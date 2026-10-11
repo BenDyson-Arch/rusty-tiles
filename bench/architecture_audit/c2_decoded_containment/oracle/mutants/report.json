@@ -1,8 +1,8 @@
 {
- "fixtures": 235,
+ "fixtures": 253,
  "mutants": [
   {
-   "flipped": 124,
+   "flipped": 130,
    "flippedExamples": [
     "EXT_mesh_polygon-undrawn-loop-vertex-outside",
     "W01-noRTC-variant",
@@ -25,7 +25,7 @@
    "patchSha256": "2ab960fe315b482762d3e0d53032ae7fb193fcc2b63f9c852ce9b4a047aea399"
   },
   {
-   "flipped": 124,
+   "flipped": 130,
    "flippedExamples": [
     "EXT_mesh_polygon-undrawn-loop-vertex-outside",
     "W01-noRTC-variant",
@@ -68,7 +68,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/reverse-tile-order.patch",
-   "patchSha256": "d11abbfa1451e890c506035cb0abbf3524476618449c26c1d635d8eaa3094ed7"
+   "patchSha256": "1db660b7d58ee1c1fe291bd14321dd0444c01bb59256a5c157e5f7b14fdb58b2"
   },
   {
    "flipped": 2,
@@ -81,7 +81,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/test-undrawn-vertices.patch",
-   "patchSha256": "ff699d74ca313accd94e2c66c3f743e77c035509febe7596192398dc35d36154"
+   "patchSha256": "b6cb708f7e84515c185c129bd4609df7fc8f0a3e3cae34f27a9b9cff735e1920"
   },
   {
    "flipped": 4,
@@ -99,7 +99,7 @@
    "patchSha256": "480d9280b29c679ac3d2bfa9fe87fe62d66635d38bc353177da52dab67ff1773"
   },
   {
-   "flipped": 168,
+   "flipped": 177,
    "flippedExamples": [
     "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-content-r0",
     "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-content-r1",
@@ -165,7 +165,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/skip-ancestors.patch",
-   "patchSha256": "bdc5ec5d925e1051fce5237f5bc7082a636b231813c4028c53fe41e2510c8791"
+   "patchSha256": "80732c0d14d7253815a22611a038f3e2932e600dcbef7f94b13f302d69a65190"
   },
   {
    "flipped": 4,
@@ -180,7 +180,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/skip-external-root-transform.patch",
-   "patchSha256": "78a8d0a271afbb7ac6ef6cd15edd588c7a173361eb112a7ed88fe27e01878541"
+   "patchSha256": "8928a8cd9a75581cfd731b99033cd9a7d088ab696cc1634c0cd0e5f913745324"
   },
   {
    "flipped": 1,
@@ -192,7 +192,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/reuse-URI-cache-for-verdicts.patch",
-   "patchSha256": "e2025cf85744496829d0c17540943bdc2b8a3e0028afbe3530cdf7a4b06e84e0"
+   "patchSha256": "5f52ceb6d83d883808c1900d39852471d88d5928a419c08d4ba7c7e75b6e70d0"
   },
   {
    "flipped": 1,

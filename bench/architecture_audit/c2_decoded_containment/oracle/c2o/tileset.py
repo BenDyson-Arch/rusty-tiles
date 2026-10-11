@@ -16,6 +16,16 @@ TILESET_ALLOWLIST = {"3DTILES_content_gltf_vector"}
 ROLE_ORDER = {"own": 0, "content": 1, "externalContent": 2, "ancestor": 3}
 
 
+class TilesetInvalid(Exception):
+    """A tileset defect that is InvalidInput (contract v3.3 (8)): a non-affine or
+    non-finite tile transform, or a number literal that overflows binary64."""
+
+    def __init__(self, why, where):
+        super().__init__(why)
+        self.why = why
+        self.where = where
+
+
 class Archive:
     def __init__(self, path, max_member_bytes):
         try:
@@ -64,6 +74,7 @@ class Level:
 
 class Reference:
     def __init__(self, index, member, uri, where, levels):
+        self.depth = len(levels) - 1  # tree depth of the referencing tile (root 0)
         self.index = index
         self.member = member
         self.uri = uri
@@ -88,10 +99,9 @@ def _transform(tile, where):
     if t is None:
         return None
     if not isinstance(t, list) or len(t) != 16 or not all(is_number(v) for v in t):
-        raise OracleUndecided("tile transform malformed at %s" % where)
+        raise TilesetInvalid("tile transform is not 16 finite numbers", where)
     if not (t[3] == 0 and t[7] == 0 and t[11] == 0 and t[15] == 1):
-        raise OracleUndecided("tile transform at %s is not affine; the contract's frame "
-                              "chain assumes an affine last row" % where)
+        raise TilesetInvalid("tile transform last row is not 0,0,0,1 (non-affine)", where)
     return t
 
 
@@ -114,6 +124,7 @@ class Traversal:
         self.exclusion_sites = []
         self.caveats = []
         self.c1_caveats = []
+        self.invalid = None  # TilesetInvalid met in traversal order, after self.references
 
     def exclude(self, reason, where):
         self.exclusions.add(reason)
@@ -122,19 +133,25 @@ class Traversal:
     def _check_extensions(self, obj, where):
         ext = obj.get("extensions")
         if isinstance(ext, dict):
-            for name in ext:
+            for name, value in ext.items():
                 if name not in TILESET_ALLOWLIST:
                     self.exclude("tilesetExtension", "%s.extensions.%s" % (where, name))
+                elif isinstance(value, dict) and value.get("clip") is True:
+                    # v3.3 (3): clip permits content outside the tile volume.
+                    self.exclude("tilesetExtension", "%s.extensions.%s.clip" % (where, name))
 
     def run(self, root_member="tileset.json"):
-        self._tileset(root_member, [], [root_member])
+        try:
+            self._tileset(root_member, [], [root_member])
+        except TilesetInvalid as err:
+            self.invalid = err
         return self
 
     def _tileset(self, member, stack, documents):
         try:
             doc = load_json(self.archive.read(member))
         except JsonNumberError as err:
-            raise OracleUndecided("tileset number overflow in %s (C1 InvalidInput): %s" % (member, err))
+            raise TilesetInvalid(str(err), member)
         except (ValueError, UnicodeDecodeError) as err:
             raise OracleUndecided("tileset JSON unreadable %s: %s" % (member, err))
         if not isinstance(doc, dict) or not isinstance(doc.get("root"), dict):

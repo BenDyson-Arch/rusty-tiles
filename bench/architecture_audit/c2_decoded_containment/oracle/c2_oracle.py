@@ -8,6 +8,9 @@ Prints one JSON report. `outcome` is one of:
   Outside        (facts)        first proven escape in streaming order
   NotInspected   (reasons)      exclusion reasons, or the precheck reason
   InvalidNode    (facts)        malformed consumed scene/node record (InvalidInput)
+  InvalidInput   (facts)        tileset defect that is InvalidInput (v3.3 (8)): a
+                                non-affine/non-finite tile transform or an
+                                overflowing number literal
   Undecided      (why)          the oracle could not decide (its own limits, an
                                 unmodelled format, or data C1 should reject);
                                 never a verdict

@@ -258,6 +258,10 @@ class Oracle:
                 exclusions.add(reason)
                 sites.append({"reason": reason, "where": ref.member})
         self.report["payloads"] = [f.summary() for f in self.uri_facts.values()]
+        if trav.invalid is not None:
+            # Every reference before the defect was admitted; the defect is next in order.
+            return {"outcome": "InvalidInput", "facts": {"why": trav.invalid.why,
+                                                         "where": trav.invalid.where}}
         if exclusions:
             return {"outcome": "NotInspected", "reasons": sorted(exclusions),
                     "exclusionSites": sites[:200]}
@@ -404,7 +408,7 @@ class Oracle:
         coord = [sum(A[r][c] * x[c] for c in range(3)) + b[r] for r in range(3)]
         return {
             "reference": ref.index, "uri": ref.uri, "member": ref.member,
-            "contentAt": ref.where, "level": lv.level, "role": lv.role,
+            "contentAt": ref.where, "depth": ref.depth, "level": lv.level, "role": lv.role,
             "k": lv.level if lv.role in ("externalContent", "ancestor") else None,
             "volumeAt": lv.where, "node": inst.node, "mesh": inst.mesh,
             "primitive": primitive, "accessor": accessor, "vertex": vi,

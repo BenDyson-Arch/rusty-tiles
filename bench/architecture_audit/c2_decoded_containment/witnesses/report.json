@@ -158,8 +158,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -189,6 +202,7 @@
       53.0,
       79.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.b3dm",
@@ -236,8 +250,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -267,6 +294,7 @@
       53.0,
       79.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.b3dm",
@@ -314,8 +342,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.4210854715202004e-14,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -345,6 +386,7 @@
       53.0,
       79.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.b3dm",
@@ -392,8 +434,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.125
+     },
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -423,6 +484,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -470,8 +532,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.5
+     },
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -501,6 +582,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -548,8 +630,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.0658141036401503e-14,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.75
+     },
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -579,6 +680,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -626,8 +728,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -657,6 +772,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -704,8 +820,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -735,6 +864,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -782,8 +912,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -813,6 +956,7 @@
       -42.0,
       22.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.b3dm",
@@ -927,8 +1071,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -965,6 +1122,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1011,8 +1169,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -1049,6 +1220,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1095,8 +1267,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -1133,6 +1318,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1179,8 +1365,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -1217,6 +1416,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1263,8 +1463,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -1301,6 +1514,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1347,8 +1561,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -1385,6 +1612,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1513,8 +1741,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -1550,6 +1791,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1596,8 +1838,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -1634,6 +1889,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1680,8 +1936,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -1718,6 +1987,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1766,6 +2036,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -1802,6 +2073,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1848,8 +2120,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -1886,6 +2171,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -1932,8 +2218,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -1970,6 +2269,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2083,8 +2383,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2121,6 +2434,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2167,8 +2481,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2205,6 +2532,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2251,8 +2579,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2289,6 +2630,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2335,8 +2677,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -2373,6 +2728,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2419,8 +2775,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -2457,6 +2826,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2503,8 +2873,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -2541,6 +2924,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2654,8 +3038,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2692,6 +3089,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2738,8 +3136,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2776,6 +3187,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2822,8 +3234,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -2860,6 +3285,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2906,8 +3332,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -2944,6 +3383,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -2990,8 +3430,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -3028,6 +3481,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3074,8 +3528,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -3112,6 +3579,7 @@
       -4.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3225,8 +3693,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -3263,6 +3744,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3309,8 +3791,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -3347,6 +3842,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3393,8 +3889,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -3431,6 +3940,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3477,8 +3987,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -3515,6 +4038,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3561,8 +4085,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -3599,6 +4136,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3645,8 +4183,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -3683,6 +4234,7 @@
       1.0,
       -4.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3796,8 +4348,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -3834,6 +4399,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3880,8 +4446,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5e-324,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.2250738585072014e-308
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -3918,6 +4497,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -3964,8 +4544,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -4002,6 +4595,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4048,8 +4642,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4086,6 +4693,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4132,8 +4740,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5e-324,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.2250738585072014e-308
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4170,6 +4791,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4216,8 +4838,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4254,6 +4889,7 @@
       0.0,
       1.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4367,8 +5003,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -4405,6 +5054,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4451,8 +5101,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -4489,6 +5152,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4535,8 +5199,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -4573,6 +5250,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4619,8 +5297,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4657,6 +5348,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4703,8 +5395,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4741,6 +5446,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4787,8 +5493,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -4825,6 +5544,7 @@
       -3.0,
       2.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -4953,8 +5673,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -4991,6 +5724,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5037,8 +5771,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -5075,6 +5822,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5121,8 +5869,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -5159,6 +5920,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5205,8 +5967,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5243,6 +6018,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5289,8 +6065,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5327,6 +6116,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5373,8 +6163,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5411,6 +6214,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5518,8 +6322,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -5549,6 +6366,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5595,8 +6413,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.944304526105059e-31,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 5.551115123125783e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -5625,6 +6456,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5671,8 +6503,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -5702,6 +6547,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5748,8 +6594,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5779,6 +6638,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5827,6 +6687,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5856,6 +6717,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -5902,8 +6764,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -5933,6 +6808,7 @@
       -32.999954222934306,
       20.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6055,8 +6931,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -6086,6 +6975,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6132,8 +7022,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -6163,6 +7066,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6209,8 +7113,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -6240,6 +7157,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6286,8 +7204,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -6317,6 +7248,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6363,8 +7295,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -6394,6 +7339,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6440,8 +7386,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -6471,6 +7430,7 @@
       2.0,
       3.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -6610,8 +7570,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.4210854715202004e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 1.4210854715202004e-14,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "ancestor"
@@ -6641,6 +7620,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -6689,8 +7669,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.842170943040401e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     },
+     {
+      "conditional": false,
+      "escape": 2.842170943040401e-14,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "ancestor"
@@ -6720,6 +7719,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -6768,8 +7768,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5.684341886080802e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     },
+     {
+      "conditional": false,
+      "escape": 5.684341886080802e-14,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "ancestor"
@@ -6799,6 +7818,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -6847,8 +7867,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.4210854715202004e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": true,
+      "escape": 1.4210854715202004e-14,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "externalContent"
@@ -6878,6 +7917,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -6926,8 +7966,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.842170943040401e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     },
+     {
+      "conditional": true,
+      "escape": 2.842170943040401e-14,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "externalContent"
@@ -6957,6 +8016,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -7005,8 +8065,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5.684341886080802e-14,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     },
+     {
+      "conditional": true,
+      "escape": 5.684341886080802e-14,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 2,
      "node": 0,
      "role": "externalContent"
@@ -7036,6 +8115,7 @@
       224.0,
       360.0
      ],
+     "depth": 2,
      "k": 2,
      "level": 2,
      "member": "w.glb",
@@ -7084,8 +8164,33 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.0625
+     },
+     {
+      "conditional": true,
+      "escape": 3.552713678800501e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.0625
+     },
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -7115,6 +8220,7 @@
       8.0,
       15.0
      ],
+     "depth": 2,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -7163,8 +8269,33 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5.329070518200751e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.09375
+     },
+     {
+      "conditional": true,
+      "escape": 5.329070518200751e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.09375
+     },
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -7194,6 +8325,7 @@
       8.0,
       15.0
      ],
+     "depth": 2,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -7242,8 +8374,33 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.125
+     },
+     {
+      "conditional": true,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.125
+     },
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -7273,6 +8430,7 @@
       8.0,
       15.0
      ],
+     "depth": 2,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -7321,8 +8479,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 0.125
+     },
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -7352,6 +8529,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7400,8 +8578,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -7431,6 +8628,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7479,8 +8677,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] in parent",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -7510,6 +8727,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7558,8 +8776,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -7589,6 +8820,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7637,8 +8869,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -7668,6 +8913,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7716,8 +8962,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json:root.children[0] content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 2,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -7747,6 +9006,7 @@
       -3.0,
       2.0
      ],
+     "depth": 2,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7863,8 +9123,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.944304526105059e-31,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.1102230246251565e-16
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -7893,6 +9166,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -7939,8 +9213,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -7970,6 +9257,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8016,8 +9304,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.7755575615628914e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -8046,6 +9347,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8094,6 +9396,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -8123,6 +9426,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8169,8 +9473,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -8200,6 +9517,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8248,6 +9566,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -8277,6 +9596,7 @@
       -3.0,
       5.680000000000001
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8325,6 +9645,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "reference": 1,
@@ -8352,6 +9673,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8477,6 +9799,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -8505,6 +9828,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8569,6 +9893,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -8598,6 +9923,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8662,6 +9988,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -8691,6 +10018,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8753,6 +10081,18 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.0,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 2251799813685248.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "likely"
+   },
    "expected": {
     "outcome": "Contained"
    },
@@ -8847,8 +10187,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -8878,6 +10231,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -8924,8 +10278,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -8955,6 +10322,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9001,8 +10369,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -9032,6 +10413,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9078,8 +10460,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9109,6 +10504,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9155,8 +10551,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9186,6 +10595,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9232,8 +10642,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9263,6 +10686,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9504,8 +10928,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -9535,6 +10972,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9581,8 +11019,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -9612,6 +11063,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9658,8 +11110,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -9689,6 +11154,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9735,8 +11201,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9766,6 +11245,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9812,8 +11292,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9843,6 +11336,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -9889,8 +11383,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -9920,6 +11427,7 @@
       -42.0,
       14.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10268,8 +11776,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -10299,6 +11820,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10345,8 +11867,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.232595164407831e-32,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.7755575615628914e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -10375,6 +11910,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10421,8 +11957,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.62964972193618e-35,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.168404344971009e-19
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -10451,6 +12000,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10497,8 +12047,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 2.220446049250313e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -10528,6 +12091,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10576,6 +12140,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -10605,6 +12170,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10653,6 +12219,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -10682,6 +12249,7 @@
       -3.0077895821015086,
       1.988266035972458
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -10824,8 +12392,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -10855,6 +12442,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -10902,8 +12490,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     },
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -10933,6 +12540,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -10980,8 +12588,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "ancestor"
@@ -11011,6 +12638,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -11058,8 +12686,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": true,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "externalContent"
@@ -11089,6 +12736,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -11136,8 +12784,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     },
+     {
+      "conditional": true,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "externalContent"
@@ -11167,6 +12834,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -11214,8 +12882,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": true,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 0,
      "role": "externalContent"
@@ -11245,6 +12932,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -11292,8 +12980,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": true,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -11323,6 +13030,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11370,8 +13078,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 1.0
+     },
+     {
+      "conditional": true,
+      "escape": 7.105427357601002e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -11401,6 +13128,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11448,8 +13176,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.25
+     },
+     {
+      "conditional": true,
+      "escape": 1.7763568394002505e-15,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -11479,6 +13226,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11526,8 +13274,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": true,
+      "escape": 1.0,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 140737488355328.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: only if C1 compares an external tileset root with the referencing content.boundingVolume"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "role": "externalContent"
     },
@@ -11553,6 +13314,7 @@
       -42.0,
       14.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -11594,7 +13356,7 @@
      "units": 182
     }
    },
-   "sha256": "ae0f252bc8dd7bd4ea122835ff62596271dec609f21ec7823e7c97ec41c76072",
+   "sha256": "66011faa6ab693fe30ed593467faf294b24f00a86683328de65223fe8b928ce8",
    "source": "newSlice1Controls[4]"
   },
   {
@@ -11699,6 +13461,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "role": "own"
     },
@@ -11726,6 +13489,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11774,6 +13538,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "role": "own"
     },
@@ -11801,6 +13566,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11847,10 +13613,9 @@
   {
    "agree": true,
    "c1Caveats": [],
-   "contractExpectation": "Contained",
-   "contractFinding": true,
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "role": "own"
     },
@@ -11864,7 +13629,7 @@
    },
    "literal": [],
    "notes": [
-    "Contract finding: own box row 1 has c=0, h=0 but every vertex has tile row 1 = 3 - 0.25*z/65535 in [2.75, 3]; no vertex can be inside, so 'Contained at 29' is unrealizable with the literal volumes."
+    "v3.3 (1): the literal worked example is in domain at 29 with verdict Outside (own box row 1 has c=0, h=0; every vertex has tile row 1 = 3 - 0.25*z/65535 in [2.75, 3])."
    ],
    "oracle": {
     "facts": {
@@ -11880,6 +13645,7 @@
       3.0,
       0.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -11956,7 +13722,7 @@
     "containmentSpanBits": 28
    },
    "notes": [
-    "Contract finding: own box row 1 has c=0, h=0 but every vertex has tile row 1 = 3 - 0.25*z/65535 in [2.75, 3]; no vertex can be inside, so 'Contained at 29' is unrealizable with the literal volumes."
+    "v3.3 (1): the literal worked example is in domain at 29 with verdict Outside (own box row 1 has c=0, h=0; every vertex has tile row 1 = 3 - 0.25*z/65535 in [2.75, 3])."
    ],
    "oracle": {
     "facts": null,
@@ -12018,7 +13784,7 @@
    },
    "literal": [],
    "notes": [
-    "Adjusted: own box centre row 1 = 3 (z = 0 for every vertex); the normative spans stay sInst=5, levels [23, 29]."
+    "v3.3 (1): the Contained-at-cap / numericSpan-at-28 control. Own box centre row 1 = 3 (z = 0 for every vertex); spans stay sInst=5, [23, 29]."
    ],
    "oracle": {
     "facts": null,
@@ -12086,7 +13852,7 @@
     "containmentSpanBits": 28
    },
    "notes": [
-    "Adjusted: own box centre row 1 = 3 (z = 0 for every vertex); the normative spans stay sInst=5, levels [23, 29]."
+    "v3.3 (1): the Contained-at-cap / numericSpan-at-28 control. Own box centre row 1 = 3 (z = 0 for every vertex); spans stay sInst=5, [23, 29]."
    ],
    "oracle": {
     "facts": null,
@@ -12185,6 +13951,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -12214,6 +13981,7 @@
       3.0,
       0.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12307,8 +14075,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.0625
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 2,
      "role": "ancestor"
@@ -12338,6 +14119,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -12385,8 +14167,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 2,
      "role": "ancestor"
@@ -12416,6 +14211,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -12463,8 +14259,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.0625
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 2,
      "role": "ancestor"
@@ -12494,6 +14303,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -12541,8 +14351,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "own"
@@ -12571,6 +14394,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12618,8 +14442,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 0.25
+     },
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "own"
@@ -12649,6 +14492,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12696,8 +14540,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "own"
@@ -12726,6 +14583,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12775,6 +14633,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "content"
@@ -12804,6 +14663,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12851,8 +14711,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "content"
@@ -12882,6 +14755,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -12931,6 +14805,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 2,
      "role": "content"
@@ -12960,6 +14835,7 @@
       -3.0,
       2.0
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13056,6 +14932,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 15,
      "role": "own"
@@ -13084,6 +14961,7 @@
       22.40674624458297,
       -2.5971868794357107
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13132,6 +15010,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 15,
      "role": "own"
@@ -13160,6 +15039,7 @@
       22.40674624458297,
       -2.5971868794357107
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13208,6 +15088,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 15,
      "role": "own"
@@ -13236,6 +15117,7 @@
       22.40674624458297,
       -2.5971868794357107
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13386,8 +15268,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5.551115123125783e-17,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -13416,6 +15311,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13462,8 +15358,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5e-324,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.2250738585072014e-308
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -13493,6 +15402,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13539,8 +15449,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5.551115123125783e-17,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -13569,6 +15492,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13617,6 +15541,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -13646,6 +15571,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13692,8 +15618,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 5e-324,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.2250738585072014e-308
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -13723,6 +15662,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13771,6 +15711,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "content"
@@ -13800,6 +15741,7 @@
       0.0,
       0.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -13892,8 +15834,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.52587890625e-05
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -13923,6 +15878,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -13970,8 +15926,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -14001,6 +15970,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -14048,8 +16018,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -14079,6 +16062,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -14126,8 +16110,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 7.62939453125e-06
+     },
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -14157,6 +16160,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14204,8 +16208,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -14234,6 +16251,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14281,8 +16299,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -14311,6 +16342,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14358,8 +16390,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -14389,6 +16434,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14438,6 +16484,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -14467,6 +16514,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14516,6 +16564,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -14545,6 +16594,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14638,8 +16688,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.52587890625e-05
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -14669,6 +16732,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -14716,8 +16780,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -14747,6 +16824,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -14794,8 +16872,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -14825,6 +16916,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -14872,8 +16964,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 7.62939453125e-06
+     },
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -14903,6 +17014,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -14950,8 +17062,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -14980,6 +17105,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15027,8 +17153,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -15057,6 +17196,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15104,8 +17244,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -15135,6 +17288,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15184,6 +17338,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -15213,6 +17368,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15262,6 +17418,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -15291,6 +17448,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15384,8 +17542,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.52587890625e-05
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -15415,6 +17586,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -15462,8 +17634,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -15493,6 +17678,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -15540,8 +17726,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 1,
      "node": 1,
      "role": "ancestor"
@@ -15571,6 +17770,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": 1,
      "level": 1,
      "member": "w.glb",
@@ -15618,8 +17818,27 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] in parent",
+      "ulps": 7.62939453125e-06
+     },
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -15649,6 +17868,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15696,8 +17916,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.6155871338926322e-27,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 1.3877787807814457e-17
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -15726,6 +17959,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15773,8 +18007,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 9.860761315262648e-32,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 8.470329472543003e-22
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "own"
@@ -15803,6 +18050,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15850,8 +18098,21 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root.children[0] content[0] in tile",
+      "ulps": 7.62939453125e-06
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -15881,6 +18142,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -15930,6 +18192,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -15959,6 +18222,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -16008,6 +18272,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 1,
      "level": 0,
      "node": 1,
      "role": "content"
@@ -16037,6 +18302,7 @@
       -1000002.76,
       -9.32
      ],
+     "depth": 1,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -16131,6 +18397,7 @@
    "c1Caveats": [],
    "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
      "node": 0,
      "role": "own"
@@ -16159,6 +18426,7 @@
       -3.214525821558802e+301,
       2.1430172143725346e+301
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -16327,8 +18595,1227 @@
    "agree": true,
    "c1Caveats": [],
    "expected": {
+    "outcome": "Contained"
+   },
+   "file": "controls/fixtures/vector-content-without-clip.3tz",
+   "group": "control",
+   "id": "vector-content-without-clip",
+   "limits": {},
+   "literal": [],
+   "notes": [],
+   "oracle": {
+    "facts": null,
+    "outcome": "Contained",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "ced18cb59dab093f90462941e725f9990e49ea30b7cc329b0c87b0ee1915d60a",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
     "facts": {
+     "depth": 0,
      "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-own-r0.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-own-r0",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[0] -> one ulp larger (h[0] == 0) at root/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "a22aa83d582bdba75ee0b10e693901a41f9eee32e70ac674e2c6023519cdf47a",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-own-r1.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-own-r1",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[1] -> one ulp larger (h[1] == 0) at root/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "0e1c04cc01d93c4632ef1c1994a150a54c785a3c44657811b705a1b5aceacb8d",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-own-r2.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-own-r2",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[2] -> one ulp larger (h[2] == 0) at root/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "161cded98a98e8130d29f57f49b7612c9c882d065f236d8dcfc604c0d1d70546",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "content"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-content-r0.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-content-r0",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[0] -> one ulp larger (h[0] == 0) at root/content/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "content",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root.content[0]"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "2442c03dbf219fd439ba0041f208b946d746f07751abc182e7084b65dfc097dd",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 7.105427357601002e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 1.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "content"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-content-r1.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-content-r1",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[1] -> one ulp larger (h[1] == 0) at root/content/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "content",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root.content[0]"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "1500cb571f010e7fbb0b95b14ead2bdbc433b8364706bb58add957e3eeadd112",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.7763568394002505e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.25
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "content"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/vector-content-without-clip~ulp-L0-content-r2.3tz",
+   "group": "control-mutant",
+   "id": "vector-content-without-clip~ulp-L0-content-r2",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of vector-content-without-clip: c[2] -> one ulp larger (h[2] == 0) at root/content/boundingVolume",
+    "declared nesting may be broken by one ulp; production C1 hierarchyBounds slack decides whether C2 is reached"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "content",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root.content[0]"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 528,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 157
+    }
+   },
+   "sha256": "d8922621f43ea2d58b677957c62d976d015652cce7b11cbf87f1091066d880af",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "tilesetExtension"
+    ]
+   },
+   "file": "controls/fixtures/vector-content-clip-true.3tz",
+   "group": "control",
+   "id": "vector-content-clip-true",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": null,
+    "outcome": "NotInspected",
+    "reasons": [
+     "tilesetExtension"
+    ],
+    "why": null
+   },
+   "sha256": "f385dc52ac12dfb8fb9195ecf099de5bf5b42f0cd13be95068e02ffbbf9227f7",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "gltfExtension"
+    ]
+   },
+   "file": "controls/fixtures/vector-clip-on-glTF-side.3tz",
+   "group": "control",
+   "id": "vector-clip-on-glTF-side",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": null,
+    "outcome": "NotInspected",
+    "reasons": [
+     "gltfExtension"
+    ],
+    "why": null
+   },
+   "sha256": "89e518c49f2bc30d2a8401a60cedbf48c44862041dcdff2d717af4f52f1dfa0f",
+   "source": "v3.3 (3)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "InvalidInput"
+   },
+   "file": "controls/fixtures/tile-transform-non-affine.3tz",
+   "group": "control",
+   "id": "tile-transform-non-affine",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": {
+     "where": "tileset.json:root.children[0]",
+     "why": "tile transform last row is not 0,0,0,1 (non-affine)"
+    },
+    "outcome": "InvalidInput",
+    "reasons": null,
+    "why": null
+   },
+   "sha256": "d0feb03e945a522b1b814d8cff29c507831c204ebc7f36c787b8f9bd3db2bfac",
+   "source": "v3.3 (8)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "InvalidInput"
+   },
+   "file": "controls/fixtures/tileset-number-overflow.3tz",
+   "group": "control",
+   "id": "tileset-number-overflow",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": {
+     "where": "tileset.json",
+     "why": "number literal overflows binary64: 1e999"
+    },
+    "outcome": "InvalidInput",
+    "reasons": null,
+    "why": null
+   },
+   "sha256": "f184fce1e3a69a99312d42a0702c6bb795adfca88f1228c4a341c686feb82bc2",
+   "source": "v3.3 (8) / contract Numbers"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "InvalidNode"
+   },
+   "file": "controls/fixtures/duplicate-child.3tz",
+   "group": "control",
+   "id": "duplicate-child",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": {
+     "member": "w.glb",
+     "node": 1,
+     "reference": 0,
+     "why": "node 1 has more than one parent"
+    },
+    "outcome": "InvalidNode",
+    "reasons": null,
+    "why": null
+   },
+   "sha256": "4a74acbae3b6a95656d081079baba092cabd30bf3b55890cd652014363ef356d",
+   "source": "v3.3 (8)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "InvalidNode"
+   },
+   "file": "controls/fixtures/duplicate-scene-root.3tz",
+   "group": "control",
+   "id": "duplicate-scene-root",
+   "limits": {},
+   "notes": [],
+   "oracle": {
+    "facts": {
+     "member": "w.glb",
+     "reference": 0,
+     "scene": 0,
+     "why": "scenes[0].nodes repeats a node"
+    },
+    "outcome": "InvalidNode",
+    "reasons": null,
+    "why": null
+   },
+   "sha256": "d2333e53cf263ca71715c92516fb94cc8feff6dd19b55ea56e9f682d1ab2e932",
+   "source": "v3.3 (8)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "controls/fixtures/contents-array-both-inside.3tz",
+   "group": "control",
+   "id": "contents-array-both-inside",
+   "limits": {},
+   "literal": [],
+   "notes": [],
+   "oracle": {
+    "facts": null,
+    "outcome": "Contained",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     },
+     {
+      "bytes": 540,
+      "decoded": 0,
+      "levelSpans": [
+       279
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "b.glb",
+      "reference": 1,
+      "sInst": 3,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 1068,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 314
+    }
+   },
+   "sha256": "cba029dde8e81c334d062b3c200e45578394a7b58689ea2353f735ff77ca7353",
+   "source": "v3.3 (10)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.015625
+     },
+     {
+      "conditional": false,
+      "escape": 1.1102230246251565e-16,
+      "pair": "tileset.json:root content[1] in tile",
+      "ulps": 0.015625
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/contents-array-both-inside~ulp-L0-own-r0.3tz",
+   "group": "control-mutant",
+   "id": "contents-array-both-inside~ulp-L0-own-r0",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of contents-array-both-inside: h[0] -> one ulp smaller at root/boundingVolume"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "a.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "a.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     },
+     {
+      "bytes": 540,
+      "decoded": 0,
+      "levelSpans": [
+       279
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "b.glb",
+      "reference": 1,
+      "sInst": 3,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 1068,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 314
+    }
+   },
+   "sha256": "08a15358e729ab4ef4ecb93b147680c4e5c735d75ed9a303e24631e04cb73c52",
+   "source": "v3.3 (10)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.5
+     },
+     {
+      "conditional": false,
+      "escape": 3.552713678800501e-15,
+      "pair": "tileset.json:root content[1] in tile",
+      "ulps": 0.5
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/contents-array-both-inside~ulp-L0-own-r1.3tz",
+   "group": "control-mutant",
+   "id": "contents-array-both-inside~ulp-L0-own-r1",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of contents-array-both-inside: h[1] -> one ulp smaller at root/boundingVolume"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "a.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "a.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     },
+     {
+      "bytes": 540,
+      "decoded": 0,
+      "levelSpans": [
+       279
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "b.glb",
+      "reference": 1,
+      "sInst": 3,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 1068,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 314
+    }
+   },
+   "sha256": "25c4aa7bb8915bc7af1a7cd56ffb9840d662d0c60a93aab1f72f74e30204add6",
+   "source": "v3.3 (10)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 0.125
+     },
+     {
+      "conditional": false,
+      "escape": 8.881784197001252e-16,
+      "pair": "tileset.json:root content[1] in tile",
+      "ulps": 0.125
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 0,
+     "role": "own"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/contents-array-both-inside~ulp-L0-own-r2.3tz",
+   "group": "control-mutant",
+   "id": "contents-array-both-inside~ulp-L0-own-r2",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "one-ulp mutant of contents-array-both-inside: h[2] -> one ulp smaller at root/boundingVolume"
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "a.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "own",
+     "uri": "a.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     },
+     {
+      "bytes": 540,
+      "decoded": 0,
+      "levelSpans": [
+       279
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "b.glb",
+      "reference": 1,
+      "sInst": 3,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 1068,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 314
+    }
+   },
+   "sha256": "27342e43a4e5b9490eef2241eb7b0da26d2779f79c72be9b1fb8abd20b75363f",
+   "source": "v3.3 (10)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "node": 1,
+     "reference": 1,
+     "role": "content"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/contents-array-second-outside.3tz",
+   "group": "control",
+   "id": "contents-array-second-outside",
+   "limits": {},
+   "literal": [],
+   "notes": [],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "tileset.json:root.content[1]",
+     "coordinate": [
+      "6",
+      "-3",
+      "2"
+     ],
+     "coordinateApprox": [
+      6.0,
+      -3.0,
+      2.0
+     ],
+     "depth": 0,
+     "k": null,
+     "level": 0,
+     "member": "b.glb",
+     "mesh": 0,
+     "node": 1,
+     "primitive": 0,
+     "reference": 1,
+     "role": "content",
+     "uri": "b.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root.content[1]"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 528,
+      "decoded": 0,
+      "levelSpans": [
+       281
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "reference": 0,
+      "sInst": 4,
+      "units": 157,
+      "vertexUnits": 25
+     },
+     {
+      "bytes": 540,
+      "decoded": 0,
+      "levelSpans": [
+       279
+      ],
+      "levels": 1,
+      "maxNodeDepth": 1,
+      "member": "b.glb",
+      "reference": 1,
+      "sInst": 3,
+      "units": 157,
+      "vertexUnits": 25
+     }
+    ],
+    "totals": {
+     "bytes": 1068,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 314
+    }
+   },
+   "sha256": "ca830f86121210b70389b53d365e06686d1501e883f7c99deaa36dfb30180915",
+   "source": "v3.3 (10)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "facts": {
+     "depth": 0,
+     "level": 0,
+     "primitive": 0,
      "role": "own",
      "vertex": 1
     },
@@ -16356,6 +19843,7 @@
       -1000.0,
       1000.0
      ],
+     "depth": 0,
      "k": null,
      "level": 0,
      "member": "w.glb",
@@ -16880,11 +20368,12 @@
   }
  ],
  "summary": {
-  "agree": 237,
-  "cases": 237,
-  "contractFindings": [
-   "worked-example-literal-containmentSpanBits-29"
+  "agree": 255,
+  "c1PreconditionLikely": [
+   "child-volume-escapes-but-content-inside"
   ],
+  "c1PreconditionPossible": 153,
+  "cases": 255,
   "controlPairs": 15,
   "controlPairsAgree": 15,
   "disagree": [],

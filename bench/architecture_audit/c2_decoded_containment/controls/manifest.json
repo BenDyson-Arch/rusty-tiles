@@ -21,6 +21,7 @@
    "mutated": {
     "expected": {
      "facts": {
+      "depth": 0,
       "level": 0,
       "node": 0,
       "role": "own"
@@ -44,6 +45,7 @@
        -42.0,
        14.0
       ],
+      "depth": 0,
       "k": null,
       "level": 0,
       "member": "w.glb",
@@ -209,6 +211,7 @@
    "mutated": {
     "expected": {
      "facts": {
+      "depth": 1,
       "level": 1,
       "role": "externalContent"
      },
@@ -231,6 +234,7 @@
        -42.0,
        14.0
       ],
+      "depth": 1,
       "k": 1,
       "level": 1,
       "member": "w.glb",
@@ -247,7 +251,7 @@
      "reasons": null,
      "why": null
     },
-    "sha256": "ae0f252bc8dd7bd4ea122835ff62596271dec609f21ec7823e7c97ec41c76072"
+    "sha256": "66011faa6ab693fe30ed593467faf294b24f00a86683328de65223fe8b928ce8"
    },
    "what": "referencing tile content.boundingVolume shrunk to exclude the payload position"
   },
@@ -272,6 +276,7 @@
    "mutated": {
     "expected": {
      "facts": {
+      "depth": 1,
       "level": 0,
       "node": 1,
       "reference": 1,
@@ -296,6 +301,7 @@
        -3.0,
        2.0
       ],
+      "depth": 1,
       "k": null,
       "level": 0,
       "member": "w.glb",
@@ -377,6 +383,7 @@
    "mutated": {
     "expected": {
      "facts": {
+      "depth": 0,
       "level": 0,
       "role": "own"
      },
@@ -399,6 +406,7 @@
        0.0,
        0.0
       ],
+      "depth": 0,
       "k": null,
       "level": 0,
       "member": "w.glb",
@@ -480,7 +488,9 @@
    "mutated": {
     "expected": {
      "facts": {
+      "depth": 0,
       "level": 0,
+      "primitive": 0,
       "role": "own",
       "vertex": 1
      },
@@ -503,6 +513,7 @@
        -1000.0,
        1000.0
       ],
+      "depth": 0,
       "k": null,
       "level": 0,
       "member": "w.glb",

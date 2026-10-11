@@ -1,6 +1,6 @@
 --- a/oracle/c2o/check.py
 +++ b/oracle/c2o/check.py
-@@ -336,7 +336,7 @@
+@@ -340,7 +340,7 @@
                  if chunk and max(chunk) >= count:
                      raise OracleUndecided("index %d >= POSITION count %d in %s (C1 rejects)"
                                            % (max(chunk), count, payload.member))

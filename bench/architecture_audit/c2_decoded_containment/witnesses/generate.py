@@ -147,9 +147,18 @@ class Case:
         self.mutants = True
         self.large = False
         self.draw_visits = None
+        self.leaf_depth = 0  # tree depth of the tile whose content holds the tracks
+        self.raw_replace = []  # (member, old bytes, new bytes) applied after JSON serialization
 
     def members(self):
-        out = [(name, B.json_bytes(doc)) for name, doc in self.tilesets.items()]
+        out = []
+        for name, doc in self.tilesets.items():
+            data = B.json_bytes(doc)
+            for member, old, new in self.raw_replace:
+                if member == name:
+                    assert data.count(old) == 1
+                    data = data.replace(old, new)
+            out.append((name, data))
         return out + list(self.payloads)
 
     def get(self, member, path):
@@ -182,6 +191,7 @@ def chain_case(case, payload_name, payload, transforms, level0_tracks, content_v
             levels.append(B.apply(B.col_major(child), p) if child is not None else list(p))
         tracks.append((node, levels))
     case.tracks = tracks
+    case.leaf_depth = n - 1
     boxes = [B.tight_box([t[1][0] for t in tracks])]
     for level in range(1, n):
         child = transforms[n - level]
@@ -356,7 +366,7 @@ def build_cases(inputs):
 
     # 1. same URI, other reference outside
     def same_uri(cid, exclude):
-        case = Case(cid, "context", {"outcome": "Outside", "facts": {"reference": 1, "level": 0,
+        case = Case(cid, "context", {"outcome": "Outside", "facts": {"reference": 1, "level": 0, "depth": 1,
                                                                     "role": "own", "node": 1}}
                     if exclude else contained(), "same-URI-other-reference-outside")
         pts = literal_points(w03)
@@ -368,6 +378,7 @@ def build_cases(inputs):
             B.tile(box_a, content="w.glb"), B.tile(box_b, content="w.glb", transform=shift)]))
         case.payloads.append(("w.glb", payload_from_spec(w03)))
         case.tracks = [(0, [pts[0]]), (1, [pts[1]])]
+        case.leaf_depth = 1
         case.tested = [{"member": "tileset.json", "path": ("root", "children", 0, "boundingVolume"),
                         "level": 0, "role": "own"}]
         case.mutants = not exclude
@@ -509,7 +520,7 @@ def build_cases(inputs):
         cases.append(case)
 
     # ---- new slice-1 controls
-    controls = build_new_controls(W, contained, ni, single)
+    controls = build_new_controls(W, contained, ni, single) + v33_cases(W, contained, ni, single)
     return cases + controls
 
 
@@ -544,15 +555,18 @@ def build_new_controls(W, contained, ni, single):
 
     # external content volume (I2): base contained, shrunk excludes
     for cid, shrink in (("external-content-volume-contains", False), ("external-content-volume-excludes", True)):
-        expect = ({"outcome": "Outside", "facts": {"level": 1, "role": "externalContent"}}
+        expect = ({"outcome": "Outside", "facts": {"level": 1, "depth": 1, "role": "externalContent"}}
                   if shrink else contained())
         case = Case(cid, "control", expect, "newSlice1Controls[4]")
         chain_case(case, "w.glb", payload_from_spec(w12), [None, None], [(0, w12pts[0])],
                    content_volume=False, ext_index=1)
         if shrink:
-            bv = case.get("tileset.json", ("root", "content", "boundingVolume"))
-            bv["box"][3] = 0.5  # half-length 0.5 around x = 8: excludes x = 8? centre stays 8
-            bv["box"][0] = 7.0  # [6.5, 7.5] excludes x = 8
+            # Referencing tile box (8,-42,14) +- 8 holds both the external root box (the
+            # point) and the content box x in [0, 7], which excludes the point x = 8.
+            case.set("tileset.json", ("root", "boundingVolume"),
+                     {"box": [8.0, -42.0, 14.0, 8.0, 0.0, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 8.0]})
+            case.set("tileset.json", ("root", "content", "boundingVolume"),
+                     {"box": [3.5, -42.0, 14.0, 3.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]})
             case.mutants = False
         cases.append(case)
 
@@ -576,9 +590,9 @@ def build_new_controls(W, contained, ni, single):
     for cid, vx, hx, expect in (
             ("tight-non-integer-centre-on-boundary", x, float(h), contained()),
             ("tight-non-integer-centre-vertex-one-ulp-beyond", B.f32_next_up(x), float(h),
-             {"outcome": "Outside", "facts": {"level": 0, "role": "own"}}),
+             {"outcome": "Outside", "facts": {"level": 0, "depth": 0, "role": "own"}}),
             ("tight-non-integer-centre-h-one-ulp-smaller", x, B.next_down(float(h)),
-             {"outcome": "Outside", "facts": {"level": 0, "role": "own"}})):
+             {"outcome": "Outside", "facts": {"level": 0, "depth": 0, "role": "own"}})):
         spec = {"positions": [[vx, 0, 0]], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}
         case = Case(cid, "control", expect, "newSlice1Controls[7]")
         case.payloads.append(("w.glb", payload_from_spec(spec)))
@@ -617,7 +631,7 @@ def worked_example_cases(contained, ni):
             elif inside:
                 expect = contained()
             else:
-                expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own"}}
+                expect = {"outcome": "Outside", "facts": {"level": 0, "depth": 1, "role": "own"}}
             case = Case(cid, "control", expect, "newSlice1Controls[8] / contract Worked example")
             case.payloads.append(("w.glb", payload))
             case.tilesets["tileset.json"] = B.tileset(B.tile(
@@ -627,14 +641,12 @@ def worked_example_cases(contained, ni):
             case.expect_spans = {"sInst": 5, "levelSpans": [23, 29]}
             case.mutants = False
             if variant == "literal":
-                case.notes.append("Contract finding: own box row 1 has c=0, h=0 but every vertex has "
-                                  "tile row 1 = 3 - 0.25*z/65535 in [2.75, 3]; no vertex can be inside, so "
-                                  "'Contained at 29' is unrealizable with the literal volumes.")
-                if bits == 29:
-                    case.contract_expectation = "Contained"
+                case.notes.append("v3.3 (1): the literal worked example is in domain at 29 with verdict "
+                                  "Outside (own box row 1 has c=0, h=0; every vertex has tile row 1 = "
+                                  "3 - 0.25*z/65535 in [2.75, 3]).")
             else:
-                case.notes.append("Adjusted: own box centre row 1 = 3 (z = 0 for every vertex); the "
-                                  "normative spans stay sInst=5, levels [23, 29].")
+                case.notes.append("v3.3 (1): the Contained-at-cap / numericSpan-at-28 control. Own box "
+                                  "centre row 1 = 3 (z = 0 for every vertex); spans stay sInst=5, [23, 29].")
             out.append(case)
     # One-ulp mutant of the adjusted variant, at the default cap (any one-ulp change of
     # a worked-example volume value changes its spans past 29).
@@ -645,6 +657,7 @@ def worked_example_cases(contained, ni):
         children=[B.tile({"box": [1.5, 3.0, 2.0, 100.0, 0, 0, 0, 0.0, 0, 0, 0, 50.0]}, content="w.glb",
                          transform=child_t)]))
     case.tracks = [(0, [p, B.apply(B.col_major(child_t), p)]) for p in pts]
+    case.leaf_depth = 1
     case.tested = [{"member": "tileset.json", "path": ("root", "children", 0, "boundingVolume"),
                     "level": 0, "role": "own"}]
     out.append(case)
@@ -842,6 +855,173 @@ def repeated_index_cases(contained, ni):
     return out
 
 
+def v33_cases(W, contained, ni, single):
+    """Fixtures for the coordinator's v3.3 decisions (3), (8) and (10)."""
+    out = []
+    w12, w02 = W["W12"], W["W02"]
+    w12pts = literal_points(w12)
+    vector = "3DTILES_content_gltf_vector"
+
+    # (3) clip: true is a non-allowlisted use on either side.
+    for cid, ext, expect in (("vector-content-without-clip", {"vector": True}, contained()),
+                             ("vector-content-clip-true", {"vector": True, "clip": True},
+                              ni("tilesetExtension"))):
+        case = single(cid, "control", w12, expect, points=w12pts, source="v3.3 (3)")
+        ts = case.tilesets["tileset.json"]
+        ts["extensionsUsed"] = [vector]
+        ts["root"]["content"]["extensions"] = {vector: ext}
+        out.append(case)
+
+    def gltf_clip(g):
+        add_used(g, vector)
+        g.doc["extensions"] = {vector: {"vector": True, "clip": True}}
+    out.append(single("vector-clip-on-glTF-side", "control", w12, ni("gltfExtension"), points=w12pts,
+                      patch=gltf_clip, source="v3.3 (3)"))
+
+    # (8) non-affine tile transform and an overflowing tileset literal are InvalidInput.
+    case = Case("tile-transform-non-affine", "control", {"outcome": "InvalidInput"}, "v3.3 (8)")
+    chain_case(case, "w.glb", payload_from_spec(w12),
+               [None, [1, 0, 0, 0.5, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]], [(0, w12pts[0])])
+    case.mutants = False
+    out.append(case)
+    case = single("tileset-number-overflow", "control", w12, {"outcome": "InvalidInput"}, points=w12pts,
+                  source="v3.3 (8) / contract Numbers")
+    case.tilesets["tileset.json"]["geometricError"] = 12345.678
+    case.raw_replace.append(("tileset.json", b"12345.678", b"1e999"))
+    case.mutants = False
+    out.append(case)
+
+    # (8) duplicates in children or scene roots are InvalidInput(node).
+    spec = copy.deepcopy(w12)
+    spec["nodes"][0]["children"] = [1, 1]
+    spec["nodes"].append({})
+    out.append(single("duplicate-child", "control", spec, {"outcome": "InvalidNode"}, points=w12pts,
+                      nodes=[0], source="v3.3 (8)"))
+    spec = copy.deepcopy(w12)
+    spec["scenes"] = [{"nodes": [0, 0]}]
+    out.append(single("duplicate-scene-root", "control", spec, {"outcome": "InvalidNode"}, points=w12pts,
+                      nodes=[0], source="v3.3 (8)"))
+
+    # (10) each contents entry is a separate reference, in array order.
+    a, b = w12pts[0], literal_points(w02)[0]
+    for cid, exclude in (("contents-array-both-inside", False), ("contents-array-second-outside", True)):
+        expect = ({"outcome": "Outside", "facts": {"reference": 1, "level": 0, "depth": 0, "role": "content",
+                                                   "node": 1}} if exclude else contained())
+        case = Case(cid, "control", expect, "v3.3 (10)")
+        case.payloads += [("a.glb", payload_from_spec(w12)), ("b.glb", payload_from_spec(w02))]
+        tile = B.tile(B.tight_box([a, b]))
+        tile["contents"] = [{"uri": "a.glb", "boundingVolume": B.tight_box([a])},
+                            {"uri": "b.glb", "boundingVolume": B.tight_box([a] if exclude else [b])}]
+        case.tilesets["tileset.json"] = B.tileset(tile)
+        case.tracks = [(0, [a]), (1, [b])]
+        case.tested = [{"member": "tileset.json", "path": ("root", "boundingVolume"), "level": 0, "role": "own"}]
+        case.mutants = not exclude
+        out.append(case)
+    return out
+
+
+# ---------------------------------------------------------------- C1 precondition (v3.3 (9))
+
+
+def _intervals(bv):
+    """Exact per-row [lo, hi] of a signed-permutation box, or None."""
+    if "box" not in bv:
+        return None
+    b = [Fraction(v) for v in bv["box"]]
+    cols = [b[3:6], b[6:9], b[9:12]]
+    out = []
+    for row in range(3):
+        cover = [col[row] for col in cols if col[row] != 0]
+        if len(cover) > 1 or any(sum(1 for r in range(3) if col[r] != 0) > 1 for col in cols):
+            return None
+        h = abs(cover[0]) if cover else Fraction(0)
+        out.append((b[row] - h, b[row] + h))
+    return out
+
+
+def _image(iv, transform):
+    if transform is None:
+        return iv
+    T = B.col_major(transform)
+    out = []
+    for r in range(3):
+        cols = [m for m in range(3) if T[r][m] != 0]
+        if len(cols) != 1 or any(T[3][c] != (1 if c == 3 else 0) for c in range(4)):
+            return None
+        m = cols[0]
+        ends = sorted([T[r][m] * iv[m][0] + T[r][3], T[r][m] * iv[m][1] + T[r][3]])
+        out.append(tuple(ends))
+    return out
+
+
+def _escape(child, parent, transform=None):
+    """Exact amount by which `child` (mapped by transform) escapes `parent`;
+    None when the oracle generator cannot judge the shapes."""
+    if "sphere" in child and "sphere" in parent and transform is None:
+        c, p = [Fraction(v) for v in child["sphere"]], [Fraction(v) for v in parent["sphere"]]
+        d2 = sum((c[j] - p[j]) ** 2 for j in range(3))
+        if p[3] >= c[3] and d2 <= (p[3] - c[3]) ** 2:
+            return Fraction(0)
+        return Fraction(math.sqrt(float(d2))) + c[3] - p[3]
+    ci, pi = _intervals(child), _intervals(parent)
+    if ci is None or pi is None:
+        return None
+    ci = _image(ci, transform)
+    if ci is None:
+        return None
+    return max([Fraction(0)] + [pi[j][0] - ci[j][0] for j in range(3)] + [ci[j][1] - pi[j][1] for j in range(3)])
+
+
+def c1_precondition(case):
+    """Best static judgement of whether C1 hierarchyBounds refuses the fixture
+    first: exact declared-nesting escapes of tile in parent, content in tile, and
+    external root in its referencing tile (and, separately, in that content volume)."""
+    escapes = []
+
+    def note(pair, child, parent, transform=None, conditional=False):
+        e = _escape(child, parent, transform)
+        if e is None or e == 0:
+            return
+        face = max(abs(float(v)) for v in (parent.get("box") or parent.get("sphere"))[:3]) or 1.0
+        face += max(abs(float(v)) for v in (parent.get("box") or parent.get("sphere"))[3:])
+        escapes.append({"pair": pair, "escape": float(e), "ulps": float(e / Fraction(math.ulp(face))),
+                        "conditional": conditional})
+
+    def walk(member, tile, where, parent_bv):
+        bv = tile["boundingVolume"]
+        if parent_bv is not None:
+            note("%s in parent" % where, bv, parent_bv, tile.get("transform"))
+        contents = ([tile["content"]] if "content" in tile else []) + tile.get("contents", [])
+        for ci, content in enumerate(contents):
+            cbv = content.get("boundingVolume")
+            if cbv is not None:
+                note("%s content[%d] in tile" % (where, ci), cbv, bv)
+            if content["uri"].endswith(".json"):
+                ext = case.tilesets[content["uri"]]["root"]
+                note("%s external root in referencing tile" % content["uri"], ext["boundingVolume"], bv,
+                     ext.get("transform"))
+                if cbv is not None:
+                    note("%s external root in referencing content volume" % content["uri"],
+                         ext["boundingVolume"], cbv, ext.get("transform"), conditional=True)
+                walk(content["uri"], ext, content["uri"] + ":root", None)
+        for i, child in enumerate(tile.get("children", [])):
+            walk(member, child, "%s.children[%d]" % (where, i), bv)
+
+    walk("tileset.json", case.tilesets["tileset.json"]["root"], "tileset.json:root", None)
+    if not escapes:
+        return None
+    hard = [e for e in escapes if not e["conditional"]]
+    if any(e["ulps"] > 4 for e in hard):
+        judgement = "likely"
+    elif hard:
+        judgement = "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+    else:
+        judgement = ("possible: only if C1 compares an external tileset root with the referencing "
+                     "content.boundingVolume")
+    return {"judgement": judgement, "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+            "escapes": escapes}
+
+
 # ---------------------------------------------------------------- expectations for mutants
 
 
@@ -866,7 +1046,8 @@ def mutants_of(case):
             m.group = case.group + "-mutant"
             m.set(tv["member"], tv["path"], mutated)
             node = stream_first_failure(case, tv["level"], tv["role"], mutated)
-            m.expect = {"outcome": "Outside", "facts": {"level": tv["level"], "role": tv["role"], "node": node}}
+            m.expect = {"outcome": "Outside", "facts": {"level": tv["level"], "depth": case.leaf_depth,
+                                                        "role": tv["role"], "node": node}}
             m.notes = ["one-ulp mutant of %s: %s at %s" % (case.id, how, "/".join(map(str, tv["path"])))]
             if tv["level"] > 0 or tv["role"] == "content" or base["box"][3 + 4 * row] == 0:
                 m.notes.append("declared nesting may be broken by one ulp; production C1 "
@@ -883,7 +1064,8 @@ def mutants_of(case):
         m.id = case.id + "~ulp-sphere-r"
         m.group = case.group + "-mutant"
         m.get(member, path)["sphere"][3] = r
-        m.expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own", "node": case.tracks[0][0]}}
+        m.expect = {"outcome": "Outside", "facts": {"level": 0, "depth": case.leaf_depth, "role": "own",
+                                                    "node": case.tracks[0][0]}}
         m.notes = ["sphere radius one ulp smaller than the smallest enclosing binary64 radius"]
         m.mutants = False
         out.append(m)
@@ -953,9 +1135,9 @@ def run_case(case, directory, report_rows, large_ok):
            "c1Caveats": report.get("c1Caveats", []), "notes": case.notes}
     if case.production:
         row["expectedProduction"] = case.production
-    if getattr(case, "contract_expectation", None):
-        row["contractExpectation"] = case.contract_expectation
-        row["contractFinding"] = True
+    pre = c1_precondition(case)
+    if pre:
+        row["c1Precondition"] = pre
     row["agree"] = compare(case.expect, report, case)
     if report.get("outcome") in ("Contained", "Outside") or case.literal:
         try:
@@ -1012,7 +1194,10 @@ def main():
         "agree": len([r for r in rows if r.get("agree")]),
         "disagree": [r["id"] for r in rows if "skipped" not in r and not r.get("agree")],
         "skipped": [r["id"] for r in rows if "skipped" in r],
-        "contractFindings": [r["id"] for r in rows if r.get("contractFinding")],
+        "c1PreconditionLikely": [r["id"] for r in rows
+                                 if (r.get("c1Precondition") or {}).get("judgement") == "likely"],
+        "c1PreconditionPossible": len([r for r in rows
+                                       if (r.get("c1Precondition") or {}).get("judgement", "").startswith("possible")]),
         "identityLevelSpansIdentical": len(set(spans)) == 1,
         "controlPairs": len(controls["pairs"]),
         "controlPairsAgree": len([p for p in controls["pairs"] if p["agree"]]),
@@ -1066,7 +1251,8 @@ def build_controls(cases, reports, rows, cdir, ldir, large_ok):
     spec = json.loads(json.dumps(load_inputs()["witnesses.json"]["cases"][3]))
     spec["indices"] = [0, 1]
     drawn.payloads = [("w.glb", payload_from_spec(spec))]
-    drawn.expect = {"outcome": "Outside", "facts": {"level": 0, "role": "own", "vertex": 1}}
+    drawn.expect = {"outcome": "Outside", "facts": {"level": 0, "depth": 0, "role": "own", "vertex": 1,
+                                                    "primitive": 0}}
     drawn.literal = []
     drawn.draw_visits = None
     drawn.notes = ["W04 with indices [0, 1]: the outlier (1000, -1000, 1000) is drawn"]

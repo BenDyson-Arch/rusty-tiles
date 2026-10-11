@@ -32,7 +32,7 @@ From this directory:
 
 ```sh
 python3 -I oracle/self_test/run.py            # 36 checks, exit 0
-python3 -I witnesses/generate.py --large      # 237 cases, 15 control pairs; exit 0 when all agree
+python3 -I witnesses/generate.py --large      # 255 cases, 15 control pairs; exit 0 when all agree
 python3 -I oracle/mutants/run.py              # 12 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
 python3 -I oracle/c2_oracle.py some.3tz --json
@@ -51,9 +51,10 @@ CPython 3.14.7.
 | `outcome` | Meaning |
 | --- | --- |
 | `Contained` | Outcome 5. Every drawn vertex is inside every tested volume, as an exact rational. |
-| `Outside` | Outcome 4. `facts` names the first proven escape in streaming order: `reference`, `uri`, `member`, `level`, `role` (`own`, `content`, `externalContent` or `ancestor`), `k` (the level index, per reading v3.2 (3)), `node`, `mesh`, `primitive`, `accessor`, `vertex` and the exact coordinate. |
+| `Outside` | Outcome 4. `facts` names the first proven escape in streaming order: `reference`, `uri`, `member`, `depth` (tree depth of the tile whose content is referenced: root 0, an external root its referencing tile's depth + 1; v3.3 (5)), `level`, `role` (`own`, `content`, `externalContent` or `ancestor`), `k` (the level index, per reading v3.2 (3)), `node`, `mesh`, `primitive` (lowest primitive index whose draw references the vertex), `accessor`, `vertex` (POSITION element index) and the exact coordinate. |
 | `NotInspected` | Outcome 2: every exclusion reason, sorted, from the frozen 15-name enum. Or outcome 3: one precheck reason, `numericSpan` or `workLimit`, with `precheckStop`. |
-| `InvalidNode` | InvalidInput for a malformed consumed scene/node record. This is the first payload in traversal order whose records fail admission. |
+| `InvalidNode` | InvalidInput for a malformed consumed scene/node record, including duplicates in `children` or a scene's `nodes` (v3.3 (8)). This is the first payload in traversal order whose records fail admission. |
+| `InvalidInput` | InvalidInput for a tileset defect met in traversal order (v3.3 (8)): a non-affine or non-finite tile `transform`, or a tileset number literal that overflows binary64. Payloads referenced earlier in traversal order are admitted first. |
 | `Undecided` | The oracle could not decide. Causes: one of its own limits ran out; the input has a format it does not model (`pnts`, `i3dm`, `cmpt`); or the data is something C1 should reject. This is **never a verdict**. |
 
 `c1Caveats` lists conditions under which production may stop in C1 before C2.
@@ -112,18 +113,20 @@ predicate on 8,000 random cases.
 
 ## Pins
 
-### Contract (v3.1) and coordinator files
+### Contract (v3.3) and coordinator files
 
 | File | sha256 |
 | --- | --- |
-| `contract-draft.md` (v3.1) | `0f1d669a8da36dc24e31bae32137e237dc6b7af54f3992ae20c227f4636addd7` |
+| `contract-draft.md` (v3.3, read for this regeneration) | `b888942bf2c7b389104043c6f8df2f44ce73ff0282a98214cd23c12967ed2a64` |
+| `contract-draft.md` (v3.1, first oracle build) | `0f1d669a8da36dc24e31bae32137e237dc6b7af54f3992ae20c227f4636addd7` |
 | `verify/slice1-witness-expectations.json` (v3.1) | `5086105c7bef651ccd62aeeafcc523aa36b742988610933a1d35befa983b1bcb` |
 | `SHA256SUMS.v3.1` | `4d4c63d05b60844b0b210b8fda73affbcdf22da759542a2cd871e886dbe1892c` |
 | `ownership-plan.md` (Slice 0a) | `18d99741ca3a2bfe73f93b1b7242e3b7c6b878aa64114b1a7bb545a123725316` |
 | `producer-inventory.md` | `e391734cc5ef6070528d92d4b913eba1fe27db035095f5cde0f5dcc9dec1e080` |
 | `verify/w13-normalized.json` | `356c36fa2040186f13f71c66c6758b670a0aafd217635332721b17c76f536a17` |
 | `verify/frozen-bound-observed.json` | `6ff24749f8fc4d4a56c96e66763e4223f5d7f0f44efd738cd0838e1609fed0ef` |
-| `change-log.md` | `0e1ccc19a7b06be9485292d4187a0cb36f7eff2381d05508b2c6b49969a7d804` |
+| `change-log.md` (v3.3 decisions on O's questions) | `1ee34c2f80a11cc53a02148316c1417563e2a2f070cb38c3bab0119c4eec4b97` |
+| `change-log.md` (v3.2 amendments, first oracle build) | `0e1ccc19a7b06be9485292d4187a0cb36f7eff2381d05508b2c6b49969a7d804` |
 
 Notes on these rows:
 
@@ -132,9 +135,8 @@ Notes on these rows:
 - `verify/frozen-bound-observed.json` is evidence the contract cites. Only its
   data was read, for B2. The probe code (`frozen_bound_probe.py` and the other
   `verify/*.py`) was **not** read.
-- `change-log.md` is pinned at the version read for the v3.2 amendments. It
-  has since moved to `a0293f04…`, which adds items 10 and 11. Neither changes
-  the oracle.
+- The v3.3 contract differs from v3.1 only in the worked-example acceptance
+  sentence. The v3.3 decisions themselves are in `change-log.md` § v3.3.
 
 ### Domain preparation
 
@@ -198,17 +200,29 @@ The artifacts were treated as data and are not committed.
     values outside their pair;
   - f32 exactness, `R(q)` exact orthogonality, the quaternion window boundary,
     and the integer predicate against the `Fraction` predicate.
-- **Witnesses and controls: 237 cases, all agree.** No expectation mismatches.
-  - 14 literal (W01–W13, plus the W01 no-RTC variant), 20 context and 36
+- **Witnesses and controls: 255 cases, all agree.** No expectation mismatches.
+  - 14 literal (W01–W13, plus the W01 no-RTC variant), 20 context and 45
     control cases.
-  - 167 one-ulp mutants.
+  - 176 one-ulp mutants.
   - Every literal frame value the oracle exposes matches its witness exactly.
     That covers W13 under the normalized meaning, W06's rational value and
     W11's external-root and parent frames.
   - All 15 control pairs agree.
+  - **`c1Precondition`** (v3.3 (9)) is the generator's static judgement of
+    whether C1 `hierarchyBounds` refuses a fixture first. It checks declared
+    nesting exactly: tile in parent, content in tile, external root in its
+    referencing tile and, conditionally, in that content volume. Acceptance
+    compares on the C1-passing subset plus the C1 refusal itself.
+
+    | Judgement | Cases |
+    | --- | --- |
+    | `likely` | 1: `child-volume-escapes-but-content-inside` |
+    | `possible` (escape of at most 4 ulps; depends on C1's slack) | 152 one-ulp mutants |
+    | `possible` (only if C1 compares an external root with the referencing content volume) | 1: `external-content-volume-excludes` |
+    | none | the other 101 |
 - **Mutants: 12/12 flip their named fixture.**
-  - Omit U and double U flip 124 fixtures each.
-  - The 1e-6 slack flips 168.
+  - Omit U and double U flip 130 fixtures each.
+  - The 1e-6 slack flips 177.
   - Reusing the URI verdict and defaulting to scene 0 flip one fixture each.
     Each flips exactly the control designed for it.
 - **Corpus: 29 runs, 27 artifacts.**
@@ -246,10 +260,13 @@ The artifacts were treated as data and are not committed.
 
 ## Contract questions (recorded readings)
 
-Each item gives the oracle's chosen reading. Items 1–3, 6 and 9 are the ones to
-settle.
+Each item gives the oracle's chosen reading. The coordinator ruled on items
+1–6, 9, 10, 13, 15 and 18 in `change-log.md` § v3.3, and the oracle and
+fixtures follow those rulings. Each ruled item says which decision applies.
 
-1. **The worked example cannot be "Contained at 29".**
+1. **The worked example cannot be "Contained at 29".** Decided by v3.3 (1):
+   the literal fixture is an in-domain, expected-`Outside` case at 29, and the
+   adjusted fixture is the Contained-at-cap / numericSpan-at-28 control.
    - The own box has `c₁ = 0`, `h₁ = 0`. Every vertex has tile row 1 equal to
      `3 − 0.25·z/65535 ∈ [2.75, 3]`, so no vertex can lie inside it.
    - The literal fixture gives `Outside` at 29 and `numericSpan` at 28.
@@ -258,10 +275,12 @@ settle.
      and `numericSpan` at 28.
    - Any one-ulp change to a worked-example volume value raises its spans above
      29. Its one-ulp mutant therefore runs at the default cap.
-2. **The B2 coverage table is sampled, not maximal.**
-   - `frozen-bound-observed.json` evaluates only depths 1, 2, 4, …, 16.
-   - "Box-only 16" therefore means every tested depth was admitted. "Sphere 10"
-     may really be 11, and near-axis "14/6" may be 15/7.
+2. **The B2 coverage table reports tested depths, not maxima.** Decided by
+   v3.3 (2).
+   - `frozen-bound-observed.json` evaluates only depths 1, 2, 4, …, 16, so each
+     B2 entry is the deepest *tested* depth that was admitted.
+   - The admitted depth is at least that value. For example, box-only generic
+     is at least 16, sphere generic at least 10 and near-axis at least 14/6.
    - For comparison:
      - W1 deep20 is admitted at depth 20 (span 2589).
      - The oracle's generic chain (seed 20261011) has span 2107 box-only at
@@ -275,19 +294,28 @@ settle.
      "buffer" region).
    - With `clip: true`, C2 would report a spec-valid buffer as `Outside`
      against the own tile volume.
-   - No producer writes `clip`. The oracle ignores it.
-   - Suggestion: exclude `clip: true`, or test only the content volume when
-     `clip` is set.
+   - No producer writes `clip`.
+   - Decided by v3.3 (3): a `3DTILES_content_gltf_vector` object with
+     `clip: true` is a non-allowlisted use. It is `tilesetExtension` on the
+     tileset, tile, content or bounding-volume side; on the glTF side the
+     extension is not allowlisted anyway, so it is `gltfExtension`. Controls:
+     `vector-content-without-clip` (Contained), `vector-content-clip-true` and
+     `vector-clip-on-glTF-side`.
 4. **Traversal order is not defined.**
    - It decides which `Outside` comes first and which precheck reason is
      recorded.
    - Oracle reading: depth-first pre-order; a tile's content(s) before its
-     children; an external tileset expanded in place.
+     children; an external tileset expanded in place. Adopted by v3.3 (4).
 5. **The Outside message fields `primitive` and `depth` are underspecified.**
    - With bitmap dedupe, `primitive` is ambiguous when several primitives share
      one POSITION accessor. The oracle reports the lowest-index primitive of
      that instance's mesh that draws the vertex.
-   - The oracle reads `depth=<u>` as the level.
+   - Decided by v3.3 (5): `depth` is the tree depth of the tile whose content
+     is referenced (root 0; an external root is its referencing tile's depth
+     + 1). The oracle reports it as `facts.depth`, next to `level`.
+     `primitive` is the lowest primitive index whose draw references the
+     vertex, which is what the oracle already reported. Mutant and control
+     expectations now include `depth`.
 6. **`Nodes(u)` is undefined for subtrees without a mesh instance.**
    - Readings (e) and (9) say `Nodes(u)` counts every selected node, at
      `128·⌈s_step/64⌉²` for each non-skipped one. They also say "F does not
@@ -297,6 +325,7 @@ settle.
      `sInst` covers instance paths only, as accepted.
    - Production can differ only for non-skipped mesh-less leaves. None occur
      in the witnesses or the corpus.
+   - Adopted by v3.3 (6): F charges mesh-less subtrees too.
 7. **Raw matrix entries and `sInst`.**
    - The span text counts only products and flat sums. Accepted reading (d)/(9)
      puts a matrix node's raw `L` entries into `s_step` and makes
@@ -320,11 +349,14 @@ settle.
    The work and repeated-index controls are built so that these models
    coincide with any natural alternative. Each of those fixtures has only
    POSITION and index accessors, every compressed view is used and there are
-   no external files. Production still needs to report these facts so they can
-   be reconciled.
+   no external files. v3.3 (7): production exposes these facts through a
+   crate-private test accessor, and acceptance reconciles them with this model
+   per work control.
 10. **Core `contents` (3D Tiles 1.1) is not mentioned in the contract.** The
     oracle treats each element as a reference with its own content volume.
-    `3DTILES_multiple_contents` is `tilesetExtension`.
+    `3DTILES_multiple_contents` is `tilesetExtension`. Adopted by v3.3 (10):
+    entries are separate references in array order. Controls:
+    `contents-array-both-inside` and `contents-array-second-outside`.
 11. **The scope of `regionVolume`, `rotatedBox`, `tileMetadata` and
     `tilesetExtension` is read literally.**
     - A region or rotated box on a tile with no payload beneath it is never
@@ -339,12 +371,15 @@ settle.
 13. **Duplicates in `children` and `scenes[*].nodes` are InvalidInput(node).**
     A node repeated in one `children` array counts as two parents. A repeated
     scene root violates glTF `uniqueItems`. The contract says only "no node
-    has two parents".
+    has two parents". Adopted by v3.3 (8). Controls: `duplicate-child` and
+    `duplicate-scene-root`.
 14. **Index-typed node fields written as floats** (for example `"mesh": 0.0`)
     are InvalidInput(node).
-15. **A tile `transform` whose last row is not `0,0,0,1`** makes the oracle
-    `Undecided`. The contract's tile step assumes an affine transform and does
-    not say what admits it.
+15. **A tile `transform` whose last row is not `0,0,0,1`, or that is not 16
+    finite numbers,** is InvalidInput by v3.3 (8). The oracle used to report
+    `Undecided` here; it now reports `InvalidInput`. A tileset number literal
+    that overflows binary64 is also `InvalidInput` now. Controls:
+    `tile-transform-non-affine` and `tileset-number-overflow`.
 16. **An overflowing number literal in glTF JSON** gives `InvalidNode` with a
     number reason. The contract makes it InvalidInput, but C1 might report it
     first.
@@ -363,7 +398,11 @@ settle.
     - In the I2 control, the content volume of the referencing tile excludes
       the external root's volume. If C1 compares external roots against that
       content volume, `hierarchyBounds` precedes C2.
-    - The contract does not say whether C1 makes that comparison.
+    - For v3.3, the I2 control was rebuilt so that its referencing tile box
+      encloses both the external root and the content box. The only possible C1
+      refusal left is that external-root-in-content comparison.
+    - Decided by v3.3 (9): every report row carries a `c1Precondition`
+      judgement wherever declared nesting is broken (see Results).
 19. **W13 needs a separating box.** The raw-polynomial and normalized readings
     differ by about 1.04e-15, below one ulp at |x| ≈ 17.5. Only a box with a
     tiny half-length, whose faces lie strictly between the two readings, can
