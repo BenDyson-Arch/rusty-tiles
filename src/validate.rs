@@ -2660,6 +2660,33 @@ mod containment_controls {
     }
 
     #[test]
+    fn per_uri_hull_decides_numeric_span_for_multi_instance_uris() {
+        // Each instance alone spans 278 bits (FLOAT pair scaled by 2^-100 or
+        // 2^100); the per-URI Pair0 hull spans 478 (contract v3.1, delta2 H1).
+        let (tiny, huge) = (2f64.powi(-100), 2f64.powi(100));
+        let files = |children: Value| {
+            let nodes = json!([
+                {"children":children},
+                {"mesh":0,"scale":[tiny,tiny,tiny]},
+                {"mesh":0,"scale":[huge,huge,huge]}
+            ]);
+            let (doc, bin) = points_doc(&[[0., 0., 0.]], nodes);
+            single(wide(), glb(&doc, &bin))
+        };
+        let limits = ValidationLimits {
+            containment_span_bits: 300,
+            ..ValidationLimits::default()
+        };
+        for alone in [json!([1]), json!([2])] {
+            assert!(contained(&run_with(&files(alone), limits.clone()).unwrap()));
+        }
+        assert_eq!(
+            not_inspected(run_with(&files(json!([1, 2])), limits)),
+            ["numericSpan"]
+        );
+    }
+
+    #[test]
     fn work_bytes_decoded_and_depth_caps_at_the_sum_and_one_below() {
         // One FLOAT vertex, a skipped {"mesh":0} node, one level of span 277:
         // units = T·⌈277/64⌉² + Nodes + Idx + E = 1·25 + 1 + 1 + 3 = 30.
