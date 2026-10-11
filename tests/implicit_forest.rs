@@ -1351,6 +1351,18 @@ fn unsupported_payloads_and_malformed_records_are_typed_errors() {
         ..record.clone()
     };
     assert!(restore_error(restore_payload(&published, &short)).contains("shorter than"));
+    // A recorded length beyond alignment padding is refused before it is allocated; the
+    // largest u32 would otherwise ask for 4 GiB.
+    for extra in [8, u32::MAX - record.raw_json_length] {
+        let long = RebaseRecord {
+            raw_json_length: record.raw_json_length + extra,
+            ..record.clone()
+        };
+        assert!(
+            restore_error(restore_payload(&published, &long)).contains("more than alignment"),
+            "{extra}"
+        );
+    }
     let copy_with_text = RebaseRecord {
         delta: [0.; 3],
         ..record.clone()

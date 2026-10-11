@@ -1267,6 +1267,16 @@ pub fn restore_payload(published: &[u8], record: &RebaseRecord) -> Result<Vec<u8
             json.len()
         )));
     }
+    // The raw chunk differs from the restored text only by its space padding, which chunk
+    // alignment keeps below 8 bytes. Refuse a larger recorded length before allocating it:
+    // the record comes from the previous archive and is untrusted.
+    if length - json.len() > 7 {
+        return Err(fail(format!(
+            "recorded JSON length {length} exceeds the restored JSON ({} bytes) by more than \
+             alignment padding",
+            json.len()
+        )));
+    }
     json.resize(length, b' ');
     source.with_json(&json).map_err(fail)
 }
