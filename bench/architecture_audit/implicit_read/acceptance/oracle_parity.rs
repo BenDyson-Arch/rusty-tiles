@@ -192,7 +192,10 @@ fn production_matches_every_i1_oracle_witness_and_control() {
         serde_json::from_slice(&std::fs::read(root.join(p)).unwrap()).unwrap()
     };
     let mut oracle: BTreeMap<String, Value> = BTreeMap::new();
-    for report in ["controls/oracle-results.json", "controls/oracle-results-large.json"] {
+    for report in [
+        "controls/oracle-results.json",
+        "controls/oracle-results-large.json",
+    ] {
         for r in read(report)["results"].as_array().unwrap() {
             oracle.insert(r["id"].as_str().unwrap().into(), r.clone());
         }
@@ -212,7 +215,10 @@ fn production_matches_every_i1_oracle_witness_and_control() {
             continue;
         }
         let o = &oracle[id];
-        assert_eq!(o["oracle"], case["expected"], "{id}: committed oracle run disagrees");
+        assert_eq!(
+            o["oracle"], case["expected"],
+            "{id}: committed oracle run disagrees"
+        );
         // A recorded production expectation outside O's domain overrides O's verdict, except
         // R5's, which holds only under an injected allocation refusal not available here.
         let want = match case["production"].as_str() {
@@ -224,7 +230,9 @@ fn production_matches_every_i1_oracle_witness_and_control() {
         let mut problems = Vec::new();
         let kind_ok = match (want.split_once(':'), kind.split_once(':')) {
             (None, Some(("ResourceLimit", _))) => want == "ResourceLimit",
-            (Some(("ResourceLimit", w)), Some(("ResourceLimit", g))) => g.split('|').any(|g| g == w),
+            (Some(("ResourceLimit", w)), Some(("ResourceLimit", g))) => {
+                g.split('|').any(|g| g == w)
+            }
             _ => kind == want,
         };
         if !kind_ok {
@@ -265,7 +273,11 @@ fn production_matches_every_i1_oracle_witness_and_control() {
     }
     let brief = json!({"run":summary["run"],"agree":agree,"skipped":summary["skipped"],
         "disagree":summary["disagree"]});
-    assert!(disagree.is_empty(), "{}", serde_json::to_string_pretty(&brief).unwrap());
+    assert!(
+        disagree.is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&brief).unwrap()
+    );
     assert_eq!(
         summary["oSide"].as_array().unwrap().len(),
         O_SIDE.len(),
@@ -294,7 +306,10 @@ fn production_matches_the_oracle_on_the_w_corpus() {
         .map(|r| (r["id"].as_str().unwrap().to_owned(), r.clone()))
         .collect();
     let (mut rows, mut skipped, mut disagree) = (Vec::new(), Vec::new(), Vec::new());
-    for a in read("corpus/manifest.json")["artifacts"].as_array().unwrap() {
+    for a in read("corpus/manifest.json")["artifacts"]
+        .as_array()
+        .unwrap()
+    {
         let id = a["id"].as_str().unwrap();
         let path = Path::new(a["path"].as_str().unwrap());
         let present = std::fs::read(path)
@@ -305,7 +320,10 @@ fn production_matches_the_oracle_on_the_w_corpus() {
             continue;
         }
         let o = &results[id];
-        assert_eq!(o["oracle"], a["expected"], "{id}: committed oracle run disagrees");
+        assert_eq!(
+            o["oracle"], a["expected"],
+            "{id}: committed oracle run disagrees"
+        );
         let want = match a["production"].as_str() {
             Some(p) => p.split(' ').next().unwrap().to_owned(),
             None => a["expected"].as_str().unwrap().to_owned(),
@@ -315,7 +333,10 @@ fn production_matches_the_oracle_on_the_w_corpus() {
         let mut problems = Vec::new();
         let kind_ok = match kind.split_once(':') {
             Some(("ResourceLimit", g)) => {
-                want == "ResourceLimit" || want.split_once(':').is_some_and(|(_, w)| g.split('|').any(|g| g == w))
+                want == "ResourceLimit"
+                    || want
+                        .split_once(':')
+                        .is_some_and(|(_, w)| g.split('|').any(|g| g == w))
             }
             _ => kind == want,
         };
