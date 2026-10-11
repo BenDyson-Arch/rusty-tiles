@@ -60,10 +60,20 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   if (config.imagery) {
     const metadata = await json(config.imagery);
     imageryBounds = C.Rectangle.fromDegrees(...metadata.bounds);
+    // Cesium 1.146 ImageryLayer._createTileImagerySkeletons maps a corner on an
+    // imagery tile edge into the outside neighbour (always the south-east one;
+    // the north-west one through rounding). That tile's intersection with the
+    // rectangle is undefined, and rendering stops. R2 bounds are tile-aligned,
+    // so the provider rectangle is inset on every edge by 1/1024 of a
+    // finest-zoom pixel: far above double rounding and below a texel. The
+    // TileJSON bounds stay exact and still frame the camera.
+    const [west, south, east, north] = metadata.bounds;
+    const inset = 360 / 2 ** metadata.maxzoom / 256 / 1024;
     const url = new URL(config.imagery, location.href);
     const provider = imageryProvider = new C.UrlTemplateImageryProvider({
       url: new URL('./tiles/', url).href + '{z}/{x}/{y}.png',
-      minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom, rectangle: imageryBounds,
+      minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom,
+      rectangle: C.Rectangle.fromDegrees(west + inset, south + inset, east - inset, north - inset),
     });
     provider.errorEvent.addEventListener(fail);
     if (!config.terrain) {
