@@ -1,0 +1,220 @@
+{
+ "binaries": {
+  "develop": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+  "head": "a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0"
+ },
+ "script": "08d074c46edfeca8fd2af9a53882507ad9c5e59885f803fc9d49bf311fb3f095",
+ "cpus": "0,1",
+ "inputs": {
+  "base": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+  "smallEdit": "a59d29b0792612e92896263de8d9960414cca8eefbd90e988d4ff3932652652c"
+ },
+ "runs": [
+  {
+   "binary": "develop",
+   "wall": 35.244,
+   "cpu": 20.59,
+   "rc": 0,
+   "kind": "base",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "head",
+   "wall": 21.199,
+   "cpu": 20.83,
+   "rc": 0,
+   "kind": "base",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "develop",
+   "wall": 22.051,
+   "cpu": 21.66,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 0,
+   "archiveBytes": 148070327,
+   "sha256": "d5a184c705cad7a5104ad236bb2cbe75b90a81c331c07af6b02a20836b9530a5",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "develop",
+   "wall": 10.203,
+   "cpu": 5.72,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 0,
+   "archiveBytes": 147077607,
+   "sha256": "f6f97044c126225bbef93cc962f8461f54b7e24d6fb714f5210a564313c3bc53",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  },
+  {
+   "binary": "head",
+   "wall": 39.92,
+   "cpu": 19.79,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 0,
+   "archiveBytes": 82995093,
+   "sha256": "480c3ea4e02e13d5b88fee3037715d1bb6fbd17db33160cdfa0a84761c4d03b2",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "head",
+   "wall": 9.153,
+   "cpu": 4.88,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 0,
+   "archiveBytes": 81992402,
+   "sha256": "18b8d719190606c8718265d1c749bb78403b8cd5f7ce3dc6638a3a659427f5a1",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  },
+  {
+   "binary": "head",
+   "wall": 9.776,
+   "cpu": 4.94,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 1,
+   "archiveBytes": 81992402,
+   "sha256": "18b8d719190606c8718265d1c749bb78403b8cd5f7ce3dc6638a3a659427f5a1",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  },
+  {
+   "binary": "head",
+   "wall": 37.332,
+   "cpu": 19.37,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 1,
+   "archiveBytes": 82995093,
+   "sha256": "480c3ea4e02e13d5b88fee3037715d1bb6fbd17db33160cdfa0a84761c4d03b2",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "develop",
+   "wall": 11.212,
+   "cpu": 6.03,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 1,
+   "archiveBytes": 147077607,
+   "sha256": "f6f97044c126225bbef93cc962f8461f54b7e24d6fb714f5210a564313c3bc53",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  },
+  {
+   "binary": "develop",
+   "wall": 34.839,
+   "cpu": 20.34,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 1,
+   "archiveBytes": 148070327,
+   "sha256": "d5a184c705cad7a5104ad236bb2cbe75b90a81c331c07af6b02a20836b9530a5",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "develop",
+   "wall": 21.809,
+   "cpu": 21.27,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 2,
+   "archiveBytes": 148070327,
+   "sha256": "d5a184c705cad7a5104ad236bb2cbe75b90a81c331c07af6b02a20836b9530a5",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "develop",
+   "wall": 6.488,
+   "cpu": 6.35,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 2,
+   "archiveBytes": 147077607,
+   "sha256": "f6f97044c126225bbef93cc962f8461f54b7e24d6fb714f5210a564313c3bc53",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  },
+  {
+   "binary": "head",
+   "wall": 21.043,
+   "cpu": 20.59,
+   "rc": 0,
+   "kind": "fresh",
+   "round": 2,
+   "archiveBytes": 82995093,
+   "sha256": "480c3ea4e02e13d5b88fee3037715d1bb6fbd17db33160cdfa0a84761c4d03b2",
+   "reused": 0,
+   "rebuilt": 12527,
+   "published": 12527
+  },
+  {
+   "binary": "head",
+   "wall": 6.649,
+   "cpu": 4.51,
+   "rc": 0,
+   "kind": "reuse",
+   "round": 2,
+   "archiveBytes": 81992402,
+   "sha256": "18b8d719190606c8718265d1c749bb78403b8cd5f7ce3dc6638a3a659427f5a1",
+   "reused": 12469,
+   "rebuilt": 62,
+   "published": 12531
+  }
+ ],
+ "developReuseVsFresh": {
+  "differingMembers": 55,
+  "firstDiffering": [
+   "@3dtilesIndex1@",
+   "conversion.json",
+   "geometry-reports.jsonl",
+   "implicit-content/12-2237-0-0-0-0-0.glb",
+   "implicit-content/12-2237-0-1-0-0-0.glb",
+   "implicit-content/12-2237-0-1-1-0-0.glb",
+   "implicit-content/12-2239-0-0-0-0-0.glb",
+   "implicit-content/12-2239-0-1-1-0-0.glb",
+   "implicit-content/12-2239-0-2-2-0-0.glb",
+   "implicit-content/12-2239-0-2-3-0-0.glb"
+  ]
+ },
+ "headReuseVsFresh": {
+  "differingMembers": 11311,
+  "firstDiffering": [
+   "@3dtilesIndex1@",
+   "conversion.json",
+   "geometry-reports.jsonl",
+   "implicit-content/r10003-0-0-0-0.glb",
+   "implicit-content/r10003-1-0-0-0.glb",
+   "implicit-content/r10003-1-1-0-0.glb",
+   "implicit-content/r10003-2-0-0-0.glb",
+   "implicit-content/r10003-2-1-0-0.glb",
+   "implicit-content/r10003-2-2-0-0.glb",
+   "implicit-content/r10003-2-3-0-0.glb"
+  ]
+ }
+}

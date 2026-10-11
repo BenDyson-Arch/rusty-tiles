@@ -1,0 +1,43 @@
+{
+ "script": "619cf35123464f5a8eab3947079f5777544f1719d0c6282bdebac8d44e7f66d4",
+ "checker": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
+ "archives": {
+  "explicit": {
+   "path": "head-native/W5-vec-perf-explicit.3tz",
+   "sha256": "a9e7f1a44b07b47bcf9105bd542bce282e43da7b9cd060eab0beed389370b3f5",
+   "tiles": 547,
+   "documentsFollowed": 1,
+   "contents": 544,
+   "distinctKeys": 544,
+   "ambiguousKeys": 0
+  },
+  "develop": {
+   "path": "develop-native/W5-vec-perf.3tz",
+   "sha256": "f1a54259d43ddee12413535e1d845b3308e7e6076bfc2e85013c5d343c9518f7",
+   "tiles": 631,
+   "documentsFollowed": 85,
+   "contents": 544,
+   "distinctKeys": 544,
+   "ambiguousKeys": 0
+  },
+  "head": {
+   "path": "head-native/W5-vec-perf.3tz",
+   "sha256": "ecf728ee458b04a25b0b96796bd48b3267980f8bf58c729adbd587ea9a6e3c04",
+   "tiles": 547,
+   "documentsFollowed": 1,
+   "contents": 544,
+   "distinctKeys": 544,
+   "ambiguousKeys": 0
+  }
+ },
+ "views": 16,
+ "leaves": 256,
+ "usableLeaves": 256,
+ "keysInEveryLayout": 544,
+ "keysPerLayout": {
+  "explicit": 544,
+  "develop": 544,
+  "head": 544
+ },
+ "base": "explicit"
+}

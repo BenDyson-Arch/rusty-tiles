@@ -1,0 +1,33 @@
+{
+ "script": "619cf35123464f5a8eab3947079f5777544f1719d0c6282bdebac8d44e7f66d4",
+ "checker": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
+ "archives": {
+  "develop": {
+   "path": "develop-native/W6d-nomeshopt.3tz",
+   "sha256": "a699f7a847a59bf076bdd605a59ec38ec799c102754358fa845056138d5aa427",
+   "tiles": 356,
+   "documentsFollowed": 43,
+   "contents": 314,
+   "distinctKeys": 312,
+   "ambiguousKeys": 2
+  },
+  "head": {
+   "path": "head-native/W6d-nomeshopt.3tz",
+   "sha256": "b701588a3ad72929c93f5beed2de4d0b4811756757bcf0baa419fb738de16283",
+   "tiles": 314,
+   "documentsFollowed": 1,
+   "contents": 314,
+   "distinctKeys": 312,
+   "ambiguousKeys": 2
+  }
+ },
+ "views": 16,
+ "leaves": 224,
+ "usableLeaves": 224,
+ "keysInEveryLayout": 312,
+ "keysPerLayout": {
+  "develop": 312,
+  "head": 312
+ },
+ "base": "develop"
+}
