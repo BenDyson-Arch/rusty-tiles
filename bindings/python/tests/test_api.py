@@ -1253,6 +1253,59 @@ class WheelAPI(unittest.TestCase):
         self.assertIn("decodedContentBounds.skin", report["notInspected"])
         self.assertIn("scene transforms", report["notInspected"])
 
+    def test_validate_reads_implicit_roots_with_rust_parity(self):
+        """I1 parity with tests/i1_implicit_read.rs: labels, counts and categories."""
+        def point_glb():
+            document = json.dumps({
+                "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+                "nodes": [{"mesh": 0}], "buffers": [{"byteLength": 12}],
+                "bufferViews": [{"buffer": 0, "byteLength": 12}],
+                "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                               "count": 1, "min": [0, 0, 0], "max": [0, 0, 0]}],
+                "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 0}]}],
+            }).encode()
+            document += b" " * (-len(document) % 4)
+            return (struct.pack("<4sII", b"glTF", 2, 28 + len(document) + 12)
+                    + struct.pack("<I4s", len(document), b"JSON") + document
+                    + struct.pack("<I4s", 12, b"BIN\0") + bytes(12))
+
+        def package(name, template):
+            # QUADTREE L = 2, A = 2: five constant-available tiles with content.
+            data = self.root / name
+            (data / "s/0/0").mkdir(parents=True)
+            subtree = json.dumps({"tileAvailability": {"constant": 1},
+                                  "contentAvailability": [{"constant": 1}],
+                                  "childSubtreeAvailability": {"constant": 0}}).encode()
+            subtree += b" " * (-len(subtree) % 8)
+            (data / "s/0/0/0.subtree").write_bytes(
+                b"subt" + struct.pack("<IQQ", 1, len(subtree), 0) + subtree)
+            for level, x, y in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 0, 1), (1, 1, 1)):
+                (data / f"c/{level}/{x}").mkdir(parents=True, exist_ok=True)
+                (data / f"c/{level}/{x}/{y}.glb").write_bytes(point_glb())
+            (data / "tileset.json").write_text(json.dumps({
+                "asset": {"version": "1.1"}, "geometricError": 16,
+                "root": {"boundingVolume": {"box": [0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 8]},
+                         "geometricError": 16, "refine": "REPLACE", "content": {"uri": template},
+                         "implicitTiling": {"subdivisionScheme": "QUADTREE", "subtreeLevels": 2,
+                                            "availableLevels": 2,
+                                            "subtrees": {"uri": "s/{level}/{x}/{y}.subtree"}}},
+            }))
+            return rusty_tiles.convert_to_3tz(data, self.root / f"{name}.3tz").output
+
+        report = rusty_tiles.validate(package("implicit", "c/{level}/{x}/{y}.glb"))
+        self.assertEqual((report["tiles"], report["contentReferences"]), (5, 5))
+        checks = report["checks"]
+        self.assertEqual(checks.index("implicitAddressingAndAvailability"),
+                         checks.index("hierarchyBounds") + 1)
+        for label in ("recordedBudgets.implicitTileExtras", "decodedContentBounds.implicitTiling"):
+            self.assertIn(label, report["notInspected"])
+        self.assertNotIn("implicitAddressingAndAvailability", report["notInspected"])
+        # X-1: a JSON content template is Unsupported at root admission.
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.validate(package("json-template", "c/{level}/{x}/{y}.json"))
+        self.assertEqual(str(caught.exception),
+                         "implicit: unsupported external tileset content template in tileset.json")
+
     def test_callback_exception_is_preserved(self):
         error = RuntimeError("callback failed")
         calls = []
