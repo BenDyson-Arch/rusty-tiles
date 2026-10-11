@@ -1724,7 +1724,9 @@ mod tests {
         let mut seen = Vec::new();
         for command in cli.get_subcommands().filter(|c| !c.is_hide_set()) {
             let name = command.get_name();
-            if name == "doctor" {
+            // convert-to-implicit is retired for 0.4.0 (removed on its own
+            // branch); doctor no longer reports it.
+            if name == "doctor" || name == "convert-to-implicit" {
                 continue;
             }
             let readiness = doctor::Command::from_name(name)

@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 /// A subcommand with a readiness entry. The CLI parser takes `doctor
 /// --command` values from [`Command::ALL`], and a CLI unit test checks them
 /// against the clap subcommand definitions so the two cannot drift.
+/// `convert-to-implicit` is retired for 0.4.0 and has no entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Command {
     Vector,
@@ -24,13 +25,12 @@ pub enum Command {
     GlbTo3tz,
     CreateTilesetJson,
     Convert,
-    ConvertToImplicit,
     Validate,
     Preview,
 }
 
 impl Command {
-    pub const ALL: [Command; 13] = [
+    pub const ALL: [Command; 12] = [
         Self::Vector,
         Self::Raster,
         Self::RasterTileToDirectory,
@@ -41,7 +41,6 @@ impl Command {
         Self::GlbTo3tz,
         Self::CreateTilesetJson,
         Self::Convert,
-        Self::ConvertToImplicit,
         Self::Validate,
         Self::Preview,
     ];
@@ -59,7 +58,6 @@ impl Command {
             Self::GlbTo3tz => "glb-to-3tz",
             Self::CreateTilesetJson => "createTilesetJson",
             Self::Convert => "convert",
-            Self::ConvertToImplicit => "convert-to-implicit",
             Self::Validate => "validate",
             Self::Preview => "preview",
         }
@@ -318,7 +316,6 @@ impl Resolver<'_> {
             | Command::GlbTo3tz
             | Command::CreateTilesetJson
             | Command::Convert
-            | Command::ConvertToImplicit
             | Command::Validate => built_in(Map::new()),
             Command::MeshTo3tz => built_in(details(json!({
                 "generalCrs": self.placement(),
@@ -706,7 +703,6 @@ mod tests {
             Command::GlbTo3tz,
             Command::CreateTilesetJson,
             Command::Convert,
-            Command::ConvertToImplicit,
             Command::Validate,
             Command::Preview,
             Command::MeshTo3tz,

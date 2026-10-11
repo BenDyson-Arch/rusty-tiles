@@ -19,11 +19,12 @@ binding exposes neither tool (`bindings/python/README.md:20`).
    driver or GEOS. `ready` is exactly `status == "ready"`.
 2. Readiness comes from the resolver that execution uses. Pure-Rust commands
    (`mesh-to-3tz`, `mesh-local-to-3tz`, `glb-to-3tz`, `createTilesetJson`,
-   `convert`, `convert-to-implicit`, `validate`, `preview`, local point clouds and
+   `convert`, `validate`, `preview`, local point clouds and
    portable vectors) have no runtime dependency. Their resolver is the build
    itself, so they are `ready`. The `match` over a typed `Command` is
    exhaustive, so adding a command cannot silently leave it out. That replaces
-   the unsourced string list at `doctor.rs:44-53`. Native vector uses
+   the unsourced string list at `doctor.rs:44-53`. `convert-to-implicit` is
+   retired for 0.4.0 and has no readiness entry. Native vector uses
    `vector::native_available` (`vector.rs:16`) and native raster uses
    `raster::capabilities` (`raster.rs:264`). Terrain and D1 open only the GDAL
    GTiff driver (`terrain/raster.rs:141`, `raster_directory/native.rs:44`), so
