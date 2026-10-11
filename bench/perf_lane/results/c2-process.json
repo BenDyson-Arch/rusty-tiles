@@ -11,25 +11,40 @@
       {
         "case": "validate:vector-explicit",
         "metric": "wallSeconds",
-        "base": 0.11396069900365546,
-        "head": 1.1307867789873853,
-        "ratio": 9.922603045380702,
+        "base": 0.11396372700983193,
+        "head": 1.1288912140007596,
+        "ratio": 9.90570634727809,
+        "contendedSides": [],
+        "foreignCpuSecondsAtBestWall": {
+          "base": 0.007175000000000004,
+          "head": 0.008135999999999978
+        },
         "explanation": null
       },
       {
         "case": "validate:point-cloud-explicit",
         "metric": "wallSeconds",
-        "base": 0.06043966699508019,
-        "head": 0.27506128200911917,
-        "ratio": 4.551005915229633,
+        "base": 0.06024460299522616,
+        "head": 0.273173219000455,
+        "ratio": 4.534401513478336,
+        "contendedSides": [],
+        "foreignCpuSecondsAtBestWall": {
+          "base": 0.0003160000000000003,
+          "head": 0.009152000000000028
+        },
         "explanation": null
       },
       {
         "case": "validate:mesh-local",
         "metric": "wallSeconds",
-        "base": 0.05338944100367371,
-        "head": 0.1985159210016718,
-        "ratio": 3.7182618373549183,
+        "base": 0.052967085008276626,
+        "head": 0.19593791700026486,
+        "ratio": 3.699239196751108,
+        "contendedSides": [],
+        "foreignCpuSecondsAtBestWall": {
+          "base": 0.007729000000000003,
+          "head": 0.005815000000000008
+        },
         "explanation": null
       }
     ],
@@ -58,7 +73,7 @@
     ]
   },
   "environment": {
-    "recordedAtUtc": "2026-10-11T05:53:33.198919+00:00",
+    "recordedAtUtc": "2026-10-11T07:34:16.869039+00:00",
     "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
     "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
     "cpuAffinity": [
@@ -67,14 +82,14 @@
     ],
     "niceness": 10,
     "loadAverageBefore": [
-      3.5,
-      5.7890625,
-      6.43408203125
+      5.07958984375,
+      9.49658203125,
+      12.34033203125
     ],
     "loadAverageAfter": [
-      2.94189453125,
-      4.88671875,
-      6.0419921875
+      3.72607421875,
+      7.81396484375,
+      11.4873046875
     ],
     "repeat": 3,
     "python": "3.14.7",
@@ -86,7 +101,7 @@
       "LC_ALL": "C"
     },
     "scriptSha256": {
-      "process.py": "513bec79b404a7961b00cf37692df299035393dd87bf03b4fcfd8ae760d46ff3",
+      "process.py": "0e734d91fe19a195e6f454bc1749fec6d9d20fb2800db7093f3583ecc5991084",
       "corpus.py": "a6cd738cbcd16a7c303402dd74dcdc75bd1596ec1a45fb5029f31bf123245258"
     },
     "binaries": {
@@ -165,33 +180,34 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 3.4950968500052113,
-              "cpuSeconds": 4.173224,
-              "peakRssMiB": 87.23046875,
-              "foreignCpuSeconds": 0.06677600000000006
+              "wallSeconds": 3.4685669719910948,
+              "cpuSeconds": 4.140485,
+              "peakRssMiB": 89.85546875,
+              "foreignCpuSeconds": 0.04951500000000031
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.475895142008085,
-              "cpuSeconds": 4.156122,
-              "peakRssMiB": 89.61328125,
-              "foreignCpuSeconds": 0.04387800000000042
+              "wallSeconds": 3.4910179279977456,
+              "cpuSeconds": 4.175943999999999,
+              "peakRssMiB": 86.8515625,
+              "foreignCpuSeconds": 0.05405600000000055
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.489116445998661,
-              "cpuSeconds": 4.17517,
-              "peakRssMiB": 86.890625,
-              "foreignCpuSeconds": 0.07483000000000017
+              "wallSeconds": 3.489778520000982,
+              "cpuSeconds": 4.175395,
+              "peakRssMiB": 86.9140625,
+              "foreignCpuSeconds": 0.08460500000000004
             }
           ],
-          "wallSeconds": 3.475895142008085,
-          "cpuSeconds": 4.156122,
-          "peakRssMiB": 89.61328125,
-          "foreignCpuSeconds": 0.04387800000000042,
-          "outputBytes": 37111803,
+          "wallSeconds": 3.4685669719910948,
+          "cpuSeconds": 4.140485,
+          "peakRssMiB": 89.85546875,
+          "foreignCpuSecondsAtBestWall": 0.04951500000000031,
+          "foreignCpuSecondsMax": 0.08460500000000004,
+          "outputBytes": 37111809,
           "members": 1262,
-          "digest": "581d542af93f97600520109c530402bc144b43285b769dc8f785a97a3014eb85",
+          "digest": "aac92633bd5199365fc8fc10c1e25e09df8f2f04724a6d4a19e930ccbb739f24",
           "tiles": 1173,
           "byExtension": {
             ".json": 87,
@@ -207,33 +223,34 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 3.066403924007318,
-              "cpuSeconds": 3.62885,
-              "peakRssMiB": 59.31640625,
-              "foreignCpuSeconds": 0.04115000000000002
+              "wallSeconds": 3.098424857002101,
+              "cpuSeconds": 3.6659289999999998,
+              "peakRssMiB": 59.125,
+              "foreignCpuSeconds": 0.05407100000000031
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.0844775410078,
-              "cpuSeconds": 3.654095,
-              "peakRssMiB": 58.5625,
-              "foreignCpuSeconds": 0.07590500000000011
+              "wallSeconds": 3.117324192004162,
+              "cpuSeconds": 3.6801630000000003,
+              "peakRssMiB": 58.35546875,
+              "foreignCpuSeconds": 0.06983699999999982
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.1245657999970717,
-              "cpuSeconds": 3.699617,
-              "peakRssMiB": 58.8203125,
-              "foreignCpuSeconds": 0.04038300000000039
+              "wallSeconds": 3.0952555960102472,
+              "cpuSeconds": 3.6627170000000002,
+              "peakRssMiB": 58.35546875,
+              "foreignCpuSeconds": 0.04728299999999985
             }
           ],
-          "wallSeconds": 3.066403924007318,
-          "cpuSeconds": 3.62885,
-          "peakRssMiB": 59.31640625,
-          "foreignCpuSeconds": 0.04038300000000039,
-          "outputBytes": 37111792,
+          "wallSeconds": 3.0952555960102472,
+          "cpuSeconds": 3.6627170000000002,
+          "peakRssMiB": 59.125,
+          "foreignCpuSecondsAtBestWall": 0.04728299999999985,
+          "foreignCpuSecondsMax": 0.06983699999999982,
+          "outputBytes": 37111807,
           "members": 1262,
-          "digest": "f63e0d84873301275db0a4d8075cecba3262988f03d03cd1bb80c6b18d8edff3",
+          "digest": "4e9de5bcec538ad2758be6d5a073bfdcccb9ad83b74cb968037dac58ab054485",
           "tiles": 1173,
           "byExtension": {
             ".json": 87,
@@ -260,30 +277,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.16430154399131425,
-              "cpuSeconds": 0.16246999999999998,
-              "peakRssMiB": 88.2109375,
-              "foreignCpuSeconds": 0.02753000000000002
+              "wallSeconds": 0.1644551009958377,
+              "cpuSeconds": 0.16379,
+              "peakRssMiB": 88.046875,
+              "foreignCpuSeconds": 0.016210000000000006
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.16413223299605306,
-              "cpuSeconds": 0.162825,
-              "peakRssMiB": 88.546875,
-              "foreignCpuSeconds": 0.007175000000000015
+              "wallSeconds": 0.16032913199160248,
+              "cpuSeconds": 0.159817,
+              "peakRssMiB": 88.046875,
+              "foreignCpuSeconds": 0.000183000000000013
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1645147410017671,
-              "cpuSeconds": 0.162928,
-              "peakRssMiB": 88.62890625,
-              "foreignCpuSeconds": 0.007072000000000019
+              "wallSeconds": 0.16049850499257445,
+              "cpuSeconds": 0.159253,
+              "peakRssMiB": 88.26953125,
+              "foreignCpuSeconds": 0.0007470000000000046
             }
           ],
-          "wallSeconds": 0.16413223299605306,
-          "cpuSeconds": 0.16246999999999998,
-          "peakRssMiB": 88.62890625,
-          "foreignCpuSeconds": 0.007072000000000019
+          "wallSeconds": 0.16032913199160248,
+          "cpuSeconds": 0.159253,
+          "peakRssMiB": 88.26953125,
+          "foreignCpuSecondsAtBestWall": 0.000183000000000013,
+          "foreignCpuSecondsMax": 0.016210000000000006
         },
         "head": {
           "case": "validate:vector",
@@ -291,30 +309,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.15609273899463005,
-              "cpuSeconds": 0.154525,
-              "peakRssMiB": 69.28125,
-              "foreignCpuSeconds": 0.005475000000000008
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.1533917519991519,
-              "cpuSeconds": 0.151667,
-              "peakRssMiB": 69.44140625,
+              "wallSeconds": 0.1548859050089959,
+              "cpuSeconds": 0.15434799999999999,
+              "peakRssMiB": 69.1875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.15307517700421158,
-              "cpuSeconds": 0.15165,
-              "peakRssMiB": 69.40234375,
+              "wallSeconds": 0.15255215800425503,
+              "cpuSeconds": 0.152058,
+              "peakRssMiB": 69.203125,
               "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.15228123699489515,
+              "cpuSeconds": 0.15146099999999998,
+              "peakRssMiB": 69.08203125,
+              "foreignCpuSeconds": 0.008539000000000012
             }
           ],
-          "wallSeconds": 0.15307517700421158,
-          "cpuSeconds": 0.15165,
-          "peakRssMiB": 69.44140625,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.15228123699489515,
+          "cpuSeconds": 0.15146099999999998,
+          "peakRssMiB": 69.203125,
+          "foreignCpuSecondsAtBestWall": 0.008539000000000012,
+          "foreignCpuSecondsMax": 0.008539000000000012
         }
       },
       "flags": []
@@ -338,33 +357,34 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 3.4501925889926497,
-              "cpuSeconds": 4.142359,
-              "peakRssMiB": 86.23828125,
-              "foreignCpuSeconds": 0.06764099999999995
+              "wallSeconds": 3.413631554998574,
+              "cpuSeconds": 4.099367,
+              "peakRssMiB": 85.65625,
+              "foreignCpuSeconds": 0.05063300000000037
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.4670994269981747,
-              "cpuSeconds": 4.1587130000000005,
-              "peakRssMiB": 82.7421875,
-              "foreignCpuSeconds": 0.041287000000000074
+              "wallSeconds": 3.476816168986261,
+              "cpuSeconds": 4.1766570000000005,
+              "peakRssMiB": 85.57421875,
+              "foreignCpuSeconds": 0.06334300000000015
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.4540106049971655,
-              "cpuSeconds": 4.143178,
-              "peakRssMiB": 83.25,
-              "foreignCpuSeconds": 0.07682199999999983
+              "wallSeconds": 3.476096680999035,
+              "cpuSeconds": 4.171485,
+              "peakRssMiB": 82.9375,
+              "foreignCpuSeconds": 0.05851500000000043
             }
           ],
-          "wallSeconds": 3.4501925889926497,
-          "cpuSeconds": 4.142359,
-          "peakRssMiB": 86.23828125,
-          "foreignCpuSeconds": 0.041287000000000074,
-          "outputBytes": 19089031,
+          "wallSeconds": 3.413631554998574,
+          "cpuSeconds": 4.099367,
+          "peakRssMiB": 85.65625,
+          "foreignCpuSecondsAtBestWall": 0.05063300000000037,
+          "foreignCpuSecondsMax": 0.06334300000000015,
+          "outputBytes": 19089024,
           "members": 549,
-          "digest": "604ff947d38684f30fd4f9223f379fb55e1129dc48ffdbb02a9cf9b4b81bf441",
+          "digest": "aee5dbb817b66aa5d04654a7edc5ff2cb6e6c725d91d03d6ef2b9d694407ef94",
           "tiles": 544,
           "byExtension": {
             ".json": 3,
@@ -379,33 +399,34 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 3.056635325003299,
-              "cpuSeconds": 3.631152,
-              "peakRssMiB": 54.7109375,
-              "foreignCpuSeconds": 0.038847999999999994
+              "wallSeconds": 3.047299943995313,
+              "cpuSeconds": 3.620251,
+              "peakRssMiB": 53.9375,
+              "foreignCpuSeconds": 0.05974900000000005
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.055690459004836,
-              "cpuSeconds": 3.62907,
-              "peakRssMiB": 54.453125,
-              "foreignCpuSeconds": 0.06092999999999982
+              "wallSeconds": 3.073379878012929,
+              "cpuSeconds": 3.652352,
+              "peakRssMiB": 54.96875,
+              "foreignCpuSeconds": 0.047648000000000024
             },
             {
               "exitCode": 0,
-              "wallSeconds": 3.067011510996963,
-              "cpuSeconds": 3.649979,
-              "peakRssMiB": 54.5390625,
-              "foreignCpuSeconds": 0.07002100000000033
+              "wallSeconds": 3.062887954991311,
+              "cpuSeconds": 3.644249,
+              "peakRssMiB": 54.57421875,
+              "foreignCpuSeconds": 0.06575100000000011
             }
           ],
-          "wallSeconds": 3.055690459004836,
-          "cpuSeconds": 3.62907,
-          "peakRssMiB": 54.7109375,
-          "foreignCpuSeconds": 0.038847999999999994,
-          "outputBytes": 19089029,
+          "wallSeconds": 3.047299943995313,
+          "cpuSeconds": 3.620251,
+          "peakRssMiB": 54.96875,
+          "foreignCpuSecondsAtBestWall": 0.05974900000000005,
+          "foreignCpuSecondsMax": 0.06575100000000011,
+          "outputBytes": 19089021,
           "members": 549,
-          "digest": "b79b1b8ae8e2f088cb46cae2b4c4c33ef09b4ff59fc18e3f7ce639989c3537ff",
+          "digest": "bf8cafa1ec27ca6586f56dad8722e5f816219adc21b9c3048a60420c47bd008a",
           "tiles": 544,
           "byExtension": {
             ".json": 3,
@@ -431,30 +452,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.1157534240046516,
-              "cpuSeconds": 0.11494399999999999,
-              "peakRssMiB": 92.109375,
-              "foreignCpuSeconds": 0.0050560000000000015
+              "wallSeconds": 0.1144901240040781,
+              "cpuSeconds": 0.113536,
+              "peakRssMiB": 92.22265625,
+              "foreignCpuSeconds": 0.0064640000000000045
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.11493556399364024,
-              "cpuSeconds": 0.113705,
-              "peakRssMiB": 92.28515625,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.11396372700983193,
+              "cpuSeconds": 0.112825,
+              "peakRssMiB": 92.06640625,
+              "foreignCpuSeconds": 0.007175000000000004
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.11396069900365546,
-              "cpuSeconds": 0.113159,
-              "peakRssMiB": 92.1875,
+              "wallSeconds": 0.11545148999721278,
+              "cpuSeconds": 0.114951,
+              "peakRssMiB": 91.9921875,
               "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.11396069900365546,
-          "cpuSeconds": 0.113159,
-          "peakRssMiB": 92.28515625,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.11396372700983193,
+          "cpuSeconds": 0.112825,
+          "peakRssMiB": 92.22265625,
+          "foreignCpuSecondsAtBestWall": 0.007175000000000004,
+          "foreignCpuSecondsMax": 0.007175000000000004
         },
         "head": {
           "case": "validate:vector-explicit",
@@ -462,38 +484,44 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 1.1315442460036138,
-              "cpuSeconds": 1.1293039999999999,
-              "peakRssMiB": 72.68359375,
-              "foreignCpuSeconds": 0.010695999999999973
+              "wallSeconds": 1.1288912140007596,
+              "cpuSeconds": 1.121864,
+              "peakRssMiB": 72.640625,
+              "foreignCpuSeconds": 0.008135999999999978
             },
             {
               "exitCode": 0,
-              "wallSeconds": 1.1337240129942074,
-              "cpuSeconds": 1.127789,
-              "peakRssMiB": 72.92578125,
-              "foreignCpuSeconds": 0.04221099999999999
+              "wallSeconds": 1.132216108002467,
+              "cpuSeconds": 1.128685,
+              "peakRssMiB": 72.9296875,
+              "foreignCpuSeconds": 0.031314999999999905
             },
             {
               "exitCode": 0,
-              "wallSeconds": 1.1307867789873853,
-              "cpuSeconds": 1.123594,
-              "peakRssMiB": 72.94140625,
-              "foreignCpuSeconds": 0.026405999999999874
+              "wallSeconds": 1.140392518005683,
+              "cpuSeconds": 1.134015,
+              "peakRssMiB": 72.86328125,
+              "foreignCpuSeconds": 0.03598499999999992
             }
           ],
-          "wallSeconds": 1.1307867789873853,
-          "cpuSeconds": 1.123594,
-          "peakRssMiB": 72.94140625,
-          "foreignCpuSeconds": 0.010695999999999973
+          "wallSeconds": 1.1288912140007596,
+          "cpuSeconds": 1.121864,
+          "peakRssMiB": 72.9296875,
+          "foreignCpuSecondsAtBestWall": 0.008135999999999978,
+          "foreignCpuSecondsMax": 0.03598499999999992
         }
       },
       "flags": [
         {
           "metric": "wallSeconds",
-          "base": 0.11396069900365546,
-          "head": 1.1307867789873853,
-          "ratio": 9.922603045380702,
+          "base": 0.11396372700983193,
+          "head": 1.1288912140007596,
+          "ratio": 9.90570634727809,
+          "contendedSides": [],
+          "foreignCpuSecondsAtBestWall": {
+            "base": 0.007175000000000004,
+            "head": 0.008135999999999978
+          },
           "explanation": null
         }
       ]
@@ -518,30 +546,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.12666627900034655,
-              "cpuSeconds": 0.11412,
-              "peakRssMiB": 45.15234375,
-              "foreignCpuSeconds": 0.005879999999999996
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.12729379699158017,
-              "cpuSeconds": 0.115895,
-              "peakRssMiB": 46.3828125,
+              "wallSeconds": 0.12348990600730758,
+              "cpuSeconds": 0.112719,
+              "peakRssMiB": 44.76171875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.12765803399088327,
-              "cpuSeconds": 0.112588,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.007411999999999995
+              "wallSeconds": 0.1297488800046267,
+              "cpuSeconds": 0.115375,
+              "peakRssMiB": 45.375,
+              "foreignCpuSeconds": 0.004624999999999997
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.12708535901037976,
+              "cpuSeconds": 0.11608099999999999,
+              "peakRssMiB": 45.234375,
+              "foreignCpuSeconds": 0.003918999999999999
             }
           ],
-          "wallSeconds": 0.12666627900034655,
-          "cpuSeconds": 0.112588,
-          "peakRssMiB": 46.3828125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.12348990600730758,
+          "cpuSeconds": 0.112719,
+          "peakRssMiB": 45.375,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.004624999999999997,
           "outputBytes": 19553112,
           "members": 13,
           "digest": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2",
@@ -559,30 +588,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.11204865599574987,
-              "cpuSeconds": 0.100906,
-              "peakRssMiB": 44.53125,
+              "wallSeconds": 0.11276867100968957,
+              "cpuSeconds": 0.10056999999999999,
+              "peakRssMiB": 44.76171875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.11721002600097563,
-              "cpuSeconds": 0.10287199999999999,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.007128000000000002
+              "wallSeconds": 0.1112006440089317,
+              "cpuSeconds": 0.10040299999999999,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.009597000000000008
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1117826870031422,
-              "cpuSeconds": 0.10083299999999999,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.11892378200718667,
+              "cpuSeconds": 0.101919,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.008081000000000005
             }
           ],
-          "wallSeconds": 0.1117826870031422,
-          "cpuSeconds": 0.10083299999999999,
-          "peakRssMiB": 44.53125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.1112006440089317,
+          "cpuSeconds": 0.10040299999999999,
+          "peakRssMiB": 44.76171875,
+          "foreignCpuSecondsAtBestWall": 0.009597000000000008,
+          "foreignCpuSecondsMax": 0.009597000000000008,
           "outputBytes": 19553112,
           "members": 13,
           "digest": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2",
@@ -611,30 +641,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.06016774800082203,
-              "cpuSeconds": 0.059849,
-              "peakRssMiB": 86.953125,
-              "foreignCpuSeconds": 0.010151000000000007
+              "wallSeconds": 0.05923034599982202,
+              "cpuSeconds": 0.058932,
+              "peakRssMiB": 87.1875,
+              "foreignCpuSeconds": 0.0010679999999999995
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.060247683999477886,
-              "cpuSeconds": 0.059941999999999995,
-              "peakRssMiB": 87.28515625,
-              "foreignCpuSeconds": 0.010058000000000008
+              "wallSeconds": 0.06007769399730023,
+              "cpuSeconds": 0.05900299999999999,
+              "peakRssMiB": 86.98828125,
+              "foreignCpuSeconds": 0.010997000000000014
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.059068578004371375,
-              "cpuSeconds": 0.058794,
-              "peakRssMiB": 86.76171875,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.05898920200706925,
+              "cpuSeconds": 0.058432,
+              "peakRssMiB": 86.95703125,
+              "foreignCpuSeconds": 0.0015680000000000034
             }
           ],
-          "wallSeconds": 0.059068578004371375,
-          "cpuSeconds": 0.058794,
-          "peakRssMiB": 87.28515625,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.05898920200706925,
+          "cpuSeconds": 0.058432,
+          "peakRssMiB": 87.1875,
+          "foreignCpuSecondsAtBestWall": 0.0015680000000000034,
+          "foreignCpuSecondsMax": 0.010997000000000014
         },
         "head": {
           "case": "validate:point-cloud",
@@ -642,30 +673,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.0484338980022585,
-              "cpuSeconds": 0.048191,
-              "peakRssMiB": 67.97265625,
+              "wallSeconds": 0.048269545994116925,
+              "cpuSeconds": 0.048000999999999995,
+              "peakRssMiB": 67.5703125,
+              "foreignCpuSeconds": 0.011999000000000003
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04798667400609702,
+              "cpuSeconds": 0.04758,
+              "peakRssMiB": 67.90625,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.04857930900470819,
-              "cpuSeconds": 0.048327999999999996,
-              "peakRssMiB": 67.84375,
-              "foreignCpuSeconds": 0.001672000000000005
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.04790647899790201,
-              "cpuSeconds": 0.047654,
-              "peakRssMiB": 67.87890625,
-              "foreignCpuSeconds": 0.012346
+              "wallSeconds": 0.0478846740006702,
+              "cpuSeconds": 0.047294,
+              "peakRssMiB": 67.80078125,
+              "foreignCpuSeconds": 0.012706000000000002
             }
           ],
-          "wallSeconds": 0.04790647899790201,
-          "cpuSeconds": 0.047654,
-          "peakRssMiB": 67.97265625,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.0478846740006702,
+          "cpuSeconds": 0.047294,
+          "peakRssMiB": 67.90625,
+          "foreignCpuSecondsAtBestWall": 0.012706000000000002,
+          "foreignCpuSecondsMax": 0.012706000000000002
         }
       },
       "flags": []
@@ -691,30 +723,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.15783604299940635,
-              "cpuSeconds": 0.14615,
-              "peakRssMiB": 50.11328125,
+              "wallSeconds": 0.15314374999434222,
+              "cpuSeconds": 0.14122200000000001,
+              "peakRssMiB": 50.77734375,
+              "foreignCpuSeconds": 0.008777999999999994
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.15634097199654207,
+              "cpuSeconds": 0.14553299999999997,
+              "peakRssMiB": 51.19140625,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.15790375499636866,
-              "cpuSeconds": 0.14643899999999999,
-              "peakRssMiB": 49.72265625,
-              "foreignCpuSeconds": 0
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.15981098100019153,
-              "cpuSeconds": 0.146513,
-              "peakRssMiB": 50.20703125,
-              "foreignCpuSeconds": 0.003487000000000004
+              "wallSeconds": 0.15964548999909312,
+              "cpuSeconds": 0.146957,
+              "peakRssMiB": 51.38671875,
+              "foreignCpuSeconds": 0.00304299999999999
             }
           ],
-          "wallSeconds": 0.15783604299940635,
-          "cpuSeconds": 0.14615,
-          "peakRssMiB": 50.20703125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.15314374999434222,
+          "cpuSeconds": 0.14122200000000001,
+          "peakRssMiB": 51.38671875,
+          "foreignCpuSecondsAtBestWall": 0.008777999999999994,
+          "foreignCpuSecondsMax": 0.008777999999999994,
           "outputBytes": 20634718,
           "members": 14,
           "digest": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a",
@@ -731,30 +764,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.14784454098844435,
-              "cpuSeconds": 0.135184,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.014816000000000003
+              "wallSeconds": 0.1438283329916885,
+              "cpuSeconds": 0.13199,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.14487380000355188,
-              "cpuSeconds": 0.133263,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.006737000000000021
+              "wallSeconds": 0.14724021501024254,
+              "cpuSeconds": 0.135042,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.14880116999847814,
-              "cpuSeconds": 0.135386,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.004614000000000014
+              "wallSeconds": 0.1503012100001797,
+              "cpuSeconds": 0.133591,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.14487380000355188,
-          "cpuSeconds": 0.133263,
-          "peakRssMiB": 44.53125,
-          "foreignCpuSeconds": 0.004614000000000014,
+          "wallSeconds": 0.1438283329916885,
+          "cpuSeconds": 0.13199,
+          "peakRssMiB": 44.76171875,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0,
           "outputBytes": 20634718,
           "members": 14,
           "digest": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a",
@@ -782,30 +816,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.06196695999824442,
-              "cpuSeconds": 0.061699000000000004,
-              "peakRssMiB": 88.13671875,
-              "foreignCpuSeconds": 0.008301000000000006
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.062296343996422365,
-              "cpuSeconds": 0.061942,
-              "peakRssMiB": 87.8203125,
+              "wallSeconds": 0.06085680300020613,
+              "cpuSeconds": 0.060524999999999995,
+              "peakRssMiB": 87.91796875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.06043966699508019,
-              "cpuSeconds": 0.06007799999999999,
-              "peakRssMiB": 88.1328125,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.0607189160073176,
+              "cpuSeconds": 0.059925,
+              "peakRssMiB": 87.7109375,
+              "foreignCpuSeconds": 7.499999999999868e-05
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.06024460299522616,
+              "cpuSeconds": 0.059684,
+              "peakRssMiB": 87.89453125,
+              "foreignCpuSeconds": 0.0003160000000000003
             }
           ],
-          "wallSeconds": 0.06043966699508019,
-          "cpuSeconds": 0.06007799999999999,
-          "peakRssMiB": 88.13671875,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.06024460299522616,
+          "cpuSeconds": 0.059684,
+          "peakRssMiB": 87.91796875,
+          "foreignCpuSecondsAtBestWall": 0.0003160000000000003,
+          "foreignCpuSecondsMax": 0.0003160000000000003
         },
         "head": {
           "case": "validate:point-cloud-explicit",
@@ -813,38 +848,44 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.2765184239979135,
-              "cpuSeconds": 0.27583399999999997,
-              "peakRssMiB": 69.70703125,
-              "foreignCpuSeconds": 0.024166000000000024
+              "wallSeconds": 0.27717436201055534,
+              "cpuSeconds": 0.27640699999999996,
+              "peakRssMiB": 69.546875,
+              "foreignCpuSeconds": 0.013593000000000015
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.278500433996669,
-              "cpuSeconds": 0.277783,
-              "peakRssMiB": 69.8125,
-              "foreignCpuSeconds": 0.0022170000000000245
+              "wallSeconds": 0.2749198189994786,
+              "cpuSeconds": 0.27396699999999996,
+              "peakRssMiB": 69.60546875,
+              "foreignCpuSeconds": 0.006033000000000052
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.27506128200911917,
-              "cpuSeconds": 0.274401,
-              "peakRssMiB": 69.78125,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.273173219000455,
+              "cpuSeconds": 0.270848,
+              "peakRssMiB": 69.703125,
+              "foreignCpuSeconds": 0.009152000000000028
             }
           ],
-          "wallSeconds": 0.27506128200911917,
-          "cpuSeconds": 0.274401,
-          "peakRssMiB": 69.8125,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.273173219000455,
+          "cpuSeconds": 0.270848,
+          "peakRssMiB": 69.703125,
+          "foreignCpuSecondsAtBestWall": 0.009152000000000028,
+          "foreignCpuSecondsMax": 0.013593000000000015
         }
       },
       "flags": [
         {
           "metric": "wallSeconds",
-          "base": 0.06043966699508019,
-          "head": 0.27506128200911917,
-          "ratio": 4.551005915229633,
+          "base": 0.06024460299522616,
+          "head": 0.273173219000455,
+          "ratio": 4.534401513478336,
+          "contendedSides": [],
+          "foreignCpuSecondsAtBestWall": {
+            "base": 0.0003160000000000003,
+            "head": 0.009152000000000028
+          },
           "explanation": null
         }
       ]
@@ -871,30 +912,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.10993696600780822,
-              "cpuSeconds": 0.09975899999999999,
-              "peakRssMiB": 60.25,
-              "foreignCpuSeconds": 0.01024100000000001
+              "wallSeconds": 0.10791559699282516,
+              "cpuSeconds": 0.09965299999999999,
+              "peakRssMiB": 60.20703125,
+              "foreignCpuSeconds": 0.00034700000000001396
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.10770701699948404,
-              "cpuSeconds": 0.100773,
-              "peakRssMiB": 60.21875,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.10595978899800684,
+              "cpuSeconds": 0.097658,
+              "peakRssMiB": 60.15625,
+              "foreignCpuSeconds": 0.012341999999999999
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.10625870700459927,
-              "cpuSeconds": 0.098908,
-              "peakRssMiB": 60.203125,
-              "foreignCpuSeconds": 0.0010920000000000148
+              "wallSeconds": 0.1121253409946803,
+              "cpuSeconds": 0.099585,
+              "peakRssMiB": 60.30859375,
+              "foreignCpuSeconds": 0.00041500000000000564
             }
           ],
-          "wallSeconds": 0.10625870700459927,
-          "cpuSeconds": 0.098908,
-          "peakRssMiB": 60.25,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.10595978899800684,
+          "cpuSeconds": 0.097658,
+          "peakRssMiB": 60.30859375,
+          "foreignCpuSecondsAtBestWall": 0.012341999999999999,
+          "foreignCpuSecondsMax": 0.012341999999999999,
           "outputBytes": 10497816,
           "members": 12,
           "digest": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587",
@@ -912,30 +954,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.09439632100111339,
-              "cpuSeconds": 0.086936,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.013064000000000006
+              "wallSeconds": 0.0936360370105831,
+              "cpuSeconds": 0.086812,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.0031880000000000025
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.09484616000554524,
-              "cpuSeconds": 0.087408,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.0025920000000000023
+              "wallSeconds": 0.09352350400877185,
+              "cpuSeconds": 0.08671199999999998,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.003288000000000007
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.09459097900253255,
-              "cpuSeconds": 0.08688099999999999,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.0031190000000000037
+              "wallSeconds": 0.09924425299686845,
+              "cpuSeconds": 0.090663,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.09439632100111339,
-          "cpuSeconds": 0.08688099999999999,
-          "peakRssMiB": 44.53125,
-          "foreignCpuSeconds": 0.0025920000000000023,
+          "wallSeconds": 0.09352350400877185,
+          "cpuSeconds": 0.08671199999999998,
+          "peakRssMiB": 44.76171875,
+          "foreignCpuSecondsAtBestWall": 0.003288000000000007,
+          "foreignCpuSecondsMax": 0.003288000000000007,
           "outputBytes": 10497816,
           "members": 12,
           "digest": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587",
@@ -964,30 +1007,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.05474136599514168,
-              "cpuSeconds": 0.05447,
-              "peakRssMiB": 85.4765625,
+              "wallSeconds": 0.054556203991523944,
+              "cpuSeconds": 0.054097,
+              "peakRssMiB": 85.234375,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.05421858599584084,
-              "cpuSeconds": 0.053878999999999996,
-              "peakRssMiB": 85.40625,
-              "foreignCpuSeconds": 0.016121000000000007
+              "wallSeconds": 0.05407210400153417,
+              "cpuSeconds": 0.053325,
+              "peakRssMiB": 85.265625,
+              "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.05338944100367371,
-              "cpuSeconds": 0.05289,
-              "peakRssMiB": 85.40234375,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.052967085008276626,
+              "cpuSeconds": 0.052271,
+              "peakRssMiB": 85.08984375,
+              "foreignCpuSeconds": 0.007729000000000003
             }
           ],
-          "wallSeconds": 0.05338944100367371,
-          "cpuSeconds": 0.05289,
-          "peakRssMiB": 85.4765625,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.052967085008276626,
+          "cpuSeconds": 0.052271,
+          "peakRssMiB": 85.265625,
+          "foreignCpuSecondsAtBestWall": 0.007729000000000003,
+          "foreignCpuSecondsMax": 0.007729000000000003
         },
         "head": {
           "case": "validate:mesh-local",
@@ -995,38 +1039,44 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.1985159210016718,
-              "cpuSeconds": 0.19799199999999997,
-              "peakRssMiB": 66.7890625,
-              "foreignCpuSeconds": 0.022008000000000024
+              "wallSeconds": 0.19899093499407172,
+              "cpuSeconds": 0.197715,
+              "peakRssMiB": 66.65625,
+              "foreignCpuSeconds": 0.022285000000000006
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.200394788000267,
-              "cpuSeconds": 0.19988,
-              "peakRssMiB": 66.75,
-              "foreignCpuSeconds": 0.00012000000000001246
+              "wallSeconds": 0.1993347410025308,
+              "cpuSeconds": 0.19805399999999998,
+              "peakRssMiB": 66.453125,
+              "foreignCpuSeconds": 0.001946000000000024
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.20143839200318325,
-              "cpuSeconds": 0.19985499999999998,
-              "peakRssMiB": 66.796875,
-              "foreignCpuSeconds": 0.000145000000000034
+              "wallSeconds": 0.19593791700026486,
+              "cpuSeconds": 0.194185,
+              "peakRssMiB": 66.55078125,
+              "foreignCpuSeconds": 0.005815000000000008
             }
           ],
-          "wallSeconds": 0.1985159210016718,
-          "cpuSeconds": 0.19799199999999997,
-          "peakRssMiB": 66.796875,
-          "foreignCpuSeconds": 0.00012000000000001246
+          "wallSeconds": 0.19593791700026486,
+          "cpuSeconds": 0.194185,
+          "peakRssMiB": 66.65625,
+          "foreignCpuSecondsAtBestWall": 0.005815000000000008,
+          "foreignCpuSecondsMax": 0.022285000000000006
         }
       },
       "flags": [
         {
           "metric": "wallSeconds",
-          "base": 0.05338944100367371,
-          "head": 0.1985159210016718,
-          "ratio": 3.7182618373549183,
+          "base": 0.052967085008276626,
+          "head": 0.19593791700026486,
+          "ratio": 3.699239196751108,
+          "contendedSides": [],
+          "foreignCpuSecondsAtBestWall": {
+            "base": 0.007729000000000003,
+            "head": 0.005815000000000008
+          },
           "explanation": null
         }
       ]
@@ -1051,30 +1101,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.14551192299404647,
-              "cpuSeconds": 0.140079,
-              "peakRssMiB": 58.28125,
-              "foreignCpuSeconds": 0.009920999999999996
+              "wallSeconds": 0.14488936800626107,
+              "cpuSeconds": 0.13940399999999997,
+              "peakRssMiB": 58.25390625,
+              "foreignCpuSeconds": 0.010596000000000015
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.14470774700748734,
-              "cpuSeconds": 0.139462,
-              "peakRssMiB": 57.953125,
-              "foreignCpuSeconds": 0.020538000000000008
+              "wallSeconds": 0.1446039629954612,
+              "cpuSeconds": 0.13930299999999998,
+              "peakRssMiB": 58.23046875,
+              "foreignCpuSeconds": 0.0006970000000000327
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.14252461100113578,
-              "cpuSeconds": 0.137849,
-              "peakRssMiB": 57.9921875,
+              "wallSeconds": 0.1448579160060035,
+              "cpuSeconds": 0.139595,
+              "peakRssMiB": 58.16015625,
               "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.14252461100113578,
-          "cpuSeconds": 0.137849,
-          "peakRssMiB": 58.28125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.1446039629954612,
+          "cpuSeconds": 0.13930299999999998,
+          "peakRssMiB": 58.25390625,
+          "foreignCpuSecondsAtBestWall": 0.0006970000000000327,
+          "foreignCpuSecondsMax": 0.010596000000000015,
           "outputBytes": 2928597,
           "members": 4,
           "digest": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c",
@@ -1091,30 +1142,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.13494715599517804,
-              "cpuSeconds": 0.129708,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.1348877709970111,
+              "cpuSeconds": 0.129641,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.0003590000000000034
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1348023610044038,
-              "cpuSeconds": 0.130193,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.13611161200969946,
+              "cpuSeconds": 0.129297,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.0007030000000000152
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1327609079889953,
-              "cpuSeconds": 0.128322,
-              "peakRssMiB": 44.53125,
-              "foreignCpuSeconds": 0.0016780000000000093
+              "wallSeconds": 0.13445050599693786,
+              "cpuSeconds": 0.12868,
+              "peakRssMiB": 44.76171875,
+              "foreignCpuSeconds": 0.0013200000000000078
             }
           ],
-          "wallSeconds": 0.1327609079889953,
-          "cpuSeconds": 0.128322,
-          "peakRssMiB": 44.53125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.13445050599693786,
+          "cpuSeconds": 0.12868,
+          "peakRssMiB": 44.76171875,
+          "foreignCpuSecondsAtBestWall": 0.0013200000000000078,
+          "foreignCpuSecondsMax": 0.0013200000000000078,
           "outputBytes": 2928597,
           "members": 4,
           "digest": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c",
@@ -1142,30 +1194,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.04411681900091935,
-              "cpuSeconds": 0.043665999999999996,
-              "peakRssMiB": 83.32421875,
-              "foreignCpuSeconds": 0.006334000000000006
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.04235532401071396,
-              "cpuSeconds": 0.041951,
-              "peakRssMiB": 83.09375,
+              "wallSeconds": 0.04160867199243512,
+              "cpuSeconds": 0.041192,
+              "peakRssMiB": 83.1328125,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.042076801997609437,
-              "cpuSeconds": 0.04163699999999999,
-              "peakRssMiB": 83.26953125,
-              "foreignCpuSeconds": 0.018363
+              "wallSeconds": 0.04225886698986869,
+              "cpuSeconds": 0.041609999999999994,
+              "peakRssMiB": 83.25,
+              "foreignCpuSeconds": 0.018389999999999997
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04201218800153583,
+              "cpuSeconds": 0.04164999999999999,
+              "peakRssMiB": 83.47265625,
+              "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.042076801997609437,
-          "cpuSeconds": 0.04163699999999999,
-          "peakRssMiB": 83.32421875,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.04160867199243512,
+          "cpuSeconds": 0.041192,
+          "peakRssMiB": 83.47265625,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.018389999999999997
         },
         "head": {
           "case": "validate:glb-wrap",
@@ -1173,30 +1226,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.050281496995012276,
-              "cpuSeconds": 0.049673,
+              "wallSeconds": 0.04876031800813507,
+              "cpuSeconds": 0.04833799999999999,
               "peakRssMiB": 66.77734375,
-              "foreignCpuSeconds": 0.00032700000000000264
+              "foreignCpuSeconds": 0.0016620000000000072
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.05030180100584403,
-              "cpuSeconds": 0.049871,
-              "peakRssMiB": 66.7109375,
-              "foreignCpuSeconds": 0.00012900000000000758
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.05093797801237088,
-              "cpuSeconds": 0.050556,
-              "peakRssMiB": 66.671875,
+              "wallSeconds": 0.048376965991337784,
+              "cpuSeconds": 0.048043,
+              "peakRssMiB": 66.56640625,
               "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04941375499765854,
+              "cpuSeconds": 0.049000999999999996,
+              "peakRssMiB": 66.7265625,
+              "foreignCpuSeconds": 0.0009990000000000086
             }
           ],
-          "wallSeconds": 0.050281496995012276,
-          "cpuSeconds": 0.049673,
+          "wallSeconds": 0.048376965991337784,
+          "cpuSeconds": 0.048043,
           "peakRssMiB": 66.77734375,
-          "foreignCpuSeconds": 0
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.0016620000000000072
         }
       },
       "flags": []
@@ -1221,30 +1275,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.23343099799240008,
-              "cpuSeconds": 0.322752,
-              "peakRssMiB": 90.5859375,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.23104819598665927,
+              "cpuSeconds": 0.319495,
+              "peakRssMiB": 90.1953125,
+              "foreignCpuSeconds": 0.010505000000000046
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.23601843799406197,
-              "cpuSeconds": 0.32595999999999997,
-              "peakRssMiB": 90.8125,
-              "foreignCpuSeconds": 0.014040000000000063
+              "wallSeconds": 0.23036214400781319,
+              "cpuSeconds": 0.318274,
+              "peakRssMiB": 90.8359375,
+              "foreignCpuSeconds": 0.001725999999999995
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.2356849939969834,
-              "cpuSeconds": 0.326176,
-              "peakRssMiB": 90.6484375,
-              "foreignCpuSeconds": 0.01382400000000002
+              "wallSeconds": 0.23034900600032415,
+              "cpuSeconds": 0.31667199999999995,
+              "peakRssMiB": 90.5390625,
+              "foreignCpuSeconds": 0.0033280000000000323
             }
           ],
-          "wallSeconds": 0.23343099799240008,
-          "cpuSeconds": 0.322752,
-          "peakRssMiB": 90.8125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.23034900600032415,
+          "cpuSeconds": 0.31667199999999995,
+          "peakRssMiB": 90.8359375,
+          "foreignCpuSecondsAtBestWall": 0.0033280000000000323,
+          "foreignCpuSecondsMax": 0.010505000000000046,
           "outputBytes": 2584349,
           "members": 13,
           "digest": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b",
@@ -1262,30 +1317,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.22594518700498156,
-              "cpuSeconds": 0.318553,
-              "peakRssMiB": 72.9296875,
-              "foreignCpuSeconds": 0.011447000000000027
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.22717236800235696,
-              "cpuSeconds": 0.31939399999999996,
-              "peakRssMiB": 72.6015625,
+              "wallSeconds": 0.22377273300662637,
+              "cpuSeconds": 0.31518799999999997,
+              "peakRssMiB": 72.62890625,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.22342843099613674,
-              "cpuSeconds": 0.314938,
-              "peakRssMiB": 72.58984375,
-              "foreignCpuSeconds": 0.015062000000000023
+              "wallSeconds": 0.22248312299780082,
+              "cpuSeconds": 0.312076,
+              "peakRssMiB": 72.703125,
+              "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.22464893500728067,
+              "cpuSeconds": 0.31682,
+              "peakRssMiB": 72.4140625,
+              "foreignCpuSeconds": 0.0031800000000000057
             }
           ],
-          "wallSeconds": 0.22342843099613674,
-          "cpuSeconds": 0.314938,
-          "peakRssMiB": 72.9296875,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.22248312299780082,
+          "cpuSeconds": 0.312076,
+          "peakRssMiB": 72.703125,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.0031800000000000057,
           "outputBytes": 2584349,
           "members": 13,
           "digest": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b",
@@ -1314,30 +1370,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.045405547993141226,
-              "cpuSeconds": 0.04496,
-              "peakRssMiB": 84.21875,
-              "foreignCpuSeconds": 0.0050400000000000045
+              "wallSeconds": 0.04509253200376406,
+              "cpuSeconds": 0.044353000000000004,
+              "peakRssMiB": 84.328125,
+              "foreignCpuSeconds": 0.005647000000000003
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.0454155030020047,
-              "cpuSeconds": 0.044847,
-              "peakRssMiB": 84.1796875,
+              "wallSeconds": 0.04373801700421609,
+              "cpuSeconds": 0.043307,
+              "peakRssMiB": 84.421875,
+              "foreignCpuSeconds": 0.0066930000000000045
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.043691683997167274,
+              "cpuSeconds": 0.043282,
+              "peakRssMiB": 83.9921875,
               "foreignCpuSeconds": 0
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.0452880910015665,
-              "cpuSeconds": 0.044815999999999995,
-              "peakRssMiB": 84.33203125,
-              "foreignCpuSeconds": 0.005184000000000006
             }
           ],
-          "wallSeconds": 0.0452880910015665,
-          "cpuSeconds": 0.044815999999999995,
-          "peakRssMiB": 84.33203125,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.043691683997167274,
+          "cpuSeconds": 0.043282,
+          "peakRssMiB": 84.421875,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.0066930000000000045
         },
         "head": {
           "case": "validate:mesh",
@@ -1345,30 +1402,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.03378768799302634,
-              "cpuSeconds": 0.03347,
-              "peakRssMiB": 64.94140625,
+              "wallSeconds": 0.03354999900329858,
+              "cpuSeconds": 0.033223,
+              "peakRssMiB": 65.359375,
+              "foreignCpuSeconds": 0.006777000000000002
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.033240477001527324,
+              "cpuSeconds": 0.032927,
+              "peakRssMiB": 65.55859375,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.03381933299533557,
-              "cpuSeconds": 0.033505999999999994,
-              "peakRssMiB": 65.43359375,
-              "foreignCpuSeconds": 0
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.03337634800118394,
-              "cpuSeconds": 0.033041,
-              "peakRssMiB": 65.4609375,
+              "wallSeconds": 0.03279426399967633,
+              "cpuSeconds": 0.032443,
+              "peakRssMiB": 65.203125,
               "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.03337634800118394,
-          "cpuSeconds": 0.033041,
-          "peakRssMiB": 65.4609375,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.03279426399967633,
+          "cpuSeconds": 0.032443,
+          "peakRssMiB": 65.55859375,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.006777000000000002
         }
       },
       "flags": []
@@ -1394,30 +1452,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.12718978599878028,
-              "cpuSeconds": 0.16998699999999997,
-              "peakRssMiB": 71.65625,
-              "foreignCpuSeconds": 0.010013000000000011
+              "wallSeconds": 0.12643309100531042,
+              "cpuSeconds": 0.16899599999999998,
+              "peakRssMiB": 71.8046875,
+              "foreignCpuSeconds": 0.02100400000000002
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1286668050015578,
-              "cpuSeconds": 0.17124999999999999,
-              "peakRssMiB": 71.71875,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 0.1279551900079241,
+              "cpuSeconds": 0.17091599999999998,
+              "peakRssMiB": 71.67578125,
+              "foreignCpuSeconds": 0.009083999999999998
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.1279132499912521,
-              "cpuSeconds": 0.170479,
-              "peakRssMiB": 71.79296875,
-              "foreignCpuSeconds": 0.019521
+              "wallSeconds": 0.1256466289923992,
+              "cpuSeconds": 0.166885,
+              "peakRssMiB": 71.5234375,
+              "foreignCpuSeconds": 0.00311500000000001
             }
           ],
-          "wallSeconds": 0.12718978599878028,
-          "cpuSeconds": 0.16998699999999997,
-          "peakRssMiB": 71.79296875,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.1256466289923992,
+          "cpuSeconds": 0.166885,
+          "peakRssMiB": 71.8046875,
+          "foreignCpuSecondsAtBestWall": 0.00311500000000001,
+          "foreignCpuSecondsMax": 0.02100400000000002,
           "outputBytes": 1689232,
           "members": 11,
           "digest": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f",
@@ -1434,30 +1493,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.11819948100310285,
-              "cpuSeconds": 0.161532,
-              "peakRssMiB": 56.5703125,
-              "foreignCpuSeconds": 0.01846799999999999
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.11773471800552215,
-              "cpuSeconds": 0.16124999999999998,
-              "peakRssMiB": 54.34375,
+              "wallSeconds": 0.11670981500355992,
+              "cpuSeconds": 0.158689,
+              "peakRssMiB": 56.671875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.11784326899214648,
-              "cpuSeconds": 0.160845,
-              "peakRssMiB": 54.3046875,
+              "wallSeconds": 0.11788765399251133,
+              "cpuSeconds": 0.160781,
+              "peakRssMiB": 56.0625,
               "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.11709025099116843,
+              "cpuSeconds": 0.15942699999999999,
+              "peakRssMiB": 56.640625,
+              "foreignCpuSeconds": 0.0005730000000000214
             }
           ],
-          "wallSeconds": 0.11773471800552215,
-          "cpuSeconds": 0.160845,
-          "peakRssMiB": 56.5703125,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.11670981500355992,
+          "cpuSeconds": 0.158689,
+          "peakRssMiB": 56.671875,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.0005730000000000214,
           "outputBytes": 1689232,
           "members": 11,
           "digest": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f",
@@ -1485,30 +1545,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.046035072999075055,
-              "cpuSeconds": 0.045555,
-              "peakRssMiB": 84.19921875,
+              "wallSeconds": 0.044229356994037516,
+              "cpuSeconds": 0.04395399999999999,
+              "peakRssMiB": 84.2421875,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.045674862994928844,
-              "cpuSeconds": 0.045274999999999996,
-              "peakRssMiB": 84.35546875,
+              "wallSeconds": 0.04406239899981301,
+              "cpuSeconds": 0.04346,
+              "peakRssMiB": 84.0703125,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.04499774900614284,
-              "cpuSeconds": 0.044501,
-              "peakRssMiB": 84.02734375,
-              "foreignCpuSeconds": 0.005499000000000007
+              "wallSeconds": 0.04387866299657617,
+              "cpuSeconds": 0.043494,
+              "peakRssMiB": 84.1015625,
+              "foreignCpuSeconds": 0
             }
           ],
-          "wallSeconds": 0.04499774900614284,
-          "cpuSeconds": 0.044501,
-          "peakRssMiB": 84.35546875,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.04387866299657617,
+          "cpuSeconds": 0.04346,
+          "peakRssMiB": 84.2421875,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0
         },
         "head": {
           "case": "validate:mesh-explicit",
@@ -1516,30 +1577,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.07542043899593409,
-              "cpuSeconds": 0.07460499999999999,
-              "peakRssMiB": 65.41796875,
-              "foreignCpuSeconds": 0.015395000000000002
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.07286672299960628,
-              "cpuSeconds": 0.07259499999999999,
+              "wallSeconds": 0.07124029399710707,
+              "cpuSeconds": 0.070958,
               "peakRssMiB": 65.359375,
-              "foreignCpuSeconds": 0.007405000000000007
+              "foreignCpuSeconds": 0.009042000000000005
             },
             {
               "exitCode": 0,
-              "wallSeconds": 0.07259173100464977,
-              "cpuSeconds": 0.07191299999999999,
-              "peakRssMiB": 65.3125,
+              "wallSeconds": 0.07203807400946971,
+              "cpuSeconds": 0.071752,
+              "peakRssMiB": 65.46484375,
               "foreignCpuSeconds": 0
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.07191377200069837,
+              "cpuSeconds": 0.071074,
+              "peakRssMiB": 65.12890625,
+              "foreignCpuSeconds": 0.008926000000000005
             }
           ],
-          "wallSeconds": 0.07259173100464977,
-          "cpuSeconds": 0.07191299999999999,
-          "peakRssMiB": 65.41796875,
-          "foreignCpuSeconds": 0
+          "wallSeconds": 0.07124029399710707,
+          "cpuSeconds": 0.070958,
+          "peakRssMiB": 65.46484375,
+          "foreignCpuSecondsAtBestWall": 0.009042000000000005,
+          "foreignCpuSecondsMax": 0.009042000000000005
         }
       },
       "flags": []
@@ -1566,30 +1628,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 0.048172302995226346,
-              "cpuSeconds": 0.019441,
-              "peakRssMiB": 46.74609375,
+              "wallSeconds": 0.048874616011744365,
+              "cpuSeconds": 0.019320999999999998,
+              "peakRssMiB": 46.76171875,
+              "foreignCpuSeconds": 0.0006790000000000008
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.048509200001717545,
+              "cpuSeconds": 0.019999999999999997,
+              "peakRssMiB": 46.6875,
+              "foreignCpuSeconds": 1.734723475976807e-18
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 0.04793443199014291,
+              "cpuSeconds": 0.019794,
+              "peakRssMiB": 46.89453125,
               "foreignCpuSeconds": 0
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.04832093199365772,
-              "cpuSeconds": 0.019815,
-              "peakRssMiB": 46.87109375,
-              "foreignCpuSeconds": 0.00018500000000000114
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 0.04787647300690878,
-              "cpuSeconds": 0.019562999999999997,
-              "peakRssMiB": 47.04296875,
-              "foreignCpuSeconds": 0.0004370000000000016
             }
           ],
-          "wallSeconds": 0.04787647300690878,
-          "cpuSeconds": 0.019441,
-          "peakRssMiB": 47.04296875,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 0.04793443199014291,
+          "cpuSeconds": 0.019320999999999998,
+          "peakRssMiB": 46.89453125,
+          "foreignCpuSecondsAtBestWall": 0,
+          "foreignCpuSecondsMax": 0.0006790000000000008,
           "outputBytes": 24597,
           "members": 8,
           "digest": "9affaec718afea0e6ffd1ce775336974f452ed7320198477fb283cf3d2d7d568",
@@ -1633,30 +1696,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 1.248093856003834,
-              "cpuSeconds": 0.210183,
-              "peakRssMiB": 56.50390625,
-              "foreignCpuSeconds": 0.07981699999999997
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 1.274995026004035,
-              "cpuSeconds": 0.20953699999999997,
-              "peakRssMiB": 56.3203125,
-              "foreignCpuSeconds": 0.06046300000000003
-            },
-            {
-              "exitCode": 0,
-              "wallSeconds": 1.3139840829971945,
-              "cpuSeconds": 0.21025899999999997,
+              "wallSeconds": 1.2734628500038525,
+              "cpuSeconds": 0.208112,
               "peakRssMiB": 56.625,
-              "foreignCpuSeconds": 0.04974100000000002
+              "foreignCpuSeconds": 0.07188800000000004
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.3056809370027622,
+              "cpuSeconds": 0.20904999999999999,
+              "peakRssMiB": 56.70703125,
+              "foreignCpuSeconds": 0.07095000000000004
+            },
+            {
+              "exitCode": 0,
+              "wallSeconds": 1.2885663589986507,
+              "cpuSeconds": 0.20921199999999998,
+              "peakRssMiB": 56.71484375,
+              "foreignCpuSeconds": 0.060788000000000036
             }
           ],
-          "wallSeconds": 1.248093856003834,
-          "cpuSeconds": 0.20953699999999997,
-          "peakRssMiB": 56.625,
-          "foreignCpuSeconds": 0.04974100000000002,
+          "wallSeconds": 1.2734628500038525,
+          "cpuSeconds": 0.208112,
+          "peakRssMiB": 56.71484375,
+          "foreignCpuSecondsAtBestWall": 0.07188800000000004,
+          "foreignCpuSecondsMax": 0.07188800000000004,
           "outputBytes": 26021688,
           "members": 291,
           "digest": "7c17c6b3638f1f669eebabd3dd85ef4afe44c64f883b9cc02cbe7aa171e0353f",
@@ -1702,30 +1766,31 @@
           "samples": [
             {
               "exitCode": 0,
-              "wallSeconds": 9.31555431499146,
-              "cpuSeconds": 12.522137999999998,
-              "peakRssMiB": 224.77734375,
+              "wallSeconds": 9.318810085009318,
+              "cpuSeconds": 12.537561,
+              "peakRssMiB": 222.6484375,
               "foreignCpuSeconds": 0
             },
             {
               "exitCode": 0,
-              "wallSeconds": 9.2453538760019,
-              "cpuSeconds": 12.411845,
-              "peakRssMiB": 224.75390625,
-              "foreignCpuSeconds": 0
+              "wallSeconds": 9.269133252993925,
+              "cpuSeconds": 12.452381,
+              "peakRssMiB": 225.6484375,
+              "foreignCpuSeconds": 0.03761899999999985
             },
             {
               "exitCode": 0,
-              "wallSeconds": 17.334980851999717,
-              "cpuSeconds": 15.63346,
-              "peakRssMiB": 223.5546875,
-              "foreignCpuSeconds": 17.776539999999997
+              "wallSeconds": 9.361794464013656,
+              "cpuSeconds": 12.545582,
+              "peakRssMiB": 223.34765625,
+              "foreignCpuSeconds": 0.08441800000000121
             }
           ],
-          "wallSeconds": 9.2453538760019,
-          "cpuSeconds": 12.411845,
-          "peakRssMiB": 224.77734375,
-          "foreignCpuSeconds": 0,
+          "wallSeconds": 9.269133252993925,
+          "cpuSeconds": 12.452381,
+          "peakRssMiB": 225.6484375,
+          "foreignCpuSecondsAtBestWall": 0.03761899999999985,
+          "foreignCpuSecondsMax": 0.08441800000000121,
           "outputBytes": 66555715,
           "members": 3172,
           "digest": "c4bf85aef6de8b54c2558d8514eb7ce93fa117c950835bf60d3a025af8a14dc7",

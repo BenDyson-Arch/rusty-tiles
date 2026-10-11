@@ -21,10 +21,11 @@
       1
     ],
     "baseline": null,
-    "rasterInsetDegrees": 0,
+    "rasterInset": null,
+    "stepTimeoutSeconds": 120,
     "scriptSha256": {
-      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
-      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+      "cesium.py": "a4ff2697d80acb5a32a84176d57310d057ff982332870d920f146248087f2b8e",
+      "cesium.cjs": "b2b67479181ccb72832d31951a0ac99de0b12767d3356258465125ffe51c71ce"
     }
   },
   "cases": [
@@ -34,13 +35,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.16220000000298,
+      "secondsToLoaded": 2.1895999999940394,
       "tilesLoadedEvents": 5,
       "selectedTiles": 4,
       "tilesetMemoryBytes": null,
-      "usedJSHeapSize": 42035974,
-      "failures": [],
+      "usedJSHeapSize": 42816190,
       "rootBoundingSphereRadius": 8344.139455469209,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -54,8 +55,14 @@
       "output": {
         "archive": "/home/bend/.cache/perf-lane/work/baseline/head/vector.3tz",
         "bytes": 37111810,
-        "sha256": "ac0c0cf914072f0c01c831fbf48c09fe7403a969ab62053f5155d38adc51b000"
+        "sha256": "30015971131cfff8e2a208bc876c32c7ffe21495eb9b9ad45f4c71a47e5d07d7"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/vector/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/vector.png",
       "requests": {
         "runtimeRequests": 5,
@@ -96,13 +103,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.6705999999940397,
+      "secondsToLoaded": 2.17429999999702,
       "tilesLoadedEvents": 4,
       "selectedTiles": 4,
       "tilesetMemoryBytes": null,
-      "usedJSHeapSize": 42570242,
-      "failures": [],
+      "usedJSHeapSize": 42986015,
       "rootBoundingSphereRadius": 8344.139455469209,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -115,9 +122,15 @@
       "kind": "tileset",
       "output": {
         "archive": "/home/bend/.cache/perf-lane/work/baseline/head/vector-explicit.3tz",
-        "bytes": 19089031,
-        "sha256": "b74822ba3a1703f1f45f272ac57c88eeceb0bba8da2e813917005d6aca1f1f88"
+        "bytes": 19089032,
+        "sha256": "8dc3f9eafcc94e20126820937df4c95181c6d76bcff8ce8ef7a839a6c0e768b9"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/vector-explicit/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/vector-explicit.png",
       "requests": {
         "runtimeRequests": 5,
@@ -158,13 +171,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.83529999999702,
+      "secondsToLoaded": 3.2267999999970196,
       "tilesLoadedEvents": 10,
       "selectedTiles": 8,
       "tilesetMemoryBytes": 19505664,
-      "usedJSHeapSize": 75395419,
-      "failures": [],
+      "usedJSHeapSize": 73496802,
       "rootBoundingSphereRadius": 198.73945902697363,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -182,6 +195,12 @@
         "bytes": 19553112,
         "sha256": "0d02f7a62e0f54773f5545a242143cd097dbd0a567ba80dce6a72d665bd996c2"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/point-cloud/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/point-cloud.png",
       "requests": {
         "runtimeRequests": 5,
@@ -222,13 +241,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.32079999999702,
+      "secondsToLoaded": 2.4921000000089406,
       "tilesLoadedEvents": 7,
       "selectedTiles": 4,
       "tilesetMemoryBytes": 9439200,
-      "usedJSHeapSize": 55734846,
-      "failures": [],
+      "usedJSHeapSize": 51666348,
       "rootBoundingSphereRadius": 198.73945902697363,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -246,6 +265,12 @@
         "bytes": 20634718,
         "sha256": "e0536c6d29025e464d4020d024bc257608324a5479dfea89e5e0b402970e345a"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/point-cloud-explicit/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/point-cloud-explicit.png",
       "requests": {
         "runtimeRequests": 5,
@@ -286,13 +311,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.532,
+      "secondsToLoaded": 2.5639000000059604,
       "tilesLoadedEvents": 8,
       "selectedTiles": 8,
       "tilesetMemoryBytes": 10728744,
-      "usedJSHeapSize": 43770117,
-      "failures": [],
+      "usedJSHeapSize": 43944483,
       "rootBoundingSphereRadius": 283.0971244522437,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -310,6 +335,12 @@
         "bytes": 10497816,
         "sha256": "372aa7027271839dd66cae9892dd67243551d4934f6bc087c7d9bb97c4c7a587"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/mesh-local/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh-local.png",
       "requests": {
         "runtimeRequests": 5,
@@ -352,13 +383,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.4749000000059604,
+      "secondsToLoaded": 2.434,
       "tilesLoadedEvents": 1,
       "selectedTiles": 1,
       "tilesetMemoryBytes": 3186996,
-      "usedJSHeapSize": 29775579,
-      "failures": [],
+      "usedJSHeapSize": 29739565,
       "rootBoundingSphereRadius": 283.09712445224403,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -374,6 +405,12 @@
         "bytes": 2928597,
         "sha256": "9687bf1635f4623ebff3dd69cc7a1352db3297fdcf6dc971e349b10d59c4639c"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/glb-wrap/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/glb-wrap.png",
       "requests": {
         "runtimeRequests": 5,
@@ -414,13 +451,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.54470000000298,
+      "secondsToLoaded": 2.76379999999702,
       "tilesLoadedEvents": 10,
       "selectedTiles": 8,
       "tilesetMemoryBytes": 17565851,
-      "usedJSHeapSize": 35052686,
-      "failures": [],
+      "usedJSHeapSize": 35637556,
       "rootBoundingSphereRadius": 283.0971244522436,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -436,6 +473,12 @@
         "bytes": 2584349,
         "sha256": "2376870a4ece4dde82a751b1a4722a09a23521a10f3626179dc706f6b2d5a17b"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/mesh/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh.png",
       "requests": {
         "runtimeRequests": 5,
@@ -476,13 +519,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 2.436,
+      "secondsToLoaded": 2.514,
       "tilesLoadedEvents": 9,
       "selectedTiles": 8,
       "tilesetMemoryBytes": 9102681,
-      "usedJSHeapSize": 33706998,
-      "failures": [],
+      "usedJSHeapSize": 27252550,
       "rootBoundingSphereRadius": 283.0971244522436,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -498,6 +541,12 @@
         "bytes": 1689232,
         "sha256": "8b5127d2012de44663d616e7eaefbaad610a109ff5528aee3a33a52c21b2144f"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/mesh-explicit/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/mesh-explicit.png",
       "requests": {
         "runtimeRequests": 5,
@@ -538,13 +587,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 1.9382000000029802,
+      "secondsToLoaded": 1.9135999999940396,
       "tilesLoadedEvents": 6,
       "selectedTiles": 6,
       "tilesetMemoryBytes": 14940,
-      "usedJSHeapSize": 27433189,
-      "failures": [],
+      "usedJSHeapSize": 28560022,
       "rootBoundingSphereRadius": 19586.588577105897,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -561,6 +610,12 @@
         "bytes": 24597,
         "treeSha256": "9affaec718afea0e6ffd1ce775336974f452ed7320198477fb283cf3d2d7d568"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/terrain-fixture/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/terrain-fixture.png",
       "requests": {
         "runtimeRequests": 5,
@@ -601,13 +656,13 @@
         1024,
         768
       ],
+      "failures": [],
       "loaded": true,
-      "secondsToLoaded": 45.85129999999702,
+      "secondsToLoaded": 41.6165,
       "tilesLoadedEvents": 289,
       "selectedTiles": 289,
       "tilesetMemoryBytes": 25636668,
-      "usedJSHeapSize": 30114400,
-      "failures": [],
+      "usedJSHeapSize": 30255901,
       "rootBoundingSphereRadius": 7109.4896829208465,
       "browserVersion": "153.0.8010.12",
       "console": {
@@ -624,6 +679,12 @@
         "bytes": 26021688,
         "treeSha256": "7c17c6b3638f1f669eebabd3dd85ef4afe44c64f883b9cc02cbe7aa171e0353f"
       },
+      "spec": {
+        "kind": "tileset",
+        "url": "/data/terrain/tileset.json",
+        "stepMs": 120000
+      },
+      "budgetSeconds": 660,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/terrain.png",
       "requests": {
         "runtimeRequests": 5,
@@ -664,11 +725,19 @@
         1024,
         768
       ],
+      "failures": [],
+      "providerRectangleDegrees": [
+        12.52251506062613,
+        41.80179991207514,
+        12.780007126055816,
+        41.99346110759679
+      ],
       "views": [
         {
           "name": "overview",
           "loaded": true,
-          "secondsToLoaded": 1.9389000000059604,
+          "backgroundSettled": true,
+          "secondsToLoaded": 3.4115999999940394,
           "changedPixelFraction": 0.6704152425130209,
           "probes": [
             {
@@ -690,7 +759,8 @@
         {
           "name": "hole-edge",
           "loaded": true,
-          "secondsToLoaded": 2.2145999999940393,
+          "backgroundSettled": true,
+          "secondsToLoaded": 2.1295,
           "changedPixelFraction": 0.5009765625,
           "probes": [
             {
@@ -711,7 +781,7 @@
         }
       ],
       "loaded": true,
-      "secondsToLoaded": 1.9389000000059604,
+      "secondsToLoaded": 3.4115999999940394,
       "imageryErrors": 0,
       "probes": [
         {
@@ -743,8 +813,7 @@
           "pass": true
         }
       ],
-      "usedJSHeapSize": 43941267,
-      "failures": [],
+      "usedJSHeapSize": 29474022,
       "browserVersion": "153.0.8010.12",
       "console": {
         "errors": [],
@@ -764,6 +833,73 @@
           "RGB": 2294
         }
       },
+      "spec": {
+        "kind": "raster",
+        "url": "/data/raster/",
+        "stepMs": 120000,
+        "probes": [
+          {
+            "name": "inside-hole",
+            "rect": [
+              12.608345749102691,
+              41.86575088640702,
+              12.694176437579255,
+              41.92963795674598
+            ],
+            "expect": "background"
+          },
+          {
+            "name": "outside-hole",
+            "rect": [
+              12.52251506062613,
+              41.80179991207514,
+              12.780007126055816,
+              41.99346110759679
+            ],
+            "expect": "content",
+            "exclude": [
+              12.599762680255035,
+              41.85936217937312,
+              12.702759506426911,
+              41.93602666377987
+            ]
+          }
+        ],
+        "views": [
+          {
+            "name": "hole-edge",
+            "rect": [
+              12.599762680255035,
+              41.892902890653254,
+              12.616928817950347,
+              41.90248595249975
+            ],
+            "probes": [
+              {
+                "name": "west-of-edge",
+                "rect": [
+                  12.6006209871398,
+                  41.89529865611488,
+                  12.607058288775542,
+                  41.900090187038124
+                ],
+                "expect": "content"
+              },
+              {
+                "name": "east-of-edge",
+                "rect": [
+                  12.60963320942984,
+                  41.89529865611488,
+                  12.616070511065582,
+                  41.900090187038124
+                ],
+                "expect": "background"
+              }
+            ]
+          }
+        ]
+      },
+      "budgetSeconds": 1140,
       "screenshot": "/home/bend/.cache/perf-lane/work/baseline/cesium/screenshots/raster.png",
       "requests": {
         "runtimeRequests": 5,
@@ -780,20 +916,20 @@
           "bytes": 0
         },
         "imagery": {
-          "requests": 73,
-          "bytes": 1956989
+          "requests": 124,
+          "bytes": 3032098
         },
         "other": {
           "requests": 0,
           "bytes": 0
         },
-        "requests": 74,
-        "requestBytes": 1957224,
-        "duplicateRequests": 7,
+        "requests": 125,
+        "requestBytes": 3032333,
+        "duplicateRequests": 58,
         "serverErrors": [],
         "imageryColorTypes": {
-          "RGBA": 59,
-          "RGB": 14
+          "RGBA": 96,
+          "RGB": 28
         }
       },
       "captureSha256": {
