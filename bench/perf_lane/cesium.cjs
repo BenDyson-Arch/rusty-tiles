@@ -1,13 +1,18 @@
 // Load one served output in pinned Cesium and report runtime behaviour as JSON.
 // Usage: node cesium.cjs URL SPEC_JSON SCREENSHOT_PNG   (NODE_PATH exposes Playwright)
 // SPEC: {kind:'tileset', url} or {kind:'raster', url, probes:[{name, rect:[w,s,e,n], expect}],
-// views:[{name, rect, probes}]} (extra raster cameras after the overview), plus timeoutMs and
-// an optional raster insetDegrees. Only 127.0.0.1 is reachable; other requests are aborted and reported.
+// views:[{name, rect, probes}]} (extra raster cameras after the overview), plus stepMs and an
+// optional raster insetDegrees [w,s,e,n]. Every asynchronous step (page load, fromUrl, TileJSON
+// fetch, each settle, the screenshot) is bounded by stepMs; cesium.py derives the case budget.
+// Only 127.0.0.1 is reachable; other requests and every WebSocket are refused and reported.
 const {chromium} = require('playwright');
 const fs = require('node:fs');
 
 async function run(spec) {
   const C = Cesium, raster = spec.kind === 'raster', failures = [];
+  const describe = error => (error && error.stack ? `${error}\n${error.stack}` : String(error)).slice(0, 4000);
+  const bounded = (promise, label) => Promise.race([promise, new Promise((unused, reject) =>
+    setTimeout(() => reject(new Error(`${label} exceeded ${spec.stepMs} ms`)), spec.stepMs))]);
   const viewer = new C.Viewer('view', {globe: raster ? undefined : false, baseLayer: false, skyBox: false,
     skyAtmosphere: false, geocoder: false, baseLayerPicker: false, animation: false, timeline: false,
     sceneModePicker: false, navigationHelpButton: false, homeButton: false, fullscreenButton: false,
@@ -15,17 +20,17 @@ async function run(spec) {
   const scene = viewer.scene;
   scene.postProcessStages.fxaa.enabled = false;
   scene.backgroundColor = C.Color.BLACK;
-  scene.renderError.addEventListener((unused, error) => failures.push(String(error)));
+  scene.renderError.addEventListener((unused, error) => failures.push('renderError: ' + describe(error)));
   if (raster) {
     scene.globe.baseColor = C.Color.MAGENTA;
     scene.globe.showGroundAtmosphere = false;
     scene.fog.enabled = false;
     scene.globe.enableLighting = false;
   }
-  // Ready when the condition holds on several consecutive completed frames.
-  const settle = (ready, timeoutMs) => new Promise(resolve => {
+  // Ready when the condition holds on five consecutive completed frames; false after stepMs.
+  const settle = ready => new Promise(resolve => {
     let stable = 0, remove = () => {};
-    const timer = setTimeout(() => { remove(); resolve(false); }, timeoutMs);
+    const timer = setTimeout(() => { remove(); resolve(false); }, spec.stepMs);
     remove = scene.postRender.addEventListener(() => {
       stable = ready() ? stable + 1 : 0;
       if (stable >= 5 || failures.length) { remove(); clearTimeout(timer); resolve(stable >= 5); }
@@ -41,44 +46,50 @@ async function run(spec) {
     return context.getImageData(0, 0, canvas.width, canvas.height);
   };
   const heap = () => performance.memory ? performance.memory.usedJSHeapSize : null;
-  const report = {version: C.VERSION, canvas: [scene.canvas.width, scene.canvas.height]};
+  const report = {version: C.VERSION, canvas: [scene.canvas.width, scene.canvas.height], failures};
   if (!raster) {
     const start = performance.now();
     let tiles;
-    try { tiles = await C.Cesium3DTileset.fromUrl(spec.url, {maximumScreenSpaceError: 16}); }
-    catch (error) { return {...report, loaded: false, failures: [String(error)]}; }
+    try { tiles = await bounded(C.Cesium3DTileset.fromUrl(spec.url, {maximumScreenSpaceError: 16}), 'fromUrl'); }
+    catch (error) { failures.push('fromUrl: ' + describe(error)); return {...report, loaded: false}; }
     let loadedTiles = 0, allTilesLoaded = 0;
     tiles.tileLoad.addEventListener(() => loadedTiles++);
-    tiles.tileFailed.addEventListener(error => failures.push(String(error.message || error)));
+    tiles.tileFailed.addEventListener(error => failures.push('tileFailed: ' + describe(error.message || error)));
     tiles.allTilesLoaded.addEventListener(() => allTilesLoaded++);
     scene.primitives.add(tiles);
     const sphere = tiles.boundingSphere;
     viewer.camera.viewBoundingSphere(sphere, new C.HeadingPitchRange(-.8, -.65, Math.max(sphere.radius * 3, 5)));
     viewer.camera.lookAtTransform(C.Matrix4.IDENTITY);
-    const loaded = await settle(() => tiles.tilesLoaded && allTilesLoaded > 0, spec.timeoutMs);
+    const loaded = await settle(() => tiles.tilesLoaded && allTilesLoaded > 0);
     return Object.assign(report, {loaded: loaded && !failures.length, secondsToLoaded: (performance.now() - start) / 1000,
       tilesLoadedEvents: loadedTiles, selectedTiles: (tiles._selectedTiles || []).length,
-      tilesetMemoryBytes: tiles.totalMemoryUsageInBytes, usedJSHeapSize: heap(), failures,
-      rootBoundingSphereRadius: sphere.radius});
+      tilesetMemoryBytes: tiles.totalMemoryUsageInBytes, usedJSHeapSize: heap(), rootBoundingSphereRadius: sphere.radius});
   }
-  const metadata = await (await fetch(spec.url + 'tilejson.json')).json();
-  // Optional inset (degrees) works around Cesium's skeleton error on tile-aligned bounds.
-  const [w, s, e, n] = metadata.bounds, d = spec.insetDegrees || 0;
-  const provider = new C.UrlTemplateImageryProvider({url: new URL('tiles/', new URL(spec.url, location.href)).href + '{z}/{x}/{y}.png',
-    minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom, rectangle: C.Rectangle.fromDegrees(w + d, s + d, e - d, n - d)});
-  let queued = 1, imageryErrors = 0, layer;
-  provider.errorEvent.addEventListener(error => { imageryErrors++; failures.push(String(error.error || error.message || error)); });
+  const metadata = await bounded(fetch(spec.url + 'tilejson.json').then(response => response.json()), 'TileJSON fetch');
+  // Optional per-edge inset (degrees): a labelled workaround, not what preview did before T1.
+  const [w, s, e, n] = metadata.bounds, [dw, ds, de, dn] = spec.insetDegrees || [0, 0, 0, 0];
+  const rectangle = C.Rectangle.fromDegrees(w + dw, s + ds, e - de, n - dn);
+  report.providerRectangleDegrees = [w + dw, s + ds, e - de, n - dn];
+  let queued = 1, imageryErrors = 0;
   scene.globe.tileLoadProgressEvent.addEventListener(length => { queued = length; });
+  // As preview does: the layer exists from startup, before any globe tile is loaded.
+  const start = performance.now();
+  const provider = new C.UrlTemplateImageryProvider({url: new URL('tiles/', new URL(spec.url, location.href)).href + '{z}/{x}/{y}.png',
+    minimumLevel: metadata.minzoom, maximumLevel: metadata.maxzoom, rectangle});
+  provider.errorEvent.addEventListener(error => { imageryErrors++; failures.push('imagery: ' + describe(error.error || error.message || error)); });
+  const layer = viewer.imageryLayers.addImageryProvider(provider);
   report.views = [];
-  // Each view: a bare-globe reference frame, then the same camera with the imagery shown.
+  // Each view: settle with imagery, then the same camera with the layer hidden as the bare-globe reference.
   for (const view of [{name: 'overview', rect: metadata.bounds, probes: spec.probes}, ...(spec.views || [])]) {
+    const viewStart = report.views.length ? performance.now() : start;
     viewer.camera.setView({destination: C.Rectangle.fromDegrees(...view.rect)});
-    if (layer) layer.show = false;
-    await settle(() => scene.globe.tilesLoaded, spec.timeoutMs);
-    const background = pixels(), start = performance.now();
-    if (layer) layer.show = true; else layer = viewer.imageryLayers.addImageryProvider(provider);
-    const loaded = await settle(() => scene.globe.tilesLoaded && queued === 0, spec.timeoutMs);
-    const seconds = (performance.now() - start) / 1000, image = pixels();
+    layer.show = true;
+    const loaded = await settle(() => scene.globe.tilesLoaded && queued === 0);
+    const seconds = (performance.now() - viewStart) / 1000, image = pixels();
+    layer.show = false;
+    const backgroundSettled = await settle(() => scene.globe.tilesLoaded);
+    const background = pixels();
+    if (failures.length) { report.views.push({name: view.name, loaded: false, backgroundSettled}); break; }
     const scale = image.width / scene.canvas.clientWidth;
     const differs = index => Math.max(...[0, 1, 2].map(c => Math.abs(image.data[index + c] - background.data[index + c]))) > 8;
     let changed = 0;
@@ -100,22 +111,26 @@ async function run(spec) {
     });
     const canvas = document.createElement('canvas');
     canvas.width = image.width; canvas.height = image.height; canvas.getContext('2d').putImageData(image, 0, 0);
-    report.views.push({name: view.name, loaded, secondsToLoaded: seconds,
+    report.views.push({name: view.name, loaded, backgroundSettled, secondsToLoaded: seconds,
       changedPixelFraction: changed / (image.width * image.height), probes, png: canvas.toDataURL('image/png')});
   }
-  return Object.assign(report, {loaded: report.views.every(v => v.loaded) && !failures.length,
-    secondsToLoaded: report.views[0].secondsToLoaded, imageryErrors, probes: report.views.flatMap(v => v.probes),
-    usedJSHeapSize: heap(), failures});
+  layer.show = true;  // settled again so the page screenshot shows the last view with imagery
+  const restored = await settle(() => scene.globe.tilesLoaded && queued === 0);
+  return Object.assign(report, {loaded: report.views.every(v => v.loaded && v.backgroundSettled) && restored && !failures.length,
+    secondsToLoaded: report.views[0].secondsToLoaded, imageryErrors, probes: report.views.flatMap(v => v.probes || []),
+    usedJSHeapSize: heap()});
 }
 
 (async () => {
   const [url, specText, screenshot] = process.argv.slice(2), spec = JSON.parse(specText);
   const browser = await chromium.launch({executablePath: process.env.CHROMIUM, headless: true,
-    args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader']});
+    args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader',
+      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1']});
   const console_ = {errors: [], warnings: []}, failedRequests = [], externalRequests = [];
   try {
     const page = await browser.newPage({viewport: {width: 1024, height: 768}});
-    page.on('pageerror', error => console_.errors.push(String(error)));
+    page.setDefaultTimeout(spec.stepMs);
+    page.on('pageerror', error => console_.errors.push(error.stack ? `${error}\n${error.stack}` : String(error)));
     page.on('console', message => {
       if (message.type() === 'error') console_.errors.push(message.text());
       else if (message.type() === 'warning') console_.warnings.push(message.text());
@@ -131,14 +146,18 @@ async function run(spec) {
       }
       return route.continue();
     });
+    await page.routeWebSocket(/.*/, socket => { externalRequests.push(socket.url()); socket.close(); });
     await page.goto(url);
     await page.waitForFunction(() => window.Cesium);
     await page.addScriptTag({content: run.toString()});
     const result = await page.evaluate(async spec => {
-      try { return await run(spec); } catch (error) { return {loaded: false, failures: ['threw: ' + String(error)]}; }
+      try { return await run(spec); }
+      catch (error) { return {loaded: false, failures: ['threw: ' + (error.stack ? `${error}\n${error.stack}` : String(error)).slice(0, 4000)]}; }
     }, spec);
-    await page.screenshot({path: screenshot});
+    try { await page.screenshot({path: screenshot}); }  // a bounded step; its failure keeps the result
+    catch (error) { result.loaded = false; (result.failures = result.failures || []).push('screenshot: ' + String(error).slice(0, 2000)); }
     for (const view of result.views || []) {  // canvas captures of each raster view
+      if (!view.png) continue;
       fs.writeFileSync(screenshot.replace(/\.png$/, `-${view.name}.png`), Buffer.from(view.png.split(',')[1], 'base64'));
       delete view.png;
     }

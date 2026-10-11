@@ -4,16 +4,20 @@ Usage: python3 bench/perf_lane/cesium.py --work DIR --out JSON NAME=PATH...
 PATH is a .3tz archive (unpacked under --work, as the archive viewers do), a
 3D Tiles directory with tileset.json, or a raster directory with tilejson.json.
 Each case gets a fresh Chromium at 1024x768 with software rendering; the local
-server binds 127.0.0.1 and every other request is aborted and counted as a failure.
+server binds 127.0.0.1 and every other request or WebSocket is refused and counted
+as a failure. --timeout bounds each asynchronous browser step; the case budget is
+that times the step count plus a fixed browser start allowance.
 """
-import argparse, hashlib, http.server, json, math, os, pathlib, shutil, subprocess, sys
+import argparse, fractions, hashlib, http.server, json, math, os, pathlib, shutil, signal, subprocess, sys
 import threading, urllib.parse, zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
-CACHE = pathlib.Path('/home/bend/.cache')
-DEFAULTS = dict(cesium=CACHE / 'rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium',
-                node_modules=CACHE / 'rusty-tiles-117-browser-cache/node_modules',
-                chromium=CACHE / 'rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome')
+# Defaults: environment overrides, else the local caches used for the recorded runs.
+CACHE = pathlib.Path.home() / '.cache'
+DEFAULTS = dict(cesium=os.environ.get('CESIUM_DIR', CACHE / 'rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium'),
+                node_modules=os.environ.get('NODE_PATH', CACHE / 'rusty-tiles-117-browser-cache/node_modules'),
+                chromium=os.environ.get('CHROMIUM', CACHE / 'rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome'))
+STARTUP_SECONDS = 60  # browser launch, before the first bounded step
 PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><script>window.CESIUM_BASE_URL='/cesium/';</script>
 <script src="/cesium/Cesium.js"></script><link rel="stylesheet" href="/cesium/Widgets/widgets.css">
 <style>html,body,#view{width:100%;height:100%;margin:0;overflow:hidden}</style></head>
@@ -71,8 +75,9 @@ def serve(mounts, cesium, log):
             if parts[0] == 'cesium': base, rest = cesium, parts[1:]
             elif parts[0] == 'data' and len(parts) > 1 and parts[1] in mounts: base, rest = mounts[parts[1]], parts[2:]
             else: return '/nonexistent'
-            target = base.joinpath(*rest).resolve()
-            return str(target) if target.is_relative_to(base.resolve()) else '/nonexistent'
+            # Lexical containment: '..' cannot escape, while mounts may contain symlinked tile trees.
+            target = os.path.normpath(base.joinpath(*rest))
+            return target if pathlib.Path(target).is_relative_to(base) else '/nonexistent'
 
         def do_GET(self):
             if self.path == '/':
@@ -112,9 +117,29 @@ def requests(entries, name, directory):
     return summary
 
 
+def run_case(command, environment, budget):
+    """Run one browser case; a budget overrun or unreadable output fails the case, not the run."""
+    child = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             start_new_session=True)
+    try:
+        stdout, stderr = child.communicate(timeout=budget)
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+        stdout, stderr = child.communicate()
+        return dict(loaded=False, timedOut=True, driverError=stderr[-4000:])
+    try:
+        if child.returncode == 0: return json.loads(stdout)
+    except json.JSONDecodeError:
+        pass
+    return dict(loaded=False, driverError=(stderr or stdout)[-4000:])
+
+
 def problems(case, baseline):
     found = []
+    if case.get('timedOut'): found.append('case budget exceeded')
     if not case.get('loaded'): found.append('load failed or timed out')
+    found += [f"view {v['name']} bare-globe reference did not settle" for v in case.get('views', [])
+              if not v.get('backgroundSettled', True)]
     for key in ('failures', 'failedRequests', 'externalRequests'):
         if case.get(key): found.append(f'{key}: {len(case[key])}')
     if case.get('console', {}).get('errors'): found.append(f"console errors: {len(case['console']['errors'])}")
@@ -129,6 +154,13 @@ def problems(case, baseline):
     return found
 
 
+def inset_degrees(text, maxzoom):
+    """--inset: one or four (W,S,E,N) values, in degrees or as 'Npx' finest-zoom pixels (e.g. 1/1024px)."""
+    pixel = 360 / 2 ** maxzoom / 256
+    values = [float(fractions.Fraction(v[:-2])) * pixel if v.endswith('px') else float(v) for v in text.split(',')]
+    return values * 4 if len(values) == 1 else values
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('cases', nargs='+', help='NAME=PATH')
@@ -136,12 +168,16 @@ def main():
     parser.add_argument('--out', type=pathlib.Path, required=True)
     parser.add_argument('--hole', help='W,S,E,N degrees that must render transparent in raster cases')
     parser.add_argument('--baseline', type=pathlib.Path, help='earlier cesium.py JSON to compare by case name')
-    parser.add_argument('--timeout', type=float, default=120)
-    parser.add_argument('--inset', type=float, default=0, help='shrink raster bounds by DEGREES per edge '
-                        '(workaround for Cesium 1.146 failing on tile-aligned bounds; not what preview does)')
+    parser.add_argument('--timeout', type=float, default=120, help='seconds per asynchronous browser step')
+    parser.add_argument('--inset', help='shrink the raster provider rectangle: DEG, W,S,E,N or Npx (finest-zoom '
+                        'pixels, e.g. 1/1024px). A workaround/probe that changes what is tested; reported as a warning')
+    parser.add_argument('--cpus', default='0,1', help='CPU affinity (AGENTS.md: two CPUs)')
+    parser.add_argument('--corner-views', action='store_true', help='add raster cameras on each bounds corner, '
+                        'four finest-zoom tiles across, after the overview')
     for key, value in DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=pathlib.Path, default=value)
     args = parser.parse_args()
-    os.sched_setaffinity(0, {0, 1}); os.setpriority(os.PRIO_PROCESS, 0, 10)
+    os.sched_setaffinity(0, {int(c) for c in args.cpus.split(',')}); os.setpriority(os.PRIO_PROCESS, 0, 10)
+    if args.inset: print(f'cesium: WARNING --inset {args.inset} changes the raster rectangle under test', file=sys.stderr)
     work = args.work.resolve(); shutil.rmtree(work / 'screenshots', ignore_errors=True)
     (work / 'screenshots').mkdir(parents=True)
     baseline = {c['name']: c for c in json.loads(args.baseline.read_text())['cases']} if args.baseline else {}
@@ -157,7 +193,9 @@ def main():
     try:
         for name, kind, identity, directory in plans:
             spec = dict(kind=kind, url=f'/data/{name}/' + ('' if kind == 'raster' else 'tileset.json'),
-                        timeoutMs=int(args.timeout * 1000), insetDegrees=args.inset)
+                        stepMs=int(args.timeout * 1000))
+            if kind == 'raster' and args.inset:
+                spec['insetDegrees'] = inset_degrees(args.inset, json.loads((directory / 'tilejson.json').read_text())['maxzoom'])
             if kind == 'raster' and args.hole:
                 hole = [float(v) for v in args.hole.split(',')]
                 bounds = json.loads((directory / 'tilejson.json').read_text())['bounds']
@@ -175,12 +213,23 @@ def main():
                          expect='background')])]
             shot = work / 'screenshots' / f'{name}.png'
             start = len(log)
-            print(f'cesium: {name} ({kind})', file=sys.stderr, flush=True)
-            child = subprocess.run(['node', str(HERE / 'cesium.cjs'), f'http://127.0.0.1:{server.server_port}/',
-                                    json.dumps(spec), str(shot)], env=environment, capture_output=True, text=True,
-                                   timeout=args.timeout + 60)
-            case = json.loads(child.stdout) if child.returncode == 0 else dict(loaded=False, driverError=child.stderr[-4000:])
-            case.update(name=name, kind=kind, output=identity, screenshot=str(shot), requests=requests(log[start:], name, directory))
+            if kind == 'raster' and args.corner_views:
+                metadata = json.loads((directory / 'tilejson.json').read_text())
+                (w, s, e, n), half = metadata['bounds'], 2 * 360 / 2 ** metadata['maxzoom']
+                spec['views'] = spec.get('views', []) + [
+                    dict(name=f'corner-{label}', rect=[x - half, y - half * math.cos(math.radians(y)) * .75,
+                                                      x + half, y + half * math.cos(math.radians(y)) * .75])
+                    for label, x, y in (('nw', w, n), ('ne', e, n), ('sw', w, s), ('se', e, s))]
+            # Bounded steps: page load, Cesium global, screenshot, then fromUrl + settle, or the TileJSON fetch,
+            # two settles per view and a final settle.
+            steps = 3 + (2 + 2 * (1 + len(spec.get('views', []))) if kind == 'raster' else 2)
+            budget = steps * args.timeout + STARTUP_SECONDS
+            print(f'cesium: {name} ({kind}, budget {budget:g} s)', file=sys.stderr, flush=True)
+            case = run_case(['node', str(HERE / 'cesium.cjs'), f'http://127.0.0.1:{server.server_port}/', json.dumps(spec), str(shot)],
+                            environment, budget)
+            case.update(name=name, kind=kind, output=identity, spec=spec, budgetSeconds=budget, screenshot=str(shot),
+                        requests=requests(log[start:], name, directory))
+            if spec.get('insetDegrees'): case['warnings'] = [f"raster rectangle inset {spec['insetDegrees']} degrees: not the exact bounds"]
             shots = [shot] + [shot.with_name(f"{name}-{view['name']}.png") for view in case.get('views', [])]
             case['captureSha256'] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in shots if p.exists()}
             case['problems'] = problems(case, baseline.get(name))
@@ -196,7 +245,8 @@ def main():
                   environment=dict(cesium=json.loads((args.cesium.resolve().parents[1] / 'package.json').read_text())['version'],
                                    playwright=json.loads((args.node_modules / 'playwright/package.json').read_text())['version'],
                                    chromium=str(args.chromium), viewport=[1024, 768], cpuAffinity=sorted(os.sched_getaffinity(0)),
-                                   baseline=str(args.baseline) if args.baseline else None, rasterInsetDegrees=args.inset,
+                                   baseline=str(args.baseline) if args.baseline else None, rasterInset=args.inset,
+                                   stepTimeoutSeconds=args.timeout,
                                    scriptSha256={name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
                                                  for name in ('cesium.py', 'cesium.cjs')}),
                   cases=results)

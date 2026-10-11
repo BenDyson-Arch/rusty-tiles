@@ -1,7 +1,7 @@
 """A/B processing benchmark of two rusty-tiles CLIs on the deterministic perf-lane corpus.
 
 Usage: python3 bench/perf_lane/process.py --base BIN --head BIN --work DIR --out JSON [--repeat N]
-Each case runs N times per binary in alternating order, pinned to two CPUs (--cpus) at nice 10.
+Each case runs N times per binary in ABBA order, pinned to two CPUs (--cpus) at nice 10.
 Wall time is best-of-N; peak RSS is the largest ru_maxrss of the measured process over
 the N runs (Linux wait4; waited descendants are not summed). Inputs and outputs stay
 under --work; the last output of each binary is kept for cesium.py.
@@ -109,7 +109,13 @@ def compare(name, base, head, explanations):
                 flags.append(dict(metric=metric, base=old, head=new, ratio=new / old))
     elif base.get('ok'):
         flags.append(dict(metric='exit', base='ok', head='failed' if 'samples' in head else head.get('skipped')))
+    # A best-wall sample is contended when other work used >10% of the two pinned CPUs during it.
+    contended = [side for side, v in (('base', base), ('head', head))
+                 if v.get('ok') and v['foreignCpuSecondsAtBestWall'] > 0.2 * v['wallSeconds']]
     for flag in flags:
+        if flag['metric'] == 'wallSeconds':
+            flag.update(contendedSides=contended, foreignCpuSecondsAtBestWall={
+                'base': base['foreignCpuSecondsAtBestWall'], 'head': head['foreignCpuSecondsAtBestWall']})
         flag['explanation'] = next((text for pattern, text in explanations if fnmatch.fnmatch(f"{name}.{flag['metric']}", pattern)), None)
     return flags
 
@@ -134,6 +140,7 @@ def main():
     sides = {'base': args.base.resolve(), 'head': args.head.resolve()}
     infos = {side: describe(binary, environment) for side, binary in sides.items()}
     explanations = [item.split('=', 1) for item in args.explain]
+    if any(len(pair) != 2 or not pair[1] for pair in explanations): parser.error('--explain needs CASE.METRIC=REASON')
     selected = set(args.only.split(',')) if args.only else None
     substitutions = {'in': str(work / 'inputs'), 'repo': str(ROOT)}
     results, load = [], os.getloadavg()
@@ -141,7 +148,7 @@ def main():
     def run_case(name, argvs, outputs, skips):
         samples = {side: [] for side in sides}
         for repeat in range(args.repeat):
-            for side in (('base', 'head') if repeat % 2 == 0 else ('head', 'base')):
+            for side in (('base', 'head') if repeat % 4 in (0, 3) else ('head', 'base')):
                 if argvs[side] is None: continue
                 if outputs and outputs[side].exists():
                     shutil.rmtree(outputs[side]) if outputs[side].is_dir() else outputs[side].unlink()
@@ -154,7 +161,8 @@ def main():
             ok = all(v['exitCode'] == 0 for v in values)
             summary = dict(case=name, ok=ok, samples=values, wallSeconds=min(v['wallSeconds'] for v in values),
                            cpuSeconds=min(v['cpuSeconds'] for v in values), peakRssMiB=max(v['peakRssMiB'] for v in values),
-                           foreignCpuSeconds=min(v['foreignCpuSeconds'] for v in values))
+                           foreignCpuSecondsAtBestWall=min(values, key=lambda v: v['wallSeconds'])['foreignCpuSeconds'],
+                           foreignCpuSecondsMax=max(v['foreignCpuSeconds'] for v in values))
             if not ok: summary['log'] = (work / side / f'{name}.log').read_text(errors='replace')[-2000:]
             if ok and outputs: summary.update(output_stats(outputs[side]))
             case['sides'][side] = summary
@@ -201,7 +209,8 @@ def main():
         b, h = case['sides']['base'], case['sides']['head']
         cells = [f"{s.get('wallSeconds', float('nan')):8.3f}s {s.get('peakRssMiB', float('nan')):7.1f}MiB {s.get('outputBytes', 0):>11}B"
                  for s in (b, h)]
-        marks = [f['metric'] + (' (explained)' if f['explanation'] else ' REGRESSION') for f in case['flags']]
+        marks = [f['metric'] + (' (explained)' if f['explanation'] else ' REGRESSION')
+                 + (' contended: rerun' if f.get('contendedSides') else '') for f in case['flags']]
         print(f"{case['case']:<30} base {cells[0]} | head {cells[1]} {', '.join(marks)}")
     sys.exit(1 if regressions else 0)
 
