@@ -1,0 +1,1335 @@
+{
+ "generator": "make_forest_fixtures.py",
+ "generatorSha256": "e12d8989756e15fd48f9aaf63dde3b5d254a68f6afc760cfbc66c9414b40c3fb",
+ "cases": {
+  "quad-single": {
+   "kind": "positive",
+   "archive": "quad-single.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "scheme": "QUADTREE",
+   "tiles": 7,
+   "levels": 3,
+   "documents": 1,
+   "implicitRoots": 1,
+   "rootPids": [
+    0
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "02dbefd9851213c4f79137e6224f6acc2e7b2e489d673534b18eda87859821c4",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "m2-single": {
+   "kind": "positive",
+   "archive": "m2-single.3tz",
+   "reference": "m2-single-explicit.3tz",
+   "scheme": "OCTREE",
+   "tiles": 1,
+   "levels": 1,
+   "documents": 1,
+   "implicitRoots": 1,
+   "rootPids": [
+    0
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "51ce82ddb2b29f55287093ad79b0231c812b84cb361f546a47c08c055fa47326",
+   "referenceSha256": "0eae9c90e78f074b01dc383883cba24101b073270922b39e26af3f93f762494f"
+  },
+  "oct-mixed": {
+   "kind": "positive",
+   "archive": "oct-mixed.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "scheme": "OCTREE",
+   "tiles": 64,
+   "levels": 7,
+   "documents": 1,
+   "implicitRoots": 5,
+   "rootPids": [
+    53,
+    2,
+    18,
+    29,
+    35
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "2964721fbb9d05d7667abda765a33e2391772d68bd2844d10d822151db62e8c1",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "quad-wide": {
+   "kind": "positive",
+   "archive": "quad-wide.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "scheme": "QUADTREE",
+   "tiles": 4095,
+   "levels": 12,
+   "documents": 97,
+   "implicitRoots": 256,
+   "rootPids": [
+    1542,
+    1557,
+    1573,
+    1588,
+    1605,
+    1620,
+    1636,
+    1651,
+    1669,
+    1684,
+    1700,
+    1715,
+    2055,
+    2070,
+    2086,
+    2101,
+    2118,
+    2133,
+    2149,
+    2164,
+    2182,
+    2197,
+    2213,
+    2228,
+    2566,
+    2581,
+    2597,
+    2612,
+    2629,
+    2644,
+    2660,
+    2675,
+    2693,
+    2708,
+    2724,
+    2739,
+    3078,
+    3093,
+    3109,
+    3124,
+    3141,
+    3156,
+    3172,
+    3187,
+    3205,
+    3220,
+    3236,
+    3251,
+    3589,
+    3604,
+    3620,
+    3635,
+    3652,
+    3667,
+    3683,
+    3698,
+    3716,
+    3731,
+    3747,
+    3762,
+    8,
+    23,
+    39,
+    54,
+    71,
+    86,
+    102,
+    117,
+    135,
+    150,
+    166,
+    181,
+    198,
+    213,
+    229,
+    244,
+    263,
+    278,
+    294,
+    309,
+    326,
+    341,
+    357,
+    372,
+    390,
+    405,
+    421,
+    436,
+    453,
+    468,
+    484,
+    499,
+    519,
+    534,
+    550,
+    565,
+    582,
+    597,
+    613,
+    628,
+    646,
+    661,
+    677,
+    692,
+    709,
+    724,
+    740,
+    755,
+    774,
+    789,
+    805,
+    820,
+    837,
+    852,
+    868,
+    883,
+    901,
+    916,
+    932,
+    947,
+    964,
+    979,
+    995,
+    1010,
+    1031,
+    1046,
+    1062,
+    1077,
+    1094,
+    1109,
+    1125,
+    1140,
+    1158,
+    1173,
+    1189,
+    1204,
+    1221,
+    1236,
+    1252,
+    1267,
+    1286,
+    1301,
+    1317,
+    1332,
+    1349,
+    1364,
+    1380,
+    1395,
+    1413,
+    1428,
+    1444,
+    1459,
+    1476,
+    1491,
+    1507,
+    1522,
+    1732,
+    1747,
+    1763,
+    1778,
+    1797,
+    1812,
+    1828,
+    1843,
+    1860,
+    1875,
+    1891,
+    1906,
+    1924,
+    1939,
+    1955,
+    1970,
+    1987,
+    2002,
+    2018,
+    2033,
+    2245,
+    2260,
+    2276,
+    2291,
+    2310,
+    2325,
+    2341,
+    2356,
+    2373,
+    2388,
+    2404,
+    2419,
+    2437,
+    2452,
+    2468,
+    2483,
+    2500,
+    2515,
+    2531,
+    2546,
+    2756,
+    2771,
+    2787,
+    2802,
+    2821,
+    2836,
+    2852,
+    2867,
+    2884,
+    2899,
+    2915,
+    2930,
+    2948,
+    2963,
+    2979,
+    2994,
+    3011,
+    3026,
+    3042,
+    3057,
+    3268,
+    3283,
+    3299,
+    3314,
+    3333,
+    3348,
+    3364,
+    3379,
+    3396,
+    3411,
+    3427,
+    3442,
+    3460,
+    3475,
+    3491,
+    3506,
+    3523,
+    3538,
+    3554,
+    3569,
+    3779,
+    3794,
+    3810,
+    3825,
+    3844,
+    3859,
+    3875,
+    3890,
+    3907,
+    3922,
+    3938,
+    3953,
+    3971,
+    3986,
+    4002,
+    4017,
+    4034,
+    4049,
+    4065,
+    4080
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "0aacc4bb9c1e081c897b988e95f1c4d67b7e7b0c06d303a0aaf97490c08b8dba",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "quad-bytes": {
+   "kind": "positive",
+   "archive": "quad-bytes.3tz",
+   "reference": "quad-bytes-explicit.3tz",
+   "scheme": "QUADTREE",
+   "tiles": 255,
+   "levels": 8,
+   "documents": 8,
+   "implicitRoots": 16,
+   "rootPids": [
+    4,
+    19,
+    35,
+    50,
+    67,
+    82,
+    98,
+    113,
+    131,
+    146,
+    162,
+    177,
+    194,
+    209,
+    225,
+    240
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "ba98e1a7ce671efcbc4da243e8e80ac30bdef46545838bd2de558e31536de8d8",
+   "referenceSha256": "226c56ee637b3b95ed6f3910911e6cf6c499ec217bc164197f028ff1eac473ef"
+  },
+  "quad-chain32": {
+   "kind": "positive",
+   "archive": "quad-chain32.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "scheme": "QUADTREE",
+   "tiles": 43,
+   "levels": 32,
+   "documents": 3,
+   "implicitRoots": 1,
+   "rootPids": [
+    28
+   ],
+   "expect": {
+    "verdict": "pass"
+   },
+   "archiveSha256": "065eb4517b92fb58d9b6a0caec5f70cf6b8ae4d9839766914f6d426dd946ead1",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-json-template": {
+   "kind": "negative",
+   "archive": "neg-json-template.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "json_template": 1
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P1.noJsonTemplate"
+    ]
+   },
+   "archiveSha256": "faebed684d4bddab68e6b20633d1734fa56f98a5a677ea7f6dcea7a7be584e61",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-child-subtree-bit": {
+   "kind": "negative",
+   "archive": "neg-child-subtree-bit.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "child_subtree": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P2.singleSubtreeRoots"
+    ]
+   },
+   "archiveSha256": "8d0b2f780f4ac4306d9cd527401b01991ebdbb20f34fd7c0c8955b0a99e0e078",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-missing-row": {
+   "kind": "negative",
+   "archive": "neg-missing-row.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "drop_row": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P3.rowsEverywhere"
+    ]
+   },
+   "archiveSha256": "4d5b41902b0cb0a8547f162c5db240be4df80e4ce3ab9e55f8bf2c8df4545254",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-row-1ulp": {
+   "kind": "negative",
+   "archive": "neg-row-1ulp.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "row_ulp": [
+     0,
+     3
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.rows"
+    ]
+   },
+   "archiveSha256": "9f338fb7764a388826ed0f7a4bd27814ae4274a3c753526f3d5e35796783fbea",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-row0-1ulp": {
+   "kind": "negative",
+   "archive": "neg-row0-1ulp.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "row0_ulp": 2
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P3.rowsEverywhere"
+    ]
+   },
+   "archiveSha256": "87073e744c5f6319964ccd90174a026dd17af699cc4a7f6d8cfe600a496c7382",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-repeated-prefix": {
+   "kind": "negative",
+   "archive": "neg-repeated-prefix.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "prefix_dup": [
+     2,
+     0
+    ]
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "5b69365e962cd2893bec7e42187bd32ac6c273d39fb94fb2166545372d51d557",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-unreferenced-member": {
+   "kind": "negative",
+   "archive": "neg-unreferenced-member.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {},
+   "mutation": "mut_orphan",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "449eb9b0ffad03734e972d1848b0bfa6a37e07d3890b3759e054a5ae55778846",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-retained-source": {
+   "kind": "negative",
+   "archive": "neg-retained-source.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "retain_sources": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "PD11.noRetainedSources",
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "df6272114febcb6f2773f5770b04f64eaf6fb56ac9e61ca77e3e2aae344b8876",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-doc-node-budget": {
+   "kind": "negative",
+   "archive": "neg-doc-node-budget.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "documents.budget"
+    ]
+   },
+   "archiveSha256": "f84b15a403e53fc20a6b1444833a31a585a3d3734d365b7b30a119a3c661a999",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-link-box": {
+   "kind": "negative",
+   "archive": "neg-link-box.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P6.linkCoherence"
+    ]
+   },
+   "archiveSha256": "9aec04716bb15cf7a282e72810388b2bcd7e1f459ef218a6540430a9412d86d2",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-missing-root-schema": {
+   "kind": "negative",
+   "archive": "neg-missing-root-schema.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {
+    "no_root_schema": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P12.schema"
+    ]
+   },
+   "archiveSha256": "04cea157382e14a25134c4cd211101a996e7b64cbb934a75a47df457a0008f7c",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-source-list": {
+   "kind": "negative",
+   "archive": "neg-source-list.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {},
+   "mutation": "mut_source_list",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "PD11.noRetainedSources"
+    ]
+   },
+   "archiveSha256": "814bbb5024f116a44026f782670245964525caaaf8abfe14e67496af17ae16c1",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-doc-schema": {
+   "kind": "negative",
+   "archive": "neg-doc-schema.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {
+    "no_doc_schema": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P12.schema"
+    ]
+   },
+   "archiveSha256": "fa6fbc61c35efa5508fc039b32fe84f41a22fca56736fb3d1dbe3e8e6846984c",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-schema-id": {
+   "kind": "negative",
+   "archive": "neg-schema-id.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "schema_id": "other"
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P12.schema"
+    ]
+   },
+   "archiveSha256": "e5385bf69f4654b4017947e47ebd4256eabe49f4e6ad6817ad0971bea3163d66",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-skeleton-s3": {
+   "kind": "negative",
+   "archive": "neg-skeleton-s3.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "S": 3
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "skeleton.S4",
+     "A4.roles"
+    ]
+   },
+   "archiveSha256": "6dc87daae2f6ff5d011f4e99b0e75ead0bca93c084921e7dfbdda999b17a8ed9",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-skeleton-s5": {
+   "kind": "negative",
+   "archive": "neg-skeleton-s5.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "S": 5
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "skeleton.S4",
+     "P2.singleSubtreeRoots",
+     "A4.roles"
+    ]
+   },
+   "archiveSha256": "176f355f38fcbd13e6d9ce0058b4c959c91e21c4037e80ea4a54ef5d14f5f466",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-leaf-as-root": {
+   "kind": "negative",
+   "archive": "neg-leaf-as-root.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "leaf_as_root": 33
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "skeleton.S4",
+     "A4.roles"
+    ]
+   },
+   "archiveSha256": "8e67373b69f64f5e022e1e259185a400d2d0cfe42bbae50e8ce0410983c5e9ad",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-truncated-archive": {
+   "kind": "negative",
+   "archive": "neg-truncated-archive.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {},
+   "mutation": "TRUNCATE",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "archive"
+    ]
+   },
+   "archiveSha256": "ba139d8d8e5bae01e9c6bba7a86b2a4da50826cdfdf94c352ba14ef77219a621",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-levels-mismatch": {
+   "kind": "negative",
+   "archive": "neg-levels-mismatch.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "levels_mismatch": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P2.singleSubtreeRoots"
+    ]
+   },
+   "archiveSha256": "87da5d792669a8afbbe9ec77df49c42c64aa68af2914daa8b733ceeeef6bba31",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-two-subtrees": {
+   "kind": "negative",
+   "archive": "neg-two-subtrees.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "two_subtrees": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P2.singleSubtreeRoots"
+    ]
+   },
+   "archiveSha256": "840017a93d51bf9d0517564859c31078e3d95ab7262848e4b7bbaaee261d29d9",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-orphan-availability": {
+   "kind": "negative",
+   "archive": "neg-orphan-availability.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {
+    "orphan_bit": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P2.singleSubtreeRoots"
+    ]
+   },
+   "archiveSha256": "a45b4122f64dd9c91eb758e2dadb6ebfcc4257add7e4e97f052109f302bb5a8c",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-l33": {
+   "kind": "negative",
+   "archive": "neg-l33.3tz",
+   "reference": "chain33-explicit.3tz",
+   "base": "chain33",
+   "tweaks": {
+    "allow_levels": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P9.levelBound"
+    ]
+   },
+   "archiveSha256": "c56d49c8bd8cbb0d8031d3424a23048f5573ca7121f7f7b54a1a80256588a002",
+   "referenceSha256": "4038502ec8579043a65eec1dc27377c02fa0de6c7a6742fe6cc6098272bc5ae5"
+  },
+  "neg-doc-bytes": {
+   "kind": "negative",
+   "archive": "neg-doc-bytes.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "documents.budget"
+    ]
+   },
+   "archiveSha256": "d18d74ff545f094112cf3fdc5b48f38a79839b118bd2f708f165df1b8270399b",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-doc-depth": {
+   "kind": "negative",
+   "archive": "neg-doc-depth.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "documents.budget"
+    ]
+   },
+   "archiveSha256": "470b0c5cf65662ce20df503349f8be0b7e1ebd1ee18c85220e6462864b00ff47",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-doc-levels": {
+   "kind": "negative",
+   "archive": "neg-doc-levels.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {
+    "doc_levels": 14
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "documents.levels"
+    ]
+   },
+   "archiveSha256": "1f7c538b706af3e08727a4b0a34947842e8ce1959d9a4a5fc38dd68e71dff598",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-link-refine": {
+   "kind": "negative",
+   "archive": "neg-link-refine.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P6.linkCoherence"
+    ]
+   },
+   "archiveSha256": "2a3a59bf8f2c0702065174ca2546be6b4cf5d31ebdf829a0bd6a5922c5bc5080",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-link-children": {
+   "kind": "negative",
+   "archive": "neg-link-children.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.wellFormed"
+    ]
+   },
+   "archiveSha256": "249e741d9f99265e6a0ebee99367742d2eaebb293f9dd189576e127712aac5a7",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-link-dangling": {
+   "kind": "negative",
+   "archive": "neg-link-dangling.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "mut_dangling",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.wellFormed"
+    ]
+   },
+   "archiveSha256": "1f7c739e92db7b71016b18c3dd10e84855ebaf3dd4e040e0709f155dbd07f8ab",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-link-twice": {
+   "kind": "negative",
+   "archive": "neg-link-twice.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "f",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.wellFormed"
+    ]
+   },
+   "archiveSha256": "7f015fb58322e2d06250943790d23c0faa7e48be6c5646ad5f22a57b3026c27f",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-doc-root-transform": {
+   "kind": "negative",
+   "archive": "neg-doc-root-transform.3tz",
+   "reference": "quad-chain32-explicit.3tz",
+   "base": "quad-chain32",
+   "tweaks": {
+    "doc_root_transform": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.wellFormed"
+    ]
+   },
+   "archiveSha256": "1f1c05027e63471128e98b0d0be025884760ad54d32e9ff9de703744afc8b8c1",
+   "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3"
+  },
+  "neg-doc-numbering": {
+   "kind": "negative",
+   "archive": "neg-doc-numbering.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "mut_renumber_from_two",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.wellFormed"
+    ]
+   },
+   "archiveSha256": "9777bc1f3e8a5e24074154dccbefb689c3097169e217ad9998efa66a05bdf85a",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-link-order": {
+   "kind": "negative",
+   "archive": "neg-link-order.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {},
+   "mutation": "mut_swap_order",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "links.creationOrder"
+    ]
+   },
+   "archiveSha256": "91cc7e2c44b2882bf8abbbfb4076c5e3ad48e40613dcf9d424662cb106a41c71",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-old-chunk-document": {
+   "kind": "negative",
+   "archive": "neg-old-chunk-document.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {},
+   "mutation": "mut_old_chunk_doc",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P1.noJsonTemplate"
+    ]
+   },
+   "archiveSha256": "2e2342e7719c58b9363632fcb55a2d6d46368366a8f40e35e39c260b0d172ef1",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-tile-child-index": {
+   "kind": "negative",
+   "archive": "neg-tile-child-index.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "tile_child_index": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P11.noImplicitChildIndex"
+    ]
+   },
+   "archiveSha256": "2b9903be638e17f7cb61371bdf9b9666f4e8db854f65df1a2885fd7e430a89d1",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-row-child-index": {
+   "kind": "negative",
+   "archive": "neg-row-child-index.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "row_child_index": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P11.noImplicitChildIndex"
+    ]
+   },
+   "archiveSha256": "f825b2a1e44893379d15919447d627b2d9624bc43807330fd0b9af66a4134019",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-extra-layer": {
+   "kind": "negative",
+   "archive": "neg-extra-layer.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "extra_layer": 0
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P10.slots"
+    ]
+   },
+   "archiveSha256": "4db04c75e299771acff441e2ca2a60d1216f1f231bdac77c6a82e0b5c7321faf",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-slots-unsorted": {
+   "kind": "negative",
+   "archive": "neg-slots-unsorted.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "slots_unsorted": 2
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P10.slots"
+    ]
+   },
+   "archiveSha256": "065b289c2439963d593519c103b8141c8664665bd3a0108a4dbfeba9e9cdd220",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-missing-content": {
+   "kind": "negative",
+   "archive": "neg-missing-content.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {},
+   "mutation": "mut_missing_content",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "1aa7dd44ffa121137a3ba27cef4dc450419cc8d0b8ed3f3aef88da265b85bb7c",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-unavailable-content": {
+   "kind": "negative",
+   "archive": "neg-unavailable-content.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {},
+   "mutation": "mut_unavailable_member",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "35a5d05096e755275965b549b19ad9e3512bb539187e119ccfbc85673ca748ee",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-corrupt-payload": {
+   "kind": "negative",
+   "archive": "neg-corrupt-payload.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {},
+   "mutation": "mut_corrupt_payload",
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "payloads.wellFormed"
+    ]
+   },
+   "archiveSha256": "cefeeda9150cbae5568e237cee26ef5b74cd821f29b62b1a7332df4c1de049f9",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-vector-build-hash": {
+   "kind": "negative",
+   "archive": "neg-vector-build-hash.3tz",
+   "reference": "quad-single-explicit.3tz",
+   "base": "quad-single",
+   "tweaks": {
+    "vector_build_hash": true
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "P4.namesClosed"
+    ]
+   },
+   "archiveSha256": "949ef861d38b12ab66d9a1309e5a54483405cfcb307cbf9421bf4431de4b1126",
+   "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4"
+  },
+  "neg-reuse-record": {
+   "kind": "negative",
+   "archive": "neg-reuse-record.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "reuse_record_wrong": 3
+   },
+   "mutation": null,
+   "needsReference": false,
+   "expect": {
+    "failRules": [
+     "vectorBuild.reuseMap"
+    ]
+   },
+   "archiveSha256": "7ab628a913ba12da6ccefaebf99eacfe03fb7379135c6c26e91dfcf9969e0b68",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-reuse-missing-entry": {
+   "kind": "negative",
+   "archive": "neg-reuse-missing-entry.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "reuse_missing_entry": true
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "vectorBuild.reuseMap"
+    ]
+   },
+   "archiveSha256": "b72f6e20b6b3fdb2573a100c42c3ab7d6fe487aece5e3bc45a469292908b1c3d",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-error-changed": {
+   "kind": "negative",
+   "archive": "neg-error-changed.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "error_change": [
+     5,
+     4
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.rows"
+    ]
+   },
+   "archiveSha256": "e9be0b770b4a045661c2f6a247485635e532310b069aedc8a6e43cba48a02e57",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-row-extras": {
+   "kind": "negative",
+   "archive": "neg-row-extras.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "row_extras_change": [
+     0,
+     2
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.extras"
+    ]
+   },
+   "archiveSha256": "0e4e2ec67e963d493845bb719e06b1fdc55d48921771541d8ee4bd779446bce4",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-tile-dropped": {
+   "kind": "negative",
+   "archive": "neg-tile-dropped.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "drop_tile": [
+     0,
+     63
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.tree"
+    ]
+   },
+   "archiveSha256": "76be53510b18af5dbf0107552cfc21ce939ad7c1a2f5d94e6cdffc41bd96fb93",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-payload-bin": {
+   "kind": "negative",
+   "archive": "neg-payload-bin.3tz",
+   "reference": "quad-wide-explicit.3tz",
+   "base": "quad-wide",
+   "tweaks": {
+    "payload_bin": [
+     3,
+     2
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.payloads"
+    ]
+   },
+   "archiveSha256": "e0afdd64a9cd1492d7acee6c54c9646d0f156da0b1a2a533e20714deb2ead632",
+   "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50"
+  },
+  "neg-payload-translation": {
+   "kind": "negative",
+   "archive": "neg-payload-translation.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "payload_translation_ulp": [
+     0,
+     1
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.payloads"
+    ]
+   },
+   "archiveSha256": "f116175a49382603fb1959df8bfe1052bd851f1d642029b7b1768e752f186545",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-payload-reserialized": {
+   "kind": "negative",
+   "archive": "neg-payload-reserialized.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "payload_reserialize": [
+     0,
+     5
+    ]
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.payloads"
+    ]
+   },
+   "archiveSha256": "31895a2cdf913f5958c298bdac05bc694fccf745cb23cde1bd82f92d5ddbfe8d",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-explicit-payload": {
+   "kind": "negative",
+   "archive": "neg-explicit-payload.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {},
+   "mutation": "mut_explicit_payload",
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.payloads"
+    ]
+   },
+   "archiveSha256": "f8ce42d023167789c2869059543e76902842831c868b800d1c90db51b9df77aa",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-prefix-not-preorder": {
+   "kind": "negative",
+   "archive": "neg-prefix-not-preorder.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "prefix_shift": 1
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.names"
+    ]
+   },
+   "archiveSha256": "3140fa89c9602d0f4d0a6574340e8c1201634f59e43cc2911d3fa0168d96c19f",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-root-refine": {
+   "kind": "negative",
+   "archive": "neg-root-refine.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "refine_root": 0
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.explicitTiles"
+    ]
+   },
+   "archiveSha256": "4e147c7b0eb903fa0ebc62d7c8285980f5519b93c20e5185a5f559f61a40025f",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  },
+  "neg-root-transform-dropped": {
+   "kind": "negative",
+   "archive": "neg-root-transform-dropped.3tz",
+   "reference": "oct-mixed-explicit.3tz",
+   "base": "oct-mixed",
+   "tweaks": {
+    "drop_root_transform": 0
+   },
+   "mutation": null,
+   "needsReference": true,
+   "expect": {
+    "failRules": [
+     "A4.explicitTiles"
+    ]
+   },
+   "archiveSha256": "bc5167562f2bb170e00e7200f61fe0504aca3baed63898f730cafa443728d475",
+   "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722"
+  }
+ }
+}

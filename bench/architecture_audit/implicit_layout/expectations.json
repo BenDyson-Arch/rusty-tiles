@@ -1,0 +1,952 @@
+{
+ "frozen": "p/oracle first commit; PO had not seen the writer diff",
+ "design": {
+  "design.md": "1c84e8ece066b1d433ad51926ead80b3265642b1cc0385325bd201f77a3e3aae",
+  "i1ContractDraft": "9674e60b959eea0a4a985b6beec7a278ec79c08579f6c19e58f5a070aee03496"
+ },
+ "checker": {
+  "file": "forest_check.py",
+  "sha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+  "profile": {
+   "S": 4,
+   "DOC_NODES": 16384,
+   "DOC_BYTES": 2097152,
+   "DOC_LEVELS": 12,
+   "JSON_DEPTH": 32,
+   "MAX_LEVELS": 32
+  },
+  "rules": [
+   {
+    "id": "archive",
+    "required": true,
+    "source": "3TZ / core"
+   },
+   {
+    "id": "skeleton.S4",
+    "required": true,
+    "source": "\u00a71, \u00a74.1 classification"
+   },
+   {
+    "id": "documents.budget",
+    "required": true,
+    "source": "P8, \u00a74.1"
+   },
+   {
+    "id": "documents.levels",
+    "required": true,
+    "source": "\u00a74.1 DOC_LEVELS"
+   },
+   {
+    "id": "links.wellFormed",
+    "required": true,
+    "source": "\u00a74.1 Documents, P1"
+   },
+   {
+    "id": "links.creationOrder",
+    "required": false,
+    "source": "\u00a74.1 \"m counts from 1 in creation order\""
+   },
+   {
+    "id": "P6.linkCoherence",
+    "required": true,
+    "source": "P6"
+   },
+   {
+    "id": "P1.noJsonTemplate",
+    "required": true,
+    "source": "P1, U-1"
+   },
+   {
+    "id": "P2.singleSubtreeRoots",
+    "required": true,
+    "source": "P2"
+   },
+   {
+    "id": "P3.rowsEverywhere",
+    "required": true,
+    "source": "P3, P12"
+   },
+   {
+    "id": "P4.namesClosed",
+    "required": true,
+    "source": "P4, PD-6"
+   },
+   {
+    "id": "P9.levelBound",
+    "required": true,
+    "source": "P9, PD-5"
+   },
+   {
+    "id": "P10.slots",
+    "required": true,
+    "source": "P10, R-4"
+   },
+   {
+    "id": "P11.noImplicitChildIndex",
+    "required": true,
+    "source": "P11, R-8"
+   },
+   {
+    "id": "P12.schema",
+    "required": true,
+    "source": "P12, F-1"
+   },
+   {
+    "id": "PD11.noRetainedSources",
+    "required": true,
+    "source": "PD-11, \u00a74.1"
+   },
+   {
+    "id": "payloads.wellFormed",
+    "required": true,
+    "source": "\u00a74.1, glTF 2.0, b3dm"
+   },
+   {
+    "id": "vectorBuild.reuseMap",
+    "required": true,
+    "source": "\u00a74.7 (PV)"
+   },
+   {
+    "id": "A4.tree",
+    "required": true,
+    "source": "P5, A-4"
+   },
+   {
+    "id": "A4.roles",
+    "required": true,
+    "source": "\u00a74.1 classification on H"
+   },
+   {
+    "id": "A4.explicitTiles",
+    "required": true,
+    "source": "P5, \u00a74.1"
+   },
+   {
+    "id": "A4.rows",
+    "required": true,
+    "source": "P3, A-4"
+   },
+   {
+    "id": "A4.extras",
+    "required": true,
+    "source": "P5, \u00a74.5"
+   },
+   {
+    "id": "A4.payloads",
+    "required": true,
+    "source": "P5, A-4, \u00a74.1"
+   },
+   {
+    "id": "A4.names",
+    "required": true,
+    "source": "PD-6, R-7"
+   },
+   {
+    "id": "A4.contentUris",
+    "required": false,
+    "source": "\u00a74.1 \"content URI\""
+   },
+   {
+    "id": "A4.topLevel",
+    "required": false,
+    "source": "\u00a74.1"
+   }
+  ]
+ },
+ "controls": {
+  "generator": "make_forest_fixtures.py",
+  "generatorSha256": "e12d8989756e15fd48f9aaf63dde3b5d254a68f6afc760cfbc66c9414b40c3fb",
+  "agreement": {
+   "runs": 106,
+   "agree": 106,
+   "positives": 6,
+   "negatives": 53,
+   "rulesTargeted": [
+    "A4.explicitTiles",
+    "A4.extras",
+    "A4.names",
+    "A4.payloads",
+    "A4.roles",
+    "A4.rows",
+    "A4.tree",
+    "P1.noJsonTemplate",
+    "P10.slots",
+    "P11.noImplicitChildIndex",
+    "P12.schema",
+    "P2.singleSubtreeRoots",
+    "P3.rowsEverywhere",
+    "P4.namesClosed",
+    "P6.linkCoherence",
+    "P9.levelBound",
+    "PD11.noRetainedSources",
+    "archive",
+    "documents.budget",
+    "documents.levels",
+    "links.creationOrder",
+    "links.wellFormed",
+    "payloads.wellFormed",
+    "skeleton.S4",
+    "vectorBuild.reuseMap"
+   ]
+  },
+  "rule": "positive: verdict pass, no rule fails, with and without --explicit; negative: every target rule fails and the verdict is fail iff a target is required; negatives without needsReference also run without --explicit",
+  "cases": {
+   "quad-single": {
+    "kind": "positive",
+    "base": "quad-single",
+    "archiveSha256": "02dbefd9851213c4f79137e6224f6acc2e7b2e489d673534b18eda87859821c4",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "m2-single": {
+    "kind": "positive",
+    "base": "m2-single",
+    "archiveSha256": "51ce82ddb2b29f55287093ad79b0231c812b84cb361f546a47c08c055fa47326",
+    "referenceSha256": "0eae9c90e78f074b01dc383883cba24101b073270922b39e26af3f93f762494f",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "oct-mixed": {
+    "kind": "positive",
+    "base": "oct-mixed",
+    "archiveSha256": "2964721fbb9d05d7667abda765a33e2391772d68bd2844d10d822151db62e8c1",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "quad-wide": {
+    "kind": "positive",
+    "base": "quad-wide",
+    "archiveSha256": "0aacc4bb9c1e081c897b988e95f1c4d67b7e7b0c06d303a0aaf97490c08b8dba",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "quad-bytes": {
+    "kind": "positive",
+    "base": "quad-bytes",
+    "archiveSha256": "ba98e1a7ce671efcbc4da243e8e80ac30bdef46545838bd2de558e31536de8d8",
+    "referenceSha256": "226c56ee637b3b95ed6f3910911e6cf6c499ec217bc164197f028ff1eac473ef",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "quad-chain32": {
+    "kind": "positive",
+    "base": "quad-chain32",
+    "archiveSha256": "065eb4517b92fb58d9b6a0caec5f70cf6b8ae4d9839766914f6d426dd946ead1",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "verdict": "pass"
+    }
+   },
+   "neg-json-template": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "faebed684d4bddab68e6b20633d1734fa56f98a5a677ea7f6dcea7a7be584e61",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P1.noJsonTemplate"
+     ]
+    }
+   },
+   "neg-child-subtree-bit": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "8d0b2f780f4ac4306d9cd527401b01991ebdbb20f34fd7c0c8955b0a99e0e078",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P2.singleSubtreeRoots"
+     ]
+    }
+   },
+   "neg-missing-row": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "4d5b41902b0cb0a8547f162c5db240be4df80e4ce3ab9e55f8bf2c8df4545254",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P3.rowsEverywhere"
+     ]
+    }
+   },
+   "neg-row-1ulp": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "9f338fb7764a388826ed0f7a4bd27814ae4274a3c753526f3d5e35796783fbea",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.rows"
+     ]
+    }
+   },
+   "neg-row0-1ulp": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "87073e744c5f6319964ccd90174a026dd17af699cc4a7f6d8cfe600a496c7382",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P3.rowsEverywhere"
+     ]
+    }
+   },
+   "neg-repeated-prefix": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "5b69365e962cd2893bec7e42187bd32ac6c273d39fb94fb2166545372d51d557",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-unreferenced-member": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "449eb9b0ffad03734e972d1848b0bfa6a37e07d3890b3759e054a5ae55778846",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-retained-source": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "df6272114febcb6f2773f5770b04f64eaf6fb56ac9e61ca77e3e2aae344b8876",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "PD11.noRetainedSources",
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-doc-node-budget": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "f84b15a403e53fc20a6b1444833a31a585a3d3734d365b7b30a119a3c661a999",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "documents.budget"
+     ]
+    }
+   },
+   "neg-link-box": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "9aec04716bb15cf7a282e72810388b2bcd7e1f459ef218a6540430a9412d86d2",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P6.linkCoherence"
+     ]
+    }
+   },
+   "neg-missing-root-schema": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "04cea157382e14a25134c4cd211101a996e7b64cbb934a75a47df457a0008f7c",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P12.schema"
+     ]
+    }
+   },
+   "neg-source-list": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "814bbb5024f116a44026f782670245964525caaaf8abfe14e67496af17ae16c1",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "PD11.noRetainedSources"
+     ]
+    }
+   },
+   "neg-doc-schema": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "fa6fbc61c35efa5508fc039b32fe84f41a22fca56736fb3d1dbe3e8e6846984c",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P12.schema"
+     ]
+    }
+   },
+   "neg-schema-id": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "e5385bf69f4654b4017947e47ebd4256eabe49f4e6ad6817ad0971bea3163d66",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P12.schema"
+     ]
+    }
+   },
+   "neg-skeleton-s3": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "6dc87daae2f6ff5d011f4e99b0e75ead0bca93c084921e7dfbdda999b17a8ed9",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "skeleton.S4",
+      "A4.roles"
+     ]
+    }
+   },
+   "neg-skeleton-s5": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "176f355f38fcbd13e6d9ce0058b4c959c91e21c4037e80ea4a54ef5d14f5f466",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "skeleton.S4",
+      "P2.singleSubtreeRoots",
+      "A4.roles"
+     ]
+    }
+   },
+   "neg-leaf-as-root": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "8e67373b69f64f5e022e1e259185a400d2d0cfe42bbae50e8ce0410983c5e9ad",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "skeleton.S4",
+      "A4.roles"
+     ]
+    }
+   },
+   "neg-truncated-archive": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "ba139d8d8e5bae01e9c6bba7a86b2a4da50826cdfdf94c352ba14ef77219a621",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "archive"
+     ]
+    }
+   },
+   "neg-levels-mismatch": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "87da5d792669a8afbbe9ec77df49c42c64aa68af2914daa8b733ceeeef6bba31",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P2.singleSubtreeRoots"
+     ]
+    }
+   },
+   "neg-two-subtrees": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "840017a93d51bf9d0517564859c31078e3d95ab7262848e4b7bbaaee261d29d9",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P2.singleSubtreeRoots"
+     ]
+    }
+   },
+   "neg-orphan-availability": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "a45b4122f64dd9c91eb758e2dadb6ebfcc4257add7e4e97f052109f302bb5a8c",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P2.singleSubtreeRoots"
+     ]
+    }
+   },
+   "neg-l33": {
+    "kind": "negative",
+    "base": "chain33",
+    "archiveSha256": "c56d49c8bd8cbb0d8031d3424a23048f5573ca7121f7f7b54a1a80256588a002",
+    "referenceSha256": "4038502ec8579043a65eec1dc27377c02fa0de6c7a6742fe6cc6098272bc5ae5",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P9.levelBound"
+     ]
+    }
+   },
+   "neg-doc-bytes": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "d18d74ff545f094112cf3fdc5b48f38a79839b118bd2f708f165df1b8270399b",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "documents.budget"
+     ]
+    }
+   },
+   "neg-doc-depth": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "470b0c5cf65662ce20df503349f8be0b7e1ebd1ee18c85220e6462864b00ff47",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "documents.budget"
+     ]
+    }
+   },
+   "neg-doc-levels": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "1f7c538b706af3e08727a4b0a34947842e8ce1959d9a4a5fc38dd68e71dff598",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "documents.levels"
+     ]
+    }
+   },
+   "neg-link-refine": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "2a3a59bf8f2c0702065174ca2546be6b4cf5d31ebdf829a0bd6a5922c5bc5080",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P6.linkCoherence"
+     ]
+    }
+   },
+   "neg-link-children": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "249e741d9f99265e6a0ebee99367742d2eaebb293f9dd189576e127712aac5a7",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.wellFormed"
+     ]
+    }
+   },
+   "neg-link-dangling": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "1f7c739e92db7b71016b18c3dd10e84855ebaf3dd4e040e0709f155dbd07f8ab",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.wellFormed"
+     ]
+    }
+   },
+   "neg-link-twice": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "7f015fb58322e2d06250943790d23c0faa7e48be6c5646ad5f22a57b3026c27f",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.wellFormed"
+     ]
+    }
+   },
+   "neg-doc-root-transform": {
+    "kind": "negative",
+    "base": "quad-chain32",
+    "archiveSha256": "1f1c05027e63471128e98b0d0be025884760ad54d32e9ff9de703744afc8b8c1",
+    "referenceSha256": "22c9d0ee3befe984c9d7a49505223f2e0853d1c55d3d683d28ca7638b83223f3",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.wellFormed"
+     ]
+    }
+   },
+   "neg-doc-numbering": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "9777bc1f3e8a5e24074154dccbefb689c3097169e217ad9998efa66a05bdf85a",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.wellFormed"
+     ]
+    }
+   },
+   "neg-link-order": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "91cc7e2c44b2882bf8abbbfb4076c5e3ad48e40613dcf9d424662cb106a41c71",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "links.creationOrder"
+     ]
+    }
+   },
+   "neg-old-chunk-document": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "2e2342e7719c58b9363632fcb55a2d6d46368366a8f40e35e39c260b0d172ef1",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P1.noJsonTemplate"
+     ]
+    }
+   },
+   "neg-tile-child-index": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "2b9903be638e17f7cb61371bdf9b9666f4e8db854f65df1a2885fd7e430a89d1",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P11.noImplicitChildIndex"
+     ]
+    }
+   },
+   "neg-row-child-index": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "f825b2a1e44893379d15919447d627b2d9624bc43807330fd0b9af66a4134019",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P11.noImplicitChildIndex"
+     ]
+    }
+   },
+   "neg-extra-layer": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "4db04c75e299771acff441e2ca2a60d1216f1f231bdac77c6a82e0b5c7321faf",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P10.slots"
+     ]
+    }
+   },
+   "neg-slots-unsorted": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "065b289c2439963d593519c103b8141c8664665bd3a0108a4dbfeba9e9cdd220",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P10.slots"
+     ]
+    }
+   },
+   "neg-missing-content": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "1aa7dd44ffa121137a3ba27cef4dc450419cc8d0b8ed3f3aef88da265b85bb7c",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-unavailable-content": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "35a5d05096e755275965b549b19ad9e3512bb539187e119ccfbc85673ca748ee",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-corrupt-payload": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "cefeeda9150cbae5568e237cee26ef5b74cd821f29b62b1a7332df4c1de049f9",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "payloads.wellFormed"
+     ]
+    }
+   },
+   "neg-vector-build-hash": {
+    "kind": "negative",
+    "base": "quad-single",
+    "archiveSha256": "949ef861d38b12ab66d9a1309e5a54483405cfcb307cbf9421bf4431de4b1126",
+    "referenceSha256": "f160115a67cfb9996925d49d9e0709e8b40b2669adde81c9e0802794d55673f4",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "P4.namesClosed"
+     ]
+    }
+   },
+   "neg-reuse-record": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "7ab628a913ba12da6ccefaebf99eacfe03fb7379135c6c26e91dfcf9969e0b68",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": false,
+    "expect": {
+     "failRules": [
+      "vectorBuild.reuseMap"
+     ]
+    }
+   },
+   "neg-reuse-missing-entry": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "b72f6e20b6b3fdb2573a100c42c3ab7d6fe487aece5e3bc45a469292908b1c3d",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "vectorBuild.reuseMap"
+     ]
+    }
+   },
+   "neg-error-changed": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "e9be0b770b4a045661c2f6a247485635e532310b069aedc8a6e43cba48a02e57",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.rows"
+     ]
+    }
+   },
+   "neg-row-extras": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "0e4e2ec67e963d493845bb719e06b1fdc55d48921771541d8ee4bd779446bce4",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.extras"
+     ]
+    }
+   },
+   "neg-tile-dropped": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "76be53510b18af5dbf0107552cfc21ce939ad7c1a2f5d94e6cdffc41bd96fb93",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.tree"
+     ]
+    }
+   },
+   "neg-payload-bin": {
+    "kind": "negative",
+    "base": "quad-wide",
+    "archiveSha256": "e0afdd64a9cd1492d7acee6c54c9646d0f156da0b1a2a533e20714deb2ead632",
+    "referenceSha256": "d4ebd10dcf99b768b33050b603c4e64ef337b94c68f21b69691d93f52ae3eb50",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.payloads"
+     ]
+    }
+   },
+   "neg-payload-translation": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "f116175a49382603fb1959df8bfe1052bd851f1d642029b7b1768e752f186545",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.payloads"
+     ]
+    }
+   },
+   "neg-payload-reserialized": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "31895a2cdf913f5958c298bdac05bc694fccf745cb23cde1bd82f92d5ddbfe8d",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.payloads"
+     ]
+    }
+   },
+   "neg-explicit-payload": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "f8ce42d023167789c2869059543e76902842831c868b800d1c90db51b9df77aa",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.payloads"
+     ]
+    }
+   },
+   "neg-prefix-not-preorder": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "3140fa89c9602d0f4d0a6574340e8c1201634f59e43cc2911d3fa0168d96c19f",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.names"
+     ]
+    }
+   },
+   "neg-root-refine": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "4e147c7b0eb903fa0ebc62d7c8285980f5519b93c20e5185a5f559f61a40025f",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.explicitTiles"
+     ]
+    }
+   },
+   "neg-root-transform-dropped": {
+    "kind": "negative",
+    "base": "oct-mixed",
+    "archiveSha256": "bc5167562f2bb170e00e7200f61fe0504aca3baed63898f730cafa443728d475",
+    "referenceSha256": "8563e5300d5749dc1da304704c79300908c4378d91f0f7578bc1e2431fa05722",
+    "needsReference": true,
+    "expect": {
+     "failRules": [
+      "A4.explicitTiles"
+     ]
+    }
+   }
+  }
+ },
+ "cesiumFixtures": {
+  "suite": "cesium/make_fixtures.py (verbatim design generator 578884d8\u2026)",
+  "judge": "cesium/judge_fixtures.py",
+  "expect": {
+   "E": "8/8 selected and picked, control passes",
+   "S": "same",
+   "X": "same",
+   "F": "same",
+   "D": "same",
+   "A": "0/8 selected and picked (placeholder cull)",
+   "N": "tileFailed reading 'classes' and 0/8 (no root schema, F-1)"
+  },
+  "pins": {
+   "cesium": "1.146.0",
+   "playwright": "1.63.0",
+   "chromium": "153.0.8010.12 (chromium-1243, SwiftShader)"
+  }
+ },
+ "deepViews": {
+  "prepare": "cesium/prepare_real.py --base explicit explicit=HEAD-EXPLICIT develop=DEVELOP head=HEAD",
+  "runner": "cesium/run_real.py (develop first)",
+  "judge": "cesium/judge_deep.py",
+  "settings": {
+   "views": 16,
+   "height": 40.0,
+   "PIMPL_MSSE": "0.0001 (pc-deep: 1)",
+   "overviewMSSE": 16,
+   "PIMPL_DETERMINISTIC": 1,
+   "PIMPL_STABLE": 30,
+   "runs": [
+    "PIMPL_CHILD_BOUNDS=0",
+    "PIMPL_CHILD_BOUNDS=1"
+   ],
+   "cpus": "one browser at a time on a recorded free pair (recorded runs: 13,15), nice 10, cpustat around each run"
+  },
+  "cases": [
+   "vector perf",
+   "mf2-lod3",
+   "mf2-lod16",
+   "pc-deep",
+   "mesh chunk case"
+  ],
+  "requirements": {
+   "R1": "every view and the overview loaded; no tile failures; no failed requests",
+   "R2": "same target-path tile in every view (cb0 and cb1)",
+   "R3": "same non-null picks in every view; null on one side only fails; null on both reported separately",
+   "R4": "cullWithChildrenBounds false: identical selections in every view",
+   "R5": "defaults: every differing view has the head selecting a strict ancestor of a develop-selected tile, never the reverse, with equal coverage; share reported"
+  }
+ },
+ "realArchives": {
+  "head": "forest_check.py HEAD --explicit HEAD-EXPLICIT: verdict pass; every required rule pass or not-applicable; links.creationOrder and A4.topLevel pass; A4.contentUris reported (may differ only by mode naming); vector: vectorBuild.reuseMap applicable and pass",
+  "develop": "develop default archives fail (JSON templates, child subtrees, retained sources); sanity only",
+  "determinism": "P7: two --reproducible builds of the same input are byte-identical (cmp), excluding conversion.json volatile fields"
+ }
+}

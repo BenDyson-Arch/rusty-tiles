@@ -1,0 +1,289 @@
+{
+ "checker": "forest_check.py",
+ "checkerSha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+ "archive": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-implicit.3tz",
+ "archiveSha256": "56750d326a2da19e9cba47d8b1a94fe2bb161a30b77626343a2ac2521c1c9c8c",
+ "reference": null,
+ "profile": {
+  "S": 4,
+  "DOC_NODES": 16384,
+  "DOC_BYTES": 2097152,
+  "DOC_LEVELS": 12,
+  "JSON_DEPTH": 32,
+  "MAX_LEVELS": 32
+ },
+ "verdict": "fail",
+ "failedRules": [
+  "P1.noJsonTemplate",
+  "P2.singleSubtreeRoots",
+  "P4.namesClosed",
+  "P10.slots",
+  "PD11.noRetainedSources",
+  "payloads.wellFormed",
+  "vectorBuild.reuseMap"
+ ],
+ "rules": {
+  "archive": {
+   "status": "pass",
+   "required": true,
+   "source": "3TZ / core",
+   "violations": 0,
+   "examples": [],
+   "description": "zip readable, member names unique, tileset.json parses as a tileset"
+  },
+  "skeleton.S4": {
+   "status": "pass",
+   "required": true,
+   "source": "\u00a71, \u00a74.1 classification",
+   "violations": 0,
+   "examples": [],
+   "description": "explicit tiles with children have h >= 4; their non-leaf children with h < 4 are implicit roots; leaf children are explicit leaves; the root is the single implicit root iff h(root) < 4"
+  },
+  "documents.budget": {
+   "status": "pass",
+   "required": true,
+   "source": "P8, \u00a74.1",
+   "violations": 0,
+   "examples": [],
+   "description": "every JSON document has <= 16,384 value nodes, <= 2 MiB and JSON depth <= 32"
+  },
+  "documents.levels": {
+   "status": "pass",
+   "required": true,
+   "source": "\u00a74.1 DOC_LEVELS",
+   "violations": 0,
+   "examples": [],
+   "description": "skeleton tiles sit at most 12 tile levels below their document root (links and unit children at most 13)"
+  },
+  "links.wellFormed": {
+   "status": "pass",
+   "required": true,
+   "source": "\u00a74.1 Documents, P1",
+   "violations": 0,
+   "examples": [],
+   "description": "link tiles: content.uri tileset-d{m}.json at the archive root, m = 1..D-1 each referenced by exactly one link, no children, no implicitTiling, doc root without transform and with children, doc asset/geometricError/extensionsUsed as specified"
+  },
+  "links.creationOrder": {
+   "status": "pass",
+   "required": false,
+   "source": "\u00a74.1 \"m counts from 1 in creation order\"",
+   "violations": 0,
+   "examples": [],
+   "description": "link numbers follow breadth-first order over documents taken in m order"
+  },
+  "P6.linkCoherence": {
+   "status": "pass",
+   "required": true,
+   "source": "P6",
+   "violations": 0,
+   "examples": [],
+   "description": "a link tile's box, error and refine equal its document root's"
+  },
+  "P1.noJsonTemplate": {
+   "status": "fail",
+   "required": true,
+   "source": "P1, U-1",
+   "violations": 2634,
+   "examples": [
+    "tileset.json: implicit root rNone: JSON content template 'implicit-tileset-0-0-0-{level}-{x}-{y}.json'",
+    "tileset JSON member implicit-tileset-0-0-0-3-0-0.json is neither tileset.json nor a linked tileset-d{m}.json",
+    "tileset JSON member implicit-tileset-0-0-0-3-1-0.json is neither tileset.json nor a linked tileset-d{m}.json"
+   ],
+   "description": "no implicit root content template names a .json resource; the only tileset JSON documents are tileset.json and linked tileset-d{m}.json"
+  },
+  "P2.singleSubtreeRoots": {
+   "status": "fail",
+   "required": true,
+   "source": "P2",
+   "violations": 1,
+   "examples": [
+    "tileset.json: implicit root ?: subtrees.uri 'subtrees/0-0-0-{level}-{x}-{y}.subtree' is not subtrees/r{n}-{level}-{x}-{y}.subtree"
+   ],
+   "description": "every implicit root: subtreeLevels == availableLevels == h+1 <= 4, exactly one subtree member, childSubtreeAvailability {constant: 0}, no children, closed availability"
+  },
+  "P3.rowsEverywhere": {
+   "status": "pass",
+   "required": true,
+   "source": "P3, P12",
+   "violations": 0,
+   "examples": [],
+   "description": "every available tile has a FLOAT64 TILE_BOUNDING_BOX and TILE_GEOMETRIC_ERROR row; the level-0 row equals the root tile box and error"
+  },
+  "P4.namesClosed": {
+   "status": "fail",
+   "required": true,
+   "source": "P4, PD-6",
+   "violations": 30308,
+   "examples": [
+    "unreferenced member implicit-content/12-1000-0-0-0-0-0.glb",
+    "unreferenced member implicit-content/12-1000-0-1-0-0-0.glb",
+    "unreferenced member implicit-content/12-1000-0-2-0-0-0.glb"
+   ],
+   "description": "distinct r{n} prefixes; every name a template produces for available content exists; every member is referenced; vector-build.json is bound by asset.extras.vectorBuildStateSha256"
+  },
+  "P9.levelBound": {
+   "status": "pass",
+   "required": true,
+   "source": "P9, PD-5",
+   "violations": 0,
+   "examples": [],
+   "description": "L = h(root) + 1 <= 32"
+  },
+  "P10.slots": {
+   "status": "fail",
+   "required": true,
+   "source": "P10, R-4",
+   "violations": 2,
+   "examples": [
+    "tileset.json: implicit root rNone: template 'implicit-content/0-0-0-{level}-{x}-{y}-0.glb' is not implicit-content/r{n}-...-{slot}.{glb|gltf|b3dm}",
+    "tileset.json: implicit root rNone: template 'implicit-tileset-0-0-0-{level}-{x}-{y}.json' is not implicit-content/r{n}-...-{slot}.{glb|gltf|b3dm}"
+   ],
+   "description": "content layer count == template count; zero content means no content/contents and no contentAvailability; templates implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{glb|gltf|b3dm} in strictly sorted (slot, suffix) order, each with available content"
+  },
+  "P11.noImplicitChildIndex": {
+   "status": "pass",
+   "required": true,
+   "source": "P11, R-8",
+   "violations": 0,
+   "examples": [],
+   "description": "no implicitChildIndex in any tile extras or row extras"
+  },
+  "P12.schema": {
+   "status": "pass",
+   "required": true,
+   "source": "P12, F-1",
+   "violations": 0,
+   "examples": [],
+   "description": "tileset.json carries the rustyTilesImplicit schema iff an implicit root exists; every document holding one carries the same schema"
+  },
+  "PD11.noRetainedSources": {
+   "status": "fail",
+   "required": true,
+   "source": "PD-11, \u00a74.1",
+   "violations": 12528,
+   "examples": [
+    "tileset.json: carries rustyTilesSourceContents",
+    "unreferenced t/ member t/00004e95c017fe723c5534a6ae326dfaa3ce1f367adb6d127ea801ad909c86d7.glb",
+    "unreferenced t/ member t/00026d42a85665f47e9f731da178c53229283409a5a5e8e55f582a867fb3fd44.glb"
+   ],
+   "description": "no rustyTilesSourceContents anywhere; no unreferenced t/ member; implicit tiles never reference t/ members"
+  },
+  "payloads.wellFormed": {
+   "status": "fail",
+   "required": true,
+   "source": "\u00a74.1, glTF 2.0, b3dm",
+   "violations": 8,
+   "examples": [
+    "implicit-tileset-0-0-0-3-7-0.json: not a GLB (magic)",
+    "implicit-tileset-0-0-0-3-6-0.json: not a GLB (magic)",
+    "implicit-tileset-0-0-0-3-5-0.json: not a GLB (magic)"
+   ],
+   "description": "implicit payloads are well-formed GLB (or b3dm-wrapped GLB); .gltf only at an implicit root"
+  },
+  "vectorBuild.reuseMap": {
+   "status": "fail",
+   "required": true,
+   "source": "\u00a74.7 (PV)",
+   "violations": 1,
+   "examples": [
+    "vector-build.json has no payloads map"
+   ],
+   "description": "when vector-build.json exists: its payloads map restores every entry byte-exactly to its sha256 key from a published implicit-content member"
+  },
+  "A4.tree": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "P5, A-4",
+   "violations": 0,
+   "examples": [],
+   "description": "expanding every document and root yields exactly the tiles and parent/child relation of H"
+  },
+  "A4.roles": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "\u00a74.1 classification on H",
+   "violations": 0,
+   "examples": [],
+   "description": "each tile has the role S = 4 assigns it in H"
+  },
+  "A4.explicitTiles": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "P5, \u00a74.1",
+   "violations": 0,
+   "examples": [],
+   "description": "explicit tiles (and link + document root) equal the producer tile objects without children and implicitChildIndex; implicit roots carry the producer transform, box, error, refine and content headers"
+  },
+  "A4.rows": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "P3, A-4",
+   "violations": 0,
+   "examples": [],
+   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise"
+  },
+  "A4.extras": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "P5, \u00a74.5",
+   "violations": 0,
+   "examples": [],
+   "description": "row extras equal the producer extras without implicitChildIndex; encodedBytes equals the published payload length"
+  },
+  "A4.payloads": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "P5, A-4, \u00a74.1",
+   "violations": 0,
+   "examples": [],
+   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; delta 0 at the root is a byte copy"
+  },
+  "A4.names": {
+   "status": "not-applicable",
+   "required": true,
+   "source": "PD-6, R-7",
+   "violations": 0,
+   "examples": [],
+   "description": "each implicit root prefix r{n} is its preorder index in H"
+  },
+  "A4.contentUris": {
+   "status": "not-applicable",
+   "required": false,
+   "source": "\u00a74.1 \"content URI\"",
+   "violations": 0,
+   "examples": [],
+   "description": "explicit tile content URIs equal the reference build URIs"
+  },
+  "A4.topLevel": {
+   "status": "not-applicable",
+   "required": false,
+   "source": "\u00a74.1",
+   "violations": 0,
+   "examples": [],
+   "description": "tileset.json asset version, geometricError and extensionsUsed equal the reference build"
+  }
+ },
+ "stats": {
+  "tiles": 15,
+  "levels": 4,
+  "skeletonTiles": 0,
+  "explicitLeaves": 0,
+  "implicitRoots": 1,
+  "implicitTiles": 15,
+  "linkTiles": 0,
+  "documents": 1,
+  "maxLinkNesting": 0,
+  "subtrees": 1,
+  "members": 30325,
+  "maxDocumentNodes": 12606,
+  "maxDocumentBytes": 915862,
+  "maxDocumentJsonDepth": 6,
+  "rootDocument": {
+   "nodes": 12606,
+   "bytes": 915862,
+   "jsonDepth": 6
+  },
+  "i1TilesCounter": 15,
+  "i1HierarchyVisits": 18
+ }
+}
