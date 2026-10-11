@@ -1,0 +1,1351 @@
+{
+ "base": "387a7bb (each patch is a git diff against it)",
+ "harness": "acceptance/oracle_parity.rs (I1_ONLY, panic guard)",
+ "build": "release lib-test binary, --locked, CARGO_BUILD_JOBS=2; run on CPUs 0,1 at nice 10",
+ "unitFilter": [
+  "content_integrity::implicit",
+  "validate::tests::i1_"
+ ],
+ "clean": {
+  "parity": {
+   "controlsFlipped": [],
+   "corpusFlipped": [],
+   "unitFailed": []
+  },
+  "timed": {
+   "R7": [
+    {
+     "id": "R7",
+     "kind": "InvalidInput",
+     "wall": 0.163347967
+    }
+   ],
+   "R7c": [
+    {
+     "id": "R7c",
+     "kind": "Accepted",
+     "wall": 0.418090793
+    }
+   ],
+   "R8a": [
+    {
+     "id": "R8a",
+     "kind": "Accepted",
+     "wall": 0.694858169
+    }
+   ]
+  }
+ },
+ "mutants": [
+  {
+   "name": "msb-first",
+   "patchSha256": "b5095032b1a46c5ff1266deadc489553560d2a2fdcda9f4ef9a87eeef1a55674",
+   "paired": "A-3",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "BQ",
+    "BO",
+    "A-2",
+    "A-9.32",
+    "A-11.base",
+    "A-11",
+    "A-12c.base",
+    "A-12d",
+    "A-13.base",
+    "A-13",
+    "B-1",
+    "B-2",
+    "B-3",
+    "B-4",
+    "B-4e",
+    "B-6",
+    "B-7",
+    "B-7t",
+    "B-10.subnormal",
+    "B-10.normal",
+    "B-10.root",
+    "B-10.l1",
+    "B-12",
+    "B-12b",
+    "C-4.base",
+    "C-5.base",
+    "C-6.base",
+    "C-7b.base",
+    "C-7c.base",
+    "C-7d.base",
+    "C-7d",
+    "C-7e",
+    "C-8",
+    "C-11",
+    "C-12.base",
+    "C-12",
+    "C-13.base",
+    "C-13",
+    "C-12b.uri.base",
+    "C-12b.group.base",
+    "C-15",
+    "C-11b",
+    "B-7o",
+    "D-6",
+    "D-7",
+    "D-7b",
+    "D-8",
+    "D-11b",
+    "R1b",
+    "R4",
+    "R4-1",
+    "R5",
+    "R2",
+    "R2-1",
+    "R2b.mid",
+    "R2b.cum-1",
+    "R6",
+    "R7a",
+    "W9'.octree-n0",
+    "W9'.octree-n0.f32",
+    "W9'.octree-n1",
+    "W9'.octree-n1.f32",
+    "W9'.octree-n2",
+    "W9'.octree-n2.f32",
+    "W9'.octree-n3",
+    "W9'.octree-n3.f32",
+    "W9'.octree-n4",
+    "W9'.octree-n4.f32",
+    "W9'.quadtree-n0",
+    "W9'.quadtree-n0.f32",
+    "W9'.quadtree-n1",
+    "W9'.quadtree-n1.f32",
+    "W9'.quadtree-n2",
+    "W9'.quadtree-n2.f32",
+    "W9'.quadtree-n3",
+    "W9'.quadtree-n3.f32",
+    "W9'.quadtree-n4",
+    "W9'.quadtree-n4.f32"
+   ],
+   "corpusFlipped": [
+    "W2.f2238cd",
+    "R1.431",
+    "R1.430",
+    "R2b.W2.190944",
+    "R2b.W2.246583",
+    "R2b.W2.190943",
+    "R2.W2.live",
+    "R2.W2.live-1",
+    "W2",
+    "W3",
+    "W5",
+    "W5.quantize",
+    "W5.meshopt",
+    "W6d",
+    "W11.mf2-lod3",
+    "W10.portable.W5",
+    "W10.portable.W5.quantize",
+    "W10.portable.W5.meshopt"
+   ],
+   "pairedFlipped": [],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::child_implies_tile",
+    "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile",
+    "content_integrity::implicit::availability::tests::distinct_views_are_distinct_sources",
+    "content_integrity::implicit::availability::tests::encoding_rules",
+    "content_integrity::implicit::availability::tests::levels_rule",
+    "content_integrity::implicit::availability::tests::root_bit_parent_rule_and_lsb_order",
+    "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
+    "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables",
+    "content_integrity::implicit::metadata::tests::interpreted_shapes_and_modifiers",
+    "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
+    "content_integrity::implicit::metadata::tests::row_counts_and_values",
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "content_integrity::implicit::metadata::tests::table_structure",
+    "content_integrity::implicit::metadata::tests::unsupported_semantics_in_walked_tables",
+    "content_integrity::implicit::subtree::tests::buffer_views",
+    "content_integrity::implicit::subtree::tests::external_buffers",
+    "content_integrity::implicit::subtree::tests::internal_buffer_and_bin_chunk",
+    "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly",
+    "content_integrity::implicit::walk::tests::derived_error_is_exact_or_unsupported",
+    "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
+    "content_integrity::implicit::walk::tests::missing_child_subtree_is_the_resolvers_failure",
+    "content_integrity::implicit::walk::tests::preorder_across_subtrees_with_morton_x_lsb",
+    "content_integrity::implicit::walk::tests::preorder_within_a_subtree",
+    "validate::tests::i1_availability_scan_is_charged_to_total_bytes_read",
+    "validate::tests::i1_facts_follow_the_walk_exactly",
+    "validate::tests::i1_facts_match_the_retained_expander_on_writer_output",
+    "validate::tests::i1_live_path_cap_admits_the_path_sum_only",
+    "validate::tests::i1_resolver_reads_external_buffers_relative_to_the_subtree"
+   ],
+   "diagnosis": "A-3 stays InvalidInput with another reason (tile has an unavailable parent); A-3 is specified as 'InvalidInput or facts'. Detected by 78 controls and 18 corpus artifacts."
+  },
+  {
+   "name": "inclusive-rank",
+   "patchSha256": "560794333c55aaeed667236227fbb4c5c387f605c6cf817d05d453b55adeb548",
+   "paired": "B-1, W1",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "BQ",
+    "BO",
+    "A-2",
+    "A-9.32",
+    "A-11.base",
+    "A-11",
+    "A-12c.base",
+    "A-13.base",
+    "A-13",
+    "B-1",
+    "B-2",
+    "B-3",
+    "B-4",
+    "B-4e",
+    "B-6",
+    "B-10.subnormal",
+    "B-10.normal",
+    "B-10.root",
+    "B-10.l1",
+    "B-12",
+    "B-12b",
+    "C-4.base",
+    "C-5.base",
+    "C-6.base",
+    "C-7b.base",
+    "C-7c.base",
+    "C-7d.base",
+    "C-7d",
+    "C-7e",
+    "C-8",
+    "C-11",
+    "C-12.base",
+    "C-13.base",
+    "C-12b.uri.base",
+    "C-12b.group.base",
+    "C-15",
+    "C-11b",
+    "D-6",
+    "D-7",
+    "D-7b",
+    "D-8",
+    "D-11b",
+    "D-9.base",
+    "T-0",
+    "T-1a",
+    "T-1b",
+    "T-2a",
+    "T-2b",
+    "T-3.base",
+    "R1b",
+    "R4",
+    "R4-1",
+    "R5",
+    "R8b.1024",
+    "R2",
+    "R2-1",
+    "R2b.mid",
+    "R2b.cum-1",
+    "R6",
+    "R7",
+    "R7a",
+    "R7c",
+    "R8a",
+    "R8a.nopad",
+    "W9'.octree-n0",
+    "W9'.octree-n0.f32",
+    "W9'.octree-n1",
+    "W9'.octree-n1.f32",
+    "W9'.octree-n2",
+    "W9'.octree-n2.f32",
+    "W9'.octree-n3",
+    "W9'.octree-n3.f32",
+    "W9'.octree-n4",
+    "W9'.octree-n4.f32",
+    "W9'.quadtree-n0",
+    "W9'.quadtree-n0.f32",
+    "W9'.quadtree-n1",
+    "W9'.quadtree-n1.f32",
+    "W9'.quadtree-n2",
+    "W9'.quadtree-n2.f32",
+    "W9'.quadtree-n3",
+    "W9'.quadtree-n3.f32",
+    "W9'.quadtree-n4",
+    "W9'.quadtree-n4.f32"
+   ],
+   "corpusFlipped": [
+    "W2.f2238cd",
+    "R1.431",
+    "R1.430",
+    "R2b.W2.190944",
+    "R2b.W2.246583",
+    "R2b.W2.190943",
+    "W1",
+    "W2",
+    "W3",
+    "W4.points-lines",
+    "W4.points-lines-quantize",
+    "W4.points-lines-meshopt",
+    "W4.polygons",
+    "W4.polygons-quantize",
+    "W4.polygons-meshopt",
+    "W5",
+    "W5.quantize",
+    "W5.meshopt",
+    "W6",
+    "W6d",
+    "W7",
+    "W11.mf2-lod3",
+    "W8s",
+    "W10.portable.W4.points-lines",
+    "W10.portable.W4.points-lines-quantize",
+    "W10.portable.W4.points-lines-meshopt",
+    "W10.portable.W4.polygons",
+    "W10.portable.W4.polygons-quantize",
+    "W10.portable.W4.polygons-meshopt",
+    "W10.portable.W5",
+    "W10.portable.W5.quantize",
+    "W10.portable.W5.meshopt"
+   ],
+   "pairedFlipped": [
+    "B-1",
+    "W1"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::child_implies_tile",
+    "content_integrity::implicit::availability::tests::content_entries_are_reserved_at_admission",
+    "content_integrity::implicit::availability::tests::content_index_is_slot_ordered_and_alias_invariant",
+    "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile",
+    "content_integrity::implicit::availability::tests::distinct_views_are_distinct_sources",
+    "content_integrity::implicit::availability::tests::encoding_rules",
+    "content_integrity::implicit::availability::tests::levels_rule",
+    "content_integrity::implicit::availability::tests::root_bit_parent_rule_and_lsb_order",
+    "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
+    "content_integrity::implicit::metadata::tests::classes_are_classified_once_per_schema_document",
+    "content_integrity::implicit::metadata::tests::content_metadata_tables",
+    "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "content_integrity::implicit::metadata::tests::unsupported_semantics_in_walked_tables",
+    "content_integrity::implicit::subtree::tests::buffer_views",
+    "content_integrity::implicit::subtree::tests::extensions_are_unsupported_anywhere_but_extras",
+    "content_integrity::implicit::subtree::tests::external_buffers",
+    "content_integrity::implicit::subtree::tests::header_and_json_chunk",
+    "content_integrity::implicit::subtree::tests::internal_buffer_and_bin_chunk",
+    "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly",
+    "content_integrity::implicit::walk::tests::derived_error_is_exact_or_unsupported",
+    "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
+    "content_integrity::implicit::walk::tests::missing_child_subtree_is_the_resolvers_failure",
+    "content_integrity::implicit::walk::tests::post_walk_content_rule_and_walk_state",
+    "content_integrity::implicit::walk::tests::preorder_across_subtrees_with_morton_x_lsb",
+    "content_integrity::implicit::walk::tests::preorder_within_a_subtree",
+    "content_integrity::implicit::walk::tests::repeated_subtree_members_are_unsupported",
+    "validate::tests::i1_availability_scan_is_charged_to_total_bytes_read",
+    "validate::tests::i1_content_reservation_and_emission_share_references",
+    "validate::tests::i1_depth_is_r_depth_plus_level",
+    "validate::tests::i1_facts_follow_the_walk_exactly",
+    "validate::tests::i1_facts_match_the_retained_expander_on_writer_output",
+    "validate::tests::i1_live_path_cap_admits_the_path_sum_only",
+    "validate::tests::i1_resolver_reads_external_buffers_relative_to_the_subtree",
+    "validate::tests::i1_visits_follow_the_reservation_formula"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "drop-content-implies-tile",
+   "patchSha256": "011f59cf2672767eea75ed01fbc181684d0a92980f9d7840d624c84615bdd466",
+   "paired": "A-6",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [],
+   "corpusFlipped": [],
+   "pairedFlipped": [],
+   "parityDetects": false,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::content_layers_and_content_implies_tile"
+   ],
+   "diagnosis": "FLIPS NO PARITY CONTROL: A-6 stays InvalidInput because the stray content bit is indexed to a neighbouring tile ('missing archive entry: content/2/1/1.glb'). Caught only by the unit test content_layers_and_content_implies_tile."
+  },
+  {
+   "name": "drop-child-implies-tile",
+   "patchSha256": "88c7a5d2f6d035f7d60551a75faa2e5fc507108950c8bca92b94ac76d6050ed3",
+   "paired": "A-7",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-7"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "A-7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::child_implies_tile"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "drop-available-count",
+   "patchSha256": "c8bc8b354fe6acbc3aa42d2f58519ef6511ca05018f9d2acf6820ac3f7ea91eb",
+   "paired": "A-4",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-4+1",
+    "A-4-1"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "A-4"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::encoding_rules"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "key-by-name",
+   "patchSha256": "de5d21357617c2b51198c81a7e1d123db92cc5cc2e54978b1f302918d11a4fab",
+   "paired": "B-3",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "BQ",
+    "BO",
+    "A-2",
+    "A-9.32",
+    "A-11.base",
+    "A-13.base",
+    "A-13",
+    "B-1",
+    "B-2",
+    "B-3",
+    "B-4",
+    "B-4e",
+    "B-6",
+    "B-7",
+    "B-7t",
+    "B-9.neg",
+    "B-9.nan",
+    "B-10.normal",
+    "B-10.root",
+    "B-12",
+    "B-11",
+    "B-12b",
+    "C-4.base",
+    "C-5.base",
+    "C-6.base",
+    "C-7b.base",
+    "C-7c.base",
+    "C-7d.base",
+    "C-7d",
+    "C-7e",
+    "C-8",
+    "C-11",
+    "C-12.base",
+    "C-13.base",
+    "C-12b.uri.base",
+    "C-12b.group.base",
+    "C-15",
+    "B-7o",
+    "D-6",
+    "D-8",
+    "D-11b",
+    "T-0",
+    "T-1a",
+    "T-1b",
+    "T-2a",
+    "T-2b",
+    "T-3.base",
+    "R4",
+    "R5",
+    "W9'.octree-n0",
+    "W9'.octree-n0.f32",
+    "W9'.octree-n1",
+    "W9'.octree-n1.f32",
+    "W9'.octree-n2",
+    "W9'.octree-n2.f32",
+    "W9'.octree-n3",
+    "W9'.octree-n3.f32",
+    "W9'.octree-n4",
+    "W9'.octree-n4.f32",
+    "W9'.quadtree-n0",
+    "W9'.quadtree-n0.f32",
+    "W9'.quadtree-n1",
+    "W9'.quadtree-n1.f32",
+    "W9'.quadtree-n2",
+    "W9'.quadtree-n2.f32",
+    "W9'.quadtree-n3",
+    "W9'.quadtree-n3.f32",
+    "W9'.quadtree-n4",
+    "W9'.quadtree-n4.f32"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "B-3"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::content_metadata_tables",
+    "content_integrity::implicit::metadata::tests::interpreted_shapes_and_modifiers",
+    "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
+    "content_integrity::implicit::metadata::tests::row_counts_and_values",
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission",
+    "validate::tests::i1_facts_follow_the_walk_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "ignore-override",
+   "patchSha256": "bb07dbb93c11f441814766d9bcac6c8287a7bcaae01be993e8310ca26d52c7e9",
+   "paired": "B-4, W6",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "BQ",
+    "BO",
+    "A-2",
+    "A-9.32",
+    "A-11.base",
+    "A-13.base",
+    "A-13",
+    "B-1",
+    "B-2",
+    "B-3",
+    "B-4e",
+    "B-6",
+    "B-10.normal",
+    "B-10.root",
+    "B-12",
+    "C-4.base",
+    "C-5.base",
+    "C-6.base",
+    "C-7b.base",
+    "C-7c.base",
+    "C-7d.base",
+    "C-7d",
+    "C-7e",
+    "C-8",
+    "C-11",
+    "C-12.base",
+    "C-13.base",
+    "C-12b.uri.base",
+    "C-12b.group.base",
+    "C-15",
+    "D-6",
+    "D-8",
+    "D-11b",
+    "T-0",
+    "T-1a",
+    "T-1b",
+    "T-2a",
+    "T-3.base",
+    "R4",
+    "R5",
+    "W9'.octree-n0",
+    "W9'.octree-n0.f32",
+    "W9'.octree-n1",
+    "W9'.octree-n1.f32",
+    "W9'.octree-n2",
+    "W9'.octree-n2.f32",
+    "W9'.octree-n3",
+    "W9'.octree-n3.f32",
+    "W9'.octree-n4",
+    "W9'.octree-n4.f32",
+    "W9'.quadtree-n0",
+    "W9'.quadtree-n0.f32",
+    "W9'.quadtree-n1",
+    "W9'.quadtree-n1.f32",
+    "W9'.quadtree-n2",
+    "W9'.quadtree-n2.f32",
+    "W9'.quadtree-n3",
+    "W9'.quadtree-n3.f32",
+    "W9'.quadtree-n4",
+    "W9'.quadtree-n4.f32"
+   ],
+   "corpusFlipped": [
+    "W2.f2238cd",
+    "R1.431",
+    "R2b.W2.190944",
+    "R2b.W2.246583",
+    "W1",
+    "W2",
+    "W3",
+    "W4.points-lines",
+    "W4.points-lines-quantize",
+    "W4.points-lines-meshopt",
+    "W4.polygons",
+    "W4.polygons-quantize",
+    "W4.polygons-meshopt",
+    "W5",
+    "W5.quantize",
+    "W5.meshopt",
+    "W6",
+    "W6d",
+    "W7",
+    "W11.mf2-lod3",
+    "W8s",
+    "W10.portable.W4.points-lines",
+    "W10.portable.W4.points-lines-quantize",
+    "W10.portable.W4.points-lines-meshopt",
+    "W10.portable.W4.polygons",
+    "W10.portable.W4.polygons-quantize",
+    "W10.portable.W4.polygons-meshopt",
+    "W10.portable.W5",
+    "W10.portable.W5.quantize",
+    "W10.portable.W5.meshopt"
+   ],
+   "pairedFlipped": [
+    "B-4",
+    "W6"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "validate::tests::i1_facts_follow_the_walk_exactly",
+    "validate::tests::i1_facts_match_the_retained_expander_on_writer_output"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "swap-x-y",
+   "patchSha256": "1f8597da9bfcd65cb4fa6e53a32e57fe96a86dbd98c77eb5e0991dd93b5ebba5",
+   "paired": "C-1, W2",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "BQ",
+    "BO",
+    "A-2",
+    "A-9.32",
+    "A-11.base",
+    "A-11",
+    "A-13.base",
+    "A-13",
+    "B-1",
+    "B-2",
+    "B-3",
+    "B-4",
+    "B-4e",
+    "B-6",
+    "B-10.subnormal",
+    "B-10.normal",
+    "B-12",
+    "B-12b",
+    "C-1",
+    "C-4.base",
+    "C-5.base",
+    "C-6.base",
+    "C-7b.base",
+    "C-7c.base",
+    "C-7d.base",
+    "C-7d",
+    "C-7e",
+    "C-8",
+    "C-11",
+    "C-12.base",
+    "C-13.base",
+    "C-12b.uri.base",
+    "C-12b.group.base",
+    "C-15",
+    "C-11b",
+    "D-6",
+    "D-7",
+    "D-7b",
+    "D-8",
+    "D-11b",
+    "R1b",
+    "R4",
+    "R4-1",
+    "R5",
+    "R7c",
+    "R8a",
+    "R8a.nopad"
+   ],
+   "corpusFlipped": [
+    "W2.f2238cd",
+    "R1.431",
+    "R1.430",
+    "R2b.W2.190944",
+    "R2b.W2.246583",
+    "R2b.W2.190943",
+    "W1",
+    "W2",
+    "W3",
+    "W5",
+    "W5.quantize",
+    "W5.meshopt",
+    "W6",
+    "W6d",
+    "W11.mf2-lod3",
+    "W10.portable.W5",
+    "W10.portable.W5.quantize",
+    "W10.portable.W5.meshopt"
+   ],
+   "pairedFlipped": [
+    "C-1",
+    "W2"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::root_bit_parent_rule_and_lsb_order",
+    "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "content_integrity::implicit::walk::tests::preorder_across_subtrees_with_morton_x_lsb",
+    "content_integrity::implicit::walk::tests::preorder_within_a_subtree",
+    "validate::tests::i1_facts_match_the_retained_expander_on_writer_output"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "error-not-halved",
+   "patchSha256": "a3ebdd5d41134548ad51be7320e95367bbbe25fbb7fab659ba0e3dc77e14a8fc",
+   "paired": "B-12",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "B-4e",
+    "B-10.normal",
+    "B-12",
+    "R2",
+    "R2b.mid",
+    "R2b.cum-1",
+    "R7c",
+    "R8a",
+    "R8a.nopad"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "B-12"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::missing_semantics_and_optional_columns_fall_back_to_derived",
+    "content_integrity::implicit::walk::tests::derived_error_is_exact_or_unsupported",
+    "validate::tests::i1_facts_follow_the_walk_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "ge-vs-gt-on-A",
+   "patchSha256": "1d754ad00829df90a59511a382fe969777f94ecccbe1ee07cef3ee5e67420575",
+   "paired": "A-8, A-9",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [],
+   "corpusFlipped": [],
+   "pairedFlipped": [],
+   "parityDetects": false,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::levels_rule"
+   ],
+   "diagnosis": "FLIPS NO PARITY CONTROL: A-8 stays InvalidInput because the admitted child subtree member is absent ('missing archive entry: subtrees/6/18/2.subtree'); A-9 exercises the 32-level cap, a different comparison. Caught only by the unit test levels_rule."
+  },
+  {
+   "name": "float32-with-float64-stride",
+   "patchSha256": "6da25c6f0e5ee07b07a43291327917943ac66883d71bb7a086cd6f76988ce4d0",
+   "paired": "B-6",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "B-6",
+    "W9'.octree-n0.f32",
+    "W9'.octree-n1.f32",
+    "W9'.octree-n2.f32",
+    "W9'.octree-n3.f32",
+    "W9'.octree-n4.f32",
+    "W9'.quadtree-n0.f32",
+    "W9'.quadtree-n1.f32",
+    "W9'.quadtree-n2.f32",
+    "W9'.quadtree-n3.f32",
+    "W9'.quadtree-n4.f32"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "B-6"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::rows_follow_strict_rank_by_semantic",
+    "validate::tests::i1_facts_follow_the_walk_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "ignore-trailing-bits",
+   "patchSha256": "a9cf4249a3c20a69c6b65e67c2a17f6bc4188022168db64c477ea1b6d9eac573",
+   "paired": "A-5",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-12c.trailing"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::distinct_views_are_distinct_sources",
+    "content_integrity::implicit::availability::tests::encoding_rules",
+    "content_integrity::implicit::availability::tests::root_bit_parent_rule_and_lsb_order"
+   ],
+   "diagnosis": "A-5's trailing bit also changes the popcount, so availableCount still refuses it; the step-order pin A-12c.trailing flips."
+  },
+  {
+   "name": "admit-json-templates",
+   "patchSha256": "ad8194f5877708d666c36ba70858985b2d0fd87ab78cb6ad80bc8c0367379bae",
+   "paired": "C-6, W5u",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-12a",
+    "C-4",
+    "C-7.upper.never",
+    "C-7.escaped.never",
+    "C-7.dot.never",
+    "C-7.slash.never",
+    "C-7.upperdot.never",
+    "W9u.octree-rename-class",
+    "W9u.quadtree-rename-class"
+   ],
+   "corpusFlipped": [
+    "W9u.coordinator.octree-rename-class",
+    "W9u.coordinator.quadtree-rename-class"
+   ],
+   "pairedFlipped": [],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment",
+    "content_integrity::implicit::tests::root_admission_profile_and_shape"
+   ],
+   "diagnosis": "C-6 and W5u stay Unsupported through C1's payload refusal ('payload format outside GLB/local glTF 2.0'); C-4 and the never-available C-7 forms flip."
+  },
+  {
+   "name": "case-sensitive-suffix",
+   "patchSha256": "ebfaa136d348126a9d45e88a0ddcd20b6b16a272a0568d8db0e283225bb0264e",
+   "paired": "C-7",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-7.upper.never",
+    "C-7.upperdot.never"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "read-scale",
+   "patchSha256": "dc4d8d913815af56ba7df9dfc1f218c1df720952f4985dbecec94b08b6db46bc",
+   "paired": "B-7",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "B-7",
+    "B-7t"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "B-7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::interpreted_shapes_and_modifiers"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "ignore-content-uri",
+   "patchSha256": "c38e71eef6efe37d418c2e0aec4e882bf643e793661957cd0627afd00d163e76",
+   "paired": "C-12",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-12",
+    "C-12b.uri"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-12"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::content_metadata_tables",
+    "content_integrity::implicit::metadata::tests::unsupported_semantics_in_walked_tables",
+    "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "ignore-content-group-id",
+   "patchSha256": "bb05e13a53e3261f24a5144b385a7b102ac8368121e61e91cfcf259ce0289320",
+   "paired": "C-13",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-13",
+    "C-12b.group"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-13"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::content_metadata_tables",
+    "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "drop-repeated-subtree-check",
+   "patchSha256": "273b38a96749f6dd94a8d486ae95cd5cff59787e3d6ca60efb541f6a0f96c0f7",
+   "paired": "A-11",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-11",
+    "C-11b"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "A-11"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::walk::tests::post_walk_content_rule_and_walk_state",
+    "content_integrity::implicit::walk::tests::repeated_subtree_members_are_unsupported"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "no-source-memoization",
+   "patchSha256": "54f8ffa5874269e8bc31df7b341ef7d97de7245128cd5560463f532f52cec80c",
+   "paired": "R7 (time bound)",
+   "timingCase": "R7",
+   "timeoutSeconds": 60,
+   "timedOut": true,
+   "timedCaseWall": null,
+   "controlsFlipped": null,
+   "corpusFlipped": null,
+   "pairedFlipped": [
+    "(timeout)"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass"
+   ],
+   "diagnosis": "R7 exceeds the 60 s timeout (clean 0.16 s)."
+  },
+  {
+   "name": "scan-per-object",
+   "patchSha256": "a635ed8af3905bba0b51063bd47e052f3274bfa67003e94196e9e4afc332f6c0",
+   "paired": "R7 (ResourceLimit)",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "R7",
+    "R7a"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "R7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
+    "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "reservation-after-rank-table",
+   "patchSha256": "37423b1efbd3ebed55fddf2807ead3e822f0baed0bd2558b1a77d732210871e5",
+   "paired": "R5b",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [],
+   "corpusFlipped": [],
+   "pairedFlipped": [],
+   "parityDetects": false,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables"
+   ],
+   "diagnosis": "FLIPS NO PARITY CONTROL: R5b keeps its ResourceLimit verdict; the defect (a rank-table allocation before the refusal) is visible only to the RANK_ALLOCATIONS probe, whose unit test fails."
+  },
+  {
+   "name": "per-visit-charging",
+   "patchSha256": "502ef5f58f345591cabfae9b8f4ec7624aeb47c22dab317cd08b44f4a632bf78",
+   "paired": "R1b",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "R1b"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "R1b"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::visit_reservation_precedes_rank_table_and_tables",
+    "validate::tests::i1_visits_follow_the_reservation_formula"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "live-path-current-subtree-only",
+   "patchSha256": "cbf796977dff365e53a2bf126948402acc2fc684c4c940f1d5ff49043953890d",
+   "paired": "R2",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "R2-1"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "R2"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::subtree::tests::external_buffers",
+    "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
+    "validate::tests::i1_live_path_cap_admits_the_path_sum_only"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "cumulative-instead-of-live",
+   "patchSha256": "7dcfc5704c82702076b4cefbb80b8291612a9329573baf86ddb00606a1840c70",
+   "paired": "R2b",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "R2",
+    "R2b.mid",
+    "R2b.cum-1"
+   ],
+   "corpusFlipped": [
+    "R2b.W2.190944",
+    "R2b.W2.246583"
+   ],
+   "pairedFlipped": [
+    "R2b"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::walk::tests::live_path_bytes_are_released_with_their_subtrees",
+    "validate::tests::i1_live_path_cap_admits_the_path_sum_only"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "refine-forced-replace",
+   "patchSha256": "e1378a713e15c4fb918e19604f91e7158f90bd688df9de8b99601c87fbf06044",
+   "paired": "W7",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "A-12c.base",
+    "C-15",
+    "R6",
+    "R7a",
+    "R7c",
+    "R8a",
+    "R8a.nopad"
+   ],
+   "corpusFlipped": [
+    "W7"
+   ],
+   "pairedFlipped": [
+    "W7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "validate::tests::i1_facts_follow_the_walk_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "padding-0x20-only",
+   "patchSha256": "92868ea70f80227fc236b1ac54767bc7d6f4cac3caf1e236cd8d4accf9a86688",
+   "paired": "D-8",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "D-8"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "D-8"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::subtree::tests::header_and_json_chunk"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "skip-post-walk-content-rule",
+   "patchSha256": "54f667b4e7ef782a31145af53095d0b57c04c44ffe53081cf03fee79e1eb9caf",
+   "paired": "C-14",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-14",
+    "R7"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-14"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::scan_is_charged_once_per_distinct_source_before_any_pass",
+    "content_integrity::implicit::walk::tests::post_walk_content_rule_and_walk_state"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "absolute-1e-6",
+   "patchSha256": "357260e693083389542378d65708510ad8b9bd7f3f71fd9f50c5ba384e02b4f7",
+   "paired": "T-1",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "T-1a"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "T-1"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [],
+   "diagnosis": "T-1a flips; no unit test detects it."
+  },
+  {
+   "name": "detect-on-raw-last-segment",
+   "patchSha256": "c08af4f24c75f483e7556d5eaae38279c1b4e2a8d7b83b3124f7b212298ece64",
+   "paired": "C-7 DC-2 forms",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-7.escaped.never",
+    "C-7.dot.never",
+    "C-7.slash.never",
+    "C-7.upperdot.never"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-7"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::json_detection_on_the_normalized_last_segment"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "resolve-raw-template-per-emission",
+   "patchSha256": "16b168d74a980fab61ab1b9afeb932995f22e961301a551a6350add813abd475",
+   "paired": "R8a (timeout)",
+   "timingCase": "R8a",
+   "timeoutSeconds": 300,
+   "timedOut": true,
+   "timedCaseWall": null,
+   "controlsFlipped": null,
+   "corpusFlipped": null,
+   "pairedFlipped": [
+    "(timeout)"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [],
+   "diagnosis": "R8a exceeds the 300 s timeout (clean 0.69 s)."
+  },
+  {
+   "name": "no-variable-survival-check",
+   "patchSha256": "fbc98db90671754d74cd0b774164cee3df565b4524530633b9319560a65f17ff",
+   "paired": "C-7c, R8",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-7c",
+    "R8"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-7c",
+    "R8"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::variable_survival_and_length_cap"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "escape-guard-last-segment-only",
+   "patchSha256": "869f1d1f3f898ee8523bebc3ed81bdc654d10cc34dd27d06e58df6110aa263af",
+   "paired": "C-7b",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-7b"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-7b"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::escape_guard_applies_in_every_segment"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "check-only-content-index",
+   "patchSha256": "2158446307f67225b0ace15e567a5f8b4f7e0c2289e9c53c206d8619d422f684",
+   "paired": "R9",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "R9"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "R9"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::availability::tests::content_entries_are_reserved_at_admission",
+    "content_integrity::implicit::walk::tests::charges_are_mirrored_exactly"
+   ],
+   "diagnosis": null
+  },
+  {
+   "name": "per-table-class-scan",
+   "patchSha256": "79653d8982682f262bc9b80a08efca3dc124139daf4da90dcc93a4c1955df166",
+   "paired": "R7c (timeout)",
+   "timingCase": "R7c",
+   "timeoutSeconds": 60,
+   "timedOut": false,
+   "timedCaseWall": [
+    17.424103114
+   ],
+   "controlsFlipped": [],
+   "corpusFlipped": null,
+   "pairedFlipped": [],
+   "parityDetects": false,
+   "unitTestsFailed": [
+    "content_integrity::implicit::metadata::tests::classes_are_classified_once_per_schema_document"
+   ],
+   "diagnosis": "NO VERDICT FLIP: R7c stays Accepted but takes 17.4 s (clean 0.42 s), breaking the contract's 5 s bound for R7c; it does not reach the contract's 60 s mutant timeout (Rust is faster than the contract's estimate). Caught by the CLASS_SCANS unit test."
+  },
+  {
+   "name": "header-metadata-not-classified",
+   "patchSha256": "5ab282e2d929e8bc0cf6adda5f24db66f35f89deb15cffb17b654043b4c0037b",
+   "paired": "C-12b",
+   "timingCase": null,
+   "timeoutSeconds": null,
+   "timedOut": false,
+   "timedCaseWall": null,
+   "controlsFlipped": [
+    "C-12b.uri",
+    "C-12b.group"
+   ],
+   "corpusFlipped": [],
+   "pairedFlipped": [
+    "C-12b"
+   ],
+   "parityDetects": true,
+   "unitTestsFailed": [
+    "content_integrity::implicit::tests::header_metadata_classes_are_classified_at_admission"
+   ],
+   "diagnosis": null
+  }
+ ],
+ "summary": {
+  "total": 35,
+  "parityDetects": 31,
+  "pairedControlFlips": 28,
+  "parityFlipsNothing": [
+   "drop-content-implies-tile",
+   "ge-vs-gt-on-A",
+   "reservation-after-rank-table",
+   "per-table-class-scan"
+  ],
+  "pairedControlDoesNotFlip": [
+   "msb-first",
+   "ignore-trailing-bits",
+   "admit-json-templates"
+  ],
+  "unitTestsDetect": 33,
+  "detectedByNothing": []
+ }
+}

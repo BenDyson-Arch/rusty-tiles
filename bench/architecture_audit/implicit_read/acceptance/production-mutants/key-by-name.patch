@@ -1,0 +1,17 @@
+diff --git a/src/content_integrity/implicit/metadata.rs b/src/content_integrity/implicit/metadata.rs
+index 82c0d96..1b7e539 100644
+--- a/src/content_integrity/implicit/metadata.rs
++++ b/src/content_integrity/implicit/metadata.rs
+@@ -210,10 +210,10 @@ fn classify(class: &Value) -> ClassRecord {
+         }
+         if let Some(name) = UNSUPPORTED.iter().find(|s| **s == semantic) {
+             record.unsupported.get_or_insert(name);
+-        } else if semantic == TILE_BOUNDING_BOX {
++        } else if semantic == TILE_BOUNDING_BOX && id == "boundingBox" {
+             record.tile_semantic.get_or_insert(TILE_BOUNDING_BOX);
+             record.bounding_box = Some(interpreted(id, property, true));
+-        } else if semantic == TILE_GEOMETRIC_ERROR {
++        } else if semantic == TILE_GEOMETRIC_ERROR && id == "geometricError" {
+             record.tile_semantic.get_or_insert(TILE_GEOMETRIC_ERROR);
+             record.geometric_error = Some(interpreted(id, property, false));
+         }
