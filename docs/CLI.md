@@ -256,9 +256,12 @@ and raster outputs, are rejected as invalid input; package supported content bef
 The typed JSON report lists `checks` and `notInspected`, per-payload accessor,
 primitive and vertex counts, archive counts, and fixed admission `limits`.
 Passing inspection means the listed checks completed within that profile.
-`hierarchyBounds` checks declared child volumes; decoded world-space content
-containment, source fidelity, geometric-error accuracy and metadata/material
-semantics are not implied. Optional extensions retain explicit inspection gaps;
+`hierarchyBounds` checks declared child volumes. `decodedContentContainment`
+appears only when every drawn vertex of an explicit, in-domain archive is exactly inside
+its tile, content and ancestor volumes; otherwise `notInspected` names the
+`decodedContentBounds.<reason>`, and a proven escape is `invalid_input`. See the
+[C2 contract](architecture/c2-decoded-containment-contract.md). Source fidelity,
+geometric-error accuracy, rendered extent and metadata/material semantics are not implied. Optional extensions retain explicit inspection gaps;
 unknown required extensions fail as unsupported. The `archiveStoredRecordLayout`
 check admits one disjoint stored-record layout and one directory interpretation.
 Coherent nested records, alternate name encodings and unsupported ZIP64 descriptor
@@ -266,7 +269,7 @@ declarations receive `unsupported`; duplicate names and malformed records receiv
 `invalid_input`. The [validation profile](VALIDATION.md) gives the finite domain.
 
 Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit`
-(exit 3), or `io` (exit 1). Oversized inputs receive a resource-limit outcome
+(exit 3), `io` (exit 1), or `invalid_state` (exit 1, an internal invariant breach). Oversized inputs receive a resource-limit outcome
 before the work covered by that ceiling. Parser usage errors remain exit 2.
 The Rust and Python APIs share the same core inspection and fixed limits.
 

@@ -68,6 +68,7 @@ remain proposals wherever the concrete scope has not adopted them.
 ## Audit documents
 
 - [R2 source raster and imagery pyramid authoring contract](r2-raster-contract.md)
+- [C2 decoded-content containment contract (slice 1)](c2-decoded-containment-contract.md)
 - [R2 retained preparation and selected native evidence](../../bench/architecture_audit/raster_source/README.md)
 
 - [F1d2 bounded adaptive surface certificate contract](f1d2-certificate-contract.md)

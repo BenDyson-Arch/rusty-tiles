@@ -69,8 +69,20 @@ ordinary buffer views is not proof of feature identity, metadata meaning,
 texture correctness or material rendering.
 
 The report separates payload checks from archive CRC/index/hash/reference and
-hierarchy checks. `hierarchyBounds` means containment of declared tile volumes;
-it is not decoded content containment. Neither report success nor a matching
+hierarchy checks. `hierarchyBounds` means containment of declared tile volumes.
+`decodedContentContainment` is the separate [C2 check](architecture/c2-decoded-containment-contract.md):
+every drawn vertex of every selected static glTF scene instance lies inside its own tile's
+volume, its content volume, any referencing external-content volume and every ancestor volume.
+The vertex is placed after node transforms, the glTF y-up to z-up step and tile transforms.
+The predicate is exact, with zero tolerance. It covers explicit `.3tz` archives with
+axis-aligned (signed-permutation) boxes and spheres. It is reported only when the whole archive
+is in domain. Otherwise `notInspected` lists `decodedContentBounds.<reason>` entries, for
+example `implicitTiling`, `regionVolume`, `rtcCenter`, `numericSpan` or `workLimit`. A proven
+escape fails as InvalidInput, and the message names the member, tile depth, volume, node,
+mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
+(`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
+`containmentDecodedBytes`, `containmentNodeDepth`) yield `notInspected`, never
+ResourceLimit. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own
@@ -108,9 +120,11 @@ are engineering bounds, not a total-process RSS promise. No request option
 bypasses them. The serialized `limits` describe the actual profile constants.
 
 Rust failures are `ValidationFailure::{InvalidInput, Unsupported, ResourceLimit,
-Io}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
-`resource_limit`, and `io`; exit codes are 3, 2, 3, and 1. Python maps them to
-`DataError`, `UnsupportedError`, `ResourceLimitError`, and `TilesIOError`.
+Io, InvalidState}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
+`resource_limit`, `io` and `invalid_state`; exit codes are 3, 2, 3, 1 and 1. Python maps
+them to `DataError`, `UnsupportedError`, `ResourceLimitError`, `TilesIOError` and
+`TilesError`. `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+capacity fault); it is never a verdict about the archive.
 No job/publication failure wrapper is used for this read-only operation.
 
 Acceptance requires independent valid payload fixtures and sensitive corruption
