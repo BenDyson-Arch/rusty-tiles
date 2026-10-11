@@ -18,8 +18,12 @@
 #               (strict browser mode also renders/picks this README pyramid
 #               before and after a cache-disabled reload)
 # Optional browser steps, run only when everything they need is present:
-#   6. layers   tests/fixtures/preview_layers.py writes all five preview layers
-#   7. probes   preview_layers.cjs, point_cloud.cjs, terrain.cjs and
+#   6. imagery  raster writes a tile-aligned R2 pyramid from
+#               tests/fixtures/d1-rgb.tif; raster_preview.cjs loads it through
+#               preview with no page errors and a render probe (needs node,
+#               playwright, Chromium, Cesium and a binary with raster ready)
+#   7. layers   tests/fixtures/preview_layers.py writes all five preview layers
+#   8. probes   preview_layers.cjs, point_cloud.cjs, terrain.cjs and
 #               vector_compat.cjs (each repeats its checks
 #               after a cache-disabled reload)
 # Skipped steps are listed at the end; they never fail the run.
@@ -234,7 +238,29 @@ kill -0 "$PREVIEW_PID" 2>/dev/null && fail "preview still running after SIGTERM"
 curl -fsS --max-time 2 "${URL}config.json" -o /dev/null 2>/dev/null && fail "preview port still answering"
 pass preview
 
-# 6-7. optional browser acceptance
+# 6. R2 imagery through preview (Cesium 1.146 tile-aligned bounds regression)
+missing=()
+command -v node >/dev/null || missing+=("node")
+[[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
+node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")
+[[ -x $CHROMIUM ]] || missing+=("Chromium at CHROMIUM=$CHROMIUM")
+env PATH="" "$BIN" doctor --command raster --json >"$WORK/raster-readiness.json" 2>&1 \
+  || missing+=("selected binary's raster capability")
+if [[ ${#missing[@]} -gt 0 ]]; then
+  missing_browser_reason
+  [[ $REQUIRE_BROWSER == 0 ]] || fail "required browser acceptance prerequisites: $reason"
+  skip "preview imagery" "$reason"
+else
+  env PATH="" "$BIN" raster -i "$REPO/tests/fixtures/d1-rgb.tif" -o "$WORK/r2-imagery" --maxZoom 5 \
+    >"$WORK/r2-imagery.log" 2>&1 || fail "raster for preview imagery" "$WORK/r2-imagery.log"
+  start_preview "$WORK/preview-imagery.json" --cesium "$CESIUM_DIR" --imagery "$WORK/r2-imagery"
+  node "$REPO/tests/fixtures/raster_preview.cjs" "$URL" >"$WORK/raster_preview.log" 2>&1 \
+    || fail "browser probe raster_preview.cjs" "$WORK/raster_preview.log"
+  pass "browser probe raster_preview.cjs"
+  stop_server
+fi
+
+# 7-8. optional browser acceptance
 browser_prerequisites
 browser_converter_prerequisites
 if [[ ${#missing[@]} -gt 0 ]]; then
