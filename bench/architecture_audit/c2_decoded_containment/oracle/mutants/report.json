@@ -1,8 +1,8 @@
 {
- "fixtures": 255,
+ "fixtures": 256,
  "mutants": [
   {
-   "flipped": 130,
+   "flipped": 131,
    "flippedExamples": [
     "EXT_mesh_polygon-undrawn-loop-vertex-outside",
     "W01-noRTC-variant",
@@ -25,7 +25,7 @@
    "patchSha256": "2ab960fe315b482762d3e0d53032ae7fb193fcc2b63f9c852ce9b4a047aea399"
   },
   {
-   "flipped": 130,
+   "flipped": 131,
    "flippedExamples": [
     "EXT_mesh_polygon-undrawn-loop-vertex-outside",
     "W01-noRTC-variant",
@@ -205,6 +205,18 @@
    "pass": true,
    "patch": "oracle/mutants/patches/default-to-scene-0.patch",
    "patchSha256": "09d73a0b0f7803f994c0ab33d2d3f4c393abc3166d408ca25f4a1713e300964e"
+  },
+  {
+   "flipped": 1,
+   "flippedExamples": [
+    "external-content-and-ancestor-both-exclude"
+   ],
+   "mutant": "slot-order-within-level",
+   "namedFixture": "external-content-and-ancestor-both-exclude",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/slot-order-within-level.patch",
+   "patchSha256": "730f7d2eeaa697e7c3c0a61269a5520a3c6c3dfec74b7c035edacbca04abecb3"
   },
   {
    "flipped": 30,

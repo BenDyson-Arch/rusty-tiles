@@ -32,8 +32,8 @@ From this directory:
 
 ```sh
 python3 -I oracle/self_test/run.py            # 36 checks, exit 0
-python3 -I witnesses/generate.py --large      # 257 cases, 15 control pairs; exit 0 when all agree
-python3 -I oracle/mutants/run.py              # 12 mutants, each must flip its named fixture
+python3 -I witnesses/generate.py --large      # 259 cases, 16 control pairs; exit 0 when all agree
+python3 -I oracle/mutants/run.py              # 13 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
 python3 -I oracle/c2_oracle.py some.3tz --json
 ```
@@ -200,8 +200,8 @@ The artifacts were treated as data and are not committed.
     values outside their pair;
   - f32 exactness, `R(q)` exact orthogonality, the quaternion window boundary,
     and the integer predicate against the `Fraction` predicate.
-- **Witnesses and controls: 257 cases, all agree.** No expectation mismatches.
-  - 14 literal (W01–W13, plus the W01 no-RTC variant), 21 context and 46
+- **Witnesses and controls: 259 cases, all agree.** No expectation mismatches.
+  - 14 literal (W01–W13, plus the W01 no-RTC variant), 21 context and 48
     control cases.
   - 176 one-ulp mutants.
   - Every literal frame value the oracle exposes matches its witness exactly.
@@ -223,7 +223,7 @@ The artifacts were treated as data and are not committed.
     | Judgement | Cases |
     | --- | --- |
     | `likely` | 6, the C1-refused fixtures below |
-    | `possible` (escape of at most 4 ulps; depends on C1's slack) | 152 one-ulp mutants |
+    | `possible` (escape of at most 4 ulps; depends on C1's slack) | 152 one-ulp mutants and `external-content-and-ancestor-both-exclude` |
     | `possible` (only if C1 compares an external root with the referencing content volume) | 1: `external-content-volume-excludes` |
     | none | the other 98 |
 
@@ -252,7 +252,28 @@ The artifacts were treated as data and are not committed.
       `JOINTS_n`, no valid glTF skin can pass C1. This fixture is therefore the
       closest C1-passing form for the `skin` reason, as the contract's own note
       describes.
-- **Mutants: 12/12 flip their named fixture.**
+- **Production mutation testing (parity run 2) added two fixtures.**
+  - **`external-content-and-ancestor-both-exclude`** expects Outside at
+    level 1 with role `externalContent` and depth 1.
+    - Both volumes at level 1 exclude the vertex, so only Role order (v3.2 (3))
+      gives `externalContent`. Slot order would report `ancestor`. The 13th
+      oracle mutant, `slot-order-within-level`, checks this.
+    - Exact declared nesting is impossible here: the vertex lies in the
+      external root box, so an external root exactly inside the referencing
+      tile's box would put the vertex inside that box too.
+    - The referencing tile box therefore excludes the vertex by a quarter ulp,
+      and the external root escapes it by the same amount. The fixture passes
+      C1 only through `hierarchyBounds` slack; `c1Precondition` is `possible`.
+  - **`repeated-index-three-payloads-units-at-sum`** (`--large`) sets
+    `containmentWorkUnits` to the hand-derived deduplicated sum and expects
+    Contained. The derivation is the `REPEATED_INDEX_UNITS` constant in
+    `witnesses/generate.py`.
+    - The sum is `3 × (3·(25+25) + 1 + 3,999,990 + 3,999,999) = 24,000,420`.
+      The oracle's computed total and production's number agree with it.
+    - The `units-minus-1` fixture now takes its cap from the same constant.
+    - New pair `repeated-index-work-units-at-cap` separates per-vertex from
+      per-occurrence charging of `T`.
+- **Mutants: 13/13 flip their named fixture.**
   - Omit U and double U flip 130 fixtures each.
   - The 1e-6 slack flips 177.
   - Reusing the URI verdict and defaulting to scene 0 flip one fixture each.

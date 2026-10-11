@@ -61,6 +61,10 @@ MUTANTS = [
      "same-URI-other-reference-outside"),
     ("default-to-scene-0", "c2o/scene.py", "if isinstance(scenes, list) and len(scenes) == 1:",
      "if isinstance(scenes, list) and len(scenes) >= 1:", "ambiguous-scene-no-default"),
+    ("slot-order-within-level", "c2o/tileset.py",
+     'ROLE_ORDER = {"own": 0, "content": 1, "externalContent": 2, "ancestor": 3}',
+     'ROLE_ORDER = {"own": 0, "content": 1, "externalContent": 4, "ancestor": 3}',
+     "external-content-and-ancestor-both-exclude"),
     ("raw-quaternion-polynomial", "c2o/scene.py", "L[r][c] = H[r][c] / n * s[c]",
      "L[r][c] = H[r][c] * s[c]", "W13-valid-local-TRS-cumulative-shear"),
 ]

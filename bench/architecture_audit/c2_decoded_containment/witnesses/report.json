@@ -18655,6 +18655,7 @@
    },
    "file": "controls/large/repeated-index-three-payloads.3tz",
    "group": "control",
+   "handDerivedUnits": 24000420,
    "id": "repeated-index-three-payloads",
    "limits": {},
    "literal": [],
@@ -19961,6 +19962,105 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 4.440892098500626e-16,
+      "pair": "ext.json external root in referencing tile",
+      "ulps": 0.0625
+     },
+     {
+      "conditional": true,
+      "escape": 1.0,
+      "pair": "ext.json external root in referencing content volume",
+      "ulps": 140737488355328.0
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "possible: declared-nesting escape of at most 4 ulps; refused only if C1 slack is smaller"
+   },
+   "expected": {
+    "facts": {
+     "depth": 1,
+     "level": 1,
+     "node": 0,
+     "reference": 0,
+     "role": "externalContent"
+    },
+    "outcome": "Outside"
+   },
+   "file": "controls/fixtures/external-content-and-ancestor-both-exclude.3tz",
+   "group": "control",
+   "id": "external-content-and-ancestor-both-exclude",
+   "limits": {},
+   "literal": [],
+   "notes": [
+    "Under slot order [Ancestor, ..., ExternalContent] the reported role would be ancestor; Role order gives externalContent (v3.2 (3)).",
+    "Not buildable with exact nesting; C1-passing only through hierarchyBounds slack for a quarter-ulp external-root escape. The external root is not compared with the referencing content volume by C1 (external-content-volume-excludes passed C1 in parity run 1)."
+   ],
+   "oracle": {
+    "facts": {
+     "accessor": 0,
+     "contentAt": "ext.json:root.content[0]",
+     "coordinate": [
+      "8",
+      "-42",
+      "14"
+     ],
+     "coordinateApprox": [
+      8.0,
+      -42.0,
+      14.0
+     ],
+     "depth": 1,
+     "k": 1,
+     "level": 1,
+     "member": "w.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "externalContent",
+     "uri": "w.glb",
+     "vertex": 0,
+     "volumeAt": "tileset.json:root.content[0]"
+    },
+    "outcome": "Outside",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 492,
+      "decoded": 0,
+      "levelSpans": [
+       279,
+       279
+      ],
+      "levels": 2,
+      "maxNodeDepth": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 6,
+      "units": 182,
+      "vertexUnits": 50
+     }
+    ],
+    "totals": {
+     "bytes": 492,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 182
+    }
+   },
+   "sha256": "431059b6e29abbb35d8737a673463396ee18c9c6917993639ad9c212a76d616d",
+   "source": "production mutation testing (role order within a level)"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
    "expected": {
     "facts": {
      "depth": 0,
@@ -20449,7 +20549,7 @@
     "containmentWorkUnits": 24000419
    },
    "notes": [
-    "24 MB stored archive: generated with --large into controls/large/ (not committed)."
+    "containmentWorkUnits = 24000419 (hand-derived deduplicated sum - 1)"
    ],
    "oracle": {
     "facts": null,
@@ -20515,10 +20615,90 @@
    },
    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763",
    "source": "newSlice1Controls[10]"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "controls/large/repeated-index-three-payloads-units-at-sum.3tz",
+   "group": "control",
+   "id": "repeated-index-three-payloads-units-at-sum",
+   "limits": {
+    "containmentWorkUnits": 24000420
+   },
+   "literal": [],
+   "notes": [
+    "containmentWorkUnits = 24000420 (hand-derived deduplicated sum)"
+   ],
+   "oracle": {
+    "facts": null,
+    "outcome": "Contained",
+    "reasons": null,
+    "why": null
+   },
+   "precheck": {
+    "references": [
+     {
+      "bytes": 8000624,
+      "decoded": 0,
+      "levelSpans": [
+       278,
+       278
+      ],
+      "levels": 2,
+      "maxNodeDepth": 1,
+      "member": "p0.glb",
+      "reference": 0,
+      "sInst": 0,
+      "units": 8000140,
+      "vertexUnits": 150
+     },
+     {
+      "bytes": 8000624,
+      "decoded": 0,
+      "levelSpans": [
+       278,
+       278
+      ],
+      "levels": 2,
+      "maxNodeDepth": 1,
+      "member": "p1.glb",
+      "reference": 1,
+      "sInst": 0,
+      "units": 8000140,
+      "vertexUnits": 150
+     },
+     {
+      "bytes": 8000624,
+      "decoded": 0,
+      "levelSpans": [
+       278,
+       278
+      ],
+      "levels": 2,
+      "maxNodeDepth": 1,
+      "member": "p2.glb",
+      "reference": 2,
+      "sInst": 0,
+      "units": 8000140,
+      "vertexUnits": 150
+     }
+    ],
+    "totals": {
+     "bytes": 24001872,
+     "decoded": 0,
+     "maxNodeDepth": 1,
+     "units": 24000420
+    }
+   },
+   "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763",
+   "source": "newSlice1Controls[10]"
   }
  ],
  "summary": {
-  "agree": 257,
+  "agree": 259,
   "c1PreconditionLikely": [
    "child-volume-escapes-but-content-inside",
    "selected-skin",
@@ -20527,10 +20707,10 @@
    "rotated-TRS-chain-depth-16-with-sphere",
    "tileset-number-overflow"
   ],
-  "c1PreconditionPossible": 153,
-  "cases": 257,
-  "controlPairs": 15,
-  "controlPairsAgree": 15,
+  "c1PreconditionPossible": 154,
+  "cases": 259,
+  "controlPairs": 16,
+  "controlPairsAgree": 16,
   "disagree": [],
   "identityLevelSpansIdentical": true,
   "skipped": []

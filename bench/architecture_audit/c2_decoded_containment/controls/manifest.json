@@ -751,6 +751,50 @@
     "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
    },
    "what": "containmentWorkUnits one below the archive sum"
+  },
+  {
+   "agree": true,
+   "base": {
+    "expected": {
+     "outcome": "Contained"
+    },
+    "file": "controls/large/repeated-index-three-payloads-units-at-sum.3tz",
+    "id": "repeated-index-three-payloads-units-at-sum",
+    "limits": {
+     "containmentWorkUnits": 24000420
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "Contained",
+     "reasons": null,
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "control": "repeated-index-work-units-at-cap",
+   "mutated": {
+    "expected": {
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    },
+    "file": "controls/large/repeated-index-three-payloads-units-minus-1.3tz",
+    "id": "repeated-index-three-payloads-units-minus-1",
+    "limits": {
+     "containmentWorkUnits": 24000419
+    },
+    "oracle": {
+     "facts": null,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ],
+     "why": null
+    },
+    "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
+   },
+   "what": "containmentWorkUnits exactly the deduplicated sum (24000420), then one below; charging T per index occurrence instead of per distinct vertex exceeds the cap"
   }
  ],
  "record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. Production and the oracle must both report both verdicts."
