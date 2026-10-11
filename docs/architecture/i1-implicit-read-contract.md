@@ -6,8 +6,11 @@ acceptance (oracle parity, resource controls, perf lane and Cesium) is a separat
 claimed here. This document is the frozen contract text v3.1 (`contract-draft.md`, sha256
 `9674e60b…`), plus the coordinator's v3.2 rulings and the integration amendments listed at the end.
 The preparation package (contract versions v1 to v3.1, change log, open decisions, ownership plan,
-producer inventory and probes) and the precode review (`review.md` `92eee8f0…`) and delta check
-(`delta-check.md` `abd37595…`) are not yet retained in the repository.
+producer inventory and probes), the precode review (`review.md` `92eee8f0…`) and the delta check
+(`delta-check.md` `abd37595…`) are retained in
+[bench/architecture_audit/implicit_read/preparation/](../../bench/architecture_audit/implicit_read/preparation/README.md),
+with the large regenerable samples listed there. Evidence paths in the text below, such as
+`probes/receipt.json`, are relative to its `contract-20261011/` directory.
 
 **Owners.** [#125](https://github.com/BenDyson-Arch/rusty-tiles/issues/125), with #126 and C2
 slice 3 as consumers. The producer layout it was paired with is the

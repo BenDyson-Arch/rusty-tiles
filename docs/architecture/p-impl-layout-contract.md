@@ -12,8 +12,11 @@ external-JSON implicit output; JSON content templates on implicit roots are excl
 The design's preparation package (versions v1 and v2, open decisions PD-1 to PD-13, ownership
 plan, and the `evidence/` scripts and results cited in §5 and §9), the precode review
 (`review.md` `16205c1c…`, NO-GO) and the v3 delta review (`delta-review.md` `09044be8…`,
-GO-WITH-CHANGES) are not yet retained in the repository. Paths under `evidence/` below are
-relative to that package. Every `src/` line reference is to `origin/develop` `f2ed077`.
+GO-WITH-CHANGES) are retained in
+[bench/architecture_audit/implicit_layout/preparation/](../../bench/architecture_audit/implicit_layout/preparation/README.md),
+with the large regenerable models and builds listed there. Paths under `evidence/` below are
+relative to its `design-20261011/` directory. Every `src/` line reference is to `origin/develop`
+`f2ed077`.
 
 The user decided on 2026-10-11 that no point-cloud, vector or legacy `mesh-to-3tz` output may put
 an external-JSON content template on an implicit root. The conditions are:
@@ -818,7 +821,7 @@ recorded separately.
 
 ## 7. Proof limits and remaining gates
 
-See the preparation package's `open-decisions.md`, "Proof limits":
+See [open-decisions.md](../../bench/architecture_audit/implicit_layout/preparation/design-20261011/open-decisions.md), "Proof limits":
 - SwiftShader timings;
 - sampled views;
 - one client;
