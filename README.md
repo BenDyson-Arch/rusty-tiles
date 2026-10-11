@@ -198,7 +198,7 @@ A height offset of 0 is correct only when source heights are already ellipsoidal
 
 Outputs are never overwritten by default. Add `--force` to replace an existing output after a successful conversion.
 
-To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged source payloads keep their bytes; implicit display addresses are regenerated. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
+To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged payloads are recovered byte for byte from the earlier archive's published tiles instead of being re-encoded. The earlier archive must come from the same converter build and settings; archives from earlier releases need one fresh conversion first. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
 
 ## Preview
 

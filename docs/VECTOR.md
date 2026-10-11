@@ -4,7 +4,7 @@ This page explains how the `vector` command turns GIS features into 3D Tiles. **
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
-Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. At boundaries that exceed their implicit cell, standard external tileset roots expose actual bounds before Cesium culls or picks the next levels. Add `--explicit` for the earlier explicit manifest and output bytes.
+Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. Add `--explicit` for the earlier explicit manifest and output bytes.
 
 ## Acceptance and library API
 
@@ -253,7 +253,7 @@ Budgets use the final encoded size. Small contents can grow because of extension
 | --- | --- |
 | `conversion.json` | Layers, CRS and height decisions, budgets, tile maxima, encoding, reuse, and a sample of geometry reports |
 | `geometry-reports.jsonl` | Every geometry report, skipped feature and repair |
-| `vector-build.json` | Build state used by `--reuse-tileset` |
+| `vector-build.json` | Build state and payload recovery records used by `--reuse-tileset`. |
 
 `conversion.json.encoding.maximumTilePrimitives` is the largest primitive count in one tile. `primitiveReferences` sums primitive counts across the hierarchy. Neither is a GPU draw-call count.
 
@@ -273,14 +273,18 @@ Reuse needs the same tiling mode (`--explicit` or the implicit default), layer s
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 
+Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
+
 ### How reuse works
 
-- Cached source content file names contain their SHA-256 hash. Unchanged source payloads keep their URLs and bytes. Implicit display content uses coordinate templates and includes the original tile translation in its glTF scene nodes. Those display payloads and subtrees are regenerated from the cached originals.
+- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb` or `.b3dm`). Implicit tiles publish a copy under `implicit-content/` whose glTF scene root carries the tile's translation. The archive holds each payload once.
 - Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
 - `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
-- Every reused payload is checked against its recorded checksum.
-- Implicit archives retain the original explicit hierarchy in build state and its immutable payloads for reuse. This increases archive size; the retained sources are listed in manifest extras and validated as references.
+- `vector-build.json` records, for each payload published only under `implicit-content/`, its member, translation, and exact raw root-node text and JSON length. Reuse restores the raw bytes exactly from these, then lays out the new archive.
+- Every recovered payload must match its SHA-256 name. An altered member or record fails with `previous content checksum failed` or `invalid previous payload record`, and nothing is published.
 - `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
+
+Reuse identifies features by source id; give GeoJSON features a top-level `id`, or use GeoPackage, so insertions and deletions do not renumber later features.
 
 Reuse saves geometry encoding, not every step. The updated source is still scanned and projected, and the archive is repacked. Source files and the earlier archive are opened read-only, and source triggers are never modified. Geometry reports cover only the new build; earlier reports stay in the earlier archive. A feature that loses its geometry is removed. Repeated edits can unbalance partitions. A fresh build resets them.
 
