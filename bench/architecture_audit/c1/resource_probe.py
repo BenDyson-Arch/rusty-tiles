@@ -46,7 +46,7 @@ def main():
         implicit_manifest=json.loads(z.read('tileset.json'))
     subtree={'tileAvailability':{'constant':1},'contentAvailability':[],'childSubtreeAvailability':{'constant':0}}
     for name,extras in [('implicit_json_limit',{'padding':'x'*(8*1024*1024)}),
-                        ('implicit_json_items_limit',{'nodes':[0]*65537})]:
+                        ('implicit_json_items_limit',{'nodes':[0]*131073})]:
         doc=dict(subtree,extras=extras);text=json.dumps(doc).encode();text+=b' '*(-len(text)%8)
         data=struct.pack('<4sIQQ',b'subt',1,len(text),0)+text
         archive(corpus/(name+'.3tz'),{'tileset.json':json.dumps(implicit_manifest).encode(),'0-0-0.subtree':data})
