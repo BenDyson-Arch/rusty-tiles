@@ -30,7 +30,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -60,7 +60,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -125,7 +125,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "ac4eba2715a390095a87e25a09144669209f1ab9d1df4037a1f5d915e14ad02a",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -155,7 +155,7 @@
    "reason": "subtree root tile bit is 0",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.5",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -185,7 +185,7 @@
    "reason": "availableCount differs from the popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.4",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -215,7 +215,7 @@
    "reason": "availableCount differs from the popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.4",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -245,7 +245,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -275,7 +275,7 @@
    "reason": "content available where the tile is not",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.7",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -305,7 +305,7 @@
    "reason": "child subtree available under an unavailable tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.8",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -370,7 +370,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -400,7 +400,7 @@
    "reason": "availableLevels > 32",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -430,7 +430,7 @@
    "reason": "missing member subtrees/3/6/6.subtree",
    "stage": "subtree subtrees/3/6/6.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -550,7 +550,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -580,7 +580,7 @@
    "reason": "availability scan exceeds total_bytes_read work limit",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.2",
    "tilesSha256": null,
-   "wallSeconds": 0.047
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -610,7 +610,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "75207088a7452a5885fc609b3a848b61487bd37a0014e3045003a1b06300139b",
-   "wallSeconds": 0.052
+   "wallSeconds": 0.05
   },
   {
    "agree": true,
@@ -640,7 +640,7 @@
    "reason": "availability trailing bits are not zero",
    "stage": "subtree st/0-0-0-0.subtree \u00a72a.3",
    "tilesSha256": null,
-   "wallSeconds": 0.048
+   "wallSeconds": 0.046
   },
   {
    "agree": true,
@@ -670,7 +670,7 @@
    "reason": "content index reservation exceeds references",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.10",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -735,7 +735,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "4f891fd595cee6497ecf11ec030fdb2387e6dfcb360c6c7ffbe271e2dc663fad",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -765,7 +765,7 @@
    "reason": "child subtree available under an unavailable tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a72a.8",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -800,7 +800,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "16a195127a38431792047b0563144407cd9a227507d75c688b8d82565777aebb",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -835,7 +835,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6a22fad50c247a0eac0c39233b255f1df775eddbc0a3bad5787af83093b71fe3",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -870,7 +870,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -905,7 +905,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6abdbf38b5f4dd803773cf263f385dcb6d8c680725ea749badc7e81250138361",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -940,7 +940,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "9763539e7915b8ea95828462513e90f7ca3c4d2656f70a51b6054b90ab9f9daf",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -970,7 +970,7 @@
    "reason": "duplicated semantic TILE_BOUNDING_BOX in class tile",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1005,7 +1005,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -1065,7 +1065,7 @@
    "reason": "offset or scale on TILE_BOUNDING_BOX",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.031
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1095,7 +1095,7 @@
    "reason": "tileMetadata count differs from the tile popcount",
    "stage": "subtree subtrees/0/0/0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.031
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1155,7 +1155,7 @@
    "reason": "negative TILE_GEOMETRIC_ERROR row",
    "stage": "subtree subtrees/3/1/1.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -1215,7 +1215,7 @@
    "reason": "derived geometric error would be a nonzero subnormal",
    "stage": "tile 5/9/1/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1245,7 +1245,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "1ef27f79424cfec72cb27934f908dd832bfc20efa7f2089b00b2d2558d7c9aec",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -1275,7 +1275,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "0c437c2ba8d71dcde1c034741b4e4ae12749470f1faeafe0ff11ef92d9068aaf",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -1405,7 +1405,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6abdbf38b5f4dd803773cf263f385dcb6d8c680725ea749badc7e81250138361",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -1435,7 +1435,7 @@
    "reason": "missing member content/2/1/0.glb",
    "stage": "tile 2/1/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -1495,7 +1495,7 @@
    "reason": "{z} in a QUADTREE template",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -1675,7 +1675,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1705,7 +1705,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -1795,7 +1795,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1825,7 +1825,7 @@
    "reason": "escape adjacent to template variable",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -1945,7 +1945,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -1975,7 +1975,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2005,7 +2005,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2035,7 +2035,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -2065,7 +2065,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2095,7 +2095,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2215,7 +2215,7 @@
    "reason": "escape adjacent to template variable",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -2245,7 +2245,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "675e455061385919091cbc992578fab744b97dac7293b4c907cec624c1e900a2",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2275,7 +2275,7 @@
    "reason": "template variables eliminated by dot-segments",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -2305,7 +2305,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "bb2ea9d59a2719679cd103b213195565a8b88a91f793d2f8069e27fe465e8c4e",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2400,7 +2400,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "479f8a39e5daf32248db1f49f8523cfacf75ec4f15e13cafe51d03bc707ee7a3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2430,7 +2430,7 @@
    "reason": "region implicit root volume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.031
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2460,7 +2460,7 @@
    "reason": "sphere implicit root volume",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -2490,7 +2490,7 @@
    "reason": "subdivision scheme HEXTREE",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -2520,7 +2520,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2550,7 +2550,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2a88dbf1723858bb7db4bdd1cd05f0712737458563978161de9d4b3af76942fc",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2580,7 +2580,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.035
   },
   {
    "agree": true,
@@ -2640,7 +2640,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2670,7 +2670,7 @@
    "reason": "semantic CONTENT_GROUP_ID in content class cmeta",
    "stage": "subtree st/0.0.0.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2700,7 +2700,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2730,7 +2730,7 @@
    "reason": "semantic CONTENT_URI in content class hmeta",
    "stage": "root admission in tileset.json/header[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2760,7 +2760,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "6768904b205dd6b8157e111a2d9cb266ce60ad55b1d520fc13f680980fd0b9d0",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -2790,7 +2790,7 @@
    "reason": "semantic CONTENT_GROUP_ID in content class hmeta",
    "stage": "root admission in tileset.json/header[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -2820,7 +2820,7 @@
    "reason": "content templates present but no tile has content",
    "stage": "post-walk (:299)",
    "tilesSha256": null,
-   "wallSeconds": 0.036
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2850,7 +2850,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "0c683cb2e28ddd785ecc6be2ba302281d900f96af80aae8fceeb0dfd257cbdec",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -2940,7 +2940,7 @@
    "reason": "implicit root has children",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3060,7 +3060,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3090,7 +3090,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3120,7 +3120,7 @@
    "reason": "availableLevels is not an integer >= 1",
    "stage": "root admission in tileset.json",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3210,7 +3210,7 @@
    "reason": "malformed percent escape",
    "stage": "root admission in tileset.json/template[0]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3270,7 +3270,7 @@
    "reason": "subtree header lengths do not match member length",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3330,7 +3330,7 @@
    "reason": "bufferView byteOffset is required",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3360,7 +3360,7 @@
    "reason": "non-zero BIN padding",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3390,7 +3390,7 @@
    "reason": "subtree version is not 1",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.031
   },
   {
    "agree": true,
@@ -3420,7 +3420,7 @@
    "reason": "subtree magic is not subt",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -3455,7 +3455,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.041
+   "wallSeconds": 0.035
   },
   {
    "agree": true,
@@ -3485,7 +3485,7 @@
    "reason": "data URI buffer",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3545,7 +3545,7 @@
    "reason": "JSON-format subtree",
    "stage": "subtree subtrees/3/6/6.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -3580,7 +3580,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -3610,7 +3610,7 @@
    "reason": "extensions in subtree JSON",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3645,7 +3645,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -3675,7 +3675,7 @@
    "reason": "bufferView byteOffset is not a JSON u64 integer",
    "stage": "subtree subtrees/0/0/0.subtree",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3705,7 +3705,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "38c9e436ee9c30238b05f66a1ccc63e651b33205e0bb01e843cf86513e3ec655",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3765,7 +3765,7 @@
    "reason": "property table count",
    "stage": "subtree st/2.0.1.0.subtree \u00a75",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3825,7 +3825,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "abe7e0b0628d945b4d0b594095ed2eb4fe444a925b8278ec06aafc64c9957b81",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3855,7 +3855,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "c18a9f1e25ab5593aaaa7478c7e768d2fdbd4bbd3914f67a1c079f0f4b5eb6e9",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3885,7 +3885,7 @@
    "reason": "hierarchyBounds: tile volume outside its parent",
    "stage": "tile 0/0/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -3915,7 +3915,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "23040ae4502a8513b612ee233bd322008d01931251b2546c8d3217eb8721d0e8",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -3945,7 +3945,7 @@
    "reason": "geometricErrorOrder: tile error exceeds its parent",
    "stage": "tile 0/0/0/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -3975,7 +3975,7 @@
    "reason": "geometricErrorOrder: root error exceeds its document geometricError",
    "stage": "node in tileset.json depth 0",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4005,7 +4005,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f9b725e95dbec0e5a19be14a93563f36a898216a1d9502b6e4f85d3b2c2eddf9",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -4035,7 +4035,7 @@
    "reason": "hierarchyBounds: tile volume outside its parent",
    "stage": "node in ext/tileset.json depth 1",
    "tilesSha256": null,
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4095,7 +4095,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.035
   },
   {
    "agree": true,
@@ -4155,7 +4155,7 @@
    "reason": "hierarchy depth exceeds limit",
    "stage": "tile 5/9/1/0",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -4275,7 +4275,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "087ae115643f2f50dbaeeaeeaed0fdcb0d06736f77e4c760ae8574d085b2e8c3",
-   "wallSeconds": 0.036
+   "wallSeconds": 0.034
   },
   {
    "agree": true,
@@ -4305,7 +4305,7 @@
    "reason": "content index reservation exceeds references",
    "stage": "subtree st/3-0-0-0.subtree \u00a72a.10",
    "tilesSha256": null,
-   "wallSeconds": 0.077
+   "wallSeconds": 0.075
   },
   {
    "agree": true,
@@ -4335,7 +4335,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "31e106c1ed74c8951be68e019a6e859bdf2ce41b590d1926fa9ad51154ba29b0",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4395,7 +4395,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4425,7 +4425,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4455,7 +4455,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "cfb30dca24c2c33a882ff290a5d04e0732ed7c6d49e005f0385f8e7f73800702",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4490,7 +4490,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "cfb30dca24c2c33a882ff290a5d04e0732ed7c6d49e005f0385f8e7f73800702",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4520,7 +4520,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "df3ca41f8a9a337a347bdd9c00cfb3cbdaeda61dacd20292595e1dfa73ad4395",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4555,7 +4555,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "df3ca41f8a9a337a347bdd9c00cfb3cbdaeda61dacd20292595e1dfa73ad4395",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4585,7 +4585,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "caa2088c0a94265d9820dd514db9bd795ce6a8ac162150d5d94636a9c63cd4d7",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4620,7 +4620,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "caa2088c0a94265d9820dd514db9bd795ce6a8ac162150d5d94636a9c63cd4d7",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4650,7 +4650,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.035
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4685,7 +4685,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4780,7 +4780,7 @@
    "reason": "external tileset content template",
    "stage": "root admission in tileset.json/template[2]",
    "tilesSha256": null,
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4840,7 +4840,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2786b24c3af7040346abd4015870c3f3c7bdcc356bd43b8908700713b2887ce9",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4875,7 +4875,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "2786b24c3af7040346abd4015870c3f3c7bdcc356bd43b8908700713b2887ce9",
-   "wallSeconds": 0.032
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4905,7 +4905,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "04d2a6904da774e38dcd32bdd091667338a89bd530059d9893083867055b307c",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.033
   },
   {
    "agree": true,
@@ -4940,7 +4940,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "04d2a6904da774e38dcd32bdd091667338a89bd530059d9893083867055b307c",
-   "wallSeconds": 0.034
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -4970,7 +4970,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "d0708625d7d57389848d280ffcf389a2d0f00ce03f31b2554f568245d8063500",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -5035,7 +5035,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -5070,7 +5070,7 @@
    "reason": null,
    "stage": null,
    "tilesSha256": "f19aa3d970ca4c582cecdb54953267132be2ea5b98479ed4038943fe07fe3167",
-   "wallSeconds": 0.033
+   "wallSeconds": 0.032
   },
   {
    "agree": true,
@@ -5165,7 +5165,7 @@
    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
    "stage": "archive",
    "tilesSha256": null,
-   "wallSeconds": 0.031
+   "wallSeconds": 0.032
   }
  ]
 }

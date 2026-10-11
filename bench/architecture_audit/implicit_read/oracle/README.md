@@ -295,6 +295,24 @@ hash is identical, and generation stays byte-reproducible.
      tolerance reading.
    - **Effect.** No other fixture or corpus verdict changed. There are now 181 cases.
 
+5. **A-6 and A-8 now ship the members their mutants name** (A-6 now `fa6ae6c1…`, A-8 now `04488b5b…`).
+   - **Reason:** independent controls must discriminate the I1 mutants drop-content-implies-tile and ge-vs-gt-on-A.
+     Both mutants previously ended in "missing archive entry" (InvalidInput) instead of passing, so neither control
+     flipped.
+   - **Provenance:** the member names come from the `diagnosis` fields of R's
+     `acceptance/production-mutants/report.json` on `feat/implicit-forest`. Only that results file was read, after
+     the freeze; no mutant patch or `src/` file was read.
+   - **A-6:** adds `content/2/1/1.glb`, the empty neighbour (2,1,1) that the mutant indexes the stray bit to. Its point
+     is the tile centre. No other member is added, so the unreferenced-entry check cannot mask the mutant.
+   - **A-8:** built as BQ plus the tile (6,18,2) at level A = 6. This sets child bit 12 in subtree (3,2,0), under the
+     available (5,9,1), and ships `subtrees/6/18/2.subtree` (tile, row, content bit, `Const0` children) and
+     `content/6/18/2.glb`.
+   - **Diff to BQ:** each changed member differs by exactly one bit (the root subtree for A-6, subtree (3,2,0) for
+     A-8); the rest are added members.
+   - **Verdicts:** unchanged, and at the targeted rule. A-6 is InvalidInput at §2a.7 ("content available where the
+     tile is not"); A-8 is InvalidInput at §2a.6 ("child subtree bit at or beyond availableLevels").
+   - **R:** re-run both mutants to confirm they now flip.
+
 ## Contract questions (my readings; please confirm or correct)
 
 - **Q1 (D-4 magic).** Resolved by v3.2 ruling 1.
