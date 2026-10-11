@@ -143,6 +143,7 @@ class Case:
         self.tested = []  # {"member", "path", "level", "role"}
         self.literal = []  # {"what", "track", "level"|"node_yp", "expected"}
         self.production = None  # production expectation when it differs (C1 precedes)
+        self.c1_refused = None  # observed production C1 refusal kind (coordinator parity run 1)
         self.notes = []
         self.mutants = True
         self.large = False
@@ -390,6 +391,7 @@ def build_cases(inputs):
     case = Case("child-volume-escapes-but-content-inside", "context", contained(),
                 "child-volume-escapes-but-content-inside")
     case.production = "C1:InvalidInput(hierarchyBounds)"
+    case.c1_refused = "invalid_input"
     spec = {"positions": [[0, 0, 0]], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}
     case.payloads.append(("w.glb", payload_from_spec(spec)))
     case.tilesets["tileset.json"] = B.tileset(B.tile({"sphere": [0, 0, 0, 2.0]}, geometric_error=10.0,
@@ -469,6 +471,7 @@ def build_cases(inputs):
     case = single("selected-skin", "context", w12, ni("skin"), points=w12pts, patch=skin(True),
                   source="selected-skin")
     case.production = "C1:Unsupported"
+    case.c1_refused = "unsupported"
     case.expect_c1_caveat = "JOINTS_0"
     cases.append(case)
     cases.append(single("selected-skin-without-joint-attributes", "context", w12, ni("skin"),
@@ -498,6 +501,7 @@ def build_cases(inputs):
     case = single("GPU-instancing-required", "context", w12, ni("gltfExtension"), points=w12pts,
                   patch=gpu(True), source="GPU-instancing-not-core-instances (required form)")
     case.production = "C1:Unsupported"
+    case.c1_refused = "unsupported"
     case.expect_c1_caveat = "EXT_mesh_gpu_instancing"
     cases.append(case)
 
@@ -508,6 +512,20 @@ def build_cases(inputs):
     case.tilesets["tileset.json"] = B.tileset(B.tile(
         {"region": [-0.001, -0.001, 0.001, 0.001, -1000.0, 1000.0]}, geometric_error=10.0,
         children=[B.tile(B.tight_box(w12pts), content="w.glb", transform=ecef)]))
+    case.production = "C1:Unsupported (mixed region/Cartesian containment)"
+    case.c1_refused = "unsupported"
+    cases.append(case)
+
+    # C1-passing regionVolume variant: every tile and content volume is a region, nested.
+    case = Case("region-only-hierarchy", "context", ni("regionVolume"), "region-bound (C1-passing variant)")
+    spec = {"positions": [[6378137.0, 0, 0]], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}
+    case.payloads.append(("w.glb", payload_from_spec(spec)))
+    leaf = B.tile({"region": [-0.001, -0.001, 0.001, 0.001, -10.0, 10.0]}, content="w.glb",
+                  content_volume={"region": [-0.0005, -0.0005, 0.0005, 0.0005, -5.0, 5.0]})
+    case.tilesets["tileset.json"] = B.tileset(B.tile(
+        {"region": [-0.01, -0.01, 0.01, 0.01, -100.0, 100.0]}, geometric_error=10.0, children=[leaf]))
+    case.notes.append("glTF (6378137, 0, 0) is ECEF (6378137, 0, 0) after U: lon 0, lat 0, height 0, "
+                      "inside every region; no tile transform (regions ignore transforms)")
     cases.append(case)
 
     # 16/17. RTC binary form and range overrun
@@ -764,6 +782,15 @@ def rotated_chain_cases(contained, ni):
                 chosen = depth
                 break
     out = [make(chosen, False), make(chosen, True)]
+    out[1].production = "C1:InvalidInput (content bounds escape tile)"
+    out[1].c1_refused = "invalid_input"
+    # C1-passing variant: the tile box encloses the content sphere (radius 100 in a +-128 box).
+    enclosed = make(chosen, True)
+    enclosed.id += "-enclosed"
+    box = enclosed.get("tileset.json", ("root", "boundingVolume"))["box"]
+    enclosed.set("tileset.json", ("root", "boundingVolume"),
+                 {"box": box[:3] + [128.0, 0.0, 0.0, 0.0, 128.0, 0.0, 0.0, 0.0, 128.0]})
+    out.append(enclosed)
     for case in out:
         case.notes.append("depth %d chosen as the smallest depth (from 10) where box-only spans <= 4096 "
                           "< spans with the sphere (generic normalized quaternions, seed 20261011)" % chosen)
@@ -889,6 +916,10 @@ def v33_cases(W, contained, ni, single):
     case.tilesets["tileset.json"]["geometricError"] = 12345.678
     case.raw_replace.append(("tileset.json", b"12345.678", b"1e999"))
     case.mutants = False
+    case.production = "C1:Unsupported (JSON exceeds finite owned-document representation)"
+    case.c1_refused = "unsupported"
+    case.notes.append("Contract 'Numbers' says an overflowing literal is InvalidInput; production C1 "
+                      "refuses it as Unsupported in its JSON layer. The oracle keeps the contract text.")
     out.append(case)
 
     # (8) duplicates in children or scene roots are InvalidInput(node).
@@ -940,6 +971,8 @@ def _intervals(bv):
 
 
 def _image(iv, transform):
+    """Exact axis-aligned image of row intervals under a signed-permutation scale
+    + translation transform, or None for other transforms."""
     if transform is None:
         return iv
     T = B.col_major(transform)
@@ -954,36 +987,80 @@ def _image(iv, transform):
     return out
 
 
+def _sphere_intervals(bv):
+    c = [Fraction(v) for v in bv["sphere"]]
+    return [(c[j] - c[3], c[j] + c[3]) for j in range(3)]
+
+
+def _kind(bv):
+    return "region" if "region" in bv else ("sphere" if "sphere" in bv else ("box" if "box" in bv else None))
+
+
 def _escape(child, parent, transform=None):
-    """Exact amount by which `child` (mapped by transform) escapes `parent`;
-    None when the oracle generator cannot judge the shapes."""
-    if "sphere" in child and "sphere" in parent and transform is None:
+    """Exact amount by which `child` (mapped by transform) escapes `parent`.
+
+    Returns a Fraction, "mixed" for region versus Cartesian nesting, or None when
+    the generator cannot judge the shapes (rotated boxes, non-permutation transforms,
+    transformed sphere in sphere)."""
+    ck, pk = _kind(child), _kind(parent)
+    if ck is None or pk is None:
+        return None
+    if (ck == "region") != (pk == "region"):
+        return "mixed"
+    if ck == "region":
+        c, p = [Fraction(v) for v in child["region"]], [Fraction(v) for v in parent["region"]]
+        return max([Fraction(0), p[0] - c[0], p[1] - c[1], c[2] - p[2], c[3] - p[3], p[4] - c[4], c[5] - p[5]])
+    if ck == "sphere" and pk == "sphere":
+        if transform is not None:
+            return None
         c, p = [Fraction(v) for v in child["sphere"]], [Fraction(v) for v in parent["sphere"]]
         d2 = sum((c[j] - p[j]) ** 2 for j in range(3))
         if p[3] >= c[3] and d2 <= (p[3] - c[3]) ** 2:
             return Fraction(0)
         return Fraction(math.sqrt(float(d2))) + c[3] - p[3]
-    ci, pi = _intervals(child), _intervals(parent)
-    if ci is None or pi is None:
+    # The child's exact axis-aligned extent: a box's intervals, or a sphere's
+    # bounding box (exact containment test against an axis box parent).
+    ci = _intervals(child) if ck == "box" else _sphere_intervals(child)
+    if ci is None:
         return None
     ci = _image(ci, transform)
     if ci is None:
         return None
-    return max([Fraction(0)] + [pi[j][0] - ci[j][0] for j in range(3)] + [ci[j][1] - pi[j][1] for j in range(3)])
+    if pk == "box":
+        pi = _intervals(parent)
+        if pi is None:
+            return None
+        return max([Fraction(0)] + [pi[j][0] - ci[j][0] for j in range(3)] + [ci[j][1] - pi[j][1] for j in range(3)])
+    if ck != "box":
+        return None
+    # Box in sphere: the farthest corner must be within the radius.
+    p = [Fraction(v) for v in parent["sphere"]]
+    far2 = sum(max((ci[j][0] - p[j]) ** 2, (ci[j][1] - p[j]) ** 2) for j in range(3))
+    if far2 <= p[3] ** 2:
+        return Fraction(0)
+    return Fraction(math.sqrt(float(far2))) - p[3]
 
 
-def c1_precondition(case):
-    """Best static judgement of whether C1 hierarchyBounds refuses the fixture
-    first: exact declared-nesting escapes of tile in parent, content in tile, and
-    external root in its referencing tile (and, separately, in that content volume)."""
+def c1_precondition(case, report=None):
+    """Best static judgement of whether production's C1 refuses the fixture before
+    C2. Declared nesting is checked exactly (tile in parent, content in tile,
+    external root in its referencing tile and, conditionally, in that content
+    volume) for box, sphere and region shapes; region nested with box/sphere is
+    refused as Unsupported (parity run 1). The oracle's c1Caveats for
+    non-allowlisted required extensions and JOINTS_n/WEIGHTS_n attributes are
+    refusals too (parity run 1)."""
     escapes = []
+    mixed = []
 
     def note(pair, child, parent, transform=None, conditional=False):
         e = _escape(child, parent, transform)
+        if e == "mixed":
+            mixed.append(pair)
+            return
         if e is None or e == 0:
             return
-        face = max(abs(float(v)) for v in (parent.get("box") or parent.get("sphere"))[:3]) or 1.0
-        face += max(abs(float(v)) for v in (parent.get("box") or parent.get("sphere"))[3:])
+        values = [abs(float(v)) for v in (parent.get("box") or parent.get("sphere") or parent.get("region"))]
+        face = (max(values[:3]) + max(values[3:])) or 1.0
         escapes.append({"pair": pair, "escape": float(e), "ulps": float(e / Fraction(math.ulp(face))),
                         "conditional": conditional})
 
@@ -1008,9 +1085,26 @@ def c1_precondition(case):
             walk(member, child, "%s.children[%d]" % (where, i), bv)
 
     walk("tileset.json", case.tilesets["tileset.json"]["root"], "tileset.json:root", None)
+    refusals = [c for c in ((report or {}).get("c1Caveats") or [])
+                if "extensionsRequired" in c or "attribute" in c]
+
+    def non_finite(value):
+        if isinstance(value, float):
+            return not math.isfinite(value)
+        if isinstance(value, dict):
+            return any(non_finite(v) for v in value.values())
+        if isinstance(value, list):
+            return any(non_finite(v) for v in value)
+        return False
+    for name, data in case.members():
+        if name.endswith(".json") and non_finite(json.loads(data)):
+            refusals.append("%s: JSON number literal overflows binary64 (C1 JSON layer: Unsupported)" % name)
+    hard = [e for e in escapes if not e["conditional"]]
+    if mixed or refusals:
+        return {"judgement": "likely", "expectedProductionIfRefused": "C1:Unsupported",
+                "mixedRegionCartesian": mixed, "c1Caveats": refusals, "escapes": escapes}
     if not escapes:
         return None
-    hard = [e for e in escapes if not e["conditional"]]
     if any(e["ulps"] > 4 for e in hard):
         judgement = "likely"
     elif hard:
@@ -1135,7 +1229,11 @@ def run_case(case, directory, report_rows, large_ok):
            "c1Caveats": report.get("c1Caveats", []), "notes": case.notes}
     if case.production:
         row["expectedProduction"] = case.production
-    pre = c1_precondition(case)
+    if case.c1_refused:
+        # Production stops in C1; the oracle (no C1 model) is judged on its C2-level expectation.
+        row["expected"] = {"outcome": "C1Refused", "kind": case.c1_refused}
+        row["oracleExpected"] = case.expect
+    pre = c1_precondition(case, report)
     if pre:
         row["c1Precondition"] = pre
     row["agree"] = compare(case.expect, report, case)
@@ -1241,7 +1339,7 @@ def build_controls(cases, reports, rows, cdir, ldir, large_ok):
     pair("tight-non-integer-centre", "tight-non-integer-centre-on-boundary",
          "tight-non-integer-centre-vertex-one-ulp-beyond", "vertex moves one f32 ulp beyond the face")
     pair("rotated-chain-sphere", [c.id for c in cases if c.id.startswith("rotated-TRS") and "box-only" in c.id][0],
-         [c.id for c in cases if c.id.startswith("rotated-TRS") and "sphere" in c.id][0],
+         [c.id for c in cases if c.id.startswith("rotated-TRS") and c.id.endswith("with-sphere-enclosed")][0],
          "sphere content volume added at the same depth")
     # Undrawn outlier made drawn (W04 indices [0] -> [0, 1]).
     w04 = [c for c in cases if c.id.startswith("W04")][0]

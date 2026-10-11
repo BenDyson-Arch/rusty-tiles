@@ -10094,7 +10094,8 @@
     "judgement": "likely"
    },
    "expected": {
-    "outcome": "Contained"
+    "kind": "invalid_input",
+    "outcome": "C1Refused"
    },
    "expectedProduction": "C1:InvalidInput(hierarchyBounds)",
    "file": "witnesses/fixtures/child-volume-escapes-but-content-inside.3tz",
@@ -10110,6 +10111,9 @@
     "outcome": "Contained",
     "reasons": null,
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "Contained"
    },
    "precheck": {
     "references": [
@@ -11502,11 +11506,19 @@
     "w.glb: mesh 0 uses attribute JOINTS_0; per the contract C1 rejects this semantic (Unsupported)",
     "w.glb: mesh 0 uses attribute WEIGHTS_0; per the contract C1 rejects this semantic (Unsupported)"
    ],
+   "c1Precondition": {
+    "c1Caveats": [
+     "w.glb: mesh 0 uses attribute JOINTS_0; per the contract C1 rejects this semantic (Unsupported)",
+     "w.glb: mesh 0 uses attribute WEIGHTS_0; per the contract C1 rejects this semantic (Unsupported)"
+    ],
+    "escapes": [],
+    "expectedProductionIfRefused": "C1:Unsupported",
+    "judgement": "likely",
+    "mixedRegionCartesian": []
+   },
    "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "skin"
-    ]
+    "kind": "unsupported",
+    "outcome": "C1Refused"
    },
    "expectedProduction": "C1:Unsupported",
    "file": "witnesses/fixtures/selected-skin.3tz",
@@ -11521,6 +11533,12 @@
      "skin"
     ],
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "skin"
+    ]
    },
    "sha256": "0d1d9f1a462b97d775be6cc96ea8354f7a18fbb3cff571e43be472690bb23433",
    "source": "selected-skin"
@@ -11605,11 +11623,18 @@
    "c1Caveats": [
     "w.glb: extensionsRequired EXT_mesh_gpu_instancing is not allowlisted; C1 may refuse it (Unsupported) before C2"
    ],
+   "c1Precondition": {
+    "c1Caveats": [
+     "w.glb: extensionsRequired EXT_mesh_gpu_instancing is not allowlisted; C1 may refuse it (Unsupported) before C2"
+    ],
+    "escapes": [],
+    "expectedProductionIfRefused": "C1:Unsupported",
+    "judgement": "likely",
+    "mixedRegionCartesian": []
+   },
    "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "gltfExtension"
-    ]
+    "kind": "unsupported",
+    "outcome": "C1Refused"
    },
    "expectedProduction": "C1:Unsupported",
    "file": "witnesses/fixtures/GPU-instancing-required.3tz",
@@ -11625,18 +11650,32 @@
     ],
     "why": null
    },
+   "oracleExpected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "gltfExtension"
+    ]
+   },
    "sha256": "85eb506fb257941cbe8bd4a12362170aace426eb0fcd11736abf5392498b899b",
    "source": "GPU-instancing-not-core-instances (required form)"
   },
   {
    "agree": true,
    "c1Caveats": [],
-   "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "regionVolume"
+   "c1Precondition": {
+    "c1Caveats": [],
+    "escapes": [],
+    "expectedProductionIfRefused": "C1:Unsupported",
+    "judgement": "likely",
+    "mixedRegionCartesian": [
+     "tileset.json:root.children[0] in parent"
     ]
    },
+   "expected": {
+    "kind": "unsupported",
+    "outcome": "C1Refused"
+   },
+   "expectedProduction": "C1:Unsupported (mixed region/Cartesian containment)",
    "file": "witnesses/fixtures/region-bound.3tz",
    "group": "context",
    "id": "region-bound",
@@ -11650,8 +11689,41 @@
     ],
     "why": null
    },
+   "oracleExpected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "regionVolume"
+    ]
+   },
    "sha256": "da5ee2485da89d93d427b3ce2e3bc4ed5789353ec5d5f5848d244a7581c90ff4",
    "source": "region-bound"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "regionVolume"
+    ]
+   },
+   "file": "witnesses/fixtures/region-only-hierarchy.3tz",
+   "group": "context",
+   "id": "region-only-hierarchy",
+   "limits": {},
+   "notes": [
+    "glTF (6378137, 0, 0) is ECEF (6378137, 0, 0) after U: lon 0, lat 0, height 0, inside every region; no tile transform (regions ignore transforms)"
+   ],
+   "oracle": {
+    "facts": null,
+    "outcome": "NotInspected",
+    "reasons": [
+     "regionVolume"
+    ],
+    "why": null
+   },
+   "sha256": "4bbc3c03e5ab7294912b5d456697cb38c5b4ee4b26802899018e0edb413c6837",
+   "source": "region-bound (C1-passing variant)"
   },
   {
    "agree": true,
@@ -15164,15 +15236,77 @@
   {
    "agree": true,
    "c1Caveats": [],
+   "c1Precondition": {
+    "escapes": [
+     {
+      "conditional": false,
+      "escape": 100.0,
+      "pair": "tileset.json:root content[0] in tile",
+      "ulps": 2.81474976710656e+16
+     }
+    ],
+    "expectedProductionIfRefused": "C1:InvalidInput(hierarchyBounds)",
+    "judgement": "likely"
+   },
+   "expected": {
+    "kind": "invalid_input",
+    "outcome": "C1Refused"
+   },
+   "expectedProduction": "C1:InvalidInput (content bounds escape tile)",
+   "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere.3tz",
+   "group": "control",
+   "id": "rotated-TRS-chain-depth-16-with-sphere",
+   "limits": {},
+   "notes": [
+    "depth 16 chosen as the smallest depth (from 10) where box-only spans <= 4096 < spans with the sphere (generic normalized quaternions, seed 20261011)"
+   ],
+   "oracle": {
+    "facts": null,
+    "outcome": "NotInspected",
+    "reasons": [
+     "numericSpan"
+    ],
+    "why": null
+   },
+   "oracleExpected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "numericSpan"
+    ]
+   },
+   "precheck": {
+    "references": [
+     {
+      "levelSpans": [
+       4216
+      ],
+      "levels": 1,
+      "member": "w.glb",
+      "reference": 0,
+      "sInst": 1878
+     }
+    ],
+    "totals": {
+     "bytes": 0,
+     "decoded": 0,
+     "units": 0
+    }
+   },
+   "sha256": "54cf169e530bf0a45cb95339ad3f65b6ce7ca98715928680204189eccd795f56",
+   "source": "newSlice1Controls[11]"
+  },
+  {
+   "agree": true,
+   "c1Caveats": [],
    "expected": {
     "outcome": "NotInspected",
     "reasons": [
      "numericSpan"
     ]
    },
-   "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere.3tz",
+   "file": "controls/fixtures/rotated-TRS-chain-depth-16-with-sphere-enclosed.3tz",
    "group": "control",
-   "id": "rotated-TRS-chain-depth-16-with-sphere",
+   "id": "rotated-TRS-chain-depth-16-with-sphere-enclosed",
    "limits": {},
    "notes": [
     "depth 16 chosen as the smallest depth (from 10) where box-only spans <= 4096 < spans with the sphere (generic normalized quaternions, seed 20261011)"
@@ -15203,7 +15337,7 @@
      "units": 0
     }
    },
-   "sha256": "54cf169e530bf0a45cb95339ad3f65b6ce7ca98715928680204189eccd795f56",
+   "sha256": "9dcbeaaea261a746325394865f7fcc1906acc18779f2ab087498ff1db799fa7a",
    "source": "newSlice1Controls[11]"
   },
   {
@@ -19258,14 +19392,27 @@
   {
    "agree": true,
    "c1Caveats": [],
-   "expected": {
-    "outcome": "InvalidInput"
+   "c1Precondition": {
+    "c1Caveats": [
+     "tileset.json: JSON number literal overflows binary64 (C1 JSON layer: Unsupported)"
+    ],
+    "escapes": [],
+    "expectedProductionIfRefused": "C1:Unsupported",
+    "judgement": "likely",
+    "mixedRegionCartesian": []
    },
+   "expected": {
+    "kind": "unsupported",
+    "outcome": "C1Refused"
+   },
+   "expectedProduction": "C1:Unsupported (JSON exceeds finite owned-document representation)",
    "file": "controls/fixtures/tileset-number-overflow.3tz",
    "group": "control",
    "id": "tileset-number-overflow",
    "limits": {},
-   "notes": [],
+   "notes": [
+    "Contract 'Numbers' says an overflowing literal is InvalidInput; production C1 refuses it as Unsupported in its JSON layer. The oracle keeps the contract text."
+   ],
    "oracle": {
     "facts": {
      "where": "tileset.json",
@@ -19274,6 +19421,9 @@
     "outcome": "InvalidInput",
     "reasons": null,
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "InvalidInput"
    },
    "sha256": "f184fce1e3a69a99312d42a0702c6bb795adfca88f1228c4a341c686feb82bc2",
    "source": "v3.3 (8) / contract Numbers"
@@ -20368,12 +20518,17 @@
   }
  ],
  "summary": {
-  "agree": 255,
+  "agree": 257,
   "c1PreconditionLikely": [
-   "child-volume-escapes-but-content-inside"
+   "child-volume-escapes-but-content-inside",
+   "selected-skin",
+   "GPU-instancing-required",
+   "region-bound",
+   "rotated-TRS-chain-depth-16-with-sphere",
+   "tileset-number-overflow"
   ],
   "c1PreconditionPossible": 153,
-  "cases": 255,
+  "cases": 257,
   "controlPairs": 15,
   "controlPairsAgree": 15,
   "disagree": [],

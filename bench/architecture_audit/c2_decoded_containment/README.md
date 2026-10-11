@@ -32,7 +32,7 @@ From this directory:
 
 ```sh
 python3 -I oracle/self_test/run.py            # 36 checks, exit 0
-python3 -I witnesses/generate.py --large      # 255 cases, 15 control pairs; exit 0 when all agree
+python3 -I witnesses/generate.py --large      # 257 cases, 15 control pairs; exit 0 when all agree
 python3 -I oracle/mutants/run.py              # 12 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
 python3 -I oracle/c2_oracle.py some.3tz --json
@@ -200,8 +200,8 @@ The artifacts were treated as data and are not committed.
     values outside their pair;
   - f32 exactness, `R(q)` exact orthogonality, the quaternion window boundary,
     and the integer predicate against the `Fraction` predicate.
-- **Witnesses and controls: 255 cases, all agree.** No expectation mismatches.
-  - 14 literal (W01–W13, plus the W01 no-RTC variant), 20 context and 45
+- **Witnesses and controls: 257 cases, all agree.** No expectation mismatches.
+  - 14 literal (W01–W13, plus the W01 no-RTC variant), 21 context and 46
     control cases.
   - 176 one-ulp mutants.
   - Every literal frame value the oracle exposes matches its witness exactly.
@@ -214,12 +214,44 @@ The artifacts were treated as data and are not committed.
     referencing tile and, conditionally, in that content volume. Acceptance
     compares on the C1-passing subset plus the C1 refusal itself.
 
+    The model covers box, sphere and region nesting in any combination. It also
+    treats as refusals what production's first parity run showed C1 refuses:
+    region volumes nested with box or sphere volumes; non-allowlisted
+    `extensionsRequired` entries; `JOINTS_n`/`WEIGHTS_n` attributes; and
+    non-finite JSON numbers.
+
     | Judgement | Cases |
     | --- | --- |
-    | `likely` | 1: `child-volume-escapes-but-content-inside` |
+    | `likely` | 6, the C1-refused fixtures below |
     | `possible` (escape of at most 4 ulps; depends on C1's slack) | 152 one-ulp mutants |
     | `possible` (only if C1 compares an external root with the referencing content volume) | 1: `external-content-volume-excludes` |
-    | none | the other 101 |
+    | none | the other 98 |
+
+  - **C1-refused fixtures.** Production's first parity run observed six
+    fixtures stop in C1. Their `expected` is
+    `{"outcome": "C1Refused", "kind": ...}`, which the harness compares on
+    `kind` only. Their C2-level expectation moves to `oracleExpected`, and the
+    oracle (which has no C1 model) is judged on that.
+
+    | Fixture | `kind` | C1 message | C1-passing variant for the C2 reason |
+    | --- | --- | --- | --- |
+    | `child-volume-escapes-but-content-inside` | `invalid_input` | hierarchyBounds | none needed; the oracle's C2 verdict is Contained |
+    | `GPU-instancing-required` | `unsupported` | required extension | `GPU-instancing-not-core-instances` (optional; already present) |
+    | `region-bound` | `unsupported` | mixed region/Cartesian containment | `region-only-hierarchy` (new) |
+    | `selected-skin` | `unsupported` | attribute semantic `JOINTS_0` | `selected-skin-without-joint-attributes` (already present) |
+    | `rotated-TRS-chain-depth-16-with-sphere` | `invalid_input` | content bounds escape tile | `rotated-TRS-chain-depth-16-with-sphere-enclosed` (new) |
+    | `tileset-number-overflow` | `unsupported` | JSON exceeds finite owned-document representation | none; see question 16 |
+
+    - **The old sphere fixture was a real defect.** Its tile box had
+      half-lengths of about 1e-16 around a content sphere of radius 100. The
+      enclosed variant uses a ±128 box, keeps the spans (4216), and replaces it
+      in the `rotated-chain-sphere` control pair.
+    - **`selected-skin-without-joint-attributes` is malformed glTF.** glTF
+      2.0.1 says "the skinned mesh **MUST** have vertex attributes that are used
+      in skinning calculations" (`gltf-2.0.1.adoc:1598`). Because C1 refuses
+      `JOINTS_n`, no valid glTF skin can pass C1. This fixture is therefore the
+      closest C1-passing form for the `skin` reason, as the contract's own note
+      describes.
 - **Mutants: 12/12 flip their named fixture.**
   - Omit U and double U flip 130 fixtures each.
   - The 1e-6 slack flips 177.
@@ -380,9 +412,16 @@ fixtures follow those rulings. Each ruled item says which decision applies.
     `Undecided` here; it now reports `InvalidInput`. A tileset number literal
     that overflows binary64 is also `InvalidInput` now. Controls:
     `tile-transform-non-affine` and `tileset-number-overflow`.
-16. **An overflowing number literal in glTF JSON** gives `InvalidNode` with a
-    number reason. The contract makes it InvalidInput, but C1 might report it
-    first.
+16. **An overflowing number literal** gives `InvalidNode` with a number
+    reason in glTF JSON, and `InvalidInput` in tileset JSON. The contract
+    "Numbers" paragraph calls it InvalidInput "as in the existing tileset number
+    handling".
+    - Production's C1 JSON layer instead refuses a tileset literal of `1e999`
+      as **Unsupported** ("JSON exceeds finite owned-document
+      representation").
+    - Either the contract sentence or that C1 kind needs correcting. The
+      fixture expects the observed C1 refusal, and the oracle keeps the
+      contract text.
 17. **Restart values.** The oracle drops the maximum index value from every
     primitive. C1 admits restart only for indexed `LINE_STRIP` with
     `KHR_mesh_primitive_restart` in both `extensionsUsed` and
