@@ -31,7 +31,7 @@ fn call_mode(
 }
 
 #[test]
-fn implicit_las_laz_keep_every_record_and_root_relative_placement_across_subtrees() {
+fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() {
     for (suffix, identical) in [("las", false), ("laz", false), ("laz", true)] {
         let work = tempfile::tempdir().unwrap();
         let input = work.path().join(format!("source.{suffix}"));
@@ -53,12 +53,17 @@ fn implicit_las_laz_keep_every_record_and_root_relative_placement_across_subtree
         );
         let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
         let manifest = document(&mut zip, "tileset.json");
-        assert_eq!(
-            manifest["root"]["implicitTiling"]["subdivisionScheme"],
-            "OCTREE"
-        );
-        if !identical {
-            assert!(zip.file_names().filter(|n| n.ends_with(".subtree")).count() > 1);
+        // The spread clouds are deeper than the skeleton bound, so implicit
+        // roots hang below explicit skeleton tiles. Identical points split by
+        // ordinal into a short tree, which is one implicit root at the top.
+        let forest = forest(&mut zip);
+        if identical {
+            assert_eq!(forest.roots.len(), 1);
+            assert_eq!(forest.explicit, 0);
+            assert!(manifest["root"].get("implicitTiling").is_some());
+        } else {
+            assert!(manifest["root"].get("implicitTiling").is_none());
+            assert!(forest.explicit >= 1 && forest.roots.len() > 1);
         }
         let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
             let mut bytes = Vec::new();
@@ -77,15 +82,23 @@ fn implicit_las_laz_keep_every_record_and_root_relative_placement_across_subtree
             .points()
             .map(Result::unwrap)
             .collect();
-        let root_translation = std::array::from_fn::<_, 3, _>(|i| {
-            manifest["root"]["transform"][12 + i].as_f64().unwrap()
-        });
+        // Skeleton tiles and implicit roots keep the producer's translations;
+        // implicit tiles carry theirs in the GLB scene root. Compose both.
         fn placement(
             zip: &mut zip::ZipArchive<std::fs::File>,
             node: &Value,
-            root: [f64; 3],
+            parent: [f64; 3],
             expected: &[las::Point],
         ) {
+            let mut root = parent;
+            if let Some(transform) = node["transform"].as_array() {
+                for (i, value) in transform.iter().enumerate().take(12) {
+                    assert_eq!(value.as_f64().unwrap(), f64::from(u8::from(i % 5 == 0)));
+                }
+                for (i, value) in root.iter_mut().enumerate() {
+                    *value += transform[12 + i].as_f64().unwrap();
+                }
+            }
             if let Some(children) = node["children"].as_array() {
                 for child in children {
                     placement(zip, child, root, expected);
@@ -131,7 +144,7 @@ fn implicit_las_laz_keep_every_record_and_root_relative_placement_across_subtree
                 );
             }
         }
-        placement(&mut zip, &expanded["root"], root_translation, &expected);
+        placement(&mut zip, &expanded["root"], [0.; 3], &expected);
         let report = support::rusty_tiles()
             .args(["validate", "--json"])
             .arg(&output)
@@ -235,6 +248,99 @@ impl Glb {
 
 fn document(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Value {
     serde_json::from_reader(zip.by_name(name).unwrap()).unwrap()
+}
+
+/// The written forest, read from the archive without the product expander.
+#[derive(Default)]
+struct Forest {
+    /// Explicit tiles of the producer hierarchy; a link and its document root
+    /// count once.
+    explicit: usize,
+    implicit_roots: usize,
+    documents: Vec<String>,
+}
+
+/// Walk every document and check the forest's root, link and subtree rules:
+/// one subtree per implicit root with `subtreeLevels == availableLevels <= 4`,
+/// no child subtrees, a row for every tile, no JSON content template, the
+/// metadata schema on every document holding a root and on `tileset.json`,
+/// and no `implicitChildIndex` in any written tile.
+fn forest(zip: &mut zip::ZipArchive<std::fs::File>) -> Forest {
+    fn walk(
+        zip: &mut zip::ZipArchive<std::fs::File>,
+        tile: &Value,
+        has_schema: bool,
+        out: &mut Forest,
+    ) {
+        assert!(tile["extras"].get("implicitChildIndex").is_none());
+        if let Some(tiling) = tile.get("implicitTiling") {
+            assert!(has_schema, "implicit root in a document without the schema");
+            assert!(tile.get("children").is_none());
+            assert_eq!(tiling["subdivisionScheme"], "OCTREE");
+            let levels = tiling["subtreeLevels"].as_u64().unwrap();
+            assert_eq!(tiling["availableLevels"].as_u64(), Some(levels));
+            assert!((1..=4).contains(&levels), "{levels} subtree levels");
+            let templates = tile["contents"]
+                .as_array()
+                .cloned()
+                .unwrap_or_else(|| tile.get("content").cloned().into_iter().collect());
+            for template in templates {
+                let uri = template["uri"].as_str().unwrap();
+                assert!(!uri.ends_with(".json"), "JSON content template {uri}");
+            }
+            let name = ["level", "x", "y", "z"].iter().fold(
+                tiling["subtrees"]["uri"].as_str().unwrap().to_owned(),
+                |name, key| name.replace(&format!("{{{key}}}"), "0"),
+            );
+            let mut bytes = Vec::new();
+            zip.by_name(&name).unwrap().read_to_end(&mut bytes).unwrap();
+            assert_eq!(&bytes[..4], b"subt");
+            let length = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+            let subtree: Value = serde_json::from_slice(&bytes[24..24 + length]).unwrap();
+            assert_eq!(
+                subtree["childSubtreeAvailability"],
+                serde_json::json!({"constant": 0})
+            );
+            assert!(subtree["tileMetadata"].is_u64(), "missing tile rows");
+            out.implicit_roots += 1;
+            return;
+        }
+        let uri = tile["content"]["uri"].as_str().unwrap_or_default();
+        if uri.ends_with(".json") {
+            assert!(tile.get("children").is_none());
+            let linked = document(zip, uri);
+            out.documents.push(uri.to_owned());
+            assert!(linked["root"].get("transform").is_none());
+            assert_eq!(linked["root"]["boundingVolume"], tile["boundingVolume"]);
+            assert_eq!(linked["root"]["geometricError"], tile["geometricError"]);
+            let schema = linked.get("schema").is_some();
+            return walk(zip, &linked["root"], schema, out);
+        }
+        out.explicit += 1;
+        for child in tile["children"].as_array().into_iter().flatten() {
+            walk(zip, child, has_schema, out);
+        }
+    }
+    let manifest = document(zip, "tileset.json");
+    let mut out = Forest {
+        documents: vec!["tileset.json".into()],
+        ..Default::default()
+    };
+    walk(zip, &manifest["root"], manifest.get("schema").is_some(), &mut out);
+    assert_eq!(manifest.get("schema").is_some(), out.implicit_roots > 0);
+    let subtrees = zip.file_names().filter(|n| n.ends_with(".subtree")).count();
+    assert_eq!(subtrees, out.implicit_roots, "one subtree per implicit root");
+    // Each tileset document is reached by exactly one link.
+    let mut documents: Vec<_> = zip
+        .file_names()
+        .filter(|n| n.ends_with(".json") && *n != "conversion.json")
+        .map(str::to_owned)
+        .collect();
+    documents.sort();
+    let mut linked = out.documents.clone();
+    linked.sort();
+    assert_eq!(documents, linked);
+    out
 }
 
 fn audit_leaves(
