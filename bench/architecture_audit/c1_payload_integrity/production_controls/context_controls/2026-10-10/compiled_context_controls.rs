@@ -30,7 +30,7 @@ fn selected_limits() -> ValidationLimits {
         central_directory_bytes: 65536,
         document_items: 8192,
         containment_span_bits: 4096,
-        containment_work_units: 4294967296,
+        containment_work_units: 268435456,
         containment_bytes_read: 2147483648,
         containment_decoded_bytes: 2147483648,
         containment_node_depth: 64,

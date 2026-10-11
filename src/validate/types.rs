@@ -97,7 +97,7 @@ impl Default for ValidationLimits {
             central_directory_bytes: 16 * 1024 * 1024,
             document_items: 65536,
             containment_span_bits: 4096,
-            containment_work_units: 1 << 32,
+            containment_work_units: 1 << 28,
             containment_bytes_read: 2 * 1024 * 1024 * 1024,
             containment_decoded_bytes: 2 * 1024 * 1024 * 1024,
             containment_node_depth: 64,
