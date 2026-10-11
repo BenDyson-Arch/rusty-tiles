@@ -27,9 +27,15 @@ def main():
             if 'independentContextControl' in row:
                 rows.append(row)
     assert len(rows) == 82
-    assert len({(r['independentContextControl'], r['fact'], r['outcome']) for r in rows}) == 82
-    assert sum(r['outcome'] == 'admitted' for r in rows) == 41
-    assert sum(r['outcome'] == 'resource_limit' for r in rows) == 41
+    # Each execution is distinct by its control, fact and selected limits.
+    assert len({(r['independentContextControl'], r['fact'], json.dumps(r['selectedLimits'], sort_keys=True))
+                for r in rows}) == 82
+    # I1 amendment (OD-4, X-7): the nested-metadata-extras control's three
+    # one-less runs are admitted, because implicit tile extras are opaque.
+    opaque = [r for r in rows if r['independentContextControl'] == 'nested-metadata-extras']
+    assert len(opaque) == 6 and all(r['outcome'] == 'admitted' for r in opaque)
+    assert sum(r['outcome'] == 'admitted' for r in rows) == 44
+    assert sum(r['outcome'] == 'resource_limit' for r in rows) == 38
     assert all(r['readOnly'] for r in rows)
     unit = Path(re.search(r'Running unittests src/lib.rs \(([^)]+)\)', raw)[1])
     if not unit.is_absolute():
