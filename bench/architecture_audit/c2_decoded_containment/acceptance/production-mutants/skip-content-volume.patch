@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 8a94975..0660d0a 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -594,7 +594,7 @@ impl Containment {
+             &mut self.levels,
+             LevelFacts {
+                 to_parent: None,
+-                volumes: [Some((Role::Own, self.tiles[tile].volume)), content, None],
++                volumes: [Some((Role::Own, self.tiles[tile].volume)), None, None],
+             },
+         )?;
+         let mut current = tile;
