@@ -6,11 +6,15 @@
 # Required steps (any failure exits non-zero):
 #   1. build    cargo build --release --locked --features native-geospatial
 #               (skipped when RUSTY_TILES_BIN names an existing binary)
-#   2. doctor   README mesh/validate/preview commands report ready
+#   2. doctor   README mesh/validate/preview commands report status ready,
+#               and the full report obeys the status/exit contract:
+#               unavailable -> environment/4, else unsupported -> 2, else 0
 #   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
 #   4. validate validate --json on the archive
-#   5. preview  preview --json starts on a free port, serves config.json and
-#               the extracted tileset manifest (curl), then stops on SIGTERM
+#   5. preview  preview --json starts on a free loopback port, serves
+#               config.json and the extracted tileset manifest (curl), refuses
+#               traversal, an outside symlink, an unselected layer and a
+#               foreign Host, then stops on SIGTERM and releases the port
 #               (strict browser mode also renders/picks this README pyramid
 #               before and after a cache-disabled reload)
 # Optional browser steps, run only when everything they need is present:
@@ -98,6 +102,42 @@ json_field() {
   "$PYTHON" -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"
 }
 
+# doctor_contract FILE EXIT [SELECTED...]: check a doctor --json report and its
+# process exit status against the T1 status contract. With SELECTED, the
+# report must list exactly those commands, all ready.
+doctor_contract() {
+  "$PYTHON" - "$@" <<'PY'
+import json, sys
+path, code, selected = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
+d = json.load(open(path))
+statuses = {name: c["status"] for name, c in d["commands"].items()}
+for name, c in d["commands"].items():
+    assert c["status"] in ("ready", "unavailable", "unsupported"), (name, c)
+    assert c["ready"] == (c["status"] == "ready"), (name, c)
+values = set(statuses.values())
+status = "unavailable" if "unavailable" in values else "unsupported" if "unsupported" in values else "ready"
+expected = {"ready": 0, "unavailable": 4, "unsupported": 2}[status]
+assert d["status"] == status and d["ready"] == d["ok"] == (status == "ready"), d["status"]
+assert code == expected, f"exit {code}, expected {expected} for {status}"
+if status != "ready":
+    assert d["exitCode"] == code, d["exitCode"]
+    assert d["error"]["code"] == {"unavailable": "environment", "unsupported": "unsupported"}[status]
+assert d["proj"]["networkEnabled"] is False
+assert set(d["probes"]) <= {"linked-versions", "proj-offline-policy", "proj-database",
+    "proj-directory-listing", "gdal-driver-registry", "geos-triangulation", "cesium-runtime"}, d["probes"]
+if selected:
+    assert d["selectedCommands"] == selected, d["selectedCommands"]
+    assert sorted(statuses) == sorted(selected) and values == {"ready"}, statuses
+PY
+}
+
+# http_status PATH [HOST]: literal request path (no client normalization).
+http_status() {
+  local host=()
+  [[ -n ${2:-} ]] && host=(-H "Host: $2")
+  curl -s --path-as-is -o /dev/null -w '%{http_code}' ${host[@]+"${host[@]}"} "${URL%/}$1"
+}
+
 # start_preview LOG ARGS...: start preview --json on a free port; sets URL.
 start_preview() {
   local log=$1
@@ -137,7 +177,11 @@ fi
 env PATH="" "$BIN" doctor --command mesh-to-3tz --command validate --command preview --json \
   >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
   || fail "doctor for README commands (exit $?)" "$WORK/doctor.json"
-[[ $(json_field "$WORK/doctor.json" 'd["ok"]') == True ]] || fail "doctor not ok" "$WORK/doctor.json"
+doctor_contract "$WORK/doctor.json" 0 mesh-to-3tz validate preview >>"$WORK/doctor.err" 2>&1 \
+  || fail "README commands are not all ready" "$WORK/doctor.err"
+env PATH="" "$BIN" doctor --json >"$WORK/doctor-all.json" 2>>"$WORK/doctor.err"
+doctor_contract "$WORK/doctor-all.json" $? >>"$WORK/doctor.err" 2>&1 \
+  || fail "full doctor report violates the status/exit contract" "$WORK/doctor.err"
 pass doctor
 
 # 3. convert (README example)
@@ -168,6 +212,18 @@ curl -fsS "${URL}config.json" -o "$WORK/config.json" || fail "curl config.json"
   || fail "config.json does not name the mesh manifest" "$WORK/config.json"
 curl -fsS "${URL}mesh/tileset.json" -o "$WORK/served-tileset.json" || fail "curl tileset.json"
 cmp -s "$WORK/served-tileset.json" "$WORK/output/example/tileset.json" || fail "served manifest differs"
+[[ $(json_field "$WORK/preview.json" 'd["loopback"]') == True && $URL == http://127.0.0.1:* ]] \
+  || fail "preview did not default to a loopback listener" "$WORK/preview.json"
+# Read-only fence: the work directory holds unselected files beside the root.
+ln -s "$WORK/convert.log" "$WORK/output/example/escape.log" || fail "create escape symlink"
+for target in /mesh/../../convert.log /mesh/%2e%2e/%2e%2e/convert.log /mesh/escape.log \
+  "/mesh/$WORK/convert.log" /terrain/tileset.json /mesh/; do
+  [[ $(http_status "$target") == 404 ]] || fail "preview served unselected path $target"
+done
+PORT=${URL%/}
+[[ $(http_status /mesh/tileset.json "evil.example:${PORT##*:}") == 421 ]] \
+  || fail "loopback preview answered a foreign Host"
+rm "$WORK/output/example/escape.log"
 if [[ $REQUIRE_BROWSER == 1 ]]; then
   node "$REPO/tests/fixtures/quick_start.cjs" "$URL" >"$WORK/quick-start-browser.log" 2>&1 \
     || fail "README quick-start browser probe" "$WORK/quick-start-browser.log"
