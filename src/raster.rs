@@ -114,7 +114,6 @@ pub(crate) struct RasterCapabilities {
     pub(crate) jpeg: bool,
     pub(crate) aaigrid: bool,
     pub(crate) cog: bool,
-    pub(crate) tile: bool,
 }
 
 #[cfg(feature = "native-geospatial")]

@@ -108,18 +108,18 @@ fn raster_readiness(geospatial: &Value) -> Value {
     #[cfg(feature = "native-geospatial")]
     let capabilities = match crate::raster::capabilities() {
         Ok(capability) => {
-            json!({"ready":capability.gtiff && capability.png && capability.cog && capability.tile,
+            json!({"ready":capability.gtiff && capability.cog,
             "nativeVersion":capability.native_version,
             "drivers":{"GTiff":capability.gtiff,"PNG":capability.png,
                 "JPEG":capability.jpeg,"AAIGrid":capability.aaigrid,"COG":capability.cog},
-            "tiling":{"ready":capability.tile}})
+            "tiling":{"ready":capability.gtiff,"backend":"exact integer nearest, Rust PNG"}})
         }
         Err(error) => json!({"ready":false,"error":error.to_string(),"tiling":{"ready":false}}),
     };
     #[cfg(not(feature = "native-geospatial"))]
     let capabilities = json!({"ready":false,"tiling":{"ready":false}});
     json!({"ready":geospatial["ready"] == true && capabilities["ready"] == true,
-        "requires":["native GDAL >= 3.12 with raster tile algorithm", "PROJ >= 9.2", "local PROJ database/grids"],
+        "requires":["native GDAL >= 3.12", "PROJ >= 9.2", "local PROJ database/grids"],
         "backend":"native GDAL", "geospatial":geospatial, "tiling":capabilities["tiling"],
         "capabilities":capabilities,
         "note":"Bounded R2 source/COG/display/nearest pyramid profile. Optional input drivers are checked per request; output filesystem support is checked before staging. No Python or GDAL executable required."})

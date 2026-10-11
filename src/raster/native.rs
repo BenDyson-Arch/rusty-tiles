@@ -409,9 +409,6 @@ impl Args {
     pub(super) fn ptr(&self) -> *mut *mut c_char {
         self.pointers.as_ptr().cast_mut()
     }
-    pub(super) fn const_ptr(&self) -> *const *const c_char {
-        self.pointers.as_ptr().cast()
-    }
 }
 
 pub(super) struct Progress<'a> {
@@ -1482,9 +1479,11 @@ pub(super) fn planned_work(
         .len()
         .checked_add(33)
         .ok_or_else(|| limit("raster path estimate overflow"))?;
+    let tiling = tile::scratch_bytes(grid.target().width, path_bound)?;
     // Three retained paths; one current output path; at most two temporary argv
-    // String paths + two CString paths; one scoped-setting CString. Other phases
-    // have fewer path owners. Numeric/static argv payloads fit64 bytes each.
+    // String paths + two CString paths; one scoped-setting CString. Tiling has
+    // fewer: one dataset CString beside its own tile path in tile scratch.
+    // Numeric/static argv payloads fit 64 bytes each.
     let paths = path_bound
         .checked_mul(9)
         .ok_or_else(|| limit("raster path owners overflow"))?;
@@ -1499,7 +1498,7 @@ pub(super) fn planned_work(
         + std::mem::size_of::<WarpOptions>()
         + std::mem::size_of::<display::Window>()
         + 4 * std::mem::size_of::<Vec<u8>>()
-        + 4 * std::mem::size_of::<std::path::PathBuf>()
+        + 5 * std::mem::size_of::<std::path::PathBuf>()
         + std::mem::size_of::<Xml>()
         + tile::owner_bytes()
         + 64 * std::mem::size_of::<*mut XmlNode>();
@@ -1508,6 +1507,7 @@ pub(super) fn planned_work(
         .checked_add(
             (coherence
                 .max(render)
+                .max(tiling)
                 .checked_add(paths)
                 .and_then(|n| n.checked_add(argv))
                 .and_then(|n| n.checked_add(fixed))
@@ -1630,7 +1630,6 @@ pub(super) fn produce(
             &finest_path,
             &output_path(stage, "tiles").map_err(failure)?,
             grid,
-            plan.workers,
             attempt,
             stage,
             plan.limits.max_working_bytes,
@@ -1682,9 +1681,6 @@ pub(super) fn capabilities() -> Result<RasterCapabilities, JobError> {
         jpeg: has(c"JPEG"),
         aaigrid: has(c"AAIGrid"),
         cog: has(c"COG"),
-        // Doctor reports capability readiness; conversions retain the complete
-        // causal failure through require_outputs instead of this projection.
-        tile: tile::available().map_err(|failure| failure.error)?,
     })
 }
 
@@ -2020,17 +2016,12 @@ fn check_standalone(ds: &Dataset, expected: &Path) -> Result<(), JobError> {
 }
 
 pub(super) fn require_outputs() -> Result<(), JobFailure> {
-    for name in [c"GTiff", c"COG", c"PNG"] {
+    for name in [c"GTiff", c"COG"] {
         if unsafe { gdal_sys::GDALGetDriverByName(name.as_ptr()) }.is_null() {
             return Err(failure(unsupported(
                 "requested raster output driver unavailable",
             )));
         }
-    }
-    if !tile::available()? {
-        return Err(failure(unsupported(
-            "requested raster tile algorithm unavailable",
-        )));
     }
     Ok(())
 }
