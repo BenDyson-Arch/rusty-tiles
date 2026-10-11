@@ -1,5 +1,5 @@
 //! Readiness must use the linked native backend, even with no executable path.
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::process::Command;
 
 fn doctor(args: &[&str], data: Option<&std::path::Path>) -> (std::process::Output, Value) {
@@ -134,12 +134,13 @@ fn portable_vector_readiness_needs_no_native_database_or_executables() {
 
 #[cfg(feature = "native-geospatial")]
 #[test]
-fn missing_database_keeps_versions_and_environment_category() {
+fn missing_database_keeps_versions_and_execution_category() {
     let root = tempfile::tempdir().unwrap();
     let (output, report) = doctor(&["--command", "terrain"], Some(root.path()));
-    assert_eq!(output.status.code(), Some(4));
+    // Terrain itself refuses its source CRS as unsupported without the database.
+    assert_eq!(output.status.code(), Some(2));
     assert_eq!(report["ok"], false);
-    assert_eq!(report["error"]["code"], "environment");
+    assert_eq!(report["error"]["code"], "unsupported");
     assert!(report["nativeGeospatial"]["versions"]["gdal"].is_string());
     assert_eq!(report["status"], "unavailable");
     assert_eq!(report["commands"]["terrain"]["status"], "unavailable");
@@ -390,6 +391,10 @@ fn portable_native_commands_are_unsupported_like_their_execution() {
             .as_str()
             .unwrap()
             .contains("--features native-geospatial"));
+        assert_eq!(
+            readiness["refusal"],
+            json!({"code":"unsupported","exitCode":2})
+        );
         // Execution in the same build refuses with the same category.
         let args: Vec<_> = args.iter().map(|a| a.as_os_str()).collect();
         let (code, result) = execute(&args, &[]);
@@ -409,38 +414,110 @@ fn portable_native_commands_are_unsupported_like_their_execution() {
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
+/// A vector conversion of the repository GeoJSON fixture.
+#[cfg(feature = "native-geospatial")]
+fn vector_command(root: &std::path::Path) -> Vec<std::ffi::OsString> {
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector.geojson");
+    ["vector", "-i"]
+        .map(std::ffi::OsString::from)
+        .into_iter()
+        .chain([
+            fixture.into_os_string(),
+            "-o".into(),
+            root.join("vector.3tz").into_os_string(),
+        ])
+        .collect()
+}
+
+/// Each not-ready command reports the category and exit status that the
+/// command's own run returns under the same missing dependency. Terrain and D1
+/// are the recorded exception: their producers report a missing GTiff driver
+/// as invalid_input (see the T1 contract), while doctor refuses it as
+/// unsupported. This test pins both sides so either change is visible.
 #[cfg(feature = "native-geospatial")]
 #[test]
-fn missing_gtiff_driver_makes_gtiff_commands_unavailable_like_their_execution() {
+fn native_refusals_report_the_category_and_exit_of_execution() {
     let root = tempfile::tempdir().unwrap();
-    let skip = std::ffi::OsStr::new("GTiff");
-    for (name, args) in gtiff_commands(root.path()) {
-        let (output, report) = doctor(&["--command", name], None);
-        assert!(output.status.success(), "{report}");
-        assert_eq!(report["commands"][name]["status"], "ready");
-        let (output, report) = doctor_with(
-            &["--command", name, "--command", "convert"],
-            None,
-            &[("GDAL_SKIP", skip)],
-        );
-        assert_eq!(output.status.code(), Some(4), "{report}");
-        assert_eq!(report["error"]["code"], "environment");
-        assert_eq!(report["status"], "unavailable");
-        assert_eq!(report["commands"]["convert"]["status"], "ready");
-        let readiness = &report["commands"][name];
-        assert_eq!(readiness["status"], "unavailable", "{name}");
-        assert_eq!(readiness["ready"], false);
-        assert!(
-            readiness["reason"].as_str().unwrap().contains("GTiff"),
-            "{readiness}"
-        );
-        // Before T1, terrain and D1 reported ready here while conversion of
-        // the same real GeoTIFF failed. Execution under the same environment:
-        let args: Vec<_> = args.iter().map(|a| a.as_os_str()).collect();
-        let (code, result) = execute(&args, &[("GDAL_SKIP", "GTiff")]);
-        assert_ne!(code, Some(0), "{name}: {result}");
-        assert_eq!(result["ok"], false, "{name}");
+    let empty = root.path().join("empty-proj");
+    std::fs::create_dir(&empty).unwrap();
+    let empty = empty.to_str().unwrap();
+    let no_proj = [("PROJ_DATA", empty), ("PROJ_LIB", empty)];
+    type Case<'a> = (&'a [(&'a str, &'a str)], &'a [&'a str]);
+    let cases: [Case; 5] = [
+        (
+            &[("GDAL_SKIP", "GTiff")],
+            &["raster", "raster-tile-to-directory", "terrain"],
+        ),
+        (&[("GDAL_SKIP", "COG")], &["raster"]),
+        (&[("GDAL_SKIP", "GPKG")], &["vector"]),
+        (&[("GDAL_SKIP", "GeoJSON")], &["vector"]),
+        (&no_proj, &["raster", "raster-tile-to-directory", "terrain"]),
+    ];
+    for (index, (env, names)) in cases.into_iter().enumerate() {
+        let work = root.path().join(index.to_string());
+        std::fs::create_dir(&work).unwrap();
+        let mut commands = gtiff_commands(&work);
+        commands.push(("vector", vector_command(&work)));
+        for name in names {
+            let os_env: Vec<_> = env
+                .iter()
+                .map(|(k, v)| (*k, std::ffi::OsStr::new(*v)))
+                .collect();
+            let (output, report) = doctor_with(&["--command", name], None, &os_env);
+            let readiness = &report["commands"][*name];
+            assert_eq!(
+                readiness["status"], "unavailable",
+                "{env:?} {name}: {report}"
+            );
+            assert_eq!(readiness["ready"], false);
+            assert_eq!(report["error"]["code"], readiness["refusal"]["code"]);
+            assert_eq!(
+                output.status.code().map(Value::from),
+                Some(readiness["refusal"]["exitCode"].clone())
+            );
+            let args = &commands
+                .iter()
+                .find(|(command, _)| command == name)
+                .unwrap()
+                .1;
+            let args: Vec<_> = args.iter().map(|a| a.as_os_str()).collect();
+            let (code, result) = execute(&args, env);
+            if env == [("GDAL_SKIP", "GTiff")]
+                && ["raster-tile-to-directory", "terrain"].contains(name)
+            {
+                // Recorded producer divergence: a failed GTiff open is invalid_input.
+                assert_eq!(
+                    (output.status.code(), &report["error"]["code"]),
+                    (Some(2), &json!("unsupported"))
+                );
+                assert_eq!(
+                    (code, &result["error"]["code"]),
+                    (Some(3), &json!("invalid_input")),
+                    "{name}: {result}"
+                );
+            } else {
+                assert_eq!(code, output.status.code(), "{env:?} {name}: {result}");
+                assert_eq!(
+                    result["error"]["code"], report["error"]["code"],
+                    "{env:?} {name}: {result}"
+                );
+            }
+        }
     }
+    // Native vector's own check needs no PROJ database; neither does a
+    // WGS84 GeoJSON conversion. Doctor previously reported it not ready.
+    let os_env: Vec<_> = no_proj
+        .iter()
+        .map(|(k, v)| (*k, std::ffi::OsStr::new(*v)))
+        .collect();
+    let (output, report) = doctor_with(&["--command", "vector"], None, &os_env);
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["commands"]["vector"]["status"], "ready");
+    let args = vector_command(root.path());
+    let args: Vec<_> = args.iter().map(|a| a.as_os_str()).collect();
+    let (code, result) = execute(&args, &no_proj);
+    assert_eq!(code, Some(0), "{result}");
 }
 
 #[test]

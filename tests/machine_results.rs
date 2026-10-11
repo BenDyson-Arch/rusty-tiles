@@ -201,13 +201,10 @@ fn doctor_failure_keeps_inventory_in_single_result() {
         &["doctor".as_ref(), "--command".as_ref(), "raster".as_ref()],
         &[("PROJ_DATA", root.path()), ("PROJ_LIB", root.path())],
     );
-    // Without a PROJ database a native build is unavailable (environment);
-    // a portable build does not contain raster at all (unsupported).
-    let (code, category) = if cfg!(feature = "native-geospatial") {
-        (4, "environment")
-    } else {
-        (2, "unsupported")
-    };
+    // Raster refuses as unsupported in both builds: natively because its
+    // source CRS cannot be admitted without the database, portably because
+    // the build does not contain it. Doctor reports that category.
+    let (code, category) = (2, "unsupported");
     assert_eq!(result.status.code(), Some(code));
     assert_eq!(report["ok"], false);
     assert_eq!(report["exitCode"], code);

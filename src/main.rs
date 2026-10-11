@@ -1076,44 +1076,41 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         }
         Command::Doctor(a) => {
             let report = doctor::report(&a.commands, Some(&a.cesium));
-            // Unavailable runtime dependencies outrank build-unsupported commands.
-            let failure = match report.status {
-                doctor::Status::Ready => None,
-                doctor::Status::Unavailable => Some((
-                    "environment",
-                    4,
-                    "selected commands have unavailable runtime dependencies",
-                )),
-                doctor::Status::Unsupported => Some((
-                    "unsupported",
-                    2,
-                    "selected commands are not supported by this build",
-                )),
+            // Each not-ready command carries the failure kind its own execution
+            // check returns; present it with execution's category and status.
+            // The first not-ready command in name order decides the process exit.
+            let refused = |(name, capability): (&str, &doctor::Capability)| {
+                let kind = capability.refusal.unwrap_or(JobErrorKind::Unsupported);
+                let reason = capability.reason.as_deref().unwrap_or("not ready");
+                (kind, format!("{name}: {reason}"))
             };
+            let failure = report.refusal().map(refused);
             if json {
                 let mut value = serde_json::to_value(&report)?;
                 value["ok"] = report.ready.into();
-                if let Some((code, exit, message)) = failure {
+                for (name, readiness) in &report.commands {
+                    if let Some(kind) = readiness.capability.refusal {
+                        let (code, exit) = job_category(kind);
+                        value["commands"][*name]["refusal"] = json!({"code":code,"exitCode":exit});
+                    }
+                }
+                if let Some((kind, message)) = failure {
                     // Include the inventory in the single error result.
+                    let (code, exit) = job_category(kind);
                     value["error"] = json!({"code":code,"message":message});
                     value["exitCode"] = exit.into();
                 }
                 return Ok(Outcome::Report(value));
             }
             println!("{report}");
-            let message =
-                |(_, _, message): (&str, u8, &str)| format!("{message}; see doctor report");
-            return match (report.status, failure.map(message)) {
-                (doctor::Status::Unavailable, Some(message)) => Err(Error::Environment(message)),
-                (doctor::Status::Unsupported, Some(message)) => {
-                    Err(Error::Job(rusty_tiles::JobFailure {
-                        error: JobError::new(JobErrorKind::Unsupported, message),
-                        secondary: Vec::new(),
-                        retained_paths: Vec::new(),
-                        recovery: None,
-                    }))
-                }
-                _ => Ok(Outcome::Done),
+            return match failure {
+                None => Ok(Outcome::Done),
+                Some((kind, message)) => Err(Error::Job(rusty_tiles::JobFailure {
+                    error: JobError::new(kind, format!("{message}; see doctor report")),
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })),
             };
         }
         Command::Preview(a) => {

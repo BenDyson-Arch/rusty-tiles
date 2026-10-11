@@ -3,6 +3,7 @@
 //! Each command resolves to `ready`, `unavailable` (compiled in, but a runtime
 //! probe failed) or `unsupported` (not in this build). Every probe that ran is
 //! named in [`Report::probes`]. See `docs/architecture/t1-tooling-contract.md`.
+use crate::JobErrorKind;
 use serde::{Serialize, Serializer};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -117,13 +118,17 @@ pub enum Probe {
     CesiumRuntime,
 }
 
-/// A status with its reason when not ready.
+/// A status with its reason when not ready. `refusal` is the failure kind
+/// that the command's own execution check returns for the same cause; the
+/// CLI presents it with the category and exit status of execution.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Capability {
     pub status: Status,
     pub ready: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip)]
+    pub refusal: Option<JobErrorKind>,
 }
 
 impl Capability {
@@ -132,18 +137,34 @@ impl Capability {
             status: Status::Ready,
             ready: true,
             reason: None,
+            refusal: None,
         }
     }
-    fn not_ready(status: Status, reason: impl Into<String>) -> Self {
+    fn not_ready(status: Status, refusal: JobErrorKind, reason: impl Into<String>) -> Self {
         Self {
             status,
             ready: false,
             reason: Some(reason.into()),
+            refusal: Some(refusal),
         }
     }
+    /// A runtime dependency failure classified by the check that found it.
+    #[cfg(feature = "native-geospatial")]
+    fn from_check(result: Result<(), crate::JobError>) -> Self {
+        match result {
+            Ok(()) => Self::ready(),
+            Err(error) => Self::not_ready(Status::Unavailable, error.kind(), error.message()),
+        }
+    }
+    /// Execution refuses commands missing from this build as unsupported
+    /// (`raster.rs`, `terrain.rs`, `raster_directory.rs` portable branches).
     #[cfg(not(feature = "native-geospatial"))]
     fn unsupported() -> Self {
-        Self::not_ready(Status::Unsupported, NATIVE_REBUILD)
+        Self::not_ready(
+            Status::Unsupported,
+            JobErrorKind::Unsupported,
+            NATIVE_REBUILD,
+        )
     }
     /// The first capability that is not ready, else ready.
     #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
@@ -209,8 +230,16 @@ pub struct Report {
     pub probes: BTreeSet<Probe>,
 }
 
-#[cfg(feature = "native-geospatial")]
-static NATIVE_PROBES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+impl Report {
+    /// The first selected command, in name order, that is not ready, with its
+    /// capability. Its `refusal` is what that command's own execution returns.
+    pub fn refusal(&self) -> Option<(&'static str, &Capability)> {
+        self.commands
+            .iter()
+            .find(|(_, readiness)| !readiness.capability.ready)
+            .map(|(name, readiness)| (*name, &readiness.capability))
+    }
+}
 
 /// Top-level entries listed per PROJ directory before the listing is truncated.
 const LISTING_LIMIT: usize = 4096;
@@ -229,13 +258,6 @@ pub fn report(selected: &[Command], cesium: Option<&Path>) -> Report {
             selection.push(*command);
         }
     }
-    // raster::capabilities re-runs GDALAllRegister without the shared Once
-    // guard (raster/native.rs); concurrent reports aborted inside GDAL.
-    // Serialize every native probe in this process's reports.
-    #[cfg(feature = "native-geospatial")]
-    let _serial = NATIVE_PROBES
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut probes = BTreeSet::new();
     let native = native_geospatial(&mut probes);
     let mut resolver = Resolver {
@@ -276,7 +298,7 @@ fn native_geospatial(probes: &mut BTreeSet<Probe>) -> NativeGeospatial {
                 probes.extend([Probe::ProjOfflinePolicy, Probe::ProjDatabase]);
                 let capability = match crate::geospatial::Crs::from_definition("EPSG:4326") {
                     Ok(_) => Capability::ready(),
-                    Err(error) => Capability::not_ready(Status::Unavailable, error.to_string()),
+                    Err(error) => native_failure(&error),
                 };
                 NativeGeospatial {
                     capability,
@@ -284,7 +306,7 @@ fn native_geospatial(probes: &mut BTreeSet<Probe>) -> NativeGeospatial {
                 }
             }
             Err(error) => NativeGeospatial {
-                capability: Capability::not_ready(Status::Unavailable, error.to_string()),
+                capability: native_failure(&error),
                 versions: None,
             },
         }
@@ -299,13 +321,29 @@ fn native_geospatial(probes: &mut BTreeSet<Probe>) -> NativeGeospatial {
     }
 }
 
+/// Producers classify native initialization and CRS-database failures
+/// (`Error::Environment`) as unsupported: `vector.rs` `job_error`,
+/// `raster/native.rs` `init`, `terrain/raster.rs` and `raster_directory/native.rs`
+/// `native_error`. Those producers hit this top-level dependency during source
+/// admission rather than through a separate check, so doctor applies their
+/// shared classification here.
+#[cfg(feature = "native-geospatial")]
+fn native_failure(error: &crate::Error) -> Capability {
+    let refusal = match error {
+        crate::Error::Environment(_) => JobErrorKind::Unsupported,
+        crate::Error::Io(_) => JobErrorKind::Io,
+        _ => JobErrorKind::InvalidInput,
+    };
+    Capability::not_ready(Status::Unavailable, refusal, error.to_string())
+}
+
 struct Resolver<'a> {
     native: &'a NativeGeospatial,
     cesium: Option<&'a Path>,
     probes: &'a mut BTreeSet<Probe>,
     /// The raster owner's driver capability, probed once when first needed.
     #[cfg(feature = "native-geospatial")]
-    drivers: Option<Result<crate::raster::RasterCapabilities, String>>,
+    drivers: Option<Result<crate::raster::RasterCapabilities, crate::JobError>>,
 }
 
 impl Resolver<'_> {
@@ -384,12 +422,12 @@ impl Resolver<'_> {
     fn vector(&mut self) -> Readiness {
         self.probes
             .extend([Probe::GdalDriverRegistry, Probe::GeosTriangulation]);
-        let geometry = match crate::vector::native_available() {
-            Ok(()) => Capability::ready(),
-            Err(error) => Capability::not_ready(Status::Unavailable, error.to_string()),
-        };
+        // Execution's own check (vector/pipeline/store.rs) with its error
+        // classification. It needs no PROJ database: CRS operations are
+        // validated per source, as for point clouds.
+        let geometry = Capability::from_check(crate::vector::native_available());
         Readiness {
-            capability: Capability::all([&self.native.capability, &geometry]),
+            capability: geometry.clone(),
             backend: "native GDAL/GEOS",
             requires: vec![
                 "native GDAL >= 3.12",
@@ -421,10 +459,10 @@ impl Resolver<'_> {
     }
 
     #[cfg(feature = "native-geospatial")]
-    fn drivers(&mut self) -> &Result<crate::raster::RasterCapabilities, String> {
+    fn drivers(&mut self) -> &Result<crate::raster::RasterCapabilities, crate::JobError> {
         if self.drivers.is_none() {
             self.probes.insert(Probe::GdalDriverRegistry);
-            self.drivers = Some(crate::raster::capabilities().map_err(|error| error.to_string()));
+            self.drivers = Some(crate::raster::capabilities());
         }
         self.drivers.as_ref().expect("probed above")
     }
@@ -439,32 +477,22 @@ impl Resolver<'_> {
         ];
         #[cfg(feature = "native-geospatial")]
         {
-            let native = self.native.capability.clone();
-            let (drivers, capabilities) = match self.drivers() {
-                Ok(c) => (
-                    if c.gtiff && c.cog {
-                        Capability::ready()
-                    } else {
-                        Capability::not_ready(
-                            Status::Unavailable,
-                            "linked GDAL lacks the GTiff or COG driver",
-                        )
-                    },
-                    json!({"nativeVersion":c.native_version,
-                        "drivers":{"GTiff":c.gtiff,"PNG":c.png,"JPEG":c.jpeg,"AAIGrid":c.aaigrid,"COG":c.cog}}),
-                ),
-                Err(error) => (
-                    Capability::not_ready(Status::Unavailable, error.clone()),
-                    Value::Null,
-                ),
+            // Execution's own admission (raster::output_capability), checked
+            // first as in source admission; the PROJ database is needed later
+            // to admit the source CRS. The driver inventory is informational.
+            self.probes.insert(Probe::GdalDriverRegistry);
+            let outputs = Capability::from_check(crate::raster::output_capability());
+            let capabilities = match self.drivers() {
+                Ok(c) => json!({"nativeVersion":c.native_version,
+                    "drivers":{"GTiff":c.gtiff,"PNG":c.png,"JPEG":c.jpeg,"AAIGrid":c.aaigrid,"COG":c.cog}}),
+                Err(_) => Value::Null,
             };
-            let tiling = drivers.clone();
             Readiness {
-                capability: Capability::all([&native, &drivers]),
+                capability: Capability::all([&outputs, &self.native.capability]),
                 backend: "native GDAL",
                 requires,
                 details: details(json!({"geospatial":self.native,"capabilities":capabilities,
-                    "tiling":tiling,"note":note})),
+                    "tiling":outputs,"note":note})),
             }
         }
         #[cfg(not(feature = "native-geospatial"))]
@@ -476,7 +504,12 @@ impl Resolver<'_> {
         }
     }
 
-    /// Terrain and D1 open sources only through the GDAL GTiff driver.
+    /// Terrain and D1 open sources only through the GDAL GTiff driver. Their
+    /// producers export no capability check: they run `native::init` and then
+    /// fail to open the source. Doctor therefore composes the GTiff driver from
+    /// the raster driver inventory and refuses it as unsupported, while those
+    /// producers currently report the failed open as invalid_input
+    /// (`terrain/raster.rs`, `raster_directory/native.rs`); see the T1 contract.
     fn gtiff_product(
         &mut self,
         backend: &'static str,
@@ -485,15 +518,18 @@ impl Resolver<'_> {
     ) -> Readiness {
         #[cfg(feature = "native-geospatial")]
         let capability = {
-            let native = self.native.capability.clone();
             let gtiff = match self.drivers() {
                 Ok(c) if c.gtiff => Capability::ready(),
-                Ok(_) => {
-                    Capability::not_ready(Status::Unavailable, "linked GDAL lacks the GTiff driver")
+                Ok(_) => Capability::not_ready(
+                    Status::Unavailable,
+                    JobErrorKind::Unsupported,
+                    "linked GDAL lacks the GTiff driver",
+                ),
+                Err(error) => {
+                    Capability::not_ready(Status::Unavailable, error.kind(), error.message())
                 }
-                Err(error) => Capability::not_ready(Status::Unavailable, error.clone()),
             };
-            Capability::all([&native, &gtiff])
+            Capability::all([&gtiff, &self.native.capability])
         };
         #[cfg(not(feature = "native-geospatial"))]
         let capability = Capability::unsupported();
@@ -789,8 +825,10 @@ mod tests {
     #[test]
     fn capability_combination_keeps_the_first_failure() {
         let ready = Capability::ready();
-        let missing = Capability::not_ready(Status::Unavailable, "missing");
-        let rebuild = Capability::not_ready(Status::Unsupported, "rebuild");
+        let missing =
+            Capability::not_ready(Status::Unavailable, JobErrorKind::Unsupported, "missing");
+        let rebuild =
+            Capability::not_ready(Status::Unsupported, JobErrorKind::Unsupported, "rebuild");
         assert_eq!(Capability::all([&ready, &ready]), ready);
         assert_eq!(Capability::all([&ready, &missing, &rebuild]), missing);
         assert_eq!(Capability::all([&rebuild, &missing]), rebuild);
