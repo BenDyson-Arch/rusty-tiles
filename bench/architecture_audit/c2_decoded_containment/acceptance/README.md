@@ -33,7 +33,9 @@ repeated references all multiply work. The original default of 2^32 units theref
 about 43 s in release (minutes in debug). After the nonauthor review, the coordinator set the
 default to 2^28. That bounds C2 work at the defaults to about 2.7 s at the most expensive
 measured unit cost, and `legal_shared_indices` becomes `workLimit`. Re-reads are separately
-capped by `containmentBytesRead`. Drawn-vertex marking per primitive is charged through `Idx`.
+capped by `containmentBytesRead`. The nonauthor review noted that per-reference C1
+re-validation and drawn-vertex marking across many primitives have no dedicated unit; that
+cost is bounded only indirectly, and timing archives with many primitives is open work.
 
 Not established here: platform byte identity, performance or RSS of the precheck caps (the cap
 values are proposals), implicit/RTC/region/rotated-box coverage, and any rendered-extent
