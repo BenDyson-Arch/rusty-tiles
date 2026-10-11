@@ -21,6 +21,14 @@ The corpus replay needs the producer artifacts: regenerate them with the corpus 
 recorded in the corpus manifest, then run `corpus_parity.py BINARY RUN_DIR
 corpus/manifest.json OUT`.
 
+Measured cost (Linux, release, 2 CPUs, best of 5 `validate --json` runs; develop f2238cd
+compared with this branch). On the 20k-point explicit point cloud (4.7 MB) the time went from
+48 ms to 108 ms, about 3 µs per tested vertex for the exact walk plus the re-read. Out-of-domain
+archives (implicit) and small mesh/vector archives were unchanged within noise (26–42 ms).
+Extrapolated to C1's 16M total payload elements, the exact pass could add roughly 50 s. That
+is a projection, not a measurement. The contract permits an equivalent i128 fast path, which
+is a later optimisation.
+
 Not established here: platform byte identity, performance or RSS of the precheck caps (the cap
 values are proposals), implicit/RTC/region/rotated-box coverage, and any rendered-extent
 claim.
