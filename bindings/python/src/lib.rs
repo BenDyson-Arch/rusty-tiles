@@ -45,6 +45,9 @@ fn error_to_python(error: Error) -> PyErr {
                 ResourceLimitError::new_err(message)
             }
             tiles_core::validate::ValidationFailure::Io(_) => TilesIOError::new_err(message),
+            tiles_core::validate::ValidationFailure::InvalidState(_) => {
+                TilesError::new_err(message)
+            }
         },
         Error::Job(failure) => Python::attach(|py| job_failure_to_python(py, failure)),
         Error::Environment(_) => EnvironmentError::new_err(message),

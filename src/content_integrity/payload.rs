@@ -4,6 +4,7 @@ use serde_json::value::RawValue;
 use std::{borrow::Cow, collections::BTreeSet};
 mod numbers;
 mod records;
+pub(crate) mod scene;
 use numbers::{at, domain, off, uint, work};
 use records::{array, boolean, optional_record, pairs, push, record, string, Raw};
 type FormatResult<T> = std::result::Result<T, FormatError>;
@@ -20,7 +21,11 @@ pub(crate) struct PayloadInspection {
     pub primitives_checked: u64,
     pub vertices: u64,
     pub elements_checked: u64,
+    /// Bytes C1 materialized: owned external and data-URI buffers plus meshopt views.
+    pub materialized_bytes: u64,
     pub not_inspected: BTreeSet<String>,
+    /// C2 format-owned exclusion facts of this payload.
+    pub exclusions: scene::ContentExclusions,
 }
 fn invalid(s: impl Into<String>) -> FormatError {
     FormatError::InvalidInput(s.into())
@@ -289,7 +294,9 @@ fn decode_meshopt(
     let out = super::meshopt::decode(compressed, count, stride, mode)?;
     Ok((out, stride))
 }
-fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<&[u8]> {
+/// The embedded GLB and whether the feature-table JSON has the `RTC_CENTER` key
+/// (JSON value or binary-body reference). The value and range are not consumed.
+fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], bool)> {
     if bytes.len() < 28 || &bytes[..4] != b"b3dm" {
         return Err(invalid("truncated or invalid b3dm header"));
     }
@@ -305,6 +312,7 @@ fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<&[u8]> {
         return Err(invalid("b3dm table framing invalid"));
     }
     let mut offset = 28usize;
+    let mut rtc_center = false;
     for (index, length) in lengths.iter().enumerate() {
         let table = range(bytes, offset, *length)?;
         if index == 0 || (index == 2 && *length > 0) {
@@ -312,6 +320,7 @@ fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<&[u8]> {
             let feature: records::FeatureTable<'_> = record(Some(doc.raw()))?;
             if index == 0 {
                 domain(feature.batch_length, u32::MAX as u64)?;
+                rtc_center = feature.rtc_center.is_some();
             }
         }
         offset = offset
@@ -333,7 +342,7 @@ fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<&[u8]> {
     if bytes.len() - end > 7 || bytes[end..].iter().any(|b| *b != 0) {
         return Err(invalid("invalid b3dm trailing padding"));
     }
-    Ok(glb)
+    Ok((glb, rtc_center))
 }
 // Extension declarations are semantic checks. Opaque extras and extension bodies
 // remain outside this traversal; JSON admission already checked their structure.
@@ -368,18 +377,60 @@ fn check_extensions(raw: &RawValue, used: &BTreeSet<String>, ceiling: usize) -> 
     }
     Ok(())
 }
+/// C1 integrity plus C2 scene/node admission and exclusion facts, without a
+/// scene consumer (format controls and producer self-checks).
+#[cfg(test)]
 pub(crate) fn inspect<E>(
     kind: PayloadKind,
     bytes: &[u8],
     limits: PayloadLimits,
     remaining_components: u64,
-    mut resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
+    resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
 ) -> std::result::Result<PayloadInspection, PayloadError<E>> {
+    inspect_scene(
+        kind,
+        bytes,
+        limits,
+        remaining_components,
+        resolve,
+        &mut scene::NoScene,
+    )
+    .map_err(|error| match error {
+        SceneError::Payload(error) => error,
+        SceneError::Consumer(never) => match never {},
+    })
+}
+/// A payload failure, or a scene-consumer failure with its own distinct type.
+#[derive(Debug)]
+pub(crate) enum SceneError<E, C> {
+    Payload(PayloadError<E>),
+    Consumer(C),
+}
+impl<E, C> From<FormatError> for SceneError<E, C> {
+    fn from(error: FormatError) -> Self {
+        Self::Payload(error.into())
+    }
+}
+/// C1 integrity, then C2 scene/node admission and exclusion facts, then the
+/// selected-scene walk into `consumer` over the live C1 views.
+pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
+    kind: PayloadKind,
+    bytes: &[u8],
+    limits: PayloadLimits,
+    remaining_components: u64,
+    mut resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
+    consumer: &mut C,
+) -> std::result::Result<PayloadInspection, SceneError<E, C::Error>> {
     if bytes.len() > limits.member_bytes {
         return Err(limit("payload exceeds member byte allowance").into());
     }
+    let mut exclusions = scene::ContentExclusions::default();
     let (source, bin) = match kind {
-        PayloadKind::B3dm => envelope(unwrap_b3dm(bytes, limits.json)?)?,
+        PayloadKind::B3dm => {
+            let (glb, rtc_center) = unwrap_b3dm(bytes, limits.json)?;
+            exclusions.rtc_center = rtc_center;
+            envelope(glb)?
+        }
         PayloadKind::Glb => envelope(bytes)?,
         PayloadKind::LocalGltf => (bytes, None),
     };
@@ -526,6 +577,7 @@ pub(crate) fn inspect<E>(
         )?;
     }
     let meshopt_required = required.contains("EXT_meshopt_compression");
+    let mut materialized = 0u64;
     let mut buffers = Vec::new();
     let mut resource_bytes = 0usize;
     for (i, b) in buffer_docs.into_iter().enumerate() {
@@ -549,7 +601,10 @@ pub(crate) fn inspect<E>(
             if uri.starts_with("data:") {
                 Cow::Owned(decode_buffer_uri(&uri, limits.decoded_bytes, remaining)?)
             } else {
-                Cow::Owned(resolve(&uri, remaining).map_err(PayloadError::Resolver)?)
+                Cow::Owned(
+                    resolve(&uri, remaining)
+                        .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?,
+                )
             }
         } else if let (0, Some(bin)) = (i, bin) {
             Cow::Borrowed(bin)
@@ -563,6 +618,9 @@ pub(crate) fn inspect<E>(
             return Err(
                 limit("actual buffer resources exceed remaining resource allowance").into(),
             );
+        }
+        if let Cow::Owned(owned) = &data {
+            materialized = materialized.saturating_add(owned.len() as u64);
         }
         resource_bytes = resource_bytes
             .checked_add(data.len())
@@ -600,6 +658,7 @@ pub(crate) fn inspect<E>(
             if decoded.len() != plan.length {
                 return Err(invalid("meshopt decoded size differs from bufferView").into());
             }
+            materialized = materialized.saturating_add(decoded.len() as u64);
             if plan.stride.is_some_and(|s| s != stride) {
                 return Err(invalid("meshopt and bufferView stride disagree").into());
             }
@@ -777,8 +836,22 @@ pub(crate) fn inspect<E>(
     let mut vertices = 0u64;
     let mut primitives = 0u64;
     let materials = array::<&RawValue>(root.materials, slots)?;
-    for mesh in array::<&RawValue>(root.meshes, slots)? {
+    let mut table = scene::MeshTable {
+        meshes: Vec::new(),
+        primitives: Vec::new(),
+        positions: Vec::new(),
+    };
+    let mut position_stamp = allocation(accessors.len(), usize::MAX)?;
+    for (mesh_index, mesh) in array::<&RawValue>(root.meshes, slots)?
+        .into_iter()
+        .enumerate()
+    {
         let mesh: records::Mesh<'_> = uninspected_record(Some(mesh))?;
+        let mut fact = scene::MeshFact {
+            primitives: (table.primitives.len(), table.primitives.len()),
+            positions: (table.positions.len(), table.positions.len()),
+            weights: mesh.weights.is_some(),
+        };
         for p in array::<records::Primitive<'_>>(mesh.primitives, slots)? {
             primitives = primitives
                 .checked_add(1)
@@ -1020,8 +1093,26 @@ pub(crate) fn inspect<E>(
             if let Some(material) = p.material {
                 at(&materials, Some(material))?;
             }
+            let indices = p.indices.map(|raw| at(&accessors, Some(raw))).transpose()?;
+            push(
+                &mut table.primitives,
+                scene::PrimitiveFact {
+                    position,
+                    indices,
+                    targets: p.targets.is_some(),
+                },
+                slots,
+            )?;
+            if position_stamp[position] != mesh_index {
+                position_stamp[position] = mesh_index;
+                push(&mut table.positions, position, slots)?;
+            }
         }
+        fact.primitives.1 = table.primitives.len();
+        fact.positions.1 = table.positions.len();
+        push(&mut table.meshes, fact, slots)?;
     }
+    drop(position_stamp);
     for (index, accessor) in accessors.iter().enumerate() {
         if accessor.component == 5125 && !index_accessors[index] {
             return Err(
@@ -1044,7 +1135,8 @@ pub(crate) fn inspect<E>(
                 .member_bytes
                 .checked_sub(resource_bytes)
                 .ok_or_else(|| limit("resource byte allowance exhausted"))?;
-            let data = resolve(&uri, remaining).map_err(PayloadError::Resolver)?;
+            let data = resolve(&uri, remaining)
+                .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?;
             if data.len() > remaining {
                 return Err(
                     limit("actual image resource exceeds remaining resource allowance").into(),
@@ -1099,16 +1191,33 @@ pub(crate) fn inspect<E>(
     } else {
         None
     };
-    not_inspected
-        .insert("scene transforms, skins, animations, morph targets and rendered bounds".into());
+    not_inspected.insert("skins, animations, morph targets and rendered extent".into());
+    // The operation removes this entry only when every reference is contained.
+    not_inspected.insert("scene transforms".into());
     not_inspected.insert("metadata and feature semantics".into());
+    // C2 admission follows C1 integrity: malformed scene/node records are
+    // InvalidInput in every payload, selected or not.
+    let graph = scene::admit(&root, &table, slots)?;
+    exclusions.gltf_extension = used
+        .iter()
+        .any(|name| !scene::GLTF_ALLOWLIST.contains(&name.as_str()));
+    graph.exclusions(&table, root.animations, slots, &mut exclusions)?;
+    let draws = scene::Draws {
+        accessors: &accessors,
+        views: &views,
+    };
+    graph
+        .walk(&table, draws, consumer, slots)?
+        .map_err(SceneError::Consumer)?;
     Ok(PayloadInspection {
         schema_uri,
         accessors_checked: accessors.len() as u64,
         primitives_checked: primitives,
         vertices,
         elements_checked: elements as u64,
+        materialized_bytes: materialized,
         not_inspected,
+        exclusions,
     })
 }
 fn reference_count(count: usize, raw: Raw<'_>) -> FormatResult<usize> {
@@ -1227,7 +1336,7 @@ mod tests {
             let mut bad = good.clone();
             bad[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
             assert!(matches!(
-                super::unwrap_b3dm(&bad, fixture_limits().json),
+                super::unwrap_b3dm(&bad, fixture_limits().json).map(|_| ()),
                 Err(FormatError::InvalidInput(_))
             ));
         }
@@ -1566,6 +1675,381 @@ mod tests {
             inspect("a.glb", &frame(&doc, &[0; 36]), 4_000_000, |_| panic!()),
             Err(FormatError::InvalidInput(_))
         ));
+    }
+    fn scene_doc() -> Value {
+        let mut doc = triangle();
+        doc["scene"] = json!(0);
+        doc["scenes"] = json!([{"nodes":[0]}]);
+        doc["nodes"] = json!([{"mesh":0}]);
+        doc
+    }
+    fn glb_facts(doc: &Value) -> FormatResult<PayloadInspection> {
+        inspect("a.glb", &frame(doc, &[0; 36]), 4_000_000, |_| panic!())
+    }
+    #[test]
+    fn c1_label_is_split_and_scene_transforms_is_separate() {
+        let facts = glb_facts(&scene_doc()).unwrap();
+        assert!(facts.not_inspected.contains("scene transforms"));
+        assert!(facts
+            .not_inspected
+            .contains("skins, animations, morph targets and rendered extent"));
+        assert!(!facts
+            .not_inspected
+            .iter()
+            .any(|s| s.contains("rendered bounds")));
+        assert_eq!(facts.exclusions, scene::ContentExclusions::default());
+    }
+    #[test]
+    fn malformed_scene_and_node_records_are_invalid_in_any_payload() {
+        let cases: Vec<(&str, Value)> = vec![
+            ("scene index", json!({"scene":1})),
+            ("scene root index", json!({"scenes":[{"nodes":[3]}]})),
+            ("child index", json!({"nodes":[{"mesh":0,"children":[7]}]})),
+            ("mesh index", json!({"nodes":[{"mesh":1}]})),
+            (
+                "two parents",
+                json!({"scenes":[{"nodes":[0]}],"nodes":[{"children":[2]},{"children":[2]},{"mesh":0}]}),
+            ),
+            (
+                "cycle",
+                json!({"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0},{"children":[2]},{"children":[1]}]}),
+            ),
+            (
+                "self cycle",
+                json!({"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0},{"children":[1]}]}),
+            ),
+            (
+                "root with parent",
+                json!({"scenes":[{"nodes":[0,1]}],"nodes":[{"children":[1]},{"mesh":0}]}),
+            ),
+            ("duplicate root", json!({"scenes":[{"nodes":[0,0]}]})),
+            (
+                "matrix and TRS",
+                json!({"nodes":[{"mesh":0,"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],"scale":[1,1,1]}]}),
+            ),
+            (
+                "matrix length",
+                json!({"nodes":[{"mesh":0,"matrix":[1,0,0,0]}]}),
+            ),
+            (
+                "matrix last row",
+                json!({"nodes":[{"mesh":0,"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,2]}]}),
+            ),
+            (
+                "matrix projective",
+                json!({"nodes":[{"mesh":0,"matrix":[1,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1]}]}),
+            ),
+            (
+                "zero quaternion",
+                json!({"nodes":[{"mesh":0,"rotation":[0,0,0,-0.0]}]}),
+            ),
+            (
+                "rotation range",
+                json!({"nodes":[{"mesh":0,"rotation":[0,0,1.5,0]}]}),
+            ),
+            (
+                "rotation type",
+                json!({"nodes":[{"mesh":0,"rotation":"identity"}]}),
+            ),
+            (
+                "translation length",
+                json!({"nodes":[{"mesh":0,"translation":[1,2]}]}),
+            ),
+            (
+                "scale string",
+                json!({"nodes":[{"mesh":0,"scale":[1,"2",3]}]}),
+            ),
+            ("node object", json!({"nodes":[3]})),
+            (
+                "unselected node",
+                json!({"nodes":[{"mesh":0},{"translation":[0,0]}]}),
+            ),
+        ];
+        for (name, patch) in cases {
+            let mut doc = scene_doc();
+            for (key, value) in patch.as_object().unwrap() {
+                doc[key] = value.clone();
+            }
+            assert!(
+                matches!(glb_facts(&doc), Err(FormatError::InvalidInput(_))),
+                "{name}"
+            );
+        }
+        // A literal that overflows binary64 is InvalidInput, not a rounded infinity.
+        let text = serde_json::to_string(&scene_doc())
+            .unwrap()
+            .replace(r#"{"mesh":0}"#, r#"{"mesh":0,"translation":[1e400,0,0]}"#);
+        let mut json = text.into_bytes();
+        while !json.len().is_multiple_of(4) {
+            json.push(b' ');
+        }
+        let mut glb = b"glTF".to_vec();
+        glb.extend(2u32.to_le_bytes());
+        glb.extend((28 + json.len() as u32 + 36).to_le_bytes());
+        glb.extend((json.len() as u32).to_le_bytes());
+        glb.extend(b"JSON");
+        glb.extend(json);
+        glb.extend(36u32.to_le_bytes());
+        glb.extend(b"BIN\0");
+        glb.extend([0; 36]);
+        assert!(matches!(
+            inspect("a.glb", &glb, 4_000_000, |_| panic!()),
+            Err(FormatError::InvalidInput(_))
+        ));
+    }
+    #[test]
+    fn scene_selection_and_selected_exclusions() {
+        let facts = |patch: Value| {
+            let mut doc = scene_doc();
+            for (key, value) in patch.as_object().unwrap() {
+                if value.is_null() {
+                    doc.as_object_mut().unwrap().remove(key);
+                } else {
+                    doc[key] = value.clone();
+                }
+            }
+            glb_facts(&doc).unwrap().exclusions
+        };
+        let none = scene::ContentExclusions::default();
+        assert_eq!(facts(json!({"scene":null})), none, "sole scene");
+        for patch in [
+            json!({"scene":null,"scenes":null}),
+            json!({"scene":null,"scenes":[]}),
+            json!({"scene":null,"scenes":[{"nodes":[0]},{"nodes":[0]}]}),
+        ] {
+            assert!(facts(patch).scene_selection);
+        }
+        assert!(!facts(json!({"scenes":[{"nodes":[0]},{}]})).scene_selection);
+        assert!(facts(json!({"nodes":[{"mesh":0,"skin":0}]})).skin);
+        assert!(facts(json!({"nodes":[{"mesh":0,"weights":[0]}]})).morph_targets);
+        assert!(
+            facts(json!({"meshes":[{"weights":[],"primitives":[{"attributes":{"POSITION":0}}]}]}))
+                .morph_targets
+        );
+        assert!(
+            facts(json!({"meshes":[{"primitives":[{"attributes":{"POSITION":0},"targets":[]}]}]}))
+                .morph_targets
+        );
+        // Unselected nodes and an empty animation list are not exclusions.
+        let unselected =
+            facts(json!({"nodes":[{"mesh":0},{"skin":0,"weights":[1]}],"animations":[]}));
+        assert_eq!(unselected, none);
+        assert!(facts(json!({"animations":[{}]})).animation);
+        let cesium = facts(
+            json!({"extensionsUsed":["CESIUM_RTC"],"extensions":{"CESIUM_RTC":{"center":[1,2,3]}}}),
+        );
+        assert!(cesium.gltf_extension);
+        assert!(facts(json!({"extensionsUsed":["EXT_mesh_gpu_instancing"]})).gltf_extension);
+        assert!(
+            !facts(json!({"extensionsUsed":["KHR_materials_unlit","EXT_mesh_features"]}))
+                .gltf_extension
+        );
+    }
+    fn b3dm_with_table(glb: &[u8], table: &[u8], body: usize) -> Vec<u8> {
+        let mut table = table.to_vec();
+        while !(28 + table.len()).is_multiple_of(8) {
+            table.push(b' ');
+        }
+        let mut result = b"b3dm".to_vec();
+        result.extend(1u32.to_le_bytes());
+        result.extend(0u32.to_le_bytes());
+        result.extend((table.len() as u32).to_le_bytes());
+        result.extend((body as u32).to_le_bytes());
+        result.extend([0u8; 8]);
+        result.extend(table);
+        result.extend(vec![0u8; body]);
+        result.extend(glb);
+        while !result.len().is_multiple_of(8) {
+            result.push(0);
+        }
+        let length = result.len() as u32;
+        result[8..12].copy_from_slice(&length.to_le_bytes());
+        result
+    }
+    #[test]
+    fn b3dm_rtc_center_key_is_detected_in_json_and_binary_form() {
+        let glb = frame(&scene_doc(), &[0; 36]);
+        for (table, body, rtc) in [
+            (&br#"{"BATCH_LENGTH":0}"#[..], 0, false),
+            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":[1,2,3]}"#[..], 0, true),
+            (
+                &br#"{"BATCH_LENGTH":0,"RTC_CENTER":{"byteOffset":0}}"#[..],
+                16,
+                true,
+            ),
+            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":null}"#[..], 0, true),
+        ] {
+            let bytes = b3dm_with_table(&glb, table, body);
+            let facts = inspect("a.b3dm", &bytes, 4_000_000, |_| panic!()).unwrap();
+            assert_eq!(
+                facts.exclusions.rtc_center,
+                rtc,
+                "{}",
+                String::from_utf8_lossy(table)
+            );
+        }
+    }
+    #[derive(Default)]
+    struct Recorder {
+        events: Vec<String>,
+        instances_only: bool,
+    }
+    impl scene::SceneConsumer for Recorder {
+        type Error = ();
+        fn instances_only(&self) -> bool {
+            self.instances_only
+        }
+        fn enter(&mut self, t: &scene::NodeTransform, depth: u64) -> Result<(), ()> {
+            let kind = match t {
+                scene::NodeTransform::Skip => "skip",
+                scene::NodeTransform::Matrix(_) => "matrix",
+                scene::NodeTransform::Trs { .. } => "trs",
+            };
+            self.events.push(format!("enter {kind} {depth}"));
+            Ok(())
+        }
+        fn leave(&mut self, _: &scene::NodeTransform) {
+            self.events.push("leave".into());
+        }
+        fn instance(&mut self, i: &scene::Instance<'_, '_>) -> Result<(), ()> {
+            for &a in i.positions() {
+                let mut marks = Vec::new();
+                i.mark(a, |v| marks.push(v));
+                let words: Vec<_> = marks.iter().map(|v| i.vertex(a, *v)).collect();
+                self.events.push(format!(
+                    "instance node={} mesh={} accessor={a} format={:?} marks={marks:?} words={words:?} T={} Idx={}",
+                    i.node(),
+                    i.mesh(),
+                    i.format(a),
+                    i.vertex_total(),
+                    i.index_total()
+                ));
+            }
+            Ok(())
+        }
+    }
+    fn walk_events(doc: &Value, bin: &[u8], instances_only: bool) -> Vec<String> {
+        let mut recorder = Recorder {
+            instances_only,
+            ..Default::default()
+        };
+        super::inspect_scene(
+            PayloadKind::Glb,
+            &frame(doc, bin),
+            fixture_limits(),
+            4_000_000,
+            |_, _| -> Result<Vec<u8>, ()> { panic!() },
+            &mut recorder,
+        )
+        .map_err(|_| ())
+        .unwrap();
+        recorder.events
+    }
+    #[test]
+    fn selected_walk_is_root_first_in_order_and_prunes_only_for_streaming() {
+        let mut doc = scene_doc();
+        doc["scenes"] = json!([{"nodes":[3]},{"nodes":[1,0]}]);
+        doc["scene"] = json!(1);
+        doc["nodes"] = json!([
+            {"mesh":0,"translation":[1,0,0]},
+            {"children":[2],"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+            {"rotation":[0,0,0,1]},
+            {"mesh":0}
+        ]);
+        let all = walk_events(&doc, &[0; 36], false);
+        assert_eq!(
+            all[..4],
+            ["enter matrix 1", "enter trs 2", "leave", "leave"].map(String::from)
+        );
+        assert_eq!(all[4], "enter trs 1");
+        assert!(all[5].starts_with("instance node=0 mesh=0 accessor=0 format=F32 marks=[0, 1, 2]"));
+        assert_eq!(all[6], "leave");
+        assert_eq!(all.len(), 7);
+        let pruned = walk_events(&doc, &[0; 36], true);
+        assert_eq!(pruned[0], "enter trs 1");
+        assert_eq!(pruned.len(), 3);
+    }
+    #[test]
+    fn drawn_indices_skip_restart_dedupe_per_accessor_and_ignore_polygon_loops() {
+        // Two primitives share POSITION 0 (counted once in T); indices name 0 and 2
+        // only, and the line strip has a restart value. Vertex 1 is undrawn.
+        let mut doc = scene_doc();
+        doc["extensionsUsed"] = json!(["KHR_mesh_primitive_restart", "EXT_mesh_polygon"]);
+        doc["extensionsRequired"] = json!(["KHR_mesh_primitive_restart"]);
+        doc["buffers"][0]["byteLength"] = json!(48);
+        doc["bufferViews"] = json!([
+            {"buffer":0,"byteLength":36},
+            {"buffer":0,"byteOffset":36,"byteLength":5},
+            {"buffer":0,"byteOffset":44,"byteLength":4}
+        ]);
+        doc["accessors"] = json!([
+            {"bufferView":0,"componentType":5126,"type":"VEC3","count":3,"min":[1,2,3],"max":[7,8,9]},
+            {"bufferView":1,"componentType":5121,"type":"SCALAR","count":5},
+            {"bufferView":2,"componentType":5121,"type":"SCALAR","count":3},
+            {"componentType":5121,"type":"SCALAR","count":1},
+            {"bufferView":2,"componentType":5121,"type":"SCALAR","count":1,"byteOffset":3}
+        ]);
+        doc["meshes"] = json!([{"primitives":[
+            {"attributes":{"POSITION":0},"indices":1,"mode":3},
+            {"attributes":{"POSITION":0},"indices":2,"mode":4,"extensions":{"EXT_mesh_polygon":{"count":1,"indicesOffsets":3,"loopIndices":4,"loopIndicesOffsets":3}}}
+        ]}]);
+        let mut bin = Vec::new();
+        for v in [1f32, 2., 3., 4., 5., 6., 7., 8., 9.] {
+            bin.extend(v.to_le_bytes());
+        }
+        bin.extend([0, 2, 255, 2, 0, 0, 0, 0]);
+        bin.extend([2, 0, 2, 1]);
+        // Loop index 1 names vertex 1, which no core index draws: loops are not draws.
+        let events = walk_events(&doc, &bin, true);
+        let instance = events.iter().find(|e| e.starts_with("instance")).unwrap();
+        assert!(
+            instance.contains("marks=[0, 2, 2, 0, 2, 0, 2]"),
+            "{instance}"
+        );
+        assert!(instance.contains("T=3 Idx=8"), "{instance}");
+        assert!(instance.contains("F32([1.0, 2.0, 3.0])"), "{instance}");
+    }
+    #[test]
+    fn quantized_words_stay_raw_and_viewless_positions_are_zero() {
+        let mut doc = scene_doc();
+        doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+        doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+        doc["buffers"][0]["byteLength"] = json!(24);
+        doc["bufferViews"][0] = json!({"buffer":0,"byteLength":24,"byteStride":8});
+        doc["accessors"][0] = json!({"bufferView":0,"componentType":5122,"normalized":true,"type":"VEC3","count":3,"min":[-32768,0,1],"max":[32767,0,1]});
+        let mut bin = Vec::new();
+        for v in [[-32768i16, 0, 1], [32767, 0, 1], [0, 0, 1]] {
+            for c in v {
+                bin.extend(c.to_le_bytes());
+            }
+            bin.extend([0, 0]);
+        }
+        let events = walk_events(&doc, &bin, true);
+        assert!(
+            events[1].contains("format=I16 { normalized: true }")
+                && events[1].contains("Int([-32768, 0, 1]), Int([32767, 0, 1])"),
+            "{events:?}"
+        );
+        let mut doc = scene_doc();
+        doc["accessors"][0] =
+            json!({"componentType":5126,"type":"VEC3","count":3,"min":[5,5,5],"max":[6,6,6]});
+        let events = walk_events(&doc, &[0; 36], true);
+        assert!(events[1].contains("F32([0.0, 0.0, 0.0])"), "{events:?}");
+    }
+    #[test]
+    fn materialized_bytes_count_owned_buffers_only() {
+        let doc = scene_doc();
+        assert_eq!(glb_facts(&doc).unwrap().materialized_bytes, 0);
+        let mut doc = scene_doc();
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let facts = inspect(
+            "a.gltf",
+            &serde_json::to_vec(&doc).unwrap(),
+            4_000_000,
+            |_| Ok(vec![0; 40]),
+        )
+        .unwrap();
+        assert_eq!(facts.materialized_bytes, 40);
     }
     #[test]
     fn independent_meshopt_golden_stream_decodes() {

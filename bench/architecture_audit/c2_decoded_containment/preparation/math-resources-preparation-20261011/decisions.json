@@ -1,0 +1,54 @@
+{
+  "status": "AUTHOR_PROPOSALS_NOT_ACCEPTED_IMPLEMENTATION",
+  "retain": [
+    "Exact C1 raw numeric/layout/quantization and narrow NONE meshopt decoder meaning",
+    "C1 per-URI integrity report meaning only",
+    "Accepted matched JSON source-ledger scope, after target/library size revalidation"
+  ],
+  "replace": [
+    "Relative1e-6 point/volume slack as C2 authority",
+    "Rounded f64 frame products treated as exact points",
+    "C2 scene omission and URI-only frame verdict caching",
+    "Dynamic Vec numerical arrays with fixed consumed numeric facts"
+  ],
+  "removeFromC2": [
+    "scale_bound sphere inflation for point predicates",
+    "Declared child-volume containment as a surrogate for descendant content checks",
+    "Arbitrary inverse/region conversion fallback",
+    "Uncharged positions or per-instance decoded copies"
+  ],
+  "initialDomain": [
+    "Cartesian closed box/sphere static drawn POSITION instances",
+    "General nonsingular represented box basis proposal; exact diagonal/signed-permutation degenerate boxes",
+    "Forward glTF matrix/TRS and core mesh instances; exact U then b3dmRTC then tile suffix frames",
+    "Singular tile, rotated-degenerate box, geographic region and unresolved numerical classification Unsupported"
+  ],
+  "encodingPolicy": "Supplied rounded quaternion/matrix components are interpreted as represented values under explicit approximate admission windows; no normalization and no spatial slack. JSONRTC f32 conversion is explicit source datatype proposal.",
+  "futureDefaults": {
+    "nodeInstanceVisits": 262144,
+    "positionInstanceVisits": 16000000,
+    "containmentTests": 64000000,
+    "nodeFrameDepth": 128,
+    "workingBytes": 536870912
+  },
+  "defaultScope": "Finite engineering refusal proposal only, not empirical or public default approval. Existing C1 profile remains separate until combined gate selects public checks.",
+  "concretePrecodeChoicesStillOpen": [
+    "Box represented-set interpretation and degenerate domain; strict normative versus approximate local-TRS encoding validity",
+    "Public C2 selection/report migration and producer-domain inventory, plus declared-child-BV check disposition",
+    "Actual A/T/R/F/error ownership representation/event signature and joint requested storage enforcement plan"
+  ],
+  "afterImplementationOnly": [
+    "Actual Rust type/capacity/library ledger matches",
+    "Actual shared decoder event integration and independently sensitive mutation cases",
+    "Real requested-working/allocation/cancellation/cause tests",
+    "Fresh separate nonauthor final-source/CI/consumer acceptance"
+  ],
+  "scopeExclusions": [
+    "Original ideal JSON-decimal physical coordinates",
+    "Regions/ECEF-to-geodetic inverse/world theorem",
+    "Skins/morphs/animations/unknown geometry extensions",
+    "Point-size/line-width/shader/material-rendered footprint",
+    "Universal allocator/RSS/native/full-renderer theorem",
+    "R2 or C2 production/merge acceptance"
+  ]
+}

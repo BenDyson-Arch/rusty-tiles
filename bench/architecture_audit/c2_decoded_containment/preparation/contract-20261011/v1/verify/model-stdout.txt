@@ -1,0 +1,1 @@
+{"status": "PASS_MODEL_ONLY", "cases": 16, "sensitiveControls": 5, "actualNice": 10, "actualAffinity": [0, 1]}

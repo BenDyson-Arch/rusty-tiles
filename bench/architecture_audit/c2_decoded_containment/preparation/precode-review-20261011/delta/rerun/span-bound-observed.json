@@ -1,0 +1,164 @@
+{
+ "scope": "standalone probe; canonical v2 formulas; exact Fraction vs static exponent-pair bound",
+ "python": "3.14.7",
+ "rows": [
+  {
+   "scenario": "point/vector: identity node, translation tiles",
+   "nodeDepth": 0,
+   "tileDepth": 1,
+   "exactMaxSpan": 61,
+   "boundMaxSpan": 281
+  },
+  {
+   "scenario": "point/vector: identity node, translation tiles",
+   "nodeDepth": 0,
+   "tileDepth": 8,
+   "exactMaxSpan": 61,
+   "boundMaxSpan": 295
+  },
+  {
+   "scenario": "point/vector: identity node, translation tiles",
+   "nodeDepth": 0,
+   "tileDepth": 16,
+   "exactMaxSpan": 63,
+   "boundMaxSpan": 311
+  },
+  {
+   "scenario": "point/vector: identity node, translation tiles",
+   "nodeDepth": 0,
+   "tileDepth": 24,
+   "exactMaxSpan": 63,
+   "boundMaxSpan": 327
+  },
+  {
+   "scenario": "vector --quantize: T,S node, u16/65535, translation tiles",
+   "nodeDepth": 1,
+   "tileDepth": 1,
+   "exactMaxSpan": 77,
+   "boundMaxSpan": 83
+  },
+  {
+   "scenario": "vector --quantize: T,S node, u16/65535, translation tiles",
+   "nodeDepth": 1,
+   "tileDepth": 16,
+   "exactMaxSpan": 78,
+   "boundMaxSpan": 112
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 1,
+   "tileDepth": 1,
+   "exactMaxSpan": 194,
+   "boundMaxSpan": 451
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 2,
+   "tileDepth": 1,
+   "exactMaxSpan": 351,
+   "boundMaxSpan": 617
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 4,
+   "tileDepth": 1,
+   "exactMaxSpan": 671,
+   "boundMaxSpan": 945
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 6,
+   "tileDepth": 1,
+   "exactMaxSpan": 1022,
+   "boundMaxSpan": 1310
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 8,
+   "tileDepth": 1,
+   "exactMaxSpan": 1349,
+   "boundMaxSpan": 1650
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 12,
+   "tileDepth": 1,
+   "exactMaxSpan": 1984,
+   "boundMaxSpan": 2300
+  },
+  {
+   "scenario": "rotated TRS nodes (generic)",
+   "nodeDepth": 16,
+   "tileDepth": 1,
+   "exactMaxSpan": 2625,
+   "boundMaxSpan": 2968
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 1,
+   "tileDepth": 1,
+   "exactMaxSpan": 295,
+   "boundMaxSpan": 555
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 2,
+   "tileDepth": 1,
+   "exactMaxSpan": 508,
+   "boundMaxSpan": 772
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 4,
+   "tileDepth": 1,
+   "exactMaxSpan": 1088,
+   "boundMaxSpan": 1362
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 6,
+   "tileDepth": 1,
+   "exactMaxSpan": 1462,
+   "boundMaxSpan": 1746
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 8,
+   "tileDepth": 1,
+   "exactMaxSpan": 1975,
+   "boundMaxSpan": 2268
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 12,
+   "tileDepth": 1,
+   "exactMaxSpan": 2937,
+   "boundMaxSpan": 3247
+  },
+  {
+   "scenario": "rotated TRS nodes (near-axis)",
+   "nodeDepth": 16,
+   "tileDepth": 1,
+   "exactMaxSpan": 4020,
+   "boundMaxSpan": 4350
+  }
+ ],
+ "maxRotatedDepthAdmittedByBoundCap": {
+  "1024": {
+   "rotated TRS nodes (generic)": 4,
+   "rotated TRS nodes (near-axis)": 2
+  },
+  "2048": {
+   "rotated TRS nodes (generic)": 8,
+   "rotated TRS nodes (near-axis)": 6
+  },
+  "4096": {
+   "rotated TRS nodes (generic)": 16,
+   "rotated TRS nodes (near-axis)": 12
+  },
+  "8192": {
+   "rotated TRS nodes (generic)": 16,
+   "rotated TRS nodes (near-axis)": 16
+  }
+ }
+}

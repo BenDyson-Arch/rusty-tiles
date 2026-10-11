@@ -69,8 +69,26 @@ ordinary buffer views is not proof of feature identity, metadata meaning,
 texture correctness or material rendering.
 
 The report separates payload checks from archive CRC/index/hash/reference and
-hierarchy checks. `hierarchyBounds` means containment of declared tile volumes;
-it is not decoded content containment. Neither report success nor a matching
+hierarchy checks. `hierarchyBounds` means containment of declared tile volumes.
+`decodedContentContainment` is the separate [C2 check](architecture/c2-decoded-containment-contract.md):
+every drawn vertex of every selected static glTF scene instance lies inside its own tile's
+volume, its content volume, any referencing external-content volume and every ancestor volume.
+The vertex is placed after node transforms, the glTF y-up to z-up step and tile transforms.
+The predicate is exact, with zero tolerance. It covers explicit `.3tz` archives with
+axis-aligned (signed-permutation) boxes and spheres. It is reported only when the whole archive
+is in domain. Otherwise `notInspected` lists `decodedContentBounds.<reason>` entries, for
+example `implicitTiling`, `regionVolume`, `rtcCenter`, `numericSpan` or `workLimit`. A proven
+escape fails as InvalidInput, and the message names the member, tile depth, volume, node,
+mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
+(`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
+`containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^28 units, 2 GiB,
+2 GiB and 64) yield `notInspected`, never ResourceLimit. At the measured release-build unit costs the default work cap bounds
+unit-charged C2 work to about 3 s; debug builds are slower, and the separately capped re-reads
+and re-decoding (2 GiB each) and per-primitive vertex marking are not included in that
+figure. Archives over the cap are reported as `workLimit`. The
+frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
+`regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
+`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own
@@ -108,15 +126,17 @@ are engineering bounds, not a total-process RSS promise. No request option
 bypasses them. The serialized `limits` describe the actual profile constants.
 
 Rust failures are `ValidationFailure::{InvalidInput, Unsupported, ResourceLimit,
-Io}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
-`resource_limit`, and `io`; exit codes are 3, 2, 3, and 1. Python maps them to
-`DataError`, `UnsupportedError`, `ResourceLimitError`, and `TilesIOError`.
+Io, InvalidState}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
+`resource_limit`, `io` and `invalid_state`; exit codes are 3, 2, 3, 1 and 1. Python maps
+them to `DataError`, `UnsupportedError`, `ResourceLimitError`, `TilesIOError` and
+`TilesError`. `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+capacity fault); it is never a verdict about the archive.
 No job/publication failure wrapper is used for this read-only operation.
 
 Acceptance requires independent valid payload fixtures and sensitive corruption
 controls, resource admission and Rust/CLI/installed-wheel parity. This finite
-slice does not certify every glTF extension, decoded world-space bounds,
-metadata semantics, source fidelity, or the #125/#113 release gates.
+slice does not certify every glTF extension, decoded world-space bounds outside the
+C2 domain (when `decodedContentContainment` is absent), metadata semantics, source fidelity, or the #125/#113 release gates.
 
 Primary byte-layout authority is the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html), identified there as source commit `8e798b02d254cea97659a333cfcb20875b62bdd4`. Its matrix-alignment rule permits omitted final column padding. Unpublished GitHub main revisions can differ; they are not silently substituted for this contract.
 

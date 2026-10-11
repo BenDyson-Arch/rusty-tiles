@@ -1,0 +1,220 @@
+{
+ "producerTranslationChainDepth20": {
+  "meshOnlyNodeSkipped": {
+   "sInst": 0,
+   "maxLevelSpan": 297,
+   "level0": 277,
+   "level20": 297
+  },
+  "identityTrsNode": {
+   "sInst": 1,
+   "maxLevelSpan": 297,
+   "level0": 277,
+   "level20": 297
+  },
+  "identityMatrixNode": {
+   "sInst": 1,
+   "maxLevelSpan": 297,
+   "level0": 277,
+   "level20": 297
+  }
+ },
+ "vectorQuantizeDepth16": {
+  "sInst": 53,
+  "maxLevelSpan": 90
+ },
+ "rotatedDepth": [
+  {
+   "style": "generic",
+   "depth": 1,
+   "boxMax": 447,
+   "sphereMax": 896
+  },
+  {
+   "style": "generic",
+   "depth": 2,
+   "boxMax": 631,
+   "sphereMax": 1264
+  },
+  {
+   "style": "generic",
+   "depth": 4,
+   "boxMax": 945,
+   "sphereMax": 1894
+  },
+  {
+   "style": "generic",
+   "depth": 6,
+   "boxMax": 1283,
+   "sphereMax": 2568
+  },
+  {
+   "style": "generic",
+   "depth": 8,
+   "boxMax": 1626,
+   "sphereMax": 3254
+  },
+  {
+   "style": "generic",
+   "depth": 10,
+   "boxMax": 1980,
+   "sphereMax": 3962
+  },
+  {
+   "style": "generic",
+   "depth": 12,
+   "boxMax": 2297,
+   "sphereMax": 4598
+  },
+  {
+   "style": "generic",
+   "depth": 14,
+   "boxMax": 2645,
+   "sphereMax": 5294
+  },
+  {
+   "style": "generic",
+   "depth": 16,
+   "boxMax": 3008,
+   "sphereMax": 6018
+  },
+  {
+   "style": "near-axis",
+   "depth": 1,
+   "boxMax": 551,
+   "sphereMax": 1104
+  },
+  {
+   "style": "near-axis",
+   "depth": 2,
+   "boxMax": 716,
+   "sphereMax": 1440
+  },
+  {
+   "style": "near-axis",
+   "depth": 4,
+   "boxMax": 1191,
+   "sphereMax": 2386
+  },
+  {
+   "style": "near-axis",
+   "depth": 6,
+   "boxMax": 1845,
+   "sphereMax": 3692
+  },
+  {
+   "style": "near-axis",
+   "depth": 8,
+   "boxMax": 2343,
+   "sphereMax": 4690
+  },
+  {
+   "style": "near-axis",
+   "depth": 10,
+   "boxMax": 2772,
+   "sphereMax": 5562
+  },
+  {
+   "style": "near-axis",
+   "depth": 12,
+   "boxMax": 3257,
+   "sphereMax": 6526
+  },
+  {
+   "style": "near-axis",
+   "depth": 14,
+   "boxMax": 3765,
+   "sphereMax": 7534
+  },
+  {
+   "style": "near-axis",
+   "depth": 16,
+   "boxMax": 4485,
+   "sphereMax": 8978
+  },
+  {
+   "style": "tiny",
+   "depth": 1,
+   "boxMax": 2434,
+   "sphereMax": 4874
+  },
+  {
+   "style": "tiny",
+   "depth": 2,
+   "boxMax": 4592,
+   "sphereMax": 9186
+  },
+  {
+   "style": "tiny",
+   "depth": 4,
+   "boxMax": 8888,
+   "sphereMax": 17780
+  },
+  {
+   "style": "tiny",
+   "depth": 6,
+   "boxMax": 13211,
+   "sphereMax": 26430
+  },
+  {
+   "style": "tiny",
+   "depth": 8,
+   "boxMax": 17502,
+   "sphereMax": 35016
+  },
+  {
+   "style": "tiny",
+   "depth": 10,
+   "boxMax": 21801,
+   "sphereMax": 43606
+  },
+  {
+   "style": "tiny",
+   "depth": 12,
+   "boxMax": 26103,
+   "sphereMax": 52218
+  },
+  {
+   "style": "tiny",
+   "depth": 14,
+   "boxMax": 30439,
+   "sphereMax": 60880
+  },
+  {
+   "style": "tiny",
+   "depth": 16,
+   "boxMax": 34735,
+   "sphereMax": 69492
+  }
+ ],
+ "admittedDepthAtCap4096": {
+  "generic": {
+   "box": 16,
+   "sphere": 10
+  },
+  "near-axis": {
+   "box": 14,
+   "sphere": 6
+  },
+  "tiny": {
+   "box": 1,
+   "sphere": 0
+  }
+ },
+ "soundness": {
+  "trials": 300,
+  "quantityAndPrefixChecks": 304455,
+  "violations": 0,
+  "violationExamples": []
+ },
+ "workedExample": {
+  "sInst": 5,
+  "levelSpans": [
+   23,
+   29
+  ],
+  "maxSpan": 29,
+  "vertexUnitsPerVertex": 2,
+  "vertexUnitsForAccessorCount4": 8
+ }
+}

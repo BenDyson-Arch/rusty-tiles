@@ -1,0 +1,351 @@
+{
+ "binary_sha256": "41a07d60606a0fe2622dc52a8e2ca6ca61fcbdbc8edfabcf8147bf1e35296f08",
+ "agree": 27,
+ "disagree": [],
+ "noArtifact": [
+  "mesh-local",
+  "convert-implicit-from-pointcloud-explicit"
+ ],
+ "rows": [
+  {
+   "name": "vector-points-lines-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-points-lines-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "vector-points-lines-quantize-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-points-lines-quantize-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "vector-points-lines-meshopt-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-points-lines-meshopt-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "vector-polygons-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-polygons-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "vector-polygons-quantize-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-polygons-quantize-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "vector-polygons-meshopt-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "vector-polygons-meshopt-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "pointcloud-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "pointcloud-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "mesh-local",
+   "status": "no-artifact",
+   "oracle": null
+  },
+  {
+   "name": "mesh-local-split",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "mesh-local-split-wgs84",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-plain-local",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-plain-wgs84",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-near-window-local",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-near-window-wgs84",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-deep20-local",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "w1-deep20-wgs84",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "legacy-mesh-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "legacy-mesh-small-implicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  },
+  {
+   "name": "legacy-mesh-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "legacy-mesh-small-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "production": {
+    "outcome": "Contained"
+   }
+  },
+  {
+   "name": "convert-implicit-from-pointcloud-explicit",
+   "status": "no-artifact",
+   "oracle": null
+  },
+  {
+   "name": "convert-implicit-from-vector-points-lines-explicit",
+   "status": "agree",
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   },
+   "production": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "implicitTiling"
+    ]
+   }
+  }
+ ]
+}

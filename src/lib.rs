@@ -102,3 +102,7 @@ mod payload_context_acceptance;
 #[cfg(test)]
 #[path = "../bench/architecture_audit/c1_payload_integrity/production_controls/stride_controls/2026-10-10/compiled_stride_controls_clippy.rs"]
 mod payload_stride_acceptance;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/c2_decoded_containment/acceptance/oracle_parity.rs"]
+mod c2_oracle_parity;

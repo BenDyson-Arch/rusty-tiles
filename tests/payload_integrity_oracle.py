@@ -25,13 +25,16 @@ def main():
     args.work.mkdir(parents=True, exist_ok=False)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     correction = controls / 'polygon_correction/2026-10-10'
+    # C2 amendment (2026-10-11): the same fixtures with C2 report expectations derived
+    # from the independent C2 oracle; the 2026-10-10 bundles stay as historical evidence.
+    amendment = controls / 'c2_amendment/2026-10-11'
     bundles = [
-        ('corrected205', 'corrected-205-fixtures.tar.gz',
-         'c05406cdb264e386d1ad209abfded1ecc0b2b97da8c8b32ad8ff911263aa46a4',
-         '40fae6bf9a0dec2fbdf6e900ac257e61a8732f0987fbdb9e1d84bd6e52510620', 205),
-        ('polygon5', 'polygon-sensitive-5-fixtures.tar.gz',
-         'add990418822a1118c9c3be2faff04fa0722ae926c2d97769353f90c928a6f2c',
-         'a26782e50b63b5449652bcd3ccb1370723d1b2f3493e7678705b9f3fc7dc9a84', 5),
+        ('corrected205', 'corrected-205-c2-fixtures.tar.gz',
+         'ebf8437f1fc0711688fdef74f7b076939dd55f177bc663159a3527049e5b8481',
+         'fd6004a4cd4074553d5ff08542fdd9b355d2db86c6035c695dc4513be5e3408c', 205),
+        ('polygon5', 'polygon-sensitive-5-c2-fixtures.tar.gz',
+         '94ae2cefc6214ac4ecf1ef972187ecbcd2275f2d44526152be13c46719e50189',
+         '61237a250af51352098dbabeb282859aa38a0528aa9048c19f8aee82aaccca00', 5),
     ]
     phases = {}
     status = 1
@@ -49,7 +52,7 @@ def main():
         spec.loader.exec_module(oracle)
         for label, name, bundle_hash, manifest_hash, count in bundles:
             status = 1
-            bundle = correction / name
+            bundle = amendment / name
             assert sha(bundle) == bundle_hash
             fixtures = args.work / label / 'fixtures'
             with tarfile.open(bundle) as archive:

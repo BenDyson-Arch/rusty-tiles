@@ -29,6 +29,11 @@ fn selected_limits() -> ValidationLimits {
         source_archive_bytes: 1048576,
         central_directory_bytes: 65536,
         document_items: 8192,
+        containment_span_bits: 4096,
+        containment_work_units: 268435456,
+        containment_bytes_read: 2147483648,
+        containment_decoded_bytes: 2147483648,
+        containment_node_depth: 64,
     }
 }
 
@@ -51,6 +56,11 @@ fn declared_limits_json(limits: &ValidationLimits) -> Value {
         "sourceArchiveBytes": limits.source_archive_bytes,
         "centralDirectoryBytes": limits.central_directory_bytes,
         "documentItems": limits.document_items,
+        "containmentSpanBits": limits.containment_span_bits,
+        "containmentWorkUnits": limits.containment_work_units,
+        "containmentBytesRead": limits.containment_bytes_read,
+        "containmentDecodedBytes": limits.containment_decoded_bytes,
+        "containmentNodeDepth": limits.containment_node_depth,
     })
 }
 
