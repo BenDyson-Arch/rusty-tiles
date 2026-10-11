@@ -538,7 +538,8 @@ def build_cases(inputs):
         cases.append(case)
 
     # ---- new slice-1 controls
-    controls = build_new_controls(W, contained, ni, single) + v33_cases(W, contained, ni, single)
+    controls = (build_new_controls(W, contained, ni, single) + v33_cases(W, contained, ni, single)
+                + role_order_case(contained))
     return cases + controls
 
 
@@ -857,6 +858,18 @@ def hull_cases(contained, ni):
     return out
 
 
+# Hand derivation of the repeated-index archive's work units (contract Work bound):
+# per payload, FLOAT POSITION word pair (-149, 127), one skipped {"mesh":0} node so G = I
+# and W = (0, 0). Level 0 (child tile) and level 1 (root, no transform) carry the same
+# box c = (0.5, 0, 0.5), h = (0.5, 0, 0.5): D_0 = sum[(-149,127), (-1,-1)] = (-149, 128),
+# span 278, so s_0 = s_1 = 278 and ceil(278/64)^2 = 25 per level.
+#   T = 3 distinct vertices (deduplicated, not 3,999,990 occurrences)
+#   vertex units = 3 * (25 + 25) = 150; Nodes = 1 (skipped node)
+#   Idx = 3,999,990 indices; E = 9 + 3,999,990 = 3,999,999
+#   per payload 8,000,140; three payloads, one reference each:
+REPEATED_INDEX_UNITS = 3 * (3 * 2 * (-(-278 // 64)) ** 2 + 1 + 3999990 + (9 + 3999990))
+
+
 def repeated_index_cases(contained, ni):
     out = []
     positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
@@ -949,6 +962,46 @@ def v33_cases(W, contained, ni, single):
         case.mutants = not exclude
         out.append(case)
     return out
+
+
+def role_order_case(contained):
+    """Production mutation testing, parity run 2: a vertex outside BOTH the
+    externalContent and the ancestor volume at the same level, so that only the
+    Role order (ExternalContent before Ancestor) gives role externalContent.
+
+    Exact declared nesting cannot hold here: the vertex lies in the external root
+    box, so if the external root were exactly inside the referencing tile's box the
+    vertex would be inside it too. The referencing tile box therefore excludes the
+    vertex by a quarter ulp, and the external root escapes it by that much. This
+    relies on C1 hierarchyBounds slack (all 152 one-ulp mutants passed C1 in
+    parity run 1)."""
+    p = F([8, -42, 14])
+    case = Case("external-content-and-ancestor-both-exclude", "control",
+                {"outcome": "Outside", "facts": {"reference": 0, "level": 1, "depth": 1,
+                                                 "role": "externalContent", "node": 0}},
+                "production mutation testing (role order within a level)")
+    case.payloads.append(("w.glb", payload_from_spec({"positions": [[1, 2, 3]],
+                                                      "nodes": [{"translation": [7, 12, 39], "mesh": 0}],
+                                                      "scenes": [{"nodes": [0]}], "scene": 0})))
+    assert B.tile_points([{"translation": [7, 12, 39]}], [0], F([1, 2, 3])) == p
+    ext_root = {"box": [4.0, -42.0, 14.0, 4.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}  # x in [0, 8]
+    ref_box = {"box": [4.0, -42.0, 14.0, B.next_down(4.0), 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}
+    content = {"box": [3.75, -42.0, 14.0, 3.25, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}  # x in [0.5, 7]
+    assert B.box_contains(ext_root, p) and not B.box_contains(ref_box, p) and not B.box_contains(content, p)
+    case.tilesets["tileset.json"] = B.tileset({"boundingVolume": ref_box, "geometricError": 10.0,
+                                               "content": {"uri": "ext.json", "boundingVolume": content}})
+    case.tilesets["ext.json"] = B.tileset({"boundingVolume": ext_root, "geometricError": 0.0,
+                                           "content": {"uri": "w.glb"}})
+    case.tracks = [(0, [p, p])]
+    case.leaf_depth = 1
+    case.mutants = False
+    case.notes.append("Under slot order [Ancestor, ..., ExternalContent] the reported role would be "
+                      "ancestor; Role order gives externalContent (v3.2 (3)).")
+    case.notes.append("Not buildable with exact nesting; C1-passing only through hierarchyBounds slack "
+                      "for a quarter-ulp external-root escape. The external root is not compared with "
+                      "the referencing content volume by C1 (external-content-volume-excludes passed "
+                      "C1 in parity run 1).")
+    return [case]
 
 
 # ---------------------------------------------------------------- C1 precondition (v3.3 (9))
@@ -1374,19 +1427,34 @@ def build_controls(cases, reports, rows, cdir, ldir, large_ok):
             by_id[c.id] = rows[-1]
         pair("%s-at-cap-and-one-over" % limit, "work-%s-at-sum" % limit, "work-%s-sum-minus-1" % limit,
              "%s = archive total (%d), then total - 1" % (limit, totals[key]))
-    # Repeated-index pair (large).
+    # Repeated-index pairs (large). The units cap comes from the hand derivation
+    # REPEATED_INDEX_UNITS (independent of the oracle); the oracle's own total must equal it.
     rep = [c for c in cases if c.id == "repeated-index-three-payloads"][0]
     rep_row = by_id.get(rep.id)
     if rep_row and "skipped" not in rep_row:
-        c = copy.deepcopy(rep)
-        c.id = "repeated-index-three-payloads-units-minus-1"
-        c.limits = {"containmentWorkUnits": rep_row["precheck"]["totals"]["units"] - 1}
-        c.expect = {"outcome": "NotInspected", "reasons": ["workLimit"]}
-        run_case(c, ldir, rows, large_ok)
-        by_id[c.id] = rows[-1]
-        pair("repeated-index-work-units", rep.id, c.id, "containmentWorkUnits one below the archive sum")
+        oracle_units = rep_row["precheck"]["totals"]["units"]
+        rep_row["handDerivedUnits"] = REPEATED_INDEX_UNITS
+        if oracle_units != REPEATED_INDEX_UNITS:
+            rep_row["agree"] = False
+        for suffix, units, expect in (
+                ("units-minus-1", REPEATED_INDEX_UNITS - 1, {"outcome": "NotInspected", "reasons": ["workLimit"]}),
+                ("units-at-sum", REPEATED_INDEX_UNITS, {"outcome": "Contained"})):
+            c = copy.deepcopy(rep)
+            c.id = "repeated-index-three-payloads-" + suffix
+            c.limits = {"containmentWorkUnits": units}
+            c.expect = expect
+            c.notes = ["containmentWorkUnits = %d (hand-derived deduplicated sum%s)"
+                       % (units, " - 1" if units != REPEATED_INDEX_UNITS else "")]
+            run_case(c, ldir, rows, large_ok)
+            by_id[c.id] = rows[-1]
+        pair("repeated-index-work-units", rep.id, rep.id + "-units-minus-1",
+             "containmentWorkUnits one below the archive sum")
+        pair("repeated-index-work-units-at-cap", rep.id + "-units-at-sum", rep.id + "-units-minus-1",
+             "containmentWorkUnits exactly the deduplicated sum (%d), then one below; charging T per "
+             "index occurrence instead of per distinct vertex exceeds the cap" % REPEATED_INDEX_UNITS)
     else:
         pairs.append({"control": "repeated-index-work-units", "skipped": "needs --large", "agree": True})
+        pairs.append({"control": "repeated-index-work-units-at-cap", "skipped": "needs --large", "agree": True})
     manifest = {"record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. "
                           "Production and the oracle must both report both verdicts.",
                 "pairs": pairs}
