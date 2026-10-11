@@ -1,6 +1,6 @@
 {
  "checker": "forest_check.py",
- "checkerSha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+ "checkerSha256": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
  "archive": "/home/bend/.cache/perf-lane/work/pimpl-oracle/model-mf2-lod3.3tz",
  "archiveSha256": "baeacf5a7b58884fd480887e5fb7a5731e40af08afd7c6915f368bdb6d885674",
  "reference": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-explicit.3tz",
@@ -11,7 +11,7 @@
   "S": 4,
   "DOC_NODES": 16384,
   "DOC_BYTES": 2097152,
-  "DOC_LEVELS": 12,
+  "DOC_LEVELS": 10,
   "JSON_DEPTH": 32,
   "MAX_LEVELS": 32
  },
@@ -49,10 +49,18 @@
   "documents.levels": {
    "status": "pass",
    "required": true,
-   "source": "\u00a74.1 DOC_LEVELS",
+   "source": "\u00a74.1 DOC_LEVELS; ruling D-3",
    "violations": 0,
    "examples": [],
-   "description": "skeleton tiles sit at most 12 tile levels below their document root (links and unit children at most 13)"
+   "description": "skeleton tiles sit at most 10 tile levels below their document root (links and unit children at most 11)"
+  },
+  "documents.compact": {
+   "status": "pass",
+   "required": true,
+   "source": "coordinator ruling",
+   "violations": 0,
+   "examples": [],
+   "description": "every tileset JSON document is compact JSON (no whitespace outside strings), so budgets are measured on compact bytes"
   },
   "links.wellFormed": {
    "status": "pass",
@@ -195,10 +203,10 @@
   "A4.rows": {
    "status": "pass",
    "required": true,
-   "source": "P3, A-4",
+   "source": "P3, A-4, ruling Q1",
    "violations": 0,
    "examples": [],
-   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise"
+   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise; a row with delta = 0 is B(t) copied bit for bit"
   },
   "A4.extras": {
    "status": "fail",
@@ -222,7 +230,7 @@
     "tile p120 implicit-content/r110-3-7-0-0.glb: JSON bytes outside the scene-root node object differ (not a root-node splice)",
     "tile p935 implicit-content/r930-2-2-0-0.glb: JSON bytes outside the scene-root node object differ (not a root-node splice)"
    ],
-   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; delta 0 at the root is a byte copy"
+   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation (or affine matrix column) == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; a delta-0 payload is a byte copy; exactly one scene root, an affine matrix never combined with TRS"
   },
   "A4.names": {
    "status": "pass",

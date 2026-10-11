@@ -9,7 +9,8 @@ Usage:
   python3 -I forest_check.py FOREST.3tz [--explicit REF.3tz] [--out VERDICT.json] [--examples N]
 Exit status: 0 when every required rule passes, 1 when one fails, 2 on a usage error.
 
-Profile constants (design §4.1): S = 4, DOC_NODES = 16,384, DOC_BYTES = 2 MiB, DOC_LEVELS = 12,
+Profile constants (design §4.1 with the coordinator's rulings): S = 4, DOC_NODES = 16,384, DOC_BYTES = 2 MiB
+(compact bytes), DOC_LEVELS = 10,
 JSON depth <= 32 (root depth 0; value nodes count the root, containers and scalars, not keys),
 L <= 32. The README lists every rule, its design source and what it does not prove.
 """
@@ -18,7 +19,7 @@ import argparse, hashlib, json, math, posixpath, re, struct, sys, urllib.parse, 
 S = 4
 DOC_NODES = 16384
 DOC_BYTES = 2 * 1024 * 1024
-DOC_LEVELS = 12
+DOC_LEVELS = 10   # coordinator ruling (review D-3): was 12 in design v3
 JSON_DEPTH = 32
 MAX_LEVELS = 32
 SIDECARS = ('conversion.json', 'geometry-reports.jsonl')
@@ -33,7 +34,8 @@ RULES = [
     ('skeleton.S4', True, '§1, §4.1 classification', 'explicit tiles with children have h >= 4; their non-leaf children with h < 4 are implicit roots; '
      'leaf children are explicit leaves; the root is the single implicit root iff h(root) < 4'),
     ('documents.budget', True, 'P8, §4.1', 'every JSON document has <= 16,384 value nodes, <= 2 MiB and JSON depth <= 32'),
-    ('documents.levels', True, '§4.1 DOC_LEVELS', 'skeleton tiles sit at most 12 tile levels below their document root (links and unit children at most 13)'),
+    ('documents.levels', True, '§4.1 DOC_LEVELS; ruling D-3', 'skeleton tiles sit at most 10 tile levels below their document root (links and unit children at most 11)'),
+    ('documents.compact', True, 'coordinator ruling', 'every tileset JSON document is compact JSON (no whitespace outside strings), so budgets are measured on compact bytes'),
     ('links.wellFormed', True, '§4.1 Documents, P1', 'link tiles: content.uri tileset-d{m}.json at the archive root, m = 1..D-1 each referenced by exactly one link, '
      'no children, no implicitTiling, doc root without transform and with children, doc asset/geometricError/extensionsUsed as specified'),
     ('links.creationOrder', False, '§4.1 "m counts from 1 in creation order"', 'link numbers follow breadth-first order over documents taken in m order'),
@@ -56,10 +58,12 @@ RULES = [
     ('A4.roles', True, '§4.1 classification on H', 'each tile has the role S = 4 assigns it in H'),
     ('A4.explicitTiles', True, 'P5, §4.1', 'explicit tiles (and link + document root) equal the producer tile objects without children and implicitChildIndex; '
      'implicit roots carry the producer transform, box, error, refine and content headers'),
-    ('A4.rows', True, 'P3, A-4', 'every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise'),
+    ('A4.rows', True, 'P3, A-4, ruling Q1', 'every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise; '
+     'a row with delta = 0 is B(t) copied bit for bit'),
     ('A4.extras', True, 'P5, §4.5', 'row extras equal the producer extras without implicitChildIndex; encodedBytes equals the published payload length'),
     ('A4.payloads', True, 'P5, A-4, §4.1', 'explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, '
-     'root translation == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; delta 0 at the root is a byte copy'),
+     'root translation (or affine matrix column) == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; a delta-0 payload is a byte copy; '
+     'exactly one scene root, an affine matrix never combined with TRS'),
     ('A4.names', True, 'PD-6, R-7', 'each implicit root prefix r{n} is its preorder index in H'),
     ('A4.contentUris', False, '§4.1 "content URI"', 'explicit tile content URIs equal the reference build URIs'),
     ('A4.topLevel', False, '§4.1', 'tileset.json asset version, geometricError and extensionsUsed equal the reference build'),
@@ -141,6 +145,24 @@ def resolve(base_member, uri):
     if norm.startswith('..') or norm == '.':
         return None
     return norm
+
+
+def is_compact(data):
+    """True when the JSON text has no whitespace outside strings (serde_json::to_vec form)."""
+    inside = escape = False
+    for byte in data:
+        if inside:
+            if escape:
+                escape = False
+            elif byte == 0x5C:
+                escape = True
+            elif byte == 0x22:
+                inside = False
+        elif byte == 0x22:
+            inside = True
+        elif byte in (0x20, 0x09, 0x0A, 0x0D):
+            return False
+    return True
 
 
 def contains_key(v, key):
@@ -860,6 +882,8 @@ def check_archive(f, report):
             report.bad('documents.budget', f'{name}: {len(data)} bytes > {DOC_BYTES}')
         if d > JSON_DEPTH:
             report.bad('documents.budget', f'{name}: JSON depth {d} > {JSON_DEPTH}')
+        if not is_compact(data):
+            report.bad('documents.compact', f'{name}: not compact JSON (whitespace outside strings)')
         if contains_key(obj, 'rustyTilesSourceContents'):
             report.bad('PD11.noRetainedSources', f'{name}: carries rustyTilesSourceContents')
         stack = [(obj['root'], 0)]
@@ -967,6 +991,8 @@ def check_archive(f, report):
 # ------------------------------------------------------------------ vector-build payload map (§4.7)
 def restore_payload(published, record):
     """The design's restore: put the recorded raw root node text back, pad the JSON chunk to the recorded length."""
+    if record.get('rootNode') == '' and record.get('jsonLength') == 0:
+        return published   # ruling: a zero-delta payload is a byte copy; its record is the empty sentinel
     suffix_b3dm = published[:4] == b'b3dm'
     tables, glb = (b3dm_split(published) if suffix_b3dm else (None, published))
     js, rest = glb_split(glb)
@@ -1081,6 +1107,8 @@ def compare_payload(raw, pub, delta, suffix):
         return [] if pub == raw else ['.gltf payload is not a byte copy']
     if pub == raw:
         return [] if zero else ['payload is a byte copy but delta is not zero']
+    if zero:
+        return ['delta is zero but the payload is not a byte copy']
     problems = []
     try:
         rt, rglb = payload_glb(raw, suffix)
@@ -1099,8 +1127,16 @@ def compare_payload(raw, pub, delta, suffix):
     except ValueError:
         return problems + ['JSON chunk does not parse']
     roots = scene_roots(rdoc)
+    if len(roots) != 1:
+        problems.append(f'{len(roots)} scene roots (the writer refuses more than one)')
     if scene_roots(pdoc) != roots or len(rdoc.get('nodes', [])) != len(pdoc.get('nodes', [])):
         return problems + ['scene roots or node count differ']
+    for i in roots:
+        rn = rdoc['nodes'][i]
+        m = rn.get('matrix')
+        if m is not None and (any(k in rn for k in ('translation', 'rotation', 'scale')) or not isinstance(m, list) or len(m) != 16
+                              or not all(isinstance(v, (int, float)) for v in m) or m[3] != 0 or m[7] != 0 or m[11] != 0 or m[15] != 1):
+            problems.append(f'raw root node {i}: matrix combined with TRS or not affine (the writer refuses it)')
     if not deq({k: v for k, v in rdoc.items() if k != 'nodes'}, {k: v for k, v in pdoc.items() if k != 'nodes'}):
         problems.append('JSON outside nodes differs')
     for i, (rn, pn) in enumerate(zip(rdoc.get('nodes', []), pdoc.get('nodes', []))):
@@ -1112,7 +1148,7 @@ def compare_payload(raw, pub, delta, suffix):
             exp = list(rn['matrix'])
             for k in range(3):
                 exp[12 + k] = float(exp[12 + k]) + d[k]
-            if 'translation' in pn or not (isinstance(pn.get('matrix'), list) and len(pn['matrix']) == 16 and all(same_f64(a, b) for a, b in zip(exp, pn['matrix']))):
+            if any(k in pn for k in ('translation', 'rotation', 'scale')) or not (isinstance(pn.get('matrix'), list) and len(pn['matrix']) == 16 and all(same_f64(a, b) for a, b in zip(exp, pn['matrix']))):
                 problems.append(f'root node {i} matrix translation != raw + delta')
             rest_r = {k: v for k, v in rn.items() if k != 'matrix'}
             rest_p = {k: v for k, v in pn.items() if k != 'matrix'}
@@ -1120,9 +1156,9 @@ def compare_payload(raw, pub, delta, suffix):
             t = rn.get('translation', [0.0, 0.0, 0.0])
             exp = [float(t[k]) + d[k] for k in range(3)]
             got = pn.get('translation')
-            if got is None and zero and 'translation' not in rn:
-                pass
-            elif not (isinstance(got, list) and len(got) == 3 and all(same_f64(a, b) for a, b in zip(exp, got))):
+            if 'matrix' in pn:
+                problems.append(f'root node {i} gained a matrix')
+            if not (isinstance(got, list) and len(got) == 3 and all(same_f64(a, b) for a, b in zip(exp, got))):
                 problems.append(f'root node {i} translation {got} != raw + delta {exp}')
             rest_r = {k: v for k, v in rn.items() if k != 'translation'}
             rest_p = {k: v for k, v in pn.items() if k != 'translation'}
@@ -1274,7 +1310,9 @@ def check_reference(f, report, ref_path, reuse_map):
                 report.bad('A4.rows', f'tile p{n.pid}: no row')
             else:
                 box, err, ex = ft.row
-                exp_box = list(hb) if n is h else [float(hb[k]) + delta[k] for k in range(3)] + list(hb[3:])
+                # ruling Q1: delta = 0 copies B bit for bit (-0.0 stays -0.0); otherwise B + delta in f64
+                zero = all(v == 0.0 for v in delta)
+                exp_box = list(hb) if (n is h or zero) else [float(hb[k]) + delta[k] for k in range(3)] + list(hb[3:])
                 if not all(same_f64(a, b) for a, b in zip(exp_box, box)):
                     report.bad('A4.rows', f'tile p{n.pid}: row box {list(box)} != B + delta {exp_box}')
                 if not same_f64(err, n.tile.get('geometricError')):

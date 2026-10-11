@@ -4,6 +4,17 @@ PO's independent acceptance checks for P-IMPL, the bounded implicit forest (desi
 A-2 (forest checker and its sensitive controls), A-4 (equivalence to an `--explicit` build) and the
 Cesium probes of A-5. The checks were frozen before PO saw the writer diff.
 
+**Refreeze 1** follows the coordinator's rulings on PO's spec questions, which rest on the writer's
+documented contract, not its code. The changes:
+- `DOC_LEVELS` is 10 (review D-3).
+- Documents must be compact JSON.
+- A row with δ = 0 is copied bit for bit, and a payload with δ = 0 is a byte copy.
+- The payload-map sentinel `rootNode: ""`, `jsonLength: 0` is accepted.
+- An affine `matrix` root takes δ in `matrix[12..14]`. A matrix combined with TRS, a non-affine
+  matrix, or several scene roots is refused.
+
+See "Rulings" below.
+
 Nothing here claims release readiness. A passing checker run shows that one archive meets the
 contract as stated below. It does not show that the writer is correct for other inputs.
 
@@ -35,7 +46,7 @@ cross-checks. `SHA256SUMS` gives the hash of every file in this directory except
 | File | What it is |
 | --- | --- |
 | `forest_check.py` | The forest checker (A-2, A-4). Writes a JSON verdict with a result for each rule |
-| `make_forest_fixtures.py` | Synthetic producer hierarchies H. Each is written as an `--explicit` reference and as a forest by PO's own v3 writer, plus 53 negative controls |
+| `make_forest_fixtures.py` | Synthetic producer hierarchies H. Each is written as an `--explicit` reference and as a forest by PO's own v3 writer, plus 57 negative controls |
 | `run_controls.py` | Runs the checker over the fixtures and judges each run against its frozen expectation |
 | `expectations.json` | The frozen expectations: rules, controls, Cesium fixture outcomes, deep-view requirements and real-archive expectations |
 | `results/` | Recorded runs: `controls.json` and `fixtures-manifest.json` (the generated archives' sha256), `model-*.verdict.json`, `develop-*.verdict.json`, `cesium-fixtures*` and `deep-smoke-vec-perf*` |
@@ -72,7 +83,8 @@ These are the design §4.1 constants. There is no option to change them.
 - `DOC_NODES` 16,384 value nodes. C1 semantics apply: the root, containers and scalars count;
   keys do not.
 - `DOC_BYTES` 2 MiB (2,097,152 bytes).
-- `DOC_LEVELS` 12.
+- `DOC_BYTES` is measured on compact bytes. Every document must be compact JSON, as ruled.
+- `DOC_LEVELS` 10, by the coordinator's ruling (review D-3; design v3 said 12).
 - JSON depth ≤ 32, with the root at depth 0.
 - L ≤ 32.
 
@@ -85,7 +97,8 @@ Required unless marked advisory.
 | `archive` | 3TZ, core | The zip is readable. Member names are unique. `tileset.json` is a tileset. `@3dtilesIndex1@` is ignored |
 | `skeleton.S4` | §1, §4.1 | The root is the single implicit root iff h(root) < 4. Explicit tiles with children have h ≥ 4. Their children are explicit leaves (h = 0), skeleton tiles or implicit roots with 1 ≤ h < 4. Heights are measured on the effective tree, so a link and its document root count as one tile |
 | `documents.budget` | P8 | Every `tileset.json` and `tileset-d{m}.json` has ≤ 16,384 value nodes, ≤ 2 MiB and JSON depth ≤ 32 |
-| `documents.levels` | §4.1 | Skeleton tiles are ≤ 12 tile levels below their document root. Links and unit children are ≤ 13 |
+| `documents.levels` | §4.1, ruling D-3 | Skeleton tiles are ≤ 10 tile levels below their document root. Links and unit children are ≤ 11 |
+| `documents.compact` | ruling | Every `tileset.json` and `tileset-d{m}.json` is compact JSON, with no whitespace outside strings |
 | `links.wellFormed` | §4.1, P1 | `content.uri` is `tileset-d{m}.json` (and nothing else). The member exists. Each document is referenced by exactly one link. Documents are numbered 1..D−1 contiguously. A link has no children and no `implicitTiling`. The document root has no transform, has `refine`, has children and is not an implicit root. The document's `geometricError` equals its root error. `extensionsUsed` and `asset.version` match `tileset.json` |
 | `links.creationOrder` (advisory) | §4.1 | Link numbers are increasing in breadth-first order, over documents taken in m order |
 | `P6.linkCoherence` | P6 | A link's box, error and refine equal its document root's |
@@ -99,13 +112,16 @@ Required unless marked advisory.
 | `P12.schema` | P12, F-1 | `tileset.json` has `schema` iff an implicit root exists, and its `id` is `rustyTilesImplicit`. Every document that holds an implicit root has the same schema |
 | `PD11.noRetainedSources` | PD-11 | No `rustyTilesSourceContents` anywhere in any document. No unreferenced `t/` member. No implicit tile names a `t/` member |
 | `payloads.wellFormed` | §4.1 | Implicit payloads are GLB (or GLB inside b3dm) with correct lengths and 4-byte chunks. A `.gltf` appears only at an implicit root |
-| `vectorBuild.reuseMap` | §4.7 | Applies when `vector-build.json` exists. It has a `payloads` map. Each entry `{member, delta, rootNode, jsonLength}` names a published `implicit-content/` member, and the design's `restore_payload` reproduces bytes whose sha256 is the key. With `--explicit`, every raw payload published only under `implicit-content/` has an entry, and no entry is extra |
+| `vectorBuild.reuseMap` | §4.7 | Applies when `vector-build.json` exists. It has a `payloads` map. Each entry `{member, delta, rootNode, jsonLength}` names a published `implicit-content/` member, and the design's `restore_payload` reproduces bytes whose sha256 is the key. The zero-δ sentinel
+(`rootNode: ""`, `jsonLength: 0`) restores the published bytes unchanged. With `--explicit`, every raw payload published only under `implicit-content/` has an entry, and no entry is extra |
 | `A4.tree` | P5, A-4 | Expanding every document and root gives exactly H's tiles and parent/child relation. Under implicit roots, H's child slot (`implicitChildIndex`, else the array index) gives the coordinates through I1's Morton rule. Explicit children carry no slot, so they are matched by box, error and transform, then by box and error, then by position |
 | `A4.roles` | §4.1 on H | Each tile's role (skeleton, explicit leaf, implicit root, implicit) is the one S = 4 assigns it in H |
 | `A4.explicitTiles` | P5, §4.1 | An explicit tile, or a link plus its document root, equals H's tile object. The comparison drops `children` and `implicitChildIndex`, compares refine by its effective value, compares `content.uri` separately, and treats empty and absent extras as equal. An implicit root carries H's transform, box, error, effective refine and per-slot content headers. H keys that a row cannot represent fail, and so does a refine change below a root |
 | `A4.rows` | P3, A-4 | See "A-4 arithmetic" below |
 | `A4.extras` | P5, §4.5 | Row extras equal H's extras without `implicitChildIndex`. `encodedBytes` (when H has it) equals the published bytes of the tile's contents |
-| `A4.payloads` | P5, A-4, §4.1 | Explicit payloads are byte-identical to H's. An implicit root's own payload is a byte copy. Other implicit payloads must meet four conditions: the same b3dm tables; byte-identical BIN and later chunks; the same parsed JSON outside the scene-root nodes; and the root `translation` equal to raw + (δ0, δ2, −δ1) bit for bit (a raw `matrix` gets the same addition at `[12..14]`). In addition, the JSON bytes outside the scene-root node objects must be identical: the root-node splice of §4.1 and §4.7. A `.gltf` is a byte copy. Layer membership follows the slot list |
+| `A4.payloads` | P5, A-4, §4.1 | Explicit payloads are byte-identical to H's. An implicit root's own payload is a byte copy. Other implicit payloads must meet four conditions: the same b3dm tables; byte-identical BIN and later chunks; the same parsed JSON outside the scene-root nodes; and the root `translation` equal to raw + (δ0, δ2, −δ1) bit for bit. An affine raw `matrix` takes the same addition at `[12..14]`;
+a matrix combined with TRS, a non-affine matrix, or more than one scene root fails. A payload with
+δ = 0 must be a byte copy. In addition, the JSON bytes outside the scene-root node objects must be identical: the root-node splice of §4.1 and §4.7. A `.gltf` is a byte copy. Layer membership follows the slot list |
 | `A4.names` | PD-6, R-7 | Each implicit root's `r{n}` is its preorder index in H, in H's children-array order |
 | `A4.contentUris` (advisory) | §4.1 | Explicit-tile content URIs equal the reference build's. The two modes may name payloads differently, for example point-cloud `t/{n}.glb`; bytes are compared by `A4.payloads` |
 | `A4.topLevel` (advisory) | §4.1 | `tileset.json` `geometricError`, `extensionsUsed` and `asset.version` equal the reference's |
@@ -117,12 +133,14 @@ Required unless marked advisory.
     of the child transforms on the path from r (exclusive) to t (inclusive), taken parent to child.
   - Expected row centre = B(t).c + δ(t), one f64 addition per component.
   - Half-axes and error are H's, bit for bit.
-  - For t = r the expected row is B(r) itself, bit for bit (P3's level-0 rule).
+  - For t = r, and for every t with δ(t) = 0, the expected row is B(t) itself, bit for bit, so −0.0
+    stays −0.0 (P3's level-0 rule and ruling Q1).
 - Composing with r's own transform (equal to H's, checked bit for bit) gives the world frame. So the
   head's per-root δ composed with each implicit root's transform is checked as two exact facts:
   the transform and the row.
 - Payload translation: raw `translation` (absent means 0.0) + (δ0, δ2, −δ1), one f64 addition per
-  component. When δ = 0 and the raw root has no translation, an absent translation is accepted.
+  component. An affine `matrix` root takes the addition at `[12..14]`. When δ = 0 the payload is a
+  byte copy (ruling).
 - All number comparisons use f64 bit patterns, so −0.0 ≠ 0.0. JSON integers equal floats of the
   same value.
 
@@ -150,12 +168,12 @@ python3 -I bench/architecture_audit/implicit_layout/run_controls.py $W/fx result
 | --- | --- | --- |
 | `quad-single` | h(root) < 4: the single root `r0`, a contentless routing tile, vector headers and extras, `vector-build.json` with its payload map, 4- and 8-aligned and unsorted-key raw GLBs | 7 / 3 / 1 / 0 / 0 |
 | `m2-single` | The M2 wrapper shape: one tile, ADD, a `.gltf` with an external buffer, copied with its resource | 1 / 1 / 1 / 0 / 0 |
-| `oct-mixed` | OCTREE with sparse `implicitChildIndex` slots: explicit leaves, roots of heights 1–3, a contentless root, a root with two slots (glb + b3dm), b3dm payloads, raw roots with and without translation | 64 / 7 / 1 / 0 / 0 |
+| `oct-mixed` | OCTREE with sparse `implicitChildIndex` slots: explicit leaves, roots of heights 1–3, a contentless root, a root with two slots (glb + b3dm), b3dm payloads, raw roots with and without translation; a δ = 0 tile with a −0.0 box centre (row and payload copied bit for bit) and an affine-`matrix` root payload | 64 / 7 / 1 / 0 / 0 |
 | `quad-wide` | The **node budget** (heavy skeleton extras): 97 documents, links two levels deep | 4,095 / 12 / 97 / 96 / 2 |
 | `quad-bytes` | The **byte budget** (300 KB string extras): documents up to 1.81 MB | 255 / 8 / 8 / 7 / 1 |
-| `quad-chain32` | The **32-level bound** and **`DOC_LEVELS`**: a 28-tile LOD chain above a height-3 root gives L = 32, 3 documents and a link two levels deep. The JSON depth is 30 | 43 / 32 / 3 / 2 / 2 |
+| `quad-chain32` | The **32-level bound** and **`DOC_LEVELS`** = 10: a 28-tile LOD chain above a height-3 root gives L = 32, 3 documents and a link two levels deep. The JSON depth is 26 | 43 / 32 / 3 / 2 / 2 |
 
-**Negatives.** There are 53, each violating a named rule. A run agrees when every target rule has
+**Negatives.** There are 57, each violating a named rule. A run agrees when every target rule has
 status `fail` and the verdict is `fail` (or `pass` if the only targets are advisory). Controls that
 do not need the reference are run both with and without it. Without the reference, `A4.*` targets
 are not judged, because those rules apply only with `--explicit`.
@@ -172,7 +190,7 @@ are not judged, because those rules apply only with `--explicit`.
   - `neg-missing-root-schema`, the archive analogue of the Cesium `N` control.
 - **The other rules:** `neg-truncated-archive`, `neg-source-list`, `neg-doc-schema`, `neg-schema-id`, `neg-skeleton-s3`,
   `neg-skeleton-s5` and `neg-leaf-as-root` (which also target `A4.roles`), `neg-levels-mismatch`, `neg-two-subtrees`,
-  `neg-orphan-availability`, `neg-l33`, `neg-doc-bytes`, `neg-doc-depth`, `neg-doc-levels`,
+  `neg-orphan-availability`, `neg-l33`, `neg-doc-bytes`, `neg-doc-depth`, `neg-doc-levels` (11 skeleton levels), `neg-doc-pretty` (a pretty-printed `tileset.json`),
   `neg-link-refine`, `neg-link-children`, `neg-link-dangling`, `neg-link-twice`,
   `neg-doc-root-transform`, `neg-doc-numbering`, `neg-link-order` (advisory),
   `neg-old-chunk-document`, `neg-tile-child-index`, `neg-row-child-index`, `neg-extra-layer`,
@@ -190,11 +208,14 @@ are not judged, because those rules apply only with `--explicit`.
   - `neg-explicit-payload`;
   - `neg-prefix-not-preorder`;
   - `neg-root-refine`;
-  - `neg-root-transform-dropped`.
+  - `neg-root-transform-dropped`;
+  - `neg-row-signed-zero`: a δ = 0 row computed as B + 0.0, which turns −0.0 into +0.0;
+  - `neg-zero-delta-rebased`: a δ = 0 payload rewritten instead of copied;
+  - `neg-matrix-as-translation`: δ written to `translation` beside the raw `matrix`.
 
-**Recorded result** (`results/controls.json`): **106 of 106 runs agree**. That is 6 positives × 2
-modes, plus 53 negatives (41 run in both modes and 12 with the reference only). The negatives
-target 25 of the 27 rules: every required rule, plus the advisory `links.creationOrder`. The two
+**Recorded result** (`results/controls.json`): **111 of 111 runs agree**. That is 6 positives × 2
+modes, plus 57 negatives (42 run in both modes and 15 with the reference only). The negatives
+target 26 of the 28 rules: every required rule, plus the advisory `links.creationOrder`. The two
 untargeted rules are the advisory `A4.contentUris` and `A4.topLevel`. Each run lists its
 collateral failures.
 
@@ -208,6 +229,8 @@ not the production writer. Results are in `results/model-*.verdict.json`.
   - vec-perf: 1 document, 4,955 nodes and 594 visits;
   - pc-deep: 258 nodes, 4,021 bytes and 2,243 visits.
 - **`pc-deep` passes every rule** (archive-only, because there is no matching explicit build).
+- **mf2-lod16 now also fails `documents.levels`** (318 tiles), because the model packs at the old
+  `DOC_LEVELS` of 12.
 - **The vector models fail only where the model predates v3:**
   - `A4.extras` on `encodedBytes`: the model keeps the raw value, but §4.5 requires the baked
     length;
@@ -217,6 +240,8 @@ not the production writer. Results are in `results/model-*.verdict.json`.
     has `-0.00005208847142057493`. The v3 writer must avoid exactly this (§4.1, §5.4).
 - **The develop archives fail as expected** (`results/develop-*.verdict.json`). Their JSON
   templates, child subtrees, retained sources and `implicit-tileset-*` documents all fail.
+- **Develop's point-cloud `tileset.json` is pretty-printed today**, so it fails
+  `documents.compact`. PP's output must be compact.
 
 ## Cesium probes (A-5)
 
@@ -308,44 +333,36 @@ design's v3 model forest, standing in for a head archive. See "Recorded smoke" b
 3. **Determinism (P7).** Build the same input twice with `--reproducible` and `cmp` the archives.
    Leave out the volatile `conversion.json` fields as A-8 does.
 
-## Interpretations and spec questions
+## Rulings and remaining interpretations
 
-The checker takes a position on each point below, and changing any of them is a single edit.
+The coordinator ruled on PO's questions (refreeze 1):
 
-1. **Signed zero in rows.** For t ≠ r, the row is B(t).c + δ(t) even when δ(t) = 0, which turns
-   −0.0 into +0.0. The level-0 row is B(r) bit for bit. A writer that skips the addition when δ = 0
-   would differ only on a −0.0 centre. Should the contract pin this?
-2. **`{slot}` in content templates.** The checker accepts either the content index or the position
-   in the slot list. It requires strictly sorted, distinct `(slot, suffix)` pairs. The two readings
-   differ only when one content index has two suffixes. Please pin one.
-3. **`content` or `contents` with one slot.** Both are accepted.
-4. **Extras on the implicit-root tile JSON.** §4.1 lists transform, box, error, refine and
-   `implicitTiling`, while the model also keeps extras. The checker accepts either, and requires
-   equality with H when extras are present.
-5. **Report sidecars.** `conversion.json` and `geometry-reports.jsonl` are not referenced by a
-   tile, a template or a link (P4 read literally), but are allowed as archive reports. §5.1 counts
-   them as entries. Any other unreferenced member fails.
-6. **`DOC_LEVELS`.** "At most 12 skeleton levels below the document root" is read as: skeleton
-   tiles at depth ≤ 12, and links and unit children at depth ≤ 13.
-7. **Creation order.** Breadth-first numbering across documents in m order is advisory. "Creation
-   order" in §4.1 is not pinned to it.
-8. **Matrix scene roots.** §4.1 defines only a translation. If a raw root has a `matrix`, the
-   checker expects `matrix[12..14] += (δ0, δ2, −δ1)` (A-4's "translation or matrix"). The reuse
-   map's restore needs exactly one scene root.
-9. **Disagreeing content headers.** When H tiles under one root disagree on a slot's content
-   headers, the case cannot be represented and the checker fails it. §4.4 does not list it as a
-   typed writer error. Should it?
-10. **`encodedBytes` with several contents.** It is the sum of the published bytes of the tile's
-    contents.
-11. **The reuse map.** It is named `payloads` with fields `{member, delta, rootNode, jsonLength}`,
-    as in §4.7. A raw hash that an explicit tile also publishes in place may have no entry. Extra
-    entries fail.
-12. **The document root's `refine`.** It is required, because core requires `refine` on a tileset
-    root, and must equal the link's.
+| Question | Ruling, as checked |
+| --- | --- |
+| Q1 signed zero | A row with δ = 0 is B copied bit for bit, so −0.0 stays −0.0. Other non-root rows are B + δ in f64 |
+| Q2 `{slot}` | Unchanged. The content index or the slot-list position is accepted, with strictly sorted, distinct `(slot, suffix)` pairs |
+| Q3 sidecars | Accepted. `conversion.json` and `geometry-reports.jsonl` may be unreferenced |
+| Q4 `DOC_LEVELS` | Now 10. Skeleton tiles ≤ 10 levels below the document root; links and unit children ≤ 11. The measured worst case is JSON depth 28 against 32 |
+| Q5 creation order | Unchanged. Breadth-first numbering across documents is advisory |
+| Q6 matrix roots | An affine `matrix` takes δ in `[12..14]`. A matrix with TRS, a non-affine matrix, or several scene roots is refused, and the checker fails it |
+| Q7 headers | Disagreeing headers within one root's slot are a typed writer error, so the checker fails them (`A4.explicitTiles`) |
+| Q8 `encodedBytes` | The sum of the published bytes of the tile's contents |
+| Q9 reuse map | `payloads` with `{member, delta, rootNode, jsonLength}`. A δ = 0 payload is a byte copy whose record is `rootNode: ""`, `jsonLength: 0`, and its restore returns the bytes unchanged |
+| Compactness | Every tileset JSON document must be compact JSON, and the budgets are measured on compact bytes. PO applies this to linked documents as well as `tileset.json` |
+
+Remaining PO readings:
+- The JSON keys of the reuse map are camelCase as in §4.7 (`rootNode`, `jsonLength`). Snake-case
+  keys would fail `vectorBuild.reuseMap`.
+- The document root's `refine` is required (core requires it on a tileset root) and must equal
+  the link's.
+- Absent and empty extras are treated as equal.
+- `content` or `contents` is accepted for a single slot.
+- Extras on an implicit-root tile's JSON are optional, but must match H when present.
 
 ## Freeze
 
-- The checks are frozen at this directory's first commit on `p/oracle`.
+- The checks were frozen at this directory's first commit on `p/oracle` (`08a9c36`) and refrozen
+  after the coordinator's rulings (refreeze 1).
 - `SHA256SUMS` pins every file, and `expectations.json` holds every expected outcome.
 - Later changes must be new commits that state the reason. None may follow from reading the writer
   diff unless it is recorded as such.

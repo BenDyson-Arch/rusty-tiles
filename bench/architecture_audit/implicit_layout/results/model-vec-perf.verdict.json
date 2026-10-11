@@ -1,6 +1,6 @@
 {
  "checker": "forest_check.py",
- "checkerSha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+ "checkerSha256": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
  "archive": "/home/bend/.cache/perf-lane/work/pimpl-oracle/model-vec-perf.3tz",
  "archiveSha256": "2990841266ed22c3f2b9d93165b0fb9ced207c35e860ffea997d3198fffb6ab8",
  "reference": "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf-explicit.3tz",
@@ -11,7 +11,7 @@
   "S": 4,
   "DOC_NODES": 16384,
   "DOC_BYTES": 2097152,
-  "DOC_LEVELS": 12,
+  "DOC_LEVELS": 10,
   "JSON_DEPTH": 32,
   "MAX_LEVELS": 32
  },
@@ -48,10 +48,18 @@
   "documents.levels": {
    "status": "pass",
    "required": true,
-   "source": "\u00a74.1 DOC_LEVELS",
+   "source": "\u00a74.1 DOC_LEVELS; ruling D-3",
    "violations": 0,
    "examples": [],
-   "description": "skeleton tiles sit at most 12 tile levels below their document root (links and unit children at most 13)"
+   "description": "skeleton tiles sit at most 10 tile levels below their document root (links and unit children at most 11)"
+  },
+  "documents.compact": {
+   "status": "pass",
+   "required": true,
+   "source": "coordinator ruling",
+   "violations": 0,
+   "examples": [],
+   "description": "every tileset JSON document is compact JSON (no whitespace outside strings), so budgets are measured on compact bytes"
   },
   "links.wellFormed": {
    "status": "pass",
@@ -194,10 +202,10 @@
   "A4.rows": {
    "status": "pass",
    "required": true,
-   "source": "P3, A-4",
+   "source": "P3, A-4, ruling Q1",
    "violations": 0,
    "examples": [],
-   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise"
+   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise; a row with delta = 0 is B(t) copied bit for bit"
   },
   "A4.extras": {
    "status": "fail",
@@ -217,7 +225,7 @@
    "source": "P5, A-4, \u00a74.1",
    "violations": 0,
    "examples": [],
-   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; delta 0 at the root is a byte copy"
+   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation (or affine matrix column) == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; a delta-0 payload is a byte copy; exactly one scene root, an affine matrix never combined with TRS"
   },
   "A4.names": {
    "status": "pass",

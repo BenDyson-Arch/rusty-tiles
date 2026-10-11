@@ -1,6 +1,6 @@
 {
  "script": "619cf35123464f5a8eab3947079f5777544f1719d0c6282bdebac8d44e7f66d4",
- "checker": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+ "checker": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
  "archives": {
   "explicit": {
    "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf-explicit.3tz",

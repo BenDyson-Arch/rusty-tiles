@@ -1,6 +1,6 @@
 {
  "checker": "forest_check.py",
- "checkerSha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
+ "checkerSha256": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
  "archive": "/home/bend/.cache/perf-lane/work/pimpl-oracle/model-mf2-lod16.3tz",
  "archiveSha256": "fbf38978e150e5b40b60deb654c38fcb6a211f4e119a9fc76544328c420c5477",
  "reference": "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod16-explicit.3tz",
@@ -11,12 +11,13 @@
   "S": 4,
   "DOC_NODES": 16384,
   "DOC_BYTES": 2097152,
-  "DOC_LEVELS": 12,
+  "DOC_LEVELS": 10,
   "JSON_DEPTH": 32,
   "MAX_LEVELS": 32
  },
  "verdict": "fail",
  "failedRules": [
+  "documents.levels",
   "P4.namesClosed",
   "A4.extras",
   "A4.payloads"
@@ -47,12 +48,24 @@
    "description": "every JSON document has <= 16,384 value nodes, <= 2 MiB and JSON depth <= 32"
   },
   "documents.levels": {
+   "status": "fail",
+   "required": true,
+   "source": "\u00a74.1 DOC_LEVELS; ruling D-3",
+   "violations": 318,
+   "examples": [
+    "tileset-d130.json: skeleton tile 11 levels below the document root > 10",
+    "tileset-d130.json: tile 12 levels below the document root > 11",
+    "tileset-d130.json: skeleton tile 11 levels below the document root > 10"
+   ],
+   "description": "skeleton tiles sit at most 10 tile levels below their document root (links and unit children at most 11)"
+  },
+  "documents.compact": {
    "status": "pass",
    "required": true,
-   "source": "\u00a74.1 DOC_LEVELS",
+   "source": "coordinator ruling",
    "violations": 0,
    "examples": [],
-   "description": "skeleton tiles sit at most 12 tile levels below their document root (links and unit children at most 13)"
+   "description": "every tileset JSON document is compact JSON (no whitespace outside strings), so budgets are measured on compact bytes"
   },
   "links.wellFormed": {
    "status": "pass",
@@ -195,10 +208,10 @@
   "A4.rows": {
    "status": "pass",
    "required": true,
-   "source": "P3, A-4",
+   "source": "P3, A-4, ruling Q1",
    "violations": 0,
    "examples": [],
-   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise"
+   "description": "every row equals B(t) + delta(t) (delta summed parent-to-child in f64 from the implicit root) and e(t), bitwise; a row with delta = 0 is B(t) copied bit for bit"
   },
   "A4.extras": {
    "status": "fail",
@@ -222,7 +235,7 @@
     "tile p171 implicit-content/r167-2-3-0-0.glb: JSON bytes outside the scene-root node object differ (not a root-node splice)",
     "tile p172 implicit-content/r167-3-6-0-0.glb: JSON bytes outside the scene-root node object differ (not a root-node splice)"
    ],
-   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; delta 0 at the root is a byte copy"
+   "description": "explicit payloads byte-identical; implicit payloads: BIN chunk identical, JSON identical outside the scene-root node, root translation (or affine matrix column) == raw + (d0, d2, -d1) bitwise, root node text the only spliced span; a delta-0 payload is a byte copy; exactly one scene root, an affine matrix never combined with TRS"
   },
   "A4.names": {
    "status": "pass",

@@ -3,7 +3,7 @@
 It builds small synthetic producer hierarchies H, writes each one twice:
   * `<case>-explicit.3tz`: the `--explicit` form of H (the A-4 reference);
   * `<case>.3tz`: a bounded implicit forest written by this file's own v3 writer (design §4.1:
-    S = 4, documents of <= 16,384 value nodes / 2 MiB / 12 skeleton levels, link tiles, single-subtree
+    S = 4, documents of <= 16,384 value nodes / 2 MiB / 10 skeleton levels (ruling D-3), link tiles, single-subtree
     implicit roots with rows, root-node splice rebase, no retained sources, schema placement);
 and then derives negative controls, each a forest that violates one named rule.
 
@@ -16,7 +16,7 @@ import copy, hashlib, json, math, os, pathlib, struct, sys, zipfile
 
 DOC_NODES = 16384
 DOC_BYTES = 2 * 1024 * 1024
-DOC_LEVELS = 12
+DOC_LEVELS = 10   # coordinator ruling (review D-3)
 MAX_LEVELS = 32
 SCHEMA = {"id": "rustyTilesImplicit", "classes": {"rustyTile": {"properties": {
     "boundingBox": {"type": "SCALAR", "componentType": "FLOAT64", "array": True, "count": 12, "semantic": "TILE_BOUNDING_BOX"},
@@ -53,7 +53,7 @@ class LCG:
 
 
 # ------------------------------------------------------------------ payloads
-def glb(seed, translation=None, align=8, sorted_keys=True):
+def glb(seed, translation=None, align=8, sorted_keys=True, matrix=None):
     rng = LCG(seed)
     pts = [(rng.unit() * 10 - 5, rng.unit() * 2, rng.unit() * 10 - 5) for _ in range(3)]
     pos = b''.join(struct.pack('<3f', *p) for p in pts)
@@ -62,6 +62,8 @@ def glb(seed, translation=None, align=8, sorted_keys=True):
     lo = [struct.unpack('<f', struct.pack('<f', v))[0] for v in lo]
     hi = [struct.unpack('<f', struct.pack('<f', v))[0] for v in hi]
     node = {"mesh": 0}
+    if matrix is not None:
+        node["matrix"] = matrix
     if translation is not None:
         node["translation"] = translation
     if sorted_keys:
@@ -176,10 +178,15 @@ def rebase(raw, delta, tw=None, key=None):
     a, b = root_node_span(js)
     node_text = js[a:b]
     node = json.loads(node_text)
-    t = node.get('translation', [0.0, 0.0, 0.0])
     d = [delta[0], delta[2], -delta[1]]
-    node['translation'] = [t[i] + d[i] for i in range(3)]
-    if tw.get('payload_translation_ulp') == key:
+    if 'matrix' in node and tw.get('matrix_as_translation') != key:   # ruling Q6: an affine matrix takes delta in its column
+        node['matrix'] = [v + d[i - 12] if 12 <= i < 15 else v for i, v in enumerate(node['matrix'])]
+        tkey = None
+    else:
+        t = node.get('translation', [0.0, 0.0, 0.0])
+        node['translation'] = [t[i] + d[i] for i in range(3)]
+        tkey = 'translation'
+    if tw.get('payload_translation_ulp') == key and tkey:
         node['translation'][0] = math.nextafter(node['translation'][0], math.inf)
     if tw.get('payload_reserialize') == key:   # today's whole-document re-serialization (not a splice)
         doc = json.loads(js)
@@ -347,6 +354,21 @@ def case_oct_mixed():
     small = node(1, 6, 2, 'glb')
     root.children = [a, leaf, small]
     a.children.sort(key=lambda c: c.slot)
+    # ruling Q1 and Q6 coverage inside the first implicit root under `a` (height 3):
+    # a child with a zero translation and a -0.0 box centre (delta = 0: row and payload copied bit for bit),
+    # and below it a payload whose scene root is an affine matrix (delta goes into matrix[12..14]).
+    zr = a.children[0].children[0]
+    zr.tile['transform'] = translation([0.0, 0.0, 0.0])
+    zr.tile['boundingVolume']['box'][0] = -0.0
+    for uri in list(zr.payloads):   # a raw root without translation, so any rebase at delta = 0 changes bytes
+        zr.payloads.pop(uri)
+    zr.tile.pop('content', None)
+    add_content(zr, glb(778, None, 8), 'glb')
+    mx = zr.children[0]
+    for uri in list(mx.payloads):
+        mx.payloads.pop(uri)
+    mx.tile.pop('content', None)
+    add_content(mx, glb(777, None, 8, True, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.5, -1.25, 2.0, 1]), 'glb')
     return root, 'OCTREE', {'asset': {'version': '1.1'}, 'geometricError': 200.0}, False
 
 
@@ -544,7 +566,8 @@ def write_forest(root, scheme, top, vector, tw=None):
         rows, layers = {}, [set() for _ in slot_list]
         for k_tile, (n, lvl, xyz, delta) in enumerate(sorted(tiles, key=lambda x: x[0].pid)):
             hb = n.tile['boundingVolume']['box']
-            b = list(hb) if n is r else [hb[i] + delta[i] for i in range(3)] + list(hb[3:])
+            zero_d = all(v == 0.0 for v in delta) and tw.get('signed_zero_add') != (index, k_tile)
+            b = list(hb) if (n is r or zero_d) else [hb[i] + delta[i] for i in range(3)] + list(hb[3:])   # ruling Q1
             err = n.tile['geometricError']
             if tw.get('row_ulp') == (index, k_tile):
                 b[0] = math.nextafter(b[0], math.inf)
@@ -564,23 +587,21 @@ def write_forest(root, scheme, top, vector, tw=None):
                 layers[li].add((lvl, xyz))
                 name = f'implicit-content/{rid}-{lvl}-' + '-'.join(map(str, xyz)) + f'-{i}.{tsuffix}'
                 raw = n.payloads[c['uri']]
-                if n is r or suffix == 'gltf':
-                    pub, rec = raw, None
+                zero = all(v == 0.0 for v in delta)
+                if (n is r or zero or suffix == 'gltf') and tw.get('zero_delta_rebased') != (index, k_tile):
+                    # ruling: a zero-delta payload is a byte copy, recorded with the empty sentinel
+                    pub, rec = raw, (None if suffix == 'gltf' else {'rootNode': '', 'jsonLength': 0})
                     if suffix == 'gltf':   # resources travel with the .gltf
                         for res, data in n.payloads.items():
                             if res != c['uri']:
                                 members['implicit-content/' + res.split('/', 1)[1]] = data
-                    else:
-                        jl = struct.unpack_from('<I', split_container(raw)[1], 12)[0]
-                        s, e = root_node_span(split_container(raw)[1][20:20 + jl].rstrip(b' '))
-                        rec = {'rootNode': split_container(raw)[1][20:20 + jl].rstrip(b' ')[s:e].decode(), 'jsonLength': jl}
                 else:
                     pub, rec = rebase(raw, delta, tw, (index, k_tile))
                 written += len(pub)
                 members[name] = pub
                 sha = hashlib.sha256(raw).hexdigest()
                 if rec is not None and vector:
-                    payload_map[sha] = {'member': name, 'delta': list(delta) if n is not r else [0.0, 0.0, 0.0], **rec}
+                    payload_map[sha] = {'member': name, 'delta': list(delta), **rec}
                 if tw.get('retain_sources') and n is not r:
                     members[c['uri']] = raw
             if 'encodedBytes' in ex and cs:
@@ -832,6 +853,10 @@ def mut_pad(kind):
     return f
 
 
+def mut_pretty(m):
+    m['tileset.json'] = json.dumps(json.loads(m['tileset.json']), indent=1).encode()
+
+
 def mut_source_list(m):
     obj = jload(m, 'tileset.json')
     obj['extras'] = {'rustyTilesSourceContents': []}
@@ -901,7 +926,8 @@ NEGATIVES = {
     'neg-l33': ('chain33', {'allow_levels': True}, None, ['P9.levelBound'], False),
     'neg-doc-bytes': ('quad-chain32', {}, mut_pad('bytes'), ['documents.budget'], False),
     'neg-doc-depth': ('quad-chain32', {}, mut_pad('depth'), ['documents.budget'], False),
-    'neg-doc-levels': ('quad-chain32', {'doc_levels': 14}, None, ['documents.levels'], False),
+    'neg-doc-levels': ('quad-chain32', {'doc_levels': 11}, None, ['documents.levels'], False),
+    'neg-doc-pretty': ('quad-chain32', {}, mut_pretty, ['documents.compact'], False),
     'neg-link-refine': ('quad-wide', {}, mut_link('refine'), ['P6.linkCoherence'], False),
     'neg-link-children': ('quad-wide', {}, mut_link('children'), ['links.wellFormed'], False),
     'neg-link-dangling': ('quad-wide', {}, mut_dangling, ['links.wellFormed'], False),
@@ -931,6 +957,10 @@ NEGATIVES = {
     'neg-prefix-not-preorder': ('oct-mixed', {'prefix_shift': 1}, None, ['A4.names'], True),
     'neg-root-refine': ('oct-mixed', {'refine_root': 0}, None, ['A4.explicitTiles'], True),
     'neg-root-transform-dropped': ('oct-mixed', {'drop_root_transform': 0}, None, ['A4.explicitTiles'], True),
+    # coordinator rulings (refreeze)
+    'neg-row-signed-zero': ('oct-mixed', {'signed_zero_add': 'ZERO_DELTA_TILE'}, None, ['A4.rows'], True),
+    'neg-zero-delta-rebased': ('oct-mixed', {'zero_delta_rebased': 'ZERO_DELTA_TILE'}, None, ['A4.payloads'], True),
+    'neg-matrix-as-translation': ('oct-mixed', {'matrix_as_translation': 'MATRIX_TILE'}, None, ['A4.payloads'], True),
 }
 
 
@@ -947,6 +977,17 @@ def resolve_tweaks(tw, root, scheme, top, vector):
         r = by_pid[order[0]]
         leaves = [n for n in _walk(r) if not n.children and n is not r]
         tw['drop_tile'] = (0, max(n.pid for n in leaves))
+    for tkey, pick in (('signed_zero_add', 'ZERO_DELTA_TILE'), ('zero_delta_rebased', 'ZERO_DELTA_TILE'), ('matrix_as_translation', 'MATRIX_TILE')):
+        if tw.get(tkey) == pick:
+            for i, pid in enumerate(order):
+                tiles = sorted(_walk(by_pid[pid]), key=lambda n: n.pid)
+                for k, n in enumerate(tiles):
+                    if pick == 'ZERO_DELTA_TILE' and k and n.tile.get('boundingVolume', {}).get('box', [1])[0] == 0.0 \
+                            and math.copysign(1, n.tile['boundingVolume']['box'][0]) < 0:
+                        tw[tkey] = (i, k)
+                    if pick == 'MATRIX_TILE' and any(b'"matrix"' in v for v in n.payloads.values()):
+                        tw[tkey] = (i, k)
+            assert tw[tkey] != pick, tkey
     if tw.get('slots_unsorted') == 'TWO_SLOT_ROOT':
         tw['slots_unsorted'] = next(i for i, pid in enumerate(order) if 'contents' in by_pid[pid].tile)
     if tw.get('payload_reserialize') == 'UNSORTED':

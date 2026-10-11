@@ -1,15 +1,15 @@
 {
  "receipt": {
-  "checkerSha256": "f669ac98e3d816dfac52382b4292abed1e379e749134c2a71f9662b185786cb9",
-  "generatorSha256": "e12d8989756e15fd48f9aaf63dde3b5d254a68f6afc760cfbc66c9414b40c3fb",
+  "checkerSha256": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
+  "generatorSha256": "3cd9375cad1f96b626ec02199608f0b03ff2c6d98ed7360a72a446b0ba230d6a",
   "runnerSha256": "5608aea4a6cba1da424c3350e8063e9d8fc284854431045114a9be55911579e3",
-  "manifestSha256": "c9f23e8f6aad84f1939aa5d2cd78cd74a45422587d1eaffbe38523dd862ea907"
+  "manifestSha256": "3625bda14ce5392fc8a9896a9078be323ca5912608c83b405a072768ed12dae2"
  },
  "summary": {
-  "runs": 106,
-  "agree": 106,
+  "runs": 111,
+  "agree": 111,
   "positives": 6,
-  "negatives": 53,
+  "negatives": 57,
   "rulesTargeted": [
    "A4.explicitTiles",
    "A4.extras",
@@ -30,6 +30,7 @@
    "PD11.noRetainedSources",
    "archive",
    "documents.budget",
+   "documents.compact",
    "documents.levels",
    "links.creationOrder",
    "links.wellFormed",
@@ -48,7 +49,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "02dbefd9851213c4f79137e6224f6acc2e7b2e489d673534b18eda87859821c4",
+   "archiveSha256": "bd8ebfd40ce987af7239874d52066fc8e5d69ee2e9aceb2727ce812c58c71c38",
    "stats": {
     "tiles": 7,
     "levels": 3,
@@ -82,7 +83,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "02dbefd9851213c4f79137e6224f6acc2e7b2e489d673534b18eda87859821c4",
+   "archiveSha256": "bd8ebfd40ce987af7239874d52066fc8e5d69ee2e9aceb2727ce812c58c71c38",
    "stats": {
     "tiles": 7,
     "levels": 3,
@@ -184,7 +185,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "2964721fbb9d05d7667abda765a33e2391772d68bd2844d10d822151db62e8c1",
+   "archiveSha256": "e8870cbdbe4ac7c1bde7a6349c0bf2b012c98c5d5f71d088f6fbfb82eec799a0",
    "stats": {
     "tiles": 64,
     "levels": 7,
@@ -218,7 +219,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "2964721fbb9d05d7667abda765a33e2391772d68bd2844d10d822151db62e8c1",
+   "archiveSha256": "e8870cbdbe4ac7c1bde7a6349c0bf2b012c98c5d5f71d088f6fbfb82eec799a0",
    "stats": {
     "tiles": 64,
     "levels": 7,
@@ -252,7 +253,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "0aacc4bb9c1e081c897b988e95f1c4d67b7e7b0c06d303a0aaf97490c08b8dba",
+   "archiveSha256": "bb07dfde98e6376d94eebe2ddd1e74f497a2905dae1845f546c41613b1fe10ec",
    "stats": {
     "tiles": 4095,
     "levels": 12,
@@ -286,7 +287,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "0aacc4bb9c1e081c897b988e95f1c4d67b7e7b0c06d303a0aaf97490c08b8dba",
+   "archiveSha256": "bb07dfde98e6376d94eebe2ddd1e74f497a2905dae1845f546c41613b1fe10ec",
    "stats": {
     "tiles": 4095,
     "levels": 12,
@@ -320,7 +321,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "ba98e1a7ce671efcbc4da243e8e80ac30bdef46545838bd2de558e31536de8d8",
+   "archiveSha256": "832c0eb86adbb0ae7d4d1a6bf51346a81e8c16e92e642e623cd3c63a3b56bf1c",
    "stats": {
     "tiles": 255,
     "levels": 8,
@@ -354,7 +355,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "ba98e1a7ce671efcbc4da243e8e80ac30bdef46545838bd2de558e31536de8d8",
+   "archiveSha256": "832c0eb86adbb0ae7d4d1a6bf51346a81e8c16e92e642e623cd3c63a3b56bf1c",
    "stats": {
     "tiles": 255,
     "levels": 8,
@@ -388,7 +389,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "065eb4517b92fb58d9b6a0caec5f70cf6b8ae4d9839766914f6d426dd946ead1",
+   "archiveSha256": "03ea5fc322346a8161d6ddb4483432b4cdd149b19798294836450386178c902f",
    "stats": {
     "tiles": 43,
     "levels": 32,
@@ -401,13 +402,13 @@
     "maxLinkNesting": 2,
     "subtrees": 1,
     "members": 49,
-    "maxDocumentNodes": 672,
-    "maxDocumentBytes": 8713,
-    "maxDocumentJsonDepth": 30,
+    "maxDocumentNodes": 578,
+    "maxDocumentBytes": 7523,
+    "maxDocumentJsonDepth": 26,
     "rootDocument": {
-     "nodes": 672,
-     "bytes": 8713,
-     "jsonDepth": 30
+     "nodes": 578,
+     "bytes": 7523,
+     "jsonDepth": 26
     },
     "i1TilesCounter": 45,
     "i1HierarchyVisits": 52
@@ -422,7 +423,7 @@
    "failedRules": [],
    "unexpectedFailures": [],
    "examples": {},
-   "archiveSha256": "065eb4517b92fb58d9b6a0caec5f70cf6b8ae4d9839766914f6d426dd946ead1",
+   "archiveSha256": "03ea5fc322346a8161d6ddb4483432b4cdd149b19798294836450386178c902f",
    "stats": {
     "tiles": 43,
     "levels": 32,
@@ -435,13 +436,13 @@
     "maxLinkNesting": 2,
     "subtrees": 1,
     "members": 49,
-    "maxDocumentNodes": 672,
-    "maxDocumentBytes": 8713,
-    "maxDocumentJsonDepth": 30,
+    "maxDocumentNodes": 578,
+    "maxDocumentBytes": 7523,
+    "maxDocumentJsonDepth": 26,
     "rootDocument": {
-     "nodes": 672,
-     "bytes": 8713,
-     "jsonDepth": 30
+     "nodes": 578,
+     "bytes": 7523,
+     "jsonDepth": 26
     },
     "i1TilesCounter": 45,
     "i1HierarchyVisits": 52
@@ -471,7 +472,7 @@
      "tileset.json: implicit root r2: JSON content template 'implicit-content/r2-{level}-{x}-{y}-{z}-0.json'"
     ]
    },
-   "archiveSha256": "faebed684d4bddab68e6b20633d1734fa56f98a5a677ea7f6dcea7a7be584e61",
+   "archiveSha256": "97adb64e8353ddebf641249ad66fdc43974f4620bbe45e91c3e70125f9036344",
    "stats": null
   },
   {
@@ -496,7 +497,7 @@
      "tileset.json: implicit root r2: JSON content template 'implicit-content/r2-{level}-{x}-{y}-{z}-0.json'"
     ]
    },
-   "archiveSha256": "faebed684d4bddab68e6b20633d1734fa56f98a5a677ea7f6dcea7a7be584e61",
+   "archiveSha256": "97adb64e8353ddebf641249ad66fdc43974f4620bbe45e91c3e70125f9036344",
    "stats": null
   },
   {
@@ -518,7 +519,7 @@
      "tileset.json: implicit root 53: childSubtreeAvailability is {'constant': 1}, not {constant: 0}"
     ]
    },
-   "archiveSha256": "8d0b2f780f4ac4306d9cd527401b01991ebdbb20f34fd7c0c8955b0a99e0e078",
+   "archiveSha256": "c418d50bcec8a0e5c7cd361051e794b42300cc89874b1b4183e5c7c094c7cbc0",
    "stats": null
   },
   {
@@ -540,7 +541,7 @@
      "tileset.json: implicit root 53: childSubtreeAvailability is {'constant': 1}, not {constant: 0}"
     ]
    },
-   "archiveSha256": "8d0b2f780f4ac4306d9cd527401b01991ebdbb20f34fd7c0c8955b0a99e0e078",
+   "archiveSha256": "c418d50bcec8a0e5c7cd361051e794b42300cc89874b1b4183e5c7c094c7cbc0",
    "stats": null
   },
   {
@@ -565,7 +566,7 @@
      "tileset.json: implicit root r53: property table count 10 != 11 available tiles"
     ]
    },
-   "archiveSha256": "4d5b41902b0cb0a8547f162c5db240be4df80e4ce3ab9e55f8bf2c8df4545254",
+   "archiveSha256": "6221f8ac190784c44f5ec7ce5e9f3e70b85295350c899c29196d6a602a8de654",
    "stats": null
   },
   {
@@ -587,7 +588,7 @@
      "tileset.json: implicit root r53: property table count 10 != 11 available tiles"
     ]
    },
-   "archiveSha256": "4d5b41902b0cb0a8547f162c5db240be4df80e4ce3ab9e55f8bf2c8df4545254",
+   "archiveSha256": "6221f8ac190784c44f5ec7ce5e9f3e70b85295350c899c29196d6a602a8de654",
    "stats": null
   },
   {
@@ -609,7 +610,7 @@
      "tile p56: row box [-3.98, -3.960000000000001, -11.94, 8.001, 0.0, 0.0, 0.0, 8.002, 0.0, 0.0, 0.0, 4.003] != B + delta [-3.9800000000000004, -3.960000000000001, -11.94, 8.001, 0.0, 0.0, 0.0, 8.002, 0.0, 0.0, 0.0, 4.003]"
     ]
    },
-   "archiveSha256": "9f338fb7764a388826ed0f7a4bd27814ae4274a3c753526f3d5e35796783fbea",
+   "archiveSha256": "8be849fe1e938ee0d9ed6fe16b1dd6b45173d8d8d0effa913e3f92dc364104d3",
    "stats": null
   },
   {
@@ -634,7 +635,7 @@
      "tileset.json: implicit root r18: level-0 row box differs from the root tile box"
     ]
    },
-   "archiveSha256": "87073e744c5f6319964ccd90174a026dd17af699cc4a7f6d8cfe600a496c7382",
+   "archiveSha256": "a12a0e6e00efed0e09ff64a94649f9ad866830d8e82aa4235a169b3cf54720e8",
    "stats": null
   },
   {
@@ -656,7 +657,7 @@
      "tileset.json: implicit root r18: level-0 row box differs from the root tile box"
     ]
    },
-   "archiveSha256": "87073e744c5f6319964ccd90174a026dd17af699cc4a7f6d8cfe600a496c7382",
+   "archiveSha256": "a12a0e6e00efed0e09ff64a94649f9ad866830d8e82aa4235a169b3cf54720e8",
    "stats": null
   },
   {
@@ -689,7 +690,7 @@
      "prefix r53 used by more than one implicit root"
     ]
    },
-   "archiveSha256": "5b69365e962cd2893bec7e42187bd32ac6c273d39fb94fb2166545372d51d557",
+   "archiveSha256": "1aa13af18d155964f526187a051618b55dbf4d02c2dbfeb009545f7106dc72a1",
    "stats": null
   },
   {
@@ -716,7 +717,7 @@
      "prefix r53 used by more than one implicit root"
     ]
    },
-   "archiveSha256": "5b69365e962cd2893bec7e42187bd32ac6c273d39fb94fb2166545372d51d557",
+   "archiveSha256": "1aa13af18d155964f526187a051618b55dbf4d02c2dbfeb009545f7106dc72a1",
    "stats": null
   },
   {
@@ -738,7 +739,7 @@
      "unreferenced member extra/orphan.glb"
     ]
    },
-   "archiveSha256": "449eb9b0ffad03734e972d1848b0bfa6a37e07d3890b3759e054a5ae55778846",
+   "archiveSha256": "6236b9c88cfc7b96d508044d8c5ca1c17d0863d82bb632bd086c6ccbbeefbbea",
    "stats": null
   },
   {
@@ -760,7 +761,7 @@
      "unreferenced member extra/orphan.glb"
     ]
    },
-   "archiveSha256": "449eb9b0ffad03734e972d1848b0bfa6a37e07d3890b3759e054a5ae55778846",
+   "archiveSha256": "6236b9c88cfc7b96d508044d8c5ca1c17d0863d82bb632bd086c6ccbbeefbbea",
    "stats": null
   },
   {
@@ -789,7 +790,7 @@
      "unreferenced member t/000c5496dbe7e457fd8b823bc25b046d90762f0b89f99349162bfa48f139b6f3.glb"
     ]
    },
-   "archiveSha256": "df6272114febcb6f2773f5770b04f64eaf6fb56ac9e61ca77e3e2aae344b8876",
+   "archiveSha256": "a468668e36bb1e4408673ebfda3156de45606e8bf70e4698bc5bc658fe1bca72",
    "stats": null
   },
   {
@@ -818,7 +819,7 @@
      "unreferenced member t/000c5496dbe7e457fd8b823bc25b046d90762f0b89f99349162bfa48f139b6f3.glb"
     ]
    },
-   "archiveSha256": "df6272114febcb6f2773f5770b04f64eaf6fb56ac9e61ca77e3e2aae344b8876",
+   "archiveSha256": "a468668e36bb1e4408673ebfda3156de45606e8bf70e4698bc5bc658fe1bca72",
    "stats": null
   },
   {
@@ -843,7 +844,7 @@
      "tileset-d1.json: 32251 value nodes > 16384"
     ]
    },
-   "archiveSha256": "f84b15a403e53fc20a6b1444833a31a585a3d3734d365b7b30a119a3c661a999",
+   "archiveSha256": "ac58e5ac570e7ed17e9d1815a5881dc996ce194b29dedc41b3cf3c6258e17bdd",
    "stats": null
   },
   {
@@ -865,7 +866,7 @@
      "tileset-d1.json: 32251 value nodes > 16384"
     ]
    },
-   "archiveSha256": "f84b15a403e53fc20a6b1444833a31a585a3d3734d365b7b30a119a3c661a999",
+   "archiveSha256": "ac58e5ac570e7ed17e9d1815a5881dc996ce194b29dedc41b3cf3c6258e17bdd",
    "stats": null
   },
   {
@@ -887,7 +888,7 @@
      "tileset.json: link to tileset-d1.json: boundingVolume differs from the document root"
     ]
    },
-   "archiveSha256": "9aec04716bb15cf7a282e72810388b2bcd7e1f459ef218a6540430a9412d86d2",
+   "archiveSha256": "5b8b90850211fe680b9c1d179fa0d64b83bf08afee43dfcc9fc241a5ae56480b",
    "stats": null
   },
   {
@@ -909,7 +910,7 @@
      "tileset.json: link to tileset-d1.json: boundingVolume differs from the document root"
     ]
    },
-   "archiveSha256": "9aec04716bb15cf7a282e72810388b2bcd7e1f459ef218a6540430a9412d86d2",
+   "archiveSha256": "5b8b90850211fe680b9c1d179fa0d64b83bf08afee43dfcc9fc241a5ae56480b",
    "stats": null
   },
   {
@@ -932,7 +933,7 @@
      "tileset-d2.json holds an implicit root but lacks the root schema"
     ]
    },
-   "archiveSha256": "04cea157382e14a25134c4cd211101a996e7b64cbb934a75a47df457a0008f7c",
+   "archiveSha256": "e57ac8e88627430a29b08b93fd2292272061c8bf47485934972a2b1c879b3b55",
    "stats": null
   },
   {
@@ -955,7 +956,7 @@
      "tileset-d2.json holds an implicit root but lacks the root schema"
     ]
    },
-   "archiveSha256": "04cea157382e14a25134c4cd211101a996e7b64cbb934a75a47df457a0008f7c",
+   "archiveSha256": "e57ac8e88627430a29b08b93fd2292272061c8bf47485934972a2b1c879b3b55",
    "stats": null
   },
   {
@@ -977,7 +978,7 @@
      "tileset.json: carries rustyTilesSourceContents"
     ]
    },
-   "archiveSha256": "814bbb5024f116a44026f782670245964525caaaf8abfe14e67496af17ae16c1",
+   "archiveSha256": "f49cb9719f675685e68e9ec0b2c57c4aa788b138f232b1f84a8b49bc9e0f9e28",
    "stats": null
   },
   {
@@ -999,7 +1000,7 @@
      "tileset.json: carries rustyTilesSourceContents"
     ]
    },
-   "archiveSha256": "814bbb5024f116a44026f782670245964525caaaf8abfe14e67496af17ae16c1",
+   "archiveSha256": "f49cb9719f675685e68e9ec0b2c57c4aa788b138f232b1f84a8b49bc9e0f9e28",
    "stats": null
   },
   {
@@ -1021,7 +1022,7 @@
      "tileset-d2.json holds an implicit root but lacks the root schema"
     ]
    },
-   "archiveSha256": "fa6fbc61c35efa5508fc039b32fe84f41a22fca56736fb3d1dbe3e8e6846984c",
+   "archiveSha256": "7269c482e58246827a16e3a3a6190f1dbd6bc4e75c642ba8a9be85e7c2af9d51",
    "stats": null
   },
   {
@@ -1043,7 +1044,7 @@
      "tileset-d2.json holds an implicit root but lacks the root schema"
     ]
    },
-   "archiveSha256": "fa6fbc61c35efa5508fc039b32fe84f41a22fca56736fb3d1dbe3e8e6846984c",
+   "archiveSha256": "7269c482e58246827a16e3a3a6190f1dbd6bc4e75c642ba8a9be85e7c2af9d51",
    "stats": null
   },
   {
@@ -1065,7 +1066,7 @@
      "tileset.json schema id 'other' is not rustyTilesImplicit"
     ]
    },
-   "archiveSha256": "e5385bf69f4654b4017947e47ebd4256eabe49f4e6ad6817ad0971bea3163d66",
+   "archiveSha256": "29d994306bc16479056b1705fa59e2e22745e12e2b27f842f086cba42a30ed05",
    "stats": null
   },
   {
@@ -1087,7 +1088,7 @@
      "tileset.json schema id 'other' is not rustyTilesImplicit"
     ]
    },
-   "archiveSha256": "e5385bf69f4654b4017947e47ebd4256eabe49f4e6ad6817ad0971bea3163d66",
+   "archiveSha256": "29d994306bc16479056b1705fa59e2e22745e12e2b27f842f086cba42a30ed05",
    "stats": null
   },
   {
@@ -1119,7 +1120,7 @@
      "tile p3: role root in the forest, implicit under S = 4"
     ]
    },
-   "archiveSha256": "6dc87daae2f6ff5d011f4e99b0e75ead0bca93c084921e7dfbdda999b17a8ed9",
+   "archiveSha256": "f3807e78ae74ef49fac29fd65818e7cbae586d2de3a7d97666575dafe92d0c45",
    "stats": null
   },
   {
@@ -1143,7 +1144,7 @@
     ],
     "A4.roles": []
    },
-   "archiveSha256": "6dc87daae2f6ff5d011f4e99b0e75ead0bca93c084921e7dfbdda999b17a8ed9",
+   "archiveSha256": "f3807e78ae74ef49fac29fd65818e7cbae586d2de3a7d97666575dafe92d0c45",
    "stats": null
   },
   {
@@ -1178,7 +1179,7 @@
      "tile p38: role root in the forest, skeleton under S = 4"
     ]
    },
-   "archiveSha256": "176f355f38fcbd13e6d9ce0058b4c959c91e21c4037e80ea4a54ef5d14f5f466",
+   "archiveSha256": "ec4e106821387e1bacd739311fc38339c8e9b190abf3cedfdfbbfd50f2d42738",
    "stats": null
   },
   {
@@ -1208,7 +1209,7 @@
     ],
     "A4.roles": []
    },
-   "archiveSha256": "176f355f38fcbd13e6d9ce0058b4c959c91e21c4037e80ea4a54ef5d14f5f466",
+   "archiveSha256": "ec4e106821387e1bacd739311fc38339c8e9b190abf3cedfdfbbfd50f2d42738",
    "stats": null
   },
   {
@@ -1235,7 +1236,7 @@
      "tile p33: role root in the forest, explicitLeaf under S = 4"
     ]
    },
-   "archiveSha256": "8e67373b69f64f5e022e1e259185a400d2d0cfe42bbae50e8ce0410983c5e9ad",
+   "archiveSha256": "4ef3fb5f87690030b53d843344f18d83e28a648a916aad24f5618bf7be94a1bb",
    "stats": null
   },
   {
@@ -1258,7 +1259,7 @@
     ],
     "A4.roles": []
    },
-   "archiveSha256": "8e67373b69f64f5e022e1e259185a400d2d0cfe42bbae50e8ce0410983c5e9ad",
+   "archiveSha256": "4ef3fb5f87690030b53d843344f18d83e28a648a916aad24f5618bf7be94a1bb",
    "stats": null
   },
   {
@@ -1280,7 +1281,7 @@
      "not a zip archive: File is not a zip file"
     ]
    },
-   "archiveSha256": "ba139d8d8e5bae01e9c6bba7a86b2a4da50826cdfdf94c352ba14ef77219a621",
+   "archiveSha256": "715a54872124a291da9d1144a9d8ad19c90d252c0a17b6b366dfbc30d0044ab3",
    "stats": null
   },
   {
@@ -1302,7 +1303,7 @@
      "not a zip archive: File is not a zip file"
     ]
    },
-   "archiveSha256": "ba139d8d8e5bae01e9c6bba7a86b2a4da50826cdfdf94c352ba14ef77219a621",
+   "archiveSha256": "715a54872124a291da9d1144a9d8ad19c90d252c0a17b6b366dfbc30d0044ab3",
    "stats": null
   },
   {
@@ -1324,7 +1325,7 @@
      "tileset.json: implicit root 53: subtreeLevels 4 != availableLevels 3"
     ]
    },
-   "archiveSha256": "87da5d792669a8afbbe9ec77df49c42c64aa68af2914daa8b733ceeeef6bba31",
+   "archiveSha256": "00ce587c0567b7fe3ec8568537d2e65fbf1b80c6d64dd8cf0c55f3ea07eb7b7d",
    "stats": null
   },
   {
@@ -1346,7 +1347,7 @@
      "tileset.json: implicit root 53: subtreeLevels 4 != availableLevels 3"
     ]
    },
-   "archiveSha256": "87da5d792669a8afbbe9ec77df49c42c64aa68af2914daa8b733ceeeef6bba31",
+   "archiveSha256": "00ce587c0567b7fe3ec8568537d2e65fbf1b80c6d64dd8cf0c55f3ea07eb7b7d",
    "stats": null
   },
   {
@@ -1371,7 +1372,7 @@
      "tileset.json: implicit root 53: 1 further subtree members share the prefix (e.g. subtrees/r53-1-1-0-0.subtree)"
     ]
    },
-   "archiveSha256": "840017a93d51bf9d0517564859c31078e3d95ab7262848e4b7bbaaee261d29d9",
+   "archiveSha256": "56989b006efc3a402fe495fa4c29dec4419ae0316b00f57233dd32dd1048664d",
    "stats": null
   },
   {
@@ -1396,7 +1397,7 @@
      "tileset.json: implicit root 53: 1 further subtree members share the prefix (e.g. subtrees/r53-1-1-0-0.subtree)"
     ]
    },
-   "archiveSha256": "840017a93d51bf9d0517564859c31078e3d95ab7262848e4b7bbaaee261d29d9",
+   "archiveSha256": "56989b006efc3a402fe495fa4c29dec4419ae0316b00f57233dd32dd1048664d",
    "stats": null
   },
   {
@@ -1423,7 +1424,7 @@
      "tileset.json: implicit root 0: 1 available tiles have an unavailable parent"
     ]
    },
-   "archiveSha256": "a45b4122f64dd9c91eb758e2dadb6ebfcc4257add7e4e97f052109f302bb5a8c",
+   "archiveSha256": "e9d0c36c1d806ad0517eff599120952a98be9f56cf6f14b266c4adc6f008a752",
    "stats": null
   },
   {
@@ -1448,7 +1449,7 @@
      "tileset.json: implicit root 0: 1 available tiles have an unavailable parent"
     ]
    },
-   "archiveSha256": "a45b4122f64dd9c91eb758e2dadb6ebfcc4257add7e4e97f052109f302bb5a8c",
+   "archiveSha256": "e9d0c36c1d806ad0517eff599120952a98be9f56cf6f14b266c4adc6f008a752",
    "stats": null
   },
   {
@@ -1470,7 +1471,7 @@
      "hierarchy has 33 levels; implicit output admits at most 32"
     ]
    },
-   "archiveSha256": "c56d49c8bd8cbb0d8031d3424a23048f5573ca7121f7f7b54a1a80256588a002",
+   "archiveSha256": "177b0d627b7c134a633b618e9545ebb3fac0c0d27df3795a058a08a935d32636",
    "stats": null
   },
   {
@@ -1492,7 +1493,7 @@
      "hierarchy has 33 levels; implicit output admits at most 32"
     ]
    },
-   "archiveSha256": "c56d49c8bd8cbb0d8031d3424a23048f5573ca7121f7f7b54a1a80256588a002",
+   "archiveSha256": "177b0d627b7c134a633b618e9545ebb3fac0c0d27df3795a058a08a935d32636",
    "stats": null
   },
   {
@@ -1514,10 +1515,10 @@
    ],
    "examples": {
     "documents.budget": [
-     "tileset-d1.json: 2105272 bytes > 2097152"
+     "tileset-d1.json: 2104083 bytes > 2097152"
     ]
    },
-   "archiveSha256": "d18d74ff545f094112cf3fdc5b48f38a79839b118bd2f708f165df1b8270399b",
+   "archiveSha256": "cfee6fa9ef2a08271c64ea8a2e898fa989ca725a470b32fa0727c47fd2404ca6",
    "stats": null
   },
   {
@@ -1536,10 +1537,10 @@
    "collateralFailures": [],
    "examples": {
     "documents.budget": [
-     "tileset-d1.json: 2105272 bytes > 2097152"
+     "tileset-d1.json: 2104083 bytes > 2097152"
     ]
    },
-   "archiveSha256": "d18d74ff545f094112cf3fdc5b48f38a79839b118bd2f708f165df1b8270399b",
+   "archiveSha256": "cfee6fa9ef2a08271c64ea8a2e898fa989ca725a470b32fa0727c47fd2404ca6",
    "stats": null
   },
   {
@@ -1564,7 +1565,7 @@
      "tileset-d1.json: JSON depth 43 > 32"
     ]
    },
-   "archiveSha256": "470b0c5cf65662ce20df503349f8be0b7e1ebd1ee18c85220e6462864b00ff47",
+   "archiveSha256": "e75b613ca153ae86064b0a9348c6a72e1b36887f7adf9c0c488571ba827ad2d5",
    "stats": null
   },
   {
@@ -1586,7 +1587,7 @@
      "tileset-d1.json: JSON depth 43 > 32"
     ]
    },
-   "archiveSha256": "470b0c5cf65662ce20df503349f8be0b7e1ebd1ee18c85220e6462864b00ff47",
+   "archiveSha256": "e75b613ca153ae86064b0a9348c6a72e1b36887f7adf9c0c488571ba827ad2d5",
    "stats": null
   },
   {
@@ -1596,23 +1597,20 @@
    "agree": true,
    "verdict": "fail",
    "failedRules": [
-    "documents.budget",
     "documents.levels"
    ],
    "targets": [
     "documents.levels"
    ],
    "missedTargets": [],
-   "collateralFailures": [
-    "documents.budget"
-   ],
+   "collateralFailures": [],
    "examples": {
     "documents.levels": [
-     "tileset.json: skeleton tile 13 levels below the document root > 12",
-     "tileset.json: skeleton tile 14 levels below the document root > 12"
+     "tileset.json: skeleton tile 11 levels below the document root > 10",
+     "tileset.json: tile 12 levels below the document root > 11"
     ]
    },
-   "archiveSha256": "1f7c538b706af3e08727a4b0a34947842e8ce1959d9a4a5fc38dd68e71dff598",
+   "archiveSha256": "32b0325e74356050c2f2ed8ac76f5a4597da1616802836be80840763a7bf769e",
    "stats": null
   },
   {
@@ -1622,23 +1620,64 @@
    "agree": true,
    "verdict": "fail",
    "failedRules": [
-    "documents.budget",
     "documents.levels"
    ],
    "targets": [
     "documents.levels"
    ],
    "missedTargets": [],
-   "collateralFailures": [
-    "documents.budget"
-   ],
+   "collateralFailures": [],
    "examples": {
     "documents.levels": [
-     "tileset.json: skeleton tile 13 levels below the document root > 12",
-     "tileset.json: skeleton tile 14 levels below the document root > 12"
+     "tileset.json: skeleton tile 11 levels below the document root > 10",
+     "tileset.json: tile 12 levels below the document root > 11"
     ]
    },
-   "archiveSha256": "1f7c538b706af3e08727a4b0a34947842e8ce1959d9a4a5fc38dd68e71dff598",
+   "archiveSha256": "32b0325e74356050c2f2ed8ac76f5a4597da1616802836be80840763a7bf769e",
+   "stats": null
+  },
+  {
+   "case": "neg-doc-pretty",
+   "kind": "negative",
+   "withReference": true,
+   "agree": true,
+   "verdict": "fail",
+   "failedRules": [
+    "documents.compact"
+   ],
+   "targets": [
+    "documents.compact"
+   ],
+   "missedTargets": [],
+   "collateralFailures": [],
+   "examples": {
+    "documents.compact": [
+     "tileset.json: not compact JSON (whitespace outside strings)"
+    ]
+   },
+   "archiveSha256": "28aa1cea6e2c50afccea641c531f03f271d1861760a0d970ce47e67393706e81",
+   "stats": null
+  },
+  {
+   "case": "neg-doc-pretty",
+   "kind": "negative",
+   "withReference": false,
+   "agree": true,
+   "verdict": "fail",
+   "failedRules": [
+    "documents.compact"
+   ],
+   "targets": [
+    "documents.compact"
+   ],
+   "missedTargets": [],
+   "collateralFailures": [],
+   "examples": {
+    "documents.compact": [
+     "tileset.json: not compact JSON (whitespace outside strings)"
+    ]
+   },
+   "archiveSha256": "28aa1cea6e2c50afccea641c531f03f271d1861760a0d970ce47e67393706e81",
    "stats": null
   },
   {
@@ -1660,7 +1699,7 @@
      "tileset.json: link to tileset-d1.json: refine 'ADD' differs from the document root 'REPLACE'"
     ]
    },
-   "archiveSha256": "2a3a59bf8f2c0702065174ca2546be6b4cf5d31ebdf829a0bd6a5922c5bc5080",
+   "archiveSha256": "3e305897ccc965f62d3003b82844efce2de19c749444f0e527717bd19464646f",
    "stats": null
   },
   {
@@ -1682,7 +1721,7 @@
      "tileset.json: link to tileset-d1.json: refine 'ADD' differs from the document root 'REPLACE'"
     ]
    },
-   "archiveSha256": "2a3a59bf8f2c0702065174ca2546be6b4cf5d31ebdf829a0bd6a5922c5bc5080",
+   "archiveSha256": "3e305897ccc965f62d3003b82844efce2de19c749444f0e527717bd19464646f",
    "stats": null
   },
   {
@@ -1704,7 +1743,7 @@
      "tileset.json: link to tileset-d1.json: link tile has children"
     ]
    },
-   "archiveSha256": "249e741d9f99265e6a0ebee99367742d2eaebb293f9dd189576e127712aac5a7",
+   "archiveSha256": "2ca7acc174287f5ae35073192266430003b59ba683d6587bcb1139c8e4e15512",
    "stats": null
   },
   {
@@ -1726,7 +1765,7 @@
      "tileset.json: link to tileset-d1.json: link tile has children"
     ]
    },
-   "archiveSha256": "249e741d9f99265e6a0ebee99367742d2eaebb293f9dd189576e127712aac5a7",
+   "archiveSha256": "2ca7acc174287f5ae35073192266430003b59ba683d6587bcb1139c8e4e15512",
    "stats": null
   },
   {
@@ -1766,7 +1805,7 @@
      "documents are not numbered 1..84 contiguously: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "1f7c739e92db7b71016b18c3dd10e84855ebaf3dd4e040e0709f155dbd07f8ab",
+   "archiveSha256": "9ccd709731b248179a212136a887fe96dfdf29a8fbd1f0c8872fd59e23f66f63",
    "stats": null
   },
   {
@@ -1796,7 +1835,7 @@
      "documents are not numbered 1..84 contiguously: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "1f7c739e92db7b71016b18c3dd10e84855ebaf3dd4e040e0709f155dbd07f8ab",
+   "archiveSha256": "9ccd709731b248179a212136a887fe96dfdf29a8fbd1f0c8872fd59e23f66f63",
    "stats": null
   },
   {
@@ -1836,7 +1875,7 @@
      "documents are not numbered 1..84 contiguously: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "7f015fb58322e2d06250943790d23c0faa7e48be6c5646ad5f22a57b3026c27f",
+   "archiveSha256": "eed44c7570b1a6675883ceef3886277aaceda0f580170297ad688fca9b6680d4",
    "stats": null
   },
   {
@@ -1866,7 +1905,7 @@
      "documents are not numbered 1..84 contiguously: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "7f015fb58322e2d06250943790d23c0faa7e48be6c5646ad5f22a57b3026c27f",
+   "archiveSha256": "eed44c7570b1a6675883ceef3886277aaceda0f580170297ad688fca9b6680d4",
    "stats": null
   },
   {
@@ -1889,7 +1928,7 @@
      "tileset-d1.json: link to tileset-d2.json: document root carries a transform (the link tile carries it)"
     ]
    },
-   "archiveSha256": "1f1c05027e63471128e98b0d0be025884760ad54d32e9ff9de703744afc8b8c1",
+   "archiveSha256": "49e1cbfa88a96a5cee6551526771db4a57833c44490601b209829690751c3d0b",
    "stats": null
   },
   {
@@ -1912,7 +1951,7 @@
      "tileset-d1.json: link to tileset-d2.json: document root carries a transform (the link tile carries it)"
     ]
    },
-   "archiveSha256": "1f1c05027e63471128e98b0d0be025884760ad54d32e9ff9de703744afc8b8c1",
+   "archiveSha256": "49e1cbfa88a96a5cee6551526771db4a57833c44490601b209829690751c3d0b",
    "stats": null
   },
   {
@@ -1934,7 +1973,7 @@
      "documents are not numbered 1..96 contiguously: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "9777bc1f3e8a5e24074154dccbefb689c3097169e217ad9998efa66a05bdf85a",
+   "archiveSha256": "64353b0636348c2661e07f74fe2329e50dc8c94dc0fb18ff2a8f424c742a9ebb",
    "stats": null
   },
   {
@@ -1956,7 +1995,7 @@
      "documents are not numbered 1..96 contiguously: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     ]
    },
-   "archiveSha256": "9777bc1f3e8a5e24074154dccbefb689c3097169e217ad9998efa66a05bdf85a",
+   "archiveSha256": "64353b0636348c2661e07f74fe2329e50dc8c94dc0fb18ff2a8f424c742a9ebb",
    "stats": null
   },
   {
@@ -1976,7 +2015,7 @@
      "link numbers in breadth-first document order: [2, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 23, 24, 25, 26, 27, 28, 29, 30, 31]"
     ]
    },
-   "archiveSha256": "91cc7e2c44b2882bf8abbbfb4076c5e3ad48e40613dcf9d424662cb106a41c71",
+   "archiveSha256": "25eba1870f3a1e330f0e56845205254fcac6a86a637dbad84d13ec5ad7aa6515",
    "stats": null
   },
   {
@@ -1996,7 +2035,7 @@
      "link numbers in breadth-first document order: [2, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 23, 24, 25, 26, 27, 28, 29, 30, 31]"
     ]
    },
-   "archiveSha256": "91cc7e2c44b2882bf8abbbfb4076c5e3ad48e40613dcf9d424662cb106a41c71",
+   "archiveSha256": "25eba1870f3a1e330f0e56845205254fcac6a86a637dbad84d13ec5ad7aa6515",
    "stats": null
   },
   {
@@ -2021,7 +2060,7 @@
      "tileset JSON member implicit-tileset-0-0-0-2-0-0.json is neither tileset.json nor a linked tileset-d{m}.json"
     ]
    },
-   "archiveSha256": "2e2342e7719c58b9363632fcb55a2d6d46368366a8f40e35e39c260b0d172ef1",
+   "archiveSha256": "107e218dfcaa9a32049b7bf609efd239a51d89ad2b4f97ca4fcac6d2ace55bd7",
    "stats": null
   },
   {
@@ -2046,7 +2085,7 @@
      "tileset JSON member implicit-tileset-0-0-0-2-0-0.json is neither tileset.json nor a linked tileset-d{m}.json"
     ]
    },
-   "archiveSha256": "2e2342e7719c58b9363632fcb55a2d6d46368366a8f40e35e39c260b0d172ef1",
+   "archiveSha256": "107e218dfcaa9a32049b7bf609efd239a51d89ad2b4f97ca4fcac6d2ace55bd7",
    "stats": null
   },
   {
@@ -2072,7 +2111,7 @@
      "tileset.json: tile extras at depth 2 carry implicitChildIndex"
     ]
    },
-   "archiveSha256": "2b9903be638e17f7cb61371bdf9b9666f4e8db854f65df1a2885fd7e430a89d1",
+   "archiveSha256": "f2f7b96eb8df70f5b65cc5b76f5b6feed0d1d1b1b230809af8a44f00f87ff92a",
    "stats": null
   },
   {
@@ -2095,7 +2134,7 @@
      "tileset.json: tile extras at depth 2 carry implicitChildIndex"
     ]
    },
-   "archiveSha256": "2b9903be638e17f7cb61371bdf9b9666f4e8db854f65df1a2885fd7e430a89d1",
+   "archiveSha256": "f2f7b96eb8df70f5b65cc5b76f5b6feed0d1d1b1b230809af8a44f00f87ff92a",
    "stats": null
   },
   {
@@ -2121,7 +2160,7 @@
      "tileset.json: implicit root r53: row extras at level 1 (0, 0, 0) carry implicitChildIndex"
     ]
    },
-   "archiveSha256": "f825b2a1e44893379d15919447d627b2d9624bc43807330fd0b9af66a4134019",
+   "archiveSha256": "93ffab61e4828c5959157d5604f4b927f96bdcb8a9d81e95394f871efa5da487",
    "stats": null
   },
   {
@@ -2144,7 +2183,7 @@
      "tileset.json: implicit root r53: row extras at level 1 (0, 0, 0) carry implicitChildIndex"
     ]
    },
-   "archiveSha256": "f825b2a1e44893379d15919447d627b2d9624bc43807330fd0b9af66a4134019",
+   "archiveSha256": "93ffab61e4828c5959157d5604f4b927f96bdcb8a9d81e95394f871efa5da487",
    "stats": null
   },
   {
@@ -2166,7 +2205,7 @@
      "tileset.json: implicit root r53: 2 content layers for 1 templates"
     ]
    },
-   "archiveSha256": "4db04c75e299771acff441e2ca2a60d1216f1f231bdac77c6a82e0b5c7321faf",
+   "archiveSha256": "6756e506fc8dd3b93e8be834f3b87c445c57f70c5a79612b3aa33fac03179d2f",
    "stats": null
   },
   {
@@ -2188,7 +2227,7 @@
      "tileset.json: implicit root r53: 2 content layers for 1 templates"
     ]
    },
-   "archiveSha256": "4db04c75e299771acff441e2ca2a60d1216f1f231bdac77c6a82e0b5c7321faf",
+   "archiveSha256": "6756e506fc8dd3b93e8be834f3b87c445c57f70c5a79612b3aa33fac03179d2f",
    "stats": null
   },
   {
@@ -2213,7 +2252,7 @@
      "tileset.json: implicit root r18: templates not in strictly sorted (slot, suffix) order: [(1, 'b3dm'), (0, 'glb')]"
     ]
    },
-   "archiveSha256": "065b289c2439963d593519c103b8141c8664665bd3a0108a4dbfeba9e9cdd220",
+   "archiveSha256": "d4a7155bf1902fcf9e994ed618201c2bc35edab76d6e5e63b6b3f2a71b7cdec5",
    "stats": null
   },
   {
@@ -2235,7 +2274,7 @@
      "tileset.json: implicit root r18: templates not in strictly sorted (slot, suffix) order: [(1, 'b3dm'), (0, 'glb')]"
     ]
    },
-   "archiveSha256": "065b289c2439963d593519c103b8141c8664665bd3a0108a4dbfeba9e9cdd220",
+   "archiveSha256": "d4a7155bf1902fcf9e994ed618201c2bc35edab76d6e5e63b6b3f2a71b7cdec5",
    "stats": null
   },
   {
@@ -2257,7 +2296,7 @@
      "tileset.json: implicit root r18: template name 'implicit-content/r18-1-0-0-0-0.glb' for available content is missing"
     ]
    },
-   "archiveSha256": "1aa7dd44ffa121137a3ba27cef4dc450419cc8d0b8ed3f3aef88da265b85bb7c",
+   "archiveSha256": "d59e1df4f3b66238d657e98e4c1d540af5ef7b3c651e73ec4a7bb330bd9c5ce0",
    "stats": null
   },
   {
@@ -2279,7 +2318,7 @@
      "tileset.json: implicit root r18: template name 'implicit-content/r18-1-0-0-0-0.glb' for available content is missing"
     ]
    },
-   "archiveSha256": "1aa7dd44ffa121137a3ba27cef4dc450419cc8d0b8ed3f3aef88da265b85bb7c",
+   "archiveSha256": "d59e1df4f3b66238d657e98e4c1d540af5ef7b3c651e73ec4a7bb330bd9c5ce0",
    "stats": null
   },
   {
@@ -2301,7 +2340,7 @@
      "unreferenced member implicit-content/r0-2-1-1-0.glb"
     ]
    },
-   "archiveSha256": "35a5d05096e755275965b549b19ad9e3512bb539187e119ccfbc85673ca748ee",
+   "archiveSha256": "6c5c121558e0928107c60a8c2406b4a0bec7212e02c34454ceac8efb277cbc45",
    "stats": null
   },
   {
@@ -2323,7 +2362,7 @@
      "unreferenced member implicit-content/r0-2-1-1-0.glb"
     ]
    },
-   "archiveSha256": "35a5d05096e755275965b549b19ad9e3512bb539187e119ccfbc85673ca748ee",
+   "archiveSha256": "6c5c121558e0928107c60a8c2406b4a0bec7212e02c34454ceac8efb277cbc45",
    "stats": null
   },
   {
@@ -2348,7 +2387,7 @@
      "implicit-content/r53-2-3-1-2-0.glb: GLB length 588 != 584 bytes"
     ]
    },
-   "archiveSha256": "cefeeda9150cbae5568e237cee26ef5b74cd821f29b62b1a7332df4c1de049f9",
+   "archiveSha256": "656c7e0d2c5c62e7d9fc2aa67a9961dce4aa9d3e4afc6307bbe761c0e7bc5370",
    "stats": null
   },
   {
@@ -2370,7 +2409,7 @@
      "implicit-content/r53-2-3-1-2-0.glb: GLB length 588 != 584 bytes"
     ]
    },
-   "archiveSha256": "cefeeda9150cbae5568e237cee26ef5b74cd821f29b62b1a7332df4c1de049f9",
+   "archiveSha256": "656c7e0d2c5c62e7d9fc2aa67a9961dce4aa9d3e4afc6307bbe761c0e7bc5370",
    "stats": null
   },
   {
@@ -2393,7 +2432,7 @@
      "unreferenced member vector-build.json"
     ]
    },
-   "archiveSha256": "949ef861d38b12ab66d9a1309e5a54483405cfcb307cbf9421bf4431de4b1126",
+   "archiveSha256": "ea3d5a8c9cbd5f3e6a9aad854b1256c61bf4935d2cb47d1209da91b24afed8f2",
    "stats": null
   },
   {
@@ -2416,7 +2455,7 @@
      "unreferenced member vector-build.json"
     ]
    },
-   "archiveSha256": "949ef861d38b12ab66d9a1309e5a54483405cfcb307cbf9421bf4431de4b1126",
+   "archiveSha256": "ea3d5a8c9cbd5f3e6a9aad854b1256c61bf4935d2cb47d1209da91b24afed8f2",
    "stats": null
   },
   {
@@ -2435,10 +2474,10 @@
    "collateralFailures": [],
    "examples": {
     "vectorBuild.reuseMap": [
-     "0024129cd5fa095f07a57818bf3392201088d7974df0fdb1e195ac8f1aeee647: restored bytes hash to d6e967222ddaf51e23407a449db6dc4beb6c81585ed5306e7d0373725e4d30de"
+     "0024129cd5fa095f07a57818bf3392201088d7974df0fdb1e195ac8f1aeee647: restore failed (recorded jsonLength shorter than the restored JSON)"
     ]
    },
-   "archiveSha256": "7ab628a913ba12da6ccefaebf99eacfe03fb7379135c6c26e91dfcf9969e0b68",
+   "archiveSha256": "e0c54dc058adafc53c0b3f28f7d854f4bc32c0b8f4779f91220646bcb2315997",
    "stats": null
   },
   {
@@ -2457,10 +2496,10 @@
    "collateralFailures": [],
    "examples": {
     "vectorBuild.reuseMap": [
-     "0024129cd5fa095f07a57818bf3392201088d7974df0fdb1e195ac8f1aeee647: restored bytes hash to d6e967222ddaf51e23407a449db6dc4beb6c81585ed5306e7d0373725e4d30de"
+     "0024129cd5fa095f07a57818bf3392201088d7974df0fdb1e195ac8f1aeee647: restore failed (recorded jsonLength shorter than the restored JSON)"
     ]
    },
-   "archiveSha256": "7ab628a913ba12da6ccefaebf99eacfe03fb7379135c6c26e91dfcf9969e0b68",
+   "archiveSha256": "e0c54dc058adafc53c0b3f28f7d854f4bc32c0b8f4779f91220646bcb2315997",
    "stats": null
   },
   {
@@ -2482,7 +2521,7 @@
      "1 raw payloads published only under implicit-content/ have no payloads entry (e.g. 00067e01bc14913562a7be27d6cb2f8f661662a845ec66fc6511dfdeaa5ec0b6)"
     ]
    },
-   "archiveSha256": "b72f6e20b6b3fdb2573a100c42c3ab7d6fe487aece5e3bc45a469292908b1c3d",
+   "archiveSha256": "cfbd92112c17f90b3388ad9fd5f40fb723801b0eb4bca58572a55473b15b62c9",
    "stats": null
   },
   {
@@ -2504,7 +2543,7 @@
      "tile p1624: row error 1.977176311509218 != 0.488588155754609"
     ]
    },
-   "archiveSha256": "e9be0b770b4a045661c2f6a247485635e532310b069aedc8a6e43cba48a02e57",
+   "archiveSha256": "d96e70e443542077f450689a38d4b776f9befc41bd5327b0c31e6d43acac32bc",
    "stats": null
   },
   {
@@ -2526,7 +2565,7 @@
      "tile p55: row extras differ in ['tampered']"
     ]
    },
-   "archiveSha256": "0e4e2ec67e963d493845bb719e06b1fdc55d48921771541d8ee4bd779446bce4",
+   "archiveSha256": "33b12a5bb3e6e08aa3e2af7bc687ca2744d9e933ec0c477f627deff8e31765db",
    "stats": null
   },
   {
@@ -2548,7 +2587,7 @@
      "tile p63 (level 1 (0, 1, 1) under r53) is not available in the forest"
     ]
    },
-   "archiveSha256": "76be53510b18af5dbf0107552cfc21ce939ad7c1a2f5d94e6cdffc41bd96fb93",
+   "archiveSha256": "2fd8eb3c7a39f6bb6bf245e9780630823b16334646946c4363558001d985f8b1",
    "stats": null
   },
   {
@@ -2573,7 +2612,7 @@
      "tile p1590 implicit-content/r1588-2-0-0-0.glb: BIN (or later) chunk differs"
     ]
    },
-   "archiveSha256": "e0afdd64a9cd1492d7acee6c54c9646d0f156da0b1a2a533e20714deb2ead632",
+   "archiveSha256": "082174004fbc94581afcbf6aad0e3d155a1b1e954febf3c869e279b8c295935f",
    "stats": null
   },
   {
@@ -2595,7 +2634,7 @@
      "tile p54 implicit-content/r53-1-0-0-0-0.glb: root node 0 translation [-7.989999999999999, -7.97, 7.98] != raw + delta [-7.99, -7.97, 7.98]"
     ]
    },
-   "archiveSha256": "f116175a49382603fb1959df8bfe1052bd851f1d642029b7b1768e752f186545",
+   "archiveSha256": "725227b51862b8475796690cac178055b819e72a2492926013bf819de30b6eae",
    "stats": null
   },
   {
@@ -2617,7 +2656,7 @@
      "tile p58 implicit-content/r53-1-1-1-0-0.glb: JSON bytes outside the scene-root node object differ (not a root-node splice)"
     ]
    },
-   "archiveSha256": "31895a2cdf913f5958c298bdac05bc694fccf745cb23cde1bd82f92d5ddbfe8d",
+   "archiveSha256": "01714d630d973d8d49175b5369066c32cb4eb2a3d2906eb9b5e695278c178708",
    "stats": null
   },
   {
@@ -2639,7 +2678,7 @@
      "tile p34: explicit payload t/4f5dfa0d72b98ec5678124d3b772d2b37749788ea5f742366c661d310b7af817.glb differs from the reference bytes"
     ]
    },
-   "archiveSha256": "f8ce42d023167789c2869059543e76902842831c868b800d1c90db51b9df77aa",
+   "archiveSha256": "4732759c7455c907689378f7241191e3c134be8f8af368771f537dfbf9645764",
    "stats": null
   },
   {
@@ -2661,7 +2700,7 @@
      "implicit root prefix r1002 != preorder index 2"
     ]
    },
-   "archiveSha256": "3140fa89c9602d0f4d0a6574340e8c1201634f59e43cc2911d3fa0168d96c19f",
+   "archiveSha256": "958b6c997bf5f74423fa78eb960b9a4da2f8fbf3f003a0ef26d0c7436d1fd70f",
    "stats": null
   },
   {
@@ -2683,7 +2722,7 @@
      "implicit root p53: refine 'ADD' != 'REPLACE'"
     ]
    },
-   "archiveSha256": "4e147c7b0eb903fa0ebc62d7c8285980f5519b93c20e5185a5f559f61a40025f",
+   "archiveSha256": "f144cf7739fa23b9762cbf4eb77703147e866e5b0a10c64b74bd64933f89626b",
    "stats": null
   },
   {
@@ -2705,7 +2744,74 @@
      "implicit root p53: transform differs from the producer tile"
     ]
    },
-   "archiveSha256": "bc5167562f2bb170e00e7200f61fe0504aca3baed63898f730cafa443728d475",
+   "archiveSha256": "2c5d58f72859f485cbf7bddd74f0ddee5f3acc0da289f568d27344ca759c07b1",
+   "stats": null
+  },
+  {
+   "case": "neg-row-signed-zero",
+   "kind": "negative",
+   "withReference": true,
+   "agree": true,
+   "verdict": "fail",
+   "failedRules": [
+    "A4.rows"
+   ],
+   "targets": [
+    "A4.rows"
+   ],
+   "missedTargets": [],
+   "collateralFailures": [],
+   "examples": {
+    "A4.rows": [
+     "tile p3: row box [0.0, 0.0, 0.0, 8.001, 0.0, 0.0, 0.0, 8.002, 0.0, 0.0, 0.0, 4.003] != B + delta [-0.0, 0.0, 0.0, 8.001, 0.0, 0.0, 0.0, 8.002, 0.0, 0.0, 0.0, 4.003]"
+    ]
+   },
+   "archiveSha256": "9ae5de090558508790394b984eb0fd9d6823d2a38ea4f8740707925189ae6eaa",
+   "stats": null
+  },
+  {
+   "case": "neg-zero-delta-rebased",
+   "kind": "negative",
+   "withReference": true,
+   "agree": true,
+   "verdict": "fail",
+   "failedRules": [
+    "A4.payloads"
+   ],
+   "targets": [
+    "A4.payloads"
+   ],
+   "missedTargets": [],
+   "collateralFailures": [],
+   "examples": {
+    "A4.payloads": [
+     "tile p3 implicit-content/r2-1-0-0-0-0.glb: delta is zero but the payload is not a byte copy"
+    ]
+   },
+   "archiveSha256": "acd6216034c7b01ce16def36d3ba5f0eeb1fd4928a13aa18296df847b0473dcc",
+   "stats": null
+  },
+  {
+   "case": "neg-matrix-as-translation",
+   "kind": "negative",
+   "withReference": true,
+   "agree": true,
+   "verdict": "fail",
+   "failedRules": [
+    "A4.payloads"
+   ],
+   "targets": [
+    "A4.payloads"
+   ],
+   "missedTargets": [],
+   "collateralFailures": [],
+   "examples": {
+    "A4.payloads": [
+     "tile p4 implicit-content/r2-2-0-0-0-0.glb: root node 0 matrix translation != raw + delta",
+     "tile p4 implicit-content/r2-2-0-0-0-0.glb: root node 0 differs outside its translation"
+    ]
+   },
+   "archiveSha256": "f597aab5d6026a05df39e1cefcd9caaf1d2b09dab8b4c294611f0b3092502015",
    "stats": null
   }
  ]
