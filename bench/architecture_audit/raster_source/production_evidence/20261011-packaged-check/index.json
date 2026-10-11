@@ -1,0 +1,281 @@
+{
+  "scope": "Lossless original failing and additive corrected packaging-consumer migration; source08 production unchanged; script artifact bound separately. Current host restricted-PATH executes real vector/validate/raster; not Docker/network/platform/CI acceptance.",
+  "utc": "2026-10-10T19:50:35.621294+00:00",
+  "roots": [
+    "/tmp/rusty-tiles-r2-packaged-check-migration-20261011",
+    "/tmp/rusty-tiles-r2-packaged-check-original-20261011",
+    "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011"
+  ],
+  "root_status": [
+    {
+      "path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011",
+      "status": "retained"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011",
+      "status": "retained"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011",
+      "status": "retained"
+    }
+  ],
+  "prior_indexes": [
+    {
+      "path": "/tmp/rusty-tiles-r2-foundation/bench/architecture_audit/raster_source/production_evidence/20261011-local/index.json",
+      "bytes": 788738,
+      "sha256": "3ce6560371f80f4d9808353634f239aebc3773bf38ce3d406186662fd698df42"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-foundation/bench/architecture_audit/raster_source/production_evidence/20261011-final-local/index.json",
+      "bytes": 10457,
+      "sha256": "7125e176d23a382fd46e4c7da01474d82eae0631a5019a574e978d461191f269"
+    }
+  ],
+  "plan": {
+    "path": "/tmp/rusty-tiles-r2-packaged-check-retention-plan-20261011/plan.json",
+    "bytes": 939,
+    "sha256": "42d5e168a09fbfbe88f1d7b9e725691db6b69edc9e87b10c02ba8a2d0d907152"
+  },
+  "exclusions": [
+    "__pycache__ directories and pyc files",
+    "compiled/native/package external bytes retained as metadata only; no exhaustive SDK dependency claim"
+  ],
+  "scheduling": {
+    "absoluteNice": 10,
+    "affinity": [
+      0,
+      1
+    ]
+  },
+  "records": [
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "corrected-plan.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/corrected-plan.json",
+      "kind": "file",
+      "bytes": 25451,
+      "sha256": "b5c9989aed053f531a557c8cfb558ae5aa053d3cd1ff37fd708291c35137f8b4",
+      "storage": "lossless-gzip",
+      "blob": "blobs/b5c9989aed053f531a557c8cfb558ae5aa053d3cd1ff37fd708291c35137f8b4.gz",
+      "compressed_bytes": 5944,
+      "compressed_sha256": "b6ab566183f27f0f2a8e32142f669ba9761aff5d78c2e3ec2b8cb60d9acae873"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "corrected-test-packaged-runtime.sh",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/corrected-test-packaged-runtime.sh",
+      "kind": "file",
+      "bytes": 1348,
+      "sha256": "070f2d3a8ba7b15ae5a67705850300d665302126d9ae33e8942ea7c21bde9098",
+      "storage": "lossless-gzip",
+      "blob": "blobs/070f2d3a8ba7b15ae5a67705850300d665302126d9ae33e8942ea7c21bde9098.gz",
+      "compressed_bytes": 642,
+      "compressed_sha256": "ab9604934df75b21ab171a725c4311e09c34cf45477530e959a6d4fc7d5c6c3e"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "original-plan.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/original-plan.json",
+      "kind": "file",
+      "bytes": 25481,
+      "sha256": "51255aefbf0bc7d975576473b1e2abc356fba4f0d02cdcbbad51c043ea454f24",
+      "storage": "lossless-gzip",
+      "blob": "blobs/51255aefbf0bc7d975576473b1e2abc356fba4f0d02cdcbbad51c043ea454f24.gz",
+      "compressed_bytes": 5925,
+      "compressed_sha256": "5c3d52b4fc444671b632f36013a1fec5e498a1fc2b0e09a9dddacf9524972413"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "original-test-packaged-runtime.sh",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/original-test-packaged-runtime.sh",
+      "kind": "file",
+      "bytes": 1352,
+      "sha256": "44178f2a4105f4a3a8ea38a0bb2d90a40e4af20a5704a22c60ee557178fafc80",
+      "storage": "lossless-gzip",
+      "blob": "blobs/44178f2a4105f4a3a8ea38a0bb2d90a40e4af20a5704a22c60ee557178fafc80.gz",
+      "compressed_bytes": 644,
+      "compressed_sha256": "30f5b6f3318cbdfc40c59160772a3dc0b2d8a0e551fc10c5514b37ed896535eb"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "path/mktemp",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/path/mktemp",
+      "kind": "symlink-target",
+      "bytes": 15,
+      "sha256": "31dd61577ff059c9a520f92a7843db2c52f46f7e92d8e4a199f1cb88ea2d380b",
+      "storage": "lossless-gzip",
+      "blob": "blobs/31dd61577ff059c9a520f92a7843db2c52f46f7e92d8e4a199f1cb88ea2d380b.gz",
+      "compressed_bytes": 35,
+      "compressed_sha256": "41f47364d3faecf70d374c3714334a109decec19da1cfa899be64f0874db4651"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "path/rm",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/path/rm",
+      "kind": "symlink-target",
+      "bytes": 11,
+      "sha256": "fce82f1a38cfded56d5eecd9905361733822523bb70b525ac9f34a1b5ec0e2fa",
+      "storage": "lossless-gzip",
+      "blob": "blobs/fce82f1a38cfded56d5eecd9905361733822523bb70b525ac9f34a1b5ec0e2fa.gz",
+      "compressed_bytes": 31,
+      "compressed_sha256": "b00ffbe23ad0a5838cf871182e39daba62c59c88dbc9711841911d453b1f84e9"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-migration-20261011",
+      "relative_path": "path/rusty-tiles",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-migration-20261011/path/rusty-tiles",
+      "kind": "symlink-target",
+      "bytes": 67,
+      "sha256": "e04400e9435a4886077205fde4b8803456068014ea37e8aaecd66c88c67bd7e3",
+      "storage": "lossless-gzip",
+      "blob": "blobs/e04400e9435a4886077205fde4b8803456068014ea37e8aaecd66c88c67bd7e3.gz",
+      "compressed_bytes": 77,
+      "compressed_sha256": "0b3ffa79eb434a08d21d89a83b2dbaf5d809256602b0e3cb794cd20319996710"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "after.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/after.json",
+      "kind": "file",
+      "bytes": 17874,
+      "sha256": "0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172",
+      "storage": "lossless-gzip",
+      "blob": "blobs/0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172.gz",
+      "compressed_bytes": 5584,
+      "compressed_sha256": "c4f78d2933f404cbb18b2490592b6c93f8b9777438a13ec1d768d79695ae7ab8"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "before.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/before.json",
+      "kind": "file",
+      "bytes": 17853,
+      "sha256": "d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6",
+      "storage": "lossless-gzip",
+      "blob": "blobs/d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6.gz",
+      "compressed_bytes": 5565,
+      "compressed_sha256": "fe28fe83cb7ed5baf9abc19ae8352a45f3e26a4449eae5d04c09f308a33b1f86"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "child-start.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/child-start.json",
+      "kind": "file",
+      "bytes": 57,
+      "sha256": "c910c685a85268a3ff63f39b4218b85405692f40109b9a6acb564e9af20dc76a",
+      "storage": "lossless-gzip",
+      "blob": "blobs/c910c685a85268a3ff63f39b4218b85405692f40109b9a6acb564e9af20dc76a.gz",
+      "compressed_bytes": 75,
+      "compressed_sha256": "4bb446b03d96e8b5aed4767f95b4e09b53b2430793e60457d407b13a3bc65c40"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "receipt.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/receipt.json",
+      "kind": "file",
+      "bytes": 46424,
+      "sha256": "16bc7c41753760bc7f7f12c00b6574e85c8a2a0b3cc0d7f2b5261a37e4a1f573",
+      "storage": "lossless-gzip",
+      "blob": "blobs/16bc7c41753760bc7f7f12c00b6574e85c8a2a0b3cc0d7f2b5261a37e4a1f573.gz",
+      "compressed_bytes": 6418,
+      "compressed_sha256": "917cb4ece9145cc335f7592db241380046d0f3ac20ddd98589ef04646a0ece0e"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "stderr",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/stderr",
+      "kind": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "lossless-gzip",
+      "blob": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "compressed_bytes": 20,
+      "compressed_sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-original-20261011",
+      "relative_path": "stdout",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-original-20261011/stdout",
+      "kind": "file",
+      "bytes": 6537,
+      "sha256": "69563051907cd91ef013b156e4249ec200fafaf6cd0ddd771004dc0e84fb2288",
+      "storage": "lossless-gzip",
+      "blob": "blobs/69563051907cd91ef013b156e4249ec200fafaf6cd0ddd771004dc0e84fb2288.gz",
+      "compressed_bytes": 2383,
+      "compressed_sha256": "acbd09f13273e197a60640bf99c7f909d592486f587c8bda5e0b357a80951c88"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "after.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/after.json",
+      "kind": "file",
+      "bytes": 17874,
+      "sha256": "0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172",
+      "storage": "lossless-gzip",
+      "blob": "blobs/0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172.gz",
+      "compressed_bytes": 5584,
+      "compressed_sha256": "c4f78d2933f404cbb18b2490592b6c93f8b9777438a13ec1d768d79695ae7ab8"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "before.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/before.json",
+      "kind": "file",
+      "bytes": 17853,
+      "sha256": "d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6",
+      "storage": "lossless-gzip",
+      "blob": "blobs/d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6.gz",
+      "compressed_bytes": 5565,
+      "compressed_sha256": "fe28fe83cb7ed5baf9abc19ae8352a45f3e26a4449eae5d04c09f308a33b1f86"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "child-start.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/child-start.json",
+      "kind": "file",
+      "bytes": 57,
+      "sha256": "5bd4a6e822aeb2800098dc47f8a02fc514638ede68f6b66da147b1cf148ca8a2",
+      "storage": "lossless-gzip",
+      "blob": "blobs/5bd4a6e822aeb2800098dc47f8a02fc514638ede68f6b66da147b1cf148ca8a2.gz",
+      "compressed_bytes": 75,
+      "compressed_sha256": "09dd7a2a0fff54aa0e2502b0380a3102ae164c74a6e50b75d8678175e81b249a"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "receipt.json",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/receipt.json",
+      "kind": "file",
+      "bytes": 46352,
+      "sha256": "810928e001ad8d65fccd097eab212a872acc069ab7871df72a583b71342f5391",
+      "storage": "lossless-gzip",
+      "blob": "blobs/810928e001ad8d65fccd097eab212a872acc069ab7871df72a583b71342f5391.gz",
+      "compressed_bytes": 6416,
+      "compressed_sha256": "c9245ae903f355db3b37670623f80516d173ed1dbc51bcf8731a1f0616f57714"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "stderr",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/stderr",
+      "kind": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "lossless-gzip",
+      "blob": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "compressed_bytes": 20,
+      "compressed_sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "epoch": "rusty-tiles-r2-packaged-check-corrected-20261011",
+      "relative_path": "stdout",
+      "original_path": "/tmp/rusty-tiles-r2-packaged-check-corrected-20261011/stdout",
+      "kind": "file",
+      "bytes": 6607,
+      "sha256": "7af24d456166d28a892a8f9ccad21ac0d4dcfa94719611e6d907a75245bebf7c",
+      "storage": "lossless-gzip",
+      "blob": "blobs/7af24d456166d28a892a8f9ccad21ac0d4dcfa94719611e6d907a75245bebf7c.gz",
+      "compressed_bytes": 2420,
+      "compressed_sha256": "ef4f88f9d0de218bdb56c70ae43e2ec44221dbcdbe0a73bd6f4ef32f894a1c0e"
+    }
+  ]
+}

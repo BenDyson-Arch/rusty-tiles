@@ -1,0 +1,223 @@
+{
+  "scope": "Additive independent epoch08 actual local acceptance and exact-source final formatting. Storage identity only; remote CI, wheel, official Blender and final package acceptance remain pending. Earlier local index stays immutable.",
+  "utc": "2026-10-10T19:47:57.829225+00:00",
+  "roots": [
+    "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+    "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011"
+  ],
+  "root_status": [
+    {
+      "path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "status": "retained"
+    },
+    {
+      "path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "status": "retained"
+    }
+  ],
+  "prior_indexes": [
+    {
+      "path": "/tmp/rusty-tiles-r2-foundation/bench/architecture_audit/raster_source/production_evidence/20261011-local/index.json",
+      "bytes": 788738,
+      "sha256": "3ce6560371f80f4d9808353634f239aebc3773bf38ce3d406186662fd698df42"
+    }
+  ],
+  "plan": {
+    "path": "/tmp/rusty-tiles-r2-final-local-retention-plan-20261011/plan.json",
+    "bytes": 680,
+    "sha256": "b2e70ea42a49d8a7fd0e7432540cb7e530c96d83504d35ca2f389bcf8e37011e"
+  },
+  "exclusions": [
+    "__pycache__ directories and pyc files",
+    "compiled/native/package external bytes retained as metadata only; no exhaustive SDK dependency claim"
+  ],
+  "scheduling": {
+    "absoluteNice": 10,
+    "affinity": [
+      0,
+      1
+    ]
+  },
+  "records": [
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "caps-consumers.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/caps-consumers.json",
+      "kind": "file",
+      "bytes": 37590,
+      "sha256": "5923d60ef6f0f9a8a85e7f93b73c4b119ad1c74989a479ce8f791921997b0c0b",
+      "storage": "lossless-gzip",
+      "blob": "blobs/5923d60ef6f0f9a8a85e7f93b73c4b119ad1c74989a479ce8f791921997b0c0b.gz",
+      "compressed_bytes": 2407,
+      "compressed_sha256": "1148dff1efb01de2e85a090d63eb645d6209766c8b71857736eb041380e5eb06"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "decision.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/decision.json",
+      "kind": "file",
+      "bytes": 2115,
+      "sha256": "7c7a1b664d684e6b531ce64f6eae53bad01cb8d30f3750ddc643c69787935879",
+      "storage": "lossless-gzip",
+      "blob": "blobs/7c7a1b664d684e6b531ce64f6eae53bad01cb8d30f3750ddc643c69787935879.gz",
+      "compressed_bytes": 1067,
+      "compressed_sha256": "6d6e205c7daac3d54b86785d222ff621e2331c072aa5fe01643f08bdd193ee99"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "finalize-consumers.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/finalize-consumers.json",
+      "kind": "file",
+      "bytes": 3276,
+      "sha256": "9096c99b8c644efb834c4255a9f2fc416704380ccda96fd95507544fa9008204",
+      "storage": "lossless-gzip",
+      "blob": "blobs/9096c99b8c644efb834c4255a9f2fc416704380ccda96fd95507544fa9008204.gz",
+      "compressed_bytes": 1067,
+      "compressed_sha256": "188e36443d368b188dc963ef57f1576dadbf5c4246890535e647f4a36c5460c5"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "integrity.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/integrity.json",
+      "kind": "file",
+      "bytes": 1767,
+      "sha256": "63058547cadcc500a118d132a1b5b0cfa016056b4591fd304cbbdd2c98c57079",
+      "storage": "lossless-gzip",
+      "blob": "blobs/63058547cadcc500a118d132a1b5b0cfa016056b4591fd304cbbdd2c98c57079.gz",
+      "compressed_bytes": 589,
+      "compressed_sha256": "427e13558664e59bb2d9b2af87b21a040e3cb10020e4e78b57dbb9648991bb1d"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "phase-bindings.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/phase-bindings.json",
+      "kind": "file",
+      "bytes": 13004,
+      "sha256": "4040ef5b728044539f8b0fd3d9cb44df1d90de66069e7e49c85f8ef494cd7bd4",
+      "storage": "lossless-gzip",
+      "blob": "blobs/4040ef5b728044539f8b0fd3d9cb44df1d90de66069e7e49c85f8ef494cd7bd4.gz",
+      "compressed_bytes": 2323,
+      "compressed_sha256": "430d504e43a51824c8a7c7875836165d0507087ccc627990ee78d86dfc0f6c9c"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "profile-consumers.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/profile-consumers.json",
+      "kind": "file",
+      "bytes": 7400,
+      "sha256": "90aefa962ae2c7655be68fcfe7f7657330650f03be10ae331346fecb1e0f605c",
+      "storage": "lossless-gzip",
+      "blob": "blobs/90aefa962ae2c7655be68fcfe7f7657330650f03be10ae331346fecb1e0f605c.gz",
+      "compressed_bytes": 957,
+      "compressed_sha256": "13f07ed189934c6032928b87e9e07797eb2f5d0d4961a3f4f8832810849ebc71"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "python-migration-reconciliation.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/python-migration-reconciliation.json",
+      "kind": "file",
+      "bytes": 3036,
+      "sha256": "bc71342d8d0e32e1be2a9b5ec5b5238a5ef484bda5550e43edc5324367ee6025",
+      "storage": "lossless-gzip",
+      "blob": "blobs/bc71342d8d0e32e1be2a9b5ec5b5238a5ef484bda5550e43edc5324367ee6025.gz",
+      "compressed_bytes": 1021,
+      "compressed_sha256": "5337376a736f7ebe6678dc9c29363636bcc7f72ad66f65b27a9de3e090ff115e"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "review.md",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/review.md",
+      "kind": "file",
+      "bytes": 5769,
+      "sha256": "8406da5f9066d6c805b41eece28bc2dd0fc79d21f50b46098a659a622fb6d6ed",
+      "storage": "lossless-gzip",
+      "blob": "blobs/8406da5f9066d6c805b41eece28bc2dd0fc79d21f50b46098a659a622fb6d6ed.gz",
+      "compressed_bytes": 2814,
+      "compressed_sha256": "e07be77bc8e3bf9205abde0769db8b9686cfce31b0b1c3c310d1651d667fba1b"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-actual-local-review-20261011",
+      "relative_path": "six-consumers.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-actual-local-review-20261011/six-consumers.json",
+      "kind": "file",
+      "bytes": 8720,
+      "sha256": "65eeb5aefa0e4fbfcc5255ea004caa10aab3a671a543579c9bd50277e480d234",
+      "storage": "lossless-gzip",
+      "blob": "blobs/65eeb5aefa0e4fbfcc5255ea004caa10aab3a671a543579c9bd50277e480d234.gz",
+      "compressed_bytes": 1549,
+      "compressed_sha256": "2a6360d45e5cb524f28d4f6d7aea9fc75248373e07a5c5244b0e9a6ff9c8787b"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "after.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/after.json",
+      "kind": "file",
+      "bytes": 17874,
+      "sha256": "0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172",
+      "storage": "lossless-gzip",
+      "blob": "blobs/0d4ee3224af6d31c0159db8f6994d6c17a168ff82e0bfe18249cadf4893e7172.gz",
+      "compressed_bytes": 5584,
+      "compressed_sha256": "c4f78d2933f404cbb18b2490592b6c93f8b9777438a13ec1d768d79695ae7ab8"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "before.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/before.json",
+      "kind": "file",
+      "bytes": 17853,
+      "sha256": "d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6",
+      "storage": "lossless-gzip",
+      "blob": "blobs/d3b4dcf647791d91856fe28615d1481bdc5951876b4dbba30ef2f9c231f72fc6.gz",
+      "compressed_bytes": 5565,
+      "compressed_sha256": "fe28fe83cb7ed5baf9abc19ae8352a45f3e26a4449eae5d04c09f308a33b1f86"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "child-start.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/child-start.json",
+      "kind": "file",
+      "bytes": 57,
+      "sha256": "439e42e9d6a338e78e4e5619641f56c360f979a4bde8b7e2ba3d32de57eeec9b",
+      "storage": "lossless-gzip",
+      "blob": "blobs/439e42e9d6a338e78e4e5619641f56c360f979a4bde8b7e2ba3d32de57eeec9b.gz",
+      "compressed_bytes": 75,
+      "compressed_sha256": "213d4a53e7573119788c12ee00015019771c79172da6a1f829673631d9290cc6"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "receipt.json",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/receipt.json",
+      "kind": "file",
+      "bytes": 2993,
+      "sha256": "ffb51404f17ccc3c0888bc5fa657123d33a8d286b5dcfac14f2b0156a7ba37c9",
+      "storage": "lossless-gzip",
+      "blob": "blobs/ffb51404f17ccc3c0888bc5fa657123d33a8d286b5dcfac14f2b0156a7ba37c9.gz",
+      "compressed_bytes": 989,
+      "compressed_sha256": "e8bfe86d24f49c7b00b12aea1257f5e3d73dd132b337317c10fa81286db55d67"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "stderr",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/stderr",
+      "kind": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "lossless-gzip",
+      "blob": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "compressed_bytes": 20,
+      "compressed_sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "epoch": "rusty-tiles-r2-epoch08-final-fmt-20261011",
+      "relative_path": "stdout",
+      "original_path": "/tmp/rusty-tiles-r2-epoch08-final-fmt-20261011/stdout",
+      "kind": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "lossless-gzip",
+      "blob": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "compressed_bytes": 20,
+      "compressed_sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    }
+  ]
+}

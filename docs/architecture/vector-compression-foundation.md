@@ -1,10 +1,23 @@
-# Vector compression foundation preparation
+# Vector compression foundation
 
-The authoring gate is settled under #126. Production codec, producer bridge and
-captured-file operation work has bounded local observations; final source and
-platform acceptance remain pending.
-Foundation decisions and focused probes precede implementation; separate
-nonauthor final-source and platform acceptance follow it.
+The chosen codec, producer bridge and captured-file operation are independently
+accepted through [PR #154](https://github.com/BenDyson-Arch/rusty-tiles/pull/154),
+reviewed head `e9fb073184ad25a1f5c7839ea5d1cd9e02830887`, develop merge
+`6c5ea2acac9fc403bfabfa9581464223b52259d7`. The merge has exactly the reviewed
+tree `e395a4c22e8b0e86d3c72169c332fbea1e5d8eb5`. All 21 applicable CI, installed
+wheel and official Blender jobs pass; two prescribed conditional skips remain
+skips. This completes this bounded vector foundation, while #126's remaining
+consumer/removal and full A2 obligations stay open.
+
+The [accepted remote evidence](../../bench/architecture_audit/vector_compression/candidate_evidence/pr154-remote-accepted-20261011/index.json)
+retains 234 selected full records as 165 shared gzip blobs: exact source/final
+reviews, API/job/log/report identities and actual merge records. Fifteen downloaded
+artifact ZIPs and five actual wheels remain externally hash-bound. Ten installed
+Python reports and four official Blender report pairs pass; Blender distribution
+and executable hashes are job-computed pins, not locally rehashed downloaded
+executables. CI tests the equal-tree synthetic PR merge; the explicitly dispatched
+wheel/Blender workflow tests the reviewed head. All 21 job logs have their actual
+checkout commit output, and Windows' readonly-source control passes.
 
 The initial integrated production compile failed before any tests with three
 integration errors. Its source freeze, diagnostics and receipt remain unchanged.

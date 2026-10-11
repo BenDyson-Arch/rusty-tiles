@@ -69,11 +69,17 @@ impl DirectoryTarget {
     }
 
     pub(crate) fn stage(self, attempt: &Attempt) -> Result<DirectoryStaging<'_>, JobFailure> {
-        attempt.check().map_err(|e| attempt.fail(e))?;
+        self.stage_pending(attempt).map_err(|e| attempt.fail(e))
+    }
+
+    /// A producer with admitted live owners must close them before finalizing
+    /// a failed attempt. This preparation leaves that finalization to its caller.
+    pub(crate) fn stage_pending(self, attempt: &Attempt) -> Result<DirectoryStaging<'_>, JobError> {
+        attempt.check()?;
         let tree = tempfile::Builder::new()
             .prefix(".tiles-dir-")
             .tempdir_in(self.output.parent().expect("prepared directory parent"))
-            .map_err(|e| attempt.fail(JobError::io("create private directory", &self.output, e)))?;
+            .map_err(|e| JobError::io("create private directory", &self.output, e))?;
         Ok(DirectoryStaging {
             tree,
             target: self,
@@ -88,6 +94,14 @@ pub(crate) struct DirectoryStaging<'a> {
     attempt: &'a Attempt,
 }
 impl<'a> DirectoryStaging<'a> {
+    #[cfg(feature = "native-geospatial")]
+    pub(crate) fn owned_bytes(&self) -> usize {
+        // TempDir retains a Box<Path>, whose backing length is exact.
+        std::mem::size_of::<Self>()
+            + self.target.output.capacity()
+            + self.tree.path().as_os_str().len()
+    }
+
     pub(crate) fn path(&self) -> &Path {
         self.tree.path()
     }

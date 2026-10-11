@@ -265,7 +265,6 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 | `tests/fixtures/example.gltf`, `tests/fixtures/vector.geojson` | The README mesh and vector examples |
 | `tests/fixtures/vector_oracle/` | The original Python vector modules, kept unchanged for comparison |
 | `tests/fixtures/terrain_oracle.py` | The original Python terrain converter, compared at every grid size |
-| `tests/fixtures/raster_oracle.py` | The original Python raster converter, compared tile by tile |
 | `tests/fixtures/*.cjs` | Browser probes, described below |
 | `bench/benchmark_*.py` | Repeatable benchmark harnesses |
 | `bench/*_results.json`, `bench/public_runtime_audit.json` | Recorded evidence, listed below |
@@ -414,7 +413,7 @@ These files record measured runs. Read them for numbers. They describe one machi
 | [`release_04_blockers_results.json`](bench/release_04_blockers_results.json) | 0.4 candidate Rust/Python/browser checks, five-platform wheels and official Blender bundle provenance; publication remains separate | Release acceptance and wheel acceptance workflows |
 | [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
 | [`vector_benchmark_results.json`](bench/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
-| [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Native raster against the Python baseline at `9a95862`, with every PNG byte compared | `bench/benchmark_raster.py` |
+| [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Historical: native raster against the Python baseline at `9a95862`, with every PNG byte compared. R2 retired that converter and its `conversion.json`, so this is not reproducible on current builds | `bench/benchmark_raster.py` at `9a95862` |
 | [`terrain_benchmark_results.json`](bench/terrain_benchmark_results.json) | First native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` |
 | [`terrain_performance_results.json`](bench/terrain_performance_results.json) | Parallel terrain encoding, with byte-identical payloads | `bench/benchmark_terrain.py --mode performance` |
 | [`runtime_benchmark_results.json`](bench/runtime_benchmark_results.json) | Native doctor and preview against the Python helpers at `bf3346c` | `bench/benchmark_runtime.py BINARY RESULTS.json` |

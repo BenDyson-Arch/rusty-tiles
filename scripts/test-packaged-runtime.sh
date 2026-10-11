@@ -30,7 +30,7 @@ rusty-tiles validate "$work/vector.3tz" --json
 rusty-tiles raster -i "$fixtures/d1-rgb.tif" -o "$work/imagery" \
     --min-zoom 0 --max-zoom 0 --json
 [ -s "$work/imagery/tilejson.json" ]
-[ -s "$work/imagery/conversion.json" ]
+[ -s "$work/imagery/report.json" ]
 [ -s "$work/imagery/source.cog.tif" ]
 [ -s "$work/imagery/tiles/0/0/0.png" ]
 # validate accepts .3tz archives; raster directory readiness is checked above.

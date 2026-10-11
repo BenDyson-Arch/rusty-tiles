@@ -96,7 +96,7 @@ fn filename_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, JobError> {
     }
 }
 fn copy(
-    dataset: &Dataset<'_>,
+    dataset: &Dataset,
     path: &Path,
     z: u8,
     x: u32,

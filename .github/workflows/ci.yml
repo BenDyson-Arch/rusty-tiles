@@ -475,6 +475,7 @@ jobs:
       - name: Test packaged conversions without Python or network access
         run: |
           docker run --rm --network none \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
             --mount type=bind,src="$PWD/tests/fixtures",dst=/fixtures,readonly \
             --mount type=bind,src="$PWD/scripts/test-packaged-runtime.sh",dst=/test-packaged-runtime.sh,readonly \
             --entrypoint /bin/sh rusty-tiles:native /test-packaged-runtime.sh /fixtures

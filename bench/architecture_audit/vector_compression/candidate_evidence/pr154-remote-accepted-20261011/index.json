@@ -1,0 +1,2005 @@
+{
+  "head": "e9fb073184ad25a1f5c7839ea5d1cd9e02830887",
+  "reviewedTree": "e395a4c22e8b0e86d3c72169c332fbea1e5d8eb5",
+  "developMerge": "6c5ea2acac9fc403bfabfa9581464223b52259d7",
+  "finalReviewIntegritySha256": "65309b72dd9155bbd9def16fb7e112974095e5af99708c89f8dd735ea9e03978",
+  "scope": "Lossless selected remote source/final reviews, original reviewer mistakes, API/job/log/report/verifier and actual merge records. Actual downloaded 15 ZIPs and five wheels remain external with byte hashes. Blender distribution/executable and CI test binary hashes are job-computed observations, not locally downloaded/rehashed binary claims. Bounded foundation accepted; no exhaustive OS closure, RSS, full A2, complete content/rendering semantics, main/tag/publication/release or issue-closure acceptance.",
+  "records": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-capture-remote-154.py",
+      "bytes": 2528,
+      "sha256": "4fac9bf3885c81f6af817083a32941ad57645f449bce1142e991387e954eca4b",
+      "file": "blobs/4fac9bf3885c81f6af817083a32941ad57645f449bce1142e991387e954eca4b.gz",
+      "gzipBytes": 1060,
+      "gzipSha256": "c47971018ad8848a980ba262b452673c0f19c5407e52a8454a70ef12b4eb967d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-collect-pr154-artifacts.py",
+      "bytes": 3283,
+      "sha256": "f4d6f90bdd047792ed3558943e3e22b0c8fbeed5e9eeefede436a0cb30ae1090",
+      "file": "blobs/f4d6f90bdd047792ed3558943e3e22b0c8fbeed5e9eeefede436a0cb30ae1090.gz",
+      "gzipBytes": 1411,
+      "gzipSha256": "919ac9efc82eb53f4ff2b83552c3f7b7532350d93480946a081283304c19427f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-collect-pr154-job-logs.py",
+      "bytes": 2023,
+      "sha256": "89552236a7dc1ac932d1274adb43591781dd6c0952ad7fd279bd3d7bfceef399",
+      "file": "blobs/89552236a7dc1ac932d1274adb43591781dd6c0952ad7fd279bd3d7bfceef399.gz",
+      "gzipBytes": 1005,
+      "gzipSha256": "f5ee6510a112a76fcd39536aae4abaf30f7d1fb1fccf6a59e8d59f37e8bb2daf"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifact-collection-20261010T164109Z.json",
+      "bytes": 12384,
+      "sha256": "e43c57c91f4b8ed689658af3f028ac96bfbb701eaaa6f086649bea9303d5525a",
+      "file": "blobs/e43c57c91f4b8ed689658af3f028ac96bfbb701eaaa6f086649bea9303d5525a.gz",
+      "gzipBytes": 2262,
+      "gzipSha256": "63a94a503996a2cba684a43f306fcb7672b7d75e432aa11f369f81834b1b476e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifact-collection-20261010T164551Z.json",
+      "bytes": 13246,
+      "sha256": "55b4f0cbcb9181e70ff2b78173935220fa1a0dadf12612d0732cb01d65b9dc52",
+      "file": "blobs/55b4f0cbcb9181e70ff2b78173935220fa1a0dadf12612d0732cb01d65b9dc52.gz",
+      "gzipBytes": 2140,
+      "gzipSha256": "6a0293da56d0659e5e301dcf20a25da38cef4b397d91d63a3f01454b3939656f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675383122-evidence-wheel-x86_64-unknown-linux-gnu/files/python-3.10.json",
+      "bytes": 484,
+      "sha256": "23e3637b1b386d65d91f6acf44a3c6985635f95bfca1f8e5d3567970dc5a87ac",
+      "file": "blobs/23e3637b1b386d65d91f6acf44a3c6985635f95bfca1f8e5d3567970dc5a87ac.gz",
+      "gzipBytes": 336,
+      "gzipSha256": "ac0a9ecf1f8c11a3bdf0aec005aaeaa2174df4284bc259d31f4b495adfaf463b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675383122-evidence-wheel-x86_64-unknown-linux-gnu/files/python-3.14.json",
+      "bytes": 483,
+      "sha256": "dc2a4bed0d3933c9570398d693c8795c158522b4f061e23477762473d74ccc3d",
+      "file": "blobs/dc2a4bed0d3933c9570398d693c8795c158522b4f061e23477762473d74ccc3d.gz",
+      "gzipBytes": 338,
+      "gzipSha256": "8e1ffc4e972f14d536a472ff1642dac2a288a5b6d393152c3095fe0ef335c38f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675383122-evidence-wheel-x86_64-unknown-linux-gnu/receipt.json",
+      "bytes": 1601,
+      "sha256": "5f701328a4b1e5fe86c96e0181a215d1e31eb49be4bfe7388524facd9ddd49e7",
+      "file": "blobs/5f701328a4b1e5fe86c96e0181a215d1e31eb49be4bfe7388524facd9ddd49e7.gz",
+      "gzipBytes": 700,
+      "gzipSha256": "f2034f9cda74e118b2d5ab0c4b4a9529ea93d775af982add2a81646948a4b00a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675428015-wheel-x86_64-unknown-linux-gnu/receipt.json",
+      "bytes": 1483,
+      "sha256": "7305c013cd94a7e33b8267eb98e76b4e737cc359fca4c64d41345738cae839ee",
+      "file": "blobs/7305c013cd94a7e33b8267eb98e76b4e737cc359fca4c64d41345738cae839ee.gz",
+      "gzipBytes": 665,
+      "gzipSha256": "acd9bbd4d1010efdaacb903a4dd4a069108979f3e2962926fbc9aa4be0df42a5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675483269-wheel-x86_64-pc-windows-msvc/receipt.json",
+      "bytes": 1467,
+      "sha256": "f9e95bf16253644b26caab74aba949b10361f3df098f2697be64920f1f510b2b",
+      "file": "blobs/f9e95bf16253644b26caab74aba949b10361f3df098f2697be64920f1f510b2b.gz",
+      "gzipBytes": 656,
+      "gzipSha256": "8adf91a2c45af838192a904b4b0cd4ae398a7631a72ae2e0024cdbc6dfa39187"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675612801-evidence-wheel-x86_64-apple-darwin/files/python-3.10.json",
+      "bytes": 531,
+      "sha256": "f3ac18ea987c6f9d0a8d5697616aff9c607f06ad092d09ef25068e46e1400402",
+      "file": "blobs/f3ac18ea987c6f9d0a8d5697616aff9c607f06ad092d09ef25068e46e1400402.gz",
+      "gzipBytes": 372,
+      "gzipSha256": "4e09da6da26598ad6a3bf6f57f0f1f5acc2f8e8edaedd026242f4c90e9d8da39"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675612801-evidence-wheel-x86_64-apple-darwin/files/python-3.14.json",
+      "bytes": 554,
+      "sha256": "98a3433667406896e67602f170fc4f5574e16f0421dd7dd6c40935de4702b9f2",
+      "file": "blobs/98a3433667406896e67602f170fc4f5574e16f0421dd7dd6c40935de4702b9f2.gz",
+      "gzipBytes": 382,
+      "gzipSha256": "92c8ea316a1594de1cdf113456a0a17b15687fe4ca72b5dcd6fe212c7d6019e6"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675612801-evidence-wheel-x86_64-apple-darwin/receipt.json",
+      "bytes": 1591,
+      "sha256": "1bfae841a4e80ceee7baa08c9989e5df51475911abc78824c06f98e67ebd2398",
+      "file": "blobs/1bfae841a4e80ceee7baa08c9989e5df51475911abc78824c06f98e67ebd2398.gz",
+      "gzipBytes": 693,
+      "gzipSha256": "d2897b38fdeffc6f822e2e8ff4e9a2901530b6e937b5d42ffff4b5e2b04fc47a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675662702-wheel-x86_64-apple-darwin/receipt.json",
+      "bytes": 1470,
+      "sha256": "b1c2e7457c5faf18303f3afa5c9a9f2df46b48016c4e02e6358e125591d4c722",
+      "file": "blobs/b1c2e7457c5faf18303f3afa5c9a9f2df46b48016c4e02e6358e125591d4c722.gz",
+      "gzipBytes": 657,
+      "gzipSha256": "de2890d16c89679fc748b2f374f34315329dc03db6100133c5435dd1aa28108a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675737858-evidence-wheel-x86_64-pc-windows-msvc/files/python-3.10.json",
+      "bytes": 542,
+      "sha256": "ccddd5d27df3faa33ae992735180934722f2ecce0afbc99e64c168690b56fb2b",
+      "file": "blobs/ccddd5d27df3faa33ae992735180934722f2ecce0afbc99e64c168690b56fb2b.gz",
+      "gzipBytes": 386,
+      "gzipSha256": "86db2dedce2d2a9deac4a49d951625841cb22cfb39d8111a5467c12385478e86"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675737858-evidence-wheel-x86_64-pc-windows-msvc/files/python-3.14.json",
+      "bytes": 548,
+      "sha256": "3b79351c889d9c4b6b2177bb12e3e79def6dc2a8fe6208680d32183f138d1a4f",
+      "file": "blobs/3b79351c889d9c4b6b2177bb12e3e79def6dc2a8fe6208680d32183f138d1a4f.gz",
+      "gzipBytes": 391,
+      "gzipSha256": "c930e108e815cc88d68bcf496ad1b78f2b1793e995d7625c872b18f9e28a4fba"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675737858-evidence-wheel-x86_64-pc-windows-msvc/receipt.json",
+      "bytes": 1599,
+      "sha256": "1409d0e2094b04a341455be4bf5890355d43dc55285197ed64feb75a1e674427",
+      "file": "blobs/1409d0e2094b04a341455be4bf5890355d43dc55285197ed64feb75a1e674427.gz",
+      "gzipBytes": 697,
+      "gzipSha256": "553bdba34a16f9c77301d6f0e46fc099d05e427c38958fe3f6313c994a045913"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675768047-evidence-official-blender-macos-x64/files/blender-acceptance.json",
+      "bytes": 1240,
+      "sha256": "cbd249a8711a1f8fe39a0b0ab2cc9b685ad32fef190db24b6ea3103127813c1a",
+      "file": "blobs/cbd249a8711a1f8fe39a0b0ab2cc9b685ad32fef190db24b6ea3103127813c1a.gz",
+      "gzipBytes": 666,
+      "gzipSha256": "5bf64a2d7a251ee870f5e73960615a3c731af7139f66d3a24ca122c51d5fc6bb"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675768047-evidence-official-blender-macos-x64/files/blender-distribution.json",
+      "bytes": 571,
+      "sha256": "e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b",
+      "file": "blobs/e29352f00f997142aeed1a583f32dd8cd63c76891ee27fb138d00c7b1374006b.gz",
+      "gzipBytes": 322,
+      "gzipSha256": "e72be363e17fa909975c2e1f5fd68bcd849a7e3295fac008f9cef3795451ce15"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675768047-evidence-official-blender-macos-x64/receipt.json",
+      "bytes": 1612,
+      "sha256": "9bf7603fb7a05787a13f6392baaec1a538da882962f31b2c7c1257a0038928c1",
+      "file": "blobs/9bf7603fb7a05787a13f6392baaec1a538da882962f31b2c7c1257a0038928c1.gz",
+      "gzipBytes": 701,
+      "gzipSha256": "0f5fe8025e6ca4f70c47134b36e63f08a35f378be26f41f85af1bdded69e95b7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675772346-wheel-aarch64-unknown-linux-gnu/receipt.json",
+      "bytes": 1486,
+      "sha256": "14a75761109978d36ca2d6180801d2cdfc7a61278bc8188b40fdf3b72db2f7b5",
+      "file": "blobs/14a75761109978d36ca2d6180801d2cdfc7a61278bc8188b40fdf3b72db2f7b5.gz",
+      "gzipBytes": 663,
+      "gzipSha256": "709b4a487ebf107d594fb83d40cb208a334f07b552af4378df3dc38f2ad16a6d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675812623-wheel-aarch64-apple-darwin/receipt.json",
+      "bytes": 1471,
+      "sha256": "c08c39f65091278a11fc0fbd16903b2af749e8bce9918be7fe48751c4069a781",
+      "file": "blobs/c08c39f65091278a11fc0fbd16903b2af749e8bce9918be7fe48751c4069a781.gz",
+      "gzipBytes": 658,
+      "gzipSha256": "0e1f0aa40b1ff75198e4adfd7c4f16ced873205c79f6d7238653f837c80bece2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675832902-evidence-official-blender-linux-x64/files/blender-acceptance.json",
+      "bytes": 1222,
+      "sha256": "8046763403016d6d7cc5fe6bb842e2f8a7f755a5af203cf3f42784a8620ea9fd",
+      "file": "blobs/8046763403016d6d7cc5fe6bb842e2f8a7f755a5af203cf3f42784a8620ea9fd.gz",
+      "gzipBytes": 643,
+      "gzipSha256": "a863b84e46fbd3b1437e196bd0a5bbf3b5514e581a8b10266bb0e58841b48b18"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675832902-evidence-official-blender-linux-x64/files/blender-distribution.json",
+      "bytes": 571,
+      "sha256": "8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5",
+      "file": "blobs/8e3ee2f2171426d252cdaba1c221fc838c2fea0380ecd4bfc9c50b9689510ad5.gz",
+      "gzipBytes": 309,
+      "gzipSha256": "270157a9f4503cd956120ced33fcf400ab89eace7234574626879debc6ad5d17"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675832902-evidence-official-blender-linux-x64/receipt.json",
+      "bytes": 1612,
+      "sha256": "4d7d69125ea6c71c4140be7bb3a503ca46969e1d8858e951eb35120ff4631f77",
+      "file": "blobs/4d7d69125ea6c71c4140be7bb3a503ca46969e1d8858e951eb35120ff4631f77.gz",
+      "gzipBytes": 697,
+      "gzipSha256": "61036753a34ca158b7f397f30579f8eb8e091740316844c8220851ec417430db"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675917255-evidence-wheel-aarch64-unknown-linux-gnu/files/python-3.10.json",
+      "bytes": 486,
+      "sha256": "469ccf3bbbdf4ef71e9b5a18efdaa904fb27573aaa80f15644cf956d09b19895",
+      "file": "blobs/469ccf3bbbdf4ef71e9b5a18efdaa904fb27573aaa80f15644cf956d09b19895.gz",
+      "gzipBytes": 338,
+      "gzipSha256": "67e1e2302049ce77e114bed59f857590706224e5dbea620508daff106191b84c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675917255-evidence-wheel-aarch64-unknown-linux-gnu/files/python-3.14.json",
+      "bytes": 485,
+      "sha256": "e427e2770fdbe86f4d1cd87baaea1a5c7efeec61acfe9f5f0459e918441e2d87",
+      "file": "blobs/e427e2770fdbe86f4d1cd87baaea1a5c7efeec61acfe9f5f0459e918441e2d87.gz",
+      "gzipBytes": 337,
+      "gzipSha256": "f2223f0f5d6ab88d8a706f4d5588c17aab2653a4071b25322d04445db3c08672"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675917255-evidence-wheel-aarch64-unknown-linux-gnu/receipt.json",
+      "bytes": 1603,
+      "sha256": "215ca91e7e60cf9a1be88d7438db01797e7f4744143cf716cac7e1dabc32cf5d",
+      "file": "blobs/215ca91e7e60cf9a1be88d7438db01797e7f4744143cf716cac7e1dabc32cf5d.gz",
+      "gzipBytes": 697,
+      "gzipSha256": "01d403f3b963bb295e7ba40896244e2cefe769145ce0f20af884c5349c5a05e0"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-archive-read.json",
+      "bytes": 44851,
+      "sha256": "38e8417c522df0918f345419b66e04c270d9998ed82b7071d38f9491aff42dcb",
+      "file": "blobs/38e8417c522df0918f345419b66e04c270d9998ed82b7071d38f9491aff42dcb.gz",
+      "gzipBytes": 4378,
+      "gzipSha256": "f22b1623bc65c1afb0ae2401518b96816aed0ec7535a7851751d7d33ce8e926e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-library.log",
+      "bytes": 139108,
+      "sha256": "f314680b9cb996e9515421cfbda4401d97473651f9185693af4b869959b3a5a6",
+      "file": "blobs/f314680b9cb996e9515421cfbda4401d97473651f9185693af4b869959b3a5a6.gz",
+      "gzipBytes": 22777,
+      "gzipSha256": "abb094299ff24f7c1b3a47327e6f374362a48f364d5cef760e68760ebff5e303"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-payload-contexts.json",
+      "bytes": 127865,
+      "sha256": "aa16dfb110c775aa2c7be295d3c723f1751da301355e9d37821413f3eb6443c3",
+      "file": "blobs/aa16dfb110c775aa2c7be295d3c723f1751da301355e9d37821413f3eb6443c3.gz",
+      "gzipBytes": 16344,
+      "gzipSha256": "274b2283e81ac38751ba774623e2c749771a8ff026c8e37953c57cea2da4d3e6"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-payload-integrity.json",
+      "bytes": 816401,
+      "sha256": "3b380570b734ab20e2316bf01558d721cafdaeb618ed551e7df03f31ae5747d5",
+      "file": "blobs/3b380570b734ab20e2316bf01558d721cafdaeb618ed551e7df03f31ae5747d5.gz",
+      "gzipBytes": 91674,
+      "gzipSha256": "6584f74de9d91ded095b202906e27b58ec3909433459169f4c6e6c9c5a71cb34"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-payload-stride.json",
+      "bytes": 59793,
+      "sha256": "26c6eabdf17695420f4fd996654df1e33d0f1eb0c4193448fbd307f8a42d91de",
+      "file": "blobs/26c6eabdf17695420f4fd996654df1e33d0f1eb0c4193448fbd307f8a42d91de.gz",
+      "gzipBytes": 16756,
+      "gzipSha256": "594ea6ad9a63e1e63e7f05dd81510fbd2f8fa3b361ef6e0914ee4dc477d8a523"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-producer.json",
+      "bytes": 2844,
+      "sha256": "2786f6a0bb87403b9695e36608eb2ca122da89767a13e5d1897ff89b34041e72",
+      "file": "blobs/2786f6a0bb87403b9695e36608eb2ca122da89767a13e5d1897ff89b34041e72.gz",
+      "gzipBytes": 1001,
+      "gzipSha256": "02e6c36cd425205848b350193f620bc9af45912d3ae32424543b12989b5330e3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-resources.json",
+      "bytes": 17175,
+      "sha256": "234a53409d40ce53efbd505d0d7d73c3953e85018dd39a37d366728bbbe049e4",
+      "file": "blobs/234a53409d40ce53efbd505d0d7d73c3953e85018dd39a37d366728bbbe049e4.gz",
+      "gzipBytes": 1939,
+      "gzipSha256": "49e00625bfba87070262d7b335ca10eb6357b715e29d7a8f22b18ebf57599984"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/files/c1-validation.json",
+      "bytes": 95540,
+      "sha256": "78503209e286a783eaf8397a3da61347851fb52271625b83892cc9d34fe21425",
+      "file": "blobs/78503209e286a783eaf8397a3da61347851fb52271625b83892cc9d34fe21425.gz",
+      "gzipBytes": 4330,
+      "gzipSha256": "50c3c24261cf4145fef78640b156ea34dddc486a0510da74888128f143314f9e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/receipt.json",
+      "bytes": 2519,
+      "sha256": "fb97842a5fd3c2f95fb4fd02b0a09931dd1d8db3fb543dca663a8d42726535e2",
+      "file": "blobs/fb97842a5fd3c2f95fb4fd02b0a09931dd1d8db3fb543dca663a8d42726535e2.gz",
+      "gzipBytes": 1020,
+      "gzipSha256": "6d266989d5dc2d241ff47736a940da09bf72014f8cf5d88e72bff8adcf9a2be1"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676192567-evidence-official-blender-windows-x64/files/blender-acceptance.json",
+      "bytes": 1259,
+      "sha256": "df3d4181e4e6474763b092be6bf0ed4fcb68239fd754b1940aefb640c67909c7",
+      "file": "blobs/df3d4181e4e6474763b092be6bf0ed4fcb68239fd754b1940aefb640c67909c7.gz",
+      "gzipBytes": 660,
+      "gzipSha256": "87d5f9bc46d367ebd8e82f5bcd91fc14d1e6e0f2de917dc99a00551627d0359a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676192567-evidence-official-blender-windows-x64/files/blender-distribution.json",
+      "bytes": 580,
+      "sha256": "ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9",
+      "file": "blobs/ad4f8a9ba42adaecf44be7a91e188c3378f2e4071e7578fe1da99b601e7fa0a9.gz",
+      "gzipBytes": 313,
+      "gzipSha256": "ef730cc314d801251642e6ecc839b1f582a4c7cb9ef8b827e0a7f59018216403"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676192567-evidence-official-blender-windows-x64/receipt.json",
+      "bytes": 1616,
+      "sha256": "7f353ddbdfa7f2687c412ad69b659cf6fdf3793e65d8b4329033d85401ceeafb",
+      "file": "blobs/7f353ddbdfa7f2687c412ad69b659cf6fdf3793e65d8b4329033d85401ceeafb.gz",
+      "gzipBytes": 703,
+      "gzipSha256": "62e3dc864ebf1d888a6d368d08652d841c0fbfb0fd12f4542a8713fdb2754dc2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676201532-evidence-official-blender-macos-arm64/files/blender-acceptance.json",
+      "bytes": 1242,
+      "sha256": "ecbe6c6099507e670523302767f65ccf8d7a53333f2ae9ce59b6371622b6128c",
+      "file": "blobs/ecbe6c6099507e670523302767f65ccf8d7a53333f2ae9ce59b6371622b6128c.gz",
+      "gzipBytes": 664,
+      "gzipSha256": "3e9f891522e55763d7e577e977ae212923c42c2ada4164200c985712e6bcf406"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676201532-evidence-official-blender-macos-arm64/files/blender-distribution.json",
+      "bytes": 575,
+      "sha256": "12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884",
+      "file": "blobs/12e77d3b821efed38a30904bbb0d3344040e50ff5b71ecdded202634c6579884.gz",
+      "gzipBytes": 323,
+      "gzipSha256": "634bf45205bfbe4027f9dc207b455cb520608db81e3043e865e77684a84bfc20"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676201532-evidence-official-blender-macos-arm64/receipt.json",
+      "bytes": 1616,
+      "sha256": "70d86c9ece70c656273f8edcf605a5e45506ceef47aaa2741c96fe8779028380",
+      "file": "blobs/70d86c9ece70c656273f8edcf605a5e45506ceef47aaa2741c96fe8779028380.gz",
+      "gzipBytes": 704,
+      "gzipSha256": "d0355a138d860825a961aed695c7ea01004b25f72891317f42a36da1a080abfe"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676331929-evidence-wheel-aarch64-apple-darwin/files/python-3.10.json",
+      "bytes": 553,
+      "sha256": "010bc77b6a27244f1fdfc344bc9843333948b36f1db2af618a4d52effef50364",
+      "file": "blobs/010bc77b6a27244f1fdfc344bc9843333948b36f1db2af618a4d52effef50364.gz",
+      "gzipBytes": 383,
+      "gzipSha256": "a12d56b3b306f0ca4d487e6037efb54948023809b3c44ec82e4a888f44fceb15"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676331929-evidence-wheel-aarch64-apple-darwin/files/python-3.14.json",
+      "bytes": 552,
+      "sha256": "72c12ce0f6e302882e8ff6a12136afb3b66266628589df320c68a4ee476cc1d4",
+      "file": "blobs/72c12ce0f6e302882e8ff6a12136afb3b66266628589df320c68a4ee476cc1d4.gz",
+      "gzipBytes": 380,
+      "gzipSha256": "295970f8b6a9c3209cf16e6b7310a362d5c6ee3ee56aa72afba0f6f332f9e4f4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676331929-evidence-wheel-aarch64-apple-darwin/receipt.json",
+      "bytes": 1593,
+      "sha256": "e8a8e6201a679c8012bd0ca5ea71fefec750980a8cddeb952c48f0dc225546d2",
+      "file": "blobs/e8a8e6201a679c8012bd0ca5ea71fefec750980a8cddeb952c48f0dc225546d2.gz",
+      "gzipBytes": 693,
+      "gzipSha256": "6c5df102dc0dcbb4c3df5808442016f760deb44d0fd026384328f477020f3d00"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/ci-artifacts-20261010T164109Z.json",
+      "bytes": 8014,
+      "sha256": "6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867",
+      "file": "blobs/6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867.gz",
+      "gzipBytes": 1358,
+      "gzipSha256": "1bcae6c511eb5fbf5257afdc13515bf91965664f3a61e4a2ed36cea91b1dd0e5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/ci-artifacts-20261010T164551Z.json",
+      "bytes": 8014,
+      "sha256": "6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867",
+      "file": "blobs/6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867.gz",
+      "gzipBytes": 1358,
+      "gzipSha256": "1bcae6c511eb5fbf5257afdc13515bf91965664f3a61e4a2ed36cea91b1dd0e5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/dispatch-tool-observation.json",
+      "bytes": 959,
+      "sha256": "957a7b82a94031ce722de2ca38cb70f7458592c4e798bee4d85aec843110c175",
+      "file": "blobs/957a7b82a94031ce722de2ca38cb70f7458592c4e798bee4d85aec843110c175.gz",
+      "gzipBytes": 580,
+      "gzipSha256": "547dece227d8e05c6e2681430842ec7cdbc103a7651510aac2c6158b6ee41712"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/final-checkout-log-verification.json",
+      "bytes": 9872,
+      "sha256": "73e56cf612c55cdbee57bcdf7f6b9869fb5c9b4d242d0f5b9a6d1c24083dbf4c",
+      "file": "blobs/73e56cf612c55cdbee57bcdf7f6b9869fb5c9b4d242d0f5b9a6d1c24083dbf4c.gz",
+      "gzipBytes": 1839,
+      "gzipSha256": "b48be509ab316ac0f7531b5f2360d3f86fd16200eef36717fbb5c4b1f97fa7e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/initial-checkout-log-observations.json",
+      "bytes": 15356,
+      "sha256": "ef2f06d4b6dd3971648101bb5faaecd603485ff289681872d9310ef32bff63a5",
+      "file": "blobs/ef2f06d4b6dd3971648101bb5faaecd603485ff289681872d9310ef32bff63a5.gz",
+      "gzipBytes": 2301,
+      "gzipSha256": "45b51519c4e2764002dfba797244c5543b10e3a0e376dffaa07040ecb0dc9d36"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260117958/receipt.json",
+      "bytes": 4762,
+      "sha256": "f9aad02496cb89dc710c2137a6293fd47895f969ae8f3fe714ac5acdab4fe88b",
+      "file": "blobs/f9aad02496cb89dc710c2137a6293fd47895f969ae8f3fe714ac5acdab4fe88b.gz",
+      "gzipBytes": 1120,
+      "gzipSha256": "07510f5cb8c0767c359022f5cf3291358c10395d37f1947f4114ea39dc6ce8b7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260117958/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260117958/stdout.log",
+      "bytes": 236132,
+      "sha256": "142cc2d6cb46ef3b9b80cae7c812aa15e6f5827e5b940bea0fd1094f742426ef",
+      "file": "blobs/142cc2d6cb46ef3b9b80cae7c812aa15e6f5827e5b940bea0fd1094f742426ef.gz",
+      "gzipBytes": 50306,
+      "gzipSha256": "fd1a18de4a8f3253d47e4b80091b8aa527e42dbea8a54db0141520c9a74ed412"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118081/receipt.json",
+      "bytes": 3657,
+      "sha256": "c69b417d88e1d6f38afddd591c6e23056c65d388dd3f8f65bda5bd6c28e8bb48",
+      "file": "blobs/c69b417d88e1d6f38afddd591c6e23056c65d388dd3f8f65bda5bd6c28e8bb48.gz",
+      "gzipBytes": 995,
+      "gzipSha256": "06142d0292d6f74f5b167eee66e075af1f7946b751590cc6df28ae9f19911750"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118081/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118081/stdout.log",
+      "bytes": 110410,
+      "sha256": "675ecdf6ad37b9723d1406b78ba03fef2349c71a2b3b26cbf6db043448ab1d2c",
+      "file": "blobs/675ecdf6ad37b9723d1406b78ba03fef2349c71a2b3b26cbf6db043448ab1d2c.gz",
+      "gzipBytes": 27071,
+      "gzipSha256": "cce4f7ec66c9e353f471b33d8c3eb972bbfce69c44ed0170efa0e2e11a968571"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118089/receipt.json",
+      "bytes": 4762,
+      "sha256": "f84db9ce8fad78a3cab39c0df9fcb6d26db615f70a7450c262efc94020d9a470",
+      "file": "blobs/f84db9ce8fad78a3cab39c0df9fcb6d26db615f70a7450c262efc94020d9a470.gz",
+      "gzipBytes": 1116,
+      "gzipSha256": "d24ec7d7dfd12d0e69ee663eb5f93b59d97b365a911f36f633841e2214604bc4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118089/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118089/stdout.log",
+      "bytes": 236114,
+      "sha256": "a412d347699570bbf377894a42b8e759c7ee94be3872227a0af185f4f1285a39",
+      "file": "blobs/a412d347699570bbf377894a42b8e759c7ee94be3872227a0af185f4f1285a39.gz",
+      "gzipBytes": 50639,
+      "gzipSha256": "56772e10b1dfef67514971b9069824266ca2031db451ef7d42d9da58adcce41f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118096/receipt.json",
+      "bytes": 10388,
+      "sha256": "133d9a367b789847528d63cfd964117547e0fa583b9545956002d67b1330e3b9",
+      "file": "blobs/133d9a367b789847528d63cfd964117547e0fa583b9545956002d67b1330e3b9.gz",
+      "gzipBytes": 1793,
+      "gzipSha256": "b5cc4fb2e7b30aecb2726023d163f64f6cad35ec5a953d4af8f11d5076389c2e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118096/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118096/stdout.log",
+      "bytes": 242894,
+      "sha256": "4f85d7bd58f6bf699d9b5614db5893a5213d049ec17cca65ec22f04ed283ad83",
+      "file": "blobs/4f85d7bd58f6bf699d9b5614db5893a5213d049ec17cca65ec22f04ed283ad83.gz",
+      "gzipBytes": 46362,
+      "gzipSha256": "b6a9d3322859dcfa04039e6fcacebae547108fa0e460b7737983fdb2b68fb59f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118100/receipt.json",
+      "bytes": 5205,
+      "sha256": "0eff04cd8a3235378452ab3d8abd6e34d4c46525a00a955d681c3bb8f249c32a",
+      "file": "blobs/0eff04cd8a3235378452ab3d8abd6e34d4c46525a00a955d681c3bb8f249c32a.gz",
+      "gzipBytes": 1153,
+      "gzipSha256": "66264ed3c3b9e36fe6a3a4f721d48b56b39f5b7072df4c69cb9dc838eec19a73"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118100/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118100/stdout.log",
+      "bytes": 196420,
+      "sha256": "c42ae576a83debef03cda432abd0cbb4abf59a43d9c3bb41b973f431bd47348d",
+      "file": "blobs/c42ae576a83debef03cda432abd0cbb4abf59a43d9c3bb41b973f431bd47348d.gz",
+      "gzipBytes": 29582,
+      "gzipSha256": "2f6566fb00fb2f67d118c33c75f707e0bdc81e8a68a1ad32cbcef8c1e2176f99"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118106/receipt.json",
+      "bytes": 3662,
+      "sha256": "5f4ae13ae470acacbc660d496eaf6f9a4275c06e80e91129a361d85c47fe85dd",
+      "file": "blobs/5f4ae13ae470acacbc660d496eaf6f9a4275c06e80e91129a361d85c47fe85dd.gz",
+      "gzipBytes": 1006,
+      "gzipSha256": "7f6e36ded0f3c14073a0452691c9ee01a52ddb6be9beffd30e8d1553a86a81b1"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118106/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118106/stdout.log",
+      "bytes": 114743,
+      "sha256": "d88b7492ffbcd4a388055bb06fb92fcecdc5fd1ae65403c80221d27429fa4cdf",
+      "file": "blobs/d88b7492ffbcd4a388055bb06fb92fcecdc5fd1ae65403c80221d27429fa4cdf.gz",
+      "gzipBytes": 28298,
+      "gzipSha256": "34c522469c430e2ca9a8dcb29d2265d61486f9469528f69989d6e93f801ece5b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118115/receipt.json",
+      "bytes": 3663,
+      "sha256": "c4b7df6efc417f985f11a7730bf99b27e56e04a5896e48fedca104d2061dff57",
+      "file": "blobs/c4b7df6efc417f985f11a7730bf99b27e56e04a5896e48fedca104d2061dff57.gz",
+      "gzipBytes": 996,
+      "gzipSha256": "1ead38c9abe116c1a810b2b328083ab563b9f320a2c1d3e41f1210ebb11c7971"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118115/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118115/stdout.log",
+      "bytes": 111058,
+      "sha256": "21e0a95395a0b0a241521ddbf861bc2e5693f5a7f2a6029656537e6c9842281d",
+      "file": "blobs/21e0a95395a0b0a241521ddbf861bc2e5693f5a7f2a6029656537e6c9842281d.gz",
+      "gzipBytes": 27848,
+      "gzipSha256": "63d96c4929542ff9f4d21b1772e0a3daf6c9b76a4b73ec969db1be29932d0553"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118131/receipt.json",
+      "bytes": 3665,
+      "sha256": "08e5f73881c3f516587046811703f7f94cdf567a29929d22b4049e0862c8a452",
+      "file": "blobs/08e5f73881c3f516587046811703f7f94cdf567a29929d22b4049e0862c8a452.gz",
+      "gzipBytes": 980,
+      "gzipSha256": "e6f3c2f15881aa776f645a863406100a2f345cc8db9b1eabab1649e87277bd58"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118131/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118131/stdout.log",
+      "bytes": 111249,
+      "sha256": "7d9b5b58c1bbcb9e40d228d794300b9e2f7908d2a029186a59405b6c944de919",
+      "file": "blobs/7d9b5b58c1bbcb9e40d228d794300b9e2f7908d2a029186a59405b6c944de919.gz",
+      "gzipBytes": 27853,
+      "gzipSha256": "88cb34aafea26c834517eba5e7c8c52cc5ca0aa88614a553aecd25de177c8b03"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118133/receipt.json",
+      "bytes": 8546,
+      "sha256": "a3b67fff363c505f5449fbc44076085479dbcb9523497e77e580960bd6ccdc45",
+      "file": "blobs/a3b67fff363c505f5449fbc44076085479dbcb9523497e77e580960bd6ccdc45.gz",
+      "gzipBytes": 1492,
+      "gzipSha256": "23dee661201324ffb94d027cc7c2678277c2461e62cdab82511d4e2af251594c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118133/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118133/stdout.log",
+      "bytes": 430853,
+      "sha256": "9fd29201241e185f69d4cdd141c9f6bc2d1f5ea38426e8b81109d31ad94e446d",
+      "file": "blobs/9fd29201241e185f69d4cdd141c9f6bc2d1f5ea38426e8b81109d31ad94e446d.gz",
+      "gzipBytes": 71075,
+      "gzipSha256": "f9fd41196b6459103e92dd93621e58a01fdad4ad1d1ff95442f7ff83bf5e4c33"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118164/receipt.json",
+      "bytes": 3934,
+      "sha256": "b838e098b4c04738c2292aa8b45e33b3950a70af939f4dc9bf82a41196292b0d",
+      "file": "blobs/b838e098b4c04738c2292aa8b45e33b3950a70af939f4dc9bf82a41196292b0d.gz",
+      "gzipBytes": 1015,
+      "gzipSha256": "78ec97d8cf128ccf1b05c9e62393b5359bd966afff449938410d1d6b5bcf9899"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118164/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118164/stdout.log",
+      "bytes": 183162,
+      "sha256": "59378295234486c075143b3c69d26d33c3a35aac72cb654ac216d8c14fe5c202",
+      "file": "blobs/59378295234486c075143b3c69d26d33c3a35aac72cb654ac216d8c14fe5c202.gz",
+      "gzipBytes": 38715,
+      "gzipSha256": "387f267f3faa95779b71cb432076279ab92867d099a2d2722389fed5a4274709"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118168/receipt.json",
+      "bytes": 3670,
+      "sha256": "3583f9689c07182233a09dc93a25b9937760279a40d230bbf23ac21c8c0e2a12",
+      "file": "blobs/3583f9689c07182233a09dc93a25b9937760279a40d230bbf23ac21c8c0e2a12.gz",
+      "gzipBytes": 990,
+      "gzipSha256": "5673105e1feb29965f567bc50fa6dff2b3980c4ac079f11a977db17e8fe70fda"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118168/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118168/stdout.log",
+      "bytes": 111698,
+      "sha256": "d3571cecc3b5f2bac8fd712d1d581e9b4a4ee7d20ddf91407355af144ca88aa0",
+      "file": "blobs/d3571cecc3b5f2bac8fd712d1d581e9b4a4ee7d20ddf91407355af144ca88aa0.gz",
+      "gzipBytes": 27889,
+      "gzipSha256": "ebaca96edd28e58f2e035b2eb418f31478495f8b05560c967e7d087a7c71b31b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118200/receipt.json",
+      "bytes": 5205,
+      "sha256": "f89df697096a71bd8731026e987178920c4f8c32d9b2a8d9c92bda1b7ef022a5",
+      "file": "blobs/f89df697096a71bd8731026e987178920c4f8c32d9b2a8d9c92bda1b7ef022a5.gz",
+      "gzipBytes": 1156,
+      "gzipSha256": "9a4c1581dacbb986276babb039d4fab27d43e23240ec0f90a89536d7c335d9f2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118200/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260118200/stdout.log",
+      "bytes": 199033,
+      "sha256": "4b3674871c89c4c9fd9ee050637a2c9b028bc673610e40e1f52e4b9a97c16d26",
+      "file": "blobs/4b3674871c89c4c9fd9ee050637a2c9b028bc673610e40e1f52e4b9a97c16d26.gz",
+      "gzipBytes": 29656,
+      "gzipSha256": "b3ca2ef33643b536492f6be7424ac00bff1d0a512c768a93cace5a43177cc436"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289075/receipt.json",
+      "bytes": 5181,
+      "sha256": "b87ed66240805f7168880339672f4bd93852061071249cd9c05a552eb4c7df8b",
+      "file": "blobs/b87ed66240805f7168880339672f4bd93852061071249cd9c05a552eb4c7df8b.gz",
+      "gzipBytes": 1157,
+      "gzipSha256": "e71d1ec358bde75bd15ac13e5108d228d6524f7d99f87b68c0cec98745ba5a92"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289075/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289075/stdout.log",
+      "bytes": 407239,
+      "sha256": "29de38c8222ba5d4729917267ff04a0068a68584ea03e5e880347783cba2b606",
+      "file": "blobs/29de38c8222ba5d4729917267ff04a0068a68584ea03e5e880347783cba2b606.gz",
+      "gzipBytes": 58633,
+      "gzipSha256": "7286b9c0d90cdbb79ef85c47f98f7d486aa7297444303567d62ba95c9ffc63a4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289189/receipt.json",
+      "bytes": 5180,
+      "sha256": "4a7543443ae5b1937b8c643c55918e3f232d932a995875b4440d8268b133985b",
+      "file": "blobs/4a7543443ae5b1937b8c643c55918e3f232d932a995875b4440d8268b133985b.gz",
+      "gzipBytes": 1158,
+      "gzipSha256": "c745182bf0c95101d8bacbe3744f4a24dbec5ac1ba1bee19b706bf0e57dc1882"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289189/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289189/stdout.log",
+      "bytes": 401991,
+      "sha256": "6587b922361b0a469a4e49213455faf545875d0b855050e6cf3c096b575dca36",
+      "file": "blobs/6587b922361b0a469a4e49213455faf545875d0b855050e6cf3c096b575dca36.gz",
+      "gzipBytes": 55344,
+      "gzipSha256": "9d139a5789710911c324a19d40fd10b2b8ca30f87044715876a6838bd0d49067"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289204/receipt.json",
+      "bytes": 5183,
+      "sha256": "c1f1c56b50d5a39e371be448b1632cb31fb5a7142e11b5f3b2ab3be0537043a2",
+      "file": "blobs/c1f1c56b50d5a39e371be448b1632cb31fb5a7142e11b5f3b2ab3be0537043a2.gz",
+      "gzipBytes": 1159,
+      "gzipSha256": "8f82398237ef640c5933ea4a1b8ed7a0c971427f6ff3cc546bfea1a449111a96"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289204/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289204/stdout.log",
+      "bytes": 408633,
+      "sha256": "a2dcf681efdf11fe5973831d88352f4feb4a74a2679d8c4067b19d59f6d0d7ee",
+      "file": "blobs/a2dcf681efdf11fe5973831d88352f4feb4a74a2679d8c4067b19d59f6d0d7ee.gz",
+      "gzipBytes": 59688,
+      "gzipSha256": "75cb36d20d7e272898bd0ac7ccf3f38785365e08281f2c7f34fd29bccb25623a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289205/receipt.json",
+      "bytes": 5188,
+      "sha256": "1304fdef1a61a523f1c65ab5c2cd133c861485845ae0ab34bb746b5cf51a2549",
+      "file": "blobs/1304fdef1a61a523f1c65ab5c2cd133c861485845ae0ab34bb746b5cf51a2549.gz",
+      "gzipBytes": 1149,
+      "gzipSha256": "89ccbe1c5d2c04e59da90dbfbb256121a1be9f2a358b1b5cb00d9d3024d2a70b"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289205/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289205/stdout.log",
+      "bytes": 408647,
+      "sha256": "ee7973f871bbd75f2c5af22c214422183697a23898564dea1a46c868d756b5e9",
+      "file": "blobs/ee7973f871bbd75f2c5af22c214422183697a23898564dea1a46c868d756b5e9.gz",
+      "gzipBytes": 59090,
+      "gzipSha256": "218ff01fa08546c77b19e3ec8c39a4e5f637eabfed2371523382b10db9ab175c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289259/receipt.json",
+      "bytes": 5175,
+      "sha256": "299dd6f0a1548ea8d89521b9b6df76d1f4d1a953677629b2d335dd5ebefcf8b2",
+      "file": "blobs/299dd6f0a1548ea8d89521b9b6df76d1f4d1a953677629b2d335dd5ebefcf8b2.gz",
+      "gzipBytes": 1161,
+      "gzipSha256": "573e98866fbbc3cb7a6104b0e0c90e5c0e3c676a789e86d0c4aa23a982973420"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289259/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114260289259/stdout.log",
+      "bytes": 404206,
+      "sha256": "88ba99169f0d0bb7943e01c39c1e0b0016b8c6723a30ebe10309ffa681618bb5",
+      "file": "blobs/88ba99169f0d0bb7943e01c39c1e0b0016b8c6723a30ebe10309ffa681618bb5.gz",
+      "gzipBytes": 55472,
+      "gzipSha256": "90321410672a578a07c6d4a4a98821d6fbc1d286d915ccf9d675cc74b502419f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723175/receipt.json",
+      "bytes": 4627,
+      "sha256": "e235abca8e204530c10320a73202f7e0969c1cc53bc50674b2a1e2de66fa6cbc",
+      "file": "blobs/e235abca8e204530c10320a73202f7e0969c1cc53bc50674b2a1e2de66fa6cbc.gz",
+      "gzipBytes": 1146,
+      "gzipSha256": "e598c89c4e36c8af5d4b2271dcc043a38ca06edf70403934969069afd935b806"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723175/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723175/stdout.log",
+      "bytes": 31544,
+      "sha256": "169ff5d8ad15b7ee3d4cc320b9662d8950b6d9a772728dd86fabccf6a97171b5",
+      "file": "blobs/169ff5d8ad15b7ee3d4cc320b9662d8950b6d9a772728dd86fabccf6a97171b5.gz",
+      "gzipBytes": 7504,
+      "gzipSha256": "1ae8b11baa083927cd334074361134c49e9c1805c7b6376d12f5d0d189eccc00"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723177/receipt.json",
+      "bytes": 4629,
+      "sha256": "971bfe2dc2a1eb732fe70af99bbc566a09630b51ca1cd2c6d4a17dca67de61dd",
+      "file": "blobs/971bfe2dc2a1eb732fe70af99bbc566a09630b51ca1cd2c6d4a17dca67de61dd.gz",
+      "gzipBytes": 1155,
+      "gzipSha256": "156ed487ffb705ed28bef9a050439b14c50534ae7d6be6998fd71d940f937cc7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723177/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723177/stdout.log",
+      "bytes": 38331,
+      "sha256": "994e63aeac6eec45ac2e4b8f17558282bb1059472058d0c12d4cb8c288087d7e",
+      "file": "blobs/994e63aeac6eec45ac2e4b8f17558282bb1059472058d0c12d4cb8c288087d7e.gz",
+      "gzipBytes": 9067,
+      "gzipSha256": "b6b2888801566aa927052ce3af95a7af4f4d10aa216a930c0f5d0cd31555dffe"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723187/receipt.json",
+      "bytes": 4631,
+      "sha256": "cb566a7585f3c1cacf8106a64b1b7431c9f125196d51e2cb779b0fbbdd54aec4",
+      "file": "blobs/cb566a7585f3c1cacf8106a64b1b7431c9f125196d51e2cb779b0fbbdd54aec4.gz",
+      "gzipBytes": 1165,
+      "gzipSha256": "e5d56890c620bb6bbb20b8dfbac98994474d53a038521ad930b18b86d28e8601"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723187/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723187/stdout.log",
+      "bytes": 29560,
+      "sha256": "000112734ea1166cbd6c0558d0db6135ef8448130687e738eb5a1492491b3d9c",
+      "file": "blobs/000112734ea1166cbd6c0558d0db6135ef8448130687e738eb5a1492491b3d9c.gz",
+      "gzipBytes": 7050,
+      "gzipSha256": "d2fddf3d29be41d3fa572cc6cfcb955bb920ccf5863ff56e1be3223472234db4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723206/receipt.json",
+      "bytes": 4631,
+      "sha256": "198d239fc85da012d4b1fd632999973e5684c6406cced5bf0b4adf143feb52ea",
+      "file": "blobs/198d239fc85da012d4b1fd632999973e5684c6406cced5bf0b4adf143feb52ea.gz",
+      "gzipBytes": 1169,
+      "gzipSha256": "087be63b6e39533fde8616bf6a645c85b398f79b16cb1ab0ba2e5eb5510aef66"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723206/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/job-logs/114261723206/stdout.log",
+      "bytes": 36027,
+      "sha256": "69a78f259dbc5d74b65ef400ae440deeaf52572cf3a2fef8d12efca9d072d02e",
+      "file": "blobs/69a78f259dbc5d74b65ef400ae440deeaf52572cf3a2fef8d12efca9d072d02e.gz",
+      "gzipBytes": 8590,
+      "gzipSha256": "e504adf0a346f67439c33d394d2860c9815e0e032729b443ec3adce2dfe3a3ae"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068220254-20261010T163959Z.json",
+      "bytes": 40402,
+      "sha256": "b819c5056f0dc00b37016bf7cbb5a71613cd9e360dc6c5130d1a9856a404b12e",
+      "file": "blobs/b819c5056f0dc00b37016bf7cbb5a71613cd9e360dc6c5130d1a9856a404b12e.gz",
+      "gzipBytes": 3681,
+      "gzipSha256": "bc670091eb1d9a110136c76f255209fb6fbe0a91d86c165ece08fe3b6389fec5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068220254-20261010T164330Z.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068220254-20261010T164551Z.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068279145-20261010T163959Z.json",
+      "bytes": 16038,
+      "sha256": "4908fb11a28451f0a62e58b6fe7b36826526c36b0ae48e58ebcd8c98034032b5",
+      "file": "blobs/4908fb11a28451f0a62e58b6fe7b36826526c36b0ae48e58ebcd8c98034032b5.gz",
+      "gzipBytes": 1446,
+      "gzipSha256": "d94cbfb8333058718b73fb137fbc703a05f594afc2d69db4a8c3df64b5ab6227"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068279145-20261010T164330Z.json",
+      "bytes": 29296,
+      "sha256": "4c30cbfe0b2e57710fcd77a7b4e54df86658015dbcd1821ff1706da9eaca846e",
+      "file": "blobs/4c30cbfe0b2e57710fcd77a7b4e54df86658015dbcd1821ff1706da9eaca846e.gz",
+      "gzipBytes": 2128,
+      "gzipSha256": "896d3ed4aef8ae5c6109c2f3cb7b22781f467f00dee3d15f1cbaf303353ee2c9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/logs-jobs-38068279145-20261010T164551Z.json",
+      "bytes": 30639,
+      "sha256": "2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060",
+      "file": "blobs/2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060.gz",
+      "gzipBytes": 2170,
+      "gzipSha256": "062d65efbaa01610875fc80e3967adb11b4364c4264dfec9503f3aa24ff52cad"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/command.json",
+      "bytes": 449,
+      "sha256": "cfa0e557a51a76e4f6de8f69a32f211994d8a09228e2fb538f29e4f85ef766b0",
+      "file": "blobs/cfa0e557a51a76e4f6de8f69a32f211994d8a09228e2fb538f29e4f85ef766b0.gz",
+      "gzipBytes": 317,
+      "gzipSha256": "5b348f2b54b2283f319f54a843aed7b9cbee6bfb198b9b734cbf82dd05d94afd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/develop-after.json",
+      "bytes": 5402,
+      "sha256": "680d8e02acb34cfa82048b6c984e6e298987c22ea9c84c9648dbf55e80395ef0",
+      "file": "blobs/680d8e02acb34cfa82048b6c984e6e298987c22ea9c84c9648dbf55e80395ef0.gz",
+      "gzipBytes": 1857,
+      "gzipSha256": "1679cdec81d03df37775900a52868e3341ec367a5847c31195eca5f2e984d178"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/develop-immediate-before.json",
+      "bytes": 5350,
+      "sha256": "243eda996475bbc3b66be1922a0e30c0e5ff041cae546ed8028c13a3cd6c4566",
+      "file": "blobs/243eda996475bbc3b66be1922a0e30c0e5ff041cae546ed8028c13a3cd6c4566.gz",
+      "gzipBytes": 1833,
+      "gzipSha256": "a4122f7807a1fa5596bcdbd71c9029d25787ac912e557053a212eb13ab33dab0"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/merge-commit.json",
+      "bytes": 2780,
+      "sha256": "6112b79d014906226331dba940b782674978e44f83559391f3a65cb57f665035",
+      "file": "blobs/6112b79d014906226331dba940b782674978e44f83559391f3a65cb57f665035.gz",
+      "gzipBytes": 1341,
+      "gzipSha256": "0ad7a72843cea8ee582ad84644e08048ad95c527e302002582776608a2466008"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/pr-after.json",
+      "bytes": 20486,
+      "sha256": "f98df267d3ce1f2263d087460f1a7fcdd287982668c307a21ee841208b1bee77",
+      "file": "blobs/f98df267d3ce1f2263d087460f1a7fcdd287982668c307a21ee841208b1bee77.gz",
+      "gzipBytes": 3388,
+      "gzipSha256": "9244e9c6ce6d566dc06b8693f5079400117833f76efaa86d2a2db099270c529f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/pr-immediate-before.json",
+      "bytes": 19465,
+      "sha256": "59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a",
+      "file": "blobs/59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a.gz",
+      "gzipBytes": 3364,
+      "gzipSha256": "883a0a7d4e0d5928c728200d35e1b1e2cf6a5ab3049920a23117b0209d3e8e69"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/merge/stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verification-phase/child-start.json",
+      "bytes": 150,
+      "sha256": "a55a8514fe0c3b6486ca612d5dd46d5e055fc18d9163d50af43eadc1550ea833",
+      "file": "blobs/a55a8514fe0c3b6486ca612d5dd46d5e055fc18d9163d50af43eadc1550ea833.gz",
+      "gzipBytes": 137,
+      "gzipSha256": "945815f0c03d63c3445d2f9096af479eeebb0689692bbf129dbaabb69a7b63d5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verification-phase/receipt.json",
+      "bytes": 608,
+      "sha256": "76e405b8512ffd54226b0749952e416f7b417149cd1e95825d3f1dd0de122882",
+      "file": "blobs/76e405b8512ffd54226b0749952e416f7b417149cd1e95825d3f1dd0de122882.gz",
+      "gzipBytes": 419,
+      "gzipSha256": "76cd9599552eeff2626361bcc66837cdde6ca8fcce217edc183ecbd0a3ee4284"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verification-phase/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file": "blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "gzipBytes": 20,
+      "gzipSha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verification-phase/stdout.log",
+      "bytes": 179,
+      "sha256": "5072f29b2a1ae3eaf93b98e6c038af35c5d77b8bd3dc48a7c440f5fece891377",
+      "file": "blobs/5072f29b2a1ae3eaf93b98e6c038af35c5d77b8bd3dc48a7c440f5fece891377.gz",
+      "gzipBytes": 156,
+      "gzipSha256": "d8c0ec35c67f505bce16bf9efbb54be733bbbaef355ffa0c334ec9d316757a1f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verification.json",
+      "bytes": 14472,
+      "sha256": "2e239526089418fa47c075b0f8856a2f4a9ac039ed0c7c76e1b4590dd6862d1d",
+      "file": "blobs/2e239526089418fa47c075b0f8856a2f4a9ac039ed0c7c76e1b4590dd6862d1d.gz",
+      "gzipBytes": 2656,
+      "gzipSha256": "e5f0e93972c217b3ac6769a969bb7b33c3c0e5cd199582bca7c3d151e21bb6f3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/platform-verifier-adaptation.json",
+      "bytes": 585,
+      "sha256": "bae7e729db4343744e67f9580fcd02d28ec87e9c8b83c674b35a1333e18e6661",
+      "file": "blobs/bae7e729db4343744e67f9580fcd02d28ec87e9c8b83c674b35a1333e18e6661.gz",
+      "gzipBytes": 381,
+      "gzipSha256": "19fdead90334fbad4ee9a28e1e4c0a7be42fc33d9da87347aa3231c8b667f735"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/capture.json",
+      "bytes": 1864,
+      "sha256": "eddcd95c194a85d7079e1f89ab0163c45408872a9cd8a6f87ea7195803a4ff1e",
+      "file": "blobs/eddcd95c194a85d7079e1f89ab0163c45408872a9cd8a6f87ea7195803a4ff1e.gz",
+      "gzipBytes": 630,
+      "gzipSha256": "760d1349f31c34acb150962ba6ded637c1e2cd93c782463bd4327dcf10720013"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/ci-jobs.json",
+      "bytes": 35265,
+      "sha256": "a1f7fca29e4d86b59e23de008e18d89c995d732d702ab25968f93ffe95ae0a70",
+      "file": "blobs/a1f7fca29e4d86b59e23de008e18d89c995d732d702ab25968f93ffe95ae0a70.gz",
+      "gzipBytes": 3105,
+      "gzipSha256": "9e3598c94c6e60577ff2b78e8dd9f2ac9d5e7ddeac9e997722e3f9b3a5fb6cb9"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/ci-run.json",
+      "bytes": 13665,
+      "sha256": "5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec",
+      "file": "blobs/5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec.gz",
+      "gzipBytes": 1717,
+      "gzipSha256": "e19eeba4d75203e8507c724d664e6a43412a2c47710a03eab9bfdf3130d708e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/pr.json",
+      "bytes": 4064,
+      "sha256": "63cfee3867afc3ccfa789ecf369f1ea40fc32e7ae781b74cd5bf4d3e988e444d",
+      "file": "blobs/63cfee3867afc3ccfa789ecf369f1ea40fc32e7ae781b74cd5bf4d3e988e444d.gz",
+      "gzipBytes": 607,
+      "gzipSha256": "67a6ca46055afe39e658d148ac25d553f86877298de8179bacbe409a6d850d0a"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/wheel-jobs.json",
+      "bytes": 13825,
+      "sha256": "d397c85a34a8227c112b6f01c328240302e3c2fc144d479bf9eb9da89d438080",
+      "file": "blobs/d397c85a34a8227c112b6f01c328240302e3c2fc144d479bf9eb9da89d438080.gz",
+      "gzipBytes": 1195,
+      "gzipSha256": "0bfeec36f37f6d8a8a8cc22d517e3232de57ca560e5889d8cc243e308350ba73"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163542Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/capture.json",
+      "bytes": 1864,
+      "sha256": "56599ce9650e466a152f3d3b106982fd1b7bd3753047094f4a1dd18e8e5f6818",
+      "file": "blobs/56599ce9650e466a152f3d3b106982fd1b7bd3753047094f4a1dd18e8e5f6818.gz",
+      "gzipBytes": 632,
+      "gzipSha256": "4227eea39f9440585ec3f53dc21e32c09f6892013a744053704ef15d01c4ddc5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/ci-jobs.json",
+      "bytes": 36273,
+      "sha256": "34c2b91b217be3eec74e41e9601f3406ff1f40fe0c8571555cf9052a7ddf6864",
+      "file": "blobs/34c2b91b217be3eec74e41e9601f3406ff1f40fe0c8571555cf9052a7ddf6864.gz",
+      "gzipBytes": 3245,
+      "gzipSha256": "d34651795b031e27e019e7b36fb84cc54072fa129e363517f991db5248dbecfd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/ci-run.json",
+      "bytes": 13665,
+      "sha256": "5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec",
+      "file": "blobs/5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec.gz",
+      "gzipBytes": 1717,
+      "gzipSha256": "e19eeba4d75203e8507c724d664e6a43412a2c47710a03eab9bfdf3130d708e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/pr.json",
+      "bytes": 4069,
+      "sha256": "42d4e5badb185c7f9c44f9e1b674030f4f10eba8881327f0b9df679ff52508e3",
+      "file": "blobs/42d4e5badb185c7f9c44f9e1b674030f4f10eba8881327f0b9df679ff52508e3.gz",
+      "gzipBytes": 628,
+      "gzipSha256": "f90cf880b83b1d7f63cf83dbb53fb5d68526f6adf622b2e2f4ede29589effbd4"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/wheel-jobs.json",
+      "bytes": 13868,
+      "sha256": "0dccb8cf3cd828770436ce9924a31c269b9895a288e7e30a310b979d06cc7bea",
+      "file": "blobs/0dccb8cf3cd828770436ce9924a31c269b9895a288e7e30a310b979d06cc7bea.gz",
+      "gzipBytes": 1187,
+      "gzipSha256": "2f415f323e9da8d2841dfef3bcb19dba69164ed556ef2f4a8b768363b7c28e67"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163646Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/capture.json",
+      "bytes": 1864,
+      "sha256": "847e031fe84ac96f58f99400a8898697c30b5a41288dbf013bedef7685559fc2",
+      "file": "blobs/847e031fe84ac96f58f99400a8898697c30b5a41288dbf013bedef7685559fc2.gz",
+      "gzipBytes": 634,
+      "gzipSha256": "71bcbd56fe867df0b8f84c07dc1959201503b01a396fc5bde0852d59ef917423"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/ci-jobs.json",
+      "bytes": 38457,
+      "sha256": "bdd5ef649a2fd449ee6e15f8573df763e9395ab5d1948069b41116f2e45e1bdc",
+      "file": "blobs/bdd5ef649a2fd449ee6e15f8573df763e9395ab5d1948069b41116f2e45e1bdc.gz",
+      "gzipBytes": 3501,
+      "gzipSha256": "96eff344a6328b29faab8e04da19eeef735b468f227347f8390feae164ef5cc8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/ci-run.json",
+      "bytes": 13665,
+      "sha256": "5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec",
+      "file": "blobs/5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec.gz",
+      "gzipBytes": 1717,
+      "gzipSha256": "e19eeba4d75203e8507c724d664e6a43412a2c47710a03eab9bfdf3130d708e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/pr.json",
+      "bytes": 4094,
+      "sha256": "4e8e18bab9d27300d0f3b22addb891696b4f2e597c18a29f3166c94c85258469",
+      "file": "blobs/4e8e18bab9d27300d0f3b22addb891696b4f2e597c18a29f3166c94c85258469.gz",
+      "gzipBytes": 659,
+      "gzipSha256": "094f695cfb17d72cc4f240b623a8945587d3e118d4c8d0d48c1b6a541de60f2e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/wheel-jobs.json",
+      "bytes": 13868,
+      "sha256": "0dccb8cf3cd828770436ce9924a31c269b9895a288e7e30a310b979d06cc7bea",
+      "file": "blobs/0dccb8cf3cd828770436ce9924a31c269b9895a288e7e30a310b979d06cc7bea.gz",
+      "gzipBytes": 1187,
+      "gzipSha256": "2f415f323e9da8d2841dfef3bcb19dba69164ed556ef2f4a8b768363b7c28e67"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163813Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/capture.json",
+      "bytes": 2168,
+      "sha256": "9abe8b117751d0facebf3ea31eaea68a3349eccbfe34dd92825eb1f8c5b07ab1",
+      "file": "blobs/9abe8b117751d0facebf3ea31eaea68a3349eccbfe34dd92825eb1f8c5b07ab1.gz",
+      "gzipBytes": 708,
+      "gzipSha256": "f8e958c2b99da4609d0b1dafe6badaf275418c050c77789df20838e538b00580"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/ci-jobs.json",
+      "bytes": 40316,
+      "sha256": "7fa6ba3e23f41a0178d5136997bc727460322d71fa37bacf85528e0819023506",
+      "file": "blobs/7fa6ba3e23f41a0178d5136997bc727460322d71fa37bacf85528e0819023506.gz",
+      "gzipBytes": 3674,
+      "gzipSha256": "2e2f759aee6ed03540bef2728c3babe3ae9bf682eaff78a504dacd5fe7dee570"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/ci-run.json",
+      "bytes": 13665,
+      "sha256": "5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec",
+      "file": "blobs/5f3af91e3fedff4b70ce734c7f237d420b9663ff7a8322eb615e14ca40d095ec.gz",
+      "gzipBytes": 1717,
+      "gzipSha256": "e19eeba4d75203e8507c724d664e6a43412a2c47710a03eab9bfdf3130d708e7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/pr-merge-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/pr.json",
+      "bytes": 4109,
+      "sha256": "21f2f16ab40c49cde78d206bdf20e789e53c5f21c8bd35395641b60d0baa2fca",
+      "file": "blobs/21f2f16ab40c49cde78d206bdf20e789e53c5f21c8bd35395641b60d0baa2fca.gz",
+      "gzipBytes": 666,
+      "gzipSha256": "5523ba01a96d02d50dd550d54c0726b2ad8e175e4c4c188406abe4dd9762aa62"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/wheel-jobs.json",
+      "bytes": 14577,
+      "sha256": "9513e4c3d5b7ffbc443ef3d87b8cc92bf722063638675b7a46a0f15675b6d543",
+      "file": "blobs/9513e4c3d5b7ffbc443ef3d87b8cc92bf722063638675b7a46a0f15675b6d543.gz",
+      "gzipBytes": 1304,
+      "gzipSha256": "afc85469e5d6141db39162cb5c3346180041181c164033f1370aab517e103938"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T163921Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/capture.json",
+      "bytes": 2168,
+      "sha256": "112eeee79f5d815538419ff24ba99a0a09008d22599ee8313ab0cb40d8d66d79",
+      "file": "blobs/112eeee79f5d815538419ff24ba99a0a09008d22599ee8313ab0cb40d8d66d79.gz",
+      "gzipBytes": 709,
+      "gzipSha256": "d10781521b53bde4ed67c8a615c776bf6d794a7d5b50de7d5f71350dd01d179f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/ci-jobs.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/ci-run.json",
+      "bytes": 13668,
+      "sha256": "20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62",
+      "file": "blobs/20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62.gz",
+      "gzipBytes": 1723,
+      "gzipSha256": "da0cff8c9acacacb6c68f866ab02a5e481e50cdd74ec5d4c40a7e33686e48b7d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/pr-merge-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/pr.json",
+      "bytes": 4124,
+      "sha256": "873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b",
+      "file": "blobs/873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b.gz",
+      "gzipBytes": 642,
+      "gzipSha256": "fd457a74b3704b7c163bf5e1bd47cde033c8296d43c28be2ff1de385878ee878"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/wheel-jobs.json",
+      "bytes": 16293,
+      "sha256": "d5155f744c082498e7e6412d787c1585d81ed83c4d15defd1956f97e77ebd2c9",
+      "file": "blobs/d5155f744c082498e7e6412d787c1585d81ed83c4d15defd1956f97e77ebd2c9.gz",
+      "gzipBytes": 1460,
+      "gzipSha256": "64cd0e4edb7d521dcbecd1ca244cfb39a5a09ef37a52352087ea3a376f7ef112"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164058Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/capture.json",
+      "bytes": 2168,
+      "sha256": "6f6fe99bea94d661c0d43394b25f36df4c59dd0f7192036ad54b3f4e3df58e0e",
+      "file": "blobs/6f6fe99bea94d661c0d43394b25f36df4c59dd0f7192036ad54b3f4e3df58e0e.gz",
+      "gzipBytes": 709,
+      "gzipSha256": "8c66f07015088164c38af5d9a03c6b9d85dcf2525043a3cd822df930ab74953e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/ci-jobs.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/ci-run.json",
+      "bytes": 13668,
+      "sha256": "20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62",
+      "file": "blobs/20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62.gz",
+      "gzipBytes": 1723,
+      "gzipSha256": "da0cff8c9acacacb6c68f866ab02a5e481e50cdd74ec5d4c40a7e33686e48b7d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/pr-merge-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/pr.json",
+      "bytes": 4124,
+      "sha256": "873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b",
+      "file": "blobs/873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b.gz",
+      "gzipBytes": 642,
+      "gzipSha256": "fd457a74b3704b7c163bf5e1bd47cde033c8296d43c28be2ff1de385878ee878"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/wheel-jobs.json",
+      "bytes": 17002,
+      "sha256": "2898f736deadaf133a4c57a8b6273098599b1d7f52ae5f1764e72c5a54100268",
+      "file": "blobs/2898f736deadaf133a4c57a8b6273098599b1d7f52ae5f1764e72c5a54100268.gz",
+      "gzipBytes": 1494,
+      "gzipSha256": "4bcd9b2e4e258eb1acd967a4c59e27ac908039753c247fb8840a681bc00be16d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164218Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb",
+      "file": "blobs/c10067601eff0c6f8250d78da14819494ccb4807f24bb87e27f5951b7dec36cb.gz",
+      "gzipBytes": 1734,
+      "gzipSha256": "a80c94b985a147e8624448d30f4b1250befc93e5fd0eafb2c10ab3cce63082d3"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/capture.json",
+      "bytes": 2168,
+      "sha256": "7e57c99f8fb6614ae1302ca783a712e403cd481c5518651f7d3edf547b0166e7",
+      "file": "blobs/7e57c99f8fb6614ae1302ca783a712e403cd481c5518651f7d3edf547b0166e7.gz",
+      "gzipBytes": 710,
+      "gzipSha256": "77127144c5e4c86b1fe7fc9095907c30003cbcff2c97115c77a520b765d7f742"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/ci-jobs.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/ci-run.json",
+      "bytes": 13668,
+      "sha256": "20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62",
+      "file": "blobs/20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62.gz",
+      "gzipBytes": 1723,
+      "gzipSha256": "da0cff8c9acacacb6c68f866ab02a5e481e50cdd74ec5d4c40a7e33686e48b7d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/pr-merge-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/pr.json",
+      "bytes": 4124,
+      "sha256": "873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b",
+      "file": "blobs/873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b.gz",
+      "gzipBytes": 642,
+      "gzipSha256": "fd457a74b3704b7c163bf5e1bd47cde033c8296d43c28be2ff1de385878ee878"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/wheel-jobs.json",
+      "bytes": 29989,
+      "sha256": "cc679c1aa095905f4f969c69a157532c7cfd71c2417953601f792f1622b1b2f3",
+      "file": "blobs/cc679c1aa095905f4f969c69a157532c7cfd71c2417953601f792f1622b1b2f3.gz",
+      "gzipBytes": 2170,
+      "gzipSha256": "a9b1b8006501d0c01f012c917a56e8848556bef564a6a77d724c5759fe176c91"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164346Z/wheel-run.json",
+      "bytes": 13636,
+      "sha256": "083057cf3092757884116c91a77df349f37cd14509c72223838af25e114c10d3",
+      "file": "blobs/083057cf3092757884116c91a77df349f37cd14509c72223838af25e114c10d3.gz",
+      "gzipBytes": 1736,
+      "gzipSha256": "10944afb43d3db0246f926f437de3d1dd90f963592d502fdeb91252afec7b90f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/capture.json",
+      "bytes": 2168,
+      "sha256": "f1241a41f5eb31258b0d58cfef3c354e5b994d9037634fd549243869d168b837",
+      "file": "blobs/f1241a41f5eb31258b0d58cfef3c354e5b994d9037634fd549243869d168b837.gz",
+      "gzipBytes": 710,
+      "gzipSha256": "c241854c73284b73a525e11b147d09cf1de016ad23e7ab21e56c6dca05da0fa7"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/ci-jobs.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/ci-run.json",
+      "bytes": 13668,
+      "sha256": "20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62",
+      "file": "blobs/20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62.gz",
+      "gzipBytes": 1723,
+      "gzipSha256": "da0cff8c9acacacb6c68f866ab02a5e481e50cdd74ec5d4c40a7e33686e48b7d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/pr-merge-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/pr.json",
+      "bytes": 4124,
+      "sha256": "873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b",
+      "file": "blobs/873b0d3b66015a2896dbfaffde769bed045449c63d3259d9190fa0b07143464b.gz",
+      "gzipBytes": 642,
+      "gzipSha256": "fd457a74b3704b7c163bf5e1bd47cde033c8296d43c28be2ff1de385878ee878"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/wheel-jobs.json",
+      "bytes": 30639,
+      "sha256": "2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060",
+      "file": "blobs/2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060.gz",
+      "gzipBytes": 2170,
+      "gzipSha256": "062d65efbaa01610875fc80e3967adb11b4364c4264dfec9503f3aa24ff52cad"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/snapshot-20261010T164530Z/wheel-run.json",
+      "bytes": 13639,
+      "sha256": "aca3e8ed514830f7f2d502dff9bb61e6e760c71dc581d27eeae86bbf600270e8",
+      "file": "blobs/aca3e8ed514830f7f2d502dff9bb61e6e760c71dc581d27eeae86bbf600270e8.gz",
+      "gzipBytes": 1739,
+      "gzipSha256": "bf8d16e6e17e9a7a14ed871d7a36927ef797cd30cdc261d1a16501850257e611"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/verify-platforms.py",
+      "bytes": 4641,
+      "sha256": "70392cd317a17c5c88117ea1c822dfcf72f98726d6ea6ac31319806b7ff3efbc",
+      "file": "blobs/70392cd317a17c5c88117ea1c822dfcf72f98726d6ea6ac31319806b7ff3efbc.gz",
+      "gzipBytes": 1516,
+      "gzipSha256": "09f8cac59c2bb19de185816ff438ff8a5bfd63d776d3d62f536eb06ea48c39fc"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/wheel-artifacts-20261010T164109Z.json",
+      "bytes": 4444,
+      "sha256": "6df78e924e6fea238697da1d707307861f49f086180475671b47782fddd7cb40",
+      "file": "blobs/6df78e924e6fea238697da1d707307861f49f086180475671b47782fddd7cb40.gz",
+      "gzipBytes": 915,
+      "gzipSha256": "7c4fc8486a7eff399ce59d78cfd06bbdee84405582081b43f97862c6f4dc4ef5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/wheel-artifacts-20261010T164551Z.json",
+      "bytes": 10326,
+      "sha256": "aba05d14933d34dcb595649acb5b902785ae725722bac69431912731bf48e1d4",
+      "file": "blobs/aba05d14933d34dcb595649acb5b902785ae725722bac69431912731bf48e1d4.gz",
+      "gzipBytes": 1600,
+      "gzipSha256": "3d90f162c5ba6a0f6593bf222fa343321cb806ae6f1d5fb905b67a6391a88d1e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/ci-artifacts-live.json",
+      "bytes": 8014,
+      "sha256": "6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867",
+      "file": "blobs/6718dfcd927ba1eb22163b042e9fc8ff6c7f5a1b1b54ee37ffbeaff119b1e867.gz",
+      "gzipBytes": 1358,
+      "gzipSha256": "1bcae6c511eb5fbf5257afdc13515bf91965664f3a61e4a2ed36cea91b1dd0e5"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/ci-jobs-live.json",
+      "bytes": 41224,
+      "sha256": "92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc",
+      "file": "blobs/92f1c0158e1c0e8a9d627c55a99636eb451b07fcefab867f10d2170b67bf5efc.gz",
+      "gzipBytes": 3695,
+      "gzipSha256": "c6ca16e115a66cdaa6245915ca19b76dc93cc2aef7740b7864ef6ff1a358d03f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/ci-run-live.json",
+      "bytes": 13668,
+      "sha256": "20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62",
+      "file": "blobs/20c682a7b5a2ca654ad1f74d0bc714272e4263058db91e8cb592d7d8bf955b62.gz",
+      "gzipBytes": 1723,
+      "gzipSha256": "da0cff8c9acacacb6c68f866ab02a5e481e50cdd74ec5d4c40a7e33686e48b7d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/control-details-verification.json",
+      "bytes": 1397,
+      "sha256": "dccc475e404cafa214cfcf59566d1fab18682dac4fc60d6332463ce39f4adcde",
+      "file": "blobs/dccc475e404cafa214cfcf59566d1fab18682dac4fc60d6332463ce39f4adcde.gz",
+      "gzipBytes": 643,
+      "gzipSha256": "acd450f76e2fb50e13f2741b9810f2f42b6bb99acbfef1d44d2de8ec9840349d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/decision.json",
+      "bytes": 1514,
+      "sha256": "6066cc3c713a8abfcbfd4cb24e0a91825667683784d4496c7409a5fffa2acb00",
+      "file": "blobs/6066cc3c713a8abfcbfd4cb24e0a91825667683784d4496c7409a5fffa2acb00.gz",
+      "gzipBytes": 923,
+      "gzipSha256": "4fa5731b5e7c1dfb5ebf31d82d40a178b62915f0bc8f3d1516810bc205be5811"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/integrity.json",
+      "bytes": 3142,
+      "sha256": "65309b72dd9155bbd9def16fb7e112974095e5af99708c89f8dd735ea9e03978",
+      "file": "blobs/65309b72dd9155bbd9def16fb7e112974095e5af99708c89f8dd735ea9e03978.gz",
+      "gzipBytes": 1205,
+      "gzipSha256": "5288af0cab5e82dc9763b3f0153ca766ba0f3484aedc134b5377489056f2b6cc"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/issue-113-live.json",
+      "bytes": 27840,
+      "sha256": "4e968059f522d342a93d728d6d4e173170b68d76bc8fe43a7174b242da62b03c",
+      "file": "blobs/4e968059f522d342a93d728d6d4e173170b68d76bc8fe43a7174b242da62b03c.gz",
+      "gzipBytes": 9878,
+      "gzipSha256": "be2c92f8bb4ecfb82b897b1021e70326eb016e2b136d7c60545831b5db756296"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/issue-121-live.json",
+      "bytes": 15529,
+      "sha256": "6f13155234db7e1b5388586fae2c3a7af041d45c63710e3a27908dae9231c19f",
+      "file": "blobs/6f13155234db7e1b5388586fae2c3a7af041d45c63710e3a27908dae9231c19f.gz",
+      "gzipBytes": 5381,
+      "gzipSha256": "abc5766e5ea8b82fb2b059974fb4f566ab35c31bfe956f75842d3a8a3b15acfc"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/issue-125-live.json",
+      "bytes": 15119,
+      "sha256": "7a69af98343c30b3b88ec0a2547a7e9bcf0b3cc235220704d86d762dd7ae992f",
+      "file": "blobs/7a69af98343c30b3b88ec0a2547a7e9bcf0b3cc235220704d86d762dd7ae992f.gz",
+      "gzipBytes": 5509,
+      "gzipSha256": "819ce1af6ca87988bec2039976b14b80efc118a77fa23e83f741d3a12dde2f3d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/issue-126-live.json",
+      "bytes": 23864,
+      "sha256": "fef763320752685e2ae52a3e229fded22b785ec4a32df620fcf3a15e8ad116d7",
+      "file": "blobs/fef763320752685e2ae52a3e229fded22b785ec4a32df620fcf3a15e8ad116d7.gz",
+      "gzipBytes": 8576,
+      "gzipSha256": "15dd496ac7a5a6277c5b89c40f5a7e4b059f3fa973f771f6018d6f3a22758539"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/merge-live.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/pr-live-final.json",
+      "bytes": 19465,
+      "sha256": "59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a",
+      "file": "blobs/59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a.gz",
+      "gzipBytes": 3364,
+      "gzipSha256": "883a0a7d4e0d5928c728200d35e1b1e2cf6a5ab3049920a23117b0209d3e8e69"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/pr-live.json",
+      "bytes": 19465,
+      "sha256": "59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a",
+      "file": "blobs/59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a.gz",
+      "gzipBytes": 3364,
+      "gzipSha256": "883a0a7d4e0d5928c728200d35e1b1e2cf6a5ab3049920a23117b0209d3e8e69"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/review.md",
+      "bytes": 10121,
+      "sha256": "23088e16dcd7807780b42f1c87364b89c86cfa4c906ab7a9cdc271e9fe60c4ef",
+      "file": "blobs/23088e16dcd7807780b42f1c87364b89c86cfa4c906ab7a9cdc271e9fe60c4ef.gz",
+      "gzipBytes": 4614,
+      "gzipSha256": "b6d57a762d170222355de6d67991f758981a0611640f971eb65f3662e8582655"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/reviewer-initial-failure.json",
+      "bytes": 363,
+      "sha256": "eec69bb57020cd31a54be0e7f1d024d65019489224ed56b41dfb7ae20f2cee45",
+      "file": "blobs/eec69bb57020cd31a54be0e7f1d024d65019489224ed56b41dfb7ae20f2cee45.gz",
+      "gzipBytes": 271,
+      "gzipSha256": "2774e0cbf5d3864b47fd514d6812518e75976dd5d30a048dfa281bf23dd340fe"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/verification.json",
+      "bytes": 44397,
+      "sha256": "68f4889ceaec0522758e2ee1888867a7ac4da205b738b4686edb2ede9bc243a2",
+      "file": "blobs/68f4889ceaec0522758e2ee1888867a7ac4da205b738b4686edb2ede9bc243a2.gz",
+      "gzipBytes": 9692,
+      "gzipSha256": "c0ab45ad8368836e1fe5b012a644165e439d1a9fd9177e50281ccdfb7ba51e27"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/verify-control-details.py",
+      "bytes": 2617,
+      "sha256": "deb3f815659e70d89f23bc0500df364bccb5affa37b095cd098dadabd5deff6c",
+      "file": "blobs/deb3f815659e70d89f23bc0500df364bccb5affa37b095cd098dadabd5deff6c.gz",
+      "gzipBytes": 1217,
+      "gzipSha256": "2cc0154d05efd888d87c5cf6691f03de35c7bc0dea8f8af0d467ac403d2ee00e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/verify-initial.py",
+      "bytes": 15323,
+      "sha256": "04651b64863de847e48a5185219d7cb707d04bf2dbdc6b0a4f5c9c5ab31662b2",
+      "file": "blobs/04651b64863de847e48a5185219d7cb707d04bf2dbdc6b0a4f5c9c5ab31662b2.gz",
+      "gzipBytes": 5601,
+      "gzipSha256": "7b3224ce68b2003768850f9019a7de46a20909360d5e26f242d24943ba238b09"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/verify.py",
+      "bytes": 15389,
+      "sha256": "ec3a90e0d53748a9e8f5ca5e78f37598c64d686dc517512c28c149fac8f92817",
+      "file": "blobs/ec3a90e0d53748a9e8f5ca5e78f37598c64d686dc517512c28c149fac8f92817.gz",
+      "gzipBytes": 5622,
+      "gzipSha256": "4ade3219dcdad6c353335e94cc6013a33f492b30bb716f5b1096c4a835415b8d"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/wheel-artifacts-live.json",
+      "bytes": 10326,
+      "sha256": "aba05d14933d34dcb595649acb5b902785ae725722bac69431912731bf48e1d4",
+      "file": "blobs/aba05d14933d34dcb595649acb5b902785ae725722bac69431912731bf48e1d4.gz",
+      "gzipBytes": 1600,
+      "gzipSha256": "3d90f162c5ba6a0f6593bf222fa343321cb806ae6f1d5fb905b67a6391a88d1e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/wheel-jobs-live.json",
+      "bytes": 30639,
+      "sha256": "2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060",
+      "file": "blobs/2d89912847d0378b41907761755abba9865b09819162455e3f357dff415e7060.gz",
+      "gzipBytes": 2170,
+      "gzipSha256": "062d65efbaa01610875fc80e3967adb11b4364c4264dfec9503f3aa24ff52cad"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-final-remote-review-20261011/wheel-run-live.json",
+      "bytes": 13639,
+      "sha256": "aca3e8ed514830f7f2d502dff9bb61e6e760c71dc581d27eeae86bbf600270e8",
+      "file": "blobs/aca3e8ed514830f7f2d502dff9bb61e6e760c71dc581d27eeae86bbf600270e8.gz",
+      "gzipBytes": 1739,
+      "gzipSha256": "bf8d16e6e17e9a7a14ed871d7a36927ef797cd30cdc261d1a16501850257e611"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/decision.json",
+      "bytes": 876,
+      "sha256": "a504f16aae27c8f460d9d1641e40db53604985af67702537e5c9014a5f213f1d",
+      "file": "blobs/a504f16aae27c8f460d9d1641e40db53604985af67702537e5c9014a5f213f1d.gz",
+      "gzipBytes": 570,
+      "gzipSha256": "14a8ed06fbfc225f187b3c9275e9a21a74cc4fc368bdb8a87a405724258a845e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/integrity.json",
+      "bytes": 1790,
+      "sha256": "a01301df38198669a94380ec50ac817fe69a8c18f10bbe799f7972bde7a6459f",
+      "file": "blobs/a01301df38198669a94380ec50ac817fe69a8c18f10bbe799f7972bde7a6459f.gz",
+      "gzipBytes": 757,
+      "gzipSha256": "c12291aae9d15931afecc7bf40766b9c2d6e8f0ffe69a1b81f84297d7605999e"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/pr-final.json",
+      "bytes": 19465,
+      "sha256": "59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a",
+      "file": "blobs/59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a.gz",
+      "gzipBytes": 3364,
+      "gzipSha256": "883a0a7d4e0d5928c728200d35e1b1e2cf6a5ab3049920a23117b0209d3e8e69"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/pr.json",
+      "bytes": 19465,
+      "sha256": "59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a",
+      "file": "blobs/59c7642271c7f581cf70207c69dffb49c7ff03a91fdc0abda44aac3257e8192a.gz",
+      "gzipBytes": 3364,
+      "gzipSha256": "883a0a7d4e0d5928c728200d35e1b1e2cf6a5ab3049920a23117b0209d3e8e69"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/public-api-diff.txt",
+      "bytes": 3349,
+      "sha256": "d6f38237073463e6088ba2457cd0d691ed4cd901a02283817157beb119f5c49b",
+      "file": "blobs/d6f38237073463e6088ba2457cd0d691ed4cd901a02283817157beb119f5c49b.gz",
+      "gzipBytes": 1180,
+      "gzipSha256": "463e24e00847556c0a838937ebfb2f75a0996108403006629158620ddcb0f229"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/remote-commit.json",
+      "bytes": 1203,
+      "sha256": "7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c",
+      "file": "blobs/7d2f6daa2c9cf7645ee3088a5170b92a1596af23a4c240af143fd32cd0e11e1c.gz",
+      "gzipBytes": 511,
+      "gzipSha256": "11424e9fba68706c25ae385b34b1e4b0ac60aba36bee956276d69a7e603261fd"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/remote-merge-preview-commit.json",
+      "bytes": 2662,
+      "sha256": "4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12",
+      "file": "blobs/4e2f0e92c2542122a5880ec0623048e2dc85d3fa39cecfcbae18097fa4e12a12.gz",
+      "gzipBytes": 1257,
+      "gzipSha256": "039dae2508bca3f7dd1791956f05a6826b91cdae44ec85c620ab83ee838630e8"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/remote-tree.json",
+      "bytes": 2051035,
+      "sha256": "92877c1c37431af8cd56d2aa4f0db6022b7859341df00cacde54e99aae57ebde",
+      "file": "blobs/92877c1c37431af8cd56d2aa4f0db6022b7859341df00cacde54e99aae57ebde.gz",
+      "gzipBytes": 273580,
+      "gzipSha256": "9f581879d19cea626f6ad867759bef1181711727104ec1a1635c4b3195db6f74"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/review.md",
+      "bytes": 4856,
+      "sha256": "be1b665f6af112d27dfc842c1487c1a1c79a2ae274d08c89a8015839116f4669",
+      "file": "blobs/be1b665f6af112d27dfc842c1487c1a1c79a2ae274d08c89a8015839116f4669.gz",
+      "gzipBytes": 2336,
+      "gzipSha256": "797c0137fd06a98a08c3657a293f3fc709a03f75300156e0501a70df45cae9b2"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/reviewer-initial-failure.json",
+      "bytes": 413,
+      "sha256": "bf09fcdf557d754095d07f0944bb11f1c837532327630d0766a3ddf81b49ec3c",
+      "file": "blobs/bf09fcdf557d754095d07f0944bb11f1c837532327630d0766a3ddf81b49ec3c.gz",
+      "gzipBytes": 297,
+      "gzipSha256": "9d7870ff6776741500ec779ecfb66e34297b95bfd9dd117aa4a64b161954adb6"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/verification.json",
+      "bytes": 36733,
+      "sha256": "851c24da9dd8b8ffc60ab1edb98a2de72e0b5b2f2c4345d5c2a3665beb3d5abb",
+      "file": "blobs/851c24da9dd8b8ffc60ab1edb98a2de72e0b5b2f2c4345d5c2a3665beb3d5abb.gz",
+      "gzipBytes": 10429,
+      "gzipSha256": "67d4de79e300af95426303a533b1ad44fb0157002422d9d33694077535d8701c"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/verify-initial.py",
+      "bytes": 6997,
+      "sha256": "17b06a4d38fd3990d987cdfc22046bdc4b64970671b1243e3c14e4c5a440ee75",
+      "file": "blobs/17b06a4d38fd3990d987cdfc22046bdc4b64970671b1243e3c14e4c5a440ee75.gz",
+      "gzipBytes": 2713,
+      "gzipSha256": "2df86b60a94b7f44ca74975fb50fc394be7e1b0542c1f985f6dc921d43e3b367"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-pr154-source-review-20261011/verify.py",
+      "bytes": 7018,
+      "sha256": "2b9be163a3dceec614f3c375aacf53c4fa502b0f1c7fb1b07d295b643b2a06c8",
+      "file": "blobs/2b9be163a3dceec614f3c375aacf53c4fa502b0f1c7fb1b07d295b643b2a06c8.gz",
+      "gzipBytes": 2722,
+      "gzipSha256": "3cefaf085faa996346f16fe7b1c975548fd49600a11e7e026c1477704b1fc20f"
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-retain-pr154-accepted-20261011.py",
+      "bytes": 3164,
+      "sha256": "b9439bead9775d03140d1ad6b7033a46d42dca471329541596f75ad31266d39b",
+      "file": "blobs/b9439bead9775d03140d1ad6b7033a46d42dca471329541596f75ad31266d39b.gz",
+      "gzipBytes": 1444,
+      "gzipSha256": "ab19f66b622004f5ea9d2466bc68c0ba072f99dbb600073ccfa0d486180fdd34"
+    }
+  ],
+  "externalDownloadedBinaries": [
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675383122-evidence-wheel-x86_64-unknown-linux-gnu/artifact.zip",
+      "bytes": 908,
+      "sha256": "640d9127a75851d068008d8e55a6fcf4a5305c95d6336d9fb052d3d4b21f8af8",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675428015-wheel-x86_64-unknown-linux-gnu/artifact.zip",
+      "bytes": 7253305,
+      "sha256": "d145baa4b54b2afd9d16b3165426a4add412a6bbaf69d53f961ef1fc0abc5efd",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675428015-wheel-x86_64-unknown-linux-gnu/files/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+      "bytes": 7281974,
+      "sha256": "6678fe66c487351d3566faf78a52e791bd80b59a674b552a44acffb35332d8de",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675483269-wheel-x86_64-pc-windows-msvc/artifact.zip",
+      "bytes": 6489745,
+      "sha256": "722435f548ee33c461fc0094007a5fb6fb21975e9a85c9822da431cb1370852d",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675483269-wheel-x86_64-pc-windows-msvc/files/rusty_tiles-0.4.0-cp310-abi3-win_amd64.whl",
+      "bytes": 6493532,
+      "sha256": "dcddc33ee8f9149afe1df1f3e2ccc21feb7e1d743c2c655146df1035188fbfb7",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675612801-evidence-wheel-x86_64-apple-darwin/artifact.zip",
+      "bytes": 988,
+      "sha256": "3f722a4d87b4033ef7989029dded2439f7faf2b13f3792d807ec83dd94f5023e",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675662702-wheel-x86_64-apple-darwin/artifact.zip",
+      "bytes": 6736706,
+      "sha256": "ab36078715b782290eb4b710fdb91c5f073701a4d845e416f525a4236dfb05bf",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675662702-wheel-x86_64-apple-darwin/files/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_x86_64.whl",
+      "bytes": 6748999,
+      "sha256": "3f1048a90e83718255d91464e464ee6e0343e4c72c233caf3a5e25760c2a9b33",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675737858-evidence-wheel-x86_64-pc-windows-msvc/artifact.zip",
+      "bytes": 1011,
+      "sha256": "b7957c0db0697ff062e3d7c3a8b00b7c8746ecf2d2c6ed6662223bc3e0dde839",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675768047-evidence-official-blender-macos-x64/artifact.zip",
+      "bytes": 1254,
+      "sha256": "b6743c24625811ce1103fff25999cb3060f6bd851d92ca00b1747a3a49807e82",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675772346-wheel-aarch64-unknown-linux-gnu/artifact.zip",
+      "bytes": 7126451,
+      "sha256": "caa7bdd0df101003e7ae65327f20c35fc534aa29abc6173dc0637fd2b8b7a4b6",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675772346-wheel-aarch64-unknown-linux-gnu/files/rusty_tiles-0.4.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+      "bytes": 7158833,
+      "sha256": "d4b935d4d0c59484361740d993e3a63bb830958dd22bfe6ab8fae4d679d9698f",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675812623-wheel-aarch64-apple-darwin/artifact.zip",
+      "bytes": 6493628,
+      "sha256": "3a2d29dc3a6967fc218e4c055585b67677ef4612505a9f8f52c7a61cefb9b017",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675812623-wheel-aarch64-apple-darwin/files/rusty_tiles-0.4.0-cp310-abi3-macosx_15_0_arm64.whl",
+      "bytes": 6505527,
+      "sha256": "7bb85265d18b865dc21fabc03832640ba14a5aded017745e4ce201876e42a0ca",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675832902-evidence-official-blender-linux-x64/artifact.zip",
+      "bytes": 1218,
+      "sha256": "87e83759ade4a46ea21b0311522227a60e7b18ca00c940a401502f966c8bd11d",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11675917255-evidence-wheel-aarch64-unknown-linux-gnu/artifact.zip",
+      "bytes": 909,
+      "sha256": "367ce862b242d1ec994fd817b3ea1bdef8a58f3288709b58b5e737878408d3db",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676191873-c1-validation-evidence/artifact.zip",
+      "bytes": 152399,
+      "sha256": "b249b943e09d46bba1e5d88e65600c89e9874df5310f7ba29667b570ed1da435",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676192567-evidence-official-blender-windows-x64/artifact.zip",
+      "bytes": 1240,
+      "sha256": "43a9c315fe69e1fe26aec1d7b20ee3c29aa48edb9c9f50df67f45487ccaea76d",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676201532-evidence-official-blender-macos-arm64/artifact.zip",
+      "bytes": 1252,
+      "sha256": "d06476598a4c1e092bf4233bfffad9df237425d741c6cab9e9ca4f7ff96865fd",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    },
+    {
+      "sourcePath": "/tmp/rusty-tiles-vector-final-remote-evidence-20261011-e9fb073/artifacts/11676331929-evidence-wheel-aarch64-apple-darwin/artifact.zip",
+      "bytes": 997,
+      "sha256": "8f2af4f99985c41ebe0c3835d362101da3a8d051804121d1b3b6201b971cc283",
+      "scope": "Actual downloaded bytes rehashed locally; binary bytes remain external."
+    }
+  ],
+  "uniqueBlobs": 165,
+  "uniqueCompressedBytes": 1420841
+}

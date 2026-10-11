@@ -97,17 +97,6 @@ impl Job {
         }
     }
 
-    /// Publish a staged directory as the output directory.
-    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
-    pub fn publish_dir(
-        self,
-        staging: &Path,
-        report: Option<Value>,
-    ) -> Result<ConversionResult, Error> {
-        publish_directory(staging, &self.output, self.force)?;
-        Ok(self.result(false, report))
-    }
-
     /// Pack named member files into a `.3tz` and publish it.
     pub fn publish_3tz(
         self,
@@ -228,43 +217,9 @@ pub(crate) fn temp_archive(dir: &Path) -> std::io::Result<tempfile::NamedTempFil
     builder.tempfile_in(dir)
 }
 
-/// Rename `staging` to `output`. An existing output is moved aside first and
-/// restored if the rename fails.
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
-pub(crate) fn publish_directory(staging: &Path, output: &Path, force: bool) -> Result<(), Error> {
-    if !output.exists() {
-        std::fs::rename(staging, output)?;
-        return Ok(());
-    }
-    if !force {
-        return Err(Error::OutputExists(output.into()));
-    }
-    let backup = tempfile::tempdir_in(parent_dir(output))?;
-    let previous = backup.path().join("previous");
-    std::fs::rename(output, &previous)?;
-    if let Err(error) = std::fs::rename(staging, output) {
-        if let Err(restore) = std::fs::rename(&previous, output) {
-            let retained = backup.keep();
-            return Err(Error::msg(format!("publication failed ({error}); restore failed ({restore}); previous output retained at {}", retained.join("previous").display())));
-        }
-        return Err(Error::Io(error));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn failed_directory_publication_restores_original() {
-        let tmp = tempfile::tempdir().unwrap();
-        let output = tmp.path().join("output");
-        std::fs::create_dir(&output).unwrap();
-        std::fs::write(output.join("original"), b"keep me").unwrap();
-        assert!(publish_directory(&tmp.path().join("missing"), &output, true).is_err());
-        assert_eq!(std::fs::read(output.join("original")).unwrap(), b"keep me");
-        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
-    }
 
     #[test]
     fn dropped_job_removes_work_and_keeps_output() {

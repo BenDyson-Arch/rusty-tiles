@@ -133,17 +133,31 @@ Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`
 
 ### raster
 
-Writes a source-preserving COG and a PNG XYZ display pyramid.
+Writes a standalone source COG, directly sampled nearest-neighbour PNG XYZ pyramid,
+TileJSON and typed `report.json`. See the [imagery profile](FORMATS.md#imagery).
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--maxZoom` | `--max-zoom` | required | Finest zoom level, from 0 to 24 |
-| `--minZoom` | `--min-zoom` | `0` | Coarsest zoom level, from 0 to `--maxZoom` |
-| `--display` | | `image` | `image` uses RGB or RGBA bands. `gray` stretches one band. |
-| `--band` | | `1` | Band used by `gray` display |
-| `--alphaBand` | `--alpha-band` | `0` | Alpha band for `image` or `gray` display, with opacity values 0–255. 0 uses the source mask or NoData. |
-| `--displayMin` | `--display-min` | none | Value shown as black in `gray` display |
-| `--displayMax` | `--display-max` | none | Value shown as white in `gray` display |
+| `--maxZoom` | `--max-zoom` | required | Finest zoom, 0 through 24 |
+| `--minZoom` | `--min-zoom` | `0` | Coarsest zoom, at most `--maxZoom` |
+| `--display` | | `image` | Byte RGB, gray or opaque palette imagery; `gray` styles raw numeric samples |
+| `--band` | | `1` for gray | Positive gray band index; an explicit band is invalid for image display |
+| `--alphaBand` | `--alpha-band` | `0` | Explicit opacity band; 0 selects the declared alpha, or opaque when absent |
+| `--displayMin` | `--display-min` | required for gray | Raw value shown as black |
+| `--displayMax` | `--display-max` | required for gray | Raw value shown as white; finite increasing range with finite width |
+| `--jobs` | | `2` | Worker cap, 1 through 4, capped by available CPUs |
+| `--max-source-bytes` | | `536870912` | Aggregate admitted source and companion bytes |
+| `--max-source-pixels` | | `268435456` | Source pixel count |
+| `--max-decoded-bytes` | | `2147483648` | Decoded source samples and independent mask |
+| `--max-tiles` | | `100000` | Total tiles across requested zooms |
+| `--max-output-bytes` | | `8589934592` | Closed output members including both JSON files |
+| `--max-working-bytes` | | `17179869184` | Logical source, derivative and concrete owner allowance; also caps closed staged files, including intermediates |
+
+All six limits must be positive. JSON success includes `rasterReport`, equal to
+published `report.json`; the precommit `raster_complete` progress reports the actual tile count.
+Replacement occurs only after the complete directory is closed and sealed.
+On Linux the output parent must be on ext, btrfs, tmpfs or xfs (kernel 4.9 or
+newer); other filesystems, such as overlayfs or network mounts, are refused as `unsupported`.
 
 ### terrain
 
@@ -309,7 +323,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Vector and point-cloud conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `cancelled`, `observer_failure` or `invalid_state` exit 1. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
+Vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
 
 ## mesh-local-to-3tz
 
@@ -418,7 +432,7 @@ With `--json`, the command prints exactly one JSON object on stdout. A successfu
 }
 ```
 
-The example is shortened. `counts` holds only counts, such as `points`, `tiles` and `features`. `settings` holds every other top-level number from `conversion.json`, such as `heightOffset`, `grid` or `lodLevels`. For a directory output, `conversionReport` is `{"path": ".../conversion.json"}`. Commands without a conversion report return empty `counts` and `settings` and null report fields.
+The example is shortened. `counts` holds only counts, such as `points`, `tiles` and `features`. `settings` holds every other top-level number from `conversion.json`, such as `heightOffset`, `grid` or `lodLevels`. For legacy directory reports, `conversionReport` is `{"path": ".../conversion.json"}`. Commands without a conversion report return empty `counts` and `settings` and null report fields.
 
 A failure has this shape and the matching exit code:
 
@@ -445,7 +459,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | --- | --- |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; domain events finish before installation |
 | `vector` | `ingestion`, `encoding` |
-| `raster` | `cog`, `display`, `tiling`. `tiling` counts XYZ tiles. |
+| `raster` | `source_cog` and `aligned_warp` use native normalized progress out of 1,000,000; `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
 | `mesh-local-to-3tz` | `mesh_approximation` when requested, `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |

@@ -72,7 +72,11 @@ pub use tile::{
 /// npm package pin used as the v0 oracle. Golden tests call this via `npx`.
 pub const ORACLE_NPM: &str = "3d-tiles-tools@0.5.4";
 
-pub mod raster;
+mod raster;
+pub use raster::{
+    raster_to_pyramid, RasterBandReport, RasterBands, RasterDisplay, RasterGridReport,
+    RasterLimits, RasterReport, RasterRequest, RasterResult, RasterSourceReport,
+};
 
 mod vector_compression;
 mod vector_encoding;

@@ -67,6 +67,9 @@ remain proposals wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
+- [R2 source raster and imagery pyramid authoring contract](r2-raster-contract.md)
+- [R2 retained preparation and selected native evidence](../../bench/architecture_audit/raster_source/README.md)
+
 - [F1d2 bounded adaptive surface certificate contract](f1d2-certificate-contract.md)
 - [F1d2 implementation and remaining approximation gates](f1d2-implementation.md)
 - [F1d2 independent artifact and consumer evidence](../../bench/architecture_audit/mesh_approximation_f1d2/README.md)
