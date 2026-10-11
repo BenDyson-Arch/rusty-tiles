@@ -130,6 +130,15 @@ fn has_extensions(value: &Value) -> Result<bool, FormatError> {
     Ok(false)
 }
 
+/// A JSON-format subtree: its first non-whitespace byte, after an optional
+/// UTF-8 BOM, is `{`. Any other member without `subt` magic is malformed.
+fn is_json_format(member: &[u8]) -> bool {
+    let text = member.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(member);
+    text.iter()
+        .find(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r'))
+        .is_some_and(|b| *b == b'{')
+}
+
 fn array<'a>(subtree: &'a Map<String, Value>, key: &str) -> Result<&'a [Value], FormatError> {
     match subtree.get(key) {
         None => Ok(&[]),
@@ -160,7 +169,10 @@ pub(super) fn admit<E>(
     limits.subtrees.insert(name.clone());
     // 1. Header.
     if !member.starts_with(b"subt") {
-        return Err(unsupported(format!("JSON-format subtree {name}")).into());
+        if is_json_format(&member) {
+            return Err(unsupported(format!("JSON-format subtree {name}")).into());
+        }
+        return Err(invalid(format!("invalid subtree magic: {name}")).into());
     }
     if member.len() < 24 {
         return Err(invalid(format!("subtree header is truncated: {name}")).into());
@@ -378,13 +390,26 @@ mod tests {
         bad[4] = 2;
         assert_invalid(one(bad), "version must be 1");
         assert_invalid(one(b"subt\x01\0\0\0".to_vec()), "header is truncated");
-        // D-7: JSON-format subtrees (no `subt` magic).
+        // D-7: JSON-format subtrees, also after a UTF-8 BOM and whitespace.
         let json =
             br#"{"tileAvailability":{"constant":1},"childSubtreeAvailability":{"constant":0}}"#;
         assert_unsupported(one(json.to_vec()), "JSON-format subtree s/0/0/0.subtree");
+        let prefixed = [&b"\xEF\xBB\xBF \t\r\n"[..], json].concat();
+        assert_unsupported(one(prefixed), "JSON-format subtree");
+        // D-4: any other member without `subt` magic is malformed.
         let mut magic = good.clone();
         magic[3] = b'x';
-        assert_unsupported(one(magic), "JSON-format subtree");
+        assert_invalid(one(magic), "invalid subtree magic: s/0/0/0.subtree");
+        for other in [
+            &b""[..],
+            b"sub",
+            b" [1]",
+            b"\xEF\xBB\xBF[",
+            b"\xEF\xBB{}",
+            b"x{}",
+        ] {
+            assert_invalid(one(other.to_vec()), "invalid subtree magic");
+        }
         // Chunk lengths.
         for (at, value) in [(8, 0u64), (8, 12), (16, 4)] {
             let mut bad = good.clone();
