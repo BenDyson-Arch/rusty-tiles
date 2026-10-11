@@ -173,6 +173,65 @@ def restore(published, entry):
     return prefix + glb
 
 
+def glb_primitives(data):
+    """Mesh primitives of one payload (b3dm-wrapped or plain GLB)."""
+    if data[:4] == b'b3dm':
+        tables = struct.unpack_from('<4I', data, 12)
+        data = data[28 + sum(tables):]
+    size = struct.unpack_from('<I', data, 12)[0]
+    doc = json.loads(data[20:20 + size])
+    return sum(len(mesh['primitives']) for mesh in doc.get('meshes', []))
+
+
+def forest_statistics(archive):
+    """Tile statistics of the producer hierarchy H, recomputed from published members.
+
+    Explicit tiles are read from every tileset document; a link tile (whose contents are only
+    tileset-d{m}.json) is not a tile of H, its document root is. An implicit tile's contents are
+    the implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix} members sharing one tile key.
+    Bytes are published member sizes; primitives are counted in each payload's glTF JSON."""
+    import re
+    names = archive.namelist()
+    tiles = []
+    def walk(node):
+        uris = [c['uri'] for c in node.get('contents', []) + ([node['content']] if 'content' in node else [])]
+        if not (uris and all(re.fullmatch(r'tileset-d[0-9]+\.json', u) for u in uris)):
+            # Template URIs belong to an implicit root, whose members are grouped below.
+            tiles.append([u for u in uris if '{' not in u])
+        for child in node.get('children', []):
+            walk(child)
+    for name in sorted(names):
+        if name == 'tileset.json' or re.fullmatch(r'tileset-d[0-9]+\.json', name):
+            walk(json.loads(archive.read(name))['root'])
+    implicit = {}
+    for name in names:
+        match = re.fullmatch(r'implicit-content/(r[0-9]+(?:-[0-9]+)+)-[0-9]+\.(?:glb|b3dm|gltf)', name)
+        if match:
+            implicit.setdefault(match.group(1), []).append(name)
+    tiles = [t for t in tiles if t] + list(implicit.values())
+    sizes = [sum(archive.getinfo(u).file_size for u in t) for t in tiles]
+    counts = [sum(glb_primitives(archive.read(u)) for u in t) for t in tiles]
+    return dict(maximumTileBytes=max(sizes, default=0), encodedTileBytes=sum(sizes),
+                primitiveReferences=sum(counts), maximumTilePrimitives=max(counts, default=0))
+
+
+def checked_statistics(archive, report):
+    """The report's tile statistics must equal those recomputed from the published members."""
+    statistics = forest_statistics(archive)
+    reported = dict(maximumTileBytes=report['maximumTileBytes'],
+                    **{key: report['encoding'][key] for key in
+                       ('encodedTileBytes', 'primitiveReferences', 'maximumTilePrimitives')})
+    assert reported == statistics, ('report statistics disagree with the published members', reported, statistics)
+    return statistics
+
+
+def explicit_inventory(path):
+    import zipfile
+    with zipfile.ZipFile(path) as archive:
+        report = json.loads(archive.read('conversion.json'))
+        return dict(report=report, statistics=checked_statistics(archive, report))
+
+
 def forest_inventory(path):
     """Default (implicit forest) archive: each payload once, every raw content recoverable."""
     import zipfile
@@ -205,8 +264,9 @@ def forest_inventory(path):
         assert all(pathlib.PurePosixPath(uri).stem in mapped for uri in only), 'unrecoverable raw content'
         report = json.loads(archive.read('conversion.json'))
         assert report['reuse']['publishedContents'] == len(contents)
+        statistics = checked_statistics(archive, report)
         rebased = sum(entry['delta'] != [0, 0, 0] for entry in mapped.values())
-        return dict(report=report, mapped_only=len(only), mapped=len(mapped), rebased=rebased,
+        return dict(report=report, mapped_only=len(only), mapped=len(mapped), rebased=rebased, statistics=statistics,
                     # Per-build reports and the offset index are not tile content.
                     payloads={n: sha(archive.read(n)) for n in names
                               if n not in ('conversion.json', 'geometry-reports.jsonl', '@3dtilesIndex1@')})
@@ -228,17 +288,22 @@ def run_forest(binary, evidence):
                 items.append(dict(type='Feature', id='l' + str(i), properties=dict(name='road-' + str(i)),
                                   geometry=dict(type='LineString', coordinates=[[x + 20 + j, y + 20 + j % 3 * .4, 0] for j in range(16)])))
             return items
-        def convert(name, edit, flags=()):
+        def points():
+            return [dict(type='Feature', id='q' + str(i), properties=dict(name='pt-' + str(i)),
+                         geometry=dict(type='Point', coordinates=[i % 8 * 40 + i // 64 * 3, i // 8 % 8 * 40, 0]))
+                    for i in range(256)]
+        def convert(name, edit, flags=(), items=None):
             source = root / name / 'parcels.geojson'
             source.parent.mkdir()
-            source.write_text(json.dumps(dict(type='FeatureCollection', features=features(edit))))
+            items = features(edit) if items is None else items
+            source.write_text(json.dumps(dict(type='FeatureCollection', features=items)))
             output = source.parent / 'out.3tz'
             command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output), '--reproducible',
                        '--sourceCrs', 'local', '--jobs', '1', '--maxFeatures', '1', '--lodLevels', '2', *flags]
             proc = subprocess.run(command, capture_output=True, text=True)
             record = dict(command=command, exit_code=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
             if proc.returncode == 0:
-                record['inventory'] = forest_inventory(output)
+                record['inventory'] = (explicit_inventory if '--explicit' in flags else forest_inventory)(output)
                 (evidence / ('forest-' + name + '.3tz')).write_bytes(output.read_bytes())
             else:
                 assert not output.exists(), 'failed conversion published output'
@@ -249,6 +314,22 @@ def run_forest(binary, evidence):
         assert base['exit_code'] == 0, base['stderr']
         assert base['inventory']['mapped_only'] > 0, 'no payload is published only under implicit-content/'
         assert base['inventory']['rebased'] > 0, 'no payload is published with a nonzero rebase'
+        # Report statistics: byte and primitive figures are recomputed from the members in
+        # forest_inventory; the rest must equal the --explicit build of the same hierarchy, whose
+        # report walks the manifest instead of the forest writer's tile records.
+        def same_statistics(forest, explicit):
+            forest, explicit = forest['inventory'], explicit['inventory']
+            for key in ('primitiveReferences', 'maximumTilePrimitives', 'uncompressedTileBytes'):
+                assert forest['report']['encoding'][key] == explicit['report']['encoding'][key], key
+            assert forest['report']['pointAggregation'] == explicit['report']['pointAggregation']
+        explicit, _ = convert('base-explicit', False, ['--explicit'])
+        assert explicit['exit_code'] == 0, explicit['stderr']
+        same_statistics(base, explicit)
+        aggregated, _ = convert('points-aggregated', False, ['--aggregatePoints'], points())
+        aggregated_explicit, _ = convert('points-aggregated-explicit', False, ['--aggregatePoints', '--explicit'], points())
+        assert aggregated['exit_code'] == aggregated_explicit['exit_code'] == 0, aggregated['stderr']
+        assert aggregated['inventory']['report']['pointAggregation']['contentTiles'] > 0
+        same_statistics(aggregated, aggregated_explicit)
         same, _ = convert('same', False, ['--reuseTileset', str(previous)])
         assert same['exit_code'] == 0, same['stderr']
         assert same['inventory']['payloads'] == base['inventory']['payloads'], 'unchanged reuse changed published bytes'
