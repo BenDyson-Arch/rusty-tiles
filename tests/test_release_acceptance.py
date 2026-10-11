@@ -1,4 +1,5 @@
 """A required browser gate must fail before building when tools are absent."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -77,6 +78,60 @@ class RequiredBrowserAcceptance(unittest.TestCase):
             self.assertIn("required browser acceptance prerequisites", result.stderr)
             self.assertIn("selected binary's", result.stderr)
             self.assertNotIn("doctor for README commands", result.stderr)
+
+
+def doctor_report(commands, exit_code=None):
+    """A doctor --json report in the T1 refusal model."""
+    entries, refusals = {}, []
+    for name, refusal in sorted(commands.items()):
+        entry = {"status": "ready" if refusal is None else "unavailable", "ready": refusal is None}
+        if refusal is not None:
+            entry["refusal"] = {"code": refusal[0], "exitCode": refusal[1]}
+            refusals.append(refusal)
+        entries[name] = entry
+    report = {"commands": entries, "selectedCommands": list(commands), "ready": not refusals,
+              "ok": not refusals, "status": "unavailable" if refusals else "ready",
+              "probes": ["proj-directory-listing"], "proj": {"networkEnabled": False}}
+    if refusals:
+        report["error"] = {"code": refusals[0][0], "message": "stub"}
+        report["exitCode"] = refusals[0][1] if exit_code is None else exit_code
+    return report
+
+
+@unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX acceptance script")
+class DoctorContractStep(unittest.TestCase):
+    """Step 2 checks the selected binary's doctor exit against its refusals."""
+
+    def run_with_stub(self, process_exit):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme = doctor_report({"mesh-to-3tz": None, "validate": None, "preview": None})
+            full = doctor_report({"convert": None, "raster": ("unsupported", 2)})
+            binary = root / "rusty-tiles"
+            # The harness runs the binary with an empty PATH: builtins only.
+            binary.write_text(
+                "#!/bin/sh\n"
+                f"if [ \"$1\" = doctor ] && [ \"$2\" = --command ]; then printf '%s\\n' '{json.dumps(readme)}'; exit 0; fi\n"
+                f"if [ \"$1\" = doctor ]; then printf '%s\\n' '{json.dumps(full)}'; exit {process_exit}; fi\n"
+                "exit 1\n")
+            binary.chmod(0o755)
+            return subprocess.run(
+                ["bash", str(ROOT / "scripts/release_acceptance.sh")],
+                env=dict(os.environ, ACCEPTANCE_REQUIRE_BROWSER="0", RUSTY_TILES_BIN=str(binary),
+                         ACCEPTANCE_WORK=str(root / "work"), PYTHON=sys.executable),
+                capture_output=True, text=True, timeout=60,
+            )
+
+    def test_exit_matching_the_first_refusal_passes_step_2(self):
+        result = self.run_with_stub(2)
+        self.assertIn("ok: doctor", result.stdout, result.stderr)
+        self.assertIn("FAIL: convert", result.stderr)
+
+    def test_exit_disagreeing_with_the_refusal_fails_step_2(self):
+        result = self.run_with_stub(4)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("ok: doctor", result.stdout)
+        self.assertIn("violates the status/exit contract", result.stderr)
 
 
 if __name__ == "__main__":

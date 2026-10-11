@@ -7,8 +7,9 @@
 #   1. build    cargo build --release --locked --features native-geospatial
 #               (skipped when RUSTY_TILES_BIN names an existing binary)
 #   2. doctor   README mesh/validate/preview commands report status ready,
-#               and the full report obeys the status/exit contract:
-#               unavailable -> environment/4, else unsupported -> 2, else 0
+#               and the full report obeys the status/exit contract: each
+#               not-ready command has the refusal its own run returns, and the
+#               first in name order sets error.code and the exit status
 #   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
 #   4. validate validate --json on the archive
 #   5. preview  preview --json starts on a free loopback port, serves
@@ -114,25 +115,36 @@ doctor_contract() {
 import json, sys
 path, code, selected = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
 d = json.load(open(path))
-statuses = {name: c["status"] for name, c in d["commands"].items()}
-for name, c in d["commands"].items():
+refused = []
+for name, c in d["commands"].items():  # JSON keys are in name order
     assert c["status"] in ("ready", "unavailable", "unsupported"), (name, c)
     assert c["ready"] == (c["status"] == "ready"), (name, c)
-values = set(statuses.values())
+    if c["ready"]:
+        assert "refusal" not in c, (name, c)
+    else:
+        assert set(c["refusal"]) == {"code", "exitCode"}, (name, c)
+        refused.append(c["refusal"])
+values = {c["status"] for c in d["commands"].values()}
 status = "unavailable" if "unavailable" in values else "unsupported" if "unsupported" in values else "ready"
-expected = {"ready": 0, "unavailable": 4, "unsupported": 2}[status]
-assert d["status"] == status and d["ready"] == d["ok"] == (status == "ready"), d["status"]
-assert code == expected, f"exit {code}, expected {expected} for {status}"
-if status != "ready":
-    assert d["exitCode"] == code, d["exitCode"]
-    assert d["error"]["code"] == {"unavailable": "environment", "unsupported": "unsupported"}[status]
+assert d["status"] == status and d["ready"] == d["ok"] == (not refused), d["status"]
+if refused:
+    first = refused[0]
+    assert code == first["exitCode"] == d["exitCode"], f"exit {code}, first refusal {first}"
+    assert d["error"]["code"] == first["code"], d["error"]
+else:
+    assert code == 0 and "error" not in d, code
 assert d["proj"]["networkEnabled"] is False
 assert set(d["probes"]) <= {"linked-versions", "proj-offline-policy", "proj-database",
     "proj-directory-listing", "gdal-driver-registry", "geos-triangulation", "cesium-runtime"}, d["probes"]
 if selected:
     assert d["selectedCommands"] == selected, d["selectedCommands"]
-    assert sorted(statuses) == sorted(selected) and values == {"ready"}, statuses
+    assert sorted(d["commands"]) == sorted(selected) and not refused, d["commands"]
 PY
+}
+
+# url_path TEXT: percent-encode a path for a literal request line.
+url_path() {
+  "$PYTHON" -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"
 }
 
 # http_status PATH [HOST]: literal request path (no client normalization).
@@ -221,7 +233,7 @@ cmp -s "$WORK/served-tileset.json" "$WORK/output/example/tileset.json" || fail "
 # Read-only fence: the work directory holds unselected files beside the root.
 ln -s "$WORK/convert.log" "$WORK/output/example/escape.log" || fail "create escape symlink"
 for target in /mesh/../../convert.log /mesh/%2e%2e/%2e%2e/convert.log /mesh/escape.log \
-  "/mesh/$WORK/convert.log" /terrain/tileset.json /mesh/; do
+  "/mesh/$(url_path "$WORK/convert.log")" /terrain/tileset.json /mesh/ /mesh/tileset.json/; do
   [[ $(http_status "$target") == 404 ]] || fail "preview served unselected path $target"
 done
 PORT=${URL%/}
