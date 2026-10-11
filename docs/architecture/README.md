@@ -67,6 +67,9 @@ remain proposals wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
+- [I1 implicit read contract](i1-implicit-read-contract.md)
+- [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)
+
 - [R2 source raster and imagery pyramid authoring contract](r2-raster-contract.md)
 - [C2 decoded-content containment contract (slice 1)](c2-decoded-containment-contract.md)
 - [R2 retained preparation and selected native evidence](../../bench/architecture_audit/raster_source/README.md)
