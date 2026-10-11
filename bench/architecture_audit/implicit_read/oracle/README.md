@@ -284,6 +284,17 @@ hash is identical, and generation stays byte-reproducible.
    new `externalTilesetLinks` count shows the link part. This changes counts only, no verdicts. Examples: C-11
    goes 10 → 11, C-11b → 12, T-3.base → 1. The corpus facts (`corpus/facts/*.json`, tile lists) did not depend on it.
 
+4. **Document-level error rule; C-11b again** (C-11b now `5898f6e4…`; new control **T-4** `38668d70…`).
+   - **Defect.** C-11b's `tileset.json` had root `geometricError` 500 under a top-level `geometricError` of 400.
+     Production refuses that under a pre-I1 explicit rule, before OD-7. The mismatch was in `tileset.json`, the
+     referencing document; `ext/tileset.json` is consistent (64/64).
+   - **Fixture.** The top-level value is now 500, and C-11b again reaches OD-7 (Unsupported, repeated subtree member).
+   - **Oracle.** The model now applies the rule to the root of every tileset document: the root's error must be
+     at most the document's `geometricError`, with the same tolerance as `geometricErrorOrder`
+     (`1e-8·(1 + e)`). T-4 sits 2 × that tolerance above the document value, so the control is robust to the
+     tolerance reading.
+   - **Effect.** No other fixture or corpus verdict changed. There are now 181 cases.
+
 ## Contract questions (my readings; please confirm or correct)
 
 - **Q1 (D-4 magic).** Resolved by v3.2 ruling 1.
