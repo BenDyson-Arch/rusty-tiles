@@ -140,6 +140,12 @@ fn limit_name(m: &str) -> &'static str {
 }
 
 /// Production result in the oracle's vocabulary.
+/// `I1_ONLY=ID[,ID…]` restricts both tests to those cases (single-case timing runs of the
+/// production mutants); filtered cases are neither run nor reported as skipped.
+fn selected(id: &str) -> bool {
+    std::env::var("I1_ONLY").map_or(true, |only| only.split(',').any(|o| o == id))
+}
+
 fn production(file: &Path, limits: ValidationLimits, dump: Option<(&Path, &str)>) -> Value {
     let start = Instant::now();
     let report = inspect_selected(ValidationRequest::new(file), limits.clone());
@@ -203,6 +209,9 @@ fn production_matches_every_i1_oracle_witness_and_control() {
     let manifest = read("controls/manifest.json");
     for case in manifest["cases"].as_array().unwrap() {
         let id = case["id"].as_str().unwrap();
+        if !selected(id) {
+            continue;
+        }
         let file = root.join("controls").join(case["file"].as_str().unwrap());
         if !file.exists() {
             skipped.push(id.to_owned());
@@ -305,6 +314,9 @@ fn production_matches_the_oracle_on_the_w_corpus() {
         .unwrap()
     {
         let id = a["id"].as_str().unwrap();
+        if !selected(id) {
+            continue;
+        }
         let path = Path::new(a["path"].as_str().unwrap());
         let present = std::fs::read(path)
             .ok()
