@@ -1,0 +1,1486 @@
+{
+ "receipt": {
+  "cesium": "/home/bend/.cache/rusty-tiles-117-browser-cache/node_modules/cesium/Build/Cesium",
+  "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+  "cesiumVersion": "1.146.0",
+  "playwrightVersion": "1.63.0",
+  "probe": "fb2d0fdb32d5fff012d372bb690cdf4a52a796c5c32f9822219a682fe5acd747",
+  "runner": "6a3c393571345a9aae9bb92d3097d4a21eaf3a01bc6c479047b44a794cace5cd",
+  "generator": "578884d8ace5844175f6ab22f10dc6413613a174f5e6c23bd4b1582ef516ee63",
+  "cpuAffinity": [
+   13,
+   15
+  ],
+  "nice": 6
+ },
+ "results": {
+  "E": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 2.0724000000059606,
+    "requests": [
+     "tileset.json",
+     "e/0-0.glb",
+     "e/1-0.glb",
+     "e/2-3.glb",
+     "e/2-0.glb",
+     "e/2-1.glb",
+     "e/2-2.glb"
+    ],
+    "selected": [
+     "e/2-1.glb",
+     "e/2-0.glb",
+     "e/2-3.glb",
+     "e/2-2.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 1.051,
+     "selected": [
+      "e/3-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "e/3-1.glb",
+      "e/3-0.glb"
+     ]
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.3955,
+     "selected": [
+      "e/3-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.4882999999970198,
+     "selected": [
+      "e/3-1.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-1.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 0.9022000000029803,
+     "selected": [
+      "e/3-2.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-2.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "e/3-3.glb",
+      "e/3-2.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.4142999999970198,
+     "selected": [
+      "e/3-3.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-3.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 0.8976000000089407,
+     "selected": [
+      "e/3-4.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-4.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "e/3-5.glb",
+      "e/3-4.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.4527000000029802,
+     "selected": [
+      "e/3-5.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-5.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 0.9578000000119209,
+     "selected": [
+      "e/3-6.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-6.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "e/3-7.glb",
+      "e/3-6.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.40679999999701977,
+     "selected": [
+      "e/3-7.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "e/3-7.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 15,
+    "unique": 15,
+    "json": 1,
+    "subtree": 0,
+    "glb": 14
+   },
+   "statistics": {
+    "numberOfTilesTotal": 15
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 15,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "f93afc9a51ad95f89b0a4b880ad891a974853f514107f887b2a851a7f7fc12c4"
+  },
+  "A": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 2.29929999999702,
+    "requests": [
+     "tileset.json",
+     "subtrees/0-0-0.subtree",
+     "content/0-0-0-0.glb",
+     "content/1-0-0-0.glb",
+     "subtrees/2-0-0.subtree",
+     "subtrees/2-1-0.subtree",
+     "subtrees/2-2-0.subtree",
+     "subtrees/2-3-0.subtree",
+     "content/2-1-0-0.glb",
+     "content/2-3-0-0.glb",
+     "content/2-2-0-0.glb",
+     "content/2-0-0-0.glb"
+    ],
+    "selected": [
+     "content/2-1-0-0.glb",
+     "content/2-0-0-0.glb",
+     "content/2-3-0-0.glb",
+     "content/2-2-0-0.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 0.5770999999940395,
+     "selected": [
+      "content/1-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "content/1-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.9672000000029802,
+     "selected": [
+      "content/3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "content/3-1-0-0.glb",
+      "content/3-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.48190000000596045,
+     "selected": [
+      "content/1-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "content/1-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 0.4915999999940395,
+     "selected": [
+      "content/1-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "content/1-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.437,
+     "selected": [
+      "content/1-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "content/1-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 0.1265,
+     "selected": [],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.13470000000298024,
+     "selected": [],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 0.1375,
+     "selected": [],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.1563999999910593,
+     "selected": [],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 14,
+    "unique": 14,
+    "json": 1,
+    "subtree": 5,
+    "glb": 8
+   },
+   "statistics": {
+    "numberOfTilesTotal": 20
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 14,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "2588518db1b4073354001599f7d4e8fca0f998a6dc9121d9b69fa0b78a495f2b"
+  },
+  "S": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 2.27770000000298,
+    "requests": [
+     "tileset.json",
+     "subtrees/0-0-0.subtree",
+     "content/0-0-0-0.glb",
+     "content/1-0-0-0.glb",
+     "content/2-3-0-0.glb",
+     "content/2-0-0-0.glb",
+     "content/2-1-0-0.glb",
+     "content/2-2-0-0.glb"
+    ],
+    "selected": [
+     "content/2-1-0-0.glb",
+     "content/2-0-0-0.glb",
+     "content/2-3-0-0.glb",
+     "content/2-2-0-0.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 1.0675,
+     "selected": [
+      "content/3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "content/3-1-0-0.glb",
+      "content/3-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.43270000000298026,
+     "selected": [
+      "content/3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.42390000000596045,
+     "selected": [
+      "content/3-1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 1.0372000000029802,
+     "selected": [
+      "content/3-2-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-2-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "content/3-3-0-0.glb",
+      "content/3-2-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.42220000000298025,
+     "selected": [
+      "content/3-3-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-3-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 0.9581000000089407,
+     "selected": [
+      "content/3-4-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-4-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "content/3-4-0-0.glb",
+      "content/3-5-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.4223999999910593,
+     "selected": [
+      "content/3-5-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-5-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 0.9690999999940395,
+     "selected": [
+      "content/3-6-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-6-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "content/3-7-0-0.glb",
+      "content/3-6-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.433,
+     "selected": [
+      "content/3-7-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "content/3-7-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 16,
+    "unique": 16,
+    "json": 1,
+    "subtree": 1,
+    "glb": 14
+   },
+   "statistics": {
+    "numberOfTilesTotal": 16
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 16,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "d50e494edccc35eea47d9153ff77661d9dbc4f3697c2603e40bf20c4127f3433"
+  },
+  "X": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 3.5715,
+    "requests": [
+     "tileset.json",
+     "subtrees/0-0-0-0-0-0.subtree",
+     "implicit-content/0-0-0-0-0-0-0.glb",
+     "implicit-content/0-0-0-1-0-0-0.glb",
+     "implicit-tileset-0-0-0-2-0-0.json",
+     "implicit-tileset-0-0-0-2-3-0.json",
+     "implicit-tileset-0-0-0-2-1-0.json",
+     "implicit-tileset-0-0-0-2-2-0.json",
+     "subtrees/2-1-0-0-0-0.subtree",
+     "subtrees/2-0-0-0-0-0.subtree",
+     "subtrees/2-2-0-0-0-0.subtree",
+     "subtrees/2-3-0-0-0-0.subtree",
+     "implicit-content/2-1-0-0-0-0-0.glb",
+     "implicit-content/2-2-0-0-0-0-0.glb",
+     "implicit-content/2-0-0-0-0-0-0.glb",
+     "implicit-content/2-3-0-0-0-0-0.glb"
+    ],
+    "selected": [
+     "implicit-content/2-1-0-0-0-0-0.glb",
+     "implicit-content/2-0-0-0-0-0-0.glb",
+     "implicit-content/2-3-0-0-0-0-0.glb",
+     "implicit-content/2-2-0-0-0-0-0.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 1.7245,
+     "selected": [
+      "implicit-content/2-0-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-0-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "implicit-content/2-0-0-1-1-0-0.glb",
+      "implicit-content/2-0-0-1-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.6913000000119209,
+     "selected": [
+      "implicit-content/2-0-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-0-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.6895,
+     "selected": [
+      "implicit-content/2-0-0-1-1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-0-0-1-1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 1.509,
+     "selected": [
+      "implicit-content/2-1-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-1-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "implicit-content/2-1-0-1-1-0-0.glb",
+      "implicit-content/2-1-0-1-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.5123000000119209,
+     "selected": [
+      "implicit-content/2-1-0-1-1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-1-0-1-1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 1.4752000000029801,
+     "selected": [
+      "implicit-content/2-2-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-2-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "implicit-content/2-2-0-1-1-0-0.glb",
+      "implicit-content/2-2-0-1-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.684,
+     "selected": [
+      "implicit-content/2-2-0-1-1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-2-0-1-1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 1.4872999999970198,
+     "selected": [
+      "implicit-content/2-3-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-3-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "implicit-content/2-3-0-1-1-0-0.glb",
+      "implicit-content/2-3-0-1-0-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.6776000000089407,
+     "selected": [
+      "implicit-content/2-3-0-1-1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/2-3-0-1-1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 24,
+    "unique": 24,
+    "json": 5,
+    "subtree": 5,
+    "glb": 14
+   },
+   "statistics": {
+    "numberOfTilesTotal": 24
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 24,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "3d2290277b5f6c9c54fe917365a371bec942097215b5cb85052bdffa58f4fb96"
+  },
+  "F": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 3.442100000008941,
+    "requests": [
+     "tileset.json",
+     "e/0-0.glb",
+     "e/1-0.glb",
+     "s/r2-3/0-0-0.subtree",
+     "s/r2-0/0-0-0.subtree",
+     "s/r2-1/0-0-0.subtree",
+     "s/r2-2/0-0-0.subtree",
+     "c/r2-1/0-0-0.glb",
+     "c/r2-0/0-0-0.glb",
+     "c/r2-2/0-0-0.glb",
+     "c/r2-3/0-0-0.glb"
+    ],
+    "selected": [
+     "c/r2-1/0-0-0.glb",
+     "c/r2-0/0-0-0.glb",
+     "c/r2-3/0-0-0.glb",
+     "c/r2-2/0-0-0.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 1.3352999999970199,
+     "selected": [
+      "c/r2-0/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-0/1-1-0.glb",
+      "c/r2-0/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.651800000011921,
+     "selected": [
+      "c/r2-0/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.6732999999970197,
+     "selected": [
+      "c/r2-0/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 1.5127000000029802,
+     "selected": [
+      "c/r2-1/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-1/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-1/1-1-0.glb",
+      "c/r2-1/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.677800000011921,
+     "selected": [
+      "c/r2-1/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-1/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 1.4872000000029801,
+     "selected": [
+      "c/r2-2/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-2/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-2/1-0-0.glb",
+      "c/r2-2/1-1-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.6442999999970198,
+     "selected": [
+      "c/r2-2/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-2/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 1.4857000000029803,
+     "selected": [
+      "c/r2-3/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-3/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-3/1-1-0.glb",
+      "c/r2-3/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.6932999999970197,
+     "selected": [
+      "c/r2-3/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-3/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 19,
+    "unique": 19,
+    "json": 1,
+    "subtree": 4,
+    "glb": 14
+   },
+   "statistics": {
+    "numberOfTilesTotal": 19
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 19,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "36ea508e51f9ac63c641d41532ccf27ebc9ecff6d14b95bb677b8b671996aadb"
+  },
+  "D": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 3.578100000008941,
+    "requests": [
+     "tileset.json",
+     "e/0-0.glb",
+     "tileset-d2.json",
+     "tileset-d1.json",
+     "e/1-0.glb",
+     "s/r2-2/0-0-0.subtree",
+     "s/r2-3/0-0-0.subtree",
+     "s/r2-0/0-0-0.subtree",
+     "s/r2-1/0-0-0.subtree",
+     "c/r2-1/0-0-0.glb",
+     "c/r2-0/0-0-0.glb",
+     "c/r2-2/0-0-0.glb",
+     "c/r2-3/0-0-0.glb"
+    ],
+    "selected": [
+     "c/r2-1/0-0-0.glb",
+     "c/r2-0/0-0-0.glb",
+     "c/r2-3/0-0-0.glb",
+     "c/r2-2/0-0-0.glb"
+    ]
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": true,
+     "seconds": 1.7286000000089408,
+     "selected": [
+      "c/r2-0/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-0/1-1-0.glb",
+      "c/r2-0/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": true,
+     "seconds": 0.6882000000029802,
+     "selected": [
+      "c/r2-0/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": true,
+     "seconds": 0.6772000000029802,
+     "selected": [
+      "c/r2-0/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-0/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": true,
+     "seconds": 1.4558999999910593,
+     "selected": [
+      "c/r2-1/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-1/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-1/1-1-0.glb",
+      "c/r2-1/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": true,
+     "seconds": 0.6557000000029802,
+     "selected": [
+      "c/r2-1/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-1/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": true,
+     "seconds": 1.4558999999910593,
+     "selected": [
+      "c/r2-2/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-2/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-2/1-1-0.glb",
+      "c/r2-2/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": true,
+     "seconds": 0.6575,
+     "selected": [
+      "c/r2-2/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-2/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": true,
+     "seconds": 1.4490999999940395,
+     "selected": [
+      "c/r2-3/1-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-3/1-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": [
+      "c/r2-3/1-1-0.glb",
+      "c/r2-3/1-0-0.glb"
+     ]
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": true,
+     "seconds": 0.6707000000029802,
+     "selected": [
+      "c/r2-3/1-1-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "c/r2-3/1-1-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 1,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 21,
+    "unique": 21,
+    "json": 3,
+    "subtree": 4,
+    "glb": 14
+   },
+   "statistics": {
+    "numberOfTilesTotal": 21
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 21,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "b071d0545003847ea9189b8305e3a17349d1a975b3300d3aa59f4823bcb93175"
+  },
+  "N": {
+   "version": "1.146.0",
+   "failures": [
+    "tileFailed: Cannot read properties of undefined (reading 'classes')",
+    "tileFailed: Cannot read properties of undefined (reading 'classes')",
+    "tileFailed: Cannot read properties of undefined (reading 'classes')",
+    "tileFailed: Cannot read properties of undefined (reading 'classes')"
+   ],
+   "overview": {
+    "loaded": false,
+    "seconds": 2.6643999999910593,
+    "requests": [
+     "tileset.json",
+     "e/0-0.glb",
+     "tileset-d2.json",
+     "tileset-d1.json",
+     "e/1-0.glb",
+     "s/r2-3/0-0-0.subtree",
+     "s/r2-2/0-0-0.subtree",
+     "s/r2-0/0-0-0.subtree",
+     "s/r2-1/0-0-0.subtree"
+    ],
+    "selected": []
+   },
+   "views": [
+    {
+     "name": "leaf-3-0",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 421,
+     "loaded": false,
+     "seconds": 0.07019999998807908,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "control-3-0",
+     "control": true,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 0,
+     "loaded": false,
+     "seconds": 0.0012999999970197678,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-1",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 595.383909759073,
+     "loaded": false,
+     "seconds": 0.0015999999940395355,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-2",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 920,
+     "loaded": false,
+     "seconds": 0.0011000000089406968,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-3",
+     "control": false,
+     "routingAncestor": false,
+     "distanceToPlaceholderCell": 1011.7514516915703,
+     "loaded": false,
+     "seconds": 0.001,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-4",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1301.78377620863,
+     "loaded": false,
+     "seconds": 0.0007999999970197678,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-5",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1692.8204275705086,
+     "loaded": false,
+     "seconds": 0.0007999999970197678,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-6",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1012.6608514206521,
+     "loaded": false,
+     "seconds": 0.0008999999910593033,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    },
+    {
+     "name": "leaf-3-7",
+     "control": false,
+     "routingAncestor": true,
+     "distanceToPlaceholderCell": 1482.0533053841214,
+     "loaded": false,
+     "seconds": 0.0008000000119209289,
+     "selected": [
+      "e/0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": "e/0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "newRequests": []
+    }
+   ],
+   "requests": {
+    "total": 9,
+    "unique": 9,
+    "json": 3,
+    "subtree": 4,
+    "glb": 2
+   },
+   "statistics": {
+    "numberOfTilesTotal": 9
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "serverRequests": 9,
+   "nonFixtureNonCesiumPaths": [
+    "/favicon.ico"
+   ],
+   "fixtureTreeSha256": "dfcccdc8e2f34b9ade83977c323dc45bbabf406001ace91c120a3f8dfa3fdb3d"
+  }
+ }
+}

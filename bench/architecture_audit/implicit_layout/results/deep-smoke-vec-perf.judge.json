@@ -1,0 +1,91 @@
+{
+ "requirements": "design \u00a76 A-5.2",
+ "runs": {
+  "cb0": {
+   "result": "results/deep-smoke-vec-perf-cb0.json",
+   "cullWithChildrenBounds": false,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 0.0
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 16,
+     "headSelectsAncestor": 0,
+     "headSelectsAncestorShare": 0.0,
+     "nullPickBoth": 14
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 328,
+     "unique": 328,
+     "json": 55,
+     "subtree": 55,
+     "glb": 218
+    },
+    "head": {
+     "total": 264,
+     "unique": 264,
+     "json": 1,
+     "subtree": 45,
+     "glb": 218
+    }
+   },
+   "viewSeconds": {
+    "develop": 41.01,
+    "head": 27.58
+   }
+  },
+  "cb1": {
+   "result": "results/deep-smoke-vec-perf-cb1.json",
+   "cullWithChildrenBounds": true,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 0.0
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 14,
+     "headSelectsAncestor": 2,
+     "headSelectsAncestorShare": 0.125,
+     "nullPickBoth": 14
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 328,
+     "unique": 328,
+     "json": 55,
+     "subtree": 55,
+     "glb": 218
+    },
+    "head": {
+     "total": 264,
+     "unique": 264,
+     "json": 1,
+     "subtree": 45,
+     "glb": 218
+    }
+   },
+   "viewSeconds": {
+    "develop": 28.89,
+    "head": 27.0
+   }
+  }
+ },
+ "problems": [],
+ "verdict": "pass"
+}
