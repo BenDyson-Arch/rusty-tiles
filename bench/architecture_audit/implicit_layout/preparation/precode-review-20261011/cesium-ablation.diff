@@ -1,0 +1,18 @@
+--- cesium-unmin/Cesium.js	2026-10-11 17:48:44.762956083 +1000
++++ cesium-patched/Cesium.js	2026-10-11 17:48:44.820958805 +1000
+@@ -137991,13 +137991,8 @@
+   }
+   function makePlaceholderChildSubtree(content, parentTile, childIndex, implicitCoordinates) {
+     const implicitTileset = content._implicitTileset;
+-    const childBoundingVolume = deriveBoundingVolume(
+-      implicitTileset,
+-      implicitCoordinates,
+-      childIndex,
+-      false,
+-      parentTile
+-    );
++    // REVIEW ABLATION: placeholder takes the implicit root volume instead of the derived cell
++    const childBoundingVolume = JSON.parse(JSON.stringify(implicitTileset.boundingVolume));
+     const childGeometricError = getGeometricError(
+       void 0,
+       implicitTileset,

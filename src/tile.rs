@@ -513,29 +513,24 @@ pub fn mesh_to_3tz_reported(
         ts["root"]["transform"] = json!(root_transform(origin, opts.rotation));
     }
     if !opts.explicit {
-        crate::implicit::write_tileset(
+        let forest = crate::implicit::write_forest(
             &mut ts,
             work,
             crate::implicit::SubdivisionScheme::Octree,
-            false,
+            &mut || Ok(()),
         )?;
-        fs::write(work.join("tileset.json"), serde_json::to_vec(&ts)?)?;
         let stage = job.staging("published")?;
-        fs::copy(work.join("tileset.json"), stage.join("tileset.json"))?;
-        for name in ["implicit-content", "subtrees"] {
-            fs::rename(work.join(name), stage.join(name))?;
-        }
-        for entry in fs::read_dir(work)? {
-            let entry = entry?;
-            if entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with("implicit-tileset-")
-            {
-                fs::rename(entry.path(), stage.join(entry.file_name()))?;
+        fs::write(stage.join("tileset.json"), serde_json::to_vec(&ts)?)?;
+        // Stage exactly the writer's members: documents, subtrees, rebased
+        // implicit content and the skeleton payloads it left in place.
+        for name in &forest.members {
+            let target = stage.join(name);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
             }
+            fs::rename(work.join(name), target)?;
         }
-        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":nodes.len(),"leafTiles":leaves});
+        let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v3","tiling":"implicit","tiles":nodes.len(),"leafTiles":leaves});
         crate::output::write_report(&stage, report.clone(), true)?;
         return job.publish_tree_3tz(&stage, Some(report));
     }

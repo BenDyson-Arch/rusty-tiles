@@ -1,0 +1,21 @@
+diff --git a/src/content_integrity/implicit/metadata.rs b/src/content_integrity/implicit/metadata.rs
+index 82c0d96..9c1709e 100644
+--- a/src/content_integrity/implicit/metadata.rs
++++ b/src/content_integrity/implicit/metadata.rs
+@@ -11,7 +11,7 @@ const TILE_BOUNDING_BOX: &str = "TILE_BOUNDING_BOX";
+ const TILE_GEOMETRIC_ERROR: &str = "TILE_GEOMETRIC_ERROR";
+ 
+ /// Unsupported in any class used by a walked table or a template header (RC-1).
+-const UNSUPPORTED: [&str; 15] = [
++const UNSUPPORTED: [&str; 14] = [
+     "TILE_BOUNDING_SPHERE",
+     "TILE_BOUNDING_REGION",
+     "TILE_BOUNDING_S2_CELL",
+@@ -20,7 +20,6 @@ const UNSUPPORTED: [&str; 15] = [
+     "TILE_TRANSFORM",
+     "TILE_REFINE",
+     "CONTENT_URI",
+-    "CONTENT_GROUP_ID",
+     "CONTENT_BOUNDING_BOX",
+     "CONTENT_BOUNDING_REGION",
+     "CONTENT_BOUNDING_SPHERE",

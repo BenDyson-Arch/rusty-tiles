@@ -1,0 +1,251 @@
+{
+ "cpus": "0,1",
+ "repeat": 5,
+ "cases": {
+  "head-forest-mf2-lod3": {
+   "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native-b51f83d",
+   "binarySha256": "60584d3d4a2185ca8cc3d6ecaa29f167c5be0650115abdb342e1d67be56abf46",
+   "archive": "/home/bend/.cache/forest-acc/work/head-b51f83d/mf2-lod3.3tz",
+   "archiveSha256": "41cd3a418dd901a530295c572aaa45a96d3e721b321e8e6c8cdcba164af5be4a",
+   "runs": [
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12718,
+     "wallSeconds": 1.0069,
+     "cpuSeconds": 1.0022,
+     "peakRssMiB": 100.85,
+     "foreignCpuSeconds": 0.008
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12718,
+     "wallSeconds": 1.0151,
+     "cpuSeconds": 1.0115,
+     "peakRssMiB": 100.89,
+     "foreignCpuSeconds": 0.028
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12718,
+     "wallSeconds": 1.0161,
+     "cpuSeconds": 1.0093,
+     "peakRssMiB": 100.89,
+     "foreignCpuSeconds": 0.031
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12718,
+     "wallSeconds": 1.0237,
+     "cpuSeconds": 1.018,
+     "peakRssMiB": 100.59,
+     "foreignCpuSeconds": 0.052
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12718,
+     "wallSeconds": 1.0269,
+     "cpuSeconds": 1.0191,
+     "peakRssMiB": 100.71,
+     "foreignCpuSeconds": 0.001
+    }
+   ],
+   "summary": {
+    "bestWallSeconds": 1.0069,
+    "foreignCpuSecondsAtBestWall": 0.008,
+    "bestCpuSeconds": 1.0022,
+    "peakRssMiB": 100.89,
+    "medianWallSeconds": 1.0161,
+    "allOk": true
+   }
+  },
+  "develop-own-default-mf2-lod3": {
+   "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+   "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+   "archive": "/home/bend/.cache/forest-acc/work/develop-native/mf2-lod3.3tz",
+   "archiveSha256": "efa3e7984ea683ea2083bd1a888d1319c08b4b20fb7d44b29816bd7ad828262f",
+   "runs": [
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12530,
+     "wallSeconds": 2.0925,
+     "cpuSeconds": 2.0812,
+     "peakRssMiB": 182.01,
+     "foreignCpuSeconds": 0.049
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12530,
+     "wallSeconds": 2.0856,
+     "cpuSeconds": 2.0791,
+     "peakRssMiB": 182.39,
+     "foreignCpuSeconds": 0.041
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12530,
+     "wallSeconds": 2.1089,
+     "cpuSeconds": 2.0965,
+     "peakRssMiB": 180.56,
+     "foreignCpuSeconds": 0.053
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12530,
+     "wallSeconds": 2.11,
+     "cpuSeconds": 2.1016,
+     "peakRssMiB": 182.34,
+     "foreignCpuSeconds": 0.058
+    },
+    {
+     "exit": 0,
+     "ok": true,
+     "tiles": 12530,
+     "wallSeconds": 2.1143,
+     "cpuSeconds": 2.1001,
+     "peakRssMiB": 180.68,
+     "foreignCpuSeconds": 0.05
+    }
+   ],
+   "summary": {
+    "bestWallSeconds": 2.0856,
+    "foreignCpuSecondsAtBestWall": 0.041,
+    "bestCpuSeconds": 2.0791,
+    "peakRssMiB": 182.39,
+    "medianWallSeconds": 2.1089,
+    "allOk": true
+   }
+  },
+  "develop-explicit-mf2-lod3": {
+   "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-develop-native",
+   "binarySha256": "2a7c4ba6cfc21dedd595cecf92d01d7f8161c3442ca1057e12c9107a78230cc3",
+   "archive": "/home/bend/.cache/forest-acc/work/head-b51f83d/mf2-lod3-explicit.3tz",
+   "archiveSha256": "4881a0eed2d1aabbed48bf97efd99d52ac3c80d2e5bc231bbb4c18f526f9240b",
+   "runs": [
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1802,
+     "cpuSeconds": 0.179,
+     "peakRssMiB": 94.29,
+     "foreignCpuSeconds": 0.011
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1767,
+     "cpuSeconds": 0.1758,
+     "peakRssMiB": 93.98,
+     "foreignCpuSeconds": 0.004
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1817,
+     "cpuSeconds": 0.1801,
+     "peakRssMiB": 93.68,
+     "foreignCpuSeconds": 0.0
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1781,
+     "cpuSeconds": 0.1766,
+     "peakRssMiB": 94.52,
+     "foreignCpuSeconds": 0.003
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1791,
+     "cpuSeconds": 0.1781,
+     "peakRssMiB": 94.26,
+     "foreignCpuSeconds": 0.002
+    }
+   ],
+   "summary": {
+    "bestWallSeconds": 0.1767,
+    "foreignCpuSecondsAtBestWall": 0.004,
+    "bestCpuSeconds": 0.1758,
+    "peakRssMiB": 94.52,
+    "medianWallSeconds": 0.1791,
+    "allOk": false
+   }
+  },
+  "head-explicit-mf2-lod3": {
+   "binary": "/home/bend/.cache/forest-acc/bin/rusty-tiles-head-native-b51f83d",
+   "binarySha256": "60584d3d4a2185ca8cc3d6ecaa29f167c5be0650115abdb342e1d67be56abf46",
+   "archive": "/home/bend/.cache/forest-acc/work/head-b51f83d/mf2-lod3-explicit.3tz",
+   "archiveSha256": "4881a0eed2d1aabbed48bf97efd99d52ac3c80d2e5bc231bbb4c18f526f9240b",
+   "runs": [
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1796,
+     "cpuSeconds": 0.1784,
+     "peakRssMiB": 94.74,
+     "foreignCpuSeconds": 0.012
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1801,
+     "cpuSeconds": 0.1794,
+     "peakRssMiB": 94.52,
+     "foreignCpuSeconds": 0.0
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1788,
+     "cpuSeconds": 0.1781,
+     "peakRssMiB": 94.52,
+     "foreignCpuSeconds": 0.0
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1789,
+     "cpuSeconds": 0.1782,
+     "peakRssMiB": 94.66,
+     "foreignCpuSeconds": 0.002
+    },
+    {
+     "exit": 3,
+     "ok": false,
+     "tiles": null,
+     "wallSeconds": 0.1807,
+     "cpuSeconds": 0.1795,
+     "peakRssMiB": 94.53,
+     "foreignCpuSeconds": 0.01
+    }
+   ],
+   "summary": {
+    "bestWallSeconds": 0.1788,
+    "foreignCpuSecondsAtBestWall": 0.0,
+    "bestCpuSeconds": 0.1781,
+    "peakRssMiB": 94.74,
+    "medianWallSeconds": 0.1796,
+    "allOk": false
+   }
+  }
+ },
+ "parentPeakRssMiB": 32.99
+}

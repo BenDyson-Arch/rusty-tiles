@@ -1,0 +1,61 @@
+{
+ "asset": {
+  "version": "1.1"
+ },
+ "schema": {
+  "id": "rustyTilesImplicit",
+  "classes": {
+   "rustyTile": {
+    "properties": {
+     "boundingBox": {
+      "type": "SCALAR",
+      "componentType": "FLOAT64",
+      "array": true,
+      "count": 12,
+      "semantic": "TILE_BOUNDING_BOX"
+     },
+     "geometricError": {
+      "type": "SCALAR",
+      "componentType": "FLOAT64",
+      "semantic": "TILE_GEOMETRIC_ERROR"
+     },
+     "extras": {
+      "type": "STRING"
+     }
+    }
+   }
+  }
+ },
+ "geometricError": 50.0,
+ "root": {
+  "boundingVolume": {
+   "box": [
+    500.0,
+    500.0,
+    0.0,
+    502.0,
+    0,
+    0,
+    0,
+    502.0,
+    0,
+    0,
+    0,
+    5.0
+   ]
+  },
+  "geometricError": 50.0,
+  "refine": "REPLACE",
+  "content": {
+   "uri": "implicit-content/2-3-0-{level}-{x}-{y}-0.glb"
+  },
+  "implicitTiling": {
+   "subdivisionScheme": "QUADTREE",
+   "subtreeLevels": 3,
+   "availableLevels": 2,
+   "subtrees": {
+    "uri": "subtrees/2-3-0-{level}-{x}-{y}.subtree"
+   }
+  }
+ }
+}

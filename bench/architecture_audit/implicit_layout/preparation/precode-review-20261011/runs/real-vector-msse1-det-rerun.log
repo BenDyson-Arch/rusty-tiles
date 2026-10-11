@@ -1,0 +1,27 @@
+today failures [] errors ['Failed to load resource: the server responded with a status of 404 (File not found)'] requests {'total': 84, 'unique': 84, 'json': 17, 'subtree': 17, 'glb': 50} overview 6 3.13
+  leaf-8-0-0               leafSelected=False pickedLeaf=False cov=0.19 newReq=36  sec=1.66 sel=3
+  leaf-8-21-0              leafSelected=False pickedLeaf=False cov=0.19 newReq=0   sec=1.20 sel=5
+  leaf-8-42-0              leafSelected=False pickedLeaf=False cov=0.12 newReq=6   sec=1.41 sel=6
+  leaf-8-69-0              leafSelected=False pickedLeaf=False cov=0.25 newReq=0   sec=1.32 sel=6
+  leaf-8-90-0              leafSelected=False pickedLeaf=False cov=0.24 newReq=0   sec=1.17 sel=4
+  leaf-8-111-0             leafSelected=False pickedLeaf=False cov=0.22 newReq=0   sec=1.24 sel=5
+  leaf-8-132-0             leafSelected=False pickedLeaf=False cov=0.26 newReq=36  sec=1.57 sel=3
+  leaf-8-153-0             leafSelected=False pickedLeaf=False cov=0.19 newReq=0   sec=1.18 sel=3
+  leaf-8-174-0             leafSelected=False pickedLeaf=False cov=0.23 newReq=0   sec=1.17 sel=4
+  leaf-8-201-0             leafSelected=False pickedLeaf=False cov=0.18 newReq=0   sec=1.20 sel=5
+  leaf-8-222-0             leafSelected=False pickedLeaf=False cov=0.29 newReq=0   sec=1.17 sel=3
+  leaf-8-243-0             leafSelected=False pickedLeaf=False cov=0.18 newReq=0   sec=1.25 sel=4
+forest4 failures [] errors ['Failed to load resource: the server responded with a status of 404 (File not found)'] requests {'total': 64, 'unique': 64, 'json': 1, 'subtree': 13, 'glb': 50} overview 5 3.12
+  leaf-8-0-0               leafSelected=False pickedLeaf=False cov=0.19 newReq=24  sec=1.53 sel=3
+  leaf-8-21-0              leafSelected=False pickedLeaf=False cov=0.19 newReq=0   sec=1.20 sel=5
+  leaf-8-42-0              leafSelected=False pickedLeaf=False cov=0.12 newReq=10  sec=1.46 sel=6
+  leaf-8-69-0              leafSelected=False pickedLeaf=False cov=0.25 newReq=0   sec=1.29 sel=6
+  leaf-8-90-0              leafSelected=False pickedLeaf=False cov=0.24 newReq=0   sec=1.18 sel=4
+  leaf-8-111-0             leafSelected=False pickedLeaf=False cov=0.22 newReq=0   sec=1.24 sel=5
+  leaf-8-132-0             leafSelected=False pickedLeaf=False cov=0.26 newReq=25  sec=1.53 sel=3
+  leaf-8-153-0             leafSelected=False pickedLeaf=False cov=0.19 newReq=0   sec=1.21 sel=3
+  leaf-8-174-0             leafSelected=False pickedLeaf=False cov=0.23 newReq=0   sec=1.20 sel=4
+  leaf-8-201-0             leafSelected=False pickedLeaf=False cov=0.18 newReq=0   sec=1.29 sel=5
+  leaf-8-222-0             leafSelected=False pickedLeaf=False cov=0.29 newReq=0   sec=1.19 sel=3
+  leaf-8-243-0             leafSelected=False pickedLeaf=False cov=0.18 newReq=0   sec=1.28 sel=4
+{"today~forest4": {"overviewSameSelection": true, "viewsSameSelection": 10, "viewsSamePick": 12, "views": 12}}

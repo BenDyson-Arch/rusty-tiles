@@ -41,7 +41,9 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag preserves the earlier explicit output and partitioning. To move an existing explicit archive to implicit tiling, re-run its converter from the original source without `--explicit`; there is no archive-to-archive rewrite command. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag keeps the earlier explicit hierarchy, partitioning and payloads (point-cloud `tileset.json` is now compact JSON, and vector `vector-build.json` and its state hash follow the encoder revision). To move an existing explicit archive to implicit tiling, re-run its converter from the original source without `--explicit`; there is no archive-to-archive rewrite command. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+
+The default layout is a bounded implicit forest. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
 
 ## Converters
 
@@ -104,7 +106,7 @@ Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--layer` | | automatic for one layer | Select a spatial layer. Repeat for several. |
-| `--explicit` | | off | Keep the earlier explicit hierarchy and output bytes |
+| `--explicit` | | off | Keep the earlier explicit hierarchy and payloads; `vector-build.json` and the `tileset.json` state hash follow the encoder revision |
 | `--allLayers` | `--all-layers` | off | Include every spatial layer |
 | `--sourceCrs` | `--source-crs` | layer CRS | Override the input CRS, or `local` for metre XYZ |
 | `--heightOffset` | `--height-offset` | none | Metres added to source heights to give ellipsoidal height |

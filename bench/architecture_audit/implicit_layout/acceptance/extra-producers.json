@@ -1,0 +1,67 @@
+{
+ "W6d-nomeshopt (mesh deep view)": {
+  "argv": [
+   "rusty-tiles",
+   "--json",
+   "mesh-to-3tz",
+   "-i",
+   "deep-mesh.glb",
+   "--maxTriangles",
+   "2",
+   "--maxBytes",
+   "0",
+   "--tileSize",
+   "64",
+   "--noMeshopt",
+   "-o",
+   "W6d-nomeshopt.3tz"
+  ],
+  "input": "deep-mesh.glb = scripts/deep_mesh_glb.py OUT 12 (sha256 5442ba6c1ee5c6fe59e94a20d1113b101eb66dc19452e0cd9a8803879d47df43)",
+  "develop766b92b": "a699f7a847a59bf076bdd605a59ec38ec799c102754358fa845056138d5aa427",
+  "headE3a67bf": "b701588a3ad72929c93f5beed2de4d0b4811756757bcf0baa419fb738de16283",
+  "headB51f83d": "b701588a3ad72929c93f5beed2de4d0b4811756757bcf0baa419fb738de16283"
+ },
+ "implicit_levels mesh": {
+  "argv": [
+   "rusty-tiles",
+   "--json",
+   "mesh-to-3tz",
+   "-i",
+   "mesh24.glb",
+   "-o",
+   "mesh.3tz",
+   "--max-triangles",
+   "2",
+   "--max-bytes",
+   "0",
+   "--tile-size",
+   "64",
+   "--cartographic-position-degrees",
+   "12.1",
+   "41.9",
+   "200"
+  ],
+  "input": "mesh24.glb = scripts/deep_mesh_glb.py OUT 24 (sha256 3d1ccd9f9f393674a36455ea95b2e6225f8f1a420251456fb47c5fb8bf4a0e9c)",
+  "output": "830cb35f6cc500aa7efd7d9ccdaf49ec0024373cfbc4eb6086859dc49de9a0c6",
+  "forestCheck": "implicit-levels/mesh.forest-check.verdict.json"
+ },
+ "implicit_levels point cloud": {
+  "argv": [
+   "rusty-tiles",
+   "--json",
+   "point-cloud",
+   "-i",
+   "deep.las",
+   "-o",
+   "cloud.3tz",
+   "--source-crs",
+   "local",
+   "--max-points",
+   "16"
+  ],
+  "input": "deep.las = python3 tests/p1_point_oracle.py --fixture deep.las --variant deep (sha256 132404cd586ed79174a26f64cb7c017291a08b88837a8a848c7437312d395ed0)",
+  "output": "046974c034f123f0cbce41f4802715239dc74b28f19af096367244d607d5199a",
+  "forestCheck": "implicit-levels/cloud.forest-check.verdict.json"
+ },
+ "binary": "head e3a67bf native a734eac5\u2026"
+}

@@ -161,18 +161,18 @@ pub(crate) fn implicit_glb_job(
         .collect::<Vec<_>>();
     let mut manifest = create_tileset_json(input, &job.path().join("tileset.json"), opts)?;
     fs::copy(input, job.path().join(file_name(input)?))?;
-    crate::implicit::write_tileset(
+    crate::implicit::write_forest(
         &mut manifest,
         job.path(),
         crate::implicit::SubdivisionScheme::Octree,
-        false,
+        &mut || Ok(()),
     )?;
     fs::write(
         job.path().join("tileset.json"),
         serde_json::to_vec(&manifest)?,
     )?;
     let work = job.path().to_owned();
-    let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v2","tiling":"implicit","tiles":1,"leafTiles":1});
+    let report = json!({"encoder":"rusty-tiles-native-mesh-implicit-v3","tiling":"implicit","tiles":1,"leafTiles":1});
     crate::output::write_report(&work, report.clone(), true)?;
     job.publish_tree_with_resources_3tz(&work, &files, Some(report))
 }

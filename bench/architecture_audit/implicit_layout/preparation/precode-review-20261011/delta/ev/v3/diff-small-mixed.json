@@ -1,0 +1,17 @@
+{
+ "input": "/home/bend/.cache/perf-lane/work/inputs/vector.geojson",
+ "inputSha256": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+ "output": "/home/bend/.cache/perf-lane/work/pimpl/v3/small/vector.geojson",
+ "outputSha256": "2680308921c1f84b77479bd8dd2b1dc68f4bd26a59a80edf68ac11a36d42da29",
+ "box": [
+  12.41,
+  41.88,
+  12.416,
+  41.884
+ ],
+ "features": 10000,
+ "edited": 20,
+ "deleted": 3,
+ "added": 3,
+ "changedShare": 0.0026
+}

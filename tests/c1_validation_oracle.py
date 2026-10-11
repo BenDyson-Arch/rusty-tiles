@@ -395,7 +395,7 @@ def generate(directory):
     emit('meshopt_count_limit', glb(doc, payload), 'resource_limit', 'Meshopt decoded count exceeds cap before decode allocation.')
     implicit = {'asset':{'version':'1.1'},'geometricError':0,'root':{'boundingVolume':{'box':[0,0,0,1,0,0,0,1,0,0,0,1]},'geometricError':0,
                 'implicitTiling':{'subdivisionScheme':'QUADTREE','subtreeLevels':1,'availableLevels':1,'subtrees':{'uri':'{level}-{x}-{y}.subtree'}}}}
-    subtree_text = b'{"tileAvailability":{"constant":1},"contentAvailability":[],"childSubtreeAvailability":{"constant":0}}'
+    subtree_text = b'{"tileAvailability":{"constant":1},"childSubtreeAvailability":{"constant":0}}'
     for name,text,kind in [('implicit_no_content',subtree_text,None),
                            ('implicit_duplicate_subtree_key',subtree_text.replace(b'"constant":1',b'"constant":1,"constant":1'),'invalid_input')]:
         padded=text+b' '*(-len(text)%8)

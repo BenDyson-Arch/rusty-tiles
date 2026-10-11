@@ -1,0 +1,91 @@
+{
+ "requirements": "design \u00a76 A-5.2",
+ "runs": {
+  "cb0": {
+   "result": "/home/bend/.cache/forest-acc/work/deep/real-pc-deep/res-cb0.json",
+   "cullWithChildrenBounds": false,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 0.0
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 16,
+     "headSelectsAncestor": 0,
+     "headSelectsAncestorShare": 0.0,
+     "nullPickBoth": 0
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 2625,
+     "unique": 2625,
+     "json": 208,
+     "subtree": 208,
+     "glb": 2209
+    },
+    "head": {
+     "total": 2218,
+     "unique": 2218,
+     "json": 1,
+     "subtree": 8,
+     "glb": 2209
+    }
+   },
+   "viewSeconds": {
+    "develop": 25.68,
+    "head": 25.81
+   }
+  },
+  "cb1": {
+   "result": "/home/bend/.cache/forest-acc/work/deep/real-pc-deep/res-cb1.json",
+   "cullWithChildrenBounds": true,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 0.0
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 16,
+     "headSelectsAncestor": 0,
+     "headSelectsAncestorShare": 0.0,
+     "nullPickBoth": 0
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 2625,
+     "unique": 2625,
+     "json": 208,
+     "subtree": 208,
+     "glb": 2209
+    },
+    "head": {
+     "total": 2218,
+     "unique": 2218,
+     "json": 1,
+     "subtree": 8,
+     "glb": 2209
+    }
+   },
+   "viewSeconds": {
+    "develop": 25.48,
+    "head": 25.58
+   }
+  }
+ },
+ "problems": [],
+ "verdict": "pass"
+}

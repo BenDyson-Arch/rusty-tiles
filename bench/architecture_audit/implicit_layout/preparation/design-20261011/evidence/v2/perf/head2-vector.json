@@ -1,0 +1,95 @@
+{
+  "gate": {
+    "rule": "fail on load failure, page/console errors, failed or external requests, failed render probes; with --baseline also on >25% more requests/bytes or load time beyond floors",
+    "ratio": 1.25,
+    "floors": {
+      "requests": 2,
+      "requestBytes": 65536,
+      "secondsToLoaded": 1.0
+    }
+  },
+  "environment": {
+    "cesium": "1.146.0",
+    "playwright": "1.63.0",
+    "chromium": "/home/bend/.cache/rusty-tiles-137-playwright/chromium-1243/chrome-linux64/chrome",
+    "viewport": [
+      1024,
+      768
+    ],
+    "cpuAffinity": [
+      13,
+      15
+    ],
+    "baseline": "/tmp/rusty-tiles-pimpl-design-20261011/evidence/v2/perf/base1-vector.json",
+    "rasterInsetDegrees": 0,
+    "scriptSha256": {
+      "cesium.py": "890f0159c26c18292498794b6cef959aaaa5029cf46ae79007de7b59e5437bf1",
+      "cesium.cjs": "23c78bbcd26471c079fced5d678370d356ccf5f1fe6e452db54dbcc4df7deb05"
+    }
+  },
+  "cases": [
+    {
+      "version": "1.146.0",
+      "canvas": [
+        1024,
+        768
+      ],
+      "loaded": true,
+      "secondsToLoaded": 1.9384000000059605,
+      "tilesLoadedEvents": 4,
+      "selectedTiles": 4,
+      "tilesetMemoryBytes": null,
+      "usedJSHeapSize": 34631112,
+      "failures": [],
+      "rootBoundingSphereRadius": 8344.139455469209,
+      "browserVersion": "153.0.8010.12",
+      "console": {
+        "errors": [],
+        "warnings": []
+      },
+      "failedRequests": [],
+      "externalRequests": [],
+      "name": "vector",
+      "kind": "tileset",
+      "output": {
+        "directory": "/home/bend/.cache/perf-lane/work/pimpl/v2/forest-vec-perf-s4",
+        "files": 590,
+        "bytes": 17778605,
+        "treeSha256": "558dcbe01844b37f3da42de1e2d708a5f58f4cf25b4e0554abb3e8d63b57931c"
+      },
+      "screenshot": "/home/bend/.cache/perf-lane/work/pimpl/v2/perf-work/head2-vector/screenshots/vector.png",
+      "requests": {
+        "runtimeRequests": 5,
+        "manifest": {
+          "requests": 1,
+          "bytes": 103805
+        },
+        "subtree": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "content": {
+          "requests": 4,
+          "bytes": 1516664
+        },
+        "imagery": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "other": {
+          "requests": 0,
+          "bytes": 0
+        },
+        "requests": 5,
+        "requestBytes": 1620469,
+        "duplicateRequests": 0,
+        "serverErrors": [],
+        "imageryColorTypes": {}
+      },
+      "captureSha256": {
+        "vector.png": "28db29fce794433d84945ad809da37f02fb3ffcabc0c61b45378560d7eda5fa3"
+      },
+      "problems": []
+    }
+  ]
+}

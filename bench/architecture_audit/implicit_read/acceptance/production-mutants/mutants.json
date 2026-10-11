@@ -1,0 +1,177 @@
+[
+ {
+  "name": "msb-first",
+  "paired": "A-3",
+  "timingCase": null
+ },
+ {
+  "name": "inclusive-rank",
+  "paired": "B-1, W1",
+  "timingCase": null
+ },
+ {
+  "name": "drop-content-implies-tile",
+  "paired": "A-6",
+  "timingCase": null
+ },
+ {
+  "name": "drop-child-implies-tile",
+  "paired": "A-7",
+  "timingCase": null
+ },
+ {
+  "name": "drop-available-count",
+  "paired": "A-4",
+  "timingCase": null
+ },
+ {
+  "name": "key-by-name",
+  "paired": "B-3",
+  "timingCase": null
+ },
+ {
+  "name": "ignore-override",
+  "paired": "B-4, W6",
+  "timingCase": null
+ },
+ {
+  "name": "swap-x-y",
+  "paired": "C-1, W2",
+  "timingCase": null
+ },
+ {
+  "name": "error-not-halved",
+  "paired": "B-12",
+  "timingCase": null
+ },
+ {
+  "name": "ge-vs-gt-on-A",
+  "paired": "A-8, A-9",
+  "timingCase": null
+ },
+ {
+  "name": "float32-with-float64-stride",
+  "paired": "B-6",
+  "timingCase": null
+ },
+ {
+  "name": "ignore-trailing-bits",
+  "paired": "A-5",
+  "timingCase": null
+ },
+ {
+  "name": "admit-json-templates",
+  "paired": "C-6, W5u",
+  "timingCase": null
+ },
+ {
+  "name": "case-sensitive-suffix",
+  "paired": "C-7",
+  "timingCase": null
+ },
+ {
+  "name": "read-scale",
+  "paired": "B-7",
+  "timingCase": null
+ },
+ {
+  "name": "ignore-content-uri",
+  "paired": "C-12",
+  "timingCase": null
+ },
+ {
+  "name": "ignore-content-group-id",
+  "paired": "C-13",
+  "timingCase": null
+ },
+ {
+  "name": "drop-repeated-subtree-check",
+  "paired": "A-11",
+  "timingCase": null
+ },
+ {
+  "name": "no-source-memoization",
+  "paired": "R7 (time bound)",
+  "timingCase": "R7"
+ },
+ {
+  "name": "scan-per-object",
+  "paired": "R7 (ResourceLimit)",
+  "timingCase": null
+ },
+ {
+  "name": "reservation-after-rank-table",
+  "paired": "R5b",
+  "timingCase": null
+ },
+ {
+  "name": "per-visit-charging",
+  "paired": "R1b",
+  "timingCase": null
+ },
+ {
+  "name": "live-path-current-subtree-only",
+  "paired": "R2",
+  "timingCase": null
+ },
+ {
+  "name": "cumulative-instead-of-live",
+  "paired": "R2b",
+  "timingCase": null
+ },
+ {
+  "name": "refine-forced-replace",
+  "paired": "W7",
+  "timingCase": null
+ },
+ {
+  "name": "padding-0x20-only",
+  "paired": "D-8",
+  "timingCase": null
+ },
+ {
+  "name": "skip-post-walk-content-rule",
+  "paired": "C-14",
+  "timingCase": null
+ },
+ {
+  "name": "absolute-1e-6",
+  "paired": "T-1",
+  "timingCase": null
+ },
+ {
+  "name": "detect-on-raw-last-segment",
+  "paired": "C-7 DC-2 forms",
+  "timingCase": null
+ },
+ {
+  "name": "resolve-raw-template-per-emission",
+  "paired": "R8a (timeout)",
+  "timingCase": "R8a"
+ },
+ {
+  "name": "no-variable-survival-check",
+  "paired": "C-7c, R8",
+  "timingCase": null
+ },
+ {
+  "name": "escape-guard-last-segment-only",
+  "paired": "C-7b",
+  "timingCase": null
+ },
+ {
+  "name": "check-only-content-index",
+  "paired": "R9",
+  "timingCase": null
+ },
+ {
+  "name": "per-table-class-scan",
+  "paired": "R7c (timeout)",
+  "timingCase": "R7c"
+ },
+ {
+  "name": "header-metadata-not-classified",
+  "paired": "C-12b",
+  "timingCase": null
+ }
+]

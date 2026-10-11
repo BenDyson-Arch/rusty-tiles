@@ -776,7 +776,7 @@
       "expectedKind": null,
       "exitCode": 0,
       "analyticFact": "Independent binary subtree header, one constant-available tile, zero content slots and unavailable child subtrees; duplicate-key variant invalid.",
-      "sha256": "93aab38196f8b2b3927ed5e02cc8419d6fc74522c9a4d185b466b473936de892"
+      "sha256": "178c55ab8daf58880ab6997599eafc5c3262949c22a105c9f66ee4a51167cac5"
     },
     {
       "name": "implicit_duplicate_subtree_key",
@@ -784,7 +784,7 @@
       "expectedKind": "invalid_input",
       "exitCode": 3,
       "analyticFact": "Independent binary subtree header, one constant-available tile, zero content slots and unavailable child subtrees; duplicate-key variant invalid.",
-      "sha256": "f289f753a8059bb2dfce07a454e0d42e2d3153ec317522c402bafc2f4d6b524e"
+      "sha256": "2b6fd5aab6f969660bd23984a12ae3aecfd546ad498e0d0835794067b0234753"
     },
     {
       "name": "polygon_optional_tables",

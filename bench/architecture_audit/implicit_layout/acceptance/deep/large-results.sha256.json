@@ -1,0 +1,9 @@
+{
+ "notCommitted": {
+  "mesh-deep/res-cb0.json": "8a4e96a6586980a5d54e96fc3a6a38694f820000f3ae2d0f6792f27385808024",
+  "mesh-deep/res-cb1.json": "10c97c179409b7e1a401a184f93be23440fb32e57c4f4e777db2ad239eb58624",
+  "pc-deep/res-cb0.json": "ccb1aff3cabd9c667d3b59635475ab22261fd966ef8d5ee2b04dfb1747f3d7ac",
+  "pc-deep/res-cb1.json": "4c0d9340a3c0e9e6d37bd58a1b460037c3dddcb5157e603b7cbb7a1e89ce5a72"
+ },
+ "workDir": "/home/bend/.cache/forest-acc/work/deep"
+}

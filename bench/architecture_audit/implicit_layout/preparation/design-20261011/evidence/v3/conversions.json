@@ -1,0 +1,30 @@
+{
+ "binary": "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd",
+ "binarySha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+ "input": "/home/bend/.cache/perf-lane/work/inputs/vector.geojson",
+ "inputSha256": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+ "command": "taskset -c 16,18 nice -n 10 env RAYON_NUM_THREADS=2 BIN --json vector -i INPUT -o OUT --reproducible --jobs 2 [OPTIONS]",
+ "archives": {
+  "prev-perf-default.3tz": {
+   "options": "",
+   "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148",
+   "bytes": 37111575,
+   "note": "base run of the first (superseded) reuse_bench invocation on CPUs 17,19; same command, no options"
+  },
+  "perf-quant.3tz": {
+   "options": "--quantize",
+   "sha256": "c79524ef229c9464ab8ce5a137fc7e9896260e8372a2b43e10d690312e31d3c2",
+   "bytes": 33711684
+  },
+  "perf-meshopt.3tz": {
+   "options": "--meshopt",
+   "sha256": "dae80561ff53bc47206f0914a3651e53c5e51cecf32f79553aed7c29fb31909a",
+   "bytes": 28290865
+  },
+  "perf-quant-meshopt.3tz": {
+   "options": "--quantize --meshopt",
+   "sha256": "9edef151d2d2491b95b6ec5ed9d4f14003ae23c7a047e1b497d874a93bf6dbca",
+   "bytes": 24529341
+  }
+ }
+}

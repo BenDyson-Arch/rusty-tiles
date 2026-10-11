@@ -1,0 +1,88 @@
+{
+ "spec": "explicit:/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod16-explicit.3tz",
+ "model": "forest_model.py",
+ "modelSha256": "8de71a3d62db4e823a4fe3f768641bca4400685c9fcf57b24088a20451a696e5",
+ "limits": {
+  "DOC_NODES": 16384,
+  "DOC_BYTES": 2097152,
+  "DOC_DEPTH": 12,
+  "MAX_LEVELS": 32
+ },
+ "scheme": "QUADTREE",
+ "S": 6,
+ "tiles": 18778,
+ "levels": 25,
+ "explicitTiles": 2427,
+ "linkTiles": 223,
+ "implicitRoots": 1098,
+ "implicitTiles": 16351,
+ "subtrees": 1098,
+ "subtreeBytes": 6840856,
+ "maxSubtreeBytes": 13056,
+ "maxSubtreeTiles": 34,
+ "implicitContent": 16351,
+ "retainedContent": 16351,
+ "explicitContent": 2424,
+ "documents": 224,
+ "docs": [
+  {
+   "name": "tileset-d36.json",
+   "valueNodes": 16333,
+   "jsonDepth": 27,
+   "bytes": 216434,
+   "bytesPretty": 927198,
+   "retainedSources": 174
+  },
+  {
+   "name": "tileset-d37.json",
+   "valueNodes": 16307,
+   "jsonDepth": 27,
+   "bytes": 215627,
+   "bytesPretty": 924803,
+   "retainedSources": 168
+  },
+  {
+   "name": "tileset.json",
+   "valueNodes": 16294,
+   "jsonDepth": 20,
+   "bytes": 180495,
+   "bytesPretty": 808625,
+   "retainedSources": 0
+  },
+  {
+   "name": "tileset-d38.json",
+   "valueNodes": 11590,
+   "jsonDepth": 29,
+   "bytes": 161576,
+   "bytesPretty": 671665,
+   "retainedSources": 207
+  },
+  {
+   "name": "tileset-d132.json",
+   "valueNodes": 9271,
+   "jsonDepth": 27,
+   "bytes": 127833,
+   "bytesPretty": 503945,
+   "retainedSources": 144
+  }
+ ],
+ "rootDoc": {
+  "name": "tileset.json",
+  "valueNodes": 16294,
+  "jsonDepth": 20,
+  "bytes": 180495,
+  "bytesPretty": 808625,
+  "retainedSources": 0
+ },
+ "maxDocNodes": 16333,
+ "maxDocBytes": 216434,
+ "maxDocBytesPretty": 927198,
+ "maxDocJsonDepth": 29,
+ "hierarchyVisits": 20547,
+ "archiveEntries": 36451,
+ "maxDocNodesOfLimit": 0.2492,
+ "maxDocBytesOfLimit": 0.0258,
+ "maxDocJsonDepthOfLimit": 0.4531,
+ "hierarchyVisitsOfLimit": 0.3135,
+ "archiveEntriesOfLimit": 0.5562
+}

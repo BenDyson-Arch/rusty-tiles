@@ -154,7 +154,12 @@ fn context(name: &str) {
                 "nodes" => limits.document_items = ceiling,
                 _ => unreachable!(),
             }
-            execution(&case, fact, limits, admitted);
+            // I1 amendment (OD-4, X-7): below an implicit root the `rustyTile`
+            // UTF8 extras column is opaque, so no JSON limit applies to the
+            // nested extras string and its one-less runs are admitted. The
+            // equality runs and every other control keep their expectations.
+            let opaque = name == "nested-metadata-extras";
+            execution(&case, fact, limits, admitted || opaque);
         }
     }
 }

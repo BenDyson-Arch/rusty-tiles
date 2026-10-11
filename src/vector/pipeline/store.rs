@@ -968,22 +968,29 @@ pub(super) fn convert(
         return Err(data("vector LOD error overflows; reduce lodTolerance"));
     }
     let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
-    let explicit_root = if options.explicit {
+    // The forest holds each payload once; reuse recovers rebased payloads from the
+    // published members through `vector-build.json` (no retained raw sources).
+    let forest = if options.explicit {
         None
     } else {
-        Some(manifest["root"].clone())
-    };
-    if !options.explicit {
-        crate::implicit::write_tileset(
+        let explicit_root = manifest["root"].clone();
+        let written = crate::implicit::write_forest(
             &mut manifest,
             output,
             crate::implicit::SubdivisionScheme::Quadtree,
-            true,
+            &mut || {
+                attempt
+                    .check()
+                    .map_err(|error| Error::Job(attempt.fail(error)))
+            },
         )?;
-    }
-    let reuse_report = build
-        .reuse
-        .publish(&mut manifest, frame, explicit_root.as_ref())?;
+        Some((explicit_root, written))
+    };
+    let reuse_report = build.reuse.publish(
+        &mut manifest,
+        frame,
+        forest.as_ref().map(|(root, written)| (root, written)),
+    )?;
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
     build.reports.finish()?;
     let shared: usize = db
@@ -991,8 +998,10 @@ pub(super) fn convert(
             Ok(r.get::<_, i64>(0)? as usize)
         })
         .map_err(sql)?;
+    // Tile statistics: one extras record per tile of the hierarchy, in preorder.
+    // Implicit tiles carry the written (rebased) encodedBytes (design §4.5).
     fn nodes<'a>(node: &'a Value, out: &mut Vec<&'a Value>) {
-        out.push(node);
+        out.push(&node["extras"]);
         if let Some(children) = node["children"].as_array() {
             for child in children {
                 nodes(child, out);
@@ -1000,27 +1009,25 @@ pub(super) fn convert(
         }
     }
     let mut list = Vec::new();
-    let display_manifest = if options.explicit {
-        manifest.clone()
-    } else {
-        crate::implicit::expand_tileset(&manifest, |name| Ok(std::fs::read(output.join(name))?))?
-    };
-    nodes(&display_manifest["root"], &mut list);
+    match &forest {
+        Some((_, written)) => list.extend(written.tiles.iter().map(|tile| &tile.extras)),
+        None => nodes(&manifest["root"], &mut list),
+    }
     if !options.explicit {
         build.counters.maximum_tile_bytes = list
             .iter()
-            .map(|node| node["extras"]["encodedBytes"].as_u64().unwrap_or(0) as usize)
+            .map(|extras| extras["encodedBytes"].as_u64().unwrap_or(0) as usize)
             .max()
             .unwrap_or(0);
     }
     let sum = |key: &str| {
         list.iter()
-            .map(|n| n["extras"][key].as_u64().unwrap_or(0))
+            .map(|extras| extras[key].as_u64().unwrap_or(0))
             .sum::<u64>()
     };
     let max = |key: &str| {
         list.iter()
-            .map(|n| n["extras"][key].as_f64().unwrap_or(0.))
+            .map(|extras| extras[key].as_f64().unwrap_or(0.))
             .fold(0., f64::max)
     };
     let mut report = serde_json::to_value(&build.counters)?;
@@ -1028,11 +1035,11 @@ pub(super) fn convert(
         "performance":{"jobs":options.jobs,"workersUsed":build.workers.len(),"phaseSeconds":{"ingestion":ingestion_seconds,"partitioning":build.partition_seconds,"encoding":encoding_seconds,"publication":publication_started.elapsed().as_secs_f64()}},
         "budgets":{"features":max_features,"parentFeatures":options.max_parent_features,"vertices":options.max_vertices,"bytes":options.max_bytes,"tiles":options.max_tiles},
         "attributeFilter":options.where_clause,"metadata":{"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields},
-        "encoding":{"quantize":options.quantize,"meshopt":options.meshopt,"primitiveReferences":sum("primitives"),"maximumTilePrimitives":list.iter().map(|n| n["extras"]["primitives"].as_u64().unwrap_or(0)).max().unwrap_or(0),"maximumQuantizationErrorMetres":max("quantizationErrorMetres"),"uncompressedTileBytes":sum("uncompressedBytes"),"uncompressedTileBytesScope":"selected-framed raw bridge after requested quantization, including fill wrapper","encodedTileBytes":sum("encodedBytes")},
+        "encoding":{"quantize":options.quantize,"meshopt":options.meshopt,"primitiveReferences":sum("primitives"),"maximumTilePrimitives":list.iter().map(|extras| extras["primitives"].as_u64().unwrap_or(0)).max().unwrap_or(0),"maximumQuantizationErrorMetres":max("quantizationErrorMetres"),"uncompressedTileBytes":sum("uncompressedBytes"),"uncompressedTileBytesScope":"selected-framed raw bridge after requested quantization, including fill wrapper","encodedTileBytes":sum("encodedBytes")},
         "parentRepairEnabled":options.parent_repair,"skipInvalidEnabled":options.skip_invalid,"repairEnabled":repair,"lodToleranceMetres":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"reuse":reuse_report,
         "lodFallbacks":build.reports.first,"geometryReportCount":build.reports.count,"geometryReports":"geometry-reports.jsonl","geometryReportsScope":"current ingestion and newly encoded geometry; previous content reports remain in the prior archive",
         "lockedSharedVertices":shared,"pointPolicy":if options.aggregate_points {"opt-in per-layer voxel count aggregates in point-only parents; original identities and properties in full-detail leaves"} else {"retain every semantic point feature; oversized parents route without content"},
-        "pointAggregation":{"enabled":options.aggregate_points,"contentTiles":list.iter().filter(|n| n["extras"].get("pointAggregation").is_some()).count()},
+        "pointAggregation":{"enabled":options.aggregate_points,"contentTiles":list.iter().filter(|extras| extras.get("pointAggregation").is_some()).count()},
         "polygonFragmentPolicy":"standard glTF fills plus vector source boundaries; no internal fragment outlines",
         "errorPolicy":"direct original-to-parent distance plus float32 rounding; all source bounds retained"});
     if let (Value::Object(report), Value::Object(values)) = (&mut report, values) {

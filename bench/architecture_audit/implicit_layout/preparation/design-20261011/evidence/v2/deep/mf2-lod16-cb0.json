@@ -1,0 +1,1081 @@
+{
+ "receipt": {
+  "probe": "fb2d0fdb32d5fff012d372bb690cdf4a52a796c5c32f9822219a682fe5acd747",
+  "runner": "498bbec09cb82363b9f3a4d909042f1a792bdcc5ef4a83b0cc2c7d2465fd5801",
+  "views": "c07d30e96ae5f01dcdedbd0ce932f4cd9583a03bd16c7b0abc5a4fb98f0c90ef",
+  "maximumScreenSpaceError": 0.0001,
+  "deterministic": true,
+  "stableFrames": 30,
+  "cullWithChildrenBounds": false,
+  "overviewMaximumScreenSpaceError": 16.0,
+  "cpuAffinity": [
+   13,
+   15
+  ],
+  "nice": 6
+ },
+ "comparison": {
+  "today~forest4": {
+   "overviewSameSelection": true,
+   "viewsSameSelection": 16,
+   "viewsSamePick": 16,
+   "views": 16
+  }
+ },
+ "results": {
+  "today": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 3.1155,
+    "selected": [
+     "implicit-content/0-0-0-2-3-0-0.glb",
+     "implicit-content/0-0-0-2-2-0-0.glb",
+     "implicit-content/0-0-0-2-1-0-0.glb",
+     "implicit-content/0-0-0-2-0-0-0.glb"
+    ],
+    "selectedKeys": [
+     "13930",
+     "2",
+     "4692",
+     "9376"
+    ],
+    "requestCount": 6
+   },
+   "views": [
+    {
+     "name": "leaf-p13",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.33029999999702,
+     "selected": [
+      "implicit-content/9-133-0-1-0-0-0.glb",
+      "implicit-content/12-0-0-1-0-0-0.glb",
+      "implicit-content/21-503552-0-3-0-0-0.glb",
+      "implicit-content/21-504320-0-3-0-0-0.glb",
+      "implicit-content/21-504576-0-3-0-0-0.glb",
+      "implicit-content/21-503808-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.0044444444444444444,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 176
+    },
+    {
+     "name": "leaf-p1045",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.5644000000059606,
+     "selected": [
+      "implicit-content/12-1065-0-0-0-0-0.glb",
+      "implicit-content/21-534272-0-2-0-0-0.glb",
+      "implicit-content/21-525312-0-2-0-0-0.glb",
+      "implicit-content/21-525824-0-2-0-0-0.glb",
+      "implicit-content/21-524800-0-1-0-0-0.glb",
+      "implicit-content/12-256-0-1-0-0-0.glb",
+      "implicit-content/9-122-0-1-1-0-0.glb",
+      "implicit-content/21-524032-0-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/12-256-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "1045",
+      "3925",
+      "4691",
+      "4723",
+      "4736",
+      "4748",
+      "5046",
+      "5423"
+     ],
+     "pickedKey": "1045",
+     "newRequestCount": 181
+    },
+    {
+     "name": "leaf-p2076",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.6305,
+     "selected": [
+      "implicit-content/9-133-0-1-0-0-0.glb",
+      "implicit-content/12-512-0-1-0-0-0.glb",
+      "implicit-content/21-503552-0-3-0-0-0.glb",
+      "implicit-content/21-504320-0-3-0-0-0.glb",
+      "implicit-content/21-504576-0-3-0-0-0.glb",
+      "implicit-content/21-503808-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.4666666666666667,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "2076",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 29
+    },
+    {
+     "name": "leaf-p3082",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.585699999988079,
+     "selected": [
+      "implicit-content/9-133-0-1-0-0-0.glb",
+      "implicit-content/12-768-0-1-0-0-0.glb",
+      "implicit-content/21-503552-0-3-0-0-0.glb",
+      "implicit-content/21-504576-0-3-0-0-0.glb",
+      "implicit-content/21-504320-0-3-0-0-0.glb",
+      "implicit-content/21-503808-0-1-0-0-0.glb",
+      "implicit-content/3-1-0-2-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.2,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "2068",
+      "3082",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 27
+    },
+    {
+     "name": "leaf-p4712",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5825,
+     "selected": [
+      "implicit-content/12-1065-0-0-0-0-0.glb",
+      "implicit-content/21-534272-0-2-0-0-0.glb",
+      "implicit-content/21-524288-0-1-0-0-0.glb",
+      "implicit-content/6-4-0-1-0-0-0.glb",
+      "implicit-content/9-122-0-1-1-0-0.glb",
+      "implicit-content/21-524032-0-3-0-0-0.glb",
+      "implicit-content/21-523776-0-2-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/21-524288-0-1-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 0.013333333333333334,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "1039",
+      "3925",
+      "4679",
+      "4691",
+      "4712",
+      "5046",
+      "5423"
+     ],
+     "pickedKey": "4712",
+     "newRequestCount": 32
+    },
+    {
+     "name": "leaf-p6315",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.7367999999970198,
+     "selected": [
+      "implicit-content/9-133-0-1-0-0-0.glb",
+      "implicit-content/12-1280-0-1-0-0-0.glb",
+      "implicit-content/12-1285-0-0-0-0-0.glb",
+      "implicit-content/9-122-0-1-1-0-0.glb",
+      "implicit-content/21-505344-0-2-0-0-0.glb",
+      "implicit-content/21-504832-0-1-0-0-0.glb",
+      "implicit-content/21-504576-0-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.008888888888888889,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3925",
+      "3995",
+      "4007",
+      "4019",
+      "5410",
+      "6315",
+      "6327"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 77
+    },
+    {
+     "name": "leaf-p7352",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5685999999940394,
+     "selected": [
+      "implicit-content/9-133-0-1-0-0-0.glb",
+      "implicit-content/9-162-0-2-2-0-0.glb",
+      "implicit-content/9-192-0-2-0-0-0.glb",
+      "implicit-content/21-503552-0-3-0-0-0.glb",
+      "implicit-content/21-503296-0-2-0-0-0.glb",
+      "implicit-content/21-503808-0-1-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3944",
+      "3956",
+      "3970",
+      "5410",
+      "6389",
+      "7351"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 50
+    },
+    {
+     "name": "leaf-p8369",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.6,
+     "selected": [
+      "implicit-content/12-1065-0-0-0-0-0.glb",
+      "implicit-content/21-534272-0-2-0-0-0.glb",
+      "implicit-content/21-526080-0-2-0-0-0.glb",
+      "implicit-content/21-525824-0-2-0-0-0.glb",
+      "implicit-content/21-525312-0-2-0-0-0.glb",
+      "implicit-content/9-224-0-2-0-0-0.glb",
+      "implicit-content/9-122-0-1-1-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3925",
+      "4736",
+      "4748",
+      "4759",
+      "5046",
+      "5423",
+      "8368"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 38
+    },
+    {
+     "name": "leaf-p9388",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.2781000000089406,
+     "selected": [
+      "implicit-content/3-6-0-1-0-0-0.glb",
+      "implicit-content/12-2048-0-2-0-0-0.glb",
+      "implicit-content/9-256-0-1-1-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1558016-0-2-0-0-0.glb",
+      "implicit-content/21-1557504-0-2-0-0-0.glb",
+      "implicit-content/21-545280-0-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.0044444444444444444,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13397",
+      "13932",
+      "5435",
+      "9388",
+      "9399"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 150
+    },
+    {
+     "name": "leaf-p10427",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.3252999999970196,
+     "selected": [
+      "implicit-content/21-1599488-0-1-0-0-0.glb",
+      "implicit-content/21-1577984-0-2-0-0-0.glb",
+      "implicit-content/21-1578752-0-2-0-0-0.glb",
+      "implicit-content/21-1577728-0-2-0-0-0.glb",
+      "implicit-content/12-2304-0-1-0-0-0.glb",
+      "implicit-content/9-277-0-2-1-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1560576-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "10066",
+      "10427",
+      "13372",
+      "13496",
+      "14111",
+      "14124",
+      "14148",
+      "14874"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 200
+    },
+    {
+     "name": "leaf-p11449",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5077999999970197,
+     "selected": [
+      "implicit-content/3-6-0-2-0-0-0.glb",
+      "implicit-content/12-2560-0-1-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1558016-0-2-0-0-0.glb",
+      "implicit-content/21-1557504-0-2-0-0-0.glb",
+      "implicit-content/21-545280-0-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "11449",
+      "13372",
+      "13385",
+      "13397",
+      "13933",
+      "5435"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 27
+    },
+    {
+     "name": "leaf-p12462",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5195,
+     "selected": [
+      "implicit-content/3-6-0-1-0-0-0.glb",
+      "implicit-content/12-2816-0-1-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1558016-0-2-0-0-0.glb",
+      "implicit-content/21-545280-0-3-0-0-0.glb",
+      "implicit-content/21-544768-0-1-0-0-0.glb",
+      "implicit-content/3-1-0-0-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "12462",
+      "13372",
+      "13397",
+      "13932",
+      "2066",
+      "5422",
+      "5435"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 43
+    },
+    {
+     "name": "leaf-p13951",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.1177999999970196,
+     "selected": [
+      "implicit-content/21-1599488-0-1-0-0-0.glb",
+      "implicit-content/21-1572864-0-2-0-0-0.glb",
+      "implicit-content/21-1573376-0-1-0-0-0.glb",
+      "implicit-content/12-2208-0-1-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1560576-0-1-0-0-0.glb",
+      "implicit-content/21-1572608-0-2-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/12-2208-0-1-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 0.5333333333333333,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "10027",
+      "13372",
+      "13496",
+      "13929",
+      "13951",
+      "13962",
+      "14874"
+     ],
+     "pickedKey": "10027",
+     "newRequestCount": 88
+    },
+    {
+     "name": "leaf-p15681",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5560999999940395,
+     "selected": [
+      "implicit-content/6-48-0-2-3-0-0.glb",
+      "implicit-content/12-3328-0-2-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1558272-0-2-0-0-0.glb",
+      "implicit-content/21-1557504-0-2-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.2088888888888889,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13408",
+      "14798",
+      "15681"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 46
+    },
+    {
+     "name": "leaf-p16722",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.7952000000029802,
+     "selected": [
+      "implicit-content/6-48-0-2-3-0-0.glb",
+      "implicit-content/12-3584-0-2-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1558272-0-2-0-0-0.glb",
+      "implicit-content/21-1557504-0-2-0-0-0.glb",
+      "implicit-content/21-1558528-0-2-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/12-3584-0-2-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 0.24888888888888888,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13408",
+      "13422",
+      "14798",
+      "16722"
+     ],
+     "pickedKey": "16722",
+     "newRequestCount": 57
+    },
+    {
+     "name": "leaf-p17745",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5137000000029803,
+     "selected": [
+      "implicit-content/21-1599488-0-1-0-0-0.glb",
+      "implicit-content/21-1577984-0-2-0-0-0.glb",
+      "implicit-content/21-1578752-0-2-0-0-0.glb",
+      "implicit-content/21-1577728-0-2-0-0-0.glb",
+      "implicit-content/6-54-0-2-1-0-0.glb",
+      "implicit-content/9-480-0-3-0-0-0.glb",
+      "implicit-content/21-1556992-0-1-0-0-0.glb",
+      "implicit-content/21-1560576-0-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13496",
+      "14111",
+      "14124",
+      "14148",
+      "14874",
+      "16260",
+      "17745"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 42
+    }
+   ],
+   "requests": {
+    "total": 1269,
+    "unique": 1269,
+    "json": 248,
+    "subtree": 248,
+    "glb": 773
+   },
+   "statistics": {
+    "numberOfTilesTotal": 1386
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "servedDirectory": "/home/bend/.cache/perf-lane/work/pimpl/v2/today-mf2-lod16"
+  },
+  "forest4": {
+   "version": "1.146.0",
+   "failures": [],
+   "overview": {
+    "loaded": true,
+    "seconds": 3.0182999999970197,
+    "selected": [
+     "t/88ff1db041227845d3e16c5b2cfedc98c31118831bb0be135024e214c8041d76.glb",
+     "t/678bb049f4523e76a09a1b618899ef88a3541f593612a700fe3f5bd0d30e6400.glb",
+     "t/6d418770092d5234016187d11de288351a41030271d4cd1bf45e21d3b29b3a3f.glb",
+     "t/b1af616020ec1fa14fc8804c54a16244e242c4d544ba6d8f440721ca5dcc003c.glb"
+    ],
+    "selectedKeys": [
+     "13930",
+     "2",
+     "4692",
+     "9376"
+    ],
+    "requestCount": 5
+   },
+   "views": [
+    {
+     "name": "leaf-p13",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.873699999988079,
+     "selected": [
+      "t/ce7a74fe5fc8f8b3213feebfb47d2e9244917583ed1fa1d87ffa86b88e2ac45e.glb",
+      "implicit-content/r11-2-0-0-0.glb",
+      "implicit-content/r3953-3-0-0-0.glb",
+      "implicit-content/r3980-3-0-0-0.glb",
+      "implicit-content/r3992-3-0-0-0.glb",
+      "implicit-content/r3967-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.0044444444444444444,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 126
+    },
+    {
+     "name": "leaf-p1045",
+     "control": false,
+     "loaded": true,
+     "seconds": 2.1737999999970197,
+     "selected": [
+      "t/43fc0458e287d08fadf234e5c9ea9601f0fc6f634804dfcd0d14312985619a15.glb",
+      "implicit-content/r5043-3-0-0-0.glb",
+      "implicit-content/r4733-3-0-0-0.glb",
+      "implicit-content/r4745-3-0-0-0.glb",
+      "implicit-content/r4720-3-0-0-0.glb",
+      "implicit-content/r1043-2-0-0-0.glb",
+      "t/74f573c173842f8e4288091a4020b67bf93ccfccb4411be6faa80c244d9e4d5f.glb",
+      "implicit-content/r4688-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/r1043-2-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 1,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "1045",
+      "3925",
+      "4691",
+      "4723",
+      "4736",
+      "4748",
+      "5046",
+      "5423"
+     ],
+     "pickedKey": "1045",
+     "newRequestCount": 121
+    },
+    {
+     "name": "leaf-p2076",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.454699999988079,
+     "selected": [
+      "t/ce7a74fe5fc8f8b3213feebfb47d2e9244917583ed1fa1d87ffa86b88e2ac45e.glb",
+      "implicit-content/r2073-3-0-0-0.glb",
+      "implicit-content/r3953-3-0-0-0.glb",
+      "implicit-content/r3980-3-0-0-0.glb",
+      "implicit-content/r3992-3-0-0-0.glb",
+      "implicit-content/r3967-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.4666666666666667,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "2076",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 20
+    },
+    {
+     "name": "leaf-p3082",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.3477000000029802,
+     "selected": [
+      "t/ce7a74fe5fc8f8b3213feebfb47d2e9244917583ed1fa1d87ffa86b88e2ac45e.glb",
+      "implicit-content/r3080-2-0-0-0.glb",
+      "implicit-content/r3953-3-0-0-0.glb",
+      "implicit-content/r3992-3-0-0-0.glb",
+      "implicit-content/r3980-3-0-0-0.glb",
+      "implicit-content/r3967-3-0-0-0.glb",
+      "t/b5183bb01274659f16282515d464b79542c2ef187d7c0b50bcd311cba949d0ed.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.2,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "2068",
+      "3082",
+      "3956",
+      "3970",
+      "3983",
+      "3995",
+      "5410"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 19
+    },
+    {
+     "name": "leaf-p4712",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.2463999999910593,
+     "selected": [
+      "t/43fc0458e287d08fadf234e5c9ea9601f0fc6f634804dfcd0d14312985619a15.glb",
+      "implicit-content/r5043-3-0-0-0.glb",
+      "implicit-content/r4709-3-0-0-0.glb",
+      "t/4bc0439c11a33a6a4d1ff373ce58e0c2e11ada9ae5cd80cad3861f69a591db4b.glb",
+      "t/74f573c173842f8e4288091a4020b67bf93ccfccb4411be6faa80c244d9e4d5f.glb",
+      "implicit-content/r4688-3-0-0-0.glb",
+      "implicit-content/r4676-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/r4709-3-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 0.013333333333333334,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "1039",
+      "3925",
+      "4679",
+      "4691",
+      "4712",
+      "5046",
+      "5423"
+     ],
+     "pickedKey": "4712",
+     "newRequestCount": 22
+    },
+    {
+     "name": "leaf-p6315",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.4847999999970198,
+     "selected": [
+      "t/ce7a74fe5fc8f8b3213feebfb47d2e9244917583ed1fa1d87ffa86b88e2ac45e.glb",
+      "implicit-content/r6312-3-0-0-0.glb",
+      "implicit-content/r6324-1-1-0-0.glb",
+      "t/74f573c173842f8e4288091a4020b67bf93ccfccb4411be6faa80c244d9e4d5f.glb",
+      "implicit-content/r4016-3-0-0-0.glb",
+      "implicit-content/r4004-3-0-0-0.glb",
+      "implicit-content/r3992-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.008888888888888889,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3925",
+      "3995",
+      "4007",
+      "4019",
+      "5410",
+      "6315",
+      "6327"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 53
+    },
+    {
+     "name": "leaf-p7352",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.2952999999970198,
+     "selected": [
+      "t/ce7a74fe5fc8f8b3213feebfb47d2e9244917583ed1fa1d87ffa86b88e2ac45e.glb",
+      "implicit-content/r6389-0-0-0-0.glb",
+      "implicit-content/r7350-1-0-0-0.glb",
+      "implicit-content/r3953-3-0-0-0.glb",
+      "implicit-content/r3941-3-0-0-0.glb",
+      "implicit-content/r3967-3-0-0-0.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3944",
+      "3956",
+      "3970",
+      "5410",
+      "6389",
+      "7351"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 37
+    },
+    {
+     "name": "leaf-p8369",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.301,
+     "selected": [
+      "t/43fc0458e287d08fadf234e5c9ea9601f0fc6f634804dfcd0d14312985619a15.glb",
+      "implicit-content/r5043-3-0-0-0.glb",
+      "implicit-content/r4756-3-0-0-0.glb",
+      "implicit-content/r4745-3-0-0-0.glb",
+      "implicit-content/r4733-3-0-0-0.glb",
+      "implicit-content/r8368-0-0-0-0.glb",
+      "t/74f573c173842f8e4288091a4020b67bf93ccfccb4411be6faa80c244d9e4d5f.glb"
+     ],
+     "leafSelected": false,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "3925",
+      "4736",
+      "4748",
+      "4759",
+      "5046",
+      "5423",
+      "8368"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 29
+    },
+    {
+     "name": "leaf-p9388",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.7292999999970198,
+     "selected": [
+      "implicit-content/r9385-3-0-0-0.glb",
+      "t/08d8f0dd16abd185d3bd1ee8ed4e21eb53d39371a8a504ed93878288c597b805.glb",
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13394-3-0-0-0.glb",
+      "implicit-content/r13382-3-0-0-0.glb",
+      "t/f6e0ce20f76ee8d9482780a476ed05829da5cf6118891a35605c5af08b5ccec9.glb",
+      "implicit-content/r5432-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.0044444444444444444,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13397",
+      "13932",
+      "5435",
+      "9388",
+      "9399"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 108
+    },
+    {
+     "name": "leaf-p10427",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.8479000000059604,
+     "selected": [
+      "implicit-content/r10425-2-0-0-0.glb",
+      "implicit-content/r10066-0-0-0-0.glb",
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13493-3-0-0-0.glb",
+      "implicit-content/r14871-3-0-0-0.glb",
+      "implicit-content/r14121-3-0-0-0.glb",
+      "implicit-content/r14145-3-0-0-0.glb",
+      "implicit-content/r14108-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "10066",
+      "10427",
+      "13372",
+      "13496",
+      "14111",
+      "14124",
+      "14148",
+      "14874"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 139
+    },
+    {
+     "name": "leaf-p11449",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.2854000000059604,
+     "selected": [
+      "implicit-content/r11447-2-0-0-0.glb",
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13394-3-0-0-0.glb",
+      "implicit-content/r13382-3-0-0-0.glb",
+      "t/eff7eb857db4f6c34a42d1b87e43d3e68a254b5cdbc9a0f3489c8e1341bea5f6.glb",
+      "implicit-content/r5432-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "11449",
+      "13372",
+      "13385",
+      "13397",
+      "13933",
+      "5435"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 20
+    },
+    {
+     "name": "leaf-p12462",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.281,
+     "selected": [
+      "implicit-content/r12460-2-0-0-0.glb",
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13394-3-0-0-0.glb",
+      "t/f6e0ce20f76ee8d9482780a476ed05829da5cf6118891a35605c5af08b5ccec9.glb",
+      "implicit-content/r5432-3-0-0-0.glb",
+      "implicit-content/r5419-3-0-0-0.glb",
+      "t/32e3ec38b86ba122661ae2f811bce425b4dfbdeab055e105510c9aaa7ddf33d2.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "12462",
+      "13372",
+      "13397",
+      "13932",
+      "2066",
+      "5422",
+      "5435"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 29
+    },
+    {
+     "name": "leaf-p13951",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.6911999999880791,
+     "selected": [
+      "implicit-content/r10025-2-0-0-0.glb",
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13493-3-0-0-0.glb",
+      "implicit-content/r13926-3-0-0-0.glb",
+      "implicit-content/r14871-3-0-0-0.glb",
+      "implicit-content/r13948-3-0-0-0.glb",
+      "implicit-content/r13959-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/r10025-2-0-0-0.glb",
+     "pickedLeaf": false,
+     "coverage": 0.5333333333333333,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "10027",
+      "13372",
+      "13496",
+      "13929",
+      "13951",
+      "13962",
+      "14874"
+     ],
+     "pickedKey": "10027",
+     "newRequestCount": 61
+    },
+    {
+     "name": "leaf-p15681",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.3812999999970197,
+     "selected": [
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13405-3-0-0-0.glb",
+      "implicit-content/r13382-3-0-0-0.glb",
+      "t/17bc026d649f253fdc48adbf36d1115c296cf43cef9714f249cb49289b420ef2.glb",
+      "implicit-content/r15678-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0.2088888888888889,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13408",
+      "14798",
+      "15681"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 33
+    },
+    {
+     "name": "leaf-p16722",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.5277000000029803,
+     "selected": [
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13405-3-0-0-0.glb",
+      "implicit-content/r13382-3-0-0-0.glb",
+      "implicit-content/r13419-3-0-0-0.glb",
+      "t/17bc026d649f253fdc48adbf36d1115c296cf43cef9714f249cb49289b420ef2.glb",
+      "implicit-content/r16719-3-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": "implicit-content/r16719-3-0-0-0.glb",
+     "pickedLeaf": true,
+     "coverage": 0.24888888888888888,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13385",
+      "13408",
+      "13422",
+      "14798",
+      "16722"
+     ],
+     "pickedKey": "16722",
+     "newRequestCount": 41
+    },
+    {
+     "name": "leaf-p17745",
+     "control": false,
+     "loaded": true,
+     "seconds": 1.3337000000029802,
+     "selected": [
+      "implicit-content/r13369-3-0-0-0.glb",
+      "implicit-content/r13493-3-0-0-0.glb",
+      "implicit-content/r14871-3-0-0-0.glb",
+      "implicit-content/r14121-3-0-0-0.glb",
+      "implicit-content/r14145-3-0-0-0.glb",
+      "implicit-content/r14108-3-0-0-0.glb",
+      "t/1f7e17b02edae0de5463e0a66f7ea95cb2e83edb18366eafaba72c2849756270.glb",
+      "implicit-content/r17744-1-0-0-0.glb"
+     ],
+     "leafSelected": true,
+     "pickedUrl": null,
+     "pickedLeaf": false,
+     "coverage": 0,
+     "leafColorFraction": 0,
+     "selectedKeys": [
+      "13372",
+      "13496",
+      "14111",
+      "14124",
+      "14148",
+      "14874",
+      "16260",
+      "17745"
+     ],
+     "pickedKey": null,
+     "newRequestCount": 29
+    }
+   ],
+   "requests": {
+    "total": 892,
+    "unique": 892,
+    "json": 57,
+    "subtree": 62,
+    "glb": 773
+   },
+   "statistics": {
+    "numberOfTilesTotal": 3827
+   },
+   "browserVersion": "153.0.8010.12",
+   "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+   ],
+   "failedRequests": [],
+   "servedDirectory": "/home/bend/.cache/perf-lane/work/pimpl/v2/forest-mf2-lod16-s4"
+  }
+ }
+}

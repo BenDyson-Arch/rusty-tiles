@@ -1,0 +1,1538 @@
+{
+ "probe": "i1-inventory",
+ "python": "3.14.7 (main, Aug 14 2026, 06:38:32) [GCC 16.2.1 20260810]",
+ "reports": [
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/convert-implicit-from-vector-points-lines-explicit.3tz",
+   "conversion": {
+    "encoder": "rusty-tiles-explicit-to-implicit-v1",
+    "operation": "convert-to-implicit",
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "d9e3f7ef1f30ccd43fc0dd615f6ac70a4d937c9c104523dcb0f450ccd49d2530"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "t/owned-0-{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 1,
+      "subtrees": {
+       "uri": "subtrees/owned-0-{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.49999652505869296,
+      0.8660274100334422,
+      0.0,
+      0,
+      0.2961988189035955,
+      0.17100888316291044,
+      0.9396926207859084,
+      0,
+      0.8137995666067578,
+      0.46984304501625035,
+      -0.34202014332566866,
+      0,
+      5192671.659275067,
+      2997990.3802936748,
+      -2167738.6864614883,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "460c2505ce75acff67586f0b331f739daddfc77ca38605b353ee0812c7496650",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": false,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "constant",
+      false
+     ],
+     [
+      "tile",
+      "constant",
+      false
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 904,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 904
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/legacy-mesh-implicit.3tz",
+   "conversion": {
+    "encoder": "rusty-tiles-native-mesh-implicit-v2",
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "generator": "rusty-tiles",
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 3,
+     "contentTemplateKeys": [
+      [
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-{z}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": null,
+     "extrasKeys": [],
+     "implicitTiling": {
+      "availableLevels": 3,
+      "subdivisionScheme": "OCTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}-{z}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 2,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "geometricError",
+      "implicitTiling",
+      "refine"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": null,
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 77,
+   "sha256": "f8865ce628aef3511ff0bd0781835990c817c5549edc8c86b0116466ff971e3e",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 8896,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 73, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 8896
+   },
+   "totals": {
+    "availableTiles": 73,
+    "contentTiles": 73,
+    "errorDiffersHalving": 72,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 73,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 72
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/legacy-mesh-small-implicit.3tz",
+   "conversion": {
+    "encoder": "rusty-tiles-native-mesh-implicit-v2",
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-{z}-0.gltf"
+     ],
+     "depth": 0,
+     "extensionsUsed": null,
+     "extrasKeys": [],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "OCTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}-{z}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "geometricError",
+      "implicitTiling",
+      "refine"
+     ],
+     "rootRefine": "ADD",
+     "rootTransform": null,
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 5,
+   "sha256": "a7be1bcd9de3315cd43d31aafb1f36cc855938416386ad5ebe198a766a89946b",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 960,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 960
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/pointcloud-implicit.3tz",
+   "conversion": {
+    "encoder": "rusty-tiles-native-las-implicit-v2",
+    "maxPositionRoundingMetres": 1.0358641703225869e-05,
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 3,
+     "contentTemplateKeys": [
+      [
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-{z}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": null,
+     "extrasKeys": [],
+     "implicitTiling": {
+      "availableLevels": 3,
+      "subdivisionScheme": "OCTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}-{z}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 2,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      249.99,
+      250.01,
+      19.995,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 77,
+   "sha256": "a4d9578b3d3a344cd75e60104ef3354a984bc1d49a36e1c6c2bb7dc117db54a7",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 8896,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 73, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 8896
+   },
+   "totals": {
+    "availableTiles": 73,
+    "contentTiles": 73,
+    "errorDiffersHalving": 72,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 73,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 70,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 2
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-points-lines-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "b592afe46569ba3ea22f663856db7a6af8f5ae784bac1c974a4e6c28bf5038d6"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.49999652505869296,
+      0.8660274100334422,
+      0.0,
+      0,
+      0.2961988189035955,
+      0.17100888316291044,
+      0.9396926207859084,
+      0,
+      0.8137995666067578,
+      0.46984304501625035,
+      -0.34202014332566866,
+      0,
+      5192671.659275067,
+      2997990.3802936748,
+      -2167738.6864614883,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "bc9425c702cf3699cfba93abdbbd25d8f547abbf446c21d4f03558fc2f930b7b",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1064,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1064
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-points-lines-meshopt-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "bf7a7f45cabd1013dfb082fed95834236abbd54ffb56b4cf9c4bec594bd6d396"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.49999652505869296,
+      0.8660274100334422,
+      0.0,
+      0,
+      0.2961988189035955,
+      0.17100888316291044,
+      0.9396926207859084,
+      0,
+      0.8137995666067578,
+      0.46984304501625035,
+      -0.34202014332566866,
+      0,
+      5192671.659275067,
+      2997990.3802936748,
+      -2167738.6864614883,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "67e147f8acb3affd336a36d414b37078398bac954da7f441297742c538f5d00a",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1064,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1064
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-points-lines-quantize-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "f1742b0c451780b4a213d2c83d71cb39dfbd5f7251272f71d70428bea1685c58"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.49999652505869296,
+      0.8660274100334422,
+      0.0,
+      0,
+      0.2961988189035955,
+      0.17100888316291044,
+      0.9396926207859084,
+      0,
+      0.8137995666067578,
+      0.46984304501625035,
+      -0.34202014332566866,
+      0,
+      5192671.659275067,
+      2997990.3802936748,
+      -2167738.6864614883,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "5adc1ed48564cfd99d280a25b4414ea289cc1d360ce5e5cb5e77f4972ce7386d",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1080,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1080
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-polygons-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "db27ebc38be7218c940c2eeed27c3a01372522383be5940143e78ffb6cca5901"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.41576289828736923,
+      0.9094730410560209,
+      0.0,
+      0,
+      -0.1301757252668463,
+      -0.05950944599826854,
+      0.9897034436578614,
+      0,
+      0.9001086006471315,
+      0.4114819721801825,
+      0.1431331324738276,
+      0,
+      2089409.2778327167,
+      824684.2536479142,
+      -2085998.938100907,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "00a6c35e40bc78d9542fc4675b0ab1920fa70366c8e7feee174eefb2223d2b24",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1064,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1064
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-polygons-meshopt-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "a11086b51506ed7c7fc01f80a86e445d2417fb65fd26c03cf09a8a1d6e24d88e"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.41576289828736923,
+      0.9094730410560209,
+      0.0,
+      0,
+      -0.1301757252668463,
+      -0.05950944599826854,
+      0.9897034436578614,
+      0,
+      0.9001086006471315,
+      0.4114819721801825,
+      0.1431331324738276,
+      0,
+      2089409.2778327167,
+      824684.2536479142,
+      -2085998.938100907,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "25334e417c1651b98e69b0302d5a644979283ca17dd5d09ee65a6754b9a25167",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1064,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1064
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  },
+  {
+   "archive": "/home/bend/.cache/c2-corpus/run2/artifacts/vector-polygons-quantize-implicit.3tz",
+   "conversion": {
+    "tiling": "implicit"
+   },
+   "documentCount": 1,
+   "documents": [
+    {
+     "asset": {
+      "extras": {
+       "vectorBuildStateSha256": "88400027981535a49f30320fe14b67c75b52ac3535ea3cfb3d437f2e2df9400d"
+      },
+      "version": "1.1"
+     },
+     "availableLevelsDeclared": 1,
+     "contentTemplateKeys": [
+      [
+       "extensions",
+       "uri"
+      ]
+     ],
+     "contentTemplates": [
+      "implicit-content/{level}-{x}-{y}-0.glb"
+     ],
+     "depth": 0,
+     "extensionsUsed": [
+      "3DTILES_content_gltf_vector"
+     ],
+     "extrasKeys": [
+      "rustyTilesSourceContents"
+     ],
+     "implicitTiling": {
+      "availableLevels": 1,
+      "subdivisionScheme": "QUADTREE",
+      "subtreeLevels": 4,
+      "subtrees": {
+       "uri": "subtrees/{level}-{x}-{y}.subtree"
+      }
+     },
+     "maxAvailableLevelObserved": 0,
+     "name": "tileset.json",
+     "rootBoundingVolumeKind": [
+      "box"
+     ],
+     "rootKeys": [
+      "boundingVolume",
+      "content",
+      "extras",
+      "geometricError",
+      "implicitTiling",
+      "refine",
+      "transform"
+     ],
+     "rootRefine": "REPLACE",
+     "rootTransform": [
+      -0.41576289828736923,
+      0.9094730410560209,
+      0.0,
+      0,
+      -0.1301757252668463,
+      -0.05950944599826854,
+      0.9897034436578614,
+      0,
+      0.9001086006471315,
+      0.4114819721801825,
+      0.1431331324738276,
+      0,
+      2089409.2778327167,
+      824684.2536479142,
+      -2085998.938100907,
+      1
+     ],
+     "schemaClasses": {
+      "rustyTile": {
+       "boundingBox": {
+        "array": true,
+        "componentType": "FLOAT64",
+        "count": 12,
+        "semantic": "TILE_BOUNDING_BOX",
+        "type": "SCALAR"
+       },
+       "extras": {
+        "type": "STRING"
+       },
+       "geometricError": {
+        "componentType": "FLOAT64",
+        "semantic": "TILE_GEOMETRIC_ERROR",
+        "type": "SCALAR"
+       }
+      }
+     }
+    }
+   ],
+   "members": 8,
+   "sha256": "5f045a9c41a91aeb74ff911d62c22c9d1b4c309f2d10aa69aa1607ffea75d668",
+   "subtreeCount": 1,
+   "subtreeSummary": {
+    "allCountsMatch": true,
+    "allTrailingZero": true,
+    "allViewsAligned8": true,
+    "allViewsHaveByteOffset": true,
+    "anyMsbFirstWouldDiffer": true,
+    "binPaddingZero": [
+     "True"
+    ],
+    "bufferShapes": [
+     "[[\"byteLength\"]]"
+    ],
+    "childSubtreeBitsSet": 0,
+    "encodings": [
+     [
+      "childSubtree",
+      "constant",
+      false
+     ],
+     [
+      "content",
+      "bitstream",
+      true
+     ],
+     [
+      "tile",
+      "bitstream",
+      true
+     ]
+    ],
+    "headerOk": true,
+    "jsonPaddingIsSpaces": true,
+    "maxSubtreeBytes": 1080,
+    "propertyTables": [
+     "[{\"class\": \"rustyTile\", \"count\": 1, \"properties\": {\"boundingBox\": [\"values\"], \"extras\": [\"stringOffsets\", \"values\"], \"geometricError\": [\"values\"]}}]"
+    ],
+    "rowsEqualAvailable": true,
+    "semanticsInTable": [
+     "[\"TILE_BOUNDING_BOX\", \"TILE_GEOMETRIC_ERROR\"]"
+    ],
+    "structuralViolations": 0,
+    "topLevelKeys": [
+     "[\"bufferViews\", \"buffers\", \"childSubtreeAvailability\", \"contentAvailability\", \"propertyTables\", \"tileAvailability\", \"tileMetadata\"]"
+    ],
+    "totalSubtreeBytes": 1080
+   },
+   "totals": {
+    "availableTiles": 1,
+    "contentTiles": 1,
+    "errorDiffersHalving": 0,
+    "errorEqualsHalving": 1,
+    "jsonContentAtLevel0": 0,
+    "jsonContentRefs": 0,
+    "missingContentMembers": 0,
+    "noRow": 0,
+    "rankRowsChecked": 1,
+    "rowEqualsDerived": 1,
+    "rowInsideDerived": 0,
+    "rowNotComparable": 0,
+    "rowOutsideDerived": 0
+   },
+   "warnings": []
+  }
+ ]
+}

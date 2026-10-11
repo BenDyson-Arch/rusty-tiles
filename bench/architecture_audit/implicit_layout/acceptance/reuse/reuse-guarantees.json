@@ -1,0 +1,83 @@
+{
+ "binarySha256": "a734eac596a2a26031a48b94e85e1fe2a4e38f7856c81e5cfdaf4a7aa327d6d0",
+ "script": "01eb8ff62662ca5919bf7612624735650e038fe593fff3216b60cdbd65382dc0",
+ "inputs": {
+  "base": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+  "smallEdit": "a59d29b0792612e92896263de8d9960414cca8eefbd90e988d4ff3932652652c"
+ },
+ "cases": [
+  {
+   "config": "perf-default",
+   "unchanged": {
+    "reuse": {
+     "incompatibleReason": null,
+     "previousTileset": true,
+     "publishedContents": 544,
+     "rebuiltContents": 0,
+     "requestedPreviousTileset": true,
+     "reusedContentReferences": 544,
+     "reusedContents": 544,
+     "reusedSubtrees": 1,
+     "reusedTiles": 547
+    },
+    "differingMembers": []
+   },
+   "smallEdit": {
+    "reuse": {
+     "incompatibleReason": null,
+     "previousTileset": true,
+     "publishedContents": 544,
+     "rebuiltContents": 10,
+     "requestedPreviousTileset": true,
+     "reusedContentReferences": 534,
+     "reusedContents": 534,
+     "reusedSubtrees": 9,
+     "reusedTiles": 535
+    },
+    "differingMembers": 0,
+    "firstDiffering": []
+   }
+  },
+  {
+   "config": "mf2-lod3",
+   "unchanged": {
+    "reuse": {
+     "incompatibleReason": null,
+     "previousTileset": true,
+     "publishedContents": 12527,
+     "rebuiltContents": 0,
+     "requestedPreviousTileset": true,
+     "reusedContentReferences": 12527,
+     "reusedContents": 12527,
+     "reusedSubtrees": 1,
+     "reusedTiles": 12530
+    },
+    "differingMembers": []
+   },
+   "smallEdit": {
+    "reuse": {
+     "incompatibleReason": null,
+     "previousTileset": true,
+     "publishedContents": 12531,
+     "rebuiltContents": 62,
+     "requestedPreviousTileset": true,
+     "reusedContentReferences": 12469,
+     "reusedContents": 12469,
+     "reusedSubtrees": 21,
+     "reusedTiles": 12470
+    },
+    "differingMembers": 11308,
+    "firstDiffering": [
+     "implicit-content/r10003-0-0-0-0.glb",
+     "implicit-content/r10003-1-0-0-0.glb",
+     "implicit-content/r10003-1-1-0-0.glb",
+     "implicit-content/r10003-2-0-0-0.glb",
+     "implicit-content/r10003-2-1-0-0.glb",
+     "implicit-content/r10003-2-2-0-0.glb",
+     "implicit-content/r10003-2-3-0-0.glb",
+     "implicit-content/r10003-3-6-0-0.glb"
+    ]
+   }
+  }
+ ]
+}

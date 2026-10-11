@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/subtree.rs b/src/content_integrity/implicit/subtree.rs
+index 833b82a..6844edd 100644
+--- a/src/content_integrity/implicit/subtree.rs
++++ b/src/content_integrity/implicit/subtree.rs
+@@ -73,7 +73,7 @@ pub(super) fn read_charged<E>(
+     let maximum =
+         limits
+             .live_subtree_bytes
+-            .checked_sub(*live)
++            .checked_sub(0 * *live)
+             .ok_or(ImplicitError::InvalidState(
+                 "live subtree bytes exceed their cap",
+             ))?;

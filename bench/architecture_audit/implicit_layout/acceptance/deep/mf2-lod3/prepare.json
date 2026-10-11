@@ -1,0 +1,43 @@
+{
+ "script": "619cf35123464f5a8eab3947079f5777544f1719d0c6282bdebac8d44e7f66d4",
+ "checker": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
+ "archives": {
+  "explicit": {
+   "path": "head-native/mf2-lod3-explicit.3tz",
+   "sha256": "90eb647e59c976603cec7038610c61fd5161e908567858cd6730cc0bef6ce4ec",
+   "tiles": 12530,
+   "documentsFollowed": 1,
+   "contents": 12527,
+   "distinctKeys": 12527,
+   "ambiguousKeys": 0
+  },
+  "develop": {
+   "path": "develop-native/mf2-lod3.3tz",
+   "sha256": "efa3e7984ea683ea2083bd1a888d1319c08b4b20fb7d44b29816bd7ad828262f",
+   "tiles": 15163,
+   "documentsFollowed": 2634,
+   "contents": 12527,
+   "distinctKeys": 12527,
+   "ambiguousKeys": 0
+  },
+  "head": {
+   "path": "head-native/mf2-lod3.3tz",
+   "sha256": "f795a4f1ece91c34e124c193789add7cf94c51463fc8ef155d03ad25e3448356",
+   "tiles": 12718,
+   "documentsFollowed": 189,
+   "contents": 12527,
+   "distinctKeys": 12527,
+   "ambiguousKeys": 0
+  }
+ },
+ "views": 16,
+ "leaves": 5904,
+ "usableLeaves": 5904,
+ "keysInEveryLayout": 12527,
+ "keysPerLayout": {
+  "explicit": 12527,
+  "develop": 12527,
+  "head": 12527
+ },
+ "base": "explicit"
+}

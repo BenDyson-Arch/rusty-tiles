@@ -1,0 +1,84 @@
+{
+ "asset": {
+  "version": "1.1"
+ },
+ "schema": {
+  "id": "rustyTilesImplicit",
+  "classes": {
+   "rustyTile": {
+    "properties": {
+     "boundingBox": {
+      "type": "SCALAR",
+      "componentType": "FLOAT64",
+      "array": true,
+      "count": 12,
+      "semantic": "TILE_BOUNDING_BOX"
+     },
+     "geometricError": {
+      "type": "SCALAR",
+      "componentType": "FLOAT64",
+      "semantic": "TILE_GEOMETRIC_ERROR"
+     },
+     "extras": {
+      "type": "STRING"
+     }
+    }
+   }
+  }
+ },
+ "geometricError": 3000.0,
+ "root": {
+  "boundingVolume": {
+   "box": [
+    0.0,
+    0.0,
+    0.0,
+    1002.0,
+    0,
+    0,
+    0,
+    1002.0,
+    0,
+    0,
+    0,
+    5.0
+   ]
+  },
+  "geometricError": 800.0,
+  "refine": "REPLACE",
+  "transform": [
+   -0.21643961393810288,
+   0.9762960071199334,
+   0,
+   0,
+   -0.6520022573310842,
+   -0.14454542048145,
+   0.744311546231154,
+   0,
+   0.7266683906387393,
+   0.1610985037159434,
+   0.6678325554710466,
+   0,
+   4641725.118266695,
+   1029045.6841753953,
+   4237343.073052207,
+   1
+  ],
+  "contents": [
+   {
+    "uri": "implicit-content/0-0-0-{level}-{x}-{y}-0.glb"
+   },
+   {
+    "uri": "implicit-tileset-0-0-0-{level}-{x}-{y}.json"
+   }
+  ],
+  "implicitTiling": {
+   "subdivisionScheme": "QUADTREE",
+   "subtreeLevels": 3,
+   "availableLevels": 3,
+   "subtrees": {
+    "uri": "subtrees/0-0-0-{level}-{x}-{y}.subtree"
+   }
+  }
+ }
+}

@@ -1,0 +1,42 @@
+{
+ "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-explicit.3tz": {
+  "sha256": "670d2e726abe32e64bf412cc559230b3fdc3c6c3e4b41fe578be470fdbb6c04d",
+  "bytes": 73968196
+ },
+ "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod3-implicit.3tz": {
+  "sha256": "56750d326a2da19e9cba47d8b1a94fe2bb161a30b77626343a2ac2521c1c9c8c",
+  "bytes": 148069713
+ },
+ "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod16-explicit.3tz": {
+  "sha256": "5e7df5c848d0b0e05358b54e9626d339626846e11930bdb831ad976872d9259c",
+  "bytes": 99562094
+ },
+ "/home/bend/.cache/perf-lane/work/pimpl/v2/mf2-lod16-implicit.3tz": {
+  "sha256": "695ba79ac510de16b7b43a94331f5bb33567f11fdc4bacca3a31a4cd81330fe9",
+  "bytes": 203561219
+ },
+ "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf.3tz": {
+  "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148",
+  "bytes": 37111575
+ },
+ "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf-explicit.3tz": {
+  "sha256": "dd22037acbc9de16bfe1600f78a108c74acd622e661be9c64f9b227bca89ef09",
+  "bytes": 19088797
+ },
+ "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-deep.3tz": {
+  "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
+  "bytes": 13357687
+ },
+ "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz": {
+  "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
+  "bytes": 23904928
+ },
+ "/home/bend/.cache/perf-lane/work/inputs/vector.geojson": {
+  "sha256": "4f11f4ca75ea9045babcda0d368d9f70ca4bc50a41926fb49feb85cd78f6c4c4",
+  "bytes": 3195221
+ },
+ "/home/bend/.cache/c2-corpus/rusty-tiles-f2238cd": {
+  "sha256": "369c3c815f95a64018e49f360b605f84740c3c4f9f145c5fde33dbd4148749b9",
+  "bytes": 19431704
+ }
+}

@@ -1,0 +1,91 @@
+{
+ "requirements": "design \u00a76 A-5.2",
+ "runs": {
+  "cb0": {
+   "result": "/home/bend/.cache/forest-acc/work/deep/real-mf2-lod3/res-cb0.json",
+   "cullWithChildrenBounds": false,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 5.671563068289958e-06
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 16,
+     "headSelectsAncestor": 0,
+     "headSelectsAncestorShare": 0.0,
+     "nullPickBoth": 12
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 820,
+     "unique": 820,
+     "json": 151,
+     "subtree": 151,
+     "glb": 518
+    },
+    "head": {
+     "total": 642,
+     "unique": 642,
+     "json": 45,
+     "subtree": 79,
+     "glb": 518
+    }
+   },
+   "viewSeconds": {
+    "develop": 32.33,
+    "head": 27.55
+   }
+  },
+  "cb1": {
+   "result": "/home/bend/.cache/forest-acc/work/deep/real-mf2-lod3/res-cb1.json",
+   "cullWithChildrenBounds": true,
+   "targetPath": {
+    "layouts": [
+     "develop",
+     "head"
+    ],
+    "views": 16,
+    "sameTargetPathSelection": 16,
+    "maxErrorOfSelectedPathTileWhenLeafNotSelected": 5.671563068289958e-06
+   },
+   "pairs": {
+    "develop~head": {
+     "views": 16,
+     "sameSelection": 3,
+     "headSelectsAncestor": 13,
+     "headSelectsAncestorShare": 0.8125,
+     "nullPickBoth": 12
+    }
+   },
+   "requests": {
+    "develop": {
+     "total": 820,
+     "unique": 820,
+     "json": 151,
+     "subtree": 151,
+     "glb": 518
+    },
+    "head": {
+     "total": 640,
+     "unique": 640,
+     "json": 45,
+     "subtree": 79,
+     "glb": 516
+    }
+   },
+   "viewSeconds": {
+    "develop": 46.15,
+    "head": 22.66
+   }
+  }
+ },
+ "problems": [],
+ "verdict": "pass"
+}

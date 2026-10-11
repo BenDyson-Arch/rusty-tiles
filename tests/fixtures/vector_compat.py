@@ -89,6 +89,9 @@ def generate(root, quantize=False, meshopt_helper=None, batch=False, aggregate_p
     # The repository preview boots from a single annotations/tileset.json.
     manifest = json.loads((root / 'line/tileset.json').read_text())
 
+    # Forest layout: implicit roots may sit on any explicit tile of this document,
+    # and link tiles name line/tileset-d*.json documents, which resolve their own
+    # relative URIs. Only this root document's references need the case prefix.
     def prefix(node):
         if 'implicitTiling' in node:
             node['implicitTiling']['subtrees']['uri'] = 'line/' + node['implicitTiling']['subtrees']['uri']

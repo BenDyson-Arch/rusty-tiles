@@ -79,6 +79,10 @@ def fixture(path, count=257, fmt=3, variant='spread', extras=True, metadata=Fals
         else:
             xyz=[(i%17)*713,(i//17)*627,((i*17)%29-14)*113]
             if variant=='outlier' and index==count-1:xyz=[600000,-400000,300000]
+        if variant=='deep':
+            # A millimetre cluster and one far point: about 19 single-child
+            # octree levels above the cluster, beyond one document's skeleton.
+            xyz=[2000000,-1500000,1000000] if index==count-1 else [i%5,(i//5)%5,(i//25)%5]
         raw=bytearray(length);struct.pack_into('<iiiH',raw,0,*xyz,(i*251)%65536)
         if extended:
             raw[14]=(i%14+1)|((i%14+1)<<4)
@@ -275,72 +279,102 @@ def morton_xyz(index,level):
     return tuple(sum(((index>>(bit*3+axis))&1)<<bit for bit in range(level)) for axis in range(3))
 
 
+FOREST_SKELETON_HEIGHT=4
+
+
 def implicit_tree(root,members,used):
-    """Decode octree BFS/Morton availability and available-row metadata ranks."""
+    """Decode one forest implicit root: a single subtree with no child subtrees.
+
+    Octree BFS/Morton availability and available-row metadata ranks are decoded
+    from the subtree bytes. Every tile, including the root, takes its box and
+    error from its row; the level-0 row must equal the root tile bitwise.
+    """
     spec=root['implicitTiling'];require(spec['subdivisionScheme']=='OCTREE','octree profile')
-    levels=spec['subtreeLevels'];require(1<=levels<=6,'bounded subtree levels')
+    levels=spec['subtreeLevels']
+    require(1<=levels<=FOREST_SKELETON_HEIGHT,'bounded implicit root height')
+    require(spec['availableLevels']==levels,'implicit root is exactly one subtree')
+    require('children' not in root,'implicit root has explicit children')
     template=spec['subtrees']['uri'];templates=root.get('contents',[root.get('content')]);require(all(templates),'implicit content templates');nodes={}
+    require(not any(t['uri'].endswith('.json') for t in templates),'JSON content template on an implicit root')
     def uri(template,c):
         return template.format(level=c[0],x=c[1],y=c[2],z=c[3])
-    pending=[(0,0,0,0)]
-    while pending:
-        base=pending.pop();name=uri(template,base);require(name not in used,'repeated subtree');used.add(name)
-        data=members[name];magic,version,jlen,blen=unpack('4sIQQ',data)
-        require(magic==b'subt' and version==1 and 24+jlen+blen==len(data),'subtree framing')
-        doc=json.loads(data[24:24+jlen]);binary=data[24+jlen:]
-        def bits(declaration,count):
-            if 'constant' in declaration:
-                require(declaration['constant'] in (0,1),'availability constant')
-                return [bool(declaration['constant'])]*count
-            raw=view_bytes(doc,binary,declaration['bitstream']);require(len(raw)==(count+7)//8,'availability bytes')
-            values=[bool(raw[i//8]&(1<<(i%8))) for i in range(count)]
-            require(sum(values)==declaration.get('availableCount',sum(values)),'availability count')
-            require(not any(raw[i//8]&(1<<(i%8)) for i in range(count,len(raw)*8)),'availability padding')
-            return values
-        count=(8**levels-1)//7;tiles=bits(doc['tileAvailability'],count)
-        declarations=doc['contentAvailability'];declarations=declarations if isinstance(declarations,list) else [declarations]
-        require(len(declarations)==len(templates),'implicit content slot count')
-        contents=[bits(d,count) for d in declarations];children=bits(doc['childSubtreeAvailability'],8**levels)
-        require(tiles[0],'available subtree root')
-        table=doc['propertyTables'][doc['tileMetadata']];props=table['properties'];require(table['count']==sum(tiles),'metadata rank count')
-        boxes=view_bytes(doc,binary,props['boundingBox']['values']);errors=view_bytes(doc,binary,props['geometricError']['values'])
-        require(len(boxes)==sum(tiles)*96 and len(errors)==sum(tiles)*8,'semantic metadata lengths')
-        rank=0
-        for level in range(levels):
-            offset=(8**level-1)//7
-            for index in range(8**level):
-                bit=offset+index
-                require(not any(c[bit] for c in contents) or tiles[bit],'content on unavailable tile')
-                if not tiles[bit]:continue
-                if level:require(tiles[(8**(level-1)-1)//7+index//8],'availability parent')
-                xyz=morton_xyz(index,level);coord=(base[0]+level,*(base[a+1]*(1<<level)+xyz[a] for a in range(3)))
-                box=unpack('d'*12,boxes,rank*96);error=unpack('d',errors,rank*8)[0];rank+=1
-                node={'boundingVolume':{'box':box},'geometricError':error,'children':[]}
-                available=[uri(t['uri'],coord) for t,c in zip(templates,contents) if c[bit]]
-                require(len(available)==1,'one reachable point/link content per tile')
-                node['content']={'uri':available[0]}
-                require(coord not in nodes,'duplicate implicit coordinate');nodes[coord]=node
-        for index,value in enumerate(children):
-            if value:
-                require(tiles[(8**(levels-1)-1)//7+index//8],'child subtree parent')
-                xyz=morton_xyz(index,levels)
-                pending.append((base[0]+levels,*(base[a+1]*(1<<levels)+xyz[a] for a in range(3))))
+    name=uri(template,(0,0,0,0));require(name not in used,'repeated subtree');used.add(name)
+    data=members[name];magic,version,jlen,blen=unpack('4sIQQ',data)
+    require(magic==b'subt' and version==1 and 24+jlen+blen==len(data),'subtree framing')
+    doc=json.loads(data[24:24+jlen]);binary=data[24+jlen:]
+    require(doc['childSubtreeAvailability']=={'constant':0},'forest subtree has no child subtrees')
+    def bits(declaration,count):
+        if 'constant' in declaration:
+            require(declaration['constant'] in (0,1),'availability constant')
+            return [bool(declaration['constant'])]*count
+        raw=view_bytes(doc,binary,declaration['bitstream']);require(len(raw)==(count+7)//8,'availability bytes')
+        values=[bool(raw[i//8]&(1<<(i%8))) for i in range(count)]
+        require(sum(values)==declaration.get('availableCount',sum(values)),'availability count')
+        require(not any(raw[i//8]&(1<<(i%8)) for i in range(count,len(raw)*8)),'availability padding')
+        return values
+    count=(8**levels-1)//7;tiles=bits(doc['tileAvailability'],count)
+    declarations=doc['contentAvailability'];declarations=declarations if isinstance(declarations,list) else [declarations]
+    require(len(declarations)==len(templates),'implicit content slot count')
+    contents=[bits(d,count) for d in declarations]
+    require(tiles[0],'available subtree root')
+    require(any(tiles[(8**(levels-1)-1)//7:]),'availableLevels reaches an available tile')
+    table=doc['propertyTables'][doc['tileMetadata']];props=table['properties'];require(table['count']==sum(tiles),'metadata rank count')
+    boxes=view_bytes(doc,binary,props['boundingBox']['values']);errors=view_bytes(doc,binary,props['geometricError']['values'])
+    require(len(boxes)==sum(tiles)*96 and len(errors)==sum(tiles)*8,'semantic metadata lengths')
+    rank=0
+    for level in range(levels):
+        offset=(8**level-1)//7
+        for index in range(8**level):
+            bit=offset+index
+            require(not any(c[bit] for c in contents) or tiles[bit],'content on unavailable tile')
+            if not tiles[bit]:continue
+            if level:require(tiles[(8**(level-1)-1)//7+index//8],'availability parent')
+            coord=(level,*morton_xyz(index,level))
+            box=unpack('d'*12,boxes,rank*96);error=unpack('d',errors,rank*8)[0];rank+=1
+            node={'boundingVolume':{'box':box},'geometricError':error,'children':[]}
+            available=[uri(t['uri'],coord) for t,c in zip(templates,contents) if c[bit]]
+            require(len(available)==1,'one reachable point content per tile')
+            node['content']={'uri':available[0]}
+            require(coord not in nodes,'duplicate implicit coordinate');nodes[coord]=node
     for coord,node in nodes.items():
         if coord[0]:
             parent=(coord[0]-1,*(v//2 for v in coord[1:]));require(parent in nodes,'implicit parent closure');nodes[parent]['children'].append(node)
-    def resolve_links(node):
-        name=node['content']['uri']
-        if name.endswith('.json'):
-            require(name not in used and name in members,'implicit external tileset closure/cycle');used.add(name)
-            linked=json.loads(members[name])['root']
-            require('transform' not in linked,'external implicit frame')
-            require(list(linked['boundingVolume']['box'])==list(node['boundingVolume']['box']) and linked['geometricError']==node['geometricError'],'external implicit boundary semantics')
-            require(not node['children'],'external tileset link replaces boundary tile')
-            return implicit_tree(linked,members,used)
-        node['children']=[resolve_links(child) for child in node['children']]
-        return node
-    expanded=resolve_links(nodes[(0,0,0,0)]);expanded['transform']=root.get('transform',IDENTITY)
+    expanded=nodes[(0,0,0,0)]
+    # Bitwise: struct round trip of the JSON double against the row double.
+    require(struct.pack('<12d',*root['boundingVolume']['box'])==struct.pack('<12d',*expanded['boundingVolume']['box']),'level-0 row box equals the implicit root tile')
+    require(struct.pack('<d',root['geometricError'])==struct.pack('<d',expanded['geometricError']),'level-0 row error equals the implicit root tile')
+    expanded['transform']=root.get('transform',IDENTITY)
     return expanded
+
+
+def expand_forest(tile,members,used,schema,stats):
+    """Expand the bounded forest into one explicit tree.
+
+    Explicit tiles are the skeleton and its explicit leaves. A link tile is an
+    explicit tile whose only content is an explicit external tileset document;
+    the link and the document root are one tile, so the link's transform and
+    the document root's content and children compose. Implicit roots expand
+    through implicit_tree. JSON content templates are not part of the profile.
+    """
+    require('implicitChildIndex' not in tile.get('extras',{}),'written implicitChildIndex')
+    if 'implicitTiling' in tile:
+        require(schema,'implicit root in a document without the metadata schema')
+        stats['implicit_roots']+=1
+        return implicit_tree(tile,members,used)
+    name=tile.get('content',{}).get('uri','')
+    if name.endswith('.json'):
+        require(not tile.get('children') and 'contents' not in tile,'link tile has only its document')
+        require(name in members and name not in used,'external tileset closure/cycle');used.add(name)
+        document=json.loads(members[name]);linked=document['root']
+        require('transform' not in linked,'external document root frame')
+        require(list(linked['boundingVolume']['box'])==list(tile['boundingVolume']['box']) and linked['geometricError']==tile['geometricError'],'link and document root semantics')
+        stats['documents']+=1
+        node=dict(expand_forest(linked,members,used,'schema' in document,stats))
+        node['transform']=tile.get('transform',IDENTITY)
+        return node
+    stats['explicit']+=1
+    node=dict(tile);node['children']=[expand_forest(child,members,used,schema,stats) for child in tile.get('children',[])]
+    return node
 
 
 def ecef(row,height=0.):
@@ -410,8 +444,10 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
     for name in members:
         require(not name.startswith('/') and '..' not in pathlib.PurePosixPath(name).parts,'archive authority escape')
     manifest=json.loads(members['tileset.json']);report=json.loads(members['conversion.json'])
-    used={'tileset.json','conversion.json','@3dtilesIndex1@'};root=manifest['root'];implicit='implicitTiling' in root
-    if implicit:root=implicit_tree(root,members,used)
+    used={'tileset.json','conversion.json','@3dtilesIndex1@'};forest={'explicit':0,'implicit_roots':0,'documents':1}
+    root=expand_forest(manifest['root'],members,used,'schema' in manifest,forest);implicit=forest['implicit_roots']>0
+    # Cesium reads the metadata schema only from tileset.json.
+    require(('schema' in manifest)==implicit,'tileset.json schema iff an implicit root exists')
     leaves=[];tiles=0;rounding=0.
     def visit(node,parent):
         nonlocal tiles,rounding
@@ -450,7 +486,8 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
             require(distance<=error+3e-6,'parent nearest-representative error claim')
         else:
             require(error==0,'leaf geometric error');leaves.extend(ids);descendants=ids
-        # Invert admitted translation-only tile transform, including implicit shared root frame.
+        # Invert admitted translation-only tile transforms, composed through
+        # skeleton tiles, links and each implicit root's frame.
         require(m[:12]==IDENTITY[:12],'point tile translation profile')
         for index in descendants:
             require(box_contains(box,tuple(expected_positions[index][a]-m[12+a] for a in range(3))),'descendant source escapes transformed bounds')
@@ -461,7 +498,7 @@ def audit(source,archive,max_points,geographic=False,height=0.,require_multileaf
     require(report['points']==len(rows) and report['maxPoints']==max_points and report['tiles']==tiles,'required report point metrics')
     require(set(report['properties'])>=set(rows[0]),'required report fields')
     require(set(members)<=used,'unreachable resource inventory: '+str(sorted(set(members)-used)))
-    return {'source_points':len(rows),'leaf_records':len(leaves),'tiles':tiles,'implicit':implicit,'max_world_position_difference_metres':rounding,'required_fields':sorted(rows[0]),'source_multiplicity':'exact','resource_closure':'exact'}
+    return {'source_points':len(rows),'leaf_records':len(leaves),'tiles':tiles,'implicit':implicit,'forest':forest,'max_world_position_difference_metres':rounding,'required_fields':sorted(rows[0]),'source_multiplicity':'exact','resource_closure':'exact'}
 
 
 def pack_glb(doc,binary):
@@ -503,11 +540,62 @@ def controls(source,archive,max_points):
     return out
 
 
+def forest_controls(source,archive,max_points):
+    """Forest mutations, each of which this reader must reject."""
+    with zipfile.ZipFile(archive) as z:members={n:z.read(n) for n in z.namelist()}
+    documents=['tileset.json']+sorted(n for n in members if n.endswith('.json') and n not in ('tileset.json','conversion.json'))
+    require(len(documents)>1,'forest control archive has external documents')
+    def implicit_root(node):
+        if 'implicitTiling' in node:return node
+        for child in node.get('children',[]):
+            found=implicit_root(child)
+            if found:return found
+    holder=next(n for n in documents if implicit_root(json.loads(members[n])['root']))
+    def edit_document(modified,name,patch):
+        doc=json.loads(modified[name]);patch(doc);modified[name]=json.dumps(doc).encode()
+    def edit_subtree(modified,patch):
+        root=implicit_root(json.loads(modified[holder])['root'])
+        name=root['implicitTiling']['subtrees']['uri'].format(level=0,x=0,y=0,z=0)
+        data=modified[name];_,version,jlen,_=unpack('4sIQQ',data)
+        doc=json.loads(data[24:24+jlen]);binary=bytearray(data[24+jlen:]);patch(doc,binary)
+        j=json.dumps(doc,separators=(',',':')).encode();j+=b' '*((-len(j))%8)
+        modified[name]=struct.pack('<4sIQQ',b'subt',version,len(j),len(binary))+j+bytes(binary)
+    def json_template(doc):
+        root=implicit_root(doc['root']);content=root['contents'][0] if 'contents' in root else root['content']
+        content['uri']=content['uri'].rsplit('.',1)[0]+'.json'
+    def levels(doc):
+        tiling=implicit_root(doc['root'])['implicitTiling'];tiling['availableLevels']=tiling['subtreeLevels']+1
+    def child_subtree(doc,binary):doc['childSubtreeAvailability']={'constant':1}
+    def row_ulp(doc,binary):
+        table=doc['propertyTables'][doc['tileMetadata']];view=doc['bufferViews'][table['properties']['boundingBox']['values']]
+        at=view.get('byteOffset',0);struct.pack_into('<d',binary,at,math.nextafter(unpack('d',binary,at)[0],math.inf))
+    def link_box(doc):doc['root']['boundingVolume']['box'][0]+=1.
+    out=[]
+    for kind in ('json_template','levels','child_subtree','row_ulp','link_box','missing_root_schema','unreferenced_member'):
+        modified=dict(members)
+        if kind=='json_template':edit_document(modified,holder,json_template)
+        elif kind=='levels':edit_document(modified,holder,levels)
+        elif kind=='child_subtree':edit_subtree(modified,child_subtree)
+        elif kind=='row_ulp':edit_subtree(modified,row_ulp)
+        elif kind=='link_box':edit_document(modified,documents[1],link_box)
+        elif kind=='missing_root_schema':edit_document(modified,'tileset.json',lambda doc:doc.pop('schema'))
+        elif kind=='unreferenced_member':modified['implicit-content/unreferenced.glb']=next(v for n,v in members.items() if n.startswith('implicit-content/'))
+        with tempfile.TemporaryDirectory() as tmp:
+            target=pathlib.Path(tmp)/'control.3tz'
+            write_archive(target,modified)
+            try:audit(source,target,max_points)
+            except (AssertionError,KeyError,ValueError,IndexError) as error:out.append({'control':kind,'rejected':True,'reason':str(error)})
+            else:raise AssertionError('oracle accepted forest control '+kind)
+    return out
+
+
 def run(binary,output_dir,quick=False,baseline=False):
     binary=pathlib.Path(binary).resolve();directory=pathlib.Path(output_dir);directory.mkdir(parents=True,exist_ok=True)
     results=[];controls_result=[]
     cases=[(3,'spread',False,11),(3,'spread',True,11),(3,'identical',True,3),(3,'outlier',False,1),(3,'reordered',True,17)]
     cases.append((3,'spread',True,11,1))
+    # A chain deeper than one document's skeleton: links and external documents.
+    cases.append((3,'deep',True,11))
     if not quick:cases.extend((fmt,'spread',implicit,3) for fmt in FORMATS if fmt!=3 for implicit in (False,True))
     for number,case in enumerate(cases):
         fmt,variant,implicit,chunk=case[:4];budget=case[4] if len(case)>4 else 16
@@ -518,6 +606,10 @@ def run(binary,output_dir,quick=False,baseline=False):
         require(completed.returncode==0,'conversion failed: '+completed.stdout+completed.stderr)
         result=audit(source,archive,budget);result.update(format=fmt,variant=variant,chunk_points=chunk,max_points=budget);results.append(result)
         if number==0:controls_result=controls(source,archive,16)
+        if variant=='deep':controls_result=controls_result+forest_controls(source,archive,budget)
+    forests=[r['forest'] for r in results if r['implicit']]
+    require(any(f['explicit'] and f['implicit_roots']>1 for f in forests),'implicit roots below an explicit skeleton were exercised')
+    require(any(f['documents']>1 for f in forests),'explicit external documents were exercised')
     profile=profile_controls(binary,directory,baseline)
     repeated=concurrent_controls(binary,directory)
     return {'binary':str(binary),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cases':results,'negative_controls':controls_result,'profile_controls':profile,'concurrent_repeated_controls':repeated,'oracle_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()}
@@ -680,12 +772,12 @@ def self_test():
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--binary');parser.add_argument('--self-test',action='store_true');parser.add_argument('--laz-python',help='Python with laspy/lazrs, required when claiming LAZ acceptance');parser.add_argument('--output-dir');parser.add_argument('--json-output');parser.add_argument('--quick',action='store_true');parser.add_argument('--baseline',action='store_true');parser.add_argument('--fixture');parser.add_argument('--format',type=int,default=3)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--binary');parser.add_argument('--self-test',action='store_true');parser.add_argument('--laz-python',help='Python with laspy/lazrs, required when claiming LAZ acceptance');parser.add_argument('--output-dir');parser.add_argument('--json-output');parser.add_argument('--quick',action='store_true');parser.add_argument('--baseline',action='store_true');parser.add_argument('--fixture');parser.add_argument('--format',type=int,default=3);parser.add_argument('--variant',default='spread',choices=('spread','identical','reordered','outlier','deep'))
     args=parser.parse_args()
     if args.self_test:print(json.dumps(self_test(),indent=2));return
     self_test()
     if args.fixture:
-        records=fixture(args.fixture,fmt=args.format);print(json.dumps({'points':len(records['rows']),'format':records['format']}));return
+        records=fixture(args.fixture,fmt=args.format,variant=args.variant);print(json.dumps({'points':len(records['rows']),'format':records['format']}));return
     require(args.binary,'--binary required; absent binary never skips acceptance')
     if args.output_dir:result=run(args.binary,args.output_dir,args.quick,args.baseline)
     else:

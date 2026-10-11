@@ -1,0 +1,33 @@
+{
+ "script": "619cf35123464f5a8eab3947079f5777544f1719d0c6282bdebac8d44e7f66d4",
+ "checker": "76dbf281389c1aee701e08a9ad35aa15ea36cb3f7a5149ad3dd342fedc91a5f2",
+ "archives": {
+  "develop": {
+   "path": "develop-native/W3-pc-deep.3tz",
+   "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
+   "tiles": 2440,
+   "documentsFollowed": 208,
+   "contents": 2233,
+   "distinctKeys": 2233,
+   "ambiguousKeys": 0
+  },
+  "head": {
+   "path": "head-native/W3-pc-deep.3tz",
+   "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+   "tiles": 2233,
+   "documentsFollowed": 1,
+   "contents": 2233,
+   "distinctKeys": 2233,
+   "ambiguousKeys": 0
+  }
+ },
+ "views": 16,
+ "leaves": 1953,
+ "usableLeaves": 1953,
+ "keysInEveryLayout": 2233,
+ "keysPerLayout": {
+  "develop": 2233,
+  "head": 2233
+ },
+ "base": "develop"
+}
