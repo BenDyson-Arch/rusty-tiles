@@ -1098,6 +1098,31 @@ Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publ
 
 ### Integration amendments (combined I1 + P branch)
 
+- **Performance obligation (final review E3).** The base this obligation names, "the combined branch
+  with I1's validator commits reverted", refuses every forest archive, so under the lane rule
+  nothing could ever be flagged. It is replaced by two parts.
+  - **Lane comparison.** The develop-base perf lane, already recorded in
+    `bench/architecture_audit/implicit_layout/acceptance/` §4: `process.py`, develop `766b92b`
+    against the combined head, `--repeat 3`, CPUs 0 and 1, with `gate.regressions = []`
+    (`validate:vector` 0.160 → 0.100 s, RSS 88.3 → 87.0 MiB).
+  - **Absolute measurement of the gating case**: `validate` on a forest archive whose validation
+    takes at least 0.4 s. The archive is mf2-lod3 at the combined head (12,718 tiles,
+    189 documents, 14,321 visits). It ran 5 times in alternating order on CPUs 0 and 1, at most
+    0.06 s foreign CPU per run (0.008 s at the best run) (`acceptance/e3-validate-perf.json`):
+    - best wall 1.007 s, best CPU 1.002 s;
+    - peak RSS 100.9 MiB (`os.wait4`; the measuring parent stayed at 33 MiB).
+    - For context only, on a different archive: develop validating its own default mf2-lod3
+      output takes 2.086 s and 182.4 MiB.
+  - **No same-archive comparison exists at this scale.** Develop refuses every forest archive, and
+    both validators refuse the `--explicit` mf2-lod3 archive at the 131,072 JSON value-node limit
+    (its single `tileset.json` is too large; that is the limit the forest's documents address).
+  - Later slices judge a validation regression against these absolute values with the lane's rule:
+    1.25× plus a 0.1 s floor for wall time and 16 MiB for RSS.
+- **R3 memory (final review E2).** Measured with `os.wait4` on the release head
+  (`acceptance/r3-rss.json`, 5 runs each):
+  - R3.L8 peaks at 86.5 MiB and R3.L32 at 86.2 MiB, against W1's 87.6 MiB;
+  - both are within the "16 MiB of W1" bound, and both refuse at §2a step 9.
+
 - **Link tiles and external documents in recorded budgets (P delta review D-1, D-2; PD-13).**
   `budgets.tiles` is compared against the producer hierarchy, so tiles whose only content is an
   external tileset document (P's link tiles) are not counted. External tileset `.json` members do

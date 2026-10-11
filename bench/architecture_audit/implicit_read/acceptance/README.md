@@ -142,8 +142,7 @@ fixed.**
 | R2 / R2-1 | Accepted / ResourceLimit before the sixth read | Agrees (refused at `subtrees/5/0/0.subtree`) | < 0.01 s |
 | R3.L8 / R3.L32 | ResourceLimit at step 9 | ResourceLimit:hierarchy_visits | < 0.01 s |
 
-The per-control RSS (R3 within 16 MiB of W1) and the implementation mutants (contract §D) were
-not run here.
+R3's RSS bound and the §D implementation mutants are in "Final review evidence" below.
 
 ## 2. W corpus W1–W11
 
@@ -219,13 +218,56 @@ The producer artifacts and the release binaries used for sections 1 and 2 are fr
 The merged changes do not touch producers (`5ffbf71` changes validation only), and the merged
 parity runs in this follow-up exercise validation at the merged head.
 
+## Final review evidence (E1–E3)
+
+These runs follow N's final source review (ACCEPT-WITH-FIXES, `final-source-review.md` sha256
+`b8a35c2a…`).
+
+**E1: §D implementation mutants** (`production-mutants/`, `report.json`). The 35 hashed patches
+were run against `387a7bb` through this harness and the I1 unit tests, with a clean baseline of
+181/181 controls, 41/41 corpus artifacts and all unit tests passing.
+- **28** flip their paired control. That includes R7 > 60 s for no source memoization and
+  R8a > 300 s for per-emission resolution.
+- **3** are caught only by other controls.
+- **4 flip no parity control, which are failed controls under §D.** Their unit tests or probes
+  catch them, so no mutant escapes both. The four are drop-content-implies-tile (A-6),
+  ge-vs-gt-on-A (A-8), reservation-after-rank-table (R5b) and per-table-class-scan.
+  per-table-class-scan leaves R7c Accepted in 17.4 s: that breaks the 5 s bound but not the
+  60 s timeout. Diagnoses are in `production-mutants/README.md`.
+
+**E2: R3 memory** (`r3-rss.json`; `os.wait4` on the release head `60584d3d…`, 5 runs each).
+
+| Case | Peak RSS | Against W1's 87.6 MiB |
+| --- | --- | --- |
+| R3.L8 | 86.5 MiB | −1.1 MiB |
+| R3.L32 | 86.2 MiB | −1.4 MiB |
+
+Both are within the 16 MiB bound, and both refuse at §2a step 9.
+
+**E3: perf obligation, amended in the contract** (`e3-validate-perf.json`; CPUs 0 and 1, quiet;
+5 runs in alternating order). `validate` on the mf2-lod3 forest (12,718 tiles, 14,321 visits)
+takes:
+- best wall 1.007 s and CPU 1.002 s;
+- peak RSS 100.9 MiB.
+
+For context, develop on its own default mf2-lod3 archive takes 2.086 s and 182.4 MiB.
+
+Both validators refuse the `--explicit` mf2-lod3 archive at the JSON value-node limit, so no
+same-archive comparison exists.
+
+**A measurement pitfall, recorded for future runs.** On Linux, a child's `ru_maxrss` includes its
+parent's high-water mark at spawn.
+- The first E3 run hashed the archives in memory and reported a constant 177.55 MiB for every
+  case. That was the parent's footprint.
+- The script now streams its hashes and records the parent's own peak (33 MiB).
+- R3's parent read only small files, and its values match `/proc` `VmHWM` sampling.
+- The perf lane streams its hashes. Its lowest recorded RSS (46.5 MiB) bounds any inherited floor,
+  so its A/B differences are unaffected.
+
 ## Not established here
 
-- Implementation mutants (contract §D).
-- R3's RSS bound.
 - Python, wheel and Blender parity (§F).
 - mf2-lod16 and the 32-level bound on production output.
-- Exact-head CI.
+- Exact-head CI: Python, wheel, `python-free-runtime`, release acceptance.
 
-The I1 perf obligation is recorded with the P lane in
-`../../implicit_layout/acceptance/`. Nothing here claims release readiness.
+Nothing here claims release readiness.
