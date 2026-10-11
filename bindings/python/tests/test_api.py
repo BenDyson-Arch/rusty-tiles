@@ -1251,7 +1251,7 @@ class WheelAPI(unittest.TestCase):
             {key: report["limits"][key] for key in (
                 "containmentSpanBits", "containmentWorkUnits", "containmentBytesRead",
                 "containmentDecodedBytes", "containmentNodeDepth")},
-            {"containmentSpanBits": 4096, "containmentWorkUnits": 2**32,
+            {"containmentSpanBits": 4096, "containmentWorkUnits": 2**28,
              "containmentBytesRead": 2**31, "containmentDecodedBytes": 2**31,
              "containmentNodeDepth": 64},
         )
