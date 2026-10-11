@@ -1,0 +1,24 @@
+--- a/oracle/c2o/gltf.py
++++ b/oracle/c2o/gltf.py
+@@ -333,7 +333,7 @@
+             scale, k = F32_SCALE, 1
+         elif normalized:
+             k = NORMALIZER[word]
+-            scale = Fraction(1, k)
++            scale = Fraction(1, 2 ** 1100)
+         else:
+             scale, k = Fraction(1), 1
+ 
+--- a/oracle/c2o/gltf.py
++++ b/oracle/c2o/gltf.py
+@@ -345,8 +345,8 @@
+                     v = tuple(f32_scaled(b) for b in comps)
+                     if None in v:
+                         raise PayloadError("non-finite POSITION value in %s" % self.member)
+-                elif normalized and word in ("i8", "i16"):
+-                    v = tuple(max(c, -k) for c in comps)
++                elif normalized:
++                    v = tuple(int(Fraction(max(c, -k) / k) * 2 ** 1100) for c in comps)
+                 else:
+                     v = tuple(comps)
+                 out[i] = v

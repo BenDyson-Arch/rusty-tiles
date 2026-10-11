@@ -1,0 +1,233 @@
+{
+ "fixtures": 235,
+ "mutants": [
+  {
+   "flipped": 124,
+   "flippedExamples": [
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside",
+    "W01-noRTC-variant",
+    "W01-noRTC-variant~ulp-L0-content-r0",
+    "W01-noRTC-variant~ulp-L0-content-r1",
+    "W01-noRTC-variant~ulp-L0-content-r2",
+    "W01-noRTC-variant~ulp-L1-ancestor-r0",
+    "W01-noRTC-variant~ulp-L1-ancestor-r1",
+    "W01-noRTC-variant~ulp-L1-ancestor-r2",
+    "W02-selected-scene-one-not-zero",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r0",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r1",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r2"
+   ],
+   "mutant": "omit-U",
+   "namedFixture": "W12-TRS-half-turn-order",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/omit-U.patch",
+   "patchSha256": "2ab960fe315b482762d3e0d53032ae7fb193fcc2b63f9c852ce9b4a047aea399"
+  },
+  {
+   "flipped": 124,
+   "flippedExamples": [
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside",
+    "W01-noRTC-variant",
+    "W01-noRTC-variant~ulp-L0-content-r0",
+    "W01-noRTC-variant~ulp-L0-content-r1",
+    "W01-noRTC-variant~ulp-L0-content-r2",
+    "W01-noRTC-variant~ulp-L1-ancestor-r0",
+    "W01-noRTC-variant~ulp-L1-ancestor-r1",
+    "W01-noRTC-variant~ulp-L1-ancestor-r2",
+    "W02-selected-scene-one-not-zero",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r0",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r1",
+    "W02-selected-scene-one-not-zero~ulp-L0-content-r2"
+   ],
+   "mutant": "double-U",
+   "namedFixture": "W12-TRS-half-turn-order",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/double-U.patch",
+   "patchSha256": "2e61da94c3da4f7c48f7de3c7b105586a9cafa3c7d4eb81f094395ba77a95471"
+  },
+  {
+   "flipped": 18,
+   "flippedExamples": [
+    "W01-noRTC-variant",
+    "W11-external-tileset-root-in-chain",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r0",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r1",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r2",
+    "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r0",
+    "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r1",
+    "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r2",
+    "identity-node-equivalence-identity-TRS",
+    "identity-node-equivalence-identity-matrix",
+    "identity-node-equivalence-mesh-only",
+    "work-base-meshopt"
+   ],
+   "mutant": "reverse-tile-order",
+   "namedFixture": "W01-noRTC-variant",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/reverse-tile-order.patch",
+   "patchSha256": "d11abbfa1451e890c506035cb0abbf3524476618449c26c1d635d8eaa3094ed7"
+  },
+  {
+   "flipped": 2,
+   "flippedExamples": [
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside",
+    "W04-unreferenced-indexed-outlier"
+   ],
+   "mutant": "test-undrawn-vertices",
+   "namedFixture": "W04-unreferenced-indexed-outlier",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/test-undrawn-vertices.patch",
+   "patchSha256": "ff699d74ca313accd94e2c66c3f743e77c035509febe7596192398dc35d36154"
+  },
+  {
+   "flipped": 4,
+   "flippedExamples": [
+    "W06-quantized-U16-normalized-node-dequant",
+    "W06-quantized-U16-normalized-node-dequant~ulp-L0-content-r0",
+    "W06-quantized-U16-normalized-node-dequant~ulp-L0-content-r1",
+    "W06-quantized-U16-normalized-node-dequant~ulp-L0-content-r2"
+   ],
+   "mutant": "rounded-normalized-quotient",
+   "namedFixture": "W06-quantized-U16-normalized-node-dequant",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/rounded-normalized-quotient.patch",
+   "patchSha256": "480d9280b29c679ac3d2bfa9fe87fe62d66635d38bc353177da52dab67ff1773"
+  },
+  {
+   "flipped": 168,
+   "flippedExamples": [
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-content-r0",
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-content-r1",
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-content-r2",
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-own-r0",
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-own-r1",
+    "EXT_mesh_polygon-undrawn-loop-vertex-outside~ulp-L0-own-r2",
+    "W01-noRTC-variant~ulp-L0-content-r0",
+    "W01-noRTC-variant~ulp-L0-content-r1",
+    "W01-noRTC-variant~ulp-L0-content-r2",
+    "W01-noRTC-variant~ulp-L0-own-r0",
+    "W01-noRTC-variant~ulp-L0-own-r1",
+    "W01-noRTC-variant~ulp-L0-own-r2"
+   ],
+   "mutant": "add-1e-6-slack",
+   "namedFixture": "W12-TRS-half-turn-order~ulp-L0-own-r0",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/add-1e-6-slack.patch",
+   "patchSha256": "0a100195559d14ab96cec93219d03d15eba8396979cf98ed5e092da2d49aadc8"
+  },
+  {
+   "flipped": 31,
+   "flippedExamples": [
+    "W06-quantized-U16-normalized-node-dequant~ulp-L0-content-r1",
+    "W06-quantized-U16-normalized-node-dequant~ulp-L0-own-r1",
+    "W13-valid-local-TRS-cumulative-shear",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r0",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r1",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r2",
+    "identity-node-equivalence-identity-TRS~ulp-L0-content-r1",
+    "identity-node-equivalence-identity-TRS~ulp-L0-content-r2",
+    "identity-node-equivalence-identity-TRS~ulp-L0-own-r1",
+    "identity-node-equivalence-identity-TRS~ulp-L0-own-r2",
+    "identity-node-equivalence-identity-TRS~ulp-L1-ancestor-r1",
+    "identity-node-equivalence-identity-TRS~ulp-L1-ancestor-r2"
+   ],
+   "mutant": "rounded-f64-point-as-exact",
+   "namedFixture": "W13-valid-local-TRS-cumulative-shear",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/rounded-f64-point-as-exact.patch",
+   "patchSha256": "2cf81ab1104cccb311bb45285a75dd30495649a9dbbf6bc8507647216d747162"
+  },
+  {
+   "flipped": 25,
+   "flippedExamples": [
+    "W01-noRTC-variant~ulp-L1-ancestor-r0",
+    "W01-noRTC-variant~ulp-L1-ancestor-r1",
+    "W01-noRTC-variant~ulp-L1-ancestor-r2",
+    "W11-external-tileset-root-in-chain~ulp-L1-ancestor-r0",
+    "W11-external-tileset-root-in-chain~ulp-L1-ancestor-r1",
+    "W11-external-tileset-root-in-chain~ulp-L1-ancestor-r2",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r0",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r1",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r2",
+    "external-content-volume-contains~ulp-L1-ancestor-r0",
+    "external-content-volume-contains~ulp-L1-ancestor-r1",
+    "external-content-volume-contains~ulp-L1-ancestor-r2"
+   ],
+   "mutant": "skip-ancestors",
+   "namedFixture": "W11-external-tileset-root-in-chain~ulp-L1-ancestor-r0",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/skip-ancestors.patch",
+   "patchSha256": "bdc5ec5d925e1051fce5237f5bc7082a636b231813c4028c53fe41e2510c8791"
+  },
+  {
+   "flipped": 4,
+   "flippedExamples": [
+    "W11-external-tileset-root-in-chain",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r0",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r1",
+    "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r2"
+   ],
+   "mutant": "skip-external-root-transform",
+   "namedFixture": "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r0",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/skip-external-root-transform.patch",
+   "patchSha256": "78a8d0a271afbb7ac6ef6cd15edd588c7a173361eb112a7ed88fe27e01878541"
+  },
+  {
+   "flipped": 1,
+   "flippedExamples": [
+    "same-URI-other-reference-outside"
+   ],
+   "mutant": "reuse-URI-cache-for-verdicts",
+   "namedFixture": "same-URI-other-reference-outside",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/reuse-URI-cache-for-verdicts.patch",
+   "patchSha256": "e2025cf85744496829d0c17540943bdc2b8a3e0028afbe3530cdf7a4b06e84e0"
+  },
+  {
+   "flipped": 1,
+   "flippedExamples": [
+    "ambiguous-scene-no-default"
+   ],
+   "mutant": "default-to-scene-0",
+   "namedFixture": "ambiguous-scene-no-default",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/default-to-scene-0.patch",
+   "patchSha256": "09d73a0b0f7803f994c0ab33d2d3f4c393abc3166d408ca25f4a1713e300964e"
+  },
+  {
+   "flipped": 30,
+   "flippedExamples": [
+    "W13-valid-local-TRS-cumulative-shear",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r0",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r1",
+    "W13-valid-local-TRS-cumulative-shear~ulp-L0-content-r2",
+    "identity-node-equivalence-identity-TRS",
+    "identity-node-equivalence-identity-TRS~ulp-L0-content-r0",
+    "identity-node-equivalence-identity-TRS~ulp-L0-content-r1",
+    "identity-node-equivalence-identity-TRS~ulp-L0-content-r2",
+    "identity-node-equivalence-identity-TRS~ulp-L1-ancestor-r0",
+    "identity-node-equivalence-identity-TRS~ulp-L1-ancestor-r1",
+    "identity-node-equivalence-identity-TRS~ulp-L1-ancestor-r2",
+    "identity-node-equivalence-identity-matrix"
+   ],
+   "mutant": "raw-quaternion-polynomial",
+   "namedFixture": "W13-valid-local-TRS-cumulative-shear",
+   "namedFixtureFlips": true,
+   "pass": true,
+   "patch": "oracle/mutants/patches/raw-quaternion-polynomial.patch",
+   "patchSha256": "3d836edfa6a3f438a4af2389111084db301d6993732f9fc3dcf6ffcf91c3d92f"
+  }
+ ]
+}

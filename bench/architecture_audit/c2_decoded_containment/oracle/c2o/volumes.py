@@ -120,6 +120,7 @@ class LevelTest:
         for alpha, beta in terms:
             rows.append(([int(a * dens) for a in alpha], int(beta * dens)))
         self.rows = rows
+        self.dens = dens
         if vol.kind == "box":
             self.bounds = [int(vol.h[j] * dens) for j in range(3)]
         else:

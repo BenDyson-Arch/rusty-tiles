@@ -1,0 +1,11 @@
+--- a/oracle/c2o/check.py
++++ b/oracle/c2o/check.py
+@@ -53,7 +53,7 @@
+     "maxVertexLevelTests": 200_000_000,
+ }
+ 
+-U = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
++U = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+ 
+ 
+ def ceil_div(a, b):

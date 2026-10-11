@@ -80,6 +80,7 @@ class _Frame:
         self.volume = volume
         self.transform = transform  # raw 16 numbers or None
         self.external_content = external_content  # (volume, where) or None
+        self.external_root = False  # root tile of an external tileset
 
 
 def _transform(tile, where):
@@ -170,6 +171,7 @@ class Traversal:
             if "metadata" in tile:
                 self.exclude("tileMetadata", where + ".metadata")
             frame = _Frame(tile, where, volume, _transform(tile, where), None)
+            frame.external_root = bool(stack) and depth == len(stack)
             path.append(frame)
             implicit = "implicitTiling" in tile
             if implicit:
@@ -199,6 +201,7 @@ class Traversal:
                     outer = list(path)
                     outer[-1] = _Frame(tile, where, volume, frame.transform,
                                        (cvol, cwhere) if cvol is not None else None)
+                    outer[-1].external_root = frame.external_root
                     self._tileset(target, outer, documents + [target])
                 else:
                     self._reference(target, uri, cwhere, path, cvol)
