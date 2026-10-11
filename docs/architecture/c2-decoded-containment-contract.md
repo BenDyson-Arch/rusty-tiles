@@ -166,10 +166,14 @@ The tileset allowlist has a single entry: `3DTILES_content_gltf_vector`, written
 - `rotation` must have finite components in [−1, 1] and be nonzero.
 - `translation` and `scale` must be finite.
 
-**Numbers.** Every number is the nearest binary64 value of the JSON text. A literal that
-overflows binary64 never reaches C2: C1's JSON admission refuses it as Unsupported (finite
-owned-document representation), in tileset and glTF JSON alike. This corrects the v3 text, which
-said InvalidInput; the oracle's `tileset-number-overflow` fixture executed the actual C1 kind.
+**Numbers.** Every number is the nearest binary64 value of the JSON text. Overflow
+outcomes differ by document. Tileset JSON is parsed into a value by C1, which refuses a
+literal that overflows binary64 as Unsupported ("JSON exceeds finite owned-document
+representation"); the oracle's `tileset-number-overflow` fixture executed this. glTF JSON is
+admitted without a value tree, so an overflowing node `matrix`/`translation`/`rotation`/`scale`
+component or accessor `min`/`max` bound is InvalidInput at node or accessor admission. This
+corrects the v3 text (InvalidInput everywhere) and the first v3.3 correction (Unsupported
+everywhere).
 
 **Not checked.** Matrix TRS-decomposability and local no-shear are not policed (D2(iii)).
 
