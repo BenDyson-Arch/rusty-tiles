@@ -1227,4 +1227,41 @@ mod tests {
         assert_eq!(p.rectangles().len(), 25);
         assert!(p.rectangles().iter().all(|r| r.reserved == [0; 3]));
     }
+
+    /// Documented bound: the 2 GiB finest RGBA ceiling admits 8192 finest
+    /// tiles. A two-tile-wide strip straddling the z1 boundary on both axes
+    /// reaches 16451 tiles over zooms 0..=24; a separate exhaustive count over
+    /// w*h <= 8192 shapes (nonauthor review of #156) found no larger pyramid.
+    #[test]
+    fn finest_rgba_ceiling_bounds_default_pyramid_tile_count() {
+        let tile = 256.0 * power_of_two(-7 - 24).unwrap() * H;
+        let first = f64::from((1u32 << 23) - 1) + 0.25;
+        let strip = |columns: f64| {
+            plan(
+                StaticCrs::WebMercator3857,
+                [
+                    -H + first * tile,
+                    (columns - 0.5) * tile,
+                    0.0,
+                    H - first * tile,
+                    0.0,
+                    -4095.5 * tile,
+                ],
+                [1, 1],
+                ZoomRange::new(0, 24).unwrap(),
+                caps(),
+            )
+        };
+        let p = strip(2.0).unwrap();
+        let r = p.finest_rect();
+        assert_eq!([r.x0, r.y0], [(1 << 23) - 1; 2]);
+        assert_eq!([r.x1 - r.x0 + 1, r.y1 - r.y0 + 1], [2, 4096]);
+        assert_eq!(p.finest_rgba_bytes(), 2 * 1024 * 1024 * 1024);
+        assert_eq!(p.total_tiles(), 16_451);
+        assert!(p.total_tiles() < caps().max_total_tiles);
+        assert_eq!(
+            strip(3.0).unwrap_err(),
+            GridError::ResourceLimit("finest RGBA bytes exceed limit")
+        );
+    }
 }

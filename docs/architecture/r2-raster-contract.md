@@ -41,6 +41,10 @@ EPSG:3857 within represented H0 = `20037508.342789244`. Finite nonsingular
 source affines receive a bounded outward corner enclosure. Source dimensions
 are at most 65536 each. Checked target dimensions fit native i32 and at most
 2 GiB finest RGBA; the source ceiling does not impose another target ceiling.
+That ceiling admits at most 8192 finest 256x256 tiles, and with integer
+ancestors a pyramid over zooms 0 through 24 has at most 16451 tiles (a
+two-tile-wide finest strip), so the default tile cap of 100000 never refuses
+a request the ceiling admits.
 Finest coverage is calculated once and coarse addresses are integer ancestors.
 An exact supplied target geotransform is created before Warp into the existing
 destination, avoiding extent/size resolution recomputation. Each requested zoom
@@ -55,7 +59,7 @@ overviews do not define the coarse sample phase.
 One `RasterLimits` owns six positive caps: aggregate source 512 MiB, source
 pixels 268435456, decoded source 2 GiB, tiles 100000, completed encoded output
 8 GiB and logical working allowance 16 GiB. Workers default to two, supported
-one through four. Fixed ceilings include 32 bands, five leaves, 1 MiB companion
+one through four, and resolve to min(requested, available CPUs). Fixed ceilings include 32 bands, five leaves, 1 MiB companion
 text, XML depth 64 and 65536 visited nodes, native blocks of 1048576 pixels and
 16 MiB decoded, zoom 24 and 16 KiB each for TileJSON/report. Post-open native
 metadata/block refusal does not imply zero allocation. Completed-file caps are

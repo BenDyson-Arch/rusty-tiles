@@ -114,12 +114,17 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
                         "tiles": 4, "sourceBands": if recipe.name == "raster-gray" { 1 } else { 3 }
                     })
                 );
+                // Documented resolution: min(requested --jobs 2, available
+                // CPUs); the child inherits this process's CPU affinity.
+                let workers = std::thread::available_parallelism().map_or(1, |n| n.get().min(2));
                 assert_eq!(
                     summary["settings"],
                     serde_json::json!({
-                        "minZoom": 9, "maxZoom": 11, "workers": 2
+                        "minZoom": 9, "maxZoom": 11, "workers": workers
                     })
                 );
+                assert_eq!(published["requested_workers"], 2);
+                assert_eq!(published["resolved_workers"], workers);
             }
             // Single files without counts report their size.
             _ => assert!(first.ends_with(" MiB)"), "{first}"),
