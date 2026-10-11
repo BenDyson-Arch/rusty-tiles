@@ -928,6 +928,7 @@
           "accessorValues",
           "primitiveIndices",
           "hierarchyBounds",
+          "implicitAddressingAndAvailability",
           "geometricErrorOrder",
           "resourceReferences",
           "recordedBudgets"
@@ -941,10 +942,10 @@
           "decodedContentBounds.implicitTiling",
           "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
-          "implicitAddressingAndAvailability",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
+          "recordedBudgets.implicitTileExtras",
           "scene transforms",
           "skins, animations, morph targets and rendered extent"
         ],
@@ -1026,6 +1027,7 @@
           "accessorValues",
           "primitiveIndices",
           "hierarchyBounds",
+          "implicitAddressingAndAvailability",
           "geometricErrorOrder",
           "resourceReferences",
           "recordedBudgets"
@@ -1039,10 +1041,10 @@
           "decodedContentBounds.implicitTiling",
           "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
-          "implicitAddressingAndAvailability",
           "materialAndImageSemantics",
           "metadata and feature semantics",
           "metadataSemantics",
+          "recordedBudgets.implicitTileExtras",
           "scene transforms",
           "skins, animations, morph targets and rendered extent"
         ],
