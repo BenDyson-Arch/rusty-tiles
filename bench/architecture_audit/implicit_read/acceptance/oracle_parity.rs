@@ -23,15 +23,9 @@ const ROOT: &str = "bench/architecture_audit/implicit_read";
 /// exact production outcome observed. They are reported, never counted as agreement, and the test
 /// fails if one changes. Production defects are never listed here. Z-payload was fixed by the
 /// i1/oracle amendment `2ecbad1`; C-11b remains (below).
-const O_SIDE: &[(&str, &str, &str)] = &[(
-    "C-11b",
-    "InvalidInput",
-    "O models geometricErrorOrder against the path-parent tile only; production (unchanged \
-     from develop) also bounds each document root by that document's top-level \
-     geometricError. The amended fixture's root is 500 under a top-level 400, so production \
-     refuses at error order before OD-7. With the top-level raised to 500 both give \
-     Unsupported \"repeated subtree member\"",
-)];
+// C-11b was the only O-side difference; oracle amendment 4 (1d2b5e9) fixed its
+// document-level geometricError, so production and oracle now agree on every case.
+const O_SIDE: &[(&str, &str, &str)] = &[];
 
 /// The oracle's frozen `DEFAULT_LIMITS` (`oracle/i1_oracle.py:29-39`, pre-#160 values). Parity
 /// runs production under the same ceilings O decided with; `I1_PRODUCTION_DEFAULTS=1` instead

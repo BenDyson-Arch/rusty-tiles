@@ -8,6 +8,8 @@ test-only `#[cfg(test)] #[path]` include in `src/lib.rs`, which follows C2's pat
 **Result at e3a67bf: FAIL.** One production defect (B-10.subnormal) remained. Every other case
 agreed, or differed for a diagnosed O-side reason.
 
+**Final result (`3c2f81a` + oracle amendment 4 `1d2b5e9`): PASS, 181/181 controls agree, 0 O-side differences, 0 production disagreements, 0 skipped** (`parity-final.json`, release, large controls generated). Oracle amendment 4 raised C-11b's referencing document's top-level `geometricError` and added the document-level error rule and control T-4; the harness's O-side list is now empty.
+
 **Result after the follow-ups (`ce9838e` plus this record): PASS, 179/180, with 1 diagnosed
 O-side difference and 0 production disagreements.** See "Follow-up" below.
 
