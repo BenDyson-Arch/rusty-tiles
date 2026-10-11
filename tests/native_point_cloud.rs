@@ -540,7 +540,7 @@ fn doctor_reports_native_local_readiness_without_python_and_keeps_other_requirem
         Some(if cfg!(feature = "native-geospatial") {
             0
         } else {
-            4
+            2 // raster/terrain are unsupported by the portable build
         })
     );
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();

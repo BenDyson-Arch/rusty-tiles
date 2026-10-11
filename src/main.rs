@@ -184,23 +184,27 @@ struct ModelManifestArgs {
     placement: RigidPlacementArgs,
 }
 
-fn doctor_commands() -> PossibleValuesParser {
+fn doctor_commands() -> impl clap::builder::TypedValueParser<Value = doctor::Command> {
+    use clap::builder::TypedValueParser;
     PossibleValuesParser::new(
-        doctor::COMMANDS
-            .iter()
-            .map(|(name, aliases)| PossibleValue::new(*name).aliases(aliases.iter().copied())),
+        doctor::Command::ALL
+            .map(|command| PossibleValue::new(command.name()).aliases(command.aliases())),
     )
+    .map(|name| doctor::Command::from_name(&name).expect("clap admits only doctor commands"))
 }
 
 #[derive(Args)]
 struct DoctorArgs {
     /// Check only these converters; repeat to select several
     #[arg(long = "command", value_parser = doctor_commands())]
-    commands: Vec<String>,
+    commands: Vec<doctor::Command>,
     /// Cesium Build/Cesium directory to look for (informational preview check;
-    /// defaults to the README install location)
-    #[arg(long)]
-    cesium: Option<PathBuf>,
+    /// the default is the README install location relative to the working directory)
+    #[arg(
+        long,
+        default_value = "target/preview-runtime/node_modules/cesium/Build/Cesium"
+    )]
+    cesium: PathBuf,
 }
 
 #[derive(Args)]
@@ -651,7 +655,10 @@ fn main() -> ExitCode {
     match run(cli, &reporter) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {
             println!("{report}");
-            ExitCode::from(4)
+            let code = report["exitCode"]
+                .as_u64()
+                .and_then(|c| u8::try_from(c).ok());
+            ExitCode::from(code.unwrap_or(4))
         }
         Ok(outcome) => {
             reporter.progress("conversion", 1, 1);
@@ -1066,24 +1073,46 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             Outcome::Report(serde_json::to_value(report)?)
         }
         Command::Doctor(a) => {
-            let report = doctor::report(&a.commands, a.cesium.as_deref())?;
+            let report = doctor::report(&a.commands, Some(&a.cesium));
+            // Unavailable runtime dependencies outrank build-unsupported commands.
+            let failure = match report.status {
+                doctor::Status::Ready => None,
+                doctor::Status::Unavailable => Some((
+                    "environment",
+                    4,
+                    "selected commands have unavailable runtime dependencies",
+                )),
+                doctor::Status::Unsupported => Some((
+                    "unsupported",
+                    2,
+                    "selected commands are not supported by this build",
+                )),
+            };
             if json {
-                let mut report = report;
-                report["ok"] = report["ready"].clone();
-                if report["ready"] != true {
+                let mut value = serde_json::to_value(&report)?;
+                value["ok"] = report.ready.into();
+                if let Some((code, exit, message)) = failure {
                     // Include the inventory in the single error result.
-                    report["error"] = json!({"code":"environment","message":"selected converters have missing dependencies"});
-                    report["exitCode"] = 4.into();
+                    value["error"] = json!({"code":code,"message":message});
+                    value["exitCode"] = exit.into();
                 }
-                return Ok(Outcome::Report(report));
+                return Ok(Outcome::Report(value));
             }
-            doctor::display(&report, false);
-            if report["ready"] != true {
-                return Err(Error::Environment(
-                    "selected converters have missing dependencies; see doctor report".into(),
-                ));
-            }
-            Outcome::Done
+            println!("{report}");
+            let message =
+                |(_, _, message): (&str, u8, &str)| format!("{message}; see doctor report");
+            return match (report.status, failure.map(message)) {
+                (doctor::Status::Unavailable, Some(message)) => Err(Error::Environment(message)),
+                (doctor::Status::Unsupported, Some(message)) => {
+                    Err(Error::Job(rusty_tiles::JobFailure {
+                        error: JobError::new(JobErrorKind::Unsupported, message),
+                        secondary: Vec::new(),
+                        retained_paths: Vec::new(),
+                        recovery: None,
+                    }))
+                }
+                _ => Ok(Outcome::Done),
+            };
         }
         Command::Preview(a) => {
             let layers: Vec<_> = [
@@ -1695,21 +1724,20 @@ mod tests {
             if name == "doctor" {
                 continue;
             }
-            let (_, aliases) = doctor::COMMANDS
-                .iter()
-                .find(|(canonical, _)| *canonical == name)
-                .unwrap_or_else(|| panic!("doctor::COMMANDS lacks {name}"));
+            let readiness = doctor::Command::from_name(name)
+                .unwrap_or_else(|| panic!("doctor::Command lacks {name}"));
+            assert_eq!(readiness.name(), name);
             let mut expected: Vec<_> = command.get_all_aliases().collect();
-            let mut actual = aliases.to_vec();
+            let mut actual = readiness.aliases().to_vec();
             expected.sort_unstable();
             actual.sort_unstable();
             assert_eq!(actual, expected, "{name}");
-            for alias in aliases.iter() {
-                assert_eq!(doctor::canonical(alias), Some(name));
+            for alias in readiness.aliases() {
+                assert_eq!(doctor::Command::from_name(alias), Some(readiness));
             }
             seen.push(name);
         }
-        assert_eq!(seen.len(), doctor::COMMANDS.len());
+        assert_eq!(seen.len(), doctor::Command::ALL.len());
         let parsed = Cli::try_parse_from([
             "rusty-tiles",
             "doctor",
@@ -1722,7 +1750,13 @@ mod tests {
         let Command::Doctor(args) = parsed.command else {
             panic!("doctor")
         };
-        assert_eq!(args.commands, ["meshTo3tz", "create-tileset-json"]);
+        assert_eq!(
+            args.commands,
+            [
+                doctor::Command::MeshTo3tz,
+                doctor::Command::CreateTilesetJson
+            ]
+        );
     }
 
     #[test]
