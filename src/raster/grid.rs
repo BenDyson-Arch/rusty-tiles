@@ -604,7 +604,7 @@ pub(super) fn plan(
     }
     let resolution =
         power_of_two(-7 - i32::from(zooms.max())).expect("validated zoom resolution") * H;
-    // Deliberately match selected tile source evaluation order, with no FMA.
+    // Fixed evaluation order without FMA; tiling consumes integer indices.
     let x = -H + f64::from(finest.x0) * resolution * 256.0;
     let y = H - f64::from(finest.y0) * resolution * 256.0;
     let target = TargetGrid {

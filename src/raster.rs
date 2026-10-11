@@ -567,7 +567,8 @@ fn run_native(
             artifact_bytes,
             requested_workers: request.limits.workers,
             resolved_workers: workers,
-            worker_policy: "configured cap; native default threshold may select fewer workers",
+            worker_policy:
+                "configured cap for native COG and warp, whose threshold may select fewer; tiling is sequential",
             native_version: native.native_version,
             resampling: "nearest-direct-finest-east-south-ties",
             color_role_migration: native.role_delta.as_str(),
