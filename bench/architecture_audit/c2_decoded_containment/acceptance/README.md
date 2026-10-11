@@ -21,13 +21,19 @@ The corpus replay needs the producer artifacts: regenerate them with the corpus 
 recorded in the corpus manifest, then run `corpus_parity.py BINARY RUN_DIR
 corpus/manifest.json OUT`.
 
-Measured cost (Linux, release, 2 CPUs, best of 5 `validate --json` runs; develop f2238cd
-compared with this branch). On the 20k-point explicit point cloud (4.7 MB) the time went from
-48 ms to 108 ms, about 3 µs per tested vertex for the exact walk plus the re-read. Out-of-domain
-archives (implicit) and small mesh/vector archives were unchanged within noise (26–42 ms).
-Extrapolated to C1's 16M total payload elements, the exact pass could add roughly 50 s. That
-is a projection, not a measurement. The contract permits an equivalent i128 fast path, which
-is a later optimisation.
+Measured cost (Linux, release, 2 CPUs; develop f2238cd compared with this branch).
+
+| Unit class | Measured on | Cost |
+| --- | --- | --- |
+| Exact vertex unit (`T·Σ⌈s/64⌉²`) | 20k-point explicit point cloud. The oracle computes 5.99M units; validate goes from 48 ms to 108 ms | about 10 ns |
+| Index unit (`Idx`) | C1 `legal_shared_indices`: 1000 primitives share a 1M-index accessor, about 1e9 units. Release 2.85 s (debug 44 s, which exceeded the C1 finite-work probe's 30 s) | about 2.8 ns |
+
+The work cap, not C1's element ceiling, bounds C2 time: instancing, shared index accessors and
+repeated references all multiply work. The original default of 2^32 units therefore allowed
+about 43 s in release (minutes in debug). After the nonauthor review, the coordinator set the
+default to 2^28. That bounds C2 work at the defaults to about 2.7 s at the most expensive
+measured unit cost, and `legal_shared_indices` becomes `workLimit`. Re-reads are separately
+capped by `containmentBytesRead`. Drawn-vertex marking per primitive is charged through `Idx`.
 
 Not established here: platform byte identity, performance or RSS of the precheck caps (the cap
 values are proposals), implicit/RTC/region/rotated-box coverage, and any rendered-extent
