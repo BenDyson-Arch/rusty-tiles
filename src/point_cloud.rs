@@ -599,17 +599,20 @@ fn convert(
     let mut manifest =
         serde_json::json!({"asset":{"version":"1.1"},"geometricError":error,"root":root});
     if !options.explicit {
-        tree.members = crate::implicit::write_tileset_recorded(
+        // The forest keeps skeleton payloads in place and replaces rebased
+        // sources; its member list is the complete payload inventory.
+        tree.members = crate::implicit::write_forest(
             &mut manifest,
             output,
             crate::implicit::SubdivisionScheme::Octree,
-            false,
             &mut || checkpoint(attempt),
-        )?;
+        )?
+        .members;
     }
+    // Compact, as the writer measures document budgets on compact JSON.
     tree.operations.member(
         &output.join("tileset.json"),
-        &serde_json::to_vec_pretty(&manifest)?,
+        &serde_json::to_vec(&manifest)?,
     )?;
     checkpoint(attempt)?;
     let (source_crs, height_offset) = match &request.coordinates {
@@ -632,7 +635,7 @@ fn convert(
         max_position_rounding_metres: tree.max_rounding,
         sampling: "first source point per voxel; cell diagonal bounds source-to-sample distance".into(),
         max_points: options.max_points, chunk_points: options.chunk_points,
-        encoder: if options.explicit { "rusty-tiles-native-las-v1" } else { "rusty-tiles-native-las-implicit-v2" }.into(),
+        encoder: if options.explicit { "rusty-tiles-native-las-v1" } else { "rusty-tiles-native-las-implicit-v3" }.into(),
         tiling: if options.explicit { "explicit" } else { "implicit" }.into(),
         coordinate_profile: "local metres or admitted strict horizontal CRS subset; explicit ellipsoidal metre offset".into(),
         scaled_extra_bytes_tolerance: "FLOAT64 multiply then add; absolute error <= 2*EPSILON*(abs(raw*scale)+abs(offset))+2*MIN_POSITIVE; scaled INT64/UINT64 unsupported".into(),
