@@ -582,11 +582,9 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
     assert!(!result.status.success());
 }
 
-/// VALIDATION-DEPENDENT (for R): the develop validator refuses implicit roots on
-/// explicit tiles, so forest archives validate only with I1's reader. Enable on
-/// the combined I1+P branch; do not weaken it to pass here.
+/// Base, reused and fresh forest archives each validate through I1's reader,
+/// which admits implicit roots below explicit tiles.
 #[test]
-#[ignore = "needs I1's validator: run on the combined I1+P branch with --ignored"]
 fn reused_and_fresh_forest_archives_validate() {
     let case = Case::new(&[
         "--maxFeatures",
