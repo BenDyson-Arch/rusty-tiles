@@ -166,7 +166,9 @@ The tileset allowlist has a single entry: `3DTILES_content_gltf_vector`, written
 - `translation` and `scale` must be finite.
 
 **Numbers.** Every number is the nearest binary64 value of the JSON text. A literal that
-overflows binary64 is InvalidInput, as in the existing tileset number handling (`validate.rs:62-82`).
+overflows binary64 never reaches C2: C1's JSON admission refuses it as Unsupported (finite
+owned-document representation), in tileset and glTF JSON alike. This corrects the v3 text, which
+said InvalidInput; the oracle's `tileset-number-overflow` fixture executed the actual C1 kind.
 
 **Not checked.** Matrix TRS-decomposability and local no-shear are not policed (D2(iii)).
 
