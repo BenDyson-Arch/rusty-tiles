@@ -212,8 +212,10 @@ struct PreviewArgs {
     /// Cesium 1.146.0 Build/Cesium directory containing Cesium.js (IIFE)
     #[arg(long)]
     cesium: PathBuf,
+    /// Listen IP address. Any non-loopback address serves every host that
+    /// can reach it; names are not resolved.
     #[arg(long, default_value = "127.0.0.1")]
-    host: String,
+    host: std::net::IpAddr,
     #[arg(long, default_value_t = 9227)]
     port: u16,
     #[arg(long)]
@@ -1125,7 +1127,8 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             .into_iter()
             .filter_map(|(name, path)| path.map(|path| (name.to_owned(), path)))
             .collect();
-            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?.serve(&a.host, a.port, json)?;
+            rusty_tiles::preview::Preview::new(&a.cesium, &layers)?
+                .serve(std::net::SocketAddr::new(a.host, a.port), json)?;
             Outcome::Done
         }
         Command::EncodeVectorContent { input } => {
