@@ -82,6 +82,24 @@ binding exposes neither tool (`bindings/python/README.md:20`).
    signalled. SIGTERM/SIGINT end it with no cleanup obligation, because it
    writes nothing. Bind and listener failures fail the process.
 
+5. Imagery: the page builds the R2 `UrlTemplateImageryProvider` from the
+   exact TileJSON `bounds`, `minzoom` and `maxzoom` (`preview/index.html`). In
+   Cesium 1.146, `ImageryLayer._createTileImagerySkeletons` maps the
+   south-east corner of a rectangle lying on imagery tile edges to the outside
+   neighbour tile. The north-west corner can land there through rounding.
+   `Rectangle.intersection` of that neighbour with the bounds is `undefined`,
+   the next read of `.west` throws, and rendering stops. R2 bounds are
+   tile-aligned, so every R2 pyramid failed. The provider rectangle is
+   therefore inset on all four edges by 1/1024 of a finest-zoom pixel
+   (`360 / 2^maxzoom / 256 / 1024` degrees). That is far above double rounding
+   and below a texel at any latitude, because a Mercator pixel is narrower in
+   latitude than in longitude. Insetting one edge does not suffice. Omitting
+   the rectangle would request tiles outside the pyramid, and their 404s fail
+   the page. Changing the tiling scheme does not alter this intersection. The
+   TileJSON written by R2 stays exact and still frames the camera. The
+   workaround is pinned to Cesium 1.146 behaviour. `raster_preview.cjs`
+   asserts `Cesium.VERSION === '1.146.0'`, so a runtime bump must re-prove it.
+
 ## Public-surface decisions
 
 | Item | Decision |
@@ -134,6 +152,16 @@ Static observations above were confirmed by execution:
 - Baseline `preview --host localhost` resolved the name and bound `[::1]`.
   Now it is a usage error, and no name is resolved.
 
+- Every R2 pyramid failed to load in preview with `TypeError: Cannot read
+  properties of undefined (reading 'west')` (found by the performance lane).
+  Regression check: `tests/fixtures/raster_preview.cjs` through the real
+  preview server, also run as release-acceptance step 6 on a tile-aligned R2
+  output of `tests/fixtures/d1-rgb.tif`. It fails on the pre-fix binary and
+  passes after the fix. The check samples 81 points: all of them must show
+  imagery, and none may with the layer hidden. The same check passes on the
+  performance lane's three 8192² outputs (z9–14), with their transparent hole
+  rendering as bare globe.
+
 The baseline traversal, symlink and unselected-layer fence held against every
 added attack; that is retained evidence, not a defect.
 
@@ -153,4 +181,7 @@ status does not prove that a source-specific CRS or height operation succeeds;
 conversion still validates it. Platforms without directory publication
 (`directory_platform.rs:351`) are not release targets and are not modelled.
 Accept-time errors other than per-connection aborts end the process; resource
-exhaustion is not retried.
+exhaustion is not retried. Imagery draped on terrain uses the same provider. It
+was not browser-checked here, because that probe needs the Python GDAL
+fixtures. The imagery probe is a release-acceptance browser step, not a
+`cargo test`, because it needs node, Playwright, Chromium and Cesium.

@@ -307,6 +307,8 @@ Preview is read-only. Before binding, each selected directory and the Cesium dir
 
 On the default loopback address, only requests addressed to `localhost`, `127.0.0.1`, `[::1]` or the bound address, with the bound port, are answered. Any other `Host` returns 421, which blocks DNS-rebinding pages. A non-loopback `--host`, such as `0.0.0.0`, is an explicit opt-in to serve every host that can reach it: it accepts any `Host` and prints a warning on stderr.
 
+Imagery uses the TileJSON `bounds`, `minzoom` and `maxzoom`. The rectangle is inset by 1/1024 of a finest-zoom pixel to work around Cesium 1.146, which stops rendering on tile-aligned bounds.
+
 `--json` prints one startup object, `{"ok":true,"url":…,"layers":{…},"loopback":true}`, after the listener is bound. The server runs until it is signalled (for example, SIGTERM or Ctrl-C). It writes nothing, so stopping it needs no cleanup. See the [T1 tooling contract](architecture/t1-tooling-contract.md).
 
 ### doctor
