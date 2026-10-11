@@ -104,7 +104,8 @@ fn forest(path: &Path, scheme: &str) -> Forest {
     assert_eq!(subtrees, out.roots.len(), "one subtree per implicit root");
     let mut documents: Vec<_> = zip
         .file_names()
-        .filter(|n| n.ends_with(".json") && *n != "conversion.json")
+        // Reports and vector build state are not tileset documents.
+        .filter(|n| n.ends_with(".json") && !["conversion.json", "vector-build.json"].contains(n))
         .map(str::to_owned)
         .collect();
     documents.sort();
