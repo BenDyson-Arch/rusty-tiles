@@ -5,20 +5,8 @@ use std::{io::Read, path::Path, process::Command};
 mod support;
 
 fn call(input: &Path, output: &Path, options: &[&str]) -> std::process::Output {
-    call_mode(input, output, options, true)
-}
-
-fn call_mode(
-    input: &Path,
-    output: &Path,
-    options: &[&str],
-    explicit: bool,
-) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
     command.args(["--json", "point-cloud"]);
-    if explicit {
-        command.arg("--explicit");
-    }
     command
         .arg("-i")
         .arg(input)
@@ -45,7 +33,7 @@ fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() 
             "--chunkPoints",
             "11",
         ];
-        let result = call_mode(&input, &output, &options, false);
+        let result = call(&input, &output, &options);
         assert!(
             result.status.success(),
             "{}",
@@ -156,9 +144,7 @@ fn implicit_las_laz_keep_every_record_and_placement_across_the_bounded_forest() 
             String::from_utf8_lossy(&report.stdout)
         );
         let repeated = work.path().join("repeated.3tz");
-        assert!(call_mode(&input, &repeated, &options, false)
-            .status
-            .success());
+        assert!(call(&input, &repeated, &options).status.success());
         assert_eq!(
             std::fs::read(output).unwrap(),
             std::fs::read(repeated).unwrap()
@@ -244,6 +230,18 @@ impl Glb {
                 .unwrap() as usize,
         )
     }
+}
+
+/// The archive's tile tree with every implicit subtree expanded.
+fn expanded_root(zip: &mut zip::ZipArchive<std::fs::File>) -> Value {
+    let manifest = document(zip, "tileset.json");
+    let mut expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+        let mut bytes = Vec::new();
+        zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+        Ok(bytes)
+    })
+    .unwrap();
+    expanded["root"].take()
 }
 
 fn document(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Value {
@@ -442,9 +440,9 @@ fn las_and_laz_stream_without_python_keep_leaf_records_and_reproduce_archives() 
                 .all(|p| p[0]["done"].as_u64() <= p[1]["done"].as_u64()));
         }
         let mut zip = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
-        let manifest = document(&mut zip, "tileset.json");
+        let root = expanded_root(&mut zip);
         let mut seen = Vec::new();
-        audit_leaves(&mut zip, &manifest["root"], &mut seen, 16);
+        audit_leaves(&mut zip, &root, &mut seen, 16);
         seen.sort_unstable();
         assert_eq!(seen, (0..257).collect::<Vec<_>>());
         assert!(zip.file_names().all(|n| !n.contains("scratch")));
@@ -498,9 +496,9 @@ fn duplicates_terminate_and_force_replaces_only_after_success() {
         String::from_utf8_lossy(&result.stdout)
     );
     let mut zip = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
-    let manifest = document(&mut zip, "tileset.json");
+    let root = expanded_root(&mut zip);
     let mut seen = Vec::new();
-    audit_leaves(&mut zip, &manifest["root"], &mut seen, 16);
+    audit_leaves(&mut zip, &root, &mut seen, 16);
     seen.sort_unstable();
     assert_eq!(seen, (0..257).collect::<Vec<_>>());
     assert_eq!(std::fs::read_dir(work.path()).unwrap().count(), 3);
@@ -575,7 +573,11 @@ fn large_tiles_use_exact_float_feature_ids_instead_of_wrapping_u16() {
     .status
     .success());
     let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
-    let glb = Glb::read(&mut zip, "t/0.glb");
+    let uri = expanded_root(&mut zip)["content"]["uri"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let glb = Glb::read(&mut zip, &uri);
     let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
         ["_FEATURE_ID_0"]
         .as_u64()
@@ -657,27 +659,14 @@ impl Level {
 
 /// C2 decoded-content containment for axis-aligned point archives, in exact arithmetic:
 /// every written position, placed by its GLB scene-root translation and the tile
-/// transforms, lies in its own tile's box and in every ancestor's. With `nested`, every
-/// child box also lies exactly inside its parent's box. Returns the vertices checked.
+/// transforms, lies in its own tile's box and in every ancestor's. Returns the
+/// vertices checked.
 fn contained(
     zip: &mut zip::ZipArchive<std::fs::File>,
     tile: &Value,
     path: &mut Vec<Level>,
-    nested: bool,
 ) -> usize {
-    let level = Level::of(tile);
-    if let Some(parent) = path.last().filter(|_| nested) {
-        for i in 0..3 {
-            // |translation + centre - parent centre| + half <= parent half.
-            let offset = [level.translation[i], level.centre[i], -parent.centre[i]];
-            assert!(
-                within(&[parent.half[i], -level.half[i]], &offset),
-                "child box escapes its parent on axis {i} at depth {}",
-                path.len()
-            );
-        }
-    }
-    path.push(level);
+    path.push(Level::of(tile));
     let mut checked = 0;
     if let Some(uri) = tile["content"]["uri"].as_str() {
         let glb = Glb::read(zip, uri);
@@ -715,7 +704,7 @@ fn contained(
         }
     }
     for child in tile["children"].as_array().into_iter().flatten() {
-        checked += contained(zip, child, path, nested);
+        checked += contained(zip, child, path);
     }
     path.pop();
     checked
@@ -733,7 +722,7 @@ fn uniform(state: &mut u64) -> f64 {
 /// must contain: a tile's half extent covers its written f32 positions (a thin cloud's tile
 /// 2/1/1/3 sat 2^-52 inside its vertex 0), a parent encloses each child's box exactly, and
 /// implicit rows grow by the drift of their accumulated f64 translations. Fixed clouds,
-/// sequential and random, are converted implicit and explicit and checked as C2
+/// sequential and random, are converted and checked as C2
 /// decodedContentContainment checks them (exact arithmetic, every ancestor).
 #[test]
 fn point_bounds_contain_decoded_content_exactly_across_fixed_clouds() {
@@ -791,27 +780,23 @@ fn point_bounds_contain_decoded_content_exactly_across_fixed_clouds() {
         }
         writer.close().unwrap();
         for max_points in ["3", "10", "37"] {
-            for explicit in [false, true] {
-                let output = work
-                    .path()
-                    .join(format!("cloud-{index}-{max_points}-{explicit}.3tz"));
-                let options = ["--sourceCrs", "local", "--maxPoints", max_points];
-                let result = call_mode(&input, &output, &options, explicit);
-                assert!(
-                    result.status.success(),
-                    "{}",
-                    String::from_utf8_lossy(&result.stdout)
-                );
-                let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
-                let manifest = document(&mut zip, "tileset.json");
-                let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
-                    let mut bytes = Vec::new();
-                    zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
-                    Ok(bytes)
-                })
-                .unwrap();
-                vertices += contained(&mut zip, &expanded["root"], &mut Vec::new(), explicit);
-            }
+            let output = work.path().join(format!("cloud-{index}-{max_points}.3tz"));
+            let options = ["--sourceCrs", "local", "--maxPoints", max_points];
+            let result = call(&input, &output, &options);
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stdout)
+            );
+            let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+            let manifest = document(&mut zip, "tileset.json");
+            let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+                let mut bytes = Vec::new();
+                zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+                Ok(bytes)
+            })
+            .unwrap();
+            vertices += contained(&mut zip, &expanded["root"], &mut Vec::new());
         }
     }
     assert!(vertices > 10_000, "{vertices}");
@@ -959,7 +944,11 @@ fn geotiff_header_and_explicit_crs_place_xyz_with_original_source_metadata() {
                     < 1e-6
             );
         }
-        let glb = Glb::read(&mut zip, "t/0.glb");
+        let uri = expanded_root(&mut zip)["content"]["uri"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let glb = Glb::read(&mut zip, &uri);
         assert_eq!(
             i32::from_le_bytes(glb.column("X").try_into().unwrap()),
             500_000_000
@@ -1010,7 +999,7 @@ fn wkt_las_and_laz_headers_place_globe_coordinates_without_external_resources() 
         writer.close().unwrap();
         let output = work.path().join("cloud.3tz");
         let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
-            .args(["--json", "point-cloud", "--explicit", "-i"])
+            .args(["--json", "point-cloud", "-i"])
             .arg(&input)
             .arg("-o")
             .arg(&output)
@@ -1536,9 +1525,9 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
         let work = tempfile::tempdir().unwrap();
         let input = work.path().join(format!("source.{suffix}"));
         fixture(&input, 257, false, vec![]);
-        for explicit in [false, true] {
-            let output = work.path().join(format!("{explicit}.3tz"));
-            let result = call_mode(
+        {
+            let output = work.path().join("cloud.3tz");
+            let result = call(
                 &input,
                 &output,
                 &[
@@ -1550,7 +1539,6 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
                     "11",
                     "--metadata-attributes",
                 ],
-                explicit,
             );
             assert!(
                 result.status.success(),
@@ -1615,7 +1603,7 @@ fn metadata_attributes_match_source_tables_through_las_laz_lods() {
                 .unwrap();
             if suffix == "las" {
                 if let Some(dir) = std::env::var_os("RUSTY_TILES_METADATA_ACCEPTANCE_DIR") {
-                    let dir = std::path::PathBuf::from(dir).join(format!("point-{explicit}"));
+                    let dir = std::path::PathBuf::from(dir).join("point");
                     std::fs::create_dir_all(&dir).unwrap();
                     zip.extract(dir).unwrap();
                 }
@@ -1656,7 +1644,7 @@ fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns()
         }
         writer.close().unwrap();
         let output = work.path().join("cloud.3tz");
-        let result = call_mode(
+        let result = call(
             &input,
             &output,
             &[
@@ -1666,7 +1654,6 @@ fn metadata_attributes_decode_legacy_classification_flags_and_extended_returns()
                 "4",
                 "--metadata-attributes",
             ],
-            false,
         );
         assert!(
             result.status.success(),

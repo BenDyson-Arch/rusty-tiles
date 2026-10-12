@@ -75,6 +75,8 @@ python3 -I bench/architecture_audit/implicit_layout/forest_check.py FOREST.3tz \
 
 - `FOREST.3tz` is a default (forest) archive. `--explicit` takes an `--explicit` build of the same
   input. That build is the producer hierarchy H, and passing it enables the `A4.*` rules.
+  H6 (2026-10-13) removed `--explicit` from `vector` and `point-cloud`; later binaries refuse it as an unknown argument. Vector and point-cloud references therefore need a converter built at or before
+  develop `7fad70c`; a vector archive also records H in `vector-build.json` `explicitRoot`.
 - Exit status: 0 when every required rule passes, 1 when one fails, 2 on a usage error.
 - The verdict holds:
   - `rules`: for each rule, its status (`pass`, `fail` or `not-applicable`), whether it is required,
