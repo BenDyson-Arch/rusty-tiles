@@ -60,9 +60,11 @@ k-way merge of its per-depth, Morton-ordered spills (one cursor per depth, at mo
 **Requirement [B2][B3][B4].** The topology must be final before phase 1. If v5.1 lets any later
 pass change the hierarchy (for example byte-budget leaf cuts decided after the texture plan),
 names can only be assigned after that pass, and payloads assembled before it must be spilled and
-copied once more. The stage-2 scratch preflight must then count that copy. The design text today
-says both "leaves are exact from the pass-0b histogram" and "stage 2 rechecks after the
-byte-budget cuts"; v5.1 must say which.
+copied once more. The stage-2 scratch preflight must then count that copy. The v5 text says both
+"leaves are exact from the pass-0b histogram" and "stage 2 rechecks after the byte-budget cuts".
+The v6 draft, in progress while this note was written (E49), builds the whole cell tree in pass
+5a from `(key, projected bytes, box)` records, with packing, run sub-hierarchies and height, before
+any LOD work. If v6 freezes that way, phase 1 runs after pass 5a and this requirement is met.
 
 **Bounded state.** Phase 1: the stack (32 entries) plus the name spill. Phase 2: an implicit
 root's subtree is a contiguous run of the post-order stream ending at the root, so at most one
