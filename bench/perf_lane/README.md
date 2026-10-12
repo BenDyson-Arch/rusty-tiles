@@ -5,6 +5,71 @@ an A/B processing benchmark and a headless Cesium runtime check. The lane blocks
 a merge only on a clear regression. Every other result is a report attached to
 the PR.
 
+## Report
+
+`report.py` is the normal entry point. It runs both scripts below and compares
+the head CLI with the latest release (`v0.3.0`) and with the last milestone,
+then rewrites `REPORT.md`.
+
+```sh
+python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
+  [--explain 'validate:*.wallSeconds=C2 adds payload checks'] [--milestone-label 'C3 merged']
+```
+
+- The release binary is built once with `--release --features
+  native-geospatial` from `git archive` of the tag, under the shared cargo lock
+  on CPUs 0 and 1 (`--cargo-wrap`). It is cached in
+  `~/.cache/perf-lane/baselines/<tag>/` (`BUILD.json` records how) and reused
+  after that. A corpus case whose command or flags the release CLI lacks
+  shows `n/a`, with the reason under `## Not run or failed`.
+- The last milestone's per-case numbers come from the data block at the end of
+  the committed `REPORT.md` (git `HEAD`). If that version already records the
+  head being rendered, the next older version is used instead. `--milestone-label` makes this run the
+  new milestone and appends a `## Milestones` row. Without it, the stored
+  milestone and the rows carry forward unchanged. Hand edits such as
+  whitespace or note lines are tolerated, but a missing, unclosed or garbled
+  data block, or no row for its commit, stops the run.
+- Benchmarks run on a hyperthread sibling pair from CPUs 4-7 or 12-15
+  (`--cpu-pool`; the cargo build locks use 0-3 and 8-11), not on the scripts'
+  default 0 and 1. Before each step (each process.py attempt, each Cesium pass)
+  a 5-second `/proc/stat` sample must show both cores at least 90% idle
+  (`--min-idle`). The previous pair is kept while it qualifies; otherwise the
+  idlest qualifying pair is used, and if none qualifies the step waits. The
+  per-core idle figures go into the report header. The global load average is
+  not used, because parallel lanes keep it high. `--cpus A,B` fixes the pair.
+- process.py is rerun (up to `--attempts`) while any best-wall sample is
+  contended (other work above 20% of its wall time on the pinned CPUs). The
+  cleanest attempt is kept, and any remaining contended cases are named in the
+  header.
+- Raw results go to `~/.cache/rusty-tiles-evidence/perf/<date>-<shortsha>/`:
+  the process and Cesium JSON, run logs, screenshots and `meta.json`, plus
+  `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. The stdlib `zstd`
+  writer needs Python 3.14 or later. Older Pythons use the `zstd` CLI, or else
+  write `raw.tar.gz`. Outputs stay under `--work` and are deleted unless
+  `--keep-work` is given. `--from-raw DIR` re-renders a recorded directory without running anything, applying the
+  `--explain` reasons recorded in its `meta.json` plus any given again.
+- Flags follow the gate below and are measured against the last milestone. Flags
+  against the release are reported but not gated. The script exits non-zero on
+  a gated regression.
+
+When to run it:
+
+- **Per PR** that changes output or a hot path: run `report.py` on the PR's
+  release build and paste the `## Flags` section and the affected case tables
+  into the PR body. Do not commit the regenerated `REPORT.md`
+  (`git checkout bench/perf_lane/REPORT.md`).
+- **On merge to develop** of an output-affecting slice: run it on a release
+  build of the merged develop with `--milestone-label '<slice> merged'` and
+  commit the regenerated `REPORT.md`. Its git history is the trend log. Commit
+  a milestone only when `report.py` exits 0, or when every remaining gated flag
+  has a stated reason: re-render with `--from-raw DIR --explain
+  CASE.METRIC=REASON`, with no rerun.
+
+Raw results never go into git: `.gitignore` admits only the scripts,
+`README.md` and `REPORT.md` under `bench/perf_lane/`.
+`python3 -I bench/perf_lane/test_report.py` unit-tests the table, delta and
+flag logic.
+
 ## Replay
 
 Put large work directories under `~/.cache/perf-lane/work`, not `/tmp`
@@ -215,9 +280,12 @@ startup, which is the path this harness exercises.
 
 ## Recorded runs
 
-Recorded on 2026-10-11 under `results/`. Each file records the sha256 of the
-scripts that produced it. Screenshots stay in the work directories and are not
-committed.
+These runs were recorded on 2026-10-11 and were committed under `results/`
+until `REPORT.md` replaced them. They are archived locally in
+`~/.cache/rusty-tiles-evidence/perf/legacy-results.tar.zst` (sha256
+`b600ab4a…`). Each file records the sha256 of the scripts that produced it. The
+first `REPORT.md` milestone was seeded from `baseline-process.json` (head side)
+and `baseline-cesium.json`.
 
 | File | Run |
 | --- | --- |
