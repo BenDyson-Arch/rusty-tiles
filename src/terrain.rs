@@ -131,14 +131,9 @@ fn overlap(source: &Path, output: &Path) -> Result<(), JobError> {
     Ok(())
 }
 #[cfg(feature = "native-geospatial")]
-fn finish_member<W: Write>(
-    w: &mut W,
-    b: &[u8],
-    sync: impl FnOnce(&mut W) -> std::io::Result<()>,
-) -> std::io::Result<()> {
+fn finish_member<W: Write>(w: &mut W, b: &[u8]) -> std::io::Result<()> {
     w.write_all(b)?;
-    w.flush()?;
-    sync(w)
+    w.flush()
 }
 #[cfg(feature = "native-geospatial")]
 fn count(bytes: &mut u64, length: u64) -> Result<(), JobError> {
@@ -153,6 +148,8 @@ fn count(bytes: &mut u64, length: u64) -> Result<(), JobError> {
     }
     Ok(())
 }
+/// Create, count and flush a staged member. Members that are published are
+/// synced once by [`seal`]; payloads the forest relocates are never synced.
 #[cfg(feature = "native-geospatial")]
 fn write(path: &Path, b: &[u8], bytes: &mut u64) -> Result<(), JobError> {
     count(bytes, b.len() as u64)?;
@@ -161,23 +158,16 @@ fn write(path: &Path, b: &[u8], bytes: &mut u64) -> Result<(), JobError> {
         .create_new(true)
         .open(path)
         .map_err(|e| JobError::io("create terrain member", path, e))?;
-    finish_member(&mut f, b, |f| f.sync_all())
-        .map_err(|e| JobError::io("finish terrain member", path, e))
+    finish_member(&mut f, b).map_err(|e| JobError::io("finish terrain member", path, e))
 }
-/// Flush and count a member that another writer created without syncing.
+/// Sync a finished member, including those the implicit forest writes without syncing.
 #[cfg(feature = "native-geospatial")]
-fn seal(path: &Path, bytes: &mut u64) -> Result<(), JobError> {
-    let file = fs::File::options()
+fn seal(path: &Path) -> Result<(), JobError> {
+    fs::File::options()
         .write(true)
         .open(path)
-        .map_err(|e| JobError::io("open terrain member", path, e))?;
-    file.sync_all()
-        .map_err(|e| JobError::io("sync terrain member", path, e))?;
-    let length = file
-        .metadata()
-        .map_err(|e| JobError::io("inspect terrain member", path, e))?
-        .len();
-    count(bytes, length)
+        .and_then(|file| file.sync_all())
+        .map_err(|e| JobError::io("sync terrain member", path, e))
 }
 #[cfg(feature = "native-geospatial")]
 #[derive(Clone)]
@@ -1072,19 +1062,24 @@ fn produce(
     plan: &PreparedPlan,
     report: &mut TerrainReport,
     mut write: impl FnMut(&Path, &[u8], &mut u64) -> Result<(), JobError>,
-    mut seal: impl FnMut(&Path, &mut u64) -> Result<(), JobError>,
+    mut seal: impl FnMut(&Path) -> Result<(), JobError>,
 ) -> Result<(), JobError> {
     let attempt = pyramid.attempt;
     payloads(path, pyramid, plan, &mut write)?;
     let mut manifest = hierarchy(plan, pyramid.frame, report.tileset_geometric_error_metres);
     let forest = forest(&mut manifest, path, attempt)?;
     prune(&path.join("tiles"))?;
-    // The forest writes without syncing: flush and count every member it kept.
+    // Count and sync every member the forest kept or wrote, once.
     let mut bytes = 0;
     let mut inventory = std::collections::BTreeSet::new();
     for member in &forest.members {
         attempt.check()?;
-        seal(&path.join(member), &mut bytes)?;
+        let member_path = path.join(member);
+        let length = fs::metadata(&member_path)
+            .map_err(|e| JobError::io("inspect terrain member", &member_path, e))?
+            .len();
+        count(&mut bytes, length)?;
+        seal(&member_path)?;
         inventory.insert(member.clone());
     }
     attempt.check()?;
@@ -1093,6 +1088,7 @@ fn produce(
         &serde_json::to_vec(&manifest).unwrap(),
         &mut bytes,
     )?;
+    seal(&path.join("tileset.json"))?;
     inventory.insert("tileset.json".into());
     report.generated_bytes = bytes;
     loop {
@@ -1109,6 +1105,7 @@ fn produce(
         &serde_json::to_vec_pretty(report).unwrap(),
         &mut bytes,
     )?;
+    seal(&path.join("conversion.json"))?;
     inventory.insert("conversion.json".into());
     receipt(path, &inventory, bytes, report.generated_bytes, attempt)?;
     attempt.emit(&RunEvent::Note {
@@ -1318,16 +1315,15 @@ mod tests {
             &plan,
             &mut report,
             write,
-            |path, bytes| {
+            |path| {
                 let name = path.strip_prefix(staging.path()).unwrap();
                 assert!(synced.insert(name.to_str().unwrap().replace('\\', "/")));
-                seal(path, bytes)
+                seal(path)
             },
         )
         .unwrap();
-        let mut members = files(staging.path());
-        assert!(members.remove("tileset.json") && members.remove("conversion.json"));
-        assert_eq!(synced, members, "every forest member is synced once");
+        let members = files(staging.path());
+        assert_eq!(synced, members, "every published member is synced once");
         assert!(members.contains("tiles/0/0/0.glb") && members.contains("tiles/1/0/1.glb"));
         assert!(members.iter().any(|m| m.ends_with(".subtree")));
         assert!(members.iter().any(|m| m.starts_with("implicit-content/")));
@@ -1359,7 +1355,7 @@ mod tests {
             &plan,
             &mut report,
             write,
-            |path, bytes| {
+            |path| {
                 if path.extension().unwrap() == "subtree" {
                     return Err(JobError::io(
                         "sync terrain member",
@@ -1367,7 +1363,7 @@ mod tests {
                         std::io::Error::other("injected sync fault"),
                     ));
                 }
-                seal(path, bytes)
+                seal(path)
             },
         )
         .unwrap_err();
@@ -1484,23 +1480,13 @@ mod tests {
     }
     #[test]
     fn member_finish_faults_remain_errors() {
-        for fault in [1, 2, 3] {
+        for fault in [1, 2] {
             let mut writer = Writer {
                 bytes: vec![],
                 fault,
             };
-            let mut synced = false;
-            let e = finish_member(&mut writer, b"mesh", |_| {
-                synced = true;
-                if fault == 3 {
-                    Err(std::io::Error::other("sync fault"))
-                } else {
-                    Ok(())
-                }
-            })
-            .unwrap_err();
+            let e = finish_member(&mut writer, b"mesh").unwrap_err();
             assert!(e.to_string().contains("fault"));
-            assert_eq!(synced, fault == 3);
         }
     }
     #[test]
