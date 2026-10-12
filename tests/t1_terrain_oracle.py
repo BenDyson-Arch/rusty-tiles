@@ -613,8 +613,15 @@ def corruption_controls(directory, plane=True, **plane_spec):
     # Pyramid controls need a coarse tile below the root.
     middle=[n for n in tiles if n['children'] and n['parent'] is not None and 'row' in n]
     if middle: faults+=['understated-error','missing-skirt','leaf-box-misses-skirt']
-    expected={'understated-error':'understated geometric error','missing-skirt':'missing skirt',
-              'leaf-box-misses-skirt':'content outside box'}
+    # Each fault's admissible rejection reasons (the plane reference sees some first).
+    expected={'understated-error':('understated geometric error',),'missing-skirt':('missing skirt',),
+              'leaf-box-misses-skirt':('content outside box',),'bounds':('level-0 row box',),
+              'frame':('root ENU frame',),'report-inventory':('report tile inventory',),
+              'position':('source elevation/position','understated geometric error'),
+              'winding':('missing/duplicated/reversed terrain cells','reversed or collapsed surface triangle'),
+              'row':('missing/duplicated/reversed terrain cells','surface vertices form one lattice'),
+              'missing-triangle':('surface vertices form one lattice',),
+              'seam':('shared seam changed stored coordinates','shared node changed stored coordinates')}
     def patch_of(node,manifest):
         return Patch(directory,node,report,manifest['root']['transform'])
     reasons={}
@@ -710,8 +717,7 @@ def corruption_controls(directory, plane=True, **plane_spec):
                 check_directory(copy)
             except (AssertionError,KeyError) as error:
                 assert fault!='identity', f'oracle rejected an identity re-store: {error}'
-                if fault in expected:
-                    assert expected[fault] in str(error), f'{fault} rejected for another reason: {error}'
+                assert any(reason in str(error) for reason in expected[fault]), f'{fault} rejected for another reason: {error}'
                 reasons[fault]=str(error) or type(error).__name__
                 continue
             if fault=='identity': continue

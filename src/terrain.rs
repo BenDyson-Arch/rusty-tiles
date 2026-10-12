@@ -328,7 +328,7 @@ fn place(
     if !stored.iter().all(|v| v.is_finite()) {
         return Err(error(
             JobErrorKind::Unsupported,
-            "terrain local positions exceed finite Float32",
+            "terrain local positions exceed finite storage",
         ));
     }
     let position = decoded(stored);

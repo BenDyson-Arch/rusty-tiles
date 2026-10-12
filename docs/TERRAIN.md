@@ -55,10 +55,11 @@ Every tile GLB requires `EXT_meshopt_compression`: its vertex and index views
 are meshopt attribute (`0xa0`) and triangle (`0xe1`) streams. Positions are
 unnormalized uint16 `KHR_mesh_quantization` integers, dequantized by the tile
 node's `translation` and `scale`. Each level has one power-of-two step for all
-three axes, the finest at which every tile of the level, surface and skirt,
-spans at most 65,535 steps, and every node translation is a multiple of it. Decoding is
-therefore exact, and tiles of one level store identical positions at shared
-nodes. Coarser levels round the same lattice nodes to their coarser grid.
+three axes, chosen (with a little headroom) so that every tile of the level,
+surface and skirt, spans at most 65,535 steps, and every node translation is
+a multiple of it. Decoding is therefore exact, and tiles of one level store
+identical positions at shared nodes. Coarser levels round the same lattice
+nodes to their coarser grid.
 
 The leaves are the reference surface. If the leaf grid could move a vertex
 more than **0.05 metre**, leaf positions stay Float32 instead, and their actual
@@ -85,7 +86,7 @@ surface at the same lattice parameters, with outward rounding: the exact maximum
 to the next finer level, including where a clipped edge cell's diagonal crosses
 finer triangles, plus the largest child error. Errors never increase toward the
 leaves. Over smooth terrain the value is close to the vertical error plus
-about 1/65,535 of the tile size for its grid. The
+the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
 not bound the distance to the continuous DEM.
 
@@ -98,8 +99,10 @@ the surface triangles, its tops are the surface vertices, and its bottoms
 follow the surface vertices. Each skirt is deepened by twice its level's
 worst storage error, so the decoded bottoms are at least that far below the
 decoded surface. Any gap between two such neighbours is at most the sum of
-their errors, so the skirt covers it. Skirts face outward under the opaque
-single-sided material. Outer footprint edges have no skirts.
+their errors, so the skirt covers it vertically. Horizontal offsets, from
+Cartesian chords and from coarse levels rounding shared nodes to their own
+grid (under a step), are not closed by vertical curtains. Skirts face outward
+under the opaque single-sided material. Outer footprint edges have no skirts.
 
 Every box contains its tile's decoded surface and skirt vertices and all of its
 descendants' boxes. The hierarchy is published as a bounded 3D Tiles implicit

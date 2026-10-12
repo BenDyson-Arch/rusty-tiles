@@ -121,6 +121,7 @@ def decode_triangles(data, count):
             b = byte()
             value |= (b & 0x7f) << shift
             shift += 7
+            assert shift <= 35, 'index varint exceeds 32 bits'
             if b < 0x80:
                 break
         delta = ~(value >> 1) if value & 1 else value >> 1
