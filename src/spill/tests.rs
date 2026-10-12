@@ -228,8 +228,14 @@ fn invalid_configuration_is_typed() {
         SortConfig::scratch_need::<Wide>(u64::MAX / 8),
         Err(SpillError::Overflow)
     ));
-    let bound = SortConfig::default().memory_bound::<Wide>();
-    assert!(bound >= (256 << 20) + 64 * (1 << 20));
+    let default = SortConfig::default();
+    let bound = default.memory_bound::<Wide>();
+    let (r, f, b) = (default.run_bytes as u64, default.fan_in as u64, 1u64 << 20);
+    assert!(bound >= r * 3 / 2 + f * b, "covers 1.5·R + F·b");
+    assert!(
+        bound <= (0.31 * (1u64 << 30) as f64) as u64,
+        "design M_sort ≈ 0.31 GiB"
+    );
 }
 
 #[derive(Clone, Debug, Default)]
@@ -671,9 +677,17 @@ fn real_volume_preflight_and_missing_directory() {
     ));
     assert_eq!(entries(parent.path()), 0);
     let missing = parent.path().join("missing");
-    assert_eq!(
-        io_kind(&Scratch::create(Some(&missing), 0).err().unwrap()),
-        io::ErrorKind::NotFound
+    let error = Scratch::create(Some(&missing), 0).err().unwrap();
+    assert_eq!(io_kind(&error), io::ErrorKind::NotFound);
+    assert!(
+        error
+            .to_string()
+            .starts_with("scratch directory does not exist"),
+        "{error}"
+    );
+    assert!(
+        !missing.exists(),
+        "an explicit scratch directory is never created"
     );
     assert_eq!(Scratch::default_parent(), std::env::temp_dir());
 }
@@ -796,12 +810,12 @@ fn spill_memory_is_flat_in_input_size() {
         large.1 <= small.1 + 1024,
         "VmHWM grew with input size: small {small:?}, large {large:?}"
     );
-    // The sort's own bound is about 0.6 MiB here; the allowance covers first-touch code pages,
-    // sort threads and the test harness, and stays below a third of the records' 34 MiB.
-    let bound_kib = memory_config().memory_bound::<Wide>() / 1024;
+    // 1.5·R + (F + 1)·b is about 0.5 MiB here. The fixed allowance covers first-touch code
+    // pages, sort threads and the test harness (about 8 MiB measured), and stays below a third
+    // of the records' 34 MiB.
     assert!(
-        large.1 - large.0 <= bound_kib + 10 * 1024,
-        "large sort grew VmHWM by {} KiB; sort bound {bound_kib} KiB",
+        large.1 - large.0 <= 11 * 1024,
+        "large sort grew VmHWM by {} KiB",
         large.1 - large.0
     );
 }

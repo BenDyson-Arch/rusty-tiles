@@ -26,10 +26,11 @@ pub(crate) struct SortConfig {
 }
 
 impl Default for SortConfig {
-    /// `R + F·b` = 256 MiB + 64 × 1 MiB (design §2.6 `M_sort` ≈ 0.31 GiB).
+    /// `1.5·R + F·b` = 240 MiB + 64 MiB, within design §2.6 `M_sort` ≈ 0.31 GiB together with
+    /// the margin in [`SortConfig::memory_bound`].
     fn default() -> Self {
         Self {
-            run_bytes: 256 << 20,
+            run_bytes: 160 << 20,
             fan_in: 64,
             buffer_bytes: 1 << 20,
             jobs: 1,
@@ -59,17 +60,28 @@ impl SortConfig {
         }
     }
 
-    /// Upper bound on resident bytes. Run phase: the buffer, the stable sort's scratch (at most
-    /// the buffer again) and one writer buffer. Merge phase (run buffer released): `F` reader
-    /// buffers, one writer buffer and the heap.
+    /// Upper bound on resident bytes: `1.5·R + (F + 1)·b` plus a margin.
+    ///
+    /// - `R`: the run buffer. It grows to at most `R / 2` before jumping to `R`, so a
+    ///   reallocation never holds more than `1.5·R` either.
+    /// - `R / 2`: the standard library's stable sort scratch, `ceil(n / 2)` elements per sorted
+    ///   chunk of `n`, live only while a run is sorted.
+    /// - `(F + 1)·b`: merge readers plus the run or merge writer.
+    /// - **Margin:** the stable sort allocates at least `min(n, 8 MB / size_of::<T>())`
+    ///   elements per sorting thread, which exceeds `n / 2` for small chunks, so the margin is
+    ///   `jobs × 8 MB`, plus the merge heap (`F` entries).
+    ///
+    /// The run and merge phases do not overlap, so the sum is conservative.
     pub(crate) fn memory_bound<T: Record>(&self) -> u64 {
-        let (run, buffer, fan_in) = (
+        const SORT_MIN_SCRATCH: u64 = 8_000_000;
+        let (run, buffer, fan_in, jobs) = (
             self.run_bytes as u64,
             self.buffer_bytes as u64,
             self.fan_in as u64,
+            self.jobs as u64,
         );
-        let merge = (fan_in + 1) * buffer + fan_in * (size_of::<T>() as u64 + 16);
-        (2 * run + buffer).max(merge)
+        let heap = fan_in * (size_of::<T>() as u64 + 16);
+        run + run.div_ceil(2) + (fan_in + 1) * buffer + jobs * SORT_MIN_SCRATCH + heap
     }
 
     /// Scratch bytes one sort of `records` can hold at once: two generations of runs, because
@@ -361,9 +373,14 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         }
         let capacity = self.buffer.capacity();
         if self.buffer.len() == capacity {
-            // Grow geometrically but never past the run size.
-            self.buffer
-                .reserve_exact(capacity.max(64).min(self.run_records - capacity));
+            // Double while the result stays within R / 2, then jump straight to R, so a
+            // reallocation holds at most 1.5·R.
+            let target = if capacity.saturating_mul(4) <= self.run_records {
+                capacity.saturating_mul(2).max(64).min(self.run_records)
+            } else {
+                self.run_records
+            };
+            self.buffer.reserve_exact(target - capacity);
         }
         self.buffer.push(record);
         self.stats.records += 1;
