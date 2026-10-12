@@ -16,6 +16,15 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   [--explain 'validate:*.wallSeconds=C2 adds payload checks'] [--milestone-label 'C3 merged']
 ```
 
+- Cesium runs in a GPU browser (see Runtime below). Before anything else,
+  `report.py` runs `cesium.py --check-renderer`: it stops, before the long
+  processing step, when the browser is unreachable or its WebGL renderer is
+  not a GPU. `--cdp-url`, `--launch`, `--software-gl` and
+  `--request-diagnostic` are passed through to `cesium.py`. `meta.json`
+  records the browser (`browser`: mode, CDP endpoint, version, viewport,
+  window size, whether the tab stayed visible, cache disabled) and the
+  WebGL renderer (`renderer`: `UNMASKED_RENDERER`, vendor and class), and
+  `REPORT.md`'s header repeats them.
 - The release binary is built once with `--release --features
   native-geospatial` from `git archive` of the tag, under the shared cargo lock
   on CPUs 0 and 1 (`--cargo-wrap`). It is cached in
@@ -48,6 +57,15 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   write `raw.tar.gz`. Outputs stay under `--work` and are deleted unless
   `--keep-work` is given. `--from-raw DIR` re-renders a recorded directory without running anything, applying the
   `--explain` reasons recorded in its `meta.json` plus any given again.
+- Cesium timings are compared only between runs with the same renderer
+  class (`gpu` or `software`). The milestone data block records the
+  renderer; blocks and `## Milestones` rows from before it was recorded ran
+  on SwiftShader. When the classes differ, the last milestone's Cesium
+  timings show as `software, superseded` with no delta or flag, and request
+  counts and load results are still compared. Software rows stay in
+  `## Milestones`, marked superseded once a GPU milestone exists, and a GPU
+  re-render of a commit adds a row beside its software row instead of
+  replacing it.
 - Flags follow the gate below and are measured against the last milestone. Flags
   against the release are reported but not gated. The script exits non-zero on
   a gated regression.
@@ -67,17 +85,28 @@ When to run it:
 
 Raw results never go into git: `.gitignore` admits only the scripts,
 `README.md` and `REPORT.md` under `bench/perf_lane/`.
-`python3 -I bench/perf_lane/test_report.py` unit-tests the table, delta and
-flag logic.
+`python3 -I bench/perf_lane/test_report.py` unit-tests the table, delta,
+flag and renderer-comparability logic. `python3 -I
+bench/perf_lane/test_cesium.py` unit-tests the finish rule (through `node`),
+the renderer check and the Cesium gate.
 
 ## Replay
 
 Put large work directories under `~/.cache/perf-lane/work`, not `/tmp`
 (a RAM-backed tmpfs). Both scripts pin themselves to CPUs 0 and 1 (`--cpus`)
 at nice 10; running them through `taskset -c 0,1 nice -n 10` has the same
-effect. `cesium.py` takes `--cesium`, `--node-modules` and `--chromium`, which
-default to `CESIUM_DIR`, `NODE_PATH` and `CHROMIUM`, or else to the local caches
-used for the recorded runs.
+effect. For `cesium.py` this pins only the driver: the attached browser runs
+wherever its owner started it. `cesium.py` takes `--cesium`, `--node-modules`
+and `--chromium`, which default to `CESIUM_DIR`, `NODE_PATH` and `CHROMIUM`,
+or else to the local caches used for the recorded runs. `--chromium` is used
+only with `--launch` or `--software-gl`.
+
+`cesium.py` needs a running GPU Chromium with a DevTools port:
+
+```sh
+chromium --remote-debugging-port=9222 --user-data-dir=$HOME/.config/chromium-perf
+python3 -I bench/perf_lane/cesium.py --check-renderer   # prints the renderer facts; exit 3 if unusable
+```
 
 ```sh
 W=~/.cache/perf-lane/work/<run>
@@ -140,11 +169,42 @@ Processing (`process.py`): each case runs N times per binary in ABBA order
   base and head. Default vector archives include volatile diagnostics, so they
   differ run to run.
 
-Runtime (`cesium.py` with `cesium.cjs`): each case runs in a fresh Chromium
-1243 with SwiftShader (`--use-angle=swiftshader`), at 1024×768. Cesium is
-1.146.0 and Playwright 1.63.0. The local server binds 127.0.0.1. Any other
-HTTP request is aborted and counted. Every WebSocket is closed and counted, and
-Chromium's resolver maps every host except 127.0.0.1 to NOTFOUND.
+Runtime (`cesium.py` with `cesium.cjs`): Cesium 1.146.0 and Playwright
+1.63.0, rendering on the GPU.
+
+- Browser. By default the lane attaches over CDP
+  (`chromium.connectOverCDP`) to a running GPU Chromium: `--cdp-url`, else
+  `RUSTY_TILES_PERF_CDP`, else `http://localhost:9222`. If nothing listens
+  there, the script stops and says how to start one. Each run opens its own
+  browser context and tab at 1024×768 (device pixel ratio 1), disables the
+  cache over CDP (`Network.setCacheDisabled`), so every run is cold, and
+  brings the tab to the front (`Page.bringToFront`). It closes only that
+  context. It never closes the browser or touches other tabs. A tab that is
+  not `visible` before the load, or that turns hidden during it, fails the
+  case, because background tabs throttle `requestAnimationFrame`. A fresh
+  window occasionally aborts its first navigation (`net::ERR_ABORTED`);
+  that is retried up to twice and counted in `navigationRetries`.
+- Every browser run holds `~/.cache/rusty-tiles-chromium.lock` (`flock`),
+  since other agents drive the same browser. Waiting for the lock does not
+  count toward a case's budget.
+- `--launch` starts a private headless Chromium (`--chromium`) instead,
+  with ANGLE on the GPU (`--angle gl`, the default, or `gl-egl` or
+  `vulkan`). Chromium's resolver then also maps every host except
+  127.0.0.1 to NOTFOUND.
+- Renderer check. A preflight page reads WebGL `UNMASKED_RENDERER_WEBGL`. A
+  software renderer (SwiftShader, llvmpipe, lavapipe, softpipe, Microsoft
+  Basic Render) stops the run with exit 3, unless `--software-gl` is given.
+  `--software-gl` implies `--launch` with `--use-angle=swiftshader`, and its
+  results are labelled `software` and never timed against GPU runs. Every
+  pass records its renderer. A renderer that differs from the preflight one
+  fails the case.
+- The local server binds 127.0.0.1. Any other HTTP request is aborted and
+  counted, and every WebSocket is closed and counted.
+
+Why GPU: under SwiftShader about 98% of a fully refined terrain load
+(35–37 s) was CPU rasterisation, at about 10.5 ms per 8,192-triangle tile
+per frame. The same load takes 0.69–0.80 s on the RTX 4080
+(`~/.cache/rusty-tiles-evidence/perf/terrain-zoom-20261012/findings.md`).
 
 `--timeout` (120 s by default) bounds each asynchronous browser step: page
 load, the Cesium global, `fromUrl` or the TileJSON fetch, each settle and the
@@ -154,11 +214,31 @@ for browser start. A tileset case has 5 steps. A raster case has 5 steps plus
 case overruns its budget, its process group is killed and the case fails with
 `timedOut`, while the run continues.
 
-- 3D Tiles: `Cesium3DTileset.fromUrl` with `maximumScreenSpaceError` 16. The
-  camera is `viewBoundingSphere(root sphere, HeadingPitchRange(-0.8, -0.65,
-  max(3r, 5)))`, the preview's framing. The case is loaded once `tilesLoaded` is
-  true and `allTilesLoaded` has fired, for five consecutive frames.
+- Finish rule. A load is done when, on every rendered frame for 250 ms of
+  wall time (`--settle-ms`), all of these hold:
+  - the content is loaded: for 3D Tiles, `tilesLoaded` is true and
+    `allTilesLoaded` has fired; for raster, `globe.tilesLoaded` is true and
+    the tile queue is empty;
+  - no requests are pending: no pending or processing tileset requests, no
+    active `RequestScheduler` requests and no in-flight XHR or fetch.
+
+  The reported time is when that state began. The confirmation window is
+  not included, and `secondsToSettled` records the time including it. Any
+  frame that breaks the state restarts the window. The window is wall time,
+  not a frame count. The previous rule, five consecutive frames, cost
+  31–37% of a SwiftShader terrain load, because each of those frames redrew
+  every tile.
+- 3D Tiles: `Cesium3DTileset.fromUrl` with `maximumScreenSpaceError` 16 (the
+  default camera; a bench-only `--maximum-sse N` changes it, for example `1`
+  to load nearly every tile of a LOD tileset from the same camera, and such a
+  run is a report: baseline comparisons go to each case's `advisory` list and
+  do not fail it, while absolute failures still do). The camera is `viewBoundingSphere(root sphere,
+  HeadingPitchRange(-0.8, -0.65, max(3r, 5)))`, the preview's framing.
   `.3tz` archives are unpacked and served as files, as the archive viewers do.
+  Each tileset case then loads again in a fresh context with
+  `maximumScreenSpaceError` 0 (the fully refined pass, `refined` in the
+  JSON, the `SSE 0` rows in `REPORT.md`). A failure in that pass fails the
+  case. `--no-refined` skips it.
 - Raster: `UrlTemplateImageryProvider` on `tiles/{z}/{x}/{y}.png`, with min
   and max zoom and bounds from `tilejson.json`. As in preview, the layer is
   added at startup. Each view sets the camera with `setView`: the overview uses
@@ -173,7 +253,20 @@ case overruns its budget, its process group is killed and the case fails with
     tested, so it prints a warning, adds a case `warnings` entry and records
     `spec.insetDegrees`. See the R2 bounds isolation below.
 - `secondsToLoaded`: from `fromUrl`, or from adding the imagery layer, until
-  loaded.
+  loaded under the finish rule. `secondsToFirstTile`, reported separately:
+  until the first tile content is loaded (`tileLoad`), or until the first
+  imagery tile is received. `framesToLoaded` counts frames from the start
+  of the settle to the onset.
+- Request scheduling is a viewer setting, not a property of the output.
+  Every gated or reported number uses Cesium's defaults (`throttleRequests`
+  true, `maximumRequestsPerServer` 18, `maximumRequests` 50). Each pass
+  records them under `scheduler`, with `peakActiveRequests`. Cesium issues
+  requests only in its per-frame update, so a fully refined terrain load
+  needs about 289/18 ≈ 16 issue frames. `--request-diagnostic` loads every
+  tileset pass a second time with `throttleRequests` false and records both
+  under `requestCapDiagnostic` (in `REPORT.md`, `## Request cap
+  diagnostic`). That is a measurement of the cap's effect. It is never
+  gated.
 - `requests`: server-side counts and bytes per category. The categories are
   `manifest` (.json), `subtree`, `content` (glb/b3dm/pnts/i3dm/cmpt) and
   `imagery` (png/jpg/webp). `duplicateRequests` counts repeated paths.
@@ -198,8 +291,8 @@ case overruns its budget, its process group is killed and the case fails with
   over the whole canvas.
 - Screenshots are written to `--work/screenshots/<case>.png`, with
   `<case>-<view>.png` canvas captures for raster views. `captureSha256`
-  records their digests. Software rendering demonstrates behaviour, not GPU
-  performance.
+  records their digests, with `<case>-refined.png` for the fully refined
+  pass.
 
 ## Gate
 
@@ -222,10 +315,15 @@ JSON lists it under `gate`.
   - a failed render probe. Console warnings are recorded
   but do not fail. With `--baseline`, it also flags these metrics by case name
   when they exceed 1.25× and the floor: `requests` (+2), `requestBytes`
-  (+64 KiB) and `secondsToLoaded` (+1 s). No Cesium self-versus-self noise run
-  exists yet, so treat `--baseline` timing flags as advisory. Terrain takes
-  about 46 s under SwiftShader and is sensitive to contention, and imagery
-  request counts depend on timing.
+  (+64 KiB) and `secondsToLoaded` (+0.25 s), except under `--maximum-sse`. Load time is compared only
+  when the baseline used the same renderer class. A baseline recorded
+  before renderer capture counts as software. Cesium times (first tile,
+  loaded, SSE 0 loaded) stay advisory in `REPORT.md`, and imagery request
+  counts depend on timing. GPU noise, measured on the two 2026-10-12
+  baselines (d1874ef and b13a86d, nine cases with byte-identical outputs,
+  one sample each): sub-0.4 s loads moved by up to ±30% (at most 0.09 s),
+  and terrain by up to 8% (0.59/0.63 s default camera, 0.72/0.66 s SSE 0).
+  That noise is why the floor is 0.25 s.
 
 Anything else, such as improvements, sub-floor noise or explained growth, is
 reported, not gated.
@@ -299,7 +397,8 @@ and `baseline-cesium.json`.
 
 ## Not covered
 
-- GPU frame rate, hardware rendering and real network latency.
+- Frame rate after load, other GPUs and drivers, and real network latency
+  (the server is local).
 - Interaction at finer zoom: 3D cases are checked at one framing, raster cases
   at the overview plus the `--hole` and corner views.
 - Aggregate process-tree memory.

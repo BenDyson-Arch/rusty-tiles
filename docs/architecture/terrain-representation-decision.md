@@ -107,6 +107,35 @@ quantized UV contract, geographic availability pyramid, legacy overload family
 and obsolete terrain-provider examples when the replacement producer/callers are
 ready. No compatibility wrapper or output-format switch is planned.
 
+## Amendment: decimated level of detail (T-LOD)
+
+The user approved replacing the flat leaf list with a level-of-detail pyramid
+(design T-LOD, 2026-10-12). This amends "no zoom pyramid" and "without
+simplification or parent proxies" above, in these terms:
+
+- **Decimation only.** Level `L` of `D` keeps every `2^(D−L)`-th leaf lattice
+  node plus the clipped far edges, in tiles of at most `cells-per-leaf` cells.
+  Coarse vertices are the stored leaf vertices; there is no resampling,
+  filtering, inferred resolution or mesh simplification. NoData and fill
+  semantics are unchanged, and leaf surface primitives are byte-identical to
+  the flat profile. A meshopt byte-reduction slice may follow separately.
+- **Certified parent errors.** A tile's error is the exact overlay maximum of
+  the distance from its decoded surface to the next finer level at equal lattice
+  parameters, plus the largest child error. It bounds the distance to the leaf
+  mesh and replaces the uncertified routing diameter. It is not a bound on the
+  continuous DEM.
+- **Skirts.** Edges shared with a same-level tile carry a separate skirt
+  primitive of depth `max(e + e_root, 1 m)`, which covers any T-junction gap
+  between levels. Outer footprint edges have none.
+- **Layout.** The explicit hierarchy is published only as the bounded implicit
+  forest; there is no `--explicit` flag. The explicit hierarchy remains a
+  crate-internal test path so that C2 decoded containment can run on it.
+- **Always on.** There is no `--no-lod` option.
+
+The report moves to schema 2, profile `t1-terrain-lod-mesh-3dtiles-1.1`. The
+validator is unchanged: packed output passes its implicit, bounds and error-order
+checks, and C2 proves decoded containment of the explicit test variant.
+
 ## Acceptance before retaining the replacement
 
 Independent literal/analytic sources must verify every lattice coordinate, height,

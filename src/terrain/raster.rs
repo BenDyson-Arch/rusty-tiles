@@ -478,6 +478,36 @@ pub(super) fn test_raster() -> PreparedRaster {
     }
 }
 
+/// A north-up raster with `value(column, row)` at each pixel centre, row 0 north;
+/// nonfinite values are NoData.
+#[cfg(test)]
+pub(super) fn test_raster_with(
+    width: usize,
+    height: usize,
+    pixel: f64,
+    value: impl Fn(usize, usize) -> f64,
+) -> PreparedRaster {
+    let values: Vec<f64> = (0..height)
+        .flat_map(|row| (0..width).map(move |column| (column, row)))
+        .map(|(column, row)| value(column, row))
+        .collect();
+    PreparedRaster {
+        source_crs: "EPSG:4326".into(),
+        bounds: [
+            12.,
+            42.,
+            12. + width as f64 * pixel,
+            42. + height as f64 * pixel,
+        ],
+        pixel: [pixel, pixel],
+        width,
+        height,
+        source_bytes: 0,
+        validity: values.iter().map(|v| v.is_finite()).collect(),
+        values,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,7 +2,7 @@
 
 Run: python3 -I bench/perf_lane/test_report.py
 """
-import pathlib, sys, unittest
+import json, pathlib, sys, unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import report  # noqa: E402
@@ -314,6 +314,113 @@ class Rendering(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         flags = text.split('## Flags\n\n')[1].split('\n\n')[0].splitlines()
         self.assertTrue(flags[0].endswith('— REGRESSION'), flags)
+
+
+GPU = dict(renderer='ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4080 SUPER/PCIe/SSE2, OpenGL ES 3.2)', rendererClass='gpu')
+
+
+def gpu_meta(label=None):
+    recorded = meta(label)
+    recorded.update(renderer=GPU, browser=dict(mode='cdp', cdpUrl='http://localhost:9222', browserVersion='153.0.8010.52',
+                                               viewport=[1024, 768], window=[1032, 853], tabVisible=True))
+    recorded['cesium'] = dict(recorded['cesium'], finishRule='held for 250 ms', refinedMaximumScreenSpaceError=0,
+                              requestScheduler=dict(throttleRequests=True, maximumRequestsPerServer=18, maximumRequests=50))
+    return recorded
+
+
+class Renderers(unittest.TestCase):
+    """GPU runs never compare Cesium timings with software (SwiftShader) runs; software rows stay, superseded."""
+
+    def software_report(self):
+        columns = dict(release=None, milestone=None, head=dict(terrain=metrics(secs=40.0, first=2.0, rsecs=41.0, rtiles=289)))
+        text, _ = report.render(meta('software baseline'), columns, (None, {}, []), [])
+        return text
+
+    def test_side_metrics_reads_first_tile_and_refined_pass(self):
+        process = dict(cases=[dict(case='terrain', sides=dict(head=process_side()))])
+        requests = lambda n: dict(content=dict(requests=n), subtree=dict(requests=0), imagery=dict(requests=0))
+        cesium = dict(cases=[dict(name='terrain', loaded=True, secondsToLoaded=0.6, secondsToFirstTile=0.15,
+                                  console=dict(errors=[]), problems=[], requests=requests(289),
+                                  refined=dict(loaded=False, secondsToLoaded=None, console=dict(errors=['x']),
+                                               requests=requests(290)))])
+        head = report.side_metrics(process, cesium, 'head')['terrain']
+        self.assertEqual((head['first'], head['secs'], head['rtiles'], head['rsecs']), (0.15, 0.6, 290, None))
+        self.assertEqual((head['load'], head['errors']), (False, 1))  # a refined-pass failure fails the load cell
+
+    def legacy_report(self):
+        """The software report as written before renderer capture: no renderer cell or milestone keys."""
+        lines = []
+        for line in self.software_report().splitlines():
+            if line.startswith('| 2026-'): line = line[:line.rstrip(' |').rindex('|')].rstrip() + ' |'
+            if line.startswith('milestone '):
+                info = json.loads(line.split(' ', 1)[1]); info.pop('renderer'); info.pop('rendererClass')
+                line = 'milestone ' + json.dumps(info)
+            lines.append(line)
+        return '\n'.join(lines) + '\n'
+
+    def test_legacy_milestone_is_software_and_masked(self):
+        previous = report.parse_previous(self.legacy_report())
+        self.assertNotIn('rendererClass', previous[0])  # recorded before renderer capture
+        columns = dict(release=None, milestone=previous[1], head=dict(terrain=metrics(secs=0.7, first=0.1, rsecs=0.8, rtiles=289)))
+        text, failures = report.render(gpu_meta(), columns, previous, [])
+        self.assertEqual(failures, [])
+        self.assertIn('| s to loaded | — | software, superseded | 0.70 |  |  |', text)
+        self.assertIn('| s to loaded, SSE 0 | — | software, superseded | 0.80 |  |  |', text)
+        self.assertIn('| tile requests, SSE 0 | — | 289 | 289 |  | +0.0% |', text)
+        self.assertIn('measured with software rendering: shown as superseded', text)
+        self.assertIn('- WebGL renderer: `ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4080 SUPER/PCIe/SSE2, OpenGL ES 3.2)` (GPU).',
+                      text)
+        self.assertIn('Request scheduling is a viewer setting', text)
+        # The stored software milestone is carried forward unmasked for the next software run.
+        self.assertEqual(report.parse_previous(text)[1]['terrain']['secs'], 40.0)
+
+    def test_same_class_timings_are_compared(self):
+        first, _ = report.render(gpu_meta('gpu'), dict(release=None, milestone=None, head=dict(terrain=metrics(secs=0.7))),
+                                 (None, {}, []), [])
+        previous = report.parse_previous(first)
+        self.assertEqual(previous[0]['rendererClass'], 'gpu')
+        columns = dict(release=None, milestone=previous[1], head=dict(terrain=metrics(secs=1.0)))
+        text, _ = report.render(gpu_meta(), columns, previous, [])
+        self.assertIn('| s to loaded | — | 0.70 | 1.00 |  | **+42.9%** |', text)
+        self.assertIn('- terrain vs milestone: s to loaded 0.70 -> 1.00 (+42.9%) — advisory', text)
+
+    def test_gpu_rerender_keeps_the_software_row_superseded(self):
+        legacy = self.legacy_report()
+        previous = report.parse_previous(legacy)
+        self.assertEqual(len(previous[2]), 1)
+        self.assertTrue(previous[2][0].endswith('| SwiftShader, superseded |'), previous[2][0])  # 8-cell legacy row
+        # Re-render the same commit on the GPU: the software row stays (superseded) beside the GPU row.
+        self.assertIs(report.previous_report(iter([legacy]), meta()['head']['commit'], 'gpu'), legacy)
+        self.assertEqual(report.previous_report(iter([legacy]), meta()['head']['commit'], 'software'), '')
+        columns = dict(release=None, milestone=previous[1], head=dict(terrain=metrics(secs=0.7)))
+        text, _ = report.render(gpu_meta('gpu re-render'), columns, previous, [])
+        rows = report.parse_previous(text)[2]
+        self.assertEqual([report.row_class(r) for r in rows], ['software', 'gpu'])
+        self.assertTrue(rows[1].endswith('| GPU: NVIDIA GeForce RTX 4080 SUPER |'), rows[1])
+        # A second GPU run of the same commit replaces only the GPU row.
+        again, _ = report.render(gpu_meta('gpu again'), columns, report.parse_previous(text), [])
+        self.assertEqual([r.split('|')[3].strip() for r in report.parse_previous(again)[2]],
+                         ['software baseline', 'gpu again'])
+
+    def test_software_rows_are_marked_superseded_once(self):
+        text = self.software_report()
+        [row] = report.parse_previous(text)[2]
+        self.assertTrue(row.endswith('| software (SwiftShader) |'), row)
+        self.assertNotIn('superseded', row)  # a software-only log is not superseded yet
+        later = gpu_meta('gpu'); later['head']['commit'] = 'f00ba12' + '0' * 33
+        gpu, _ = report.render(later, dict(release=None, milestone=None, head=dict(terrain=GOOD)), report.parse_previous(text), [])
+        twice, _ = report.render(later, dict(release=None, milestone=None, head=dict(terrain=GOOD)), report.parse_previous(gpu), [])
+        rows = report.parse_previous(twice)[2]
+        self.assertEqual(rows[0].count('superseded'), 1)
+        self.assertEqual(report.row_class(rows[1]), 'gpu')
+
+    def test_request_cap_section(self):
+        recorded = gpu_meta()
+        recorded['requestCap'] = dict(terrain=dict(refined=dict(
+            throttled=dict(secondsToLoaded=0.72, framesToLoaded=35), unthrottled=dict(secondsToLoaded=0.48, framesToLoaded=14))))
+        text, _ = report.render(recorded, dict(release=None, milestone=None, head=dict(terrain=GOOD)), (None, {}, []), [])
+        self.assertIn('| terrain | refined | 0.72 | 0.48 | -33.3% | 35 | 14 |', text)
+        self.assertIn('not gated', text.split('## Request cap diagnostic')[1])
 
 
 if __name__ == '__main__':

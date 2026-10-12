@@ -166,7 +166,8 @@ newer); other filesystems, such as overlayfs or network mounts, are refused as `
 
 ### terrain
 
-Writes a bounded 3D Tiles 1.1 GLB mesh directory. See the [terrain guide](TERRAIN.md).
+Writes a bounded 3D Tiles 1.1 GLB mesh directory: an implicit level-of-detail
+pyramid over full-detail leaves. See the [terrain guide](TERRAIN.md).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -174,7 +175,9 @@ Writes a bounded 3D Tiles 1.1 GLB mesh directory. See the [terrain guide](TERRAI
 | `--height-offset` | required | Metres added to raw DEM samples to obtain ellipsoidal height |
 | `--fill-height` | required | Ellipsoidal height for missing lattice samples inside the footprint |
 
-There is no zoom or simplification option. Source, height and precision limits
+Level of detail is always on: coarser levels decimate the leaf lattice, carry
+certified geometric errors and have skirts on shared edges. There is no flat
+mode, simplification or zoom option. Source, height and precision limits
 are checked before private staging. Queries, clamping and live imagery draping
 are included in the pinned Cesium preview.
 
