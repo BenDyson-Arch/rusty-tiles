@@ -61,8 +61,7 @@ hierarchy, finite bounds, transforms, geometric errors, content references and
 source identity. Shape them by what the large-mesh tiler of milestone 3 will
 need, so that the tiler becomes their long-term consumer. Establish a shared
 generated explicit-node/document serializer at the existing `src/tileset_node.rs`
-boundary, consumed first by a retained producer: the vector point/line writer
-in `src/vector/pipeline/store.rs`. No work goes into migrating the legacy mesh
+boundary, consumed first by vector's default implicit output (after H6) in `src/vector/pipeline/store.rs`. No work goes into migrating the legacy mesh
 paths that the large-mesh tiler supersedes (user decision: retired once the
 tiler lands): `mesh-to-3tz` in `src/tile.rs` and the mesh archive tileset in
 `src/mesh_archive/encode.rs`. This roadmap does not change the disposition of
@@ -97,9 +96,8 @@ vectors without forcing their geometry into one model.
 
 Retain/rework/replace/remove existing producer and writer components according
 to their independent evidence. Preserve current implicit subtree and metadata
-semantics and the 3TZ boundary. Plain-glTF vector fills, including holes and
-stable source attributes, need successful viewer appearance and picking before
-#75 retires their legacy path. Complete current-content conformance and resource
+semantics and the 3TZ boundary. GLB vector fills (#75) merged in #185 with their bounded viewer appearance
+and picking evidence, including holes and stable source attributes. Complete current-content conformance and resource
 closure where each migrated producer needs them.
 
 Acceptance covers the supported explicit/implicit meaning, known coordinate
@@ -122,10 +120,10 @@ including a small static local mesh with WGS84 anchor/orientation/offset
 controls, enter here. Emit current Tiles 1.1/glTF 2.0 using its accepted
 subtree, metadata and delivery encoding.
 
-Milestones 2 and 3 are not strictly sequential. Producer migration, glTF-only
-vector fills (#75) with their viewer gate, C2 slice 3 and validator work, and
+Milestones 2 and 3 are not strictly sequential. Producer migration, validator work and
 performance fixes on retained paths may run concurrently with the tiler slices
-when their file ownership is disjoint. The ML1 encoder work
+when their file ownership is disjoint. GLB vector fills (#75, #185) and C2
+slice 3 (#179) are merged within their recorded bounded scopes. The ML1 encoder work
 ([#163](https://github.com/BenDyson-Arch/rusty-tiles/pull/163)) may be prepared
 alongside the earlier tiler slices. Only milestone 4 waits for both milestones.
 
@@ -208,19 +206,18 @@ the final acceptance evidence; document consolidation alone does not close
 
 ## Immediate queue and first new implementation slice
 
-Finish final-source independent acceptance of the existing C1 meshopt correction
-at `538c0bde4623e8ad9561e444a19769274805eaa9`, using its nine retained independent
-controls and applicable checks. Then implement the bounded shared explicit
-Tiles 1.1 serializer below with the retained vector point/line writer as its
-first caller; the next concrete caller is one retained implicit producer. Do not
-migrate the superseded mesh paths; the large-mesh tiler becomes the serializer's
-long-term caller in milestone 3. Preserve and diagnose C2's
-`BQ.references-pair` failure at its owning reference-budget boundary: the
-charged total must admit and one fewer reference must refuse. This is an
-unresolved resource-accounting gate, not an established geometry defect or a
-blanket prerequisite to the explicit serializer. Reuse C2 logic only where its
-required domain has independent acceptance; do not require completion of every
-old C2 integration before the new bounded slice.
+The C1 meshopt correction (#176), GLB vector fills (#185), outline runs
+(#186), point outward bounds (#183) and C2 slice 3 (#179) are merged.
+H6 retires all vector/point explicit output modes before M1; its prerequisites
+are complete. M1's first caller is vector's **default implicit output**.
+H7's legacy payload retirement still requires its own contract amendments,
+independent oracle/controls and final nonauthor audit. H14 records these
+public-surface decisions in the [inventory](public-surface-inventory.md#acceptance-and-removal-sequence).
+H6, H7 and H11 (C2 8-corner fast path) are transferred to Claude; H14
+only records their statuses and decisions.
+Do not migrate superseded mesh paths; the large-mesh tiler becomes the
+serializer's long-term caller in milestone 3. C2's bounded accepted scope does
+not establish decoded containment of derived cells, RTC, regions or rotated boxes.
 
 The first new implementation slice is **owned tile records to the current
 writer**, within milestone 1:
@@ -235,10 +232,10 @@ inspect independently; mesh fixtures belong to milestone 3.
 
 **Change:** establish a small generated explicit Tiles 1.1 node/document
 serializer at `src/tileset_node.rs`, whose current helpers interpret JSON. Have
-the explicit point/line output of the vector writer in
+the default implicit output of the vector writer in
 `src/vector/pipeline/store.rs` consume it. This producer already uses
-`src/tileset_node.rs`, writes point/line content as plain GLB rather than the
-b3dm-wrapped polygon fills, carries a stable per-feature source identity that
+`src/tileset_node.rs`, writes point/line and, after #185, polygon-fill content
+as GLB, carries a stable per-feature source identity that
 Cesium can pick, and places a local frame at a WGS84 anchor. That identity holds
 with point aggregation off, its default; opt-in aggregated point parents omit
 `_source_id`, so the fixture runs without aggregation. The point cloud writer's
@@ -250,11 +247,13 @@ contracts in `src/mesh_archive/` are design input for the tiler's needs; move a
 type into the shared contract only where its evidence supports retention,
 without migrating the superseded mesh paths. Resolve values at their owning
 boundaries, and audit serialization and metadata attachment for this domain.
-Avoid a broad abstraction for future formats and avoid requiring full explicit
-and implicit production emitters in
-this first slice. Existing implicit output remains supported; its migration and
-subtree-boundary acceptance belong to a subsequent concrete caller slice.
-Plain-glTF vector fills and their viewer gate belong to milestone 2.
+The serializer retains explicit skeleton, external-document, explicit-leaf,
+link and implicit-root records within that default implicit forest; retiring
+an explicit output mode does not delete these format roles. The forest owner
+keeps layout, addressing, rebasing and subtree binaries. Include the vector
+subtree-boundary controls in this first caller slice; other producers retain
+the existing adapter until their own migration. Avoid a broad abstraction for
+future formats. GLB vector fills and their bounded viewer gate merged in #185.
 
 **Output:** a runnable conversion generating a small real Tiles 1.1/glTF 2.0
 dataset from owned records; a reproducible local load through the proven current
@@ -270,8 +269,8 @@ values; force hierarchy traversal and refinement;
 and include wrong-identity, wrong-frame and missing-resource controls that
 demonstrably fail. Exercise failed conversion without publishing an invalid
 dataset. Record consumer failures and proof limits. One root load or matching
-historical bytes is insufficient. Extend implicit coverage to a tiny subtree
-boundary fixture when that representation enters the owned contract.
+historical bytes is insufficient. Require a tiny implicit subtree-boundary
+fixture in this first default-implicit caller slice.
 
 This slice supplies the first shared contract and real current-format consumer
 evidence. It does not implement the whole tiler or retire advertised output
