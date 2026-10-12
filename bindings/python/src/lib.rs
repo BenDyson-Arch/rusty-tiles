@@ -727,7 +727,7 @@ fn model_to_manifest(
 
 /// Tile local or grid-free georeferenced LAS/LAZ point clouds.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=50_000, chunk_points=100_000, explicit=false, metadata_attributes=false, callback=None))]
+#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=50_000, chunk_points=100_000, metadata_attributes=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn point_cloud_to_3tz(
     py: Python<'_>,
@@ -738,7 +738,6 @@ fn point_cloud_to_3tz(
     height_offset: Option<f64>,
     max_points: usize,
     chunk_points: usize,
-    explicit: bool,
     metadata_attributes: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<PointCloudResult> {
@@ -767,7 +766,6 @@ fn point_cloud_to_3tz(
     let options = PointCloudOptions {
         max_points,
         chunk_points,
-        explicit,
         metadata_attributes,
     };
     let policy = if force {
@@ -842,7 +840,7 @@ impl VectorResult {
     where_clause=None, repair=false, ambiguous_outlines=false, skip_invalid=false,
     max_features=64, max_vertices=65_536, max_bytes=4_194_304, max_tiles=100_000,
     max_source_vertices=1_000_000, lod_tolerance=0.1, lod_levels=3, jobs=None,
-    explicit=false, reproducible=false, quantize=false, meshopt=false, parent_repair=false,
+    reproducible=false, quantize=false, meshopt=false, parent_repair=false,
     aggregate_points=false, max_parent_features=4096, reuse_tileset=None, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn vector_to_3tz(
@@ -869,7 +867,6 @@ fn vector_to_3tz(
     lod_tolerance: f64,
     lod_levels: u8,
     jobs: Option<usize>,
-    explicit: bool,
     reproducible: bool,
     quantize: bool,
     meshopt: bool,
@@ -902,7 +899,6 @@ fn vector_to_3tz(
             levels: lod_levels,
         },
         jobs: jobs.unwrap_or(defaults.jobs),
-        explicit,
         reproducible,
         quantize,
         meshopt,

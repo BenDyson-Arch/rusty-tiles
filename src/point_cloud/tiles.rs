@@ -151,16 +151,14 @@ impl<O: ProducerIo> Tree<'_, O> {
             progress(self.attempt, "tiling", self.leaf_points, self.total_points)?;
             return Ok(node);
         }
-        let depth_limit = if self.options.explicit { 64 } else { 31 };
-        if depth >= depth_limit {
+        // Implicit subtree addressing caps the octree at 31 levels.
+        const DEPTH_LIMIT: usize = 31;
+        if depth >= DEPTH_LIMIT {
             return Err(Error::Data(format!(
-                "point partition exceeds {depth_limit} levels; inspect source extent or raise maxPoints"
+                "point partition exceeds {DEPTH_LIMIT} levels; inspect source extent or raise maxPoints"
             )));
         }
-        let axis = (0..3)
-            .max_by(|a, b| extent[*a].total_cmp(&extent[*b]).then_with(|| b.cmp(a)))
-            .unwrap();
-        let branches = if self.options.explicit { 2 } else { 8 };
+        let branches = 8;
         let (cell_lo, cell_hi) = cell.unwrap_or((lo, hi));
         let midpoint: [f64; 3] =
             std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
@@ -183,14 +181,7 @@ impl<O: ProducerIo> Tree<'_, O> {
                     break;
                 }
                 for row in batch.chunks_exact(self.layout.record_len) {
-                    let left = if extent[axis] == 0. {
-                        seen < count / 2
-                    } else {
-                        position(row)[axis] < center[axis]
-                    };
-                    let branch = if self.options.explicit {
-                        usize::from(!left)
-                    } else if extent == [0.; 3] {
+                    let branch = if extent == [0.; 3] {
                         ((seen as u128 * 8 / count as u128) as usize).min(7)
                     } else {
                         let p = position(row);
@@ -206,9 +197,6 @@ impl<O: ProducerIo> Tree<'_, O> {
             for file in &mut files {
                 file.flush()?;
             }
-            if self.options.explicit && counts.contains(&0) {
-                return Err(Error::Data("spatial split made no progress".into()));
-            }
         }
         std::fs::remove_file(path)?;
         let mut children = Vec::new();
@@ -217,30 +205,24 @@ impl<O: ProducerIo> Tree<'_, O> {
                 std::fs::remove_file(path)?;
                 continue;
             }
-            let child_cell = if self.options.explicit {
-                None
-            } else {
-                Some((
-                    std::array::from_fn(|i| {
-                        if branch & (1 << i) != 0 {
-                            midpoint[i]
-                        } else {
-                            cell_lo[i]
-                        }
-                    }),
-                    std::array::from_fn(|i| {
-                        if branch & (1 << i) != 0 {
-                            cell_hi[i]
-                        } else {
-                            midpoint[i]
-                        }
-                    }),
-                ))
-            };
-            let mut child = self.build(path, center, depth + 1, child_cell)?;
-            if !self.options.explicit {
-                child["extras"] = json!({"implicitChildIndex":branch});
-            }
+            let child_cell = (
+                std::array::from_fn(|i| {
+                    if branch & (1 << i) != 0 {
+                        midpoint[i]
+                    } else {
+                        cell_lo[i]
+                    }
+                }),
+                std::array::from_fn(|i| {
+                    if branch & (1 << i) != 0 {
+                        cell_hi[i]
+                    } else {
+                        midpoint[i]
+                    }
+                }),
+            );
+            let mut child = self.build(path, center, depth + 1, Some(child_cell))?;
+            child["extras"] = json!({"implicitChildIndex":branch});
             children.push(child);
         }
         let offsets = children

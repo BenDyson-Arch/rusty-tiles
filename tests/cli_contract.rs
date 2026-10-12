@@ -55,7 +55,18 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
         let lines = summary(&result.stderr, recipe.command, &output);
         let first = &lines[0];
         match recipe.command {
-            "point-cloud" => assert!(first.ends_with(" (3000 points, 15 tiles)"), "{first}"),
+            // The octree splits in each recipe's own frame (ECEF or local metres).
+            "point-cloud" => {
+                let tiles = if recipe.name == "point-cloud-local" {
+                    9
+                } else {
+                    37
+                };
+                assert!(
+                    first.ends_with(&format!(" (3000 points, {tiles} tiles)")),
+                    "{first}"
+                )
+            }
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
             "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
             "glb-to-3tz" | "createTilesetJson" => {
@@ -304,6 +315,43 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_typed_outcom
                 .unwrap()
                 .starts_with(&message),
             "{error}"
+        );
+    }
+}
+
+/// Explicit vector and point-cloud output retired in 0.4.0 (H6): `--explicit`
+/// is an unknown argument, refused as a usage error before any input or output
+/// work, and no longer advertised in help.
+#[test]
+fn vector_and_point_cloud_reject_retired_explicit_flag() {
+    let work = tempfile::tempdir().unwrap();
+    for (command, input) in [("vector", "in.geojson"), ("point-cloud", "in.las")] {
+        let output = work.path().join(format!("{command}.3tz"));
+        let result = Command::new(bin())
+            .arg(command)
+            .arg("--explicit")
+            .arg("-i")
+            .arg(work.path().join(input))
+            .arg("-o")
+            .arg(&output)
+            .args(["--sourceCrs", "local"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert_eq!(result.status.code(), Some(2), "{command}: {stderr}");
+        assert!(
+            stderr.contains("unexpected argument '--explicit'"),
+            "{command}: {stderr}"
+        );
+        assert!(!output.exists(), "{command} wrote output");
+        let help = Command::new(bin())
+            .args([command, "--help"])
+            .output()
+            .unwrap();
+        assert!(help.status.success());
+        assert!(
+            !String::from_utf8_lossy(&help.stdout).contains("--explicit"),
+            "{command} help still lists --explicit"
         );
     }
 }

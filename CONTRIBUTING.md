@@ -129,7 +129,7 @@ For the optional issue #79 browser acceptance, install CesiumJS 1.146.0 and Play
 npm install --prefix target/metadata-browser --no-save --package-lock=false cesium@1.146.0 playwright
 RUSTY_TILES_METADATA_ACCEPTANCE_DIR=target/metadata-fixtures cargo test --locked --features native-geospatial --test shared_metadata --test native_point_cloud
 cargo run --features native-geospatial -- preview --cesium target/metadata-browser/node_modules/cesium/Build/Cesium \
-  --mesh target/metadata-fixtures/mesh-false-true --point-cloud target/metadata-fixtures/point-false --port 9279
+  --mesh target/metadata-fixtures/mesh-false-true --point-cloud target/metadata-fixtures/point --port 9279
 ```
 
 In another terminal, run `NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/shared_metadata.cjs http://127.0.0.1:9279`. The probe uses installed Chromium (`CHROMIUM` overrides its path), picks separately instanced buildings, checks building and point style colors and picks a point with its original LAS metadata. Both explicit and implicit fixtures, including compressed meshes, pass upstream `3d-tiles-validator` 0.6.1 with zero errors and warnings using the validator command above.

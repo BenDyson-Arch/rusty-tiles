@@ -4,7 +4,7 @@ This page explains how the `vector` command turns GIS features into 3D Tiles. **
 
 The output is experimental. It uses draft glTF vector extensions inside a 3D Tiles 1.1 `.3tz` archive. It is not a finalized 3D Tiles 2.0 format.
 
-Implicit tiling is the default. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. Add `--explicit` for an explicit manifest with the earlier explicit layout and payloads; `vector-build.json` and the `tileset.json` state hash still change with the encoder revision.
+Vector output uses implicit tiling. The existing spatial partition and LOD chains are addressed as a quadtree, with standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserving padded boxes and refinement errors. These addresses describe the hierarchy; content is not clipped to regular cells. Upper levels stay explicit tiles, and each implicit root covers at most four levels in a single subtree whose rows carry every tile's actual bounds, so Cesium never culls or picks by a regular cell. Large skeletons are split into explicit external tileset documents. The [command reference](CLI.md#conventions) describes the layout. This is the only output layout: the `--explicit` mode, which published the hierarchy as one explicit manifest, was removed in 0.4.0.
 
 ## Acceptance and library API
 
@@ -135,7 +135,7 @@ The portable backend validates polygons in Rust, repairs self-intersections usin
 
 Polygons with a horizontal CRS and a constant source height retain their original XY coordinates for validation and triangulation. The resulting triangles use the corresponding vertices on the globe. This prevents globe curvature from introducing false crossings, such as the missing Sudan polygon in earlier country conversions. Longitude coordinates are used as supplied; pole and longitude-seam aliases retain their source boundaries. Local polygons, surfaces with varying heights and native compound or three-axis CRS inputs keep the existing best-fit 3D policy. Simplification carries the matching source vertices through each LOD, and triangle fragmentation retains the original boundary without adding internal edges.
 
-Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including explicit tilesets.
+Reconvert existing vector archives to apply this correction. Previous vector build state is incompatible with the corrected encoder, including archives from the removed explicit mode.
 
 `--parent-repair` affects parent display only. Leaves are unchanged. A stand-in is used only when its error bound, the source 3D bounding-box diagonal, fits the tolerance. Reports record `substitution: parentOutline`. No feature is dropped.
 
@@ -276,17 +276,17 @@ rusty-tiles vector -i updated.gpkg -o output/updated.3tz --layer roads \
 
 ### What must match
 
-Reuse needs the same tiling mode (`--explicit` or the implicit default), layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and backend. Native builds additionally need the same GDAL, GEOS and PROJ versions. Switching between portable and native builds needs a fresh conversion. Archives made by the earlier Python converter also need a fresh build first.
+Reuse needs the same layer selection, height policy, budgets, LOD, field, list, aggregation and encoding options as the earlier build. It also needs the same encoder revision and backend. Native builds additionally need the same GDAL, GEOS and PROJ versions. Switching between portable and native builds needs a fresh conversion. Archives made by the earlier Python converter also need a fresh build first.
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 
-Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
+Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Archives from the explicit mode removed in 0.4.0 are refused with "previous archive uses the retired explicit vector layout". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
 
 ### How reuse works
 
-- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb`). Implicit tiles publish one member per content under `implicit-content/`: a copy whose glTF scene root carries the tile's translation, or a byte copy when that translation is zero. A raw payload used only by implicit tiles is not also kept under `t/`. A raw payload shared by several tiles can therefore appear more than once: in place for explicit tiles and as one copy per implicit tile.
+- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles of the forest skeleton publish raw payloads in place (`t/<sha256>.glb`). Implicit tiles publish one member per content under `implicit-content/`: a copy whose glTF scene root carries the tile's translation, or a byte copy when that translation is zero. A raw payload used only by implicit tiles is not also kept under `t/`. A raw payload shared by several tiles can therefore appear more than once: in place for explicit tiles and as one copy per implicit tile.
 - Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
-- `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
+- `vector-build.json` stores partition decisions, the original local frame and the producer hierarchy (`explicitRoot`) that the forest was written from. Deleting the first feature does not move unchanged content.
 - `vector-build.json` holds one `payloads` entry per distinct raw payload that any implicit tile publishes, keyed by its SHA-256: the first such `implicit-content/` member in tile preorder, its translation, and the exact raw root-node text and JSON length (empty text and length 0 for a byte copy). Raw payloads that an explicit tile also publishes in place have an entry too. Reuse restores each raw payload exactly from its entry, otherwise from `t/<sha256>`, then lays out the new archive.
 - Every recovered payload must match its SHA-256 name. An altered member or record fails with `previous content checksum failed` or `invalid previous payload record`, and nothing is published.
 - `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
