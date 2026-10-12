@@ -31,7 +31,9 @@ pinned draft's `TRIANGLES` path.
 [`Cesium3DTileContentFactory`](https://github.com/CesiumGS/cesium/blob/b8d3a36fe98a3e432eb89253c95d5f20e605e0f1/packages/engine/Source/Scene/Cesium3DTileContentFactory.js)
 chooses the vector GLB reader from the tileset-wide extension declaration.
 Consequently plain triangle fill GLBs cannot be mixed into that tileset on
-1.146.0; fragmented fills retain their b3dm wrapper.
+1.146.0. Fragmented fills are encoded as one `EXT_mesh_polygon` polygon per
+triangle, with counterclockwise exterior loops, in the same GLB as their
+boundaries.
 
 ## Schema provenance and verification
 

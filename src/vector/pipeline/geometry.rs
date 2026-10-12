@@ -19,6 +19,13 @@ fn outline(message: &str) -> FeatureFailure {
 fn is_outline(error: &FeatureFailure) -> bool {
     error.is_outline()
 }
+fn cross(a: Point, b: Point) -> Point {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
 fn opened(ring: &[Point]) -> &[Point] {
     if ring.len() > 1 && ring.first() == ring.last() {
         &ring[..ring.len() - 1]
@@ -62,10 +69,21 @@ impl Plane {
                 *v /= scale;
             }
         }
-        Ok(Self {
-            origin,
-            axes: crate::bbox::jacobi_eigenvectors(cov),
-        })
+        let mut axes = crate::bbox::jacobi_eigenvectors(cov);
+        // Eigenvector signs are arbitrary. Orient the projected XY so that its
+        // counterclockwise rings and triangles face local up (glTF +Y), as the
+        // pinned EXT_mesh_polygon draft requires of exterior rings. A vertical
+        // plane has no up side; it takes a deterministic horizontal side.
+        let n = cross(axes[0], axes[1]);
+        let side = [n[1], n[0], -n[2]]
+            .into_iter()
+            .find(|v| *v != 0.)
+            .unwrap_or(1.);
+        if side < 0. {
+            axes[1] = mul(axes[1], -1.);
+            axes[2] = mul(axes[2], -1.);
+        }
+        Ok(Self { origin, axes })
     }
     fn project(&self, p: Point) -> Point {
         let d = sub(p, self.origin);
@@ -354,13 +372,7 @@ fn polygon_in_chart(
                 collapsed_pole_triangles += 1;
                 continue;
             }
-            let ab = sub(b, a);
-            let ac = sub(c, a);
-            let normal = [
-                ab[1] * ac[2] - ab[2] * ac[1],
-                ab[2] * ac[0] - ab[0] * ac[2],
-                ab[0] * ac[1] - ab[1] * ac[0],
-            ];
+            let normal = cross(sub(b, a), sub(c, a));
             if dot(normal, sub(mul(add(add(a, b), c), 1. / 3.), earth_center)) < 0. {
                 tri.reverse();
             }
@@ -373,6 +385,13 @@ fn polygon_in_chart(
     if indices.is_empty() {
         return Err(data("polygon produced no triangles"));
     }
+    orient_loops(
+        &positions,
+        &indices,
+        &mut loops,
+        &triangle_offsets,
+        &loop_offsets,
+    );
     Ok(Polygon {
         positions,
         source_positions,
@@ -384,6 +403,52 @@ fn polygon_in_chart(
         "triangulationSpace":if chart.is_some(){"intrinsic source XY"}else{"best-fit 3D"},"collapsedPoleTriangles":collapsed_pole_triangles,
         "duplicateVertices":duplicates,"addedIntersectionVertices":added,"maximumIntersectionAdjustmentMetres":spread,"polygonParts":parts.len()}),
     })
+}
+
+/// Wind each polygon's exterior loop like its triangles' front faces and its
+/// holes the other way, as 3D vector areas. Triangles already face up (best-fit
+/// plane) or away from the earth (geographic charts), so exteriors are
+/// counterclockwise and holes clockwise seen from up, per the pinned
+/// EXT_mesh_polygon draft. The 3D comparison matters for thin geographic
+/// triangles, whose chart orientation can disagree with their 3D chords.
+fn orient_loops(
+    positions: &[Point],
+    indices: &[u32],
+    loops: &mut [u32],
+    triangle_offsets: &[u32],
+    loop_offsets: &[u32],
+) {
+    let end = |offsets: &[u32], part: usize, len: usize| {
+        offsets.get(part + 1).map_or(len, |o| *o as usize)
+    };
+    for part in 0..loop_offsets.len() {
+        let triangles =
+            &indices[triangle_offsets[part] as usize..end(triangle_offsets, part, indices.len())];
+        let front = triangles.as_chunks::<3>().0.iter().fold([0.; 3], |sum, t| {
+            let [a, b, c] = t.map(|i| positions[i as usize]);
+            add(sum, cross(sub(b, a), sub(c, a)))
+        });
+        if front == [0.; 3] {
+            continue;
+        }
+        let range = loop_offsets[part] as usize..end(loop_offsets, part, loops.len());
+        for (ring, loop_) in loops[range].split_mut(|i| *i == u32::MAX).enumerate() {
+            // The restart that separates this part from the next ends its range.
+            if loop_.is_empty() {
+                continue;
+            }
+            // Relative to the first vertex: distant small rings keep precision.
+            let origin = positions[loop_[0] as usize];
+            let area = (1..loop_.len()).fold([0.; 3], |sum, i| {
+                let a = sub(positions[loop_[i] as usize], origin);
+                let b = sub(positions[loop_[(i + 1) % loop_.len()] as usize], origin);
+                add(sum, cross(a, b))
+            });
+            if (dot(area, front) > 0.) != (ring == 0) {
+                loop_.reverse();
+            }
+        }
+    }
 }
 
 pub(super) fn validate(
@@ -744,6 +809,156 @@ mod tests {
             .sum();
         assert!((area - 375.).abs() < 1e-10);
         assert_eq!(mesh.loops.iter().filter(|i| **i == u32::MAX).count(), 1);
+    }
+
+    /// Twice the signed area of `ring` seen from glTF +Y (local up).
+    fn up_area(positions: &[Point], ring: &[u32]) -> f64 {
+        (0..ring.len())
+            .map(|i| {
+                let a = positions[ring[i] as usize];
+                let b = positions[ring[(i + 1) % ring.len()] as usize];
+                a[2] * b[0] - a[0] * b[2]
+            })
+            .sum()
+    }
+
+    /// The pinned EXT_mesh_polygon draft: exterior rings counterclockwise and
+    /// holes clockwise. Best-fit planes have arbitrary eigenvector signs, so
+    /// sweep orientations, source ring directions and off-plane noise.
+    #[test]
+    fn best_fit_rings_and_triangles_wind_counterclockwise_from_up() {
+        let mut cases = 0;
+        for step in 0..24 {
+            let angle = step as f64 * std::f64::consts::PI / 12.;
+            for reversed in [false, true] {
+                let square = |half: f64, noise: f64| {
+                    let mut ring: Vec<Point> = (0..16)
+                        .map(|i| {
+                            let t = i as f64 * std::f64::consts::PI / 8.;
+                            let (x, z) = (half * t.cos(), half * t.sin());
+                            let (s, c) = angle.sin_cos();
+                            // Slightly tilted, slightly nonplanar, so the
+                            // source is a best-fit (non-intrinsic) polygon.
+                            [
+                                x * c - z * s,
+                                0.01 * x + noise * (i as f64 * 1.7).sin(),
+                                x * s + z * c,
+                            ]
+                        })
+                        .collect();
+                    if reversed {
+                        ring.reverse();
+                    }
+                    ring
+                };
+                let mesh = polygon(&[square(20., 0.004), square(5., 0.)], false).unwrap();
+                let rings: Vec<_> = mesh.loops.split(|i| *i == u32::MAX).collect();
+                assert_eq!(rings.len(), 2);
+                assert!(
+                    up_area(&mesh.positions, rings[0]) > 0.,
+                    "exterior at {step}"
+                );
+                assert!(up_area(&mesh.positions, rings[1]) < 0., "hole at {step}");
+                for t in mesh.indices.as_chunks::<3>().0 {
+                    assert!(up_area(&mesh.positions, t) > 0., "triangle at {step}");
+                }
+                cases += 1;
+            }
+        }
+        assert_eq!(cases, 48);
+    }
+
+    /// Thin geographic triangles: the lon/lat chart and the 3D chords can
+    /// disagree about orientation. The loop must wind like the outward-facing
+    /// triangle (a fragmented fill polygon is exactly one triangle).
+    #[test]
+    fn geographic_sliver_loops_wind_with_their_outward_triangle() {
+        let radius = 6378137.;
+        let local = |lon: f64, lat: f64| -> Point {
+            let (lon, lat) = (lon.to_radians(), lat.to_radians());
+            // x east, y up, z = -north around the (0,0) tangent point.
+            [
+                radius * lat.cos() * lon.sin(),
+                radius * lat.cos() * lon.cos() - radius,
+                -radius * lat.sin(),
+            ]
+        };
+        let earth = [0., -radius, 0.]; // earth centre in local (y-up) metres
+                                       // Along a parallel the great-circle chord bulges poleward, so a small
+                                       // poleward chart offset is a clockwise sliver in 3D.
+        for offset in [0.1, -0.1, 0.5, -0.5, 3., -3.] {
+            for reversed in [false, true] {
+                let mut source = vec![[0., 60., 0.], [20., 60., 0.], [10., 60. + offset, 0.]];
+                if reversed {
+                    source.reverse();
+                }
+                let rings = vec![source.iter().map(|p| local(p[0], p[1])).collect::<Vec<_>>()];
+                let mesh = polygon_in_chart(&rings, Some((&[source.clone()], true, earth)), false)
+                    .unwrap();
+                assert_eq!(mesh.indices.len(), 3);
+                let t = [mesh.indices[0], mesh.indices[1], mesh.indices[2]];
+                let [a, b, c] = t.map(|i| mesh.positions[i as usize]);
+                let normal = cross(sub(b, a), sub(c, a));
+                let centroid = mul(add(add(a, b), c), 1. / 3.);
+                assert!(
+                    dot(normal, sub(centroid, earth)) > 0.,
+                    "triangle faces outward"
+                );
+                let rotations = [t, [t[1], t[2], t[0]], [t[2], t[0], t[1]]];
+                assert!(
+                    rotations
+                        .iter()
+                        .any(|r| r.as_slice() == mesh.loops.as_slice()),
+                    "loop {:?} winds like triangle {t:?} at {offset}",
+                    mesh.loops
+                );
+            }
+        }
+    }
+
+    /// CesiumJS 1.146.0 sizes its polygon vertex remap by the loop list, so
+    /// every polygon vertex must be a loop vertex, including after repairs
+    /// (which refuse rather than drop source boundary material).
+    #[test]
+    fn polygon_vertices_are_loop_vertices() {
+        let cases: Vec<(Vec<Vec<Point>>, bool)> = vec![
+            (
+                vec![vec![
+                    [0., 0., 0.],
+                    [2., 0., 2.],
+                    [2., 0., 1.],
+                    [2., 0., 0.],
+                    [0., 0., 2.],
+                    [0., 0., 0.],
+                ]],
+                true,
+            ),
+            (
+                vec![vec![
+                    [0., 0., 0.],
+                    [4., 0., 0.],
+                    [2., 0., 0.],
+                    [2., 0., 3.],
+                    [0., 0., 3.],
+                    [0., 0., 0.],
+                ]],
+                true,
+            ),
+            (
+                vec![
+                    vec![[0., 0., 0.], [4., 0., 0.], [4., 0., 4.], [0., 0., 4.]],
+                    vec![[1., 0., 1.], [1., 0., 2.], [2., 0., 2.], [2., 0., 1.]],
+                ],
+                false,
+            ),
+        ];
+        for (rings, repair) in cases {
+            let mesh = polygon(&rings, repair).unwrap();
+            let looped: BTreeSet<_> = mesh.loops.iter().filter(|i| **i != u32::MAX).collect();
+            assert_eq!(looped.len(), mesh.positions.len());
+            assert!(mesh.indices.iter().all(|i| looped.contains(i)));
+            assert!(mesh.positions.len() <= mesh.loops.len());
+        }
     }
 
     #[test]

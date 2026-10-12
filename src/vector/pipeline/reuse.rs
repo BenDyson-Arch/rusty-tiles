@@ -116,6 +116,21 @@ fn encoder_with_framing(framing_source: &str) -> String {
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
 }
 
+/// Fragmented polygon fills were b3dm-wrapped before glTF-only fills. Their
+/// payloads cannot be reused; the archive must be rebuilt.
+const LEGACY_FILL: &str = "previous archive has legacy b3dm polygon fills; fills are now glTF \
+     vector content. Run a fresh conversion without --reuse-tileset";
+
+fn has_legacy_fill(node: &Value) -> bool {
+    contents(node).iter().any(|content| {
+        content["uri"]
+            .as_str()
+            .is_some_and(|uri| uri.to_ascii_lowercase().ends_with(".b3dm"))
+    }) || node["children"]
+        .as_array()
+        .is_some_and(|children| children.iter().any(has_legacy_fill))
+}
+
 pub(super) fn contents(node: &Value) -> Vec<&Value> {
     if let Some(contents) = node["contents"].as_array() {
         contents.iter().collect()
@@ -234,10 +249,11 @@ impl Reuse {
                 }
                 Ok(())
             }
-            index(
-                state.get("explicitRoot").unwrap_or(&manifest["root"]),
-                &mut result.nodes,
-            )?;
+            let previous_root = state.get("explicitRoot").unwrap_or(&manifest["root"]);
+            if has_legacy_fill(previous_root) {
+                return Err(data(LEGACY_FILL));
+            }
+            index(previous_root, &mut result.nodes)?;
             result.old = serde_json::from_value(state["records"].clone())?;
             result.cuts = result
                 .old
@@ -394,7 +410,7 @@ impl Reuse {
                     || !stem
                         .bytes()
                         .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v))
-                    || !matches!(suffix, "glb" | "b3dm")
+                    || suffix != "glb"
                 {
                     return Err(data(
                         "previous content URI is not an immutable vector content path",
@@ -622,6 +638,43 @@ fn previous_payload(
 #[cfg(test)]
 mod codec_reuse_tests {
     use super::*;
+
+    /// An intact earlier archive whose explicit hierarchy still names a
+    /// b3dm fill is refused up front with the actionable rebuild message.
+    #[test]
+    fn previous_b3dm_fill_archive_refuses_reuse() {
+        let root = tempfile::tempdir().unwrap();
+        for (uri, refused) in [("t/aa.b3dm", true), ("t/aa.glb", false)] {
+            let tile = json!({"geometricError":0,"children":[{"geometricError":0,
+                "contents":[{"uri":"t/bb.glb"},{"uri":uri}]}]});
+            let manifest = json!({"asset":{"version":"1.1"},"geometricError":1,"root":tile});
+            let state = json!({"version":1,"records":{},"config":{"encoder":encoder(),"where":null},
+                "manifestSha256":digest(&manifest).unwrap(),"anchor":[0.,0.,0.],
+                "frame":[[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]]});
+            let raw = serde_json::to_vec(&state).unwrap();
+            let mut published = manifest.clone();
+            published["asset"]["extras"] = json!({"vectorBuildStateSha256":hash(&raw)});
+            let path = root.path().join(format!("previous-{refused}.3tz"));
+            let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            zip.start_file("tileset.json", options).unwrap();
+            std::io::Write::write_all(&mut zip, &serde_json::to_vec(&published).unwrap()).unwrap();
+            zip.start_file("vector-build.json", options).unwrap();
+            std::io::Write::write_all(&mut zip, &raw).unwrap();
+            zip.finish().unwrap();
+            let options = VectorOptions {
+                reuse_tileset: Some(path),
+                ..VectorOptions::default()
+            };
+            match Reuse::new(root.path(), &options) {
+                Err(Error::Data(message)) if refused => assert_eq!(message, LEGACY_FILL),
+                Ok(_) if !refused => {}
+                Err(error) => panic!("unexpected refusal for {uri}: {error}"),
+                Ok(_) => panic!("b3dm fill archive must not be reused"),
+            }
+        }
+        assert!(LEGACY_FILL.contains("without --reuse-tileset"));
+    }
 
     /// Exercise the real subtree signature and restore decision: an unchanged
     /// encoder identity restores the cached node, a changed framing dependency

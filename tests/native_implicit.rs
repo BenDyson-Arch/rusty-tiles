@@ -306,14 +306,7 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
     rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let forest = forest(&output, "QUADTREE");
     fn payload(bytes: &[u8]) -> (Vec<u8>, String) {
-        let offset = if bytes.starts_with(b"b3dm") {
-            (3..7).fold(28, |offset, i| {
-                offset + u32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap()) as usize
-            })
-        } else {
-            0
-        };
-        let glb = gltf::Glb::from_slice(&bytes[offset..]).unwrap();
+        let glb = gltf::Glb::from_slice(bytes).unwrap();
         let mut json: Value = serde_json::from_slice(&glb.json).unwrap();
         // Only scene node placement may change; attributes, textures, feature
         // metadata, compression and all binary buffer bytes must stay exact.
@@ -323,7 +316,8 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
     let payloads = |path: &Path| {
         let zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
         zip.file_names()
-            .filter(|name| name.ends_with(".glb") || name.ends_with(".b3dm"))
+            .inspect(|name| assert!(!name.ends_with(".b3dm"), "legacy fill {name}"))
+            .filter(|name| name.ends_with(".glb"))
             .map(str::to_owned)
             .collect::<Vec<_>>()
     };
@@ -338,9 +332,19 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
         let decoded = payload(&bytes);
         assert!(sources.contains(&decoded), "changed payload: {name}");
         published.insert(decoded);
-        if name.ends_with(".b3dm") {
-            assert_eq!(bytes.len() % 8, 0, "unaligned {name}");
-            fills += 1;
+        assert_eq!(bytes.len() % 8, 0, "unaligned {name}");
+        // A fragmented fill is one EXT_mesh_polygon polygon per triangle.
+        let glb = gltf::Glb::from_slice(&bytes).unwrap();
+        let json: Value = serde_json::from_slice(&glb.json).unwrap();
+        for primitive in json["meshes"][0]["primitives"].as_array().unwrap() {
+            let polygon = &primitive["extensions"]["EXT_mesh_polygon"];
+            let indices = &json["accessors"][primitive["indices"].as_u64().unwrap() as usize];
+            if polygon["count"]
+                .as_u64()
+                .is_some_and(|count| count > 1 && count * 3 == indices["count"].as_u64().unwrap())
+            {
+                fills += 1;
+            }
         }
     }
     assert_eq!(published, sources, "every raw payload is published once");
@@ -367,7 +371,7 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
             .contains(&json!("3DTILES_content_gltf_vector")));
         headers(&doc["root"]);
     }
-    assert!(fills > 1, "exercise fragmented b3dm content");
+    assert!(fills > 1, "exercise fragmented glTF fill content");
     // Headers are checked on implicit roots below the skeleton, where the
     // chunked layout used to put its external implicit roots.
     assert!(
