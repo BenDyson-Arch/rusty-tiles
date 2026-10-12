@@ -1,9 +1,9 @@
 # F1d3 large-mesh tiler: public surface inventory and dispositions (ML0)
 
-Status: **DRAFT** (ML0, light process). It records, for every public option of the legacy
-`mesh-to-3tz` family and of today's `mesh-local-to-3tz`, whether the large-mesh tiler retains,
-replaces or retires it, and which user decision governs. Questions the decisions do not settle
-are listed for the user at the end. Nothing is removed by this document; removals happen in ML10,
+Status: **DRAFT** (ML0, light process), with every user question answered (2026-10-12). It
+records, for every public option of the legacy `mesh-to-3tz` family and of today's
+`mesh-local-to-3tz`, whether the large-mesh tiler retains, replaces or retires it, and which user
+decision or coordinator ruling governs. Nothing is removed by this document; removals happen in ML10,
 after ML9 accepts (the legacy command stays advertised until then).
 
 **Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. Sources read: `src/main.rs`
@@ -26,6 +26,11 @@ inventory is [public-surface-inventory.md](public-surface-inventory.md); the con
 | V3 | `--scratch-dir`, default the system temp directory, refusal before starting | New option |
 | U1 | Small primitives vanish from coarse tiles | Documented in help and docs; no option |
 | U2 | 3TZ member ceiling accepted, typed early refusal | Documented in help and docs; no option |
+| U4 = (c) | Small islands vanish and small holes are filled at coarse depths; the output publishes the sets | Documented in help and docs; no option |
+| O-U1 (2026-10-12) | Retire `--leaf-triangles`; `L` comes from the profile only | §3 |
+| O-U2 (2026-10-12) | Retire `--root-proxy-triangles`, `--max-proxy-error-metres` and the full-detail mode; **supersedes the F1d2 contract's "keep the public FullDetail/RootProxy request" note** | §3 |
+| O-U3 (2026-10-12) | `--jobs` defaults to auto: `max(1, min(cores, available memory ÷ per-job need))`; the report states the value and why | §4 |
+| O-U4 (coordinator) | Python `validate` gains `max_volume`, for CLI/Python parity | §4 |
 
 ## 1. Operations
 
@@ -61,9 +66,9 @@ inventory is [public-surface-inventory.md](public-surface-inventory.md); the con
 | --- | --- | --- | --- |
 | `-i`, `-o`, `-f` | `input`, `output`, `force` | `MeshRequest::local_gltf`, `with_policy` | **Retained** |
 | `--anchor`, `--orientation-xyzw`, `--scene-offset` | same names | `with_placement(MeshPlacement)` | **Retained** |
-| `--leaf-triangles` (required) | `leaf_triangles` (required) | third argument of `local_gltf` | **Open (O-U1).** Draft: retired in favour of the profile's `L`, which changes `local_gltf`'s signature |
-| `--root-proxy-triangles`, `--max-proxy-error-metres` | same names | `MeshApproximation::RootProxy` | **Open (O-U2).** Draft: retired; F1d3 always builds the certified multi-level hierarchy, which subsumes F1d1/F1d2's single root proxy. The F1d2 contract states these "keep" for that slice, so retiring them needs the user |
-| (default) | (default) | `MeshApproximation::FullDetail` | **Open (O-U2).** Draft: retired (no LOD-less output) |
+| `--leaf-triangles` (required) | `leaf_triangles` (required) | third argument of `local_gltf` | **Retired (O-U1).** `L` comes from the profile only; `local_gltf(input, output)` loses its third argument |
+| `--root-proxy-triangles`, `--max-proxy-error-metres` | same names | `MeshApproximation::RootProxy`, `with_approximation` | **Retired (O-U2).** F1d3 always builds the certified multi-level hierarchy, which subsumes F1d1/F1d2's single root proxy. This supersedes the F1d2 contract's note that the FullDetail/RootProxy request and its CLI/Python arguments are kept |
+| (default) | (default) | `MeshApproximation::FullDetail`, `MeshApproximationReport` | **Retired (O-U2).** There is no LOD-less output; `MeshCertificateReport` is replaced by the F1d3 report (umbrella §13) |
 
 ## 4. New surface
 
@@ -71,14 +76,16 @@ inventory is [public-surface-inventory.md](public-surface-inventory.md); the con
 | --- | --- | --- | --- |
 | `--profile {fast, balanced, quality, lossless}` | `profile="balanced"` | `MeshRequest::with_profile(MeshProfile)` | D5 default; unknown values are InvalidRequest |
 | `--scratch-dir PATH` | `scratch_dir=None` | `with_scratch_dir` | V3; default the system temp directory; the report says when scratch is memory-backed |
-| `--jobs N` | `jobs=None` | `with_jobs` | **Open (O-U3)**: the default. Memory grows by about 0.6–1.3 GiB per job (contract §9). Draft: 2, the value the memory table and scale gates use. Vector defaults to all cores; raster to 1..4 |
+| `--jobs N` (default `auto`) | `jobs=None` (auto) | `with_jobs(Jobs::Auto \| Jobs::Fixed(n))` | **O-U3:** auto = `max(1, min(cores, ⌊available memory ÷ per-job need⌋))`, where the per-job need is the profile's `jobs ×` term of the memory bound (umbrella §9; about 0.6–1.3 GiB) and available memory is read once at start. An explicit `N ≥ 1` is used as given. The report states the chosen value, the cores and memory it saw and which limit decided. Output bytes do not depend on it (umbrella §11) |
 | (report) | (report) | `MeshReport` | Profile and constants, per-level counts, seam and certificate statistics, `appearance`, preflight stage fields, vanished primitives (contract §13) |
-| `validate --max-volume KEY=N` | **Open (O-U4)** | `ValidationLimits` changes (C1 O-C1-4, I1 O-I1-1) | A-C1-4 and A-C2-1 keys. Rust `ValidationReport::payloads` becomes `PayloadRows` (ML7a); Python `report["payloads"]` becomes a lazy sequence |
+| `validate --max-volume KEY=N` (repeatable) | `validate(path, max_volume={"KEY": N})` (O-U4) | the validation request takes the same keys; `ValidationLimits` volume and budget fields become `Option<u64>`, serialized as `null` when uncapped (O-C1-4) | A-C1-4 and A-C2-1 keys. The I1 subtree cap stays internal (O-I1-1). Rust `ValidationReport::payloads` becomes `PayloadRows` (ML7a); Python `report["payloads"]` becomes a lazy sequence |
 
 **Help and docs text (U1, U2).** The command help and `docs/` say: small primitives may vanish
 from coarse levels, never from leaves, and the vanished geometry is inside the published
 `geometricError`; an archive holds at most 178,956,970 members (about 1.7×10^12 triangles at
-`balanced`), and larger inputs are refused before work starts.
+`balanced`), and larger inputs are refused before work starts; at coarse levels small islands
+may vanish and small holes may be filled (U4), and each coarse tile lists what it removed or
+filled (umbrella §6.7).
 
 ## 5. Output and compatibility changes
 
@@ -90,19 +97,17 @@ from coarse levels, never from leaves, and the vanished geometry is inside the p
 - **Reuse identity:** earlier vector archives stop serving as `--reuse-tileset` baselines at ML1
   (`Cargo.lock`, `vector_encoding/*`) and again at ML3 (`implicit*`). Release notes say "re-run
   the build".
-- **Rust API breaks:** `local_gltf`'s signature (if O-U1 retires `leaf_triangles`);
-  `MeshApproximation` (if O-U2 retires it); `ValidationLimits` field types and a new field;
-  `ValidationReport::payloads`.
+- **Rust API breaks:** `local_gltf`'s signature (O-U1); `MeshApproximation`,
+  `with_approximation`, `MeshApproximationReport` and `MeshCertificateReport` (O-U2);
+  `ValidationLimits` field types (O-C1-4); `ValidationReport::payloads`.
+- **Python breaks:** `mesh_local_to_3tz` loses `leaf_triangles`, `root_proxy_triangles` and
+  `max_proxy_error_metres`, and gains `profile`, `scratch_dir` and `jobs`; `validate` gains
+  `max_volume`.
 - **Docs to update** (ML9 and ML10): `README.md`, `docs/CLI.md`, `docs/CONVERTERS.md`,
   `docs/DEMOS.md`, `docs/FORMATS.md`, `docs/INSTALL.md`, `docs/VALIDATION.md`, `CHANGELOG.md`, and
   the `tile` and `mesh_archive` rows of `public-surface-inventory.md`.
 
-## Open questions for the user
+## Open questions
 
-- **O-U1.** Keep `--leaf-triangles` as an expert override of the profile's `L`, or retire it
-  (draft)? Keeping it makes `L` a user number again, which the profile gates (ML9) do not cover.
-- **O-U2.** Retire `--root-proxy-triangles`/`--max-proxy-error-metres` and the full-detail mode
-  (draft), or keep a full-detail (no LOD) mode for users who want only leaves?
-- **O-U3.** Default for `--jobs`: 2 (draft), or the number of cores as vector does?
-- **O-U4 (coordinator).** Does Python `validate` gain a `max_volume` argument, or is
-  `--max-volume` CLI-only for 0.4.0?
+None for the user. The coordinator schedules the C1 meshopt-header defect fix (C1 amendment
+A-C1-3) as its own small PR.
