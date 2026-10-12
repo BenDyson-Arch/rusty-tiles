@@ -110,7 +110,14 @@ extern "C" {
 // The call is single-threaded: cFlagThreaded is never set, so the encoder's
 // job pool has no worker threads. Status, statistics and debug output flags are
 // never set, and no statistics are computed.
-RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uint32_t width, std::uint32_t height,
+struct RtBasisuMipLevel {
+    const std::uint8_t *rgba;
+    std::size_t length;
+    std::uint32_t width;
+    std::uint32_t height;
+};
+
+RT_BASISU_ENTRY std::int32_t rt_basisu_encode_mips(const RtBasisuMipLevel *levels, std::size_t level_count,
                               std::uint32_t format, std::int32_t quality, std::int32_t effort,
                               std::uint32_t flags, std::uint8_t **out, std::size_t *out_len) {
     rt_basisu_clear_diagnostics();
@@ -119,13 +126,35 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uin
     }
     *out = nullptr;
     *out_len = 0;
-    if (rgba == nullptr || (flags & ~kKnownFlags) != 0) {
+    if (levels == nullptr || level_count == 0 || level_count > 15 ||
+        (flags & ~kKnownFlags) != 0 || (flags & kFlagMipmaps) != 0) {
         return kInvalidArgument;
     }
+    const std::uint32_t width = levels[0].width, height = levels[0].height;
     if (width == 0 || height == 0 || width > kMaxEdge || height > kMaxEdge ||
         static_cast<std::uint64_t>(width) * height > kMaxTexels) {
         return kInvalidArgument;
     }
+    std::size_t full_levels = 1;
+    for (std::uint32_t edge = width > height ? width : height; edge > 1; edge >>= 1) {
+        ++full_levels;
+    }
+    if (level_count != 1 && level_count != full_levels) {
+        return kInvalidArgument;
+    }
+    std::uint64_t total_texels = 0;
+    std::uint32_t mip_width = width, mip_height = height;
+    for (std::size_t i = 0; i < level_count; ++i) {
+        const RtBasisuMipLevel &level = levels[i];
+        if (level.rgba == nullptr || level.width != mip_width || level.height != mip_height ||
+            level.length != static_cast<std::uint64_t>(mip_width) * mip_height * 4) {
+            return kInvalidArgument;
+        }
+        total_texels += static_cast<std::uint64_t>(mip_width) * mip_height;
+        mip_width = mip_width > 1 ? mip_width >> 1 : 1;
+        mip_height = mip_height > 1 ? mip_height >> 1 : 1;
+    }
+    if (total_texels > 2 * kMaxTexels) return kInvalidArgument;
     if (effort < 0 || effort > kMaxEffort) {
         return kInvalidArgument;
     }
@@ -156,11 +185,17 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uin
         if (flags & kFlagZstd) {
             basis_flags |= basisu::cFlagKTX2UASTCSuperCompression;
         }
-        if (flags & kFlagMipmaps) {
-            basis_flags |= basisu::cFlagGenMipsClamp;
+        // Never set cFlagGenMips*: the vector overload copies extra images to
+        // m_source_mipmap_images and disables automatic generation. One image
+        // deliberately remains base-only. Caller pixels are copied before encode.
+        basisu::vector<basisu::image> source_images;
+        source_images.resize(static_cast<std::uint32_t>(level_count));
+        for (std::size_t i = 0; i < level_count; ++i) {
+            source_images[static_cast<std::uint32_t>(i)].init(
+                levels[i].rgba, levels[i].width, levels[i].height, 4);
         }
         std::size_t size = 0;
-        void *data = basisu::basis_compress2(mode, rgba, width, height, width, basis_flags, quality,
+        void *data = basisu::basis_compress2(mode, source_images, basis_flags, quality,
                                              effort, &size, nullptr);
         if (data == nullptr) {
             return kEncodeFailed;
@@ -206,6 +241,21 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_selftest_failure(std::int32_t which) {
     } catch (...) {
         return kException;
     }
+}
+
+// Base-only legacy ABI. Requests to generate mips are rejected by the common entry.
+RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uint32_t width, std::uint32_t height,
+                              std::uint32_t format, std::int32_t quality, std::int32_t effort,
+                              std::uint32_t flags, std::uint8_t **out, std::size_t *out_len) {
+    if (width > kMaxEdge || height > kMaxEdge) {
+        rt_basisu_clear_diagnostics();
+        if (out != nullptr) *out = nullptr;
+        if (out_len != nullptr) *out_len = 0;
+        return kInvalidArgument;
+    }
+    const std::size_t bytes = static_cast<std::size_t>(width) * height * 4;
+    const RtBasisuMipLevel level{rgba, bytes, width, height};
+    return rt_basisu_encode_mips(&level, 1, format, quality, effort, flags, out, out_len);
 }
 
 void rt_basisu_free(std::uint8_t *data) {

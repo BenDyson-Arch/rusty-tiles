@@ -16,7 +16,27 @@ pub(super) const FLAG_SRGB: u32 = 1 << 0;
 pub(super) const FLAG_ZSTD: u32 = 1 << 1;
 pub(super) const FLAG_MIPMAPS: u32 = 1 << 2;
 
+#[repr(C)]
+pub(super) struct MipLevel {
+    pub rgba: *const u8,
+    pub length: usize,
+    pub width: u32,
+    pub height: u32,
+}
+
 extern "C" {
+    /// Encode caller-authored levels. Descriptors and pixels remain borrowed.
+    pub(super) fn rt_basisu_encode_mips(
+        levels: *const MipLevel,
+        level_count: usize,
+        format: u32,
+        quality: i32,
+        effort: i32,
+        flags: u32,
+        out: *mut *mut u8,
+        out_len: *mut usize,
+    ) -> i32;
+
     /// Encodes tightly packed RGBA8 rows to KTX2. On success `*out` owns
     /// `*out_len` bytes that must be released with [`rt_basisu_free`].
     pub(super) fn rt_basisu_encode(
