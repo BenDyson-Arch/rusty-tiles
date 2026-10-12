@@ -11,8 +11,9 @@ they disagree on an item below, this note governs that item. It is the I1 half o
 [the C1 amendment](c1-large-mesh-ml0-amendment.md) (A-C1-4), and it composes with C2 slice 3
 (frozen v3.1, `contract-draft.md` `8bc53429…31d6`), which uses I1's walk unchanged.
 
-**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. **Design:** large-mesh v5
-(`design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`); review `698b3b61…c4ef`.
+**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. **Design:** large-mesh v6.1
+(`design.md` `0bf9fd19…441b`, `slices.md` `705bb8f7…f225`); reviews `698b3b61…c4ef` (v5) and
+`3f2c0583…ae6d` (v6).
 
 ## What the forest output needs from I1
 
@@ -113,16 +114,18 @@ live subtrees (about 256 MiB). The live-path sum keeps the index at most `C_sub`
 **Monotone.** Today `Σ_live E ≤ references` = 2^20 holds at every moment, and
 `Σ_live P_t ≤ hierarchy_visits` = 2^18. So no archive admitted today reaches either new check.
 
-**Representation.** Proposed: a new `ValidationLimits` field `implicit_subtree_tiles`
-(serialized `implicitSubtreeTiles`, default 1,048,576), carried in `ImplicitLimits` next to the
-live-path byte cap. This supersedes OD-5 ("no new fields") and, like C2's O-b, breaks external
-struct literals (O-I1-1). Producer forests use at most 585 tiles per subtree (OCTREE, S = 4) and
-one subtree per path.
+**Representation (coordinator ruling O-I1-1: internal).** `C_sub` is a crate-private profile
+constant carried in `ImplicitLimits` next to the live-path byte cap. It is **not** a
+`ValidationLimits` field and is not serialized, so OD-5 ("no new fields") stands and there is no
+public API break. No acceptance criterion needs it public: the controls below run in-crate
+through the `pub(crate)` `inspect_selected`, which takes a crate-private override of `C_sub`. The
+two refusal messages name the cap's value. Producer forests use at most 585 tiles per subtree
+(OCTREE, S = 4) and one subtree per path.
 
 ### Acceptance criteria
 
-- **AC-I1.7 At-cap pairs** (through `inspect_selected` with explicit limits so fixtures stay
-  small): with `C_sub` = 1,000, one subtree with `P_t` = 1,000 succeeds and 1,001 is ResourceLimit
+- **AC-I1.7 At-cap pairs** (in-crate, through `inspect_selected` with the crate-private
+  `C_sub` override so fixtures stay small): with `C_sub` = 1,000, one subtree with `P_t` = 1,000 succeeds and 1,001 is ResourceLimit
   with the tiles message; a root subtree with `P_t` = 600 plus a child subtree with 400 succeeds,
   401 fails (the live-path sum); the same for `E` with the contents message.
 - **AC-I1.8 Release.** Two sibling child subtrees of 600 tiles under a root subtree of 300
@@ -161,12 +164,9 @@ today's caps and through the independent streaming reader at scale (slices ML3, 
 
 ---
 
-## Open questions
+## Open questions and settled items
 
-- **O-I1-1 (I1 owner + coordinator).** Public field `implicit_subtree_tiles` (proposed), or a
-  private profile constant that is not serialized? The public field is consistent with C2's O-b;
-  the private constant avoids an API break but hides a refusal threshold from the report.
+- **Settled (coordinator, 2026-10-12):** `C_sub` stays internal (O-I1-1); uncapped budgets
+  serialize as `null` (A-C1-4, O-C1-4).
 - **O-I1-2 (I1 owner).** Confirm the credit factor `4·8` per availability byte. It is the
   design's (§10.3); AC-I1.6 records producer headroom against it.
-- **O-I1-3 (coordinator).** A-C1-4's serialization (O-C1-4) applies to `hierarchyVisits`,
-  `references` and `totalBytesRead`, which I1 also reads.
