@@ -46,8 +46,13 @@ def side_metrics(process, cesium, side):
         if 'skipped' in data and 'ok' not in data:
             out[name] = dict(na=data['skipped'] or 'not run'); continue
         if not data.get('ok'):
-            tail = [line for line in data.get('log', '').splitlines() if line.strip()]
-            out[name] = dict(failed=f"exit {data['samples'][-1]['exitCode']}: {tail[-1][:120] if tail else 'no log'}"); continue
+            lines = [line.strip() for line in data.get('log', '').splitlines() if line.strip()]
+            code = data['samples'][-1]['exitCode']
+            error = next((i for i, line in enumerate(lines) if line.startswith('error:')), None)
+            if code == 2 and error is not None:  # clap usage error: this CLI takes different arguments
+                out[name] = dict(na='usage error: ' + ' '.join(lines[error:error + 2])[:160]); continue
+            out[name] = dict(failed=f"exit {code}: {(lines[error] if error is not None else lines[-1] if lines else 'no log')[:120]}")
+            continue
         m = dict(wall=data['wallSeconds'], rss=data['peakRssMiB'], bytes=data['outputBytes'])
         check = by_case.get(f'validate:{name}', {}).get('sides', {}).get(side, {})
         if check.get('ok'): m['vwall'] = check['wallSeconds']
@@ -222,7 +227,9 @@ def render(meta, columns, previous, explanations):
             f"{release['build']}." if release else '- Release column: not recorded in this run.'),
            f"- Last milestone: " + (f"`{info['commit'][:12]}` ({info['label']}, {info['date']})." if info else 'none.'),
            f"- CPU: {env['cpu']}; pinned to CPUs {','.join(map(str, env['cpuAffinity']))} at nice {env['niceness']}, "
-           f"RAYON_NUM_THREADS=2; best of {env['repeat']} ABBA runs; load average before {env['loadAverageBefore'][0]:.2f}.",
+           f"RAYON_NUM_THREADS=2; best of {env['repeat']} ABBA runs; load average before {env['loadAverageBefore'][0]:.2f}; "
+           + (f"contended best samples (other work >20% of the wall time): {', '.join(meta['contended'])}."
+              if meta.get('contended') else 'no contended best samples.'),
            f"- Cesium {ces.get('cesium', '—')}, Playwright {ces.get('playwright', '—')}, Chromium "
            f"{chromium(ces.get('chromium'))} (SwiftShader, 1024×768).",
            f"- Corpus sha256 `{meta['corpus'][:16]}` (pinned `corpus.py` inputs and the T1 fixture).",
@@ -238,7 +245,7 @@ def render(meta, columns, previous, explanations):
         out.append(f"- {f['case']} {ref}: {f['text']} — {verdict}")
     notes = [f"- {case} on {label}: {m.get('na') or m.get('failed')}" for col, label in (('release', tag), ('head', 'head'))
              for case, m in (columns.get(col) or {}).items() if m and ('na' in m or 'failed' in m)]
-    if notes: out += ['', '## Not run', '', *notes]
+    if notes: out += ['', '## Not run or failed', '', *notes]
     out += ['', '## Cases', '']
     for case in columns['head']:
         out += case_table(case, columns, flagged, tag) + ['']
@@ -286,7 +293,8 @@ def baseline_binary(tag, cache, target, wrap):
     archive = subprocess.run(['git', '-C', ROOT, 'archive', '--format=tar', commit], capture_output=True, check=True).stdout
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar: tar.extractall(source, filter='data')
     features = ['--release', '--locked', '--features', 'native-geospatial', '--bin', 'rusty-tiles']
-    environment = dict(os.environ, CARGO_BUILD_JOBS='2', CARGO_TARGET_DIR=str(target))
+    # CONTRIBUTING.md: native builds share the system SQLite with GDAL/PROJ.
+    environment = dict(os.environ, CARGO_BUILD_JOBS='2', CARGO_TARGET_DIR=str(target), LIBSQLITE3_SYS_USE_PKG_CONFIG='1')
     run([*wrap, 'cargo', 'build', *features], cwd=source, env=environment, check=True)
     shutil.copy2(target / 'release' / 'rusty-tiles', binary)
     rustc = subprocess.run(['rustc', '--version'], capture_output=True, text=True).stdout.strip()
@@ -298,12 +306,30 @@ def baseline_binary(tag, cache, target, wrap):
     return binary, build
 
 
-def wait_for_quiet(limit, interval, give_up):
-    """Wait while the 1-minute load average is above the limit (another agent may be timing)."""
-    deadline = time.monotonic() + give_up
-    while (load := os.getloadavg()[0]) > limit:
-        if time.monotonic() > deadline: raise SystemExit(f'report: load average {load:.2f} stayed above {limit} for {give_up:g} s')
-        print(f'report: load average {load:.2f} > {limit}; waiting {interval:g} s', file=sys.stderr, flush=True)
+def pinned_busy(cpus, seconds=5):
+    """Fraction of the pinned CPUs' capacity that other work used over a short sample."""
+    import process
+    before = process.busy(cpus); time.sleep(seconds)
+    return (process.busy(cpus) - before) / os.sysconf('SC_CLK_TCK') / seconds / len(cpus)
+
+
+def contended(process):
+    """Cases whose best-wall sample had other work using >20% of it on the pinned CPUs (process.py's rule)."""
+    return sorted(f"{c['case']} {side}" for c in process['cases'] for side, v in c['sides'].items()
+                  if v.get('ok') and v['foreignCpuSecondsAtBestWall'] > 0.2 * v['wallSeconds'])
+
+
+def wait_for_quiet(limit, interval, give_up, cpus, max_busy, samples=3):
+    """Wait until the 1-minute load average is at most the limit and the pinned CPUs were idle
+    (under max_busy) for several consecutive samples: other agents also time and pin work."""
+    deadline, quiet = time.monotonic() + give_up, 0
+    while quiet < samples:
+        load, busy = os.getloadavg()[0], pinned_busy(cpus)
+        if load <= limit and busy <= max_busy: quiet += 1; continue
+        quiet = 0
+        if time.monotonic() > deadline: raise SystemExit(f'report: not quiet for {give_up:g} s (load {load:.2f}, CPUs busy {busy:.0%})')
+        print(f'report: load average {load:.2f} (limit {limit}), pinned CPUs {busy:.0%} busy (limit {max_busy:.0%}); '
+              f'waiting {interval:g} s', file=sys.stderr, flush=True)
         time.sleep(interval)
 
 
@@ -342,11 +368,19 @@ def collect(args, explanations):
     work = args.work / evidence.name
     shutil.rmtree(work, ignore_errors=True)
     py = [sys.executable, '-I']
-    wait_for_quiet(args.max_load, args.load_interval, args.load_give_up)
-    process = run([*py, HERE / 'process.py', '--base', base, '--head', head, '--work', work / 'process', '--out',
-                   evidence / 'process.json', '--repeat', args.repeat, '--cpus', args.cpus,
-                   *(x for e in args.explain for x in ('--explain', e))])
-    if process.returncode not in (0, 1) or not (evidence / 'process.json').exists(): raise SystemExit('report: process.py failed')
+    cpus = {int(c) for c in args.cpus.split(',')}
+    best = None
+    for attempt in range(1, args.attempts + 1):  # rerun while other work contended the pinned CPUs
+        wait_for_quiet(args.max_load, args.load_interval, args.load_give_up, cpus, args.max_cpu_busy)
+        out = evidence / f'process-attempt{attempt}.json'
+        process = run([*py, HERE / 'process.py', '--base', base, '--head', head, '--work', work / 'process', '--out', out,
+                       '--repeat', args.repeat, '--cpus', args.cpus, *(x for e in args.explain for x in ('--explain', e))])
+        if process.returncode not in (0, 1) or not out.exists(): raise SystemExit('report: process.py failed')
+        noisy = contended(json.loads(out.read_text()))
+        print(f'report: attempt {attempt}: {len(noisy)} contended case sides {noisy}', file=sys.stderr, flush=True)
+        if best is None or len(noisy) < best[1]: best = (out, len(noisy))
+        if not noisy: break
+    shutil.copy2(best[0], evidence / 'process.json')
     result = json.loads((evidence / 'process.json').read_text())
     hole = ','.join(map(str, result['environment']['rasterHoleDegrees']))
     for side in ('base', 'head'):
@@ -357,7 +391,7 @@ def collect(args, explanations):
             name = pathlib.PurePath(case['argv'][case['argv'].index('-o') + 1]).name
             targets.append(f"{case['case']}={work / 'process' / side / name}")
         if not targets: continue
-        wait_for_quiet(args.max_load, args.load_interval, args.load_give_up)
+        wait_for_quiet(args.max_load, args.load_interval, args.load_give_up, cpus, args.max_cpu_busy)
         check = run([*py, HERE / 'cesium.py', '--work', work / f'cesium-{side}', '--out', evidence / f'cesium-{side}.json',
                      '--hole', hole, '--cpus', args.cpus, *targets])
         if check.returncode not in (0, 1) or not (evidence / f'cesium-{side}.json').exists():
@@ -380,6 +414,7 @@ def load_raw(directory):
     columns = dict(head=side_metrics(process, read('cesium-head.json'), 'head'),
                    release=side_metrics(process, read('cesium-base.json'), 'base') if meta.get('release') else None)
     meta['environment'] = process['environment']
+    meta['contended'] = contended(process)
     meta.setdefault('corpus', corpus_digest(process['environment']['inputs']))
     meta['cesium'] = (read('cesium-head.json') or {}).get('environment')
     if 'bundle' not in meta:
@@ -415,7 +450,10 @@ def main():
     parser.add_argument('--repeat', type=int, default=3)
     parser.add_argument('--cpus', default='0,1')
     parser.add_argument('--max-load', type=float, default=4.0, help='wait while the 1-minute load average is above this')
+    parser.add_argument('--max-cpu-busy', type=float, default=0.2,
+                        help='wait while other work uses more than this fraction of the pinned CPUs')
     parser.add_argument('--load-interval', type=float, default=60)
+    parser.add_argument('--attempts', type=int, default=4, help='process.py runs while best samples are contended')
     parser.add_argument('--load-give-up', type=float, default=4 * 3600)
     parser.add_argument('--keep-work', action='store_true', help='keep the outputs under --work')
     args = parser.parse_args()

@@ -16,9 +16,9 @@ def metrics(**changes):
 
 def process_side(ok=True, wall=1.0, rss=100.0, out=1000, skipped=None):
     if skipped: return dict(skipped=skipped)
-    side = dict(ok=ok, wallSeconds=wall, peakRssMiB=rss, samples=[dict(exitCode=0 if ok else 2)])
+    side = dict(ok=ok, wallSeconds=wall, peakRssMiB=rss, samples=[dict(exitCode=0 if ok else 101)])
     if ok: side['outputBytes'] = out
-    else: side['log'] = 'reading input\nerror: unexpected argument --jobs\n'
+    else: side['log'] = "reading input\nthread 'main' panicked at src/raster.rs:1:1\n"
     return side
 
 
@@ -36,6 +36,8 @@ class Extraction(unittest.TestCase):
             dict(case='validate:vector', sides=dict(base=process_side(wall=0.1), head=process_side(wall=0.3))),
             dict(case='mesh-local', sides=dict(base=process_side(skipped='no mesh-local-to-3tz command'), head=process_side())),
             dict(case='raster', sides=dict(base=process_side(ok=False), head=process_side())),
+            dict(case='terrain', sides=dict(base=dict(ok=False, samples=[dict(exitCode=2)], log='error: the following required '
+                 'arguments were not provided:\n  --maxZoom <MAX_ZOOM>\n\nUsage: rusty-tiles terrain\n'), head=process_side())),
         ])
         cesium = dict(cases=[dict(name='vector', loaded=True, secondsToLoaded=2.5, console=dict(errors=['boom'], warnings=[]),
                                   problems=['console errors: 1'],
@@ -45,8 +47,16 @@ class Extraction(unittest.TestCase):
                                               secs=2.5, problems=['console errors: 1']))
         base = report.side_metrics(process, None, 'base')
         self.assertEqual(base['mesh-local'], dict(na='no mesh-local-to-3tz command'))
-        self.assertEqual(base['raster'], dict(failed='exit 2: error: unexpected argument --jobs'))
+        self.assertEqual(base['raster'], dict(failed="exit 101: thread 'main' panicked at src/raster.rs:1:1"))
+        self.assertEqual(base['terrain'], dict(na='usage error: error: the following required arguments were not provided: '
+                                                  '--maxZoom <MAX_ZOOM>'))
         self.assertNotIn('load', base['vector'])
+
+    def test_contended(self):
+        side = lambda wall, foreign: dict(ok=True, wallSeconds=wall, foreignCpuSecondsAtBestWall=foreign)
+        process = dict(cases=[dict(case='vector', sides=dict(base=side(1.0, 0.2), head=side(1.0, 0.21))),
+                              dict(case='mesh', sides=dict(base=dict(skipped='x'), head=side(0.1, 0.5)))])
+        self.assertEqual(report.contended(process), ['mesh head', 'vector head'])
 
 
 class Deltas(unittest.TestCase):

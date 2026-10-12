@@ -20,13 +20,16 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   native-geospatial` from `git archive` of the tag, under the shared cargo lock
   on CPUs 0 and 1. It is cached in `~/.cache/perf-lane/baselines/<tag>/`
   (`BUILD.json` records how) and reused after that. A corpus case whose command
-  or flags the release CLI lacks shows `n/a`, with the reason under `## Not run`.
+  or flags the release CLI lacks shows `n/a`, with the reason under
+  `## Not run or failed`.
 - The last milestone's per-case numbers come from the data block at the end of
   the committed `REPORT.md` (git `HEAD`). `--milestone-label` makes this run the
   new milestone and appends a `## Milestones` row. Without it, the stored
   milestone and the rows carry forward unchanged.
-- Each benchmark step waits while the 1-minute load average is above 4
-  (`--max-load`), so that other work does not skew the numbers.
+- Each benchmark step waits until the 1-minute load average is at most 4
+  (`--max-load`) and the pinned CPUs have been under 20% busy for three
+  5-second samples (`--max-cpu-busy`), so that other work does not skew the
+  numbers.
 - Raw results go to `~/.cache/rusty-tiles-evidence/perf/<date>-<shortsha>/`:
   the process and Cesium JSON, run logs, screenshots and `meta.json`, plus
   `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. Outputs stay under
