@@ -1,0 +1,81 @@
+# Declared budgets for the milestone-4 scale gates (docs/architecture/04-tiles2-roadmap.md,
+# "Retain the v6.1 pass/fail scale obligations").
+#
+# A budget set has:
+#   max    metric <= value       min  metric >= value       expect  metric == value
+#   scale  input-manifest dotted path >= value: the obligation's required input scale. A run whose
+#          budgets pass on a smaller input reports BELOW-SCALE, never PASS.
+#   extends = "other set" (tables merge, the child wins).
+# A value is a number/bool/string, or "producer:<dotted path>[*factor]" (the producer's JSON
+# report), "manifest:<dotted path>[*factor]" (the input manifest) or "validate:<path>".
+#
+# Gate (a)-(d) numbers marked provisional are planning values from the P0 prototype
+# (mlarge-p0-20261012: 526,174,760-triangle grid, balanced 1238 s / 1228 MiB high-water mark) and
+# the H1 scale run. The roadmap freezes constants only after the final checks pass; replace these
+# with the tiler's declared configuration bounds (producer:...) once its report names them.
+
+# ------------------------------------------------------------------ shared expectations
+
+[budget.converter]
+expect = { producer_exit = 0, validate_exit = 0, validate_ok = true, cesium_loaded = true, cesium_problems = 0 }
+
+# ------------------------------------------------------------------ milestone-4 gates
+
+[budget.gate-a]
+# (a) spilled 5.26e8-triangle production octree
+extends = "converter"
+provisional = true
+scale = { "truth.triangles" = 526_174_760 }
+max = { peak_rss_bytes = 2_147_483_648, wall_seconds = 7_200, scratch_peak_bytes = "manifest:total_bytes*4", validate_peak_rss_bytes = 2_147_483_648, validate_wall_seconds = 3_600, cesium_load_seconds = 30, cesium_refined_seconds = 300 }
+min = { tiles = 2 }
+
+[budget.gate-b]
+# (b) 10^4 primitives and 10^4 holes/islands per root (region 0 is checked; every region has the same counts)
+extends = "converter"
+provisional = true
+scale = { "truth.regions.0.primitives" = 10_000, "truth.regions.0.holes" = 10_000, "truth.regions.0.islands" = 10_000 }
+max = { peak_rss_bytes = 1_073_741_824, wall_seconds = 1_800, scratch_peak_bytes = "manifest:total_bytes*8", validate_peak_rss_bytes = 1_073_741_824, validate_wall_seconds = 600, cesium_load_seconds = 30, cesium_refined_seconds = 120 }
+min = { tiles = 1 }
+
+[budget.gate-c]
+# (c) procedural-texture bake: every material has baseColor, normal and metallicRoughness textures
+extends = "converter"
+provisional = true
+scale = { "parameters.texture_size" = 1024, "truth.materials" = 4 }
+max = { peak_rss_bytes = 2_147_483_648, wall_seconds = 3_600, scratch_peak_bytes = "manifest:total_bytes*8", validate_peak_rss_bytes = 1_073_741_824, validate_wall_seconds = 600, cesium_load_seconds = 30, cesium_refined_seconds = 120 }
+min = { tiles = 1 }
+
+[budget.gate-d-implicit]
+# (d) large hierarchy: >= 2^22 implicit tiles, validated without a producer (gen_archive.py implicit)
+provisional = true
+scale = { "truth.tiles" = 4_194_304 }
+expect = { validate_exit = 0, validate_ok = true, cesium_loaded = true, cesium_problems = 0 }
+min = { tiles = "manifest:truth.expected_validator.tiles" }
+max = { validate_peak_rss_bytes = 4_294_967_296, validate_wall_seconds = 1_800, cesium_load_seconds = 60, cesium_refined_seconds = 600 }
+
+[budget.gate-d-large]
+# (d) large delivery: archive over 4 GiB (gen_archive.py large)
+provisional = true
+scale = { "truth.archive_bytes" = 4_294_967_297 }
+expect = { validate_exit = 0, validate_ok = true, cesium_loaded = true, cesium_problems = 0 }
+min = { tiles = "manifest:truth.expected_validator.tiles" }
+max = { validate_peak_rss_bytes = 1_073_741_824, validate_wall_seconds = 1_800, cesium_load_seconds = 120, cesium_refined_seconds = 600 }
+
+# ------------------------------------------------------------------ harness validation (current binaries)
+
+[budget.mesh-local]
+# Existing mesh-local-to-3tz (in-memory, 100,000-triangle / 32 MiB source ceiling).
+extends = "converter"
+max = { peak_rss_bytes = 1_073_741_824, wall_seconds = 300, scratch_peak_bytes = "manifest:total_bytes*8", validate_peak_rss_bytes = 536_870_912, validate_wall_seconds = 120, cesium_load_seconds = 30, cesium_refined_seconds = 60 }
+min = { tiles = "producer:counts.leaf_tiles" }
+
+[budget.mesh-local-ceiling]
+# Above its ceiling mesh-local-to-3tz must refuse early with a typed error and publish nothing.
+expect = { producer_exit = 2, producer_error = "unsupported", output_exists = false }
+max = { peak_rss_bytes = 268_435_456, wall_seconds = 30, scratch_end_bytes = 0 }
+
+[budget.h1-capture]
+# H1 streamed capture/sort/tree (mesh_large::tests::external_driver in the lib test binary):
+# the producer's own declared bounds are the budget.
+expect = { producer_exit = 0 }
+max = { peak_rss_bytes = "producer:capture.memory.bound_bytes", scratch_peak_bytes = "producer:capture.scratch.need_bytes", scratch_end_bytes = 0, wall_seconds = 1_800 }
