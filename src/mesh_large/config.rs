@@ -377,6 +377,29 @@ pub(crate) fn scratch_need(triangles: u64, total_bytes: u64, config: &TreeConfig
     scratch_need_parts(triangles, total_bytes, config).map(|need| need.need_bytes)
 }
 
+/// Recheck remaining capacity at a pass boundary; current owned files already consumed their
+/// share of the full preflight allowance. Concurrent filesystem use is never reserved.
+pub(crate) fn preflight_remaining(
+    scratch: &crate::spill::Scratch,
+    total_need: u64,
+) -> Result<(), crate::JobError> {
+    let remaining = total_need
+        .checked_sub(scratch.live_bytes())
+        .ok_or_else(|| {
+            crate::JobError::new(
+                crate::JobErrorKind::ResourceLimit,
+                "H1 live scratch exceeds its declared preflight allowance",
+            )
+        })?;
+    crate::spill::preflight(
+        scratch.path(),
+        remaining,
+        crate::spill::SpaceRole::Scratch,
+        crate::spill::PreflightStage::Geometry,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn scratch_need_parts(
     triangles: u64,
     total_bytes: u64,

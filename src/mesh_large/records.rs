@@ -83,9 +83,9 @@ impl Bounds {
     };
 
     pub(crate) fn include(&mut self, point: [f32; 3]) {
-        for axis in 0..3 {
-            self.min[axis] = self.min[axis].min(point[axis]);
-            self.max[axis] = self.max[axis].max(point[axis]);
+        for (axis, value) in point.into_iter().enumerate() {
+            self.min[axis] = self.min[axis].min(value);
+            self.max[axis] = self.max[axis].max(value);
         }
     }
 

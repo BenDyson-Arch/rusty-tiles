@@ -19,6 +19,7 @@ from pathlib import Path
 import random
 import struct
 import subprocess
+import tempfile
 import unittest
 
 
@@ -722,6 +723,42 @@ class ReferenceControls(unittest.TestCase):
         row[3] = min(incidents[:16])
         with self.assertRaisesRegex(AssertionError, "all-corner"):
             compare(expected, damaged)
+
+    def test_streamed_scale_reference_and_wrong_provenance(self):
+        positions, template_indices = grid_template()
+        source = primitive_triangles(positions, template_indices * 2)
+        expected = hierarchy(source, 256, 100000)
+        with tempfile.TemporaryDirectory(prefix="h1-oracle-control-") as temporary:
+            directory = Path(temporary)
+            (directory / "scale-truth.json").write_text(json.dumps({"triangles": 4096, "cells": 32,
+                    "template_triangles": 2048, "positions": 1089}))
+            raw = bytearray()
+            for t in expected["triangles"]:
+                raw.extend(struct.pack("<QIIIQ3Q9fIB", t["key"], *t["source"], *t["vertices"],
+                                       *(v for p in t["positions"] for v in p), t["bytes"], t["degenerate"]))
+            (directory / "triangles.bin").write_bytes(raw)
+            with (directory / "nodes.bin").open("wb") as output:
+                for n in expected["nodes"]:
+                    output.write(struct.pack("<BQBQBBBQQQ6f3x", *n["identity"], n["last_octant"],
+                            n["kind"] == "leaf", n["children"], n["first"], n["end"], n["bytes"],
+                            *n["bounds"]["min"], *n["bounds"]["max"]))
+            (directory / "vertex_depth.bin").write_bytes(b"".join(struct.pack("<IIIB", *row)
+                                                        for row in expected["vertex_depth"]))
+            leaves = sum(n["kind"] == "leaf" for n in expected["nodes"])
+            info = {"tree": {"triangles": 4096, "nodes": len(expected["nodes"]), "leaves": leaves,
+                    "internal": len(expected["nodes"]) - leaves,
+                    "height": max(n["depth"] for n in expected["nodes"]) + 1,
+                    "degenerate_cells": 0, "welded_vertices": 1089,
+                    "per_depth": [{"depth": d, "bounds": box, "maximum_extent": extent}
+                                  for d, box, extent in expected["depth_bounds"]]},
+                    "source_bounds": {"min": [0, 0, 0], "max": [32, 32, 0]},
+                    "cube": {"origin": [0, 0, 0], "side": 32}, "geometry_bytes": 56 * 4096}
+            (directory / "info.json").write_text(json.dumps(info))
+            verify_scale(directory / "scale-truth.json", directory, 256, 100000)
+            struct.pack_into("<Q", raw, 20, 4095)
+            (directory / "triangles.bin").write_bytes(raw)
+            with self.assertRaisesRegex(AssertionError, "provenance"):
+                verify_scale(directory / "scale-truth.json", directory, 256, 100000)
 
 
 def main():

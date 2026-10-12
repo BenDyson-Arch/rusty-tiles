@@ -120,6 +120,7 @@ pub(crate) fn build(
             &scan,
             check,
         )?;
+        config::preflight_remaining(&scratch, need.need_bytes)?;
         let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, check)?;
         member_gate(tree.stats.nodes, config.member_ceiling)?;
         check()?;

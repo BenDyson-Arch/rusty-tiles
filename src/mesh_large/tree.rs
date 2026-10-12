@@ -408,7 +408,7 @@ fn common_cell_prefix(a: u64, b: u64) -> u8 {
 
 pub(crate) fn build(
     scratch: &Scratch,
-    mut triangles: SortedStream<'_, TriangleRecord>,
+    triangles: SortedStream<'_, TriangleRecord>,
     config: &TreeConfig,
     jobs: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
@@ -426,7 +426,7 @@ pub(crate) fn build(
     let mut group: Option<KeyGroup<'_>> = None;
     let mut cells: Vec<OpenCell> = Vec::with_capacity(KEY_DEPTH as usize);
     let mut previous: Option<TriangleRecord> = None;
-    while let Some(triangle) = triangles.next() {
+    for triangle in triangles {
         let triangle = triangle?;
         if previous
             .as_ref()
@@ -467,10 +467,9 @@ pub(crate) fn build(
             .unwrap()
             .push(&triangle, stats.triangles, config)?;
         stored.push(&triangle)?;
-        stats.triangles = stats
-            .triangles
-            .checked_add(1)
-            .ok_or_else(|| invalid("triangle count overflows u64"))?;
+        stats.triangles = stats.triangles.checked_add(1).ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "triangle count overflows u64")
+        })?;
         previous = Some(triangle);
         if stats.triangles.is_multiple_of(4096) {
             check()?;
@@ -480,7 +479,10 @@ pub(crate) fn build(
         let closed = group.close(config, &mut nodes, &mut stats, check)?;
         cells.last_mut().unwrap().append(closed)?;
     } else {
-        return Err(unsupported("scene contains no triangles"));
+        return Err(JobError::new(
+            JobErrorKind::InvalidInput,
+            "scene contains no triangles",
+        ));
     }
     while cells.len() > 1 {
         let closed = cells.pop().unwrap().close(config, &mut nodes)?;
@@ -532,6 +534,11 @@ pub(crate) fn build(
     }
     let nodes = ordered_nodes.finish()?;
     check()?;
+    let need =
+        super::config::scratch_need(stats.triangles, root.bytes, config).ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64")
+        })?;
+    super::config::preflight_remaining(scratch, need)?;
     let weld_depths = vertex_depths(scratch, &triangles, &nodes, config, jobs, check)?;
     stats.welded_vertices = weld_depths.len();
     check()?;
