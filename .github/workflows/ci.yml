@@ -23,7 +23,8 @@ jobs:
     steps:
       # Docs-only means every changed path is Markdown under docs/ or at the
       # repository root. Markdown under bench/ and tests/ is hashed by oracles,
-      # so it counts as code. Any doubt (manual runs, new branches, API errors,
+      # so it counts as code, and so does any removal or rename (a missing
+      # README.md breaks cargo package). Any doubt (manual runs, new branches, API errors,
       # truncated file lists) runs the full workflow.
       - name: Classify changed paths
         id: scope
@@ -35,7 +36,7 @@ jobs:
         run: |
           docs_only=false
           if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
-            if files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${HEAD}" --jq '.files[].filename') \
+            if files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${HEAD}" --jq '.files[] | if (.status == "added" or .status == "modified") then .filename else "!" + .filename end') \
               && [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -lt 300 ] \
               && ! printf '%s\n' "$files" | grep -qvE '^(docs/.*|[^/]+)\.md$'; then
               docs_only=true
