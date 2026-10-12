@@ -18,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from fixturelib import (Implicit, Slot, SubIR, cell, cjson, glb_point, glb_tile_point, morton, offset, pad,  # noqa: E402
+from fixturelib import (Implicit, Slot, SubIR, cell, cjson, glb_tile_point, morton, offset, pad,  # noqa: E402
                         subtree_binary, tileset, write_3tz)
 
 ROOT = os.path.dirname(HERE)
@@ -193,7 +193,7 @@ def family_a():
     # Post-freeze amendment 5: ship the member the drop-content-implies-tile mutant names (R's report: the stray
     # bit is indexed to the empty neighbour (2,1,1)), so only content => tile refuses the archive.
     m = implicit_archive(BQ(subtree_hooks=[ir_hook(ROOT_SUB, set_bit("content", 5 + morton([0, 1])))]))
-    m["content/2/1/1.glb"] = glb_point(cell(BQ_BOX, False, 2, 1, 1, 0)[0:3])
+    m["content/2/1/1.glb"] = glb_tile_point(cell(BQ_BOX, False, 2, 1, 1, 0)[0:3])
     case("A-6", m, "InvalidInput", pair="BQ", ref="A-6",
          note="one content bit; ships content/2/1/1.glb (amendment 5) so the mutant reaches no missing entry")
     # A-7: child bit (3,0,2): its parent (2,0,1) is unavailable.
@@ -300,7 +300,7 @@ def a12c(trailing):
                                "subtrees": {"uri": "st/{level}-{x}-{y}-{z}.subtree"}},
             "refine": "ADD"}
     return {"tileset.json": cjson(tileset(root)), "st/0-0-0-0.subtree": subtree_binary(cjson(js), buf),
-            "s0/0-0-0-0.glb": glb_point([0.0, 0.0, 0.0])}
+            "s0/0-0-0-0.glb": glb_tile_point([0.0, 0.0, 0.0])}
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -316,6 +316,9 @@ def family_b():
         return bq_row_error(b_ if t == a else a if t == b_ else t)
     m = BQ()
     m.row_box, m.row_error = swapped, swapped_e
+    # Amendment 6: each payload sits at the centre of its tile's (swapped) row, so C2 slice 3 finds it inside its
+    # own effective volume; at the cell centre it would be Outside (own) and production would refuse an I1 control.
+    m.slots[0].payload = lambda t, c: glb_tile_point(swapped(t)[0:3])
     case("B-1", implicit_archive(m), "Accepted", pair="BQ", facts=("differ", "BQ"), ref="B-1 (leaf siblings swapped)")
 
     def ulp(t):
@@ -866,7 +869,7 @@ def r9():
             for y in range(1 << level):
                 for z in range(1 << level):
                     c = cell(box, True, level, x, y, z)[0:3]
-                    m[f"c/{level}-{x}-{y}-{z}.glb"] = glb_point(c)
+                    m[f"c/{level}-{x}-{y}-{z}.glb"] = glb_tile_point(c)
     return m
 
 
@@ -962,7 +965,7 @@ def family_r_large():
                                    "subtrees": {"uri": "st/{level}-{x}-{y}-{z}.subtree"}}, "refine": "ADD"}
         mm = {"tileset.json": cjson(tileset(root)), "st/0-0-0-0.subtree": subtree_binary(cjson(js), buf)}
         if extra:
-            mm["a/0-0-0-0.glb"] = glb_point([0.0, 0.0, 0.0])
+            mm["a/0-0-0-0.glb"] = glb_tile_point([0.0, 0.0, 0.0])
         case(cid, mm, "Accepted" if extra else "InvalidInput", large=True,
              ref="R7a (one extra layer aliasing the tile view)" if extra else "R7 (post-walk content rule)",
              note="Scan = 2 x 19,173,962 B (tile view + one shared zero view)")
@@ -1012,13 +1015,13 @@ def family_r_large():
                                    "subtrees": {"uri": "st/{level}-{x}-{y}-{z}.subtree"}}, "refine": "ADD"}
         mm = {"tileset.json": cjson(tileset(root)), "st/0-0-0-0.subtree": subtree_binary(cjson(js), b"")}
         if cid == "R8":
-            mm["c/a.glb"] = glb_point([0.0, 0.0, 0.0])
+            mm["c/a.glb"] = glb_tile_point([0.0, 0.0, 0.0])
         else:
             for level in range(6):
                 for x in range(1 << level):
                     for y in range(1 << level):
                         for z in range(1 << level):
-                            mm[f"c/{level}-{x}-{y}-{z}.glb"] = glb_point(cell(box, True, level, x, y, z)[0:3])
+                            mm[f"c/{level}-{x}-{y}-{z}.glb"] = glb_tile_point(cell(box, True, level, x, y, z)[0:3])
         case(cid, mm, exp, large=True,
              ref={"R8": "R8 (DC-1: variables eliminated, at root admission)",
                   "R8a": "R8a (variables survive; normalized length 25 B)",
