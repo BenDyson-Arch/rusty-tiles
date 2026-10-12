@@ -138,12 +138,16 @@ def build(work):
         assert sha((STRIDE / name).read_bytes()) == entry["sha256"], name
     lane = work / STRIDE_LANE
     # Unchanged lane files are relative symlinks to the validator-caps lane (no duplicated
-    # bytes in the tree); only fixtures/manifest.json and integrity.json are new files.
+    # bytes in the tree), except runner.py (copied: it resolves its own directory);
+    # fixtures/manifest.json and integrity.json are new files.
     for name in sorted(source_integrity["files"]):
         if name == "fixtures/manifest.json":
             continue
         target = lane / name
         target.parent.mkdir(parents=True, exist_ok=True)
+        if name == "runner.py":  # the runner locates its lane from its own resolved path
+            shutil.copyfile(STRIDE / name, target)
+            continue
         placed = HERE / STRIDE_LANE / name
         os.symlink(os.path.relpath(STRIDE / name, placed.parent), target)
     manifest = json.loads((STRIDE / "fixtures/manifest.json").read_text())
@@ -156,8 +160,8 @@ def build(work):
         raw = (lane / name).read_bytes() if name == "fixtures/manifest.json" else (STRIDE / name).read_bytes()
         files[name] = {"bytes": len(raw), "sha256": sha(raw)}
     integrity = {"status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only "
-                           "fixtures/manifest.json differs; runner, generator, primary references and "
-                           "fixture files are relative symlinks to that lane",
+                           "fixtures/manifest.json differs; the runner is copied, and the generator, primary "
+                           "references and fixture files are relative symlinks to that lane",
                  "amends": {"integritySha256": STRIDE_INTEGRITY_SHA, "manifestSha256": STRIDE_MANIFEST_SHA},
                  "files": files}
     (lane / "integrity.json").write_bytes((json.dumps(integrity, indent=2) + "\n").encode())

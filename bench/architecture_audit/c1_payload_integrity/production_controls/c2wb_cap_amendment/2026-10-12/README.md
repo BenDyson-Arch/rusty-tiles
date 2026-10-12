@@ -38,9 +38,9 @@ such a case and writes nothing. There are none: of the 82 admitted cases, 78 are
 
 The bundles keep every member, order and tar attribute; only `manifest.json` differs (with
 `c2wbCapAmendment` provenance, which `driver.py` ignores). In the stride lane only
-`fixtures/manifest.json` and `integrity.json` are new files; every other file (runner,
-generator, primary references, fixture bytes) is a relative symlink to the validator-caps lane,
-so no bytes are duplicated in the tree. `integrity.json` lists the same files and hashes. `driver.py` is
+`fixtures/manifest.json` and `integrity.json` are new files and `runner.py` is copied (it
+locates its lane from its own resolved path); the generator, primary references and fixture
+bytes are relative symlinks to the validator-caps lane, so they are not duplicated in the tree. `integrity.json` lists the same files and hashes. `driver.py` is
 unchanged. `tests/payload_integrity_oracle.py` and `tests/payload_meshopt_stride_oracle.py`
 now name these outputs and their pins.
 

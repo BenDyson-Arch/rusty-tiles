@@ -1,5 +1,5 @@
 {
-  "status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only fixtures/manifest.json differs; runner, generator, primary references and fixture files are relative symlinks to that lane",
+  "status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only fixtures/manifest.json differs; the runner is copied, and the generator, primary references and fixture files are relative symlinks to that lane",
   "amends": {
     "integritySha256": "925429a64023bf5aa0ed8e1e5e037b694609ef97d593cba30ae8b6ae02010bbc",
     "manifestSha256": "a934bc207fe17670cb095f0b4023842dd4241ef1b65c9556bbd65aff4bde7040"
