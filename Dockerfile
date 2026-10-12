@@ -30,6 +30,7 @@ WORKDIR /src
 # Keep fixture, documentation and CI-only edits out of the release build cache.
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ src/
+COPY vendor/ vendor/
 COPY bindings/python/Cargo.toml bindings/python/Cargo.toml
 COPY bindings/python/src/ bindings/python/src/
 COPY preview/ preview/

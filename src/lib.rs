@@ -4,6 +4,7 @@
 //! Raster and elevation source decoding require the native-geospatial build.
 
 mod archive3tz;
+mod basisu_ktx2;
 pub mod bbox;
 mod content_integrity;
 mod crs;
