@@ -27,8 +27,9 @@ merge (PR #164) and its WB-6 calibration. **Design:** large-mesh v6.1 (`design.m
 - **Slice 3's coverage statement and performance obligation** (§5.2, §10) are measured at the
   fixed 2^29 default. A-C2-1 makes archives above `S₀ = 8 MiB` (below) stream where they reported
   `workLimit`, so validation time grows on them by design. ML7c re-derives the coverage statement
-  and records every perf-lane `validate` case before and after; growth on a case that moved from
-  `workLimit` to streaming is an expected change, not a regression (O-C2-3).
+  and records every perf-lane `validate` case before and after. Growth on a case that moved from
+  `workLimit` to streaming is an expected change: the perf-lane gate accepts it only through its
+  `--explain` option, naming the case and this amendment (coordinator ruling O-C2-3).
 
 ## Unchanged
 
@@ -74,11 +75,12 @@ traversal, so the caps are fixed before the precheck starts.
   producer rate `units / S`, including ML6 outputs. Measured so far: mf2-lod3 5.36 and W5 14.25
   units per stored byte [E-rev, C2-WB probes]; the mesh tiler is projected at about 24 at depth 6
   (non-indexed leaves, D1). Frozen in ML9 (design §13, ML9 "κ_u frozen").
-- **`κ_r` = 2 and `κ_d` = 16 (provisional, this draft's proposal; the design gives no value).**
+- **`κ_r` = 2 and `κ_d` = 16** (coordinator ruling 2026-10-12: design v6.1 gives no value, so
+  this amendment's proposal is adopted; provisional like `κ_u` until ML9).
   Same rule: at least twice the largest measured `Σ bytes(r) / S` and `Σ decoded(r) / S` over the
   producer corpus. A payload referenced once is read once, so `Σ bytes / S ≤ 1` for forest output;
   `Dec` counts meshopt-decoded views, whose ratio to stored bytes is not yet measured on
-  large-mesh output (O-C2-1).
+  large-mesh output; ML7c and ML9 measure it.
 - **Threshold.** `κ_u·S > B0` exactly when `S > S₀ = B0/κ_u` = 8,388,608 bytes (8 MiB). Archives
   of at most 8 MiB keep the default 2^29 and its serialized value. For bytes and decoded the
   thresholds are 1 GiB and 128 MiB.
@@ -251,13 +253,15 @@ that the oracle checks them on this output.
 - **Mutants (producer-side):** fan apex chosen off the rim; box computed before vanished
   descendants are hulled; sets written as tile `metadata`.
 
-## Open questions
+## Open questions and settled items
 
-- **O-C2-1 (C2 owners, design author).** Values of `κ_r` and `κ_d`. The design sets only `κ_u`.
-  This draft proposes 2 and 16, subject to measurement on ML6 output.
+- **Settled (coordinator, 2026-10-12):** `κ_r` = 2, `κ_d` = 16 (A-C2-1); by-design slower
+  validation of large archives passes the perf-lane gate only through `--explain` (O-C2-3); the
+  lattice origin in the root transform with δ ≡ 0 (umbrella §4), which A-C2-3 assumes.
 - **O-C2-2 (C2-WB owner).** Confirm `S` as the sum of stored data lengths over the selected
   catalog (not the archive file length, which includes headers and the central directory).
-- **O-C2-3 (coordinator).** Accept that validation time grows by design for archives that move
-  from `workLimit` to streaming, and say how the perf-lane gate treats them.
 - **O-C2-4 (slice-3 owner).** Add a large-mesh forest witness to slice 3's witness table once ML4
   produces one. Slice 3's corpus has none today.
+- **O-C2-5 (C2 owners).** A-C2-3 and A-C2-4 change no rule. Their acceptance criteria are C2
+  sensitivity controls on this output's shapes (snapped vertices, hulls, fans, the property
+  table); confirm they belong in the C2 corpus rather than only in the producer tests.
