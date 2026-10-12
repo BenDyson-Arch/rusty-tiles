@@ -136,7 +136,7 @@ impl Reports {
     }
 }
 
-fn split(
+pub(super) fn split(
     feature: &Feature,
     repair: bool,
     counters: &mut Counters,
@@ -203,20 +203,7 @@ fn split(
                     "one triangle or its metadata exceeds tile budget",
                 ));
             }
-            // Boundary ownership comes from the source loops, not triangle
-            // incidence. Dropping a zero-area seam face must not expose its
-            // interior edges or lose its original (collapsed) boundary edge.
-            let mut edges = BTreeSet::new();
-            for ring in polygon.loops.split(|i| *i == u32::MAX) {
-                for i in 0..ring.len() {
-                    let mut pair = [ring[i], ring[(i + 1) % ring.len()]];
-                    pair.sort();
-                    edges.insert(pair);
-                }
-            }
-            let mut represented = BTreeSet::new();
             let mut parts = Vec::new();
-            let mut boundaries = Vec::new();
             let mut source_parts = Vec::new();
             for tri in triangles {
                 let points: Vec<_> = tri.iter().map(|i| polygon.positions[*i as usize]).collect();
@@ -228,25 +215,14 @@ fn split(
                     source_ring.push(source_ring[0]);
                     source_parts.push(vec![source_ring]);
                 }
-                boundaries.push(
-                    (0..3)
-                        .filter_map(|i| {
-                            let mut pair = [tri[i], tri[(i + 1) % 3]];
-                            pair.sort();
-                            edges.contains(&pair).then(|| {
-                                represented.insert(pair);
-                                vec![points[i], points[(i + 1) % 3]]
-                            })
-                        })
-                        .collect::<Vec<_>>(),
-                );
             }
-            for pair in edges.difference(&represented) {
-                boundaries[0].push(vec![
-                    polygon.positions[pair[0] as usize],
-                    polygon.positions[pair[1] as usize],
-                ]);
-            }
+            // The outline comes from the source loops, not triangle
+            // incidence: dropping a zero-area seam face must not expose its
+            // interior edges or lose its original (collapsed) boundary edge.
+            // It is its own locked line feature of closed rings, so the line
+            // splitter cuts an oversized ring into contiguous runs placed
+            // where they lie, and tiles chain them back (see `outline`).
+            let outline = outline::source_rings(&polygon.positions, &polygon.loops);
             counters.fragmented_polygons += 1;
             let mut report = polygon.report;
             report["sourceId"] = feature.source_id().clone();
@@ -254,7 +230,7 @@ fn split(
             report["reason"]=json!("oversized polygon surfaces partitioned; original boundary rendered separately without internal edges");
             reports.push(report);
             let middle = parts.len() / 2;
-            return Ok([(0, middle), (middle, parts.len())]
+            let mut fragments: Vec<_> = [(0, middle), (middle, parts.len())]
                 .into_iter()
                 .map(|(a, b)| {
                     let mut f = feature.clone();
@@ -263,16 +239,23 @@ fn split(
                         intrinsic.geometry = Geometry::MultiPolygon(source_parts[a..b].to_vec());
                     }
                     f.surface_fragment = true;
-                    f.triangle_boundaries = boundaries[a..b].to_vec();
                     f
                 })
-                .collect());
+                .collect();
+            if !outline.is_empty() {
+                let mut f = feature.clone();
+                f.geometry = Geometry::MultiLineString(outline);
+                f.intrinsic = None;
+                f.surface_fragment = true;
+                fragments.push(f);
+            }
+            return Ok(fragments);
         }
         _ => return Err(FeatureFailure::reject(
             "indivisible geometry or its metadata exceeds tile budget; raise maxVertices/maxBytes",
         )),
     }
-    let mut parts: Vec<_> = geometries
+    let parts: Vec<_> = geometries
         .into_iter()
         .enumerate()
         .map(|(index, geometry)| {
@@ -291,11 +274,6 @@ fn split(
             f
         })
         .collect();
-    if feature.surface_fragment && matches!(feature.geometry, Geometry::MultiPolygon(_)) {
-        let middle = feature.triangle_boundaries.len() / 2;
-        parts[0].triangle_boundaries = feature.triangle_boundaries[..middle].to_vec();
-        parts[1].triangle_boundaries = feature.triangle_boundaries[middle..].to_vec();
-    }
     Ok(parts)
 }
 /// Spool writer: features enter the disk index, oversized ones split first.
@@ -412,7 +390,7 @@ fn accept_feature(
 }
 
 fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Error> {
-    let (lo, hi) = bounds(feature.rendered_points())?;
+    let (lo, hi) = bounds(feature.geometry.points())?;
     let center = mul(add(lo, hi), 0.5);
     let bytes = canonical(feature)?;
     let data = String::from_utf8(bytes).unwrap();
@@ -420,7 +398,7 @@ fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Erro
         params![path,data,feature.geometry.size() as i64,feature.estimate() as i64,center[0],center[1],center[2],lo[0],lo[1],lo[2],hi[0],hi[1],hi[2],format!("{}\0{}\0{}",feature.layer(),feature.source_id().as_str().unwrap(),feature.fragment_path)]).map_err(sql)?;
     let owner = db.last_insert_rowid();
     let mut vertex=db.prepare_cached("INSERT INTO vertices(x,y,z,owner) VALUES(?1,?2,?3,?4) ON CONFLICT(x,y,z) DO UPDATE SET shared=shared OR owner!=excluded.owner").map_err(sql)?;
-    for point in feature.rendered_points() {
+    for point in feature.geometry.points() {
         vertex
             .execute(params![point[0], point[1], point[2], owner])
             .map_err(sql)?;
@@ -1130,7 +1108,6 @@ mod countries_fragment_tests {
             geometry,
             intrinsic: None,
             surface_fragment: false,
-            triangle_boundaries: Vec::new(),
             fragment_path: String::new(),
         }
     }
@@ -1509,7 +1486,6 @@ mod countries_fragment_tests {
             geometry,
             intrinsic: None,
             surface_fragment: false,
-            triangle_boundaries: Vec::new(),
             fragment_path: String::new(),
         };
         insert_row(
@@ -1589,24 +1565,7 @@ mod countries_fragment_tests {
     }
 
     #[test]
-    fn source_boundaries_outside_a_fill_triangle_enter_spool_bounds() {
-        let mut feature: Feature = serde_json::from_value(json!({"properties":{"_source_id":"1","_source_layer":"polar"},"geometry":{"type":"Polygon","coordinates":[[[0.,0.,0.],[1.,0.,0.],[0.,1.,0.],[0.,0.,0.]]]}})).unwrap();
-        let before = feature.estimate();
-        feature.triangle_boundaries = vec![vec![vec![[10., 20., 30.], [11., 21., 31.]]]];
-        assert_eq!(feature.estimate(), before + 64);
-        let db = Connection::open_in_memory().unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,sortkey TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,UNIQUE(x,y,z));").unwrap();
-        insert_row(&db, &feature, "").unwrap();
-        let high: Point = db
-            .query_row("SELECT hx,hy,hz FROM features", [], |r| {
-                Ok([r.get(0)?, r.get(1)?, r.get(2)?])
-            })
-            .unwrap();
-        assert_eq!(high, [11., 21., 31.]);
-    }
-
-    #[test]
-    fn collapsed_polar_face_keeps_source_boundaries_and_expands_fragment_bounds() {
+    fn collapsed_polar_face_keeps_source_boundaries_as_closed_outline_rings() {
         let source = Geometry::Polygon(vec![vec![
             [-180., -90., 0.],
             [-180., -80., 0.],
@@ -1628,7 +1587,6 @@ mod countries_fragment_tests {
             geometry,
             intrinsic,
             surface_fragment: false,
-            triangle_boundaries: vec![],
             fragment_path: String::new(),
         };
         let Geometry::Polygon(rings) = &feature.geometry else {
@@ -1654,23 +1612,30 @@ mod countries_fragment_tests {
             })
             .collect();
         let parts = split(&feature, false, &mut Counters::default(), &mut Vec::new()).unwrap();
-        let actual: BTreeSet<_> = parts
+        // Two fill halves plus one locked outline feature of closed rings.
+        assert_eq!(parts.len(), 3);
+        assert!(parts.iter().all(|f| f.surface_fragment));
+        let Geometry::MultiLineString(rings) = &parts[2].geometry else {
+            panic!("outline geometry {:?}", parts[2].geometry)
+        };
+        assert!(parts[2].intrinsic.is_none());
+        assert!(rings.iter().all(|r| r.len() >= 4 && r.first() == r.last()));
+        // Each ring opens and closes at the midpoint of one source edge;
+        // without that seam vertex it is the source loop.
+        let actual: Vec<_> = rings
             .iter()
-            .flat_map(|f| f.triangle_boundaries.iter().flatten())
-            .map(|line| edge(line[0], line[1]))
+            .flat_map(|r| {
+                let cycle = &r[1..r.len() - 1];
+                let n = cycle.len();
+                assert_eq!(r[0], mul(add(cycle[n - 1], cycle[0]), 0.5), "seam");
+                (0..n).map(move |i| edge(cycle[i], cycle[(i + 1) % n]))
+            })
             .collect();
+        assert_eq!(actual.len(), expected.len(), "each source edge once");
         assert_eq!(
-            actual, expected,
+            actual.into_iter().collect::<BTreeSet<_>>(),
+            expected,
             "fragmentation must not introduce internal meridian outlines"
         );
-        for part in parts {
-            let (lo, hi) = bounds(part.rendered_points()).unwrap();
-            for point in part.triangle_boundaries.iter().flatten().flatten() {
-                for axis in 0..3 {
-                    assert!(point[axis] >= lo[axis] && point[axis] <= hi[axis]);
-                }
-            }
-            assert!(part.estimate() >= part.rendered_points().count() * 32);
-        }
     }
 }

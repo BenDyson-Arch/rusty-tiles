@@ -71,7 +71,6 @@ pub(super) fn collect(
                         ("sourceLayer".into(), json!(source.layer())),
                     ]),
                     surface_fragment: false,
-                    triangle_boundaries: Vec::new(),
                     fragment_path: String::new(),
                 };
                 estimate = estimate.saturating_add(aggregate.estimate() - 2048);

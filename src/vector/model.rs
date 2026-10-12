@@ -119,25 +119,14 @@ pub(super) struct Feature {
     pub(super) surface_fragment: bool,
     #[serde(
         default,
-        rename = "_triangle_boundaries",
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub(super) triangle_boundaries: Vec<Vec<Vec<Point>>>,
-    #[serde(
-        default,
         rename = "_fragment_path",
         skip_serializing_if = "String::is_empty"
     )]
     pub(super) fragment_path: String,
 }
 impl Feature {
-    pub(super) fn rendered_points(&self) -> impl Iterator<Item = &Point> {
-        self.geometry
-            .points()
-            .chain(self.triangle_boundaries.iter().flatten().flatten())
-    }
     pub(super) fn estimate(&self) -> usize {
-        (self.rendered_points().count()
+        (self.geometry.size()
             + self
                 .intrinsic
                 .as_ref()
@@ -237,7 +226,6 @@ mod tests {
         assert_eq!(feature.layer(), "layer");
         assert_eq!(serde_json::to_value(&feature).unwrap(), source);
         feature.surface_fragment = true;
-        feature.triangle_boundaries = vec![vec![vec![[1., 2., 3.], [4., 5., 6.]]]];
         feature.fragment_path = "01".into();
         let persisted = serde_json::to_value(&feature).unwrap();
         assert_eq!(persisted["_surface_fragment"], true);
