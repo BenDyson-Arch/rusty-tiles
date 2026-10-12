@@ -280,7 +280,7 @@ Reuse needs the same layer selection, height policy, budgets, LOD, field, list, 
 
 A mismatch fails with a reason. Remove `--reuse-tileset` to build afresh. A changed `--where` filter is the exception: it starts a fresh build and records `reuse.incompatibleReason: attribute filter changed`.
 
-Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Archives from the explicit mode removed in 0.4.0 are refused with "previous archive uses the retired explicit vector layout". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
+Archives written before the bounded implicit forest layout are not reuse baselines; reuse fails with "run a fresh conversion". Explicit-layout archives, from the `--explicit` mode removed in 0.4.0 or the explicit default of 0.3.0 and earlier, are refused with "previous archive uses the retired explicit vector layout". Convert once without `--reuse-tileset` to make a new baseline. Earlier default archives that split their hierarchy into `implicit-tileset-*.json` documents are also reported Unsupported by `validate`; convert them again.
 
 ### How reuse works
 

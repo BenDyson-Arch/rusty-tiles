@@ -568,6 +568,7 @@ fn convert(
     drop(reader);
     let mut tree = tiles::Tree {
         attempt,
+        // Filled from the forest writer's published inventory below.
         members: Vec::new(),
         operations,
         layout: &layout,

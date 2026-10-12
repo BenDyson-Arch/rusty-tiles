@@ -134,7 +134,6 @@ impl<O: ProducerIo> Tree<'_, O> {
             self.attempt,
             self.operations,
         )?;
-        self.members.push(uri.clone());
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         // The padded estimate can sit an ulp inside the f32 positions actually written;
