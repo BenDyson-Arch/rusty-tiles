@@ -161,6 +161,62 @@ class CpuChoice(unittest.TestCase):
             self.assertTrue(set(pair) <= {4, 5, 6, 7, 12, 13, 14, 15})
 
 
+class ParsePrevious(unittest.TestCase):
+    def setUp(self):
+        columns = dict(release=None, milestone=None, head=dict(vector=GOOD))
+        self.text, _ = report.render(meta('first'), columns, (None, {}, []), [])
+        self.expected = report.parse_previous(self.text)
+
+    def edited(self, old, new):
+        self.assertIn(old, self.text)
+        return self.text.replace(old, new)
+
+    def assertFails(self, text, message):
+        with self.assertRaises(SystemExit) as raised: report.parse_previous(text)
+        self.assertIn(message, str(raised.exception))
+
+    def test_empty_report_starts_the_log(self):
+        self.assertEqual(report.parse_previous(''), (None, {}, []))
+        self.assertEqual(report.parse_previous('\n  \n'), (None, {}, []))
+
+    def test_indented_and_trailing_whitespace(self):
+        text = '\n'.join('  ' + line + '  ' for line in self.text.splitlines())
+        self.assertEqual(report.parse_previous(text), self.expected)
+
+    def test_marker_and_heading_matched_by_prefix(self):
+        text = self.edited(report.BLOCK_START, '<!-- perf-lane milestone data (hand edited)')
+        text = text.replace('## Milestones', '## Milestones (trend log)')
+        self.assertEqual(report.parse_previous(text), self.expected)
+
+    def test_row_without_spaces(self):
+        row = self.expected[2][0]
+        compact = '|' + '|'.join(cell.strip() for cell in row.strip('|').split('|')) + '|'
+        self.assertTrue(compact.startswith('|2026-10-12|'))
+        self.assertEqual(report.parse_previous(self.edited(row, compact)), self.expected)
+
+    def test_note_lines_are_skipped(self):
+        row = self.expected[2][0]
+        text = self.edited(row, 'Note: the 2026-10-11 row was seeded from legacy results.\n' + row + '\n> reviewed')
+        self.assertEqual(report.parse_previous(text), self.expected)
+
+    def test_missing_data_block_fails(self):
+        start = self.text.index(report.BLOCK_START)
+        self.assertFails(self.text[:start], 'expected one milestone data block, found 0')
+
+    def test_unclosed_or_garbled_block_fails(self):
+        self.assertFails(self.text.rstrip().removesuffix('-->'), 'not closed')
+        self.assertFails(self.edited('case vector {', 'case vector {oops'), 'bad JSON')
+        self.assertFails(self.edited('case vector', 'cases vector'), 'unrecognised data line')
+        milestone = next(line for line in self.text.splitlines() if line.startswith('milestone '))
+        self.assertFails(self.edited(milestone + '\n', ''), 'lacks the milestone line')
+
+    def test_missing_rows_fail(self):
+        self.assertFails(self.edited(self.expected[2][0] + '\n', ''), "'## Milestones' has no rows")
+        self.assertFails(self.edited('## Milestones', '## Trend'), "expected one '## Milestones' section, found 0")
+        self.assertFails(self.edited('`d1874ef`', '`0000000`'), "no Milestones row for the data block's commit d1874ef")
+        self.assertFails(self.edited('| 2026-10-12 |', '| 12 Oct |'), 'unrecognised Milestones row')
+
+
 class Rendering(unittest.TestCase):
     def columns(self):
         return dict(release=dict(vector=metrics(wall=0.5), **{'mesh-local': dict(na='no mesh-local-to-3tz command')}),

@@ -31,6 +31,7 @@ METRICS = {
 ROWS = ['wall', 'rss', 'bytes', 'load', 'tiles', 'secs']  # 'load' shows the console error count too
 PROCESS_METRICS = {'wall', 'rss', 'bytes', 'vwall'}
 BLOCK_START, BLOCK_END = '<!-- perf-lane milestone data (read by report.py; do not edit)', '-->'
+BLOCK_PREFIX = '<!-- perf-lane milestone data'
 
 
 # ---------- extraction ----------
@@ -197,21 +198,46 @@ def encode_block(meta, head):
 
 
 def parse_previous(text):
-    """(milestone info, {case: metrics}, [milestone table rows]) from an earlier REPORT.md."""
+    """(milestone info, {case: metrics}, [milestone table rows]) from an earlier REPORT.md.
+
+    Tolerates hand edits (indentation, a changed marker or heading suffix, rows without the
+    space after '|', note lines) but stops when the data block or the rows are missing or
+    disagree, rather than silently dropping the last milestone."""
     info, cases, rows = None, {}, []
-    if not text: return info, cases, rows
-    lines = text.splitlines()
-    if BLOCK_START in lines:
-        for line in lines[lines.index(BLOCK_START) + 1:]:
-            if line == BLOCK_END: break
-            kind, _, rest = line.partition(' ')
+    if not text or not text.strip(): return info, cases, rows
+    lines = [line.strip() for line in text.splitlines()]
+    fail = lambda why: SystemExit(f'report: previous REPORT.md: {why} (fix it from git history, or pass '
+                                  '--previous /dev/null to start the milestone log over)')
+    starts = [i for i, line in enumerate(lines) if line.startswith(BLOCK_PREFIX)]
+    if len(starts) != 1: raise fail(f'expected one milestone data block, found {len(starts)}')
+    number = starts[0] + 1
+    for number, line in enumerate(lines[starts[0] + 1:], starts[0] + 2):
+        if line.startswith(BLOCK_END): break
+        if not line: continue
+        kind, _, rest = line.partition(' ')
+        try:
             if kind == 'milestone': info = json.loads(rest)
             elif kind == 'case':
                 name, _, payload = rest.partition(' '); cases[name] = json.loads(payload)
-    if '## Milestones' in lines:
-        for line in lines[lines.index('## Milestones') + 1:]:
-            if line.startswith('| ') and not line.startswith('| date') and not line.startswith('| ---'): rows.append(line)
-            elif rows and not line.startswith('|'): break
+            else: raise fail(f'line {number}: unrecognised data line {line[:60]!r}')
+        except json.JSONDecodeError as error:
+            raise fail(f'line {number}: bad JSON ({error})')
+    else:
+        raise fail('milestone data block is not closed with -->')
+    if not info or not cases: raise fail('milestone data block lacks the milestone line or its case lines')
+    headings = [i for i, line in enumerate(lines) if line.startswith('## Milestones')]
+    if len(headings) != 1: raise fail(f"expected one '## Milestones' section, found {len(headings)}")
+    for number, line in enumerate(lines[headings[0] + 1:], headings[0] + 2):
+        if line.startswith('## ') or line.startswith(BLOCK_PREFIX): break
+        if not line.startswith('|'): continue  # blank or note line
+        cells = [cell.strip() for cell in line.strip('|').split('|')]
+        if cells[0].lower() == 'date' or all(set(cell) <= set('-: ') for cell in cells): continue
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', cells[0]) or len(cells) < 3:
+            raise fail(f'line {number}: unrecognised Milestones row {line[:60]!r}')
+        rows.append('| ' + ' | '.join(cells) + ' |')
+    if not rows: raise fail("'## Milestones' has no rows")
+    if not any(row.split('|')[2].strip().strip('`') == info['commit'][:7] for row in rows):
+        raise fail(f"no Milestones row for the data block's commit {info['commit'][:7]}")
     return info, cases, rows
 
 

@@ -25,7 +25,9 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
 - The last milestone's per-case numbers come from the data block at the end of
   the committed `REPORT.md` (git `HEAD`). `--milestone-label` makes this run the
   new milestone and appends a `## Milestones` row. Without it, the stored
-  milestone and the rows carry forward unchanged.
+  milestone and the rows carry forward unchanged. Hand edits such as
+  whitespace or note lines are tolerated, but a missing, unclosed or garbled
+  data block, or no row for its commit, stops the run.
 - Benchmarks run on a hyperthread sibling pair from CPUs 4-7 or 12-15
   (`--cpu-pool`; the cargo build locks use 0-3 and 8-11), not on the scripts'
   default 0 and 1. Before each step (each process.py attempt, each Cesium pass)
