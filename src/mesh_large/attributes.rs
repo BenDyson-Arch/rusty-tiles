@@ -31,11 +31,11 @@ pub(crate) const UV0: u8 = 4;
 pub(crate) const UV1: u8 = 8;
 pub(crate) const COLOR: u8 = 16;
 fn flags(p: &ScenePrimitive<'_>) -> u8 {
-    u8::from(p.normal.is_some()) * NORMAL
-        | u8::from(p.tangent.is_some()) * TANGENT
-        | u8::from(p.texcoords[0].is_some()) * UV0
-        | u8::from(p.texcoords[1].is_some()) * UV1
-        | u8::from(p.color.is_some()) * COLOR
+    (u8::from(p.normal.is_some()) * NORMAL)
+        | (u8::from(p.tangent.is_some()) * TANGENT)
+        | (u8::from(p.texcoords[0].is_some()) * UV0)
+        | (u8::from(p.texcoords[1].is_some()) * UV1)
+        | (u8::from(p.color.is_some()) * COLOR)
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct CornerAttributes {
@@ -46,7 +46,7 @@ pub(crate) struct CornerAttributes {
 }
 impl CornerAttributes {
     fn encode(&self, out: &mut [u8]) {
-        for (dst, v) in out.chunks_exact_mut(4).zip(
+        for (dst, v) in out.as_chunks_mut::<4>().0.iter_mut().zip(
             self.normal
                 .iter()
                 .chain(self.tangent.iter())
@@ -58,8 +58,10 @@ impl CornerAttributes {
     }
     fn decode(bytes: &[u8]) -> Self {
         let mut values = bytes
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()));
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b));
         Self {
             normal: std::array::from_fn(|_| values.next().unwrap()),
             tangent: std::array::from_fn(|_| values.next().unwrap()),
@@ -109,7 +111,11 @@ impl Record for FullTriangle {
         out[93..101].copy_from_slice(&self.expanded_ordinal.to_le_bytes());
         out[101..105].copy_from_slice(&self.material.to_le_bytes());
         out[105] = self.flags;
-        for (a, b) in self.corners.iter().zip(out[106..].chunks_exact_mut(60)) {
+        for (a, b) in self
+            .corners
+            .iter()
+            .zip(out[106..].as_chunks_mut::<60>().0.iter_mut())
+        {
             a.encode(b);
         }
     }

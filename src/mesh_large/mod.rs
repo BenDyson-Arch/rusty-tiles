@@ -1,11 +1,15 @@
 //! Private streamed mesh foundation. Tile producers will consume these owned spill records.
-//! No tile output, rendering, texture capture or certificate is promised by this module.
+//! Full capture owns attributes, images and the frozen lattice; tile output,
+//! rendering and approximation certificates remain downstream work.
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
 mod attributes;
 mod capture;
 mod config;
+mod full;
+mod images;
 mod input;
+mod leaves;
 mod records;
 mod tree;
 
