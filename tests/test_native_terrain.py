@@ -35,7 +35,7 @@ class NativeTerrainTests(unittest.TestCase):
                 output = root / f'out-{index}'
                 result, summary = self.call(source, output)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(summary['terrainReport']['profile'], 't1-terrain-mesh-3dtiles-1.1')
+                self.assertEqual(summary['terrainReport']['profile'], 't1-terrain-lod-mesh-3dtiles-1.1')
                 self.assertLessEqual(summary['terrainReport']['positionErrorMetres'], .05)
                 self.assertEqual(oracle.check_plane(output), {'nodes': 25, 'triangles': 32})
                 oracle.corruption_controls(output)
@@ -48,6 +48,46 @@ class NativeTerrainTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(oracle.check_directory(output)['leaf_tiles'], 6)
             self.assertEqual(oracle.check_plane(output, width=33, height=17, pixel=.01), {'nodes': 612, 'triangles': 1122})
+            oracle.corruption_controls(output, width=33, height=17, pixel=.01)
+
+    def validate(self, output):
+        archive = output.with_suffix('.3tz')
+        for argv in (['convert', '-i', str(output), '-o', str(archive)], ['validate', str(archive)]):
+            result = subprocess.run([BIN, '--json', *argv], capture_output=True, text=True,
+                                    env=dict(os.environ, PATH=''), timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_lod_pyramid_errors_skirts_and_forest_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            # 5x3 leaves, four levels, clipped end strips: certified errors,
+            # skirts and every pyramid corruption control.
+            source = root / 'bump.tif'
+            oracle.write_fixture(source, 'bump', width=67, height=45, pixel=.001)
+            output = root / 'bump'
+            result, summary = self.call(source, output)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = summary['terrainReport']
+            self.assertEqual((report['levels'], report['tilesPerLevel']), (4, [1, 2, 6, 15]))
+            checked = oracle.check_directory(output)
+            self.assertGreater(checked['certified']['1'], .1)
+            self.assertLessEqual(report['skirtDepthMetres'][0], report['skirtDepthMetres'][1])
+            oracle.corruption_controls(output, plane=False)
+            checks = self.validate(output)['checks']
+            for check in ('implicitAddressingAndAvailability', 'hierarchyBounds', 'geometricErrorOrder'):
+                self.assertIn(check, checks)
+            # 17x3 leaves, six levels: skeleton tiles above implicit roots.
+            source = root / 'strip.tif'
+            oracle.write_fixture(source, 'bump', width=260, height=40, pixel=.001)
+            output = root / 'strip'
+            result, summary = self.call(source, output)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            manifest = json.loads((output/'tileset.json').read_text())
+            self.assertNotIn('implicitTiling', manifest['root'])
+            self.assertEqual(oracle.check_directory(output, samples=1)['leaf_tiles'], 51)
+            checks = self.validate(output)['checks']
+            self.assertIn('implicitAddressingAndAvailability', checks)
 
     def test_native_float64_fraction_earns_its_reported_storage_error(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -58,13 +98,13 @@ class NativeTerrainTests(unittest.TestCase):
             dataset.GetRasterBand(1).Fill(literal); dataset = None
             output = root / 'output'; result, summary = self.call(source, output, offset=0)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            manifest = json.loads((output/'tileset.json').read_text())
-            _, primitives = oracle.glb(output/manifest['root']['children'][0]['content']['uri'])
+            _, root_tile, tiles = oracle.tree(output)
+            _, primitives = oracle.glb(output/tiles[0]['uri'])
             positions = primitives[0][0]
             truth = [oracle.ecef(lon, lat, literal) for lat in [21-.000001,21] for lon in [10,10+.000001]]
             errors = []
             for position, expected in zip(positions, truth):
-                actual = oracle.transform(manifest['root']['transform'], (position[0],-position[2],position[1]))
+                actual = oracle.transform(root_tile['transform'], (position[0],-position[2],position[1]))
                 errors.append(sum((a-b)**2 for a,b in zip(actual,expected))**.5)
             self.assertLessEqual(max(errors), summary['terrainReport']['positionErrorMetres']+2e-8)
             self.assertGreater(max(errors), .00001)  # A hidden Float32 source cast cannot earn a near-zero receipt.
@@ -109,12 +149,12 @@ class NativeTerrainTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             # All decoded positions are checked independently against literal
             # source contributors; scalar NoData invalidates nonzero weights.
-            report = summary['terrainReport']; manifest = json.loads((output/'tileset.json').read_text())
+            report = summary['terrainReport']; _, root, tiles = oracle.tree(output)
             observed = []
-            for leaf in manifest['root']['children']:
-                _, primitives = oracle.glb(output/leaf['content']['uri'])
-                observed += [oracle.transform(manifest['root']['transform'], (p[0],-p[2],p[1]))
-                             for positions, _ in primitives for p in positions]
+            for leaf in tiles:
+                _, primitives = oracle.glb(output/leaf['uri'])
+                observed += [oracle.transform(root['transform'], (p[0],-p[2],p[1]))
+                             for p in primitives[0][0]]
             def expected(i,j):
                 x=max(0,min(3,i-.5)); y=max(0,min(3,4-j-.5))
                 contributors=[]
