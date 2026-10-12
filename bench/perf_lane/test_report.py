@@ -145,6 +145,15 @@ class Flags(unittest.TestCase):
         self.assertEqual([f['ref'] for f in failures], ['cesium'])
 
 
+class Explanations(unittest.TestCase):
+    def test_recorded_explanations_are_kept_and_new_ones_win(self):
+        merged = report.merge_explanations(['validate:*.wallSeconds=C2 checks', 'raster.exit=no GDAL'],
+                                           ['validate:*.wallSeconds=classified: payload checks'])
+        self.assertEqual(merged, [['validate:*.wallSeconds', 'classified: payload checks'], ['raster.exit', 'no GDAL']])
+        [flag] = report.compare('vector', 'milestone', GOOD, metrics(vwall=0.9), merged)
+        self.assertEqual(flag['explanation'], 'classified: payload checks')
+
+
 class CpuChoice(unittest.TestCase):
     PAIRS = [(4, 5), (6, 7), (12, 13), (14, 15)]
 

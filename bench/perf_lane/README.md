@@ -44,7 +44,8 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   the process and Cesium JSON, run logs, screenshots and `meta.json`, plus
   `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. Outputs stay under
   `--work` and are deleted unless `--keep-work` is given. `--from-raw DIR`
-  re-renders a recorded directory without running anything.
+  re-renders a recorded directory without running anything, applying the
+  `--explain` reasons recorded in its `meta.json` plus any given again.
 - Flags follow the gate below and are measured against the last milestone. Flags
   against the release are reported but not gated. The script exits non-zero on
   a gated regression.

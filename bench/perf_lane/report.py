@@ -488,6 +488,16 @@ def collect(args, explanations):
     return evidence
 
 
+def merge_explanations(recorded, given):
+    """--explain pairs: those recorded with the run (meta.json) plus new ones; a new reason for the same
+    pattern wins, because explained() takes the first match."""
+    pairs = [item.split('=', 1) for item in given] + [item.split('=', 1) for item in recorded]
+    seen, merged = set(), []
+    for pattern, reason in pairs:
+        if pattern not in seen: seen.add(pattern); merged.append([pattern, reason])
+    return merged
+
+
 def load_raw(directory):
     read = lambda name: json.loads((directory / name).read_text()) if (directory / name).exists() else None
     meta, process = read('meta.json'), read('process.json')
@@ -542,6 +552,7 @@ def main():
     if not args.from_raw and not args.head: parser.error('--head is required unless --from-raw is given')
     evidence = args.from_raw.resolve() if args.from_raw else collect(args, explanations)
     meta, columns = load_raw(evidence)
+    explanations = merge_explanations(meta.get('explanations', []), args.explain)
     if args.milestone_label: meta['label'] = args.milestone_label
     previous = parse_previous(args.previous.read_text() if args.previous else committed_report(args.report))
     columns['milestone'] = previous[1] or None
