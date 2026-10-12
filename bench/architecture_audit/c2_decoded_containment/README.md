@@ -644,6 +644,88 @@ chain-bit controls, and the totals and per-URI facts of the 43 matrix-size rows
 (local, with `--large`). That also confirms C1 admits every large class fixture,
 including the meshopt INDICES/bits streams and the 800-character decimals.
 
+## Slice 3: implicit archives (O, 2026-10-12)
+
+Role O of the slice-3 ownership plan (sha256 `28285135…`) wrote this from the frozen slice-3 contract v3.1
+(`contract-draft.md`, sha256 `8bc534290c5a90ace963e345336dea1e04c45fafb3c869672ee4af1ba03331d6`), the C2, I1
+and C1 contracts under `docs/architecture/` and the primary specs. It did not read `src/`, `tests/`,
+`bindings/` or the quarantined prototype probes (contract 9.G). `probes/validate-corpus-b51f83d.json` (marked
+readable) was used only for the archive hashes.
+
+| Path | What it is |
+| --- | --- |
+| `oracle/c2o/implicit.py` | O-implicit-C2 (contract 9.A): composes O-implicit (`implicit_read/oracle/i1_oracle.py`, `evaluate()`) and O-explicit (`c2o/`, as amended by C2-WB), both pinned by sha256 (`PINS`; drift is reported as `pinDrift`). Builds the section 4 chains, applies I5–I7, never produces `implicitTiling`, reports section 3 Outside facts (`facts.volume` = `own`, `ancestor:k`, `externalContent:k`; `facts.depth` = depth(R) + l) |
+| `oracle/c2_oracle.py --implicit [--i1-limit NAME=VALUE]` | CLI flag. A non-Accepted O-implicit verdict is the outcome, with `"phase": "I1"` |
+| `oracle/self_test/slice3.py` | 14 checks: pins; explicitization identity (9 fixtures, verdict, units and every per-level vertex coordinate); chain length = depth(R) + 1 + l + 1 and depth = depth(R) + l on 706 references; root order (and a swapped-record negative); external-root placement at l + 2 |
+| `oracle/mutants/slice3.py` | 15 oracle mutants (contract 9.E, oracle side) as hashed patches in `oracle/mutants/slice3/`, report `slice3-report.json` |
+| `controls/slice3/` | `generate.py` (with `synthetic.py`, `forest.py`), `manifest.json`, committed `fixtures/`, `check.py`, `results.json` |
+| `corpus/slice3.py`, `corpus/slice3-manifest.json` | Forest witnesses (9.B), their precheck totals, the coverage statement and the 9.D limit pairs |
+
+Replay (from this directory; single-threaded, `taskset -c 2,3 nice -n 10`):
+
+```sh
+python3 -I oracle/self_test/slice3.py                       # 14 checks, 0 failed
+python3 -I controls/slice3/generate.py --forest DIR --pre-amendment DIR   # 80 cases; --check: 0 mismatches
+python3 -I controls/slice3/check.py                         # 80 cases + 181 I1 cases, 0 disagreements
+python3 -I oracle/mutants/slice3.py                         # 15/15 flip their named control
+python3 -I corpus/slice3.py CORPUS_DIR                      # 34 archives, 5 pairs, 0 failed
+```
+
+`--forest` is R's b51f83d forest directory; `--pre-amendment` holds the I1 controls as generated at `92e8c04`.
+Forest-derived controls above 120 kB are written to `/home/bend/.cache/c2s3-evidence/slice3/` and are listed in
+the manifest by sha256 only (`file: "evidence:…"`).
+
+**Limits.** O passes the #160 defaults to O-implicit (`hierarchy_visits` 2^18, `references` 2^20,
+`member_bytes` and `document_decoded_bytes` 128 MiB, `document_items` 2^17), and the slice-3 default cap
+`containmentWorkUnits` = 2^29 explicitly: `c2o/check.py`'s `DEFAULT_LIMITS` (O-WB's file, not edited here)
+still says 2^28. I1 controls (S3-18, S3-19) run at their manifest limits over O-implicit's own defaults, as the
+I1 parity test does.
+
+### Results
+
+- **Forest witnesses (b51f83d, 17 forest + 17 twins): all Contained**, except the `mf2-lod3-explicit` twin,
+  which O-implicit refuses as ResourceLimit (`document_items`), as production does. No witness is `workLimit`
+  at 2^29. Maximum span 290 bits (F-MF2); FLOAT levels 277–290, quantized 69–78; at most 19 chain levels.
+
+  | Witness | Units | Witness | Units |
+  | --- | --- | --- | --- |
+  | F-W1 | 7,074,373 | F-W5 / -quantize / -meshopt | 202,516,294 / 198,748,288 / 209,130,354 |
+  | F-W2 | 70,582,811 | F-MF2 | **447,748,743** (12,527 references, 11,300 implicit) |
+  | F-W3 | 31,659,297 | F-W6 / F-W6d / F-W6dn | 2,430,561 / 2,602,924 / 2,050,284 |
+  | F-W4 (6 archives) | 11,347–102,823 | F-W7 | 4,193 |
+
+- **9.D limit pairs (each end run by the oracle):** F-MF2 `containmentWorkUnits` 447,748,743 Contained /
+  447,748,742 `workLimit`; `containmentSpanBits` 290 / 289 (`numericSpan`); `containmentBytesRead`
+  59,996,880 / 59,996,879, the precheck-only arm, stops at the last reference (12,526); F-W6d
+  `containmentDecodedBytes` 57,736 / 57,735; repeated-URI fixture (K = 3, 9 references)
+  `containmentWorkUnits` 20,562 / 20,561.
+- **Controls: 80 cases, all agree.** Every base and mutant is Accepted by O-implicit (so passes
+  `hierarchyBounds` and `geometricErrorOrder`), except S3-16.depth-1, the intended I1 ResourceLimit.
+  - S3-1 (W6), S3-2 (W4-polygons, W1, W5-quantize), S3-3 (W1), S3-4 and S3-5 (W7, W6), S3-6 (W1), S3-7
+    (W5-quantize) from producer output.
+  - Synthetic: S3-8, S3-9 to S3-14, S3-16, S3-20, the S3-17 role family (own, ancestor:1, ancestor:2 = I_0,
+    ancestor:3 = V_R, externalContent:4, ancestor:4, all depth 3; it also carries S3-4, S3-5 and S3-15), the
+    repeated-URI pair and a two-root fixture.
+- **S3-18 (181 I1 controls after amendment 6):** 65 Contained; 106 refused by I1 (verdict passes through);
+  derived 4 (B-4, B-12b, R8a, R8a.nopad); `tileMetadata` 2 (C-12b.group.base, C-12b.uri.base); outside C2 in
+  production 4 (C-10 and R1b.full refused in C1, R5 by injection only, Z-payload explicit-only). None is Outside.
+- **S3-19:** 32 pre-amendment fixtures, all Outside(own), with their old hashes.
+- **Mutants: 15/15** flip their named control (an unmutated copy flips nothing). The 9.E row "register with the
+  charging `ArchiveResources::reference`" is C1 accounting and has no oracle counterpart.
+
+### Readings (please confirm or correct)
+
+1. **S3-4 on F-W6 (9.C).** `I_0` carries its own content and it lies on every `V_0` face, so shrinking `V_0`
+   gives Outside(**own**) at reference 0, not `ancestor:l`. `ancestor:l` is covered by S3-17.ancestor2.
+2. **Whole-subtree-tight mutants (9.C steps 1 and 3).** With `c'` fixed, `h'` can be bound by the
+   opposite-face constraint; then `pred(h')` still reaches `e(X)` and the mutant stays Contained (W5-quantize's
+   first leaf did this). O chooses X and the face where the `e` constraint binds and records both.
+3. **S3-8 on producer output** is not built. A tight explicit parent of the vector roots would need every
+   `V_R` and row below it tightened too (vector padding is millions of ulps), so the control is synthetic.
+   S3-6 uses W1 because the single-tile vector witnesses carry no root translation.
+4. **The witnesses are b51f83d**, not the slice-3 head (9.B). Re-run `corpus/slice3.py` and
+   `controls/slice3/generate.py` on R's head-regenerated archives (update `WITNESSES` / `forest.INPUTS`).
+
 ## What remains
 
 - Production verdicts for `witnesses/report.json`, `controls/manifest.json`
@@ -654,4 +736,5 @@ including the meshopt INDICES/bits streams and the 800-character decimals.
   `wb/` at-cap pairs are pinned to the oracle's computed totals, so they must be
   regenerated if a formula reconciliation changes `E`, `B`, `Dec`, `J`, `Res`
   or `Prim`.
-- O-implicit (Slice 0b), for implicit coverage.
+- Slice 3: production verdicts for `controls/slice3/manifest.json`, S3-18 and the forest witnesses at the
+  slice-3 head (R), with the limit pairs above.

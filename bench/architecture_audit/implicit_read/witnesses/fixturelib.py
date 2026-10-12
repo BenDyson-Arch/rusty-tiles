@@ -45,8 +45,10 @@ def glb_point(p):
 
 def glb_tile_point(p):
     """A GLB whose point lands at tile-frame `p` after glTF's y-up to z-up rotation U(x, y, z) = (x, -z, y)
-    (core README :441).  Used for explicit payloads, which C2 checks; implicit payloads keep glb_point."""
-    return glb_point([p[0], p[2], -p[1]])
+    (core README :441).  Used for every payload, explicit and implicit (amendment 6: C2 slice 3 checks implicit
+    payloads too).  `0.0 - y` keeps a zero coordinate +0.0, so a point on the tile-frame y = 0 plane is written
+    exactly as glb_point wrote it."""
+    return glb_point([p[0], p[2], 0.0 - p[1]])
 
 
 def subtree_binary(js_bytes, bin_bytes, magic=b"subt", version=1):
@@ -272,7 +274,7 @@ class Slot:
         self.avail = avail                    # set of tiles with content
         self.member_template = member_template or template
         self.header = header or {}
-        self.payload = payload                # callable(tile, centre) -> bytes, default glb_point(centre)
+        self.payload = payload                # callable(tile, centre) -> bytes, default glb_tile_point(centre)
         self.metadata_class = metadata_class  # opaque content-metadata class name (UINT8 "weight")
 
 
@@ -461,7 +463,7 @@ class Implicit:
                     continue
                 name = s.member_template(t) if callable(s.member_template) else subst(s.member_template, *t)
                 c = self.centre(t)
-                out[name] = s.payload(t, c) if s.payload else glb_point(c)
+                out[name] = s.payload(t, c) if s.payload else glb_tile_point(c)  # amendment 6
         return out
 
     def members(self):

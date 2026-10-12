@@ -1,0 +1,13 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -284,7 +284,9 @@
+             self.tiles += 1
+             if self.tiles > self.max_tiles:
+                 raise OracleUndecided("tile count exceeds the oracle's tile limit")
+-            chain = path + stack
++            r_frame = TS._Frame(path[-1].tile, path[-1].where, path[-1].volume, None, None)
++            i0 = TS._Frame(None, stack[0].where, stack[0].volume, path[-1].transform, None)
++            chain = path[:-1] + [r_frame, i0] + stack[1:]
+             for slot, target in rec["contents"]:
+                 cwhere = "%s.content[%d]" % (twhere, slot)
+                 self._reference(target, target, cwhere, chain, None)

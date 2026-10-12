@@ -1,27 +1,27 @@
 {
  "cases": [
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "Accepted",
    "file": "fixtures/BQ.3tz",
    "id": "BQ",
    "limits": {},
    "members": 28,
    "ref": "base (QUADTREE L=3 A=6, rows, one slot, bitstreams)",
-   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+   "sha256": "d8edaf226902bedf1c3eae690f8422639e0c10decc2e7cc1cc29aaf777f2c649"
   },
   {
-   "bytes": 11023,
+   "bytes": 11035,
    "expected": "Accepted",
    "file": "fixtures/BO.3tz",
    "id": "BO",
    "limits": {},
    "members": 15,
    "ref": "base (OCTREE L=2 A=3, transform, two slots, contentMetadata)",
-   "sha256": "42808d67093ba6655c185c5ee9d7431ccba92b5cac49c4ed4b25b845f38b33a4"
+   "sha256": "78ec66bb6e0029f5a1623ffd5117825c940ed5ed61b21f16bba858a899ddc291"
   },
   {
-   "bytes": 18472,
+   "bytes": 18504,
    "diff": {
     "added": [],
     "changed": {
@@ -39,10 +39,10 @@
    "note": "co-adjusted: availableCount, row removed, content bit cleared, payload deleted",
    "pair": "BQ",
    "ref": "A-1",
-   "sha256": "7ff767698ee12157f34c96c8beb4cbd54c5689bd7726acd5d8db9c7049a89bc0"
+   "sha256": "210aa3202c966282fd590bcb01e422b90830d28cb4785146e862a134d5d050a7"
   },
   {
-   "bytes": 19716,
+   "bytes": 19752,
    "diff": {
     "added": [
      "content/4/2/2.glb"
@@ -64,10 +64,10 @@
    "note": "+1 tile; row copied from the parent; no content",
    "pair": "BQ",
    "ref": "A-2",
-   "sha256": "4b69da45c98b23ea45551b9e34e72255665bd00ee7194ebe391dcdd6783d0c42"
+   "sha256": "0158ac375cdfabe3eaa668f5e87c744efa693cb0adbf4174742cc195f8f5fab7"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -87,10 +87,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "A-3 (InvalidInput or facts; the oracle decides InvalidInput)",
-   "sha256": "905c6358efab678034ece550a5e94b0abf9121aa67912cd81546f029fe3b08ab"
+   "sha256": "5dfc77d38b2f39be37a92f1567722c9d58cdce4874168bcac2b5f2a697eef1aa"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -105,10 +105,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "A-4",
-   "sha256": "26a39542df5207b930f5153b9865caf5e6046892509f2fcc206120491f7005cb"
+   "sha256": "d7571126e63b09600d65bef97649820efb790869b5b8374e59ca2dec2f8bc342"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -123,10 +123,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "A-4",
-   "sha256": "5a535ffcdbe0bbcae3fd75e0a2c59fd1b4b1fe584db3880ea134973a49b1252e"
+   "sha256": "f7b26ca2b09f5cfc5086df13eb5d59fa1e7540761e722531885ba65be38e9ab2"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -142,10 +142,10 @@
    "note": "one bit",
    "pair": "BQ",
    "ref": "A-5",
-   "sha256": "5e7f7e5f89f2751c17a08779442e9551a8d9156c7219d56f2fc1670d7cd842fe"
+   "sha256": "a1109dd7803776400fe364e8c5141c2fab7327251ade13ce18523e34b10b30a2"
   },
   {
-   "bytes": 19612,
+   "bytes": 19652,
    "diff": {
     "added": [
      "content/2/1/1.glb"
@@ -163,10 +163,10 @@
    "note": "one content bit; ships content/2/1/1.glb (amendment 5) so the mutant reaches no missing entry",
    "pair": "BQ",
    "ref": "A-6",
-   "sha256": "fa6ae6c15069ad9235a17c5c159780425ebaa8e6b1b5fa9abc99029043d9c314"
+   "sha256": "031240a8d8a3632b2eeabbb598d07d2768a4b4c72a793d5498f1e441da560175"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -182,10 +182,10 @@
    "note": "one bit",
    "pair": "BQ",
    "ref": "A-7",
-   "sha256": "bde0670f36d157b370e271c8b5dbdf207637c9c6adfc549b4f5983a00cf39240"
+   "sha256": "b34101237210a332038d55fa3b888789692eae58a43d5fc3cd5a32f6d815bf31"
   },
   {
-   "bytes": 20516,
+   "bytes": 20556,
    "diff": {
     "added": [
      "content/6/18/2.glb",
@@ -204,10 +204,10 @@
    "note": "child bit (morton 12) in subtree (3,2,0) under the available (5,9,1); ships subtrees/6/18/2.subtree and content/6/18/2.glb (amendment 5)",
    "pair": "BQ",
    "ref": "A-8",
-   "sha256": "04488b5bbfeb5572bb59acd95e25b439e2d7e024593f77dc6ed32847e2220c24"
+   "sha256": "a6aac157a2630407a11c885aa03a7216c9af3a01e8c125daf7b8f54cc434ea46"
   },
   {
-   "bytes": 19095,
+   "bytes": 19131,
    "diff": {
     "added": [],
     "changed": {
@@ -226,10 +226,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "A-9 (looser A, OD-8)",
-   "sha256": "bc5c9922f1339602bd4a5e8c194edd9cd4b523b34c21d193cb2ee0bb85afe58a"
+   "sha256": "3655cda504a5f8a228179a5f9ef7eb013bff41a106f0e29863340fc822f428ac"
   },
   {
-   "bytes": 19095,
+   "bytes": 19131,
    "diff": {
     "added": [],
     "changed": {
@@ -244,10 +244,10 @@
    "members": 28,
    "pair": "A-9.32",
    "ref": "A-9",
-   "sha256": "12f31be6aa5ea690e58f06f81b9e0a5395e45f03e2b8ea6724c5b4638b0721c9"
+   "sha256": "b3af964b7b600e0f535f6133dae082d7cde40b052db783f9f229aa4eb91d0f3d"
   },
   {
-   "bytes": 18198,
+   "bytes": 18234,
    "diff": {
     "added": [],
     "changed": {},
@@ -262,20 +262,20 @@
    "members": 27,
    "pair": "BQ",
    "ref": "A-10",
-   "sha256": "66f3a9b643ddecf23405038ac67a0a5b4681bc8218f27781444e03ce45c9f041"
+   "sha256": "4738de2106a865e4e42529151706770a08d601ba39b89d6e5f772512fe8996d9"
   },
   {
-   "bytes": 37318,
+   "bytes": 37390,
    "expected": "Accepted",
    "file": "fixtures/A-11.base.3tz",
    "id": "A-11.base",
    "limits": {},
    "members": 55,
    "ref": "A-11 base (distinct subtree members)",
-   "sha256": "80dd2314e2af04a4ca73a8fbbf9ef30098ab0740bcde776f8408e4d393e7c7a6"
+   "sha256": "61b3052b3247ca4e70b7071cad8d071009b0e81c7182d389f29784d5928589f7"
   },
   {
-   "bytes": 30025,
+   "bytes": 30097,
    "diff": {
     "added": [],
     "changed": {
@@ -297,10 +297,10 @@
    "members": 49,
    "pair": "A-11.base",
    "ref": "A-11 (OD-7)",
-   "sha256": "5ed3135bb66220b74a6cb492fe43caf3eefcb7ea931b246064d537e5bf3407ac"
+   "sha256": "9ea30d005b551d158d928c696c852344654db03b9b53a43900740bc6210c1af7"
   },
   {
-   "bytes": 19137,
+   "bytes": 19173,
    "diff": {
     "added": [
      "content/0/0/0.json",
@@ -361,10 +361,10 @@
    "note": "defects: JSON template (Unsupported) and subtree version 2 (InvalidInput)",
    "pair": "BQ",
    "ref": "A-12 root admission before \u00a71",
-   "sha256": "f74ea59dd4f155af23c427aa478510bd0d6accd79fdc2d998bf7a3b76e42195e"
+   "sha256": "01ba485d767fd65497693b9e30cdf08399bed0057debba720810de02ac810d33"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {},
@@ -380,7 +380,7 @@
    "note": "Tileset + Node = 2 visits, root P_t = 11 > 10 remaining",
    "pair": "A-5",
    "ref": "A-12 \u00a72a.3 before \u00a72a.9",
-   "sha256": "5e7f7e5f89f2751c17a08779442e9551a8d9156c7219d56f2fc1670d7cd842fe"
+   "sha256": "a1109dd7803776400fe364e8c5141c2fab7327251ade13ce18523e34b10b30a2"
   },
   {
    "bytes": 125002,
@@ -432,7 +432,7 @@
    "sha256": "5204d0c823a7e156b7e877b6ee65079348b02f5e85effbaf23eeeec6b484c5c6"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {},
@@ -448,20 +448,20 @@
    "note": "root subtree member = 1 reference; E = 9 > 8 remaining",
    "pair": "B-8+1",
    "ref": "A-12 \u00a72a.10 before \u00a75",
-   "sha256": "e2d9d3091f5be6a9fbaef5bbcec7104ef5121dfa9c9989efbab70f2bdff0cb48"
+   "sha256": "56becdd308f7d7d07acbbdcd3419385f708467f9d79d3f1bff73624d409b7094"
   },
   {
-   "bytes": 41172,
+   "bytes": 41280,
    "expected": "Accepted",
    "file": "fixtures/A-13.base.3tz",
    "id": "A-13.base",
    "limits": {},
    "members": 70,
    "ref": "A-13 unaliased form",
-   "sha256": "1117008fe69cae5d64549e246e710f7272b77b36adcd9acc8ab0d4f3b19c8f90"
+   "sha256": "04588e82d0dfd086db773defb4238829eaeb9682d28488c6f9a0444e1a7a23e2"
   },
   {
-   "bytes": 40548,
+   "bytes": 40656,
    "diff": {
     "added": [],
     "changed": {
@@ -485,10 +485,10 @@
    "members": 70,
    "pair": "A-13.base",
    "ref": "A-13 (K = 3 aliases)",
-   "sha256": "9b3ba61aa32e4c4a6bf1f5ba6e5de459d7843c1a33065d4b1fae0e522dec6771"
+   "sha256": "49f362fa6ed76db3fdb9af41c70ce1019d2937541fe5228eb5b6943ce5052da5"
   },
   {
-   "bytes": 19046,
+   "bytes": 19082,
    "diff": {
     "added": [],
     "changed": {
@@ -503,13 +503,15 @@
    "members": 28,
    "pair": "BQ",
    "ref": "A-14 (closed form)",
-   "sha256": "eb6b5d9bf6ab704a725e39b3f608e5b5358451b887e8fda4096aa8e255f249e0"
+   "sha256": "3c2e0906c25e9e5e5db34c95da000bb220826dbba1e79a666e84b18fee844aae"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
+     "content/4/2/3.glb": 6,
+     "content/4/3/2.glb": 6,
      "subtrees/3/1/1.subtree": 6
     },
     "removed": []
@@ -525,10 +527,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-1 (leaf siblings swapped)",
-   "sha256": "1634ebca91397b1641810ec7e0a8ba101d51985893902a85181840fc3b67cfdc"
+   "sha256": "8839b26f0f393c9af9bc29d9058f9d226b5b48f7b4dfb60e1843221232ed8088"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -548,10 +550,10 @@
    "note": "one ulp on a centre component",
    "pair": "BQ",
    "ref": "B-2 (+1 ulp)",
-   "sha256": "e19400bed395bc3ede80b639a07b59223e5547cc3375d06ddc5ec2794c81d100"
+   "sha256": "57aac82559bb999a586b5d82343eaa252f226fa259da8652d76fff9b4dcf5acc"
   },
   {
-   "bytes": 19123,
+   "bytes": 19159,
    "diff": {
     "added": [],
     "changed": {
@@ -576,10 +578,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-3 (property and class renamed)",
-   "sha256": "973de3651e277997717b427b855843a891a33c171b00aee64a663701fb2bee68"
+   "sha256": "c1701faf85f8e7ea65a68f5a670f2b5190e276a8a853fa1bd93cafe1133228b7"
   },
   {
-   "bytes": 19063,
+   "bytes": 19099,
    "diff": {
     "added": [],
     "changed": {
@@ -598,10 +600,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-4 (box semantic removed: derived, derived-root at level 0)",
-   "sha256": "a5144276c9b0225347de1f0df85495962d946af214453820962aa07ed971c613"
+   "sha256": "9857d1c0d84799756d5281ae41da319798b85b9db1ea62aed02c15e6912ef685"
   },
   {
-   "bytes": 19060,
+   "bytes": 19096,
    "diff": {
     "added": [],
     "changed": {
@@ -620,10 +622,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-4 (error semantic removed: e_R 2^-l)",
-   "sha256": "b271412831daede1350b8a8f3fcbb938d7f10d5bb4ae759d3b8f72c719923621"
+   "sha256": "12b8c8cbf2a9ecf445b6d36539d2aa46d91315ea4752b33511d4e95cace91920"
   },
   {
-   "bytes": 19203,
+   "bytes": 19239,
    "diff": {
     "added": [],
     "changed": {
@@ -638,10 +640,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-5",
-   "sha256": "840e858cb5f249e9f9cb43cf61612b33feb86398b1b4a862e3c70268a74464fb"
+   "sha256": "69da976cf43e0fa37e006bd00290cd75afa7b777d7a52e6fb2855993bd064fb9"
   },
   {
-   "bytes": 17862,
+   "bytes": 17898,
    "diff": {
     "added": [],
     "changed": {
@@ -666,10 +668,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-6 (FLOAT32 rows widen exactly)",
-   "sha256": "42a63e788700b07b5bbb0f8e56d45b3a48c291f1966ed31abed77ce6b94a5133"
+   "sha256": "eca345cfb42f26325014e07386f55a1a389dad42b65e90de0939a2ea38692240"
   },
   {
-   "bytes": 19152,
+   "bytes": 19188,
    "diff": {
     "added": [],
     "changed": {
@@ -684,10 +686,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-7 (class scale)",
-   "sha256": "6a95ea0eb1529ca4340cf8b07a5c127b03a663b526759e6c7efb20fd0a7c2f74"
+   "sha256": "ac1c62503e1aedb67e1acd886de18487023fe6db29b7de9b8b35fa5f27f7a5e2"
   },
   {
-   "bytes": 19158,
+   "bytes": 19194,
    "diff": {
     "added": [],
     "changed": {
@@ -702,10 +704,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-7 (table-level scale; O-extra)",
-   "sha256": "e5eb1c7649572df17e93301feb5210b5590360be9f2d8e1ab6061fc1d346f035"
+   "sha256": "65aadced86bdefe5490c1c34f655c5685324d86d9f175d7be2e4342c8ddf3dd6"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -720,10 +722,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-8",
-   "sha256": "e2d9d3091f5be6a9fbaef5bbcec7104ef5121dfa9c9989efbab70f2bdff0cb48"
+   "sha256": "56becdd308f7d7d07acbbdcd3419385f708467f9d79d3f1bff73624d409b7094"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -738,10 +740,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-8",
-   "sha256": "bbca9bc4b6d04bf5140c759b86fc31bc9dc1d17da383f4f6de8dae2726484615"
+   "sha256": "7d8fddde2d1a82f02d1cac5b55fc86c74b9009bb19d7e7b68dc8fbe5f7b3dc61"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -756,10 +758,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-9",
-   "sha256": "28e8c7ad6af440648144b1d668155b4f66ab6b38b5342b1a8d18be0ed6cf643e"
+   "sha256": "ca0edad141283f980fccddbddef34e2ab1edec2783af8a02fc09093132693c7e"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -774,10 +776,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-9",
-   "sha256": "83ab2e56dc2febd3cc1601569744b267a286097414c6de1ebd77cf611364e3e2"
+   "sha256": "76440b87b01fa80b110a7713f7d9a741956e8607ce51c4ab6edb599dbee4f47e"
   },
   {
-   "bytes": 18440,
+   "bytes": 18476,
    "diff": {
     "added": [],
     "changed": {
@@ -793,10 +795,10 @@
    "note": "TILE_GEOMETRIC_ERROR absent; derived e_R 2^-l reaches level 5; one ulp apart",
    "pair": "B-10.normal",
    "ref": "B-10",
-   "sha256": "413a75ee0607481afbe793f21bb3affabe9258b0fbd3eb1900d7b87b84dbb1c9"
+   "sha256": "4c4dfe74a62bd17d7a15d08c4f1f6ed8517dfe2e7fa11bf3b11fb8e1cf37e031"
   },
   {
-   "bytes": 18440,
+   "bytes": 18476,
    "expected": "Accepted",
    "file": "fixtures/B-10.normal.3tz",
    "id": "B-10.normal",
@@ -804,7 +806,7 @@
    "members": 28,
    "note": "TILE_GEOMETRIC_ERROR absent; derived e_R 2^-l reaches level 5; one ulp apart",
    "ref": "B-10",
-   "sha256": "88638aca1f46055b450e5db4f03649dc180a1baec576e7f59afc7e3a537498b5"
+   "sha256": "87202933e9df54622e4db51ebcad56921318f16d1c04323247d037d4ed22acf8"
   },
   {
    "bytes": 1422,
@@ -835,7 +837,7 @@
    "sha256": "712587539d073a12dfe0ca1a49eea96520e87fb85b7bd3459030b691b4c89c82"
   },
   {
-   "bytes": 18494,
+   "bytes": 18530,
    "diff": {
     "added": [],
     "changed": {
@@ -859,10 +861,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-12 (optional omitted: e_R 2^-l)",
-   "sha256": "dc49e0fa991053129c6452bc96e598f14545c7420b4e051f8477d4531a7c9844"
+   "sha256": "b9af6873419beae87a68525a7a9fa25d2ac171a8ef0ef79fb7b248a00c5345bf"
   },
   {
-   "bytes": 18510,
+   "bytes": 18546,
    "diff": {
     "added": [],
     "changed": {
@@ -877,10 +879,10 @@
    "members": 28,
    "pair": "B-12",
    "ref": "B-11 (required omitted)",
-   "sha256": "d50f3e0241b5804b7a733733b1e6f0ada03455ffc83080089d8e29ad18ceddf7"
+   "sha256": "45e557315ce20fa1e78e60be1c9ca300df9229d515908305f9c759856bf6651b"
   },
   {
-   "bytes": 16374,
+   "bytes": 16410,
    "diff": {
     "added": [],
     "changed": {
@@ -904,10 +906,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "B-12 (optional box omitted: derived)",
-   "sha256": "2b3f8c6150bda0e2c6768442691cd6046596f909175ebed891b4bffce36d4c3e"
+   "sha256": "4349bfa6b6a1d3ceef3f8609f91d4ea897d537d157ed5f9e81999c780e868009"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [
      "content/1/0/1.glb",
@@ -949,10 +951,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-1 (InvalidInput or facts; asymmetric set gives InvalidInput)",
-   "sha256": "7c826ae2578dc9e48f1be75ecaaad846b691074d4832695f5f2bac6b2212c9c5"
+   "sha256": "1890297c231c11cd84cae23f3480a72ccf93e944934bf370da89f51c98f924ea"
   },
   {
-   "bytes": 19090,
+   "bytes": 19126,
    "diff": {
     "added": [],
     "changed": {
@@ -967,10 +969,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-2",
-   "sha256": "e81904a566a9d20e5f999a698d56ebae365bc0e16e87b1d3934f11d0d85a0d4b"
+   "sha256": "b1126ace26911ff2a3e9b93ca2713bd13dbd87eaef0a3957e830e3b93384b2ec"
   },
   {
-   "bytes": 19098,
+   "bytes": 19134,
    "diff": {
     "added": [],
     "changed": {
@@ -985,20 +987,20 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-3",
-   "sha256": "716f846d22cb44d3d7e5509a5e6cd7f1766adc3b8ca723824c50a8ec5d541dec"
+   "sha256": "aa20bcc16880c56ab560ca2c4d06640f1caae0f7a37d9f36ffe2c41831600553"
   },
   {
-   "bytes": 10549,
+   "bytes": 10561,
    "expected": "Accepted",
    "file": "fixtures/C-4.base.3tz",
    "id": "C-4.base",
    "limits": {},
    "members": 15,
    "ref": "C-4 base (third slot never available)",
-   "sha256": "38f9a9424c2bdf47d5132e48d5f1f0b0f1539cb1839a52050d6f7447e062a929"
+   "sha256": "ba226780748e0214bee7e7ef39686b168f41536acc1e5c29ceb368ff390517e6"
   },
   {
-   "bytes": 10550,
+   "bytes": 10562,
    "diff": {
     "added": [],
     "changed": {
@@ -1013,20 +1015,20 @@
    "members": 15,
    "pair": "C-4.base",
    "ref": "C-4",
-   "sha256": "e1b18b782be708894038709f79c8ccd13039a4591a7f826ff5fb8450f34ebcf2"
+   "sha256": "658f54d8a1e68ecb4a019bd4fa2d6475904fe894b0fe863f75d30b0a5c703ac9"
   },
   {
-   "bytes": 11075,
+   "bytes": 11087,
    "expected": "Accepted",
    "file": "fixtures/C-5.base.3tz",
    "id": "C-5.base",
    "limits": {},
    "members": 16,
    "ref": "C-5 base",
-   "sha256": "7ec1c1e4ddfb1bdbd91fc35336e85202ff679b80c41022ec2c5df9da2e4cf989"
+   "sha256": "9e7aeb9d5b38680672f98498ca06f6c16e71779844d09f144ca47928ca14dfc8"
   },
   {
-   "bytes": 10856,
+   "bytes": 10868,
    "diff": {
     "added": [
      "o/c/0-0-0-0.json"
@@ -1045,20 +1047,20 @@
    "members": 16,
    "pair": "C-5.base",
    "ref": "C-5 (RC-3)",
-   "sha256": "196b56f321258e9ff1bcf1385d855a408e2707e58ad5926f7226d414bab7491b"
+   "sha256": "b203750bd5567de30ae2685c5e64f6a2f83db0e7f6234f67e539871dac621573"
   },
   {
-   "bytes": 14219,
+   "bytes": 14243,
    "expected": "Accepted",
    "file": "fixtures/C-6.base.3tz",
    "id": "C-6.base",
    "limits": {},
    "members": 22,
    "ref": "C-6 base",
-   "sha256": "8acd1ece12e8edcd343c02b65be9e8c5c72ff64e94409fc3322658141a21fcd9"
+   "sha256": "61021cf58bce14fd70d4cd81eb71681152883ab188b900670b5a618586c8440e"
   },
   {
-   "bytes": 12692,
+   "bytes": 12704,
    "diff": {
     "added": [
      "o/c/1-0-0-0.json",
@@ -1089,10 +1091,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-6 (producer pattern)",
-   "sha256": "e281824323a234c426761e12efe563802fa1e34355a05c53e40a64be749609e8"
+   "sha256": "fac3b1724a588de32978f8b3a2c93bcc40c2080bd865de3a43d1b9e01712ceea"
   },
   {
-   "bytes": 12692,
+   "bytes": 12704,
    "diff": {
     "added": [
      "o/c/1-0-0-0.JSON",
@@ -1123,10 +1125,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "abadc1a8e47a6e79fb8ad218f8be395f9ce2c7bc09a218482277de932d46b7e4"
+   "sha256": "7914d6f43b761d37a8be375a7c8db2edc2bae2ad0b4442e251b34233cf0a4b7e"
   },
   {
-   "bytes": 10550,
+   "bytes": 10562,
    "diff": {
     "added": [],
     "changed": {
@@ -1153,10 +1155,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "a906fe4dadf253593970451325c3717f3fa80d3a8f95c78db245e22d4e557842"
+   "sha256": "c80d8e0cccffdc6600db4a01a6d87c996513d9c9ca923197830c5ad3ec710403"
   },
   {
-   "bytes": 12694,
+   "bytes": 12706,
    "diff": {
     "added": [
      "o/c/1-0-0-0.json",
@@ -1187,10 +1189,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "89f2c098e5ef08adf47126dbe9d7a6db1f38cf91c4a23d9635e0aa821ad4fbf4"
+   "sha256": "20907173a82f950e982b9ef9e8f04b5fc69575905a9746e3a4d93c534ded2514"
   },
   {
-   "bytes": 10552,
+   "bytes": 10564,
    "diff": {
     "added": [],
     "changed": {
@@ -1217,10 +1219,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "9358d2e46b0a27f4b78cf9c7b2524d750fe01972cb0690a4e2e19b15954a0a69"
+   "sha256": "2c26dbd05875b335f03cd69cb9cf8f1ecd54cc86095a530e886256aa395fcae0"
   },
   {
-   "bytes": 12724,
+   "bytes": 12736,
    "diff": {
     "added": [
      "o/c/1-0-0-0.j%70on",
@@ -1251,10 +1253,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "917846c184dabb7c86c9a2d80302b6a74233b586d8bcae765ce1e02f64d2053d"
+   "sha256": "dce55417b842ae412f9466253f395254eca67cb3846911cb0b78e477c4753fe1"
   },
   {
-   "bytes": 10554,
+   "bytes": 10566,
    "diff": {
     "added": [],
     "changed": {
@@ -1281,10 +1283,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "d1e000d14a36756214ad67245df5888caf90f9cc3e5d61926466f24b881ffd91"
+   "sha256": "443029815bd142e394e73e408cd1e0027f5661c1a6523c8720ddd165aeea46ed"
   },
   {
-   "bytes": 12696,
+   "bytes": 12708,
    "diff": {
     "added": [
      "o/c/1-0-0-0.json",
@@ -1315,10 +1317,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "674ee1a9673cdf110318e06060adb7166bcc2898959e03f2a1ca14b79d6a34d7"
+   "sha256": "6e51218279d8a3a09d44ece5762780199d57dde3f759b93c2853e2eb6d55993b"
   },
   {
-   "bytes": 10554,
+   "bytes": 10566,
    "diff": {
     "added": [],
     "changed": {
@@ -1345,10 +1347,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "51a9533bde5b2cac5ba1649afe2072a829cfe236e8025606c26962d5ab79a04e"
+   "sha256": "12c03f425237e6bf5c43bf769dff0206630782620b1285759c4c6dee92e92c02"
   },
   {
-   "bytes": 12694,
+   "bytes": 12706,
    "diff": {
     "added": [
      "o/c/1-0-0-0.json",
@@ -1379,10 +1381,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "20eb75edd665a3c4d7c60c7cc17c01480ca2a9473c5e8a458b68efb49e22cb95"
+   "sha256": "a0e8bba4e505ac61665623b287c1c24f9968949d86898ac7afc4b1459bb5b07c"
   },
   {
-   "bytes": 10552,
+   "bytes": 10564,
    "diff": {
     "added": [],
     "changed": {
@@ -1409,10 +1411,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "43eb0b0f769d748a85bce71af9eafbaa3f50a0b6bd1621e76a7a6b7c6a64c772"
+   "sha256": "cabf130b4f4985dce5147d691b3fd14fb070d1680ea74e40342bf04fd7361eaf"
   },
   {
-   "bytes": 12693,
+   "bytes": 12705,
    "diff": {
     "added": [
      "o/c/1-0-0-0.json",
@@ -1443,10 +1445,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "b5e166f8df31c076abd9dc25c06d0c6c65b8cecf4d104c7531d8d268e84f717e"
+   "sha256": "aea242fcad54461ad7bbd82c873ed4b2780f072f105e4820f83a85774f83e592"
   },
   {
-   "bytes": 10551,
+   "bytes": 10563,
    "diff": {
     "added": [],
     "changed": {
@@ -1473,10 +1475,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "2664c335666931cbc9d013731c8050678e5af1462280ba3dd17e21bb760b0b3e"
+   "sha256": "f1ff42bf60bee53b9c40d1c46920d8bb978e177ae407039f652130d398e530be"
   },
   {
-   "bytes": 10849,
+   "bytes": 10861,
    "diff": {
     "added": [
      "o/c/x.json"
@@ -1501,10 +1503,10 @@
    "members": 16,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "2f276686b017709ccf9b086f8521eb6c59adf9772071816bbf06059e7ad35b60"
+   "sha256": "d8dd01d9ab7f0b61d2f81f82046f0b112b78eaf34506456a05bdb2641e837a97"
   },
   {
-   "bytes": 10555,
+   "bytes": 10567,
    "diff": {
     "added": [],
     "changed": {
@@ -1531,10 +1533,10 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "891676dfc75596d77e5284e14395791bd95b2289048db970452427be8642de29"
+   "sha256": "fcda50bf9969bd1588c26c3e71f6b69209ef38f86f39bbafe8e40a1c178feef8"
   },
   {
-   "bytes": 12696,
+   "bytes": 12708,
    "diff": {
     "added": [
      "o/c/1-0-0-0.JSON",
@@ -1565,10 +1567,10 @@
    "members": 22,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "ab037676af3ca00ce361b5c42e283745cadd5e23a35191a9fb5e59fd047b16dc"
+   "sha256": "23d8f40d4d591ecb2501b8864190e31bd240794fb3df36f1da34aa6e92a84b92"
   },
   {
-   "bytes": 10554,
+   "bytes": 10566,
    "diff": {
     "added": [],
     "changed": {
@@ -1595,20 +1597,20 @@
    "members": 15,
    "pair": "C-6.base",
    "ref": "C-7 (DC-2 forms; also never available)",
-   "sha256": "c25bc20a77039c600c14d65f3ec64745e9ad5cfa051ede8f2510d368b20422ef"
+   "sha256": "76aaabc954420d736b26fdae02180260ecae5082ef8cee5661eeac3a3abe59bf"
   },
   {
-   "bytes": 10993,
+   "bytes": 11005,
    "expected": "Accepted",
    "file": "fixtures/C-7b.base.3tz",
    "id": "C-7b.base",
    "limits": {},
    "members": 15,
    "ref": "C-7b base",
-   "sha256": "f34fde3cf26c8bd7a8d42bd460950aa988537fa965bccfc3cce564fc4ceb42fb"
+   "sha256": "fcdd0cf637cbe97ae61c23dd101a86459990957061450742e8b97b0b877e278c"
   },
   {
-   "bytes": 10994,
+   "bytes": 11006,
    "diff": {
     "added": [],
     "changed": {
@@ -1623,17 +1625,17 @@
    "members": 15,
    "pair": "C-7b.base",
    "ref": "C-7b (escape guard, non-last segment)",
-   "sha256": "51b2ee92175294f724c969c943675f2716f845da62656a9e7f4d06c14ba3e43c"
+   "sha256": "bd56725044ab45c979b4255deb3912c00422816623c99e592f3f586640e73fbd"
   },
   {
-   "bytes": 11023,
+   "bytes": 11035,
    "expected": "Accepted",
    "file": "fixtures/C-7c.base.3tz",
    "id": "C-7c.base",
    "limits": {},
    "members": 15,
    "ref": "C-7c base",
-   "sha256": "65bc1c1ad2c2b1b9d7c4cd6d3e4d001b41b94002da0c68f8522f21b5b160c1ff"
+   "sha256": "99c26fb2285f246d759093dd7a9594db758eb5386c4ff7ed72468aca638197c4"
   },
   {
    "bytes": 7875,
@@ -1661,20 +1663,20 @@
    "members": 9,
    "pair": "C-7c.base",
    "ref": "C-7c (variables eliminated)",
-   "sha256": "3ca8411b89d65b7f741ddc3a2e17570ed6e279ccb139e51d50658b6cdd862054"
+   "sha256": "873462d1f0dc8b043406f0eab51b44932be7840f43cc20aa752b15116c8fb6d7"
   },
   {
-   "bytes": 10993,
+   "bytes": 11005,
    "expected": "Accepted",
    "file": "fixtures/C-7d.base.3tz",
    "id": "C-7d.base",
    "limits": {},
    "members": 15,
    "ref": "C-7d base",
-   "sha256": "31328a261e32218acd71cd8b12d4a912acd0bc7fe12dde96dfef0d2a0465574b"
+   "sha256": "80c633d8f2e86ead6cbd2d058cfbbcfe113e7c5b7cbb6bb92b72cbbe292f1d8b"
   },
   {
-   "bytes": 10998,
+   "bytes": 11010,
    "diff": {
     "added": [],
     "changed": {
@@ -1693,20 +1695,20 @@
    "members": 15,
    "pair": "C-7d.base",
    "ref": "C-7d (normalization exactness: same members and volumes)",
-   "sha256": "d536a604dcc2c11d8937a84afb0ced1f3c4f75628b36c1b9ae039e28ed08d2bc"
+   "sha256": "afc3c0e57293666131e7201c650e1099ab58bed50539b14f33b2a46bc7283670"
   },
   {
-   "bytes": 11057,
+   "bytes": 11069,
    "expected": "Accepted",
    "file": "fixtures/C-7e.3tz",
    "id": "C-7e",
    "limits": {},
    "members": 15,
    "ref": "O-extra: %7Bx%7D decodes to the literal '{x}' (normalization is structural)",
-   "sha256": "09d38ab3dfe28d13e5d7f3279c26e050a861c2cdb5b2b0fbd9fa6149cfa3d2b9"
+   "sha256": "0c4b37ff0bf45f0d0d8392e0c6df4d169300721d50fec2732fe77b6642821f72"
   },
   {
-   "bytes": 19833,
+   "bytes": 19869,
    "expected": "Accepted",
    "file": "fixtures/C-8.3tz",
    "id": "C-8",
@@ -1714,10 +1716,10 @@
    "members": 29,
    "note": "R (refine REPLACE) is the first child of an ADD root",
    "ref": "C-8 (X-8)",
-   "sha256": "06d5f32cfc2aa5d4c8ff13f44e1d44cabe6dc8966af591c4dbcae337cda9d1f0"
+   "sha256": "a54d931144790bfe1b57299cefbc442da633feaed5b6e1f5e05afa4d73465354"
   },
   {
-   "bytes": 19076,
+   "bytes": 19112,
    "diff": {
     "added": [],
     "changed": {
@@ -1732,10 +1734,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-9",
-   "sha256": "8c7a6f46f48bce67d9ace4cbc577ed9f1134cadd5b93db3e7a43c1f5d83204f0"
+   "sha256": "dc3232f2ac9eaeb135f35909045fcb23b132d7784175c36e4e21be2fa1a8459a"
   },
   {
-   "bytes": 19065,
+   "bytes": 19101,
    "diff": {
     "added": [],
     "changed": {
@@ -1750,10 +1752,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-9",
-   "sha256": "eb3da12af324b5d87bd602c0d66cb5dec3a76a389888b7843249cf570ffec838"
+   "sha256": "8ac304efdf9b3568faf280d301d0eb2c2f075197c7b7b4bea37bd6f38aa8882b"
   },
   {
-   "bytes": 19093,
+   "bytes": 19129,
    "diff": {
     "added": [],
     "changed": {
@@ -1768,14 +1770,14 @@
    "members": 28,
    "pair": "BQ",
    "ref": "C-9",
-   "sha256": "8a778d2b010180f15c6598fd66615a2f938a6c8bbcbaafebc6388f7e0c45d8c9"
+   "sha256": "71a9680bd748fdba8ce20b51408c7fdf44b3827fd5c616e93848c4fa044b2a4d"
   },
   {
-   "bytes": 18884,
+   "bytes": 18916,
    "diff": {
     "added": [],
     "changed": {
-     "content/0/0/0.glb": "length 384 -> 174"
+     "content/0/0/0.glb": "length 388 -> 174"
     },
     "removed": []
    },
@@ -1787,30 +1789,30 @@
    "pair": "BQ",
    "production": "InvalidInput",
    "ref": "C-10 (C1 magic; the oracle treats payloads as opaque)",
-   "sha256": "00a1ac9d89266edce2ea172f7d2472ba28180955347bf64465ce20248c6a38a4"
+   "sha256": "c106f66f49864ae67c42dcc59dffb46fd2f1c639c1938167fd12cbdfba91a269"
   },
   {
-   "bytes": 11485,
+   "bytes": 11497,
    "expected": "Accepted",
    "file": "fixtures/C-11.3tz",
    "id": "C-11",
    "limits": {},
    "members": 16,
    "ref": "C-11",
-   "sha256": "8639db78eeda547ca870349b70958e85883094420b78c2f534f4ad1ee15b2006"
+   "sha256": "8193736037d088d95930b4ea7e805b0b717fd887ba6df18d4e3170dcc24f37bb"
   },
   {
-   "bytes": 11969,
+   "bytes": 11981,
    "expected": "Accepted",
    "file": "fixtures/C-12.base.3tz",
    "id": "C-12.base",
    "limits": {},
    "members": 15,
    "ref": "C-12 base (same column, no semantic)",
-   "sha256": "3d787d6cef979e8298b7bd56bc5e812b01d51f72a7b3fc2ddbcdee4df70eda32"
+   "sha256": "3ed2a231c49efe3d3b55d75989124558d63a2c14a2f50c3bf0ce3a8d5f151c74"
   },
   {
-   "bytes": 11994,
+   "bytes": 12006,
    "diff": {
     "added": [],
     "changed": {
@@ -1826,20 +1828,20 @@
    "note": "the CONTENT_URI value names x.json",
    "pair": "C-12.base",
    "ref": "C-12 (RC-1)",
-   "sha256": "d5ca466830b788657aa30b184a1aba09d9f8be35a8df743a6b0f462f36f78819"
+   "sha256": "10547ddaec10ecfb91ac1358059d6406d3d3025fc03a135f395129cb705d6915"
   },
   {
-   "bytes": 11538,
+   "bytes": 11550,
    "expected": "Accepted",
    "file": "fixtures/C-13.base.3tz",
    "id": "C-13.base",
    "limits": {},
    "members": 15,
    "ref": "C-13 base (same column, no semantic)",
-   "sha256": "e474f474eb7db06ee14c072d40c98e8fd1bce8776f4e8086344066a8432276ac"
+   "sha256": "890774d6df5ebcc32a4019bfaac2c09809a109c131cdaa85b3cef2f0a92cf755"
   },
   {
-   "bytes": 11568,
+   "bytes": 11580,
    "diff": {
     "added": [],
     "changed": {
@@ -1854,20 +1856,20 @@
    "members": 15,
    "pair": "C-13.base",
    "ref": "C-13 (RC-1)",
-   "sha256": "36384fcdf3b71c5363e91185555d2f217608b30da6d313dd47e199b0effa77e2"
+   "sha256": "8ab6e19a5c9acd97f519da54fffac2c625a2f0dfbfd750597a9d7efb64f69fb5"
   },
   {
-   "bytes": 11127,
+   "bytes": 11139,
    "expected": "Accepted",
    "file": "fixtures/C-12b.uri.base.3tz",
    "id": "C-12b.uri.base",
    "limits": {},
    "members": 15,
    "ref": "C-12b (DC-5, at root admission)",
-   "sha256": "a0126dd392ee56c009f50f5d02b3ee44ca0e34bec32fe2b0cec9f763c9ee7970"
+   "sha256": "658f682c3b5f9ef98d3f34eefcb6f69c49dc32a6abb60f9b372e75de9fbeec93"
   },
   {
-   "bytes": 11152,
+   "bytes": 11164,
    "diff": {
     "added": [],
     "changed": {
@@ -1882,20 +1884,20 @@
    "members": 15,
    "pair": "C-12b.uri.base",
    "ref": "C-12b (DC-5, at root admission)",
-   "sha256": "4efbecce49add1e13a956b5df66eedb5cb801c3c72ec4de60b9db6475cc3e703"
+   "sha256": "1436f10e60ed3db3443ffa38ded08d69b6c773a010209916742d8f19bc09a996"
   },
   {
-   "bytes": 11145,
+   "bytes": 11157,
    "expected": "Accepted",
    "file": "fixtures/C-12b.group.base.3tz",
    "id": "C-12b.group.base",
    "limits": {},
    "members": 15,
    "ref": "C-12b (DC-5, at root admission)",
-   "sha256": "adfa0b7c7bdb35b559c2e49b9ed12c89c4159a681c73ba3a0af5cfa40ff83965"
+   "sha256": "4252099a5c387127e68224249547ec289bb0f479f6000d0be5217ab78dfbf457"
   },
   {
-   "bytes": 11175,
+   "bytes": 11187,
    "diff": {
     "added": [],
     "changed": {
@@ -1910,7 +1912,7 @@
    "members": 15,
    "pair": "C-12b.group.base",
    "ref": "C-12b (DC-5, at root admission)",
-   "sha256": "acb52fbd0c0a1b53f1160ae09e3761fdeeb6127acafb8ecc776976b17d6d4fae"
+   "sha256": "582428d9e83c9581a810381e7c189a00b3734c978dc84d48787e84daa0a614d3"
   },
   {
    "bytes": 7868,
@@ -1959,17 +1961,17 @@
    "sha256": "3f5ae65a56d2b7347d3df386dda367b1d6519b52ad809293ae44c97b18e78a5b"
   },
   {
-   "bytes": 19206,
+   "bytes": 19242,
    "expected": "Accepted",
    "file": "fixtures/C-15.3tz",
    "id": "C-15",
    "limits": {},
    "members": 28,
    "ref": "O-extra: inherited refine ADD (paired with 'refine forced to REPLACE')",
-   "sha256": "85a3887ff7b331f6a903012885c45acf792a3b0c7227d14847858ded5655d994"
+   "sha256": "dc82c580470f330c0c742de670aa734faa0048f0677bf73f8c1edc5000531afe"
   },
   {
-   "bytes": 19193,
+   "bytes": 19229,
    "diff": {
     "added": [],
     "changed": {
@@ -1984,10 +1986,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: S2 root (X-3)",
-   "sha256": "4244632f052bb3979508a47e75523bf59042b8aea8570deef86cff92d5212c9a"
+   "sha256": "fec4ecc6a44f15ecbb9699e9f7ff7e79ab411dc16f97c1ceb08a8f9579acfff7"
   },
   {
-   "bytes": 19163,
+   "bytes": 19199,
    "diff": {
     "added": [],
     "changed": {
@@ -2002,10 +2004,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: 3DTILES_implicit_tiling 1.0 (X-13)",
-   "sha256": "2f2bed188842b5696fa270c5695b8e61c4712a93b0d3e3254b1cf0cd52cde9bb"
+   "sha256": "c84e46d4dc9bef9e4141801d54d21bdfdb38ce5aeb24c3326662c2b70171303d"
   },
   {
-   "bytes": 19207,
+   "bytes": 19243,
    "diff": {
     "added": [],
     "changed": {
@@ -2020,10 +2022,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: implicit root with children (:92-97)",
-   "sha256": "3df189cee17904f5dc37c701ee86f0e5c77ef636e2dfd463012870006f694cd8"
+   "sha256": "a6cf173f4998cf72dcd1fd9c34c9f712f75ce02fc7aed2da04cf4ad390d6da3e"
   },
   {
-   "bytes": 19122,
+   "bytes": 19158,
    "diff": {
     "added": [],
     "changed": {
@@ -2038,10 +2040,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: implicit root with metadata (:92-97)",
-   "sha256": "51b246535e7c66c8c9cb663589510cee7dd0927a117b9d45b24062aef92e3265"
+   "sha256": "97e3a6293ffc1e1abef85f138ea892b00dfccb23cc9737e6e9a8288a24e96ca3"
   },
   {
-   "bytes": 19171,
+   "bytes": 19207,
    "diff": {
     "added": [],
     "changed": {
@@ -2056,10 +2058,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: content template with boundingVolume (:92-97)",
-   "sha256": "c2c89917bd96a183585d40d5547a6d5d31c4d7aadf57c240c64bcb3850793de7"
+   "sha256": "6870d0a55d41901d59d7dc1bbec80e23c775e97f2d5be2dc0c687abc155c6699"
   },
   {
-   "bytes": 19095,
+   "bytes": 19131,
    "diff": {
     "added": [],
     "changed": {
@@ -2074,10 +2076,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: subtreeLevels 33 (X-4)",
-   "sha256": "410026eb1ae181c5d9aeda50935322973ed84ee5043cfd526be223a51bb77342"
+   "sha256": "d6025c90cd81fef8a7ecf320e7c81a9ef5dab361a5496630d5dd6a4f40e54878"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2092,10 +2094,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: availableLevels 0",
-   "sha256": "993934ddb9d6c9e34457b08ac74acc6d59f2fb505162857adbce0993dc9b7b8d"
+   "sha256": "0ebc1bf404ae60fbc6475d69f2f425d3e67fbe12ef1fba844321dc49f9c287c1"
   },
   {
-   "bytes": 19096,
+   "bytes": 19132,
    "diff": {
     "added": [],
     "changed": {
@@ -2110,10 +2112,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "v3.2: implicit integer fields are JSON integers",
-   "sha256": "bb1fd63a75d97c37b768cf6ade0eee293579fba04a627770815ce88227e379f4"
+   "sha256": "5d0d022a43e6fb550c060cac2841b036ed11ffebd7be7bd614e4e0568359a84b"
   },
   {
-   "bytes": 19096,
+   "bytes": 19132,
    "diff": {
     "added": [],
     "changed": {
@@ -2128,10 +2130,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "v3.2: implicit integer fields are JSON integers",
-   "sha256": "0ad56f53454e1708bad50facd49aeb158fa6967036ac2fa1762c8fa49c72c269"
+   "sha256": "f18ce6f06310bcdad08092f38d9d50d3463aadf9734cec0cf68041eb1a5dddf6"
   },
   {
-   "bytes": 19157,
+   "bytes": 19193,
    "diff": {
     "added": [],
     "changed": {
@@ -2146,10 +2148,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "v3.2: a duplicated semantic of any kind in one class",
-   "sha256": "acf31e8443accf2efa956190ec027cbe9305bed683a70e45a70b666386c0dbc5"
+   "sha256": "ed9a2e727984f9b9b5efeab0809693223784010707a338d8affef020a48397e6"
   },
   {
-   "bytes": 11771,
+   "bytes": 11783,
    "diff": {
     "added": [],
     "changed": {
@@ -2164,10 +2166,10 @@
    "members": 16,
    "pair": "C-11",
    "ref": "v3.2: OD-7 validation-wide (one implicit-root external tileset referenced twice)",
-   "sha256": "5898f6e4d650f2cd1e898dacfd2195930a0c92c3e24b9147e57f757473c700d9"
+   "sha256": "72b28eef40ad9bc4afe908b97134d11d823cb301ac1da01fcfeee337348f7e04"
   },
   {
-   "bytes": 10994,
+   "bytes": 11006,
    "diff": {
     "added": [],
     "changed": {
@@ -2182,10 +2184,10 @@
    "members": 15,
    "pair": "C-7d.base",
    "ref": "v3.2: escape guard per segment; 'c%' is a malformed escape",
-   "sha256": "d55d37ff8c5ba18c60964cb354227ddca59b33b5214f592898bedf31733df43d"
+   "sha256": "46efbbceb1fb7cbef7386bcc4439567429616e721f8581f657c6f5a354e62e9d"
   },
   {
-   "bytes": 19107,
+   "bytes": 19143,
    "diff": {
     "added": [],
     "changed": {
@@ -2200,10 +2202,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: offset on TILE_GEOMETRIC_ERROR",
-   "sha256": "e0ac1859490d5a0a79e3a7360343191bf39e55ddbbbd2d9c7d2c29ce8e31190d"
+   "sha256": "273e8ba3941b0c780c5e8f0df5b6410fa8dc8571eead3ba77eed65281dc1a1ac"
   },
   {
-   "bytes": 19086,
+   "bytes": 19122,
    "diff": {
     "added": [],
     "changed": {
@@ -2218,10 +2220,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-1 (truncated BIN)",
-   "sha256": "1563bc73501448b28cf7dbf93f190fd7b0177098b42783eba8a228a768f1deea"
+   "sha256": "2bad3a5258562919c1bd0473cadf7327c353b01286520aaa85fe3818478ac191"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2236,10 +2238,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-2 (byteOffset +1)",
-   "sha256": "15c9b8d8280fe4ef7af9b1bc6a467a49fd8f29300901bcc75121c00f435c783d"
+   "sha256": "e331b61468f23daa8dc8970814d512082e571eff6d1d35d688e9f0828331e8fb"
   },
   {
-   "bytes": 19078,
+   "bytes": 19114,
    "diff": {
     "added": [],
     "changed": {
@@ -2254,10 +2256,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-2 (byteOffset absent)",
-   "sha256": "37011a967f22f330e2d05cd22e4dfa98056851c597053eadc68a52d78a506cd1"
+   "sha256": "11636311e848d3190719c0645ef3267975ff3c4a8fcc12aff80eb8bcfddfc1cd"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2273,10 +2275,10 @@
    "note": "one bit in the BIN padding",
    "pair": "BQ",
    "ref": "D-3",
-   "sha256": "ac37cbc4ffa0fec13c7522c6015e795861d3cd64b26e1651701e0ef7d81d3c12"
+   "sha256": "91ede447a1887908146b79f7138225477146f5529ec55348c7fe0384ef954ef2"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2291,10 +2293,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-4",
-   "sha256": "e6a84fb62002193e5002dcf42682efa366f010467ebb83b691ded06b3c781fd6"
+   "sha256": "28bbd56bb435753a2110f417027b82d444abe1f8df9064f8c2903ac00efcf2df"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2309,10 +2311,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-4 (bad magic; v3.2 ruling 1)",
-   "sha256": "8cff73529926903e9c91d75178754d76d8100974c6e620eecdeca64a66a5b0a9"
+   "sha256": "040ce0309c4a02d71b6ba680b2d6a32c5eb41cbf35416306afebc7ab63f9d2b1"
   },
   {
-   "bytes": 19240,
+   "bytes": 19276,
    "diff": {
     "added": [
      "subtrees/0/0/0.bin"
@@ -2333,10 +2335,10 @@
    "members": 29,
    "pair": "BQ",
    "ref": "D-6 (valid external buffer, OD-6)",
-   "sha256": "5d113137dfc573fdfaa84df9ab073fbc9ff5992425bbd47b36425e312cbe6db4"
+   "sha256": "e0823b211ad983966cb4bb00c9235757776358bf45a174f2a65ef4758a452492"
   },
   {
-   "bytes": 17974,
+   "bytes": 18010,
    "diff": {
     "added": [],
     "changed": {
@@ -2353,10 +2355,10 @@
    "members": 28,
    "pair": "D-6",
    "ref": "D-5 (data URI)",
-   "sha256": "6aec0d22d35598f0385c2e938740d5953762d5bb4cbd8a296a67f4d7d56008e6"
+   "sha256": "77d347ec914df68f723419b2c5c9c68e9ab564453211f2e7e207a60bd373a78a"
   },
   {
-   "bytes": 18419,
+   "bytes": 18455,
    "diff": {
     "added": [],
     "changed": {
@@ -2371,10 +2373,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-7 (JSON-format subtree)",
-   "sha256": "9ddf6533c44a1ac2a64a819088f4b76e6ab62551ecd98e3b6375b95801a6cadc"
+   "sha256": "6ea2a29058425ff968289336066c69fdd2664c855e66cc3623f792264880e839"
   },
   {
-   "bytes": 18425,
+   "bytes": 18461,
    "diff": {
     "added": [],
     "changed": {
@@ -2389,10 +2391,10 @@
    "members": 28,
    "pair": "D-7",
    "ref": "D-7 with a UTF-8 BOM and leading whitespace (v3.2 ruling 1)",
-   "sha256": "70bd378c0cfc9b3c6e50ec8b7e1ca1bf7fd90936afe9f6a72c996f2b1daf2cda"
+   "sha256": "0fc089e67e6e2345d5f939edce22190eec5f81b52e6ebe831703a438caa53f7e"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "diff": {
     "added": [],
     "changed": {
@@ -2411,10 +2413,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "D-8 (RC-5: JSON ends in \\n, no padding)",
-   "sha256": "41bb063b648ea2a60141fb3d8de5ae2aac0bc18161b8ec15fb1c29d9e273f04a"
+   "sha256": "72f4fe0032e5f63ffc48a1d8ff7f21d6fbcfe43b3aa141c63a81dec5c894c309"
   },
   {
-   "bytes": 19110,
+   "bytes": 19146,
    "diff": {
     "added": [],
     "changed": {
@@ -2429,10 +2431,10 @@
    "members": 28,
    "pair": "BQ",
    "ref": "O-extra: extensions in subtree JSON (X-6)",
-   "sha256": "018418e7202b13c91a1f8c552047b9f6d8c1d91dc7fb0fa3e3194d14406ff6bc"
+   "sha256": "93058fad841d0285ff136224715d70e88e4264312d6bc367f2f7d6c3221f5b8a"
   },
   {
-   "bytes": 19150,
+   "bytes": 19186,
    "diff": {
     "added": [],
     "changed": {
@@ -2451,10 +2453,10 @@
    "members": 28,
    "pair": "D-11",
    "ref": "v3.2: 'extensions' inside extras is not an extension",
-   "sha256": "3f4d1e55cf9f0589dd92adba17fcc214a1e9cc0d3739c893da171494abbb3181"
+   "sha256": "2c5e72009aba7046dc9142a0791ec5faaa1b0435ec44069311dbbbe81339f46d"
   },
   {
-   "bytes": 19102,
+   "bytes": 19138,
    "diff": {
     "added": [],
     "changed": {
@@ -2469,7 +2471,7 @@
    "members": 28,
    "pair": "BQ",
    "ref": "v3.2: integer fields are JSON integers (byteOffset 0.0)",
-   "sha256": "151f4d1b5888e43f4ec1995b8656f22dc114661ab9835d7c0097cefd45c7479e"
+   "sha256": "e199393efe735bd5d10dab6b2d1f4d625f2e81c847dcf7e177adfc584104e741"
   },
   {
    "bytes": 832,
@@ -2500,7 +2502,7 @@
    "sha256": "c6afbc4ca12b1b02a7254e6b07f505c1e78aef80de325d8e7092ff73a717a107"
   },
   {
-   "bytes": 11279,
+   "bytes": 11291,
    "diff": {
     "added": [],
     "changed": {
@@ -2515,10 +2517,10 @@
    "members": 15,
    "pair": "BO",
    "ref": "D-10a (count 0)",
-   "sha256": "f9c9a524e119dbd189b650ce07728a19dee76d8f574b5692143b0425631d2671"
+   "sha256": "49c2255e815318f230ff76f837af97e8bfda9b5d615c43018d9fd9f0898eca6f"
   },
   {
-   "bytes": 11279,
+   "bytes": 11291,
    "diff": {
     "added": [],
     "changed": {
@@ -2533,7 +2535,7 @@
    "members": 15,
    "pair": "BO",
    "ref": "D-10b (count 1)",
-   "sha256": "6183ca878501d9e0caaa7aa925940f0e7725f7d29e03289d53afd214ba70e513"
+   "sha256": "4a2d902fe5990b91f22fce28d6c87e57bc8f87cb91b53550385069c5e249ac19"
   },
   {
    "bytes": 1449,
@@ -2664,7 +2666,7 @@
    "sha256": "f777ef98a7bb8ceefd92f79ef2477c00d6316be1c4817b1f94170e1463a17384"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "ResourceLimit:hierarchy_visits",
    "file": "fixtures/R1b.3tz",
    "id": "R1b",
@@ -2675,10 +2677,10 @@
    "note": "limit = visits needed through the last reservation minus one (26 - 1); per-visit charging would reach the corrupt payload first (InvalidInput)",
    "question": "Q2",
    "ref": "R1b (reservation at the last subtree's admission)",
-   "sha256": "0eca73402a7b0b2ec980bd5f7e56da645422a0c7b769c2ab927595d3faee8419"
+   "sha256": "09221483c8650677aa49158774b7287b28dcf0d1438c83413ee6bcd93a366d5a"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "Accepted",
    "file": "fixtures/R1b.3tz",
    "id": "R1b.full",
@@ -2688,10 +2690,10 @@
    "members": 28,
    "production": "InvalidInput",
    "ref": "R1b with the full count: C1 refuses the corrupt payload",
-   "sha256": "0eca73402a7b0b2ec980bd5f7e56da645422a0c7b769c2ab927595d3faee8419"
+   "sha256": "09221483c8650677aa49158774b7287b28dcf0d1438c83413ee6bcd93a366d5a"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "Accepted",
    "file": "fixtures/BQ.3tz",
    "id": "R4",
@@ -2701,10 +2703,10 @@
    "members": 28,
    "question": "Q3",
    "ref": "R4 exact",
-   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+   "sha256": "d8edaf226902bedf1c3eae690f8422639e0c10decc2e7cc1cc29aaf777f2c649"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "ResourceLimit:hierarchy_depth",
    "file": "fixtures/BQ.3tz",
    "id": "R4-1",
@@ -2714,7 +2716,7 @@
    "members": 28,
    "question": "Q3",
    "ref": "R4 one less",
-   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+   "sha256": "d8edaf226902bedf1c3eae690f8422639e0c10decc2e7cc1cc29aaf777f2c649"
   },
   {
    "bytes": 791,
@@ -2747,7 +2749,7 @@
    "sha256": "366f0cec8d6df6f922a71542cade5c958ef93f30fdbc773eeec9334ece911b6f"
   },
   {
-   "bytes": 19094,
+   "bytes": 19130,
    "expected": "Accepted",
    "file": "fixtures/BQ.3tz",
    "id": "R5",
@@ -2755,7 +2757,7 @@
    "members": 28,
    "production": "ResourceLimit (injected)",
    "ref": "R5 (fixture for the injected rank-table refusal; production expects ResourceLimit under injection only)",
-   "sha256": "65d06540e41b352f7a8f31e4e36c9eaa4bcbdd1ce8998247b7646f07bb17b3f1"
+   "sha256": "d8edaf226902bedf1c3eae690f8422639e0c10decc2e7cc1cc29aaf777f2c649"
   },
   {
    "bytes": 203906,
@@ -2765,20 +2767,20 @@
    "limits": {},
    "members": 76,
    "ref": "R9 (DC-3: 182,500 reserved + 182,500 > 262,144)",
-   "sha256": "95cb4498da1a27b466d0afcdab7ff50ce4950358069d8d2a2de707ffaa0a3f4d"
+   "sha256": "244615052e03e11ead5f867250991ce677649bb40a0ae6862c19a684980177c4"
   },
   {
-   "bytes": 4525,
+   "bytes": 4529,
    "expected": "Accepted",
    "file": "fixtures/R8b.1024.3tz",
    "id": "R8b.1024",
    "limits": {},
    "members": 3,
    "ref": "R8b (normalized length 1,024 B)",
-   "sha256": "49ef5cf029b75f129984723fa19dc20376e2dc1965a0a4e617c278ab39c0e713"
+   "sha256": "627f350894c826442334e435fd32459d1cd731d7c1a2e5ec5bbce5bd43e4ed41"
   },
   {
-   "bytes": 4528,
+   "bytes": 4532,
    "diff": {
     "added": [
      "c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/0-0-0.glb"
@@ -2797,7 +2799,7 @@
    "members": 3,
    "pair": "R8b.1024",
    "ref": "R8b (1,025 B)",
-   "sha256": "378750ed9c8b1fcc8fec96fea88d5144f4e829682da7ed3e306e4a2b9cd1cb2a"
+   "sha256": "5067a4af46fd0cfe70a7576aaa562de89a803cd7859080abe91d1aa17774fd90"
   },
   {
    "bytes": 4157674,
@@ -2941,7 +2943,7 @@
    "members": 37451,
    "question": "Q4",
    "ref": "R8a (variables survive; normalized length 25 B)",
-   "sha256": "074756fc7b0d0b30e40e135994a67a32db96c7c7ec411ec0c1c51f50a083ad2a"
+   "sha256": "230a00393978a529f996229300808910401da3cbf003460e3830603dc94e8fb1"
   },
   {
    "bytes": 19515419,
@@ -2952,7 +2954,7 @@
    "members": 37451,
    "question": "Q4",
    "ref": "R8a timing companion without padding",
-   "sha256": "2ba128adc3c4f35205d8d9261d29115df1e11a47416202a46aae04324333938c"
+   "sha256": "055654f9461d190328f771dda8b6105eec52c867d348dcd62be4a2bf1a39f30b"
   },
   {
    "bytes": 18144,
