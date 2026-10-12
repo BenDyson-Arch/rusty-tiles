@@ -30,7 +30,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "d36e732390c0e4b30eda5cd0c84d7a6ef88de38e2d4f57c46b201b6880fa7244",
+   "sha256": "d4a3772fef8423cf0c7a18a5ae8e90b24b40a9dc33540df999a5c0ca656fd27d",
    "source": "W4-polygons",
    "what": "producer archive, unchanged"
   },
@@ -47,7 +47,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "a3b4a32fcb6a55e0238a03c3fbf206d7d7a1e85a4457a56163822bfdd2cea81a",
+   "sha256": "c4c1653eae33149f386178790532500d8aa80eaa82fbdb87de87f47e03386ae5",
    "source": "W5-vec-perf-quantize",
    "what": "producer archive, unchanged"
   },
@@ -1501,7 +1501,7 @@
    "limits": {},
    "pair": "S3-2.W4-polygons.base",
    "role": "mutant",
-   "sha256": "2d57d85e5328224ed1f0ce17a316b7de61ec8719bda48a009450e17eaba36e42",
+   "sha256": "e6c22bf23bea635c5cd6c8afc5af5018a035390cdfb5b91e244bfedce1eae340",
    "source": "W4-polygons",
    "what": "pred(h') on X"
   },
@@ -1527,7 +1527,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "cd0f96036137bab99c8fbe93e158403ae86a3f828eb8518c878ed20e30456f4d",
+   "sha256": "c47fa68dd0bdfcf6e5a108e198f3073d61c1bebe814730f9f78c709729ec3545",
    "source": "W4-polygons",
    "what": "whole-subtree-tight base at leaf 0/0/0/0, axis 0 sign +1"
   },
@@ -1557,7 +1557,7 @@
    "limits": {},
    "pair": "S3-2.W5-vec-perf-quantize.base",
    "role": "mutant",
-   "sha256": "3e8613c713ba7cf75dba9db0b6a51212c2b64430e239fd12559adaedd598478e",
+   "sha256": "a90198de22d38de6aea284fecc34f974d414a6d2a246eb0aeed5bb2c270d2ec5",
    "source": "W5-vec-perf-quantize",
    "what": "pred(h') on X"
   },
@@ -1583,7 +1583,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "18a90ef70a0701c122e03422fe9373fb6900f0d8825699885b1bb8cf4bec6d57",
+   "sha256": "97fcccffaca3c6306204a445fb1c5bce568f8b9a28f57889c7fc3b604c2bac0d",
    "source": "W5-vec-perf-quantize",
    "what": "whole-subtree-tight base at leaf 3/0/0/0, axis 2 sign +1"
   },
@@ -1826,7 +1826,7 @@
    "limits": {},
    "pair": "F-W5-vec-perf-quantize",
    "role": "mutant",
-   "sha256": "a911a83062895a1ab233b64dd06a976faede883354b96889a4d6a3682edabac5",
+   "sha256": "a8be47de8899f920e71ad700dc0b68268d6ef72f9193577052b02db860a6d5aa",
    "source": "W5-vec-perf-quantize",
    "what": "first implicit payload with a root translation: (d0, d1, d2) written instead of (d0, d2, -d1)"
   },
@@ -1986,8 +1986,8 @@
  "forestInputs": {
   "W1": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
   "W2": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
-  "W4-polygons": "d36e732390c0e4b30eda5cd0c84d7a6ef88de38e2d4f57c46b201b6880fa7244",
-  "W5-vec-perf-quantize": "a3b4a32fcb6a55e0238a03c3fbf206d7d7a1e85a4457a56163822bfdd2cea81a",
+  "W4-polygons": "d4a3772fef8423cf0c7a18a5ae8e90b24b40a9dc33540df999a5c0ca656fd27d",
+  "W5-vec-perf-quantize": "c4c1653eae33149f386178790532500d8aa80eaa82fbdb87de87f47e03386ae5",
   "W6": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
   "W7": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe"
  },
