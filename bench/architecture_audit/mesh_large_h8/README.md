@@ -1,118 +1,99 @@
-# H8 leaf producer and remaining acceptance gates
+# H8 full-detail leaf producer
 
-This branch adds owned full-attribute and image capture over the merged H1
-tree, a frozen geometry lattice, crop/pack atlases and an actual in-process ML1
-caller. `mesh-leaf-payloads` publishes leaf GLBs and a diagnostic manifest;
-it does not publish a tileset hierarchy. Producer acceptance is unfinished.
-The encoder API is on draft #163 and remains coordinated with the completed
-H8 producer. The user owns CI monitoring and merges.
+H8 produces actual full-detail GLBs through the in-process ML1 encoder. The
+hidden `mesh-leaf-payloads` command and exported `mesh_to_leaf_payloads` Rust API
+publish leaf payloads, decoded bounds/error certificates, source picking metadata
+and diagnostic manifests. The bounded producer acceptance below is complete;
+implicit hierarchy/archive assembly is a later integration slice. The caller-mip
+API on #163 remains coordinated with this first real caller. The user owns CI
+monitoring and merges.
 
-`src/mesh_large/full.rs` captures attributes, every declared image, material
-bindings and samplers before releasing source ownership. It checks the exact
-H1 triangle-rank projection, joins every corner to H1's positional minimum
-depth through bounded spills, then freezes the dataset-wide zero-origin
-lattice. Logical image aliases remain distinct. Encoded-image hashes bind the
-owned snapshots; source stability checks establish observed file identity,
-rather than an atomic cryptographic snapshot of all source files.
+The final producer source is commit `b81dd9430039f00a5595ddb65e11cb688dbad10e`.
+[producer-acceptance.json](producer-acceptance.json) binds its exact source and
+binary identities, independent reviews, executed artifacts, controls and limits.
+Bulk receipts live at `~/.cache/rusty-tiles-evidence/h8-leaves-20261013/`; the
+manifest records their SHA-256 values. The earlier
+[foundation-manifest.json](foundation-manifest.json) remains historical evidence.
 
-Full capture preflights the larger 286-byte records, retained streams, corner
-join, image chunks, metadata and serial decoder ownership. Its conservative
-scratch allowance adds `863N + 286N + 189N` bytes to the existing H1 allowance,
-plus images and physical allocation reserves. The known-memory check includes
-the scratch allowance on memory-backed filesystems and applies to fixed job
-counts too. These calculations and decoder limits still require measured
-producer RSS/scratch acceptance; they are not an allocator-wide memory proof.
+The final balanced 10-million-triangle run emitted 1,024 leaves, totaling
+1,334,467,104 GLB bytes, in 71.13 seconds. Its measured high-water RSS was
+219,254,784 bytes and sampled physical scratch peak was 6,555,504,640 bytes.
+Every member stays below 96 MiB; the largest is 1,313,348 bytes. All 10 million
+triangles retain the independently accepted geometry/provenance proof through
+strict byte identity of every complete GLB. Only two named allocation-accounting
+receipt fields differ. All 5,120 KTX pages and 20,480 stored mip levels pass the
+independent decoded-image gate. This scale fixture has constant five-slot
+textures and establishes no general high-frequency appearance guarantee.
 
-`leaves/geometry.rs` owns the immutable all-depth plan and aligned U16 affine
-representation. Focused tests cover mixed incidence, packed/synthetic depths
-through 31, negative positions, global lattice indices beyond `2^24`, exact
-terms, rounded sums, identity flattening and outward displacement/bounds.
-Actual source-derived snapped coordinates are exactly representable as f32.
-The GLB writer promotes certified f32 scale/translation to f64 before
-JSON serialization: a shortest f32 decimal need not preserve its exact value
-when the independent validator parses it as f64. Geographic placement and
-renderer RTC arithmetic remain separate proof gates.
+A separate reproducible five-image 2048x2048 fixture exercises ten physical
+pages, including 4096-wide pages, with an explicitly planned density drop of two.
+Its measured RSS is 558,587,904 bytes; all 124 decoded levels pass unchanged
+class floors. Resource checks use an empty PATH, exact input/binary identities,
+owned scratch cleanup and fresh isolated output parents. Periodic scratch
+samples are non-atomic. Native workspace charges remain provisional policy,
+rather than a universal allocator or worst-case resource proof.
 
-`leaves/mips.rs` reduces colour in linear light with linear alpha, normal maps
-in tangent space with per-level renormalization, and data channels linearly.
-It covers odd dimensions and one-dimensional chains to 1x1. Normal cancellation
-uses the greatest-overlap unit donor with stable ties. Its scalar MASK helper
-reports attainable discrete coverage. Uniform image support is its domain;
-sparse atlas support, gutters and variable vertex-alpha contexts require the
-atlas owner described below.
+Full capture owns attributes, every declared image, material bindings and
+samplers before releasing source ownership. It checks the exact H1 triangle-rank
+projection and joins every corner to its positional minimum incident depth
+through bounded spills. Logical image aliases remain distinct. Physical page
+planning precedes the immutable dataset-wide zero-origin lattice; leaf writes
+cannot later change it. Exact decoded terms and rounded sums support large
+lattice indices, packed and synthetic depths through 31. The writer promotes
+certified f32 TRS terms to f64 before JSON serialization and bounds actual decoded
+positions. Executed mixed-depth, packed and synthetic seam witnesses pass all
+four profiles, with sensitive crack controls.
 
-The independent source-authored mip reference in `mip_oracle_tests.rs` does not
-use the production filter arithmetic. Regular tests exercise class differences
-and sensitive wrong-filter controls. Ignored delivery probes are deliberate
-coordinator executions, not default-CI acceptance. The initial delivery
-inventory fails 16 unchanged class/profile floors. Its fixtures and failures
-remain preserved. Bounded probes investigate UASTC colour, meaningful-channel
-occlusion replication and alpha guards. Success on those fixtures does not
-establish a general encoder recipe. A coupled vertex-alpha counterexample
-explicitly exposes where the proposed one-byte guard changes source coverage.
+PNG lossless preserves decoded source RGBA8 at level zero, including transparent
+RGB and original normal bytes, original factors/normalScale and vertex colours.
+The independent raw-texel artifact check passes. Viewer-generated PNG mips are
+outside the lossless guarantee. Fast, balanced and quality instead supply complete
+caller-authored KTX2 chains: linear-light colour with linear alpha, tangent-space
+normal filtering and per-level renormalization, and linear data filtering. The
+encoder never regenerates these chains. Independent decoding checks every level
+against fixed profile/class floors on meaningful material channels.
 
-Bulk precode, source reviews, execution logs and consumer probes are held at
-`~/.cache/rusty-tiles-evidence/h8-leaves-20261013/`. The tracked
-`foundation-manifest.json` binds retained source, evidence and build identities.
-The complete revised H12/H13 planning documents remain in their corresponding
-`tiler-lod-design-20261013/` and `tiler-bake-design-20261013/` cache directories.
-Planning GO is distinct from approximation/baking implementation acceptance.
+Mipmapped bindings use dedicated, aligned pages derived from original-source
+semantic chains. Sixteen barycentric centroids, three vertices and three edge
+midpoints per decoded triangle provide finite source/page sampler checks across
+quarter LODs. Independent artifacts cover repeat, mirror, clamp and all four
+published mip filter modes: 150 pages, 1,080 stored-level checks and 707,520
+sampler evaluations, with seven controls per run. The exact rational reference
+keeps discontinuous nearest boundaries and adjacent f32 UV controls. Its scope
+is exact geometric sample points and finite isotropic footprints, not all camera
+positions or GPU interpolation precision. The final binary reproduced all fifteen
+witnesses with byte-identical GLBs.
 
-The pinned GPU consumer probe accepts dense output `TEXCOORD_0..4` and two
-feature attributes (11 attributes against its limit of 16), with independent
-glTF validation and role-binding/raster controls. Its constant-UV, FLOAT,
-base-PNG/NEAREST fixtures establish layout and sampling closure only. The
-occlusion diagnostic checks sampled material occlusion separately because the
-pinned standard PBR fixture is insensitive to occlusion. It proves neither
-general-client support beyond two UV sets nor feature picking, atlas mip/LOD
-equivalence, quantization or normal-frame preservation. Its loopback server and
-private browser context are closed; no product viewer is installed.
+MASK filtering uses an independent fixed semantic mip and original vertex alpha
+to establish attainable coverage. A one-byte alpha guard is permitted only if
+every checked geometry classification remains unchanged. Literal material
+factors and normalScale are retained. Coverage is finite-sample certification;
+continuous coverage and effective normal shading under arbitrary filtering are
+separate claims. Only physical byte-budget failures permit lossy density retries;
+fidelity failures abort publication. Executed refusal and worker-count/scratch
+path determinism controls pass.
 
-The producer emits dense per-slot UVs, original material factors/normalScale,
-source numeric picking metadata, required meshopt/quantization extensions and
-decoded content bounds. Only actual byte-budget failures permit lossy density
-retries; texture-fidelity failures abort publication. Physical crop/page planning
-is frozen before the all-depth geometry lattice. The tree's later scratch check
-includes retained full attributes and encoded images.
+Actual compressed GPU payloads pass stored and fractional-LOD checks with the
+matching sRGB colour target; maximum meaningful error is two for fast/balanced
+and one for quality on these fixtures. Their KTX colour DFDs correctly specify
+sRGB. The pinned Cesium consumer chooses UNORM ASTC while ignoring the DFD
+transfer function, so its high-contrast linear-light colour filtering fails.
+That compatibility failure is retained; no producer compensation or relaxed
+floor was added. Numeric source picking and normalized reflected-source model
+checks pass separately. No general renderer, geographic RTC, continuous normal
+frame or all-camera appearance certification is claimed.
 
-Lossless PNG preserves decoded RGBA8 at level zero only, including transparent
-RGB and original normal bytes. Viewer-generated PNG mip levels are outside its
-texel-exact guarantee. KTX2 profiles carry complete caller-authored class chains
-and independently decode/check every level. Finite MASK checks preserve original
-vertex alpha and report the fixed semantic attainable gap; an optional one-byte
-alpha guard requires unchanged classifications at every checked geometry sample.
-This is a finite sample guarantee, not continuous surface coverage certification.
+Final verification: 732 portable and 799 native library tests pass, both
+all-target Clippy configurations pass with warnings denied, and the installed
+wheel plus checksum-pinned official Blender 4.5.14 each pass 45 API tests with
+an empty PATH. Wheel licence notices and the tracked-tree budget pass. These are
+local checks; CI monitoring and merging remain with the user.
 
-Executed small published-artifact checks establish all five slots, complete KTX
-chains and unchanged class floors on an opaque low-variance D0 fixture for all
-three KTX profiles. PNG has an independent raw-texel check. Numeric GPU picking
-works in the pinned consumer, including reflected geometry. These fixtures use
-non-mip samplers. A new source-LOD counterexample exposes crop phase error and
-coarse mixing between packed charts for mipmapped samplers; the composite-chain
-quality oracle alone cannot certify source minification correspondence. The corrected mip-sampler path uses dedicated aligned pages and original-source
-class chains, with finite decoded-geometry sampler checks. Independent artifact
-checks have passed repeat, mirror and clamp fixtures; final checks remain pending.
-The reflected PBR diagnostic was traced to reference winding: independently
-flattening the source resolves its interior discrepancy. Original failed
-measurements remain preserved, including fast/balanced MASK-edge differences.
-
-Before H8 can complete, independently verify source sampler mip/LOD support,
-normalScale/filter correspondence and MASK coverage with original COLOR_0.
-Coverage discreteness must be established from an independent fixed semantic
-mip, never from the compressed candidate itself. Bind all five slots, every
-class/mip and each profile to decoded artifacts with unchanged quality floors.
-Run the 10-million textured producer with encoding/assembly resource receipts,
-mixed-depth/packed decoded seam witnesses, deterministic output controls and
-final GPU acceptance. Future implicit hierarchy integration
-must use actual decoded content bounds through the existing metadata override
-contract, rather than treating centroid assignment cells as containing geometry.
-
-The implementation is published as a draft while final-source checks run. The
-first actual 10-million producer execution emitted 1,024 leaves in 60.95 seconds
-with measured peak RSS of 200,511,488 bytes. Its independent geometry/provenance
-check passed all triangles; this constant-texture fixture does not establish
-high-frequency texture quality. The resource wrapper falsely flagged unrelated
-concurrent cache directories, so its original failure is preserved and a final
-isolated repeat is required. Mixed-depth, packed and synthetic-depth seam
-artifacts pass all four profiles. Final resource, decoded texture and packaging
-receipts will supersede these provisional results without deleting failures.
+The independent oracles, witness generators and controls in this directory are
+retained for later slices. Original failed codec, sampler-reference, resource,
+GPU and receipt-construction runs remain in the cache. H12/H13 planning documents
+are in their respective `tiler-lod-design-20261013/` and
+`tiler-bake-design-20261013/` cache directories; their planning GO does not certify
+LOD approximation or proxy baking. Future hierarchy integration must use actual
+decoded content bounds through the metadata override contract, rather than
+centroid assignment cells. No permanent viewer is installed.
