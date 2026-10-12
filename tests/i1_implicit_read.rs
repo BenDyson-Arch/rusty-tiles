@@ -232,7 +232,7 @@ fn x14_report_labels_and_counts() {
     for label in [
         "recordedBudgets.implicitTileExtras",
         "decodedContentBounds",
-        "decodedContentBounds.implicitTiling",
+        "decodedContentBounds.derivedImplicitVolume",
         "metadataSemantics",
     ] {
         assert!(report.not_inspected.iter().any(|c| c == label), "{label}");
