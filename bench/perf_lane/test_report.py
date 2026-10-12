@@ -48,9 +48,16 @@ class Extraction(unittest.TestCase):
         base = report.side_metrics(process, None, 'base')
         self.assertEqual(base['mesh-local'], dict(na='no mesh-local-to-3tz command'))
         self.assertEqual(base['raster'], dict(failed="exit 101: thread 'main' panicked at src/raster.rs:1:1"))
-        self.assertEqual(base['terrain'], dict(na='usage error: error: the following required arguments were not provided: '
+        self.assertEqual(base['terrain'], dict(na='usage error: the following required arguments were not provided: '
                                                   '--maxZoom <MAX_ZOOM>'))
         self.assertNotIn('load', base['vector'])
+
+    def test_tidy_reason(self):
+        self.assertEqual(report.tidy_reason("--help does not list ['--explicit']"), '--help does not list --explicit')
+        self.assertEqual(report.tidy_reason("--help does not list ['--a', '--b']"), '--help does not list --a, --b')
+        self.assertEqual(report.tidy_reason('no mesh-local-to-3tz command (doctor does not list it)'),
+                         'no mesh-local-to-3tz command')
+        self.assertEqual(report.tidy_reason('doctor: raster not ready'), 'doctor: raster not ready')
 
     def test_contended(self):
         side = lambda wall, foreign: dict(ok=True, wallSeconds=wall, foreignCpuSecondsAtBestWall=foreign)

@@ -45,13 +45,14 @@ def side_metrics(process, cesium, side):
         if name.startswith('validate:'): continue
         data = case['sides'][side]
         if 'skipped' in data and 'ok' not in data:
-            out[name] = dict(na=data['skipped'] or 'not run'); continue
+            out[name] = dict(na=tidy_reason(data['skipped'] or 'not run')); continue
         if not data.get('ok'):
             lines = [line.strip() for line in data.get('log', '').splitlines() if line.strip()]
             code = data['samples'][-1]['exitCode']
             error = next((i for i, line in enumerate(lines) if line.startswith('error:')), None)
             if code == 2 and error is not None:  # clap usage error: this CLI takes different arguments
-                out[name] = dict(na='usage error: ' + ' '.join(lines[error:error + 2])[:160]); continue
+                text = ' '.join([lines[error].removeprefix('error:').strip(), *lines[error + 1:error + 2]])
+                out[name] = dict(na=f'usage error: {text}'[:160]); continue
             out[name] = dict(failed=f"exit {code}: {(lines[error] if error is not None else lines[-1] if lines else 'no log')[:120]}")
             continue
         m = dict(wall=data['wallSeconds'], rss=data['peakRssMiB'], bytes=data['outputBytes'])
@@ -66,6 +67,12 @@ def side_metrics(process, cesium, side):
                      secs=load.get('secondsToLoaded'), problems=list(load.get('problems', [])))
         out[name] = m
     return out
+
+
+def tidy_reason(text):
+    """Skip reasons as prose: also tidies older process.py wording (a list repr, a doctor aside)."""
+    text = re.sub(r"\[((?:'[^']*'(?:, )?)+)\]", lambda m: m.group(1).replace("'", ''), text)
+    return text.replace(' command (doctor does not list it)', ' command')
 
 
 def usable(m):
