@@ -1,0 +1,22 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..5434836 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1700,14 +1700,14 @@ impl Check<'_> {
+             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
+             // a rowless I_0, and no volume for a derived cell (I5).
+             let index = self.c2.tile(TileFact {
+-                transform: None,
++                transform: if level == 0 { self.c2.tiles[r.tile].transform } else { None },
+                 volume: match &tile.volume {
+                     EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
+                     EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),
+                     EffectiveVolume::Derived(_) => None,
+                 },
+-                external: None,
+-                parent: Some(parent_tile),
++                external: if level == 0 { self.c2.tiles[r.tile].external } else { None },
++                parent: if level == 0 { self.c2.tiles[r.tile].parent } else { Some(parent_tile) },
+                 depth,
+                 chain: 0,
+             })?;

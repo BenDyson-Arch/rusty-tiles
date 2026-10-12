@@ -1,0 +1,12 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..ceb58fd 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1426,6 +1426,7 @@ impl Check<'_> {
+         // I1 root admission precedes R's explicit checks (contract precedence):
+         // fields, scheme, levels, volume kind, shape, templates, header classes.
+         let implicit = if declares_implicit(&node) {
++            self.c2.exclude(Reason::DerivedImplicitVolume);
+             Some(
+                 admit_root(&node, &base, schema.as_deref())
+                     .map_err(|e| implicit_error(e.widen()))?,

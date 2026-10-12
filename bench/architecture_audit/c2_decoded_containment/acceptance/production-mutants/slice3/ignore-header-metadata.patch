@@ -1,0 +1,14 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..2af83a2 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1479,9 +1479,6 @@ impl Check<'_> {
+             // it is "content has `metadata`" (slice 3 I6, §4 step 7).
+             for slot in 0..root.slots() {
+                 let header = root.header(slot);
+-                if header.get("metadata").is_some() {
+-                    self.c2.exclude(Reason::TileMetadata);
+-                }
+                 self.extension_object(header);
+             }
+             return self.walk_implicit(

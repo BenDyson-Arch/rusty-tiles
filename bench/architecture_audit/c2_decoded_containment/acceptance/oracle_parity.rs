@@ -722,3 +722,21 @@ fn production_matches_the_slice3_forest_witnesses_and_limit_pairs() {
         );
     }
 }
+
+/// Contract §10 item 2 (precheck-only arm), a timing helper, not an acceptance check: one
+/// `inspect_selected` of `C2S3_ARM_FILE`, with `containmentBytesRead` = `C2S3_ARM_BYTES` when set
+/// (O's total − 1 on F-MF2: the precheck runs to the last reference, then `workLimit`, no streaming),
+/// printing production's outcome. R times the test process against the same run of the
+/// `gltfUpAxis` twin (no precheck, no streaming).
+#[test]
+#[ignore = "perf helper: run explicitly with C2S3_ARM_FILE"]
+fn slice3_precheck_only_arm() {
+    let Some(file) = std::env::var_os("C2S3_ARM_FILE") else {
+        return;
+    };
+    let mut l = ValidationLimits::default();
+    if let Ok(bytes) = std::env::var("C2S3_ARM_BYTES") {
+        l.containment_bytes_read = bytes.parse().unwrap();
+    }
+    println!("{}", production(Path::new(&file), l));
+}

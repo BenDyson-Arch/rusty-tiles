@@ -1,0 +1,16 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..77cb64e 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -692,7 +692,10 @@ impl Containment {
+             | self.tiles[tile].chain
+             | content.map_or(0, |c| shape_bit(&self.content_volumes[c]));
+         // The precheck only runs while the archive is still entirely in domain.
+-        if self.exclusions != 0 || self.precheck.is_some() {
++        if self.exclusions != 0
++            || self.precheck.is_some()
++            || self.references.iter().filter(|r| r.uri == uri).count() > 1
++        {
+             return Ok(());
+         }
+         self.build_levels(tile, content)?;

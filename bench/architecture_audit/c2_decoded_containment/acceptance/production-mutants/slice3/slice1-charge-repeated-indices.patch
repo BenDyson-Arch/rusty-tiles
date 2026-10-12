@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..81beeae 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -826,7 +826,7 @@ impl SceneConsumer for FactConsumer<'_> {
+                 None => containment::hull(&UriBounds::identity(), &member),
+             });
+         }
+-        self.t = self.t.saturating_add(instance.vertex_total());
++        self.t = self.t.saturating_add(instance.index_total());
+         self.idx = self.idx.saturating_add(instance.index_total());
+         Ok(())
+     }
