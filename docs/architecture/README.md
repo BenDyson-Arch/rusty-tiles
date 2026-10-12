@@ -2,16 +2,19 @@
 
 ## Current implementation direction — 2026-10-12
 
-The [0.4 Tiles 2.0 roadmap](04-tiles2-roadmap.md) governs new work and sequencing.
-It targets the 3D Tiles 2.0 / glTF 2.1 draft, retains implicit tiling, and requires
-a pinned specification and working consumer demonstration before committing to
-the new delivery representation. The [interrupted-track ledger](04-track-dispositions.md)
-records what continues, what is superseded, and how unfinished source can be recovered.
+The [0.4 delivery and 0.5 transition roadmap](04-tiles2-roadmap.md) governs new
+work and sequencing. **0.4 ships Tiles 1.1 / glTF 2.0**, including implicit tiling
+and the certified textured large-mesh tiler. Its owned tile data and output
+boundaries prepare for **0.5's official Tiles 2.0 / glTF 2.1 transition**.
+Draft experiments may inform design, but draft-format viewer support does not
+block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what
+continues, what is superseded, and how unfinished source can be recovered.
 
-This direction supersedes the earlier separation of 1.1 work into 0.4 and core
-Tiles 2.0 work into a ratification-gated 0.5, and the unmerged ML0 implementation
-sequence. Existing foundation evidence remains limited to its recorded domain.
-The release gate below remains open; this planning change accepts no new output.
+This accepted correction supersedes PR #171's new-format shipping target for
+0.4, while retaining its consolidated sequence, recovery evidence and retirement
+policy. The unmerged ML0 sequence remains superseded. Existing foundation
+evidence remains limited to its recorded domain. The release gate below stays
+open; this planning change accepts no new output.
 
 Status: ongoing architecture gate; F0 is accepted and merged in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Baseline: `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on `develop`.
@@ -80,7 +83,7 @@ wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
-- [0.4 Tiles 2.0 implementation roadmap](04-tiles2-roadmap.md)
+- [0.4 delivery and 0.5 format-transition roadmap](04-tiles2-roadmap.md)
 - [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)

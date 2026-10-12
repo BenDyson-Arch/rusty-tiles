@@ -1,5 +1,27 @@
 # Interrupted tracks: recovery and disposition
 
+## Current continuation after the release split
+
+The user accepted a correction after PR #171: **0.4 ships Tiles 1.1/glTF 2.0;
+0.5 makes the official Tiles 2.0/glTF 2.1 transition**. The
+[roadmap](04-tiles2-roadmap.md) owns that sequence. Draft consumer support is
+not a 0.4 gate. The snapshot below remains historical recovery evidence, not
+an instruction to restore the superseded new-format shipping target.
+
+Finish the retained meshopt correctness and bounded terrain corrections. Resume
+the shared tile/output work against a real 1.1 producer and current viewer;
+reuse existing types and validated writers where their evidence applies.
+Reassess C2s3's known references-pair failure against the 1.1 path actually
+retained for 0.4; its reusable correctness obligations cannot be deferred merely
+because a 2.0 writer is planned. New 3TZ work is justified only by a concrete
+0.4 streaming/resource requirement and stays at the packaging boundary.
+The encoder and glTF-only fill work remain in 0.4; replacing wrappers still
+requires working rendering and picking. PR #168 remains closed as superseded;
+useful decisions and code remain preserved. No feature was accepted by this
+correction, and no interrupted work was deleted.
+
+## Historical recovery snapshot
+
 Snapshot: **2026-10-12**. This ledger records read-only worktree inspection and
 GitHub PR metadata for the streamlined 0.4 direction. It is a recovery record,
 not implementation acceptance. Superseded and deferred work remains unfinished;
