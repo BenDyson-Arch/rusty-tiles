@@ -42,9 +42,10 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   header.
 - Raw results go to `~/.cache/rusty-tiles-evidence/perf/<date>-<shortsha>/`:
   the process and Cesium JSON, run logs, screenshots and `meta.json`, plus
-  `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. Outputs stay under
-  `--work` and are deleted unless `--keep-work` is given. `--from-raw DIR`
-  re-renders a recorded directory without running anything, applying the
+  `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. The stdlib `zstd`
+  writer needs Python 3.14 or later. Older Pythons use the `zstd` CLI, or else
+  write `raw.tar.gz`. Outputs stay under `--work` and are deleted unless
+  `--keep-work` is given. `--from-raw DIR` re-renders a recorded directory without running anything, applying the
   `--explain` reasons recorded in its `meta.json` plus any given again.
 - Flags follow the gate below and are measured against the last milestone. Flags
   against the release are reported but not gated. The script exits non-zero on

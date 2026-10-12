@@ -407,16 +407,32 @@ def contended(process):
                   if v.get('ok') and v['foreignCpuSecondsAtBestWall'] > 0.2 * v['wallSeconds'])
 
 
-def bundle(directory):
-    """raw.tar.zst of every other file in the evidence directory, with fixed metadata; returns its sha256."""
-    target = directory / 'raw.tar.zst'
+BUNDLES = ('raw.tar.zst', 'raw.tar.gz')  # tarfile 'w:zst' needs Python 3.14+; older ones use the zstd CLI or gzip
+
+
+def bundle(directory, stdlib_zstd=None):
+    """Bundle every other file in the evidence directory with fixed metadata; returns the bundle path.
+
+    raw.tar.zst via tarfile (Python 3.14+) or the zstd CLI, else raw.tar.gz (gzip mtime 0)."""
+    if stdlib_zstd is None: stdlib_zstd = 'zst' in tarfile.TarFile.OPEN_METH
     def tidy(info):
         info.mtime, info.uid, info.gid, info.uname, info.gname = 0, 0, 0, '', ''
         return info
-    with tarfile.open(target, 'w:zst') as tar:
-        for path in sorted(p for p in directory.rglob('*') if p.is_file() and p.name not in ('raw.tar.zst', 'REPORT.md')):
-            tar.add(path, arcname=str(path.relative_to(directory)), filter=tidy)
-    return sha256(target)
+    files = sorted(p for p in directory.rglob('*') if p.is_file() and p.name not in (*BUNDLES, 'raw.tar', 'REPORT.md'))
+    def write(target, mode):
+        with tarfile.open(target, mode) as tar:
+            for path in files: tar.add(path, arcname=str(path.relative_to(directory)), filter=tidy)
+        return target
+    if stdlib_zstd: return write(directory / 'raw.tar.zst', 'w:zst')
+    plain = write(directory / 'raw.tar', 'w')
+    if shutil.which('zstd'):
+        subprocess.run(['zstd', '-q', '-19', '--rm', '-o', str(directory / 'raw.tar.zst'), str(plain)], check=True)
+        return directory / 'raw.tar.zst'
+    import gzip
+    with open(plain, 'rb') as source, gzip.GzipFile(directory / 'raw.tar.gz', 'wb', mtime=0) as target:
+        shutil.copyfileobj(source, target)
+    plain.unlink()
+    return directory / 'raw.tar.gz'
 
 
 def corpus_digest(environment_inputs):
@@ -515,8 +531,8 @@ def load_raw(directory):
     meta.setdefault('corpus', corpus_digest(process['environment']['inputs']))
     meta['cesium'] = (read('cesium-head.json') or {}).get('environment')
     if 'bundle' not in meta:
-        meta['bundle'] = dict(path=str(directory / 'raw.tar.zst').replace(str(pathlib.Path.home()), '~'),
-                              sha256=bundle(directory) if not (directory / 'raw.tar.zst').exists() else sha256(directory / 'raw.tar.zst'))
+        path = next((directory / name for name in BUNDLES if (directory / name).exists()), None) or bundle(directory)
+        meta['bundle'] = dict(path=str(path).replace(str(pathlib.Path.home()), '~'), sha256=sha256(path))
     return meta, columns
 
 

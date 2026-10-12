@@ -154,6 +154,28 @@ class Explanations(unittest.TestCase):
         self.assertEqual(flag['explanation'], 'classified: payload checks')
 
 
+class Bundle(unittest.TestCase):
+    def test_bundle_formats(self):
+        import tarfile, tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            (directory / 'meta.json').write_text('{}'); (directory / 'REPORT.md').write_text('not bundled')
+            (directory / 'logs').mkdir(); (directory / 'logs' / 'a.log').write_text('log')
+            # This interpreter's choice, the pre-3.14 path with the zstd CLI (if installed), and without it (gzip).
+            for stdlib, which in ((None, report.shutil.which), (False, report.shutil.which), (False, lambda _: None)):
+                with mock.patch.object(report.shutil, 'which', which):
+                    path = report.bundle(directory, stdlib_zstd=stdlib)
+                    if which is not report.shutil.which: self.assertEqual(path.name, 'raw.tar.gz')
+                    self.assertIn(path.name, report.BUNDLES)
+                    self.assertFalse((directory / 'raw.tar').exists())
+                    if path.suffix == '.gz' or 'zst' in tarfile.TarFile.OPEN_METH:
+                        with tarfile.open(path) as tar: self.assertEqual(sorted(tar.getnames()), ['logs/a.log', 'meta.json'])
+                    first = report.sha256(path); path.unlink()
+                    self.assertEqual(report.sha256(report.bundle(directory, stdlib_zstd=stdlib)), first)  # reproducible
+                    for name in report.BUNDLES: (directory / name).unlink(missing_ok=True)
+
+
 class CpuChoice(unittest.TestCase):
     PAIRS = [(4, 5), (6, 7), (12, 13), (14, 15)]
 
