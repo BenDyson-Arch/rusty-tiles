@@ -582,7 +582,7 @@
         "new": 536870912
       }
     },
-    "evidence": "bench/architecture_audit/c2_decoded_containment/acceptance/wb-gate",
+    "evidence": "bench/architecture_audit/c2_decoded_containment/acceptance/README.md (C2-WB gate)",
     "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/c2wb_cap_amendment/2026-10-12/amend.py"
   }
 }

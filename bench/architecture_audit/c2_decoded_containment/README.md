@@ -583,7 +583,7 @@ reviews only. It did not read `src/`, R's `probes/`, or the J/S/F branches.
 | `c2o/gltf.py`, `c2o/numbers.py` | `J` (now also parses the b3dm batch-table JSON) and `Res` |
 | `c2o/tileset.py` | Sibling references share ancestor levels at distance ≥ 2 (memory only; 100k references × 103 levels) |
 | `witnesses/generate.py` | `REPEATED_INDEX_UNITS` re-derived by hand (48,008,577) |
-| `preparation/contract-20261011/verify/frozen_bound_probe.py` | `--wb` writes `frozen-bound-observed-wb.json` (C2-WB units of the same chains and the 3.6 worked example by the probe's own span engine); the slice-1 output is byte-identical |
+| `preparation/contract-20261011/verify/frozen_bound_probe.py` | `--wb` writes `frozen-bound-observed-wb.json` (gitignored; C2-WB units of the same chains and the 3.6 worked example by the probe's own span engine; the 2026-10-12 output, sha256 `2926e31aa50dfddd33cbb938bd8b74fd7777054cea7995daf575e5e36c5fd543`, is kept outside the repository); the slice-1 output is byte-identical |
 
 **At-cap pairs whose expected totals changed** (fixture bytes unchanged; only the
 cap values in `controls/manifest.json`):

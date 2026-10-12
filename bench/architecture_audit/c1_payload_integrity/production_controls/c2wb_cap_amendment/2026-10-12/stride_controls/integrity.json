@@ -1,5 +1,5 @@
 {
-  "status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only fixtures/manifest.json differs; runner, generator, primary references and fixture bytes are copied unchanged",
+  "status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only fixtures/manifest.json differs; runner, generator, primary references and fixture files are relative symlinks to that lane",
   "amends": {
     "integritySha256": "925429a64023bf5aa0ed8e1e5e037b694609ef97d593cba30ae8b6ae02010bbc",
     "manifestSha256": "a934bc207fe17670cb095f0b4023842dd4241ef1b65c9556bbd65aff4bde7040"
@@ -46,8 +46,8 @@
       "sha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89"
     },
     "fixtures/manifest.json": {
-      "bytes": 19835,
-      "sha256": "c89a9382a90783f0a95df668abd1babf9f53719457f9cef0b80552abd21397ff"
+      "bytes": 19850,
+      "sha256": "83ca40eb831ad802e1ce1fbbfb1b4ede45905761c305dd91821c8b58bd08d345"
     },
     "fixtures/scalar-real-range/input.3tz": {
       "bytes": 1433,
@@ -65,22 +65,6 @@
       "bytes": 157,
       "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
     },
-    "fixtures/unused-packed-scalar/input.3tz": {
-      "bytes": 1433,
-      "sha256": "2f797738be8bcbf3e22bfd4062bc4b6171e11717ac2453ec37bfc4bf3cfd5f51"
-    },
-    "fixtures/unused-packed-scalar/literal-payload.json": {
-      "bytes": 790,
-      "sha256": "f50332a20ebaecdefca5ae18dba3123fdbe037570b5023345112ade97a415f4e"
-    },
-    "fixtures/unused-packed-scalar/tile.glb": {
-      "bytes": 908,
-      "sha256": "7350ef451cbd3a5a58b85c76f057acc4f7c5c1177f6b1fc35db76a38ad926223"
-    },
-    "fixtures/unused-packed-scalar/tileset.json": {
-      "bytes": 157,
-      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
-    },
     "fixtures/unused-packed-scalar-offset/input.3tz": {
       "bytes": 1433,
       "sha256": "95ad08c4ba4879969e68f80f424089ba3d0c84dfb9bb1a4f418bab7cfa565f69"
@@ -94,6 +78,22 @@
       "sha256": "40165da8535a1c906f82e7e8dd318ded508d299de3c9e4d3fc315371a31a30d3"
     },
     "fixtures/unused-packed-scalar-offset/tileset.json": {
+      "bytes": 157,
+      "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
+    },
+    "fixtures/unused-packed-scalar/input.3tz": {
+      "bytes": 1433,
+      "sha256": "2f797738be8bcbf3e22bfd4062bc4b6171e11717ac2453ec37bfc4bf3cfd5f51"
+    },
+    "fixtures/unused-packed-scalar/literal-payload.json": {
+      "bytes": 790,
+      "sha256": "f50332a20ebaecdefca5ae18dba3123fdbe037570b5023345112ade97a415f4e"
+    },
+    "fixtures/unused-packed-scalar/tile.glb": {
+      "bytes": 908,
+      "sha256": "7350ef451cbd3a5a58b85c76f057acc4f7c5c1177f6b1fc35db76a38ad926223"
+    },
+    "fixtures/unused-packed-scalar/tileset.json": {
       "bytes": 157,
       "sha256": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f"
     },

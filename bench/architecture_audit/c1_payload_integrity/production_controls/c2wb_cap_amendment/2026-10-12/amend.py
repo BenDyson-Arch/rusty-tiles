@@ -7,7 +7,7 @@
 Inputs are the validator_caps_amendment/2026-10-11 outputs, hash-verified and never
 modified. The only rule: every admitted case's expectedReport.limits takes the C2-WB
 default containmentWorkUnits (2^29, contract C2-WB WB-6; evidence in
-bench/architecture_audit/c2_decoded_containment/acceptance/wb-gate). The old value is
+bench/architecture_audit/c2_decoded_containment/acceptance/README.md, "C2-WB gate"). The old value is
 asserted before it is replaced, and nothing else in a report changes.
 
 Refused cases keep their expectations (C2 never refuses). An admitted case whose
@@ -22,6 +22,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -82,7 +83,7 @@ def amend_manifest(manifest, origin, origin_sha, manifest_sha):
         "amends": origin, "inputSha256": origin_sha, "inputManifestSha256": manifest_sha,
         "rule": "admitted expectedReport.limits take the C2-WB containmentWorkUnits default; nothing else changes",
         "raised": {key: {"old": old, "new": new} for key, (old, new) in RAISED.items()},
-        "evidence": "bench/architecture_audit/c2_decoded_containment/acceptance/wb-gate",
+        "evidence": "bench/architecture_audit/c2_decoded_containment/acceptance/README.md (C2-WB gate)",
         "generator": "bench/architecture_audit/c1_payload_integrity/production_controls/"
                      "c2wb_cap_amendment/2026-10-12/amend.py",
     }
@@ -136,24 +137,27 @@ def build(work):
     for name, entry in source_integrity["files"].items():
         assert sha((STRIDE / name).read_bytes()) == entry["sha256"], name
     lane = work / STRIDE_LANE
+    # Unchanged lane files are relative symlinks to the validator-caps lane (no duplicated
+    # bytes in the tree); only fixtures/manifest.json and integrity.json are new files.
     for name in sorted(source_integrity["files"]):
         if name == "fixtures/manifest.json":
             continue
         target = lane / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(STRIDE / name, target)
+        placed = HERE / STRIDE_LANE / name
+        os.symlink(os.path.relpath(STRIDE / name, placed.parent), target)
     manifest = json.loads((STRIDE / "fixtures/manifest.json").read_text())
     amended, admitted, bad = amend_manifest(manifest, "validator_caps_amendment/2026-10-11/stride_controls/fixtures/manifest.json",
                                             STRIDE_MANIFEST_SHA, STRIDE_MANIFEST_SHA)
     changes += [{"bundle": "validator_caps_amendment/2026-10-11/stride_controls", "case": name} for name in bad]
     (lane / "fixtures/manifest.json").write_bytes(manifest_bytes(amended))
     files = {}
-    for path in sorted(p for p in lane.rglob("*") if p.is_file()):
-        raw = path.read_bytes()
-        files[str(path.relative_to(lane))] = {"bytes": len(raw), "sha256": sha(raw)}
+    for name in sorted(source_integrity["files"]):
+        raw = (lane / name).read_bytes() if name == "fixtures/manifest.json" else (STRIDE / name).read_bytes()
+        files[name] = {"bytes": len(raw), "sha256": sha(raw)}
     integrity = {"status": "C2-WB cap amendment of validator_caps_amendment/2026-10-11/stride_controls: only "
                            "fixtures/manifest.json differs; runner, generator, primary references and "
-                           "fixture bytes are copied unchanged",
+                           "fixture files are relative symlinks to that lane",
                  "amends": {"integritySha256": STRIDE_INTEGRITY_SHA, "manifestSha256": STRIDE_MANIFEST_SHA},
                  "files": files}
     (lane / "integrity.json").write_bytes((json.dumps(integrity, indent=2) + "\n").encode())
@@ -187,14 +191,20 @@ def main():
         for name in OUTPUTS:
             fresh, committed = work / name, HERE / name
             if args.check:
-                pairs = ([(p, committed / p.relative_to(fresh)) for p in fresh.rglob("*") if p.is_file()]
-                         if fresh.is_dir() else [(fresh, committed)])
-                mismatches += [str(c) for f, c in pairs if not c.is_file() or c.read_bytes() != f.read_bytes()]
+                pairs = ([(p, committed / p.relative_to(fresh)) for p in fresh.rglob("*")
+                          if p.is_symlink() or p.is_file()] if fresh.is_dir() else [(fresh, committed)])
+                for f, c in pairs:
+                    if f.is_symlink():
+                        same = c.is_symlink() and os.readlink(c) == os.readlink(f)
+                    else:
+                        same = c.is_file() and not c.is_symlink() and c.read_bytes() == f.read_bytes()
+                    if not same:
+                        mismatches.append(str(c))
             else:
                 if committed.is_dir():
                     shutil.rmtree(committed)
                 if fresh.is_dir():
-                    shutil.copytree(fresh, committed)
+                    shutil.copytree(fresh, committed, symlinks=True)
                 else:
                     shutil.copyfile(fresh, committed)
         print(json.dumps({"admittedAmended": sum(b["admittedAmended"] for b in record["bundles"])

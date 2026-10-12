@@ -100,7 +100,10 @@ step leaves the pairs unchanged.
 | 256 | `large-span-sphere-16-limbs`, sphere centre `2^340` | `d0 = (-149, 341)`. `d0² = (-298, 683)`. The sum of 3 is `(-298, 685)`, span 984: 16 limbs |
 | node: 1 | dyadic translations, unit matrix or scale | `s_step ≤ 64`, so the visit is `max(256, 128) = 256` |
 
-## Formula mutants (`mutants.py`, `mutants-report.json`)
+## Formula mutants (`mutants.py`)
+
+`mutants.py` writes `mutants-report.json` (gitignored; the 2026-10-12 run is kept outside the
+repository, sha256 `0195cdf1b7ca2d40ff7fc28ffaa6a91918851bfd823387d7d31fc87bfda13826`).
 
 These are the unit-arithmetic subset of contract 9.C, applied to a copy of `c2o` and
 scored on the 55 CI at-cap pairs. Each must flip its named pair.

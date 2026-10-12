@@ -32,13 +32,15 @@ such a case and writes nothing. There are none: of the 82 admitted cases, 78 are
 
 | Output | sha256 |
 | --- | --- |
-| `corrected-205-c2wb-fixtures.tar.gz` | `eee7f3777b0c96926f7fec860ff2d4446c3dd78313298cae4d5ee3e1cda4189f` (manifest `09c195d7e13b6e8635abe89a07283a365913d36ddd43997648b5f198c12dce3a`) |
-| `polygon-sensitive-5-c2wb-fixtures.tar.gz` | `1355d6975deb5e9c08ab803fcaf2166149e3b2d38c5204e64fb999e1fee71a10` (manifest `3b59cb2ab47180111817c6a71583b83e5b09412404acbe6914644e0aef8cf3b8`) |
-| `stride_controls/fixtures/manifest.json` | `c89a9382a90783f0a95df668abd1babf9f53719457f9cef0b80552abd21397ff` |
+| `corrected-205-c2wb-fixtures.tar.gz` | `7d844ecf1fc99719b0807f2859bbc6e988ee110283d5f001c25a0eee563fdb7e` (manifest `3ef63c08433e1b69573e83c9aef0fe00972f94b9160e7934b07974bad956ae35`) |
+| `polygon-sensitive-5-c2wb-fixtures.tar.gz` | `d64eaf9ade5bb7b3dd5d73a5b2398a12083c2bc3ae948a3a250a07139971b25f` (manifest `2d5d56c03526d50ecc864da16ae744ffa44efaa10e683c9fa4f7bdd40cda6ef8`) |
+| `stride_controls/fixtures/manifest.json` | `83ca40eb831ad802e1ce1fbbfb1b4ede45905761c305dd91821c8b58bd08d345` |
 
 The bundles keep every member, order and tar attribute; only `manifest.json` differs (with
-`c2wbCapAmendment` provenance, which `driver.py` ignores). The stride lane is a byte-identical
-copy except `fixtures/manifest.json`, with `integrity.json` regenerated. `driver.py` is
+`c2wbCapAmendment` provenance, which `driver.py` ignores). In the stride lane only
+`fixtures/manifest.json` and `integrity.json` are new files; every other file (runner,
+generator, primary references, fixture bytes) is a relative symlink to the validator-caps lane,
+so no bytes are duplicated in the tree. `integrity.json` lists the same files and hashes. `driver.py` is
 unchanged. `tests/payload_integrity_oracle.py` and `tests/payload_meshopt_stride_oracle.py`
 now name these outputs and their pins.
 

@@ -34,11 +34,11 @@ def main():
     amendment = controls / 'c2wb_cap_amendment/2026-10-12'
     bundles = [
         ('corrected205', 'corrected-205-c2wb-fixtures.tar.gz',
-         'eee7f3777b0c96926f7fec860ff2d4446c3dd78313298cae4d5ee3e1cda4189f',
-         '09c195d7e13b6e8635abe89a07283a365913d36ddd43997648b5f198c12dce3a', 205),
+         '7d844ecf1fc99719b0807f2859bbc6e988ee110283d5f001c25a0eee563fdb7e',
+         '3ef63c08433e1b69573e83c9aef0fe00972f94b9160e7934b07974bad956ae35', 205),
         ('polygon5', 'polygon-sensitive-5-c2wb-fixtures.tar.gz',
-         '1355d6975deb5e9c08ab803fcaf2166149e3b2d38c5204e64fb999e1fee71a10',
-         '3b59cb2ab47180111817c6a71583b83e5b09412404acbe6914644e0aef8cf3b8', 5),
+         'd64eaf9ade5bb7b3dd5d73a5b2398a12083c2bc3ae948a3a250a07139971b25f',
+         '2d5d56c03526d50ecc864da16ae744ffa44efaa10e683c9fa4f7bdd40cda6ef8', 5),
     ]
     phases = {}
     status = 1
