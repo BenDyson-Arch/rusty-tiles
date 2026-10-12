@@ -115,6 +115,13 @@ The reviewer probes were used only to size controls (R7, R7b, R7c, R8, R9 and W2
     gives **431**.
   - `references`: one per explicit content, external tileset, subtree member and external buffer, plus each
     reserved `E`.
+    - Note (R, C2 slice 3, 2026-10-12): `referencesCharged` leaves out C1's tileset-document reads, that is
+      the root `tileset.json` and each external tileset document (which C1 charges in addition to its
+      content entry). C1's `references` counts actual caller resource visits and reads
+      (`docs/architecture/c1-payload-integrity-contract.md`, "C1 reads/references"), and I1 §2a step 10
+      keeps that meaning. So the C1 `references` boundary is `referencesCharged + tilesets`: BQ 28 admits and
+      27 refuses; C-11 17 admits and 16 refuses (`c2_decoded_containment/acceptance/oracle_parity.rs`). This
+      note changes neither the model nor any verdict.
   - Depth: `depth(R) + level`.
   - Live-path bytes: subtree plus external buffers on the current path. Cumulative bytes are reported as well.
   - `total_bytes_read`: member reads plus `Scan`.
