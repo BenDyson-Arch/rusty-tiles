@@ -106,8 +106,12 @@ class NativeTerrainTests(unittest.TestCase):
             for position, expected in zip(positions, truth):
                 actual = oracle.transform(root_tile['transform'], (position[0],-position[2],position[1]))
                 errors.append(sum((a-b)**2 for a,b in zip(actual,expected))**.5)
+            # The leaf is quantized on a micrometre grid, finer than Float32 at
+            # 1000 m, so a hidden Float32 source cast (about 1.7e-5 m here) would
+            # exceed the receipt.
+            self.assertIsNotNone(summary['terrainReport']['quantizationStepMetres'][-1])
+            self.assertLess(summary['terrainReport']['positionErrorMetres'], 5e-6)
             self.assertLessEqual(max(errors), summary['terrainReport']['positionErrorMetres']+2e-8)
-            self.assertGreater(max(errors), .00001)  # A hidden Float32 source cast cannot earn a near-zero receipt.
 
     def test_source_refusals_preserve_replacement_and_leave_no_work(self):
         with tempfile.TemporaryDirectory() as temporary:

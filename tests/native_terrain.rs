@@ -479,8 +479,12 @@ fn packed_lod_forest_passes_validation_and_keeps_flat_leaf_surfaces() {
     ] {
         assert!(checks.contains(&check.into()), "{report}");
     }
-    // Position and index bytes of each leaf surface primitive are those of the
-    // flat T1 leaves (develop e29cd19, tiles/{row}/{column}.glb, same request).
+    // Position and index bytes of each leaf surface are those of the flat T1
+    // leaves (develop e29cd19, tiles/{row}/{column}.glb, same request). These
+    // ~1.1 km pixels give leaves a grid coarser than the 0.05 m storage limit,
+    // so leaves keep Float32 positions. The decoded meshopt views hold the
+    // surface first; the index codec may rotate a triangle's corners, and the
+    // flat leaves started every triangle at its smallest index.
     for (row, column, sha256) in [
         (
             0,
@@ -520,16 +524,45 @@ fn packed_lod_forest_passes_validation_and_keeps_flat_leaf_surfaces() {
         let binary = &glb[28 + length..];
         let primitive = &document["meshes"][0]["primitives"][0];
         assert_eq!(
+            document["meshes"][0]["primitives"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
             (
                 primitive["attributes"]["POSITION"].as_u64(),
                 primitive["indices"].as_u64()
             ),
             (Some(0), Some(1))
         );
+        assert_eq!(document["accessors"][0]["componentType"], 5126);
+        let stream = |view: usize| {
+            let e = &document["bufferViews"][view]["extensions"]["EXT_meshopt_compression"];
+            let start = e["byteOffset"].as_u64().unwrap() as usize;
+            let count = e["count"].as_u64().unwrap() as usize;
+            (
+                &binary[start..start + e["byteLength"].as_u64().unwrap() as usize],
+                count,
+            )
+        };
+        // The 33x17 source in 16-cell leaves: 16- and 1-cell columns and rows.
+        let (cells_x, cells_y) = ([16, 16, 1][column], [16, 1][row]);
+        let (vertices, indices) = ((cells_x + 1) * (cells_y + 1), 6 * cells_x * cells_y);
+        let (data, count) = stream(0);
+        let positions = meshopt::encoding::decode_vertex_buffer::<[u8; 12]>(data, count).unwrap();
+        let (data, count) = stream(1);
+        let triangles = meshopt::encoding::decode_index_buffer::<u16>(data, count).unwrap();
         let mut digest = Sha256::new();
-        for view in &document["bufferViews"].as_array().unwrap()[..2] {
-            let start = view["byteOffset"].as_u64().unwrap() as usize;
-            digest.update(&binary[start..start + view["byteLength"].as_u64().unwrap() as usize]);
+        for p in &positions[..vertices] {
+            digest.update(p);
+        }
+        for t in triangles[..indices].chunks(3) {
+            let k = (0..3).min_by_key(|&k| t[k]).unwrap();
+            for i in 0..3 {
+                digest.update(t[(k + i) % 3].to_le_bytes());
+            }
         }
         assert_eq!(
             format!("{:x}", digest.finalize()),
