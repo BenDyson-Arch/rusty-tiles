@@ -567,6 +567,35 @@ fn production_matches_the_slice3_sweep_of_every_i1_control() {
             disagree.push(json!({"id": id, "category": category, "problems": problems}));
         }
     }
+    // Contract 9.E "charging reference" pair: `references` at O-implicit's charged total for
+    // BQ (`referencesCharged`, implicit_read/controls/oracle-results.json) admits the archive;
+    // one less is ResourceLimit. Emitted contents are reserved once, never charged again.
+    let charged = read_root(&format!("{i1}/oracle-results.json"))["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "BQ")
+        .unwrap()["counts"]["referencesCharged"]
+        .as_u64()
+        .unwrap();
+    let bq = cases.iter().find(|c| c["id"] == "BQ").unwrap();
+    let pair = |references: u64| {
+        let mut l = i1_oracle_defaults();
+        apply_i1_limits(&mut l, &bq["limits"]);
+        l.references = references;
+        production(&root.join(bq["file"].as_str().unwrap()), l)
+    };
+    let (at, under) = (pair(charged), pair(charged - 1));
+    let under_ok = under["outcome"] == "resource_limit"
+        && under["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("reference"));
+    if at == json!({"outcome":"Contained"}) && under_ok {
+        agree.push("BQ.references-pair".into());
+    } else {
+        disagree.push(json!({"id": "BQ.references-pair", "references": charged,
+            "at": at, "under": under}));
+    }
     let summary = json!({"cases": cases.len(), "agree": agree.len(), "categories": categories,
         "skipped": skipped, "injectedOnly": injected, "disagree": disagree});
     if let Some(out) = std::env::var_os("C2S3_SWEEP_OUT") {
