@@ -1,6 +1,6 @@
 // Load one served output in pinned Cesium and report runtime behaviour as JSON.
 // Usage: node cesium.cjs URL SPEC_JSON SCREENSHOT_PNG   (NODE_PATH exposes Playwright)
-// SPEC: {kind:'tileset', url} or {kind:'raster', url, probes:[{name, rect:[w,s,e,n], expect}],
+// SPEC: {kind:'tileset', url, maximumScreenSpaceError} or {kind:'raster', url, probes:[{name, rect:[w,s,e,n], expect}],
 // views:[{name, rect, probes}]} (extra raster cameras after the overview), plus stepMs and an
 // optional raster insetDegrees [w,s,e,n]. Every asynchronous step (page load, fromUrl, TileJSON
 // fetch, each settle, the screenshot) is bounded by stepMs; cesium.py derives the case budget.
@@ -50,7 +50,7 @@ async function run(spec) {
   if (!raster) {
     const start = performance.now();
     let tiles;
-    try { tiles = await bounded(C.Cesium3DTileset.fromUrl(spec.url, {maximumScreenSpaceError: 16}), 'fromUrl'); }
+    try { tiles = await bounded(C.Cesium3DTileset.fromUrl(spec.url, {maximumScreenSpaceError: spec.maximumScreenSpaceError ?? 16}), 'fromUrl'); }
     catch (error) { failures.push('fromUrl: ' + describe(error)); return {...report, loaded: false}; }
     let loadedTiles = 0, allTilesLoaded = 0;
     tiles.tileLoad.addEventListener(() => loadedTiles++);

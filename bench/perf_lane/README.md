@@ -89,8 +89,11 @@ for browser start. A tileset case has 5 steps. A raster case has 5 steps plus
 case overruns its budget, its process group is killed and the case fails with
 `timedOut`, while the run continues.
 
-- 3D Tiles: `Cesium3DTileset.fromUrl` with `maximumScreenSpaceError` 16. The
-  camera is `viewBoundingSphere(root sphere, HeadingPitchRange(-0.8, -0.65,
+- 3D Tiles: `Cesium3DTileset.fromUrl` with `maximumScreenSpaceError` 16. A
+  bench-only `--maximum-sse N` changes it, for example `1` to load nearly every
+  tile of a LOD tileset from the same camera. Such a run is a report: baseline
+  comparisons go to each case's `advisory` list and do not fail it, while
+  absolute failures still do. The camera is `viewBoundingSphere(root sphere, HeadingPitchRange(-0.8, -0.65,
   max(3r, 5)))`, the preview's framing. The case is loaded once `tilesLoaded` is
   true and `allTilesLoaded` has fired, for five consecutive frames.
   `.3tz` archives are unpacked and served as files, as the archive viewers do.
@@ -157,10 +160,11 @@ JSON lists it under `gate`.
   - a failed render probe. Console warnings are recorded
   but do not fail. With `--baseline`, it also flags these metrics by case name
   when they exceed 1.25× and the floor: `requests` (+2), `requestBytes`
-  (+64 KiB) and `secondsToLoaded` (+1 s). No Cesium self-versus-self noise run
-  exists yet, so treat `--baseline` timing flags as advisory. Terrain takes
-  about 46 s under SwiftShader and is sensitive to contention, and imagery
-  request counts depend on timing.
+  (+64 KiB) and `secondsToLoaded` (+1 s), except under `--maximum-sse`. No
+  Cesium self-versus-self noise run exists yet, so treat `--baseline` timing
+  flags as advisory. Flat terrain (before the LOD pyramid) took about 46 s
+  under SwiftShader and is sensitive to contention, and imagery request counts
+  depend on timing.
 
 Anything else, such as improvements, sub-floor noise or explained growth, is
 reported, not gated.
