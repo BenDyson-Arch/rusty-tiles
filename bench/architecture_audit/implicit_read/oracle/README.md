@@ -115,6 +115,13 @@ The reviewer probes were used only to size controls (R7, R7b, R7c, R8, R9 and W2
     gives **431**.
   - `references`: one per explicit content, external tileset, subtree member and external buffer, plus each
     reserved `E`.
+    - Note (R, C2 slice 3, 2026-10-12): `referencesCharged` leaves out C1's tileset-document reads, that is
+      the root `tileset.json` and each external tileset document (which C1 charges in addition to its
+      content entry). C1's `references` counts actual caller resource visits and reads
+      (`docs/architecture/c1-payload-integrity-contract.md`, "C1 reads/references"), and I1 §2a step 10
+      keeps that meaning. So the C1 `references` boundary is `referencesCharged + tilesets`: BQ 28 admits and
+      27 refuses; C-11 17 admits and 16 refuses (`c2_decoded_containment/acceptance/oracle_parity.rs`). This
+      note changes neither the model nor any verdict.
   - Depth: `depth(R) + level`.
   - Live-path bytes: subtree plus external buffers on the current path. Cumulative bytes are reported as well.
   - `total_bytes_read`: member reads plus `Scan`.
@@ -279,7 +286,7 @@ hash is identical, and generation stays byte-reproducible.
    - C-8 was not refused, because C2 excludes archives with implicit tiles. It is fixed anyway, being the only other
      explicit payload.
    - Implicit payloads keep the raw `glb_point`. Their positions matter to no I1 or C2 check today, but **C2 slice 3
-     will need them rotated too**.
+     will need them rotated too**. (Done by amendment 6.)
 3. **`contentReferences`** now counts every content entry, external-tileset links included, as production does. A
    new `externalTilesetLinks` count shows the link part. This changes counts only, no verdicts. Examples: C-11
    goes 10 → 11, C-11b → 12, T-3.base → 1. The corpus facts (`corpus/facts/*.json`, tile lists) did not depend on it.
@@ -312,6 +319,34 @@ hash is identical, and generation stays byte-reproducible.
    - **Verdicts:** unchanged, and at the targeted rule. A-6 is InvalidInput at §2a.7 ("content available where the
      tile is not"); A-8 is InvalidInput at §2a.6 ("child subtree bit at or beyond availableLevels").
    - **R:** re-run both mutants to confirm they now flip.
+
+6. **Implicit payloads are rotated (C2 slice 3, 2026-10-12).** Requested by the C2 slice-3 contract (frozen v3.1,
+   sha256 `8bc53429…`, §7 last row and §9.C "Sequencing of amendment 6"). It lands before production stops
+   excluding implicit archives from C2, because an unrotated row-bearing fixture would then be production
+   InvalidInput (Outside) against O-implicit's Accepted.
+   - **Fixtures.** Every implicit payload is now written with `glb_tile_point`, so `U` maps the stored point to the
+     tile-frame cell centre (the `Implicit.payloads` default and the six explicit `glb_point` calls in
+     `generate.py`). `glb_tile_point` now writes `0.0 - y`, so a zero coordinate stays `+0.0`; a payload at the
+     origin is byte-identical to before, and Z-payload and C-8 are unchanged.
+   - **B-1.** Its two leaf rows are swapped, so a payload at the cell centre lies outside its own row: C2 would
+     report Outside (own) and production would refuse an I1 control. B-1's payloads now sit at the centre of their
+     tile's row. I1 does not read payloads, so its verdict and `tilesSha256` are unchanged.
+   - **C2 reading of the amended controls.** Under the slice-3 oracle (`c2o/implicit.py`), every case O-implicit
+     accepts is Contained or NotInspected except R1b.full (corrupt payload; Undecided, production refuses it in C1).
+     None is Outside, so production keeps every I1 verdict once C2 streams implicit content.
+   - **Scope.** 126 of the 181 cases (122 files) changed hash, including the large R8a and R8a.nopad; 55 are
+     unchanged (their payloads sit at the origin, or they have none). The old and new hash, size and verdict of each
+     changed case are in `controls/amendment6.json`. The pre-amendment manifest is the one at `92e8c04`
+     (sha256 `1a86392b…`).
+   - **Re-run.** All 181 cases were re-run (`witnesses/check.py`, small and `--large`): 0 disagreements. Against
+     the pre-amendment results, every verdict, reason, stage and `tilesSha256` is unchanged, and so is every count,
+     including `bytesReadModelled`, `cumulativeSubtreeBytes`, `maxLivePathBytes` and `scanBytes`. The oracle never
+     reads payload bytes, so only the manifest's archive `bytes` changed. No limit pin (`total_bytes_read`,
+     `member_bytes`, `document_decoded_bytes`) is on a changed case, so no pin moved.
+   - **The unrotated fixtures leave this manifest.** They are no longer I1 controls. The ones C2 can use are kept,
+     with their old hashes, as C2 slice-3 control S3-19 (`c2_decoded_containment/controls/slice3/`).
+   - **R:** re-run I1 parity (`production_matches_every_i1_oracle_witness_and_control`) on the new manifest before
+     any C2 parity run.
 
 ## Contract questions (my readings; please confirm or correct)
 

@@ -1,0 +1,600 @@
+{
+ "fixtures": 80,
+ "mutants": [
+  {
+   "contractRow": "must flip nothing",
+   "crashed": 0,
+   "flipped": 0,
+   "flippedExamples": [],
+   "mutant": "unmutated copy (runner sanity)",
+   "namedControl": null,
+   "namedControlBase": null,
+   "namedControlFlips": true,
+   "namedControlMutant": null,
+   "pass": true,
+   "patch": null,
+   "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "contractRow": "Keep the implicitTiling exclusion (F-W1 when the evidence is present)",
+   "crashed": 0,
+   "flipped": 79,
+   "flippedExamples": [
+    "F-W1",
+    "F-W4-polygons",
+    "F-W5-vec-perf-quantize",
+    "F-W6",
+    "F-W7",
+    "S3-1.W6",
+    "S3-10",
+    "S3-11",
+    "S3-11.base",
+    "S3-12.header",
+    "S3-12.subtree",
+    "S3-13",
+    "S3-13.base",
+    "S3-14.syn",
+    "S3-14.syn.base",
+    "S3-16"
+   ],
+   "mutant": "keep-implicitTiling-exclusion",
+   "namedControl": "F-W7",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "NotInspected",
+    [
+     "implicitTiling"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/keep-implicitTiling-exclusion.patch",
+   "patchSha256": "5fdc141af06052ffd90a3cd3766c41823e89fa205b53e882a13cbb3072422e98"
+  },
+  {
+   "contractRow": "Skip the I_0 level",
+   "crashed": 0,
+   "flipped": 6,
+   "flippedExamples": [
+    "S3-17.ancestor2",
+    "S3-17.ancestor3",
+    "S3-17.ancestor4",
+    "S3-17.externalContent4",
+    "S3-8.syn",
+    "repeated-uri.cap-1"
+   ],
+   "mutant": "skip-I0-level",
+   "namedControl": "S3-17.ancestor2",
+   "namedControlBase": [
+    "Outside",
+    [],
+    "ancestor:2",
+    3,
+    0,
+    0,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/skip-I0-level.patch",
+   "patchSha256": "0f2bf5917bfe9b1ba47ca08b4b191ebba3e550b56623d4db7808c3bf86946a8d"
+  },
+  {
+   "contractRow": "Skip the V_R level (merge I_0 into R)",
+   "crashed": 0,
+   "flipped": 7,
+   "flippedExamples": [
+    "S3-17.ancestor3",
+    "S3-17.ancestor4",
+    "S3-17.externalContent4",
+    "S3-5.W6",
+    "S3-5.W7",
+    "S3-8.syn",
+    "repeated-uri.cap-1"
+   ],
+   "mutant": "merge-I0-into-R",
+   "namedControl": "S3-17.ancestor3",
+   "namedControlBase": [
+    "Outside",
+    [],
+    "ancestor:3",
+    3,
+    0,
+    0,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/merge-I0-into-R.patch",
+   "patchSha256": "905b2916043b285f1c02231e8d4ddf7699e3865b4e8cd228decc9b2f1e4d8ca8"
+  },
+  {
+   "contractRow": "Test only the own row (skip implicit ancestors); also S3-3",
+   "crashed": 0,
+   "flipped": 8,
+   "flippedExamples": [
+    "S3-17.ancestor1",
+    "S3-17.ancestor2",
+    "S3-17.ancestor3",
+    "S3-17.ancestor4",
+    "S3-17.externalContent4",
+    "S3-3.W1",
+    "S3-8.syn",
+    "repeated-uri.cap-1"
+   ],
+   "mutant": "own-row-only",
+   "namedControl": "S3-17.ancestor1",
+   "namedControlBase": [
+    "Outside",
+    [],
+    "ancestor:1",
+    3,
+    0,
+    0,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/own-row-only.patch",
+   "patchSha256": "844e3beef13699e7cfecf72f19b92f66eec45162acf283cd41436918e3bb8409"
+  },
+  {
+   "contractRow": "Apply R.transform before testing V_R",
+   "crashed": 0,
+   "flipped": 17,
+   "flippedExamples": [
+    "F-W1",
+    "F-W4-polygons",
+    "F-W5-vec-perf-quantize",
+    "S3-17.ancestor4",
+    "S3-17.base",
+    "S3-17.externalContent4",
+    "S3-2.W1",
+    "S3-2.W1.base",
+    "S3-2.W4-polygons",
+    "S3-2.W4-polygons.base",
+    "S3-2.W5-vec-perf-quantize",
+    "S3-2.W5-vec-perf-quantize.base",
+    "S3-3.W1",
+    "S3-3.W1.base",
+    "S3-6.W1",
+    "S3-8.syn"
+   ],
+   "mutant": "R-transform-before-V_R",
+   "namedControl": "S3-8.syn.base",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Outside",
+    [],
+    "ancestor:3",
+    3,
+    0,
+    0,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/R-transform-before-V_R.patch",
+   "patchSha256": "049b46bbb84ca66fdb90011d87e8b308e32451b008219e826c228188aa39a7dc"
+  },
+  {
+   "contractRow": "Test an external-root R's referencing content volume at R's level, before R.transform",
+   "crashed": 0,
+   "flipped": 1,
+   "flippedExamples": [
+    "S3-17.externalContent4"
+   ],
+   "mutant": "external-content-at-R-level",
+   "namedControl": "S3-17.externalContent4",
+   "namedControlBase": [
+    "Outside",
+    [],
+    "externalContent:4",
+    3,
+    0,
+    0,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/external-content-at-R-level.patch",
+   "patchSha256": "0aef4d1ca03034a668bcbf372f1b2425f45da671c6c0930d5f507c2b9dd5adf5"
+  },
+  {
+   "contractRow": "Use an approximate box for derived tiles (Cell::rounded_for_hierarchy_bounds stand-in: V_R)",
+   "crashed": 0,
+   "flipped": 2,
+   "flippedExamples": [
+    "S3-20",
+    "S3-9"
+   ],
+   "mutant": "derived-as-root-volume",
+   "namedControl": "S3-9",
+   "namedControlBase": [
+    "NotInspected",
+    [
+     "derivedImplicitVolume"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/derived-as-root-volume.patch",
+   "patchSha256": "1fb767cc46f0eb180b54eb1a5c3f6c12eedb0861295b3949caddca49c3df6395"
+  },
+  {
+   "contractRow": "Archive-scoped derived exclusion",
+   "crashed": 0,
+   "flipped": 1,
+   "flippedExamples": [
+    "S3-10"
+   ],
+   "mutant": "archive-scoped-derived",
+   "namedControl": "S3-10",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "NotInspected",
+    [
+     "derivedImplicitVolume"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/archive-scoped-derived.patch",
+   "patchSha256": "d2d265515892754930d4b1e0966494357a1fbde5906e0177cb7b6cd2ed8d4da1"
+  },
+  {
+   "contractRow": "Derived detected in build_levels only (no chain bit): the precheck stops first",
+   "crashed": 1,
+   "flipped": 2,
+   "flippedExamples": [
+    "S3-20",
+    "S3-9"
+   ],
+   "mutant": "derived-detected-at-precheck-only",
+   "namedControl": "S3-20",
+   "namedControlBase": [
+    "NotInspected",
+    [
+     "derivedImplicitVolume"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "NotInspected",
+    [
+     "workLimit"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/derived-detected-at-precheck-only.patch",
+   "patchSha256": "f9c461b3d5b4f84bb79462792e6dc76079688e14fd371f420ec022f6c4caae0c"
+  },
+  {
+   "contractRow": "Read FLOAT32 rows rounded (through their shortest decimal)",
+   "crashed": 0,
+   "flipped": 3,
+   "flippedExamples": [
+    "F-W6",
+    "S3-1.W6",
+    "S3-14.syn.base"
+   ],
+   "mutant": "float32-rows-via-shortest-decimal",
+   "namedControl": "S3-14.syn.base",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Outside",
+    [],
+    "own",
+    1,
+    0,
+    0,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/float32-rows-via-shortest-decimal.patch",
+   "patchSha256": "cf2bbfaef2fb6aa4b0e9600ef102c044a9bcba87095e09e84617fb230a03803b"
+  },
+  {
+   "contractRow": "Treat subtree tileMetadata as tileMetadata (F-W1 when the evidence is present)",
+   "crashed": 0,
+   "flipped": 72,
+   "flippedExamples": [
+    "F-W1",
+    "F-W4-polygons",
+    "F-W5-vec-perf-quantize",
+    "F-W6",
+    "F-W7",
+    "S3-1.W6",
+    "S3-12.subtree",
+    "S3-13",
+    "S3-13.base",
+    "S3-14.syn",
+    "S3-14.syn.base",
+    "S3-16",
+    "S3-17.ancestor1",
+    "S3-17.ancestor2",
+    "S3-17.ancestor3",
+    "S3-17.ancestor4"
+   ],
+   "mutant": "subtree-tileMetadata-is-tileMetadata",
+   "namedControl": "F-W7",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "NotInspected",
+    [
+     "tileMetadata"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/subtree-tileMetadata-is-tileMetadata.patch",
+   "patchSha256": "ac8df58567298dc822c444363f5269a76261aea5b4bfcad81bae204515614101"
+  },
+  {
+   "contractRow": "Ignore header metadata (omit F step 7)",
+   "crashed": 0,
+   "flipped": 1,
+   "flippedExamples": [
+    "S3-12.header"
+   ],
+   "mutant": "ignore-header-metadata",
+   "namedControl": "S3-12.header",
+   "namedControlBase": [
+    "NotInspected",
+    [
+     "tileMetadata"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/ignore-header-metadata.patch",
+   "patchSha256": "2e87f352ebebd9030cbd8bb3594494140c1a9fd0396f13092513743953c68e20"
+  },
+  {
+   "contractRow": "depth = chain length - 1",
+   "crashed": 0,
+   "flipped": 52,
+   "flippedExamples": [
+    "S3-1.W6",
+    "S3-11",
+    "S3-14.syn",
+    "S3-17.ancestor1",
+    "S3-17.ancestor2",
+    "S3-17.ancestor3",
+    "S3-17.ancestor4",
+    "S3-17.externalContent4",
+    "S3-17.own",
+    "S3-19.A-11.base",
+    "S3-19.A-13",
+    "S3-19.A-13.base",
+    "S3-19.A-2",
+    "S3-19.A-9.32",
+    "S3-19.B-1",
+    "S3-19.B-10.normal"
+   ],
+   "mutant": "depth-is-chain-length-minus-1",
+   "namedControl": "S3-17.own",
+   "namedControlBase": [
+    "Outside",
+    [],
+    "own",
+    3,
+    0,
+    0,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Outside",
+    [],
+    "own",
+    4,
+    0,
+    0,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/depth-is-chain-length-minus-1.patch",
+   "patchSha256": "cda6064a245a66449a913014fc82aba10b312b6ea0d88fed8ef458cd56f624fa"
+  },
+  {
+   "contractRow": "Units per URI instead of per reference",
+   "crashed": 0,
+   "flipped": 1,
+   "flippedExamples": [
+    "repeated-uri.cap-1"
+   ],
+   "mutant": "units-per-URI",
+   "namedControl": "repeated-uri.cap-1",
+   "namedControlBase": [
+    "NotInspected",
+    [
+     "workLimit"
+    ],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/units-per-URI.patch",
+   "patchSha256": "b201ea68e205e1d478fcda5d547f8581f9c82043f16460ad5f70d8e9f8b86997"
+  },
+  {
+   "contractRow": "A fixed 129-level chain capacity (synthetic; here hierarchy_depth + 1 = 13)",
+   "crashed": 0,
+   "flipped": 1,
+   "flippedExamples": [
+    "S3-16"
+   ],
+   "mutant": "fixed-chain-capacity (synthetic)",
+   "namedControl": "S3-16",
+   "namedControlBase": [
+    "Contained",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "namedControlFlips": true,
+   "namedControlMutant": [
+    "Undecided",
+    [],
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "pass": true,
+   "patch": "oracle/mutants/slice3/fixed-chain-capacity.patch",
+   "patchSha256": "6e66f18bb79f37aad026da2e103e2f77c233fd3b960c25735a93ca56d4396c9d"
+  }
+ ],
+ "notModelled": [
+  "Register emitted contents with the charging ArchiveResources::reference: C1 reference accounting is production-only; O-implicit's references verdicts cover it (I1 R9 pair)"
+ ]
+}

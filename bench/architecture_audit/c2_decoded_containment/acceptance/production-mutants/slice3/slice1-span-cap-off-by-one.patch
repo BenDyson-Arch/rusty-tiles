@@ -1,0 +1,13 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index fb78a6c..45ccd02 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -179,7 +179,7 @@ impl Spans {
+     }
+ }
+ fn over(s: u32, span_bits: u64) -> bool {
+-    s == u32::MAX || u64::from(s) > span_bits
++    s == u32::MAX || u64::from(s) >= span_bits
+ }
+ 
+ impl UriBounds {

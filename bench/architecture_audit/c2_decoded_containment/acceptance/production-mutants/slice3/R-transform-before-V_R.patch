@@ -1,0 +1,17 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..2b4070d 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1697,10 +1697,11 @@ impl Check<'_> {
+                     "geometricError increases at depth {depth}"
+                 )));
+             }
++            let moved = if level == 0 { self.c2.tiles[r.tile].transform.take() } else { None };
+             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
+             // a rowless I_0, and no volume for a derived cell (I5).
+             let index = self.c2.tile(TileFact {
+-                transform: None,
++                transform: moved,
+                 volume: match &tile.volume {
+                     EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
+                     EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),

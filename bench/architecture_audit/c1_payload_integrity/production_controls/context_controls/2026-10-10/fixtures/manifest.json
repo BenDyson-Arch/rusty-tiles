@@ -939,7 +939,6 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
-          "decodedContentBounds.implicitTiling",
           "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",
@@ -1038,7 +1037,6 @@
         "notInspected": [
           "EXT_structural_metadata",
           "decodedContentBounds",
-          "decodedContentBounds.implicitTiling",
           "decodedContentBounds.sceneSelection",
           "geometricErrorAccuracy",
           "materialAndImageSemantics",

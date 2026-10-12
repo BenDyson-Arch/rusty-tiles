@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/payload/scene.rs b/src/content_integrity/payload/scene.rs
+index 5ab1d8e..f4add34 100644
+--- a/src/content_integrity/payload/scene.rs
++++ b/src/content_integrity/payload/scene.rs
+@@ -323,7 +323,7 @@ pub(super) fn admit(
+     drop(stamp);
+     let selected = match root.scene {
+         Some(raw) => Some(index(&scenes, raw, "scene")?),
+-        None if scenes.len() == 1 => Some(0),
++        None if !scenes.is_empty() => Some(0),
+         None => None,
+     };
+     // Every node has at most one parent, so a node unreachable from a parentless

@@ -1,0 +1,11 @@
+--- a/oracle/c2o/implicit.py
++++ b/oracle/c2o/implicit.py
+@@ -126,7 +126,7 @@
+         super().__init__("derived", raw=raw)
+ 
+     def exclusion(self):
+-        return DERIVED_REASON
++        return None
+ 
+ 
+ def _row(text):

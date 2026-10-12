@@ -381,7 +381,7 @@ use payload::scene::{
 /// The frozen 15-name not-inspected reason enum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Reason {
-    ImplicitTiling,
+    DerivedImplicitVolume,
     TilesetExtension,
     TileMetadata,
     UpAxisOverride,
@@ -398,7 +398,7 @@ enum Reason {
     WorkLimit,
 }
 const REASONS: [Reason; 15] = [
-    Reason::ImplicitTiling,
+    Reason::DerivedImplicitVolume,
     Reason::TilesetExtension,
     Reason::TileMetadata,
     Reason::UpAxisOverride,
@@ -417,7 +417,7 @@ const REASONS: [Reason; 15] = [
 impl Reason {
     fn name(self) -> &'static str {
         match self {
-            Self::ImplicitTiling => "implicitTiling",
+            Self::DerivedImplicitVolume => "derivedImplicitVolume",
             Self::TilesetExtension => "tilesetExtension",
             Self::TileMetadata => "tileMetadata",
             Self::UpAxisOverride => "upAxisOverride",
@@ -532,13 +532,16 @@ struct UriFacts {
 struct TileFact {
     /// The tile's own transform into its parent frame, when present.
     transform: Option<[f64; 16]>,
-    volume: VolumeFacts,
+    /// `None` only for an implicit tile at level ≥ 1 without a row: its
+    /// `Derived` cell is never evaluated (slice 3 I5, `derivedImplicitVolume`).
+    volume: Option<VolumeFacts>,
     /// For an external-tileset root: the referencing content's boundingVolume.
     external: Option<VolumeFacts>,
     parent: Option<usize>,
     depth: usize,
     /// Inherited chain exclusions (C2-WB §3.3): the caller's own bits, ORed at
-    /// registration with the shape exclusions of `volume` and `external` and
+    /// registration with the shape exclusions of `volume` and `external` (or
+    /// `derivedImplicitVolume` for a `None` volume, slice 3 §4 step 5) and
     /// the parent's `chain`. Every level of a reference's chain except its
     /// content volume is covered, so `Containment::reference` needs no walk.
     chain: u16,
@@ -609,33 +612,53 @@ impl Containment {
         Ok(arena.as_mut().unwrap())
     }
     /// Register a tile; its `chain` gains its own shape bits and its parent's.
+    /// A rowless implicit tile (`volume: None`) carries `derivedImplicitVolume`
+    /// here, so any reference through it is excluded in O(1), whether or not
+    /// the precheck has already stopped (slice 3 §4 step 5).
     fn tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
-        fact.chain |= shape_bit(&fact.volume)
+        fact.chain |= fact
+            .volume
+            .as_ref()
+            .map_or(Reason::DerivedImplicitVolume.bit(), shape_bit)
             | fact.external.as_ref().map_or(0, shape_bit)
             | fact.parent.map_or(0, |p| self.tiles[p].chain);
         try_push(&mut self.tiles, fact)?;
         Ok(self.tiles.len() - 1)
     }
+    /// A tile's volume on a level chain. A `None` (derived) volume never
+    /// reaches a chain in domain: its chain bit excludes every reference
+    /// through it before any level is built (slice 3 §4 step 5).
+    fn chain_volume(&self, tile: usize) -> Result<VolumeFacts, Error> {
+        self.tiles[tile].volume.ok_or_else(|| {
+            Error::InvalidState(
+                "internal containment invariant: derived implicit volume on a level chain".into(),
+            )
+        })
+    }
     /// The level chain of a reference: own tile and content volume at level 0,
-    /// then each ancestor through external-tileset roots (I1, I2).
+    /// then each ancestor through external-tileset roots (I1, I2). Implicit
+    /// levels have no transform; an implicit root's transform steps out of
+    /// its own level (slice 3 §4 table).
     fn build_levels(&mut self, tile: usize, content: Option<usize>) -> Result<(), Error> {
         self.levels.clear();
         let content = content.map(|c| (Role::Content, self.content_volumes[c]));
+        let own = self.chain_volume(tile)?;
         try_push(
             &mut self.levels,
             LevelFacts {
                 to_parent: None,
-                volumes: [Some((Role::Own, self.tiles[tile].volume)), content, None],
+                volumes: [Some((Role::Own, own)), content, None],
             },
         )?;
         let mut current = tile;
         while let Some(parent) = self.tiles[current].parent {
             let level = self.levels.len() as u32;
+            let volume = self.chain_volume(parent)?;
             let child = &self.tiles[current];
             let fact = LevelFacts {
                 to_parent: child.transform,
                 volumes: [
-                    Some((Role::Ancestor(level), self.tiles[parent].volume)),
+                    Some((Role::Ancestor(level), volume)),
                     None,
                     child.external.map(|v| (Role::ExternalContent(level), v)),
                 ],
@@ -1023,6 +1046,8 @@ struct NodeTask {
 struct ImplicitParent {
     #[cfg(test)]
     base: String,
+    /// R's index in the C2 tile arena: the parent of I_0's `TileFact`.
+    tile: usize,
     bounds: Volume,
     error: f64,
     depth: usize,
@@ -1324,8 +1349,7 @@ impl Check<'_> {
         Ok((doc, error, schema))
     }
 
-    /// Document-level C2 exclusion facts. The `implicitTiling` exclusion is set
-    /// per tile, for any implicit root (`node`).
+    /// Document-level C2 exclusion facts.
     fn tileset_exclusions(&mut self, doc: &Value) {
         if let Some(axis) = doc["asset"].get("gltfUpAxis") {
             if axis.as_str() != Some("Y") {
@@ -1402,7 +1426,6 @@ impl Check<'_> {
         // I1 root admission precedes R's explicit checks (contract precedence):
         // fields, scheme, levels, volume kind, shape, templates, header classes.
         let implicit = if declares_implicit(&node) {
-            self.c2.exclude(Reason::ImplicitTiling);
             Some(
                 admit_root(&node, &base, schema.as_deref())
                     .map_err(|e| implicit_error(e.widen()))?,
@@ -1430,7 +1453,7 @@ impl Check<'_> {
         self.extension_object(&node["boundingVolume"]);
         let tile = self.c2.tile(TileFact {
             transform: node.get("transform").map(|_| std::array::from_fn(|i| m[i])),
-            volume: volume_facts(&bounds),
+            volume: Some(volume_facts(&bounds)),
             external: link.external,
             parent: link.parent,
             depth,
@@ -1452,14 +1475,21 @@ impl Check<'_> {
         self.tiles += 1;
         if let Some(root) = implicit {
             // R's content entries are templates: never explicit references.
+            // A header `metadata` entity is copied to every emitted content, so
+            // it is "content has `metadata`" (slice 3 I6, §4 step 7).
             for slot in 0..root.slots() {
-                self.extension_object(root.header(slot));
+                let header = root.header(slot);
+                if header.get("metadata").is_some() {
+                    self.c2.exclude(Reason::TileMetadata);
+                }
+                self.extension_object(header);
             }
             return self.walk_implicit(
                 &root,
                 ImplicitParent {
                     #[cfg(test)]
                     base,
+                    tile,
                     bounds,
                     error,
                     depth,
@@ -1591,13 +1621,15 @@ impl Check<'_> {
     /// The I1 walk of one admitted root R, after R's explicit checks. Each
     /// visited tile gets the explicit-tile checks: `hierarchyBounds` and
     /// `geometricErrorOrder` against its path parent (R for I_0), C1 payloads
-    /// and report-level budgets. No C2 tile or reference is registered below R
-    /// (RC-12a); the archive is excluded by `implicitTiling`.
+    /// and report-level budgets. C2 (slice 3 §4 steps 3-4): each visited tile
+    /// is a `TileFact` whose parent is R for I_0 and its path parent otherwise,
+    /// and each emitted content is a C2 reference, in walk order.
     fn walk_implicit(&mut self, root: &ImplicitRoot<'_>, r: ImplicitParent) -> Result<(), Error> {
         self.implicit_roots += 1;
         let mut walk = root.walk();
-        // Level-indexed path stack (RC-21): entry `l` is the tile at level `l`.
-        let mut path: Vec<(Volume, f64)> = Vec::new();
+        // Level-indexed path stack (RC-21): entry `l` is the tile at level `l`,
+        // with its C1 volume, its error and its C2 tile index.
+        let mut path: Vec<(Volume, f64, usize)> = Vec::new();
         loop {
             // Counter sync around every `Walk::next` (owner charging protocol).
             let limits = &self.resources.limits;
@@ -1646,11 +1678,11 @@ impl Check<'_> {
                 }
             };
             let (EffectiveError::Row(error) | EffectiveError::Derived(error)) = tile.error;
-            let (parent, parent_error) = match level {
-                0 => (&r.bounds, r.error),
+            let (parent, parent_error, parent_tile) = match level {
+                0 => (&r.bounds, r.error, r.tile),
                 _ => path
                     .get(level - 1)
-                    .map(|(volume, error)| (volume, *error))
+                    .map(|(volume, error, index)| (volume, *error, *index))
                     .ok_or_else(|| {
                         Error::InvalidState("implicit tile without a path parent".into())
                     })?,
@@ -1665,8 +1697,22 @@ impl Check<'_> {
                     "geometricError increases at depth {depth}"
                 )));
             }
+            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
+            // a rowless I_0, and no volume for a derived cell (I5).
+            let index = self.c2.tile(TileFact {
+                transform: None,
+                volume: match &tile.volume {
+                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
+                    EffectiveVolume::DerivedRoot => Some(volume_facts(&r.bounds)),
+                    EffectiveVolume::Derived(_) => None,
+                },
+                external: None,
+                parent: Some(parent_tile),
+                depth,
+                chain: 0,
+            })?;
             path.truncate(level);
-            try_push(&mut path, (volume, error))?;
+            try_push(&mut path, (volume, error, index))?;
             // R and I_0 are one tile for counting.
             if level > 0 {
                 self.tiles += 1;
@@ -1687,9 +1733,10 @@ impl Check<'_> {
                     .ok_or_else(|| invalid("tile byte count overflow"))?;
                 // JSON detection at admission leaves only payload members here.
                 let inspected = self.payload(name)?;
-                // No C2 reference below R (RC-12a), but the payload's own
-                // reasons stay listed, as they were for expanded tiles.
-                self.c2.exclusions |= self.c2.uris[self.c2.uri_index[name.as_str()]].1.exclusions;
+                // C2 registration only: C1 already counted this reference at
+                // subtree admission (`reference_reserved` above).
+                let uri = self.c2.uri_index[name.as_str()];
+                self.c2.reference(index, None, uri)?;
                 vertices = vertices
                     .checked_add(inspected.vertices)
                     .ok_or_else(|| invalid("tile vertex count overflow"))?;
@@ -3412,13 +3459,83 @@ mod containment_controls {
         }
     }
 
+    // ---- Slice 3: implicit archives (contract §4) ----
+    use super::i1_fixtures::{constant, implicit_root, tileset as i1_tileset, Sub};
+
+    /// One point at the origin of a node translated by `x` along +X (U leaves
+    /// the X axis unchanged), so the drawn vertex is exactly `(x, 0, 0)`.
+    fn point_at(x: f64) -> Vec<u8> {
+        let (doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"mesh":0,"translation":[x,0,0]}]));
+        glb(&doc, &bin)
+    }
+    /// A box centred at the origin with half-lengths `(hx, 8, 8)`.
+    fn row(hx: f64) -> [f64; 12] {
+        [0., 0., 0., hx, 0., 0., 0., 8., 0., 0., 0., 8.]
+    }
+    /// A FLOAT64 TILE_BOUNDING_BOX schema for subtree rows (class `b`).
+    fn row_schema() -> Value {
+        json!({"id":"s","classes":{
+            "b":{"properties":{"vol":{"type":"SCALAR","componentType":"FLOAT64",
+                "array":true,"count":12,"semantic":"TILE_BOUNDING_BOX"}}},
+            "label":{"properties":{"name":{"type":"STRING"}}}}})
+    }
+    /// The one subtree of a QUADTREE root (L = A = 2): available tiles and
+    /// contents by subtree bit index (0 is I_0, 1 + Morton at level 1), and one
+    /// FLOAT64 row per available tile when `rows` is given.
+    fn subtree(tiles: &[usize], contents: &[usize], rows: Option<&[[f64; 12]]>) -> Vec<u8> {
+        let mut sub = Sub::new(Value::Null, constant(0));
+        let t = sub.bitstream(5, tiles);
+        let c = sub.bitstream(5, contents);
+        let mut sub = sub
+            .set("tileAvailability", t)
+            .set("contentAvailability", json!([c]));
+        if let Some(rows) = rows {
+            let flat: Vec<f64> = rows.iter().flatten().copied().collect();
+            let values = sub.floats(&flat, false);
+            sub = sub
+                .set(
+                    "propertyTables",
+                    json!([{"class":"b","count":rows.len(),"properties":{"vol":{"values":values}}}]),
+                )
+                .set("tileMetadata", json!(0));
+        }
+        sub.build()
+    }
+    /// A tileset document with the row schema.
+    fn implicit_doc(root: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({"asset":{"version":"1.1"},"geometricError":32,
+            "schema":row_schema(),"root":root}))
+        .unwrap()
+    }
+    const NAMES: [&str; 5] = [
+        "c/0/0/0.glb",
+        "c/1/0/0.glb",
+        "c/1/1/0.glb",
+        "c/1/0/1.glb",
+        "c/1/1/1.glb",
+    ];
+    /// An archive of `root` (holding R with template `c/{level}/{x}/{y}.glb`),
+    /// its subtree, and one payload per emitted content.
+    fn implicit_files(
+        root: Value,
+        sub: Vec<u8>,
+        payloads: &[(usize, Vec<u8>)],
+    ) -> Vec<(&'static str, Vec<u8>)> {
+        let mut files = vec![
+            ("tileset.json", implicit_doc(root)),
+            ("s/0/0/0.subtree", sub),
+        ];
+        files.extend(payloads.iter().map(|(i, p)| (NAMES[*i], p.clone())));
+        files
+    }
+    fn r() -> Value {
+        implicit_root(2, 2, &["c/{level}/{x}/{y}.glb"])
+    }
+
     #[test]
-    fn implicit_archives_are_not_inspected() {
-        // RC-12a: I1 reads the implicit root (on any tile) and registers nothing
-        // below R, so C2 keeps the `implicitTiling` exclusion. The C1 fixture
-        // `implicit_no_content.3tz` once declared `"contentAvailability": []`, now
-        // InvalidInput (X-9, schema minItems), so this builds its valid form.
-        use super::i1_fixtures::{constant, implicit_root, tileset, Sub};
+    fn implicit_archives_are_inspected() {
+        // §4 step 1: no `implicitTiling` exclusion. Payload-free roots, on the
+        // tileset root and below it, are Contained with the I1 check listed.
         let subtree = Sub::new(constant(1), constant(0)).build();
         for root in [
             implicit_root(1, 1, &[]),
@@ -3426,32 +3543,269 @@ mod containment_controls {
                 "refine":"ADD","children":[implicit_root(1, 1, &[])]}),
         ] {
             let report = run(&[
-                ("tileset.json", tileset(root)),
+                ("tileset.json", i1_tileset(root)),
                 ("s/0/0/0.subtree", subtree.clone()),
-            ]);
-            let report = report.unwrap();
+            ])
+            .unwrap();
             assert!(report
                 .checks
                 .contains(&"implicitAddressingAndAvailability".to_owned()));
-            assert_eq!(not_inspected(Ok(report)), ["implicitTiling"]);
+            assert!(contained(&report), "{report:?}");
+            assert!(!report
+                .not_inspected
+                .iter()
+                .any(|c| c.contains("implicitTiling")));
         }
-        // A payload's own reasons stay listed for implicit contents, without
-        // any C2 tile or reference below R.
+        // An implicit content's payload reasons come from its per-URI facts.
         let subtree = Sub::new(constant(1), constant(0))
             .set("contentAvailability", json!([constant(1)]))
             .build();
-        let report = run(&[
-            (
-                "tileset.json",
-                tileset(implicit_root(1, 1, &["c/{level}/{x}/{y}.glb"])),
-            ),
-            ("s/0/0/0.subtree", subtree),
-            (
-                "c/0/0/0.glb",
-                with_doc(|d| d["nodes"][0]["skin"] = json!(0)),
-            ),
-        ]);
-        assert_eq!(not_inspected(report), ["implicitTiling", "skin"]);
+        let files = |payload: Vec<u8>| {
+            vec![
+                (
+                    "tileset.json",
+                    i1_tileset(implicit_root(1, 1, &["c/{level}/{x}/{y}.glb"])),
+                ),
+                ("s/0/0/0.subtree", subtree.clone()),
+                ("c/0/0/0.glb", payload),
+            ]
+        };
+        assert_eq!(
+            not_inspected(run(&files(with_doc(|d| d["nodes"][0]["skin"] = json!(0))))),
+            ["skin"]
+        );
+        // DerivedRoot only: I_0's own volume is exactly V_R (closed).
+        assert!(contained(&run(&files(point_at(8.))).unwrap()));
+        assert_eq!(
+            outside(run(&files(point_at(8f64.next_up())))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+    }
+
+    #[test]
+    fn implicit_chain_tests_own_implicit_ancestors_i0_and_v_r_in_order() {
+        // §4 table and I4. R (depth 1, box half 8) under an explicit parent P
+        // (box half 8 + 2e-7, within the hierarchyBounds tolerance). Rows widen
+        // X by 2e-7 within the same tolerance; the vertex sits at 8 + 1e-7, so
+        // each verdict names the first level whose X face is exactly 8.
+        let (wide, edge) = (8. + 2e-7, 8. + 1e-7);
+        let parent = |hx: f64, r_hx: f64| {
+            let mut r = r();
+            r["boundingVolume"]["box"][3] = json!(r_hx);
+            json!({"boundingVolume":{"box":row(hx).to_vec()},"geometricError":32,
+                "refine":"ADD","children":[r]})
+        };
+        let level_one = |p_hx, r_hx, rows: [f64; 2]| {
+            implicit_files(
+                parent(p_hx, r_hx),
+                subtree(&[0, 1], &[1], Some(&[row(rows[0]), row(rows[1])])),
+                &[(1, point_at(edge))],
+            )
+        };
+        let message = |volume: &str| {
+            format!("decoded content outside bounding volume: content=c/1/0/0.glb depth=2 volume={volume} node=0 mesh=0 primitive=0 vertex=0")
+        };
+        // Level l = 1: own, ancestor:1 = I_0, ancestor:2 = R (V_R), ancestor:3 = P.
+        for (p_hx, r_hx, rows, volume) in [
+            (wide, wide, [wide, 8.], "own"),
+            (wide, wide, [8., wide], "ancestor:1"),
+            (wide, 8., [wide, wide], "ancestor:2"),
+            (8., wide, [wide, wide], "ancestor:3"),
+        ] {
+            assert_eq!(outside(run(&level_one(p_hx, r_hx, rows))), message(volume));
+        }
+        assert!(contained(
+            &run(&level_one(wide, wide, [wide, wide])).unwrap()
+        ));
+        // Level l = 0: own = I_0's row, ancestor:1 = V_R.
+        let level_zero = |r_hx, row_hx| {
+            implicit_files(
+                parent(wide, r_hx),
+                subtree(&[0], &[0], Some(&[row(row_hx)])),
+                &[(0, point_at(edge))],
+            )
+        };
+        let message = |volume: &str| {
+            format!("decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume={volume} node=0 mesh=0 primitive=0 vertex=0")
+        };
+        assert_eq!(outside(run(&level_zero(wide, 8.))), message("own"));
+        assert_eq!(outside(run(&level_zero(8., wide))), message("ancestor:1"));
+        assert!(contained(&run(&level_zero(wide, wide)).unwrap()));
+    }
+
+    #[test]
+    fn implicit_root_transform_steps_out_of_v_r_before_the_parent() {
+        // R carries translation (10, 0, 0) under P (centre 10, half 8): V_R is
+        // tested in R's frame, then R.transform, then P (§4 table, level l+2).
+        let parent = |r_hx: f64| {
+            let mut r = r();
+            r["boundingVolume"]["box"][3] = json!(r_hx);
+            let mut m = IDENTITY;
+            m[12] = 10.;
+            r["transform"] = json!(m);
+            json!({"boundingVolume":{"box":[10,0,0,8,0,0,0,8,0,0,0,8]},"geometricError":32,
+                "refine":"ADD","children":[r]})
+        };
+        let files = |x: f64| {
+            implicit_files(
+                parent(8. + 2e-7),
+                subtree(&[0], &[0], None),
+                &[(0, point_at(x))],
+            )
+        };
+        assert!(contained(&run(&files(8.)).unwrap()));
+        assert_eq!(
+            outside(run(&files(8. + 1e-7))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume=ancestor:2 node=0 mesh=0 primitive=0 vertex=0"
+        );
+        // Both verdicts need the step: unstepped, 8 + 1e-7 would lie inside P
+        // and -7 outside it; stepped, -7 is 3, inside P.
+        assert!(contained(&run(&files(-7.)).unwrap()));
+    }
+
+    #[test]
+    fn external_implicit_root_tests_the_referencing_content_after_r_transform() {
+        // tileset.json links ext.json with a content volume centred at x = 5
+        // (half 1); ext.json's root is R with translation (5, 0, 0).
+        let mut r = implicit_root(1, 1, &["c/{level}/{x}/{y}.glb"]);
+        let mut m = IDENTITY;
+        m[12] = 5.;
+        r["transform"] = json!(m);
+        let link = json!({"boundingVolume":{"box":[0,0,0,20,0,0,0,20,0,0,0,20]},
+            "geometricError":32,"contents":[{"uri":"ext.json",
+                "boundingVolume":{"box":[5,0,0,1,0,0,0,8,0,0,0,8]}}]});
+        let subtree = Sub::new(constant(1), constant(0))
+            .set("contentAvailability", json!([constant(1)]))
+            .build();
+        let files = |x: f64| {
+            vec![
+                ("tileset.json", i1_tileset(link.clone())),
+                ("ext.json", i1_tileset(r.clone())),
+                ("s/0/0/0.subtree", subtree.clone()),
+                ("c/0/0/0.glb", point_at(x)),
+            ]
+        };
+        // 0 in R's frame is 5 in the link's: inside only after R.transform.
+        assert!(contained(&run(&files(0.)).unwrap()));
+        assert!(contained(&run(&files(1.)).unwrap()));
+        assert_eq!(
+            outside(run(&files(1f64.next_up()))),
+            "decoded content outside bounding volume: content=c/0/0/0.glb depth=1 volume=externalContent:2 node=0 mesh=0 primitive=0 vertex=0"
+        );
+    }
+
+    #[test]
+    fn derived_implicit_volume_is_chain_scoped() {
+        // §2, I5: rowless level-1 tiles with no content at or below them do
+        // not exclude; a content on one does, through its chain bit.
+        let all = [0, 1, 2, 3, 4];
+        let origin = point_at(0.);
+        assert!(contained(
+            &run(&implicit_files(
+                r(),
+                subtree(&all, &[0], None),
+                &[(0, origin.clone())]
+            ))
+            .unwrap()
+        ));
+        assert_eq!(
+            not_inspected(run(&implicit_files(
+                r(),
+                subtree(&all, &[0, 3], None),
+                &[(0, origin.clone()), (3, origin.clone())]
+            ))),
+            ["derivedImplicitVolume"]
+        );
+        // With rows, the same tiles are tested.
+        let rows = [row(8.); 5];
+        assert!(contained(
+            &run(&implicit_files(
+                r(),
+                subtree(&all, &[0, 3], Some(&rows)),
+                &[(0, origin.clone()), (3, origin)]
+            ))
+            .unwrap()
+        ));
+    }
+
+    #[test]
+    fn derived_implicit_volume_overrides_a_stopped_precheck() {
+        // S3-20 in miniature: an explicit reference first stops the precheck
+        // at workLimit; a later reference through a rowless tile still lists
+        // derivedImplicitVolume, and only it.
+        let origin = point_at(0.);
+        let files = |contents: &[usize]| {
+            let root = json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},
+                "geometricError":32,"refine":"ADD",
+                "children":[content_tile(boxed([0.; 3], [8.; 3]), "a.glb"), r()]});
+            let mut files = implicit_files(
+                root,
+                subtree(&[0, 1], contents, None),
+                &contents
+                    .iter()
+                    .map(|&i| (i, origin.clone()))
+                    .collect::<Vec<_>>(),
+            );
+            files.push(("a.glb", origin.clone()));
+            files
+        };
+        let limits = ValidationLimits {
+            containment_work_units: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&files(&[0, 1]), limits.clone())),
+            ["derivedImplicitVolume"]
+        );
+        assert_eq!(not_inspected(run_with(&files(&[0]), limits)), ["workLimit"]);
+        assert_eq!(
+            not_inspected(run(&files(&[0, 1]))),
+            ["derivedImplicitVolume"]
+        );
+        assert!(contained(&run(&files(&[0])).unwrap()));
+    }
+
+    #[test]
+    fn template_header_metadata_is_tile_metadata_and_subtree_tables_are_not() {
+        // I6, §4 step 7: a header `metadata` entity is content metadata.
+        let mut root = r();
+        root["content"]["metadata"] = json!({"class":"label","properties":{"name":"x"}});
+        let files = |root: Value| {
+            implicit_files(
+                root,
+                subtree(&[0], &[0], Some(&[row(8.)])),
+                &[(0, point_at(0.))],
+            )
+        };
+        assert_eq!(not_inspected(run(&files(root))), ["tileMetadata"]);
+        // The subtree's TILE_BOUNDING_BOX table alone excludes nothing.
+        assert!(contained(&run(&files(r())).unwrap()));
+    }
+
+    #[test]
+    fn implicit_references_stream_in_walk_order_at_r_position() {
+        // §3 item 4: R's emitted contents are references in I1 walk order, at
+        // R's place in the explicit pre-order. Every payload here is Outside.
+        let far = point_at(100.);
+        let files = |r_first: bool| {
+            let explicit = content_tile(boxed([0.; 3], [8.; 3]), "z.glb");
+            let children = if r_first {
+                json!([r(), explicit])
+            } else {
+                json!([explicit, r()])
+            };
+            let root = json!({"boundingVolume":{"box":[0,0,0,8,0,0,0,8,0,0,0,8]},
+                "geometricError":32,"refine":"ADD","children":children});
+            let mut files = implicit_files(
+                root,
+                subtree(&[0, 1, 2], &[1, 2], Some(&[row(8.); 3])),
+                &[(1, far.clone()), (2, far.clone())],
+            );
+            files.push(("z.glb", far.clone()));
+            files
+        };
+        assert!(outside(run(&files(true))).contains("content=c/1/0/0.glb depth=2 volume=own "));
+        assert!(outside(run(&files(false))).contains("content=z.glb depth=1 volume=own "));
     }
 
     #[test]
@@ -4086,26 +4440,41 @@ mod containment_controls {
             chain,
         };
         let plain = VolumeFacts::Box([0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 1.]);
-        let root = c.tile(fact(plain, None, 0)).unwrap();
-        let child = c.tile(fact(plain, Some(root), 0)).unwrap();
+        let root = c.tile(fact(Some(plain), None, 0)).unwrap();
+        let child = c.tile(fact(Some(plain), Some(root), 0)).unwrap();
         assert_eq!(c.tiles[child].chain, 0);
         c.reference(child, None, 0).unwrap();
         assert_eq!((c.levels.len(), c.units), (2, 1152 + 16));
-        // A caller-supplied chain bit (slice 3's derived bit uses this path;
-        // here a stand-in) is inherited and ORed without building levels.
+        // Slice 3 §4 step 5: a rowless implicit tile (`None`) carries the
+        // derived bit, inherited and ORed without building levels.
         c.levels.clear();
-        let marked = c
-            .tile(fact(plain, Some(root), Reason::ImplicitTiling.bit()))
-            .unwrap();
-        let below = c.tile(fact(plain, Some(marked), 0)).unwrap();
-        assert_eq!(c.tiles[below].chain, Reason::ImplicitTiling.bit());
+        let derived = c.tile(fact(None, Some(root), 0)).unwrap();
+        assert_eq!(c.tiles[derived].chain, Reason::DerivedImplicitVolume.bit());
+        let below = c.tile(fact(Some(plain), Some(derived), 0)).unwrap();
+        assert_eq!(c.tiles[below].chain, Reason::DerivedImplicitVolume.bit());
         c.reference(below, None, 0).unwrap();
-        assert_eq!(c.exclusions, Reason::ImplicitTiling.bit());
+        assert_eq!(c.exclusions, Reason::DerivedImplicitVolume.bit());
         assert!(c.levels.is_empty());
         assert_eq!(c.units, 1152 + 16);
+        // A caller-supplied chain bit is inherited too.
+        let marked = c
+            .tile(fact(Some(plain), Some(root), Reason::Skin.bit()))
+            .unwrap();
+        let below_marked = c.tile(fact(Some(plain), Some(marked), 0)).unwrap();
+        assert_eq!(c.tiles[below_marked].chain, Reason::Skin.bit());
+        // `build_levels` never sees a `None` in domain; reaching one, as own
+        // volume or as an ancestor's, is an internal invariant failure.
+        for tile in [derived, below] {
+            assert!(matches!(
+                c.build_levels(tile, None),
+                Err(Error::InvalidState(_))
+            ));
+        }
         // A region tile's bit reaches its descendants' chains.
-        let region = c.tile(fact(VolumeFacts::Region, Some(root), 0)).unwrap();
-        let leaf = c.tile(fact(plain, Some(region), 0)).unwrap();
+        let region = c
+            .tile(fact(Some(VolumeFacts::Region), Some(root), 0))
+            .unwrap();
+        let leaf = c.tile(fact(Some(plain), Some(region), 0)).unwrap();
         assert_eq!(c.tiles[leaf].chain, Reason::RegionVolume.bit());
         assert_eq!(c.tiles[root].chain, 0);
     }

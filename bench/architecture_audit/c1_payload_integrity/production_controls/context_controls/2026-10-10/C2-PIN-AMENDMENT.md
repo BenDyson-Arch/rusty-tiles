@@ -51,3 +51,18 @@ The 82-execution receipt (`tests/payload_context_receipt.py`) now expects 44 adm
 ResourceLimit rows, and identifies each execution by its control, fact and selected limits.
 `context_controls.rs`, the uncompiled 2026-10-10 original, is unchanged
 (`3a2959b544285ed568236d62fa1533592e1eeb49f800e215c7560a393e2287fd`).
+
+## C2 slice-3 amendment (2026-10-12)
+
+C2 slice 3 (contract v3.1, sha256 `8bc53429…`, §2 and §6) removes the frozen reason
+`implicitTiling`: every implicit root I1 reads is now in C2's domain, and the enum keeps
+15 names with `derivedImplicitVolume` in its place. The label change was made by the
+coordinator (R) in a separate labelled commit. No member pin, archive byte, selected limit,
+C1 outcome, check or count changed; the 82-execution receipt is unchanged.
+
+| File | Previous sha256 (I1 amendment) | Amended sha256 | Reason |
+| --- | --- | --- | --- |
+| `fixtures/manifest.json` | `a68e4afc7c8205c741ccbc32c86019fd744588c7c2230afa2651eaa28538975f` | `47694c3d609ca4acc0bee97a83290fd3a7aa538886e9777ae5714576b829b372` | In the `expectedReport` of the two implicit cases, `nested-metadata-extras` and `subtree-json`, only: `decodedContentBounds.implicitTiling` leaves `notInspected`. Both stay outside C2 for their payload's own reason (`decodedContentBounds.sceneSelection`, a scene-less GLB), so `decodedContentContainment` does not enter `checks` |
+
+`compiled_context_controls.rs` (`a142a385…`) and the uncompiled `context_controls.rs` are
+unchanged. The earlier pins remain true statements about the source they reviewed.

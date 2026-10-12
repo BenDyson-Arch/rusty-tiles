@@ -81,12 +81,22 @@ hierarchy checks. `hierarchyBounds` means containment of declared tile volumes.
 every drawn vertex of every selected static glTF scene instance lies inside its own tile's
 volume, its content volume, any referencing external-content volume and every ancestor volume.
 The vertex is placed after node transforms, the glTF y-up to z-up step and tile transforms.
-The predicate is exact, with zero tolerance. It covers explicit `.3tz` archives with
-axis-aligned (signed-permutation) boxes and spheres. It is reported only when the whole archive
-is in domain. Otherwise `notInspected` lists `decodedContentBounds.<reason>` entries, for
-example `implicitTiling`, `regionVolume`, `rtcCenter`, `numericSpan` or `workLimit`. A proven
-escape fails as InvalidInput, and the message names the member, tile depth, volume, node,
-mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
+The predicate is exact, with zero tolerance. It covers `.3tz` archives with
+axis-aligned (signed-permutation) boxes and spheres, explicit and implicit alike (C2 slice 3).
+Below an implicit root, every content the I1 reader emits is a reference, and its vertices are
+tested against the tile's effective volume (its `TILE_BOUNDING_BOX` row, FLOAT32 rows widened
+exactly, or the root's box for a rowless level-0 tile), every implicit ancestor's, the
+level-0 tile's, the implicit root's own JSON volume, the referencing external-content volume
+when the root roots an external tileset (after the root's transform), and every explicit
+ancestor's. A tile at level 1 or deeper without a row has a derived volume that C2 does not
+evaluate; a reference through one is `notInspected` as `derivedImplicitVolume`. A template
+header with `metadata` is `tileMetadata`; subtree metadata tables are not. It is reported only
+when the whole archive is in domain. Otherwise `notInspected` lists
+`decodedContentBounds.<reason>` entries, for example `derivedImplicitVolume`, `regionVolume`,
+`rtcCenter`, `numericSpan` or `workLimit`. A proven escape fails as InvalidInput, and the
+message names the member, tile depth, volume, node, mesh, primitive and vertex; for implicit
+content, `depth` is the root's depth plus the level, and `ancestor:k` counts implicit levels,
+then the root, then explicit ancestors. C2 runs only after C1 succeeds. Its own caps
 (`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
 `containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^29 units, 2 GiB,
 2 GiB and 64) yield `notInspected`, never ResourceLimit. Units are charged per operation
@@ -99,7 +109,7 @@ on a P-core (median of 7 clean A/B runs per class), so the precheck and streamin
 validation stay within about 7.9 s on an E-core (about 4.4 s on a P-core) at the default cap.
 Classes outside that matrix, other hosts, debug builds and C1's own inspection time are not
 covered. Archives over the cap are reported as `workLimit`. The
-frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
+frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling`), `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
@@ -174,4 +184,4 @@ C2 domain (when `decodedContentContainment` is absent), metadata semantics, sour
 
 Primary byte-layout authority is the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html), identified there as source commit `8e798b02d254cea97659a333cfcb20875b62bdd4`. Its matrix-alignment rule permits omitted final column padding. Unpublished GitHub main revisions can differ; they are not silently substituted for this contract.
 
-Implicit roots are read by the I1 implicit reader, on any explicit tile, including tiles inside explicit external tilesets. Every subtree reachable through child-subtree availability is read from a confined archive member, availability is checked bit by bit, and every available tile is visited once at its exact coordinates. Each implicit tile then receives the explicit-tile checks: payload integrity, `hierarchyBounds`, `geometricErrorOrder`, `resourceReferences` and the report-level `conversion.json` budgets. The report lists `implicitAddressingAndAvailability` in `checks`; it lists `recordedBudgets.implicitTileExtras` in `notInspected`, because per-tile `extras` budgets are not compared below an implicit root. Decoded containment of implicit content (`decodedContentBounds.implicitTiling`) and uninterpreted metadata (`metadataSemantics`) remain uninspected. The subtrees on the current path share the 128 MiB `document_decoded_bytes` limit; no expanded presentation tree is built. JSON content templates are Unsupported ("implicit: unsupported external tileset content template in <member>"), as are JSON-format subtrees, region and S2 implicit roots, and `subtreeLevels` or `availableLevels` above 32. Consequently, default point-cloud, vector and deep `mesh-to-3tz` archives written before the bounded implicit forest layout, which split their hierarchy into `implicit-tileset-*.json` documents, are Unsupported; convert them again. Archives written by `convert-to-implicit`, which was removed before 0.4.0, are Unsupported when they have more than one node. Single-node convert archives have no JSON template and still validate; they list their retained original payloads in `conversion.json` `retainedContentUris`, and validation still references and checks those payloads. See the [I1 implicit read contract](architecture/i1-implicit-read-contract.md).
+Implicit roots are read by the I1 implicit reader, on any explicit tile, including tiles inside explicit external tilesets. Every subtree reachable through child-subtree availability is read from a confined archive member, availability is checked bit by bit, and every available tile is visited once at its exact coordinates. Each implicit tile then receives the explicit-tile checks: payload integrity, `hierarchyBounds`, `geometricErrorOrder`, `resourceReferences` and the report-level `conversion.json` budgets. The report lists `implicitAddressingAndAvailability` in `checks`; it lists `recordedBudgets.implicitTileExtras` in `notInspected`, because per-tile `extras` budgets are not compared below an implicit root. Decoded containment of implicit content is the C2 check above (C2 slice 3); uninterpreted metadata (`metadataSemantics`) remains uninspected. The subtrees on the current path share the 128 MiB `document_decoded_bytes` limit; no expanded presentation tree is built. JSON content templates are Unsupported ("implicit: unsupported external tileset content template in <member>"), as are JSON-format subtrees, region and S2 implicit roots, and `subtreeLevels` or `availableLevels` above 32. Consequently, default point-cloud, vector and deep `mesh-to-3tz` archives written before the bounded implicit forest layout, which split their hierarchy into `implicit-tileset-*.json` documents, are Unsupported; convert them again. Archives written by `convert-to-implicit`, which was removed before 0.4.0, are Unsupported when they have more than one node. Single-node convert archives have no JSON template and still validate; they list their retained original payloads in `conversion.json` `retainedContentUris`, and validation still references and checks those payloads. See the [I1 implicit read contract](architecture/i1-implicit-read-contract.md).

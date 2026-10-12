@@ -1297,7 +1297,7 @@ class WheelAPI(unittest.TestCase):
         checks = report["checks"]
         self.assertEqual(checks.index("implicitAddressingAndAvailability"),
                          checks.index("hierarchyBounds") + 1)
-        for label in ("recordedBudgets.implicitTileExtras", "decodedContentBounds.implicitTiling"):
+        for label in ("recordedBudgets.implicitTileExtras", "decodedContentBounds.derivedImplicitVolume"):
             self.assertIn(label, report["notInspected"])
         self.assertNotIn("implicitAddressingAndAvailability", report["notInspected"])
         # X-1: a JSON content template is Unsupported at root admission.

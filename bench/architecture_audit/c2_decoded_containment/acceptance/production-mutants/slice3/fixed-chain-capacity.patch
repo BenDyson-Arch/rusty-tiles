@@ -1,0 +1,14 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..591b0c6 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -663,6 +663,9 @@ impl Containment {
+                     child.external.map(|v| (Role::ExternalContent(level), v)),
+                 ],
+             };
++            if self.levels.len() >= 13 {
++                return Err(Error::limit("fixed chain capacity"));
++            }
+             try_push(&mut self.levels, fact)?;
+             current = parent;
+         }

@@ -1,0 +1,14 @@
+--- a/oracle/c2o/check.py
++++ b/oracle/c2o/check.py
+@@ -330,7 +330,11 @@
+         self.report["precheck"] = {"totals": totals, "references": per_ref, "terms": terms}
+         cap = self.limits
+         level_cache = {}  # (id(levels), member) -> (levels, spans, V, rows); levels may be shared
++        charged = set()
+         for ref in references:
++            if ref.member in charged:
++                continue
++            charged.add(ref.member)
+             facts = self.uri_facts[ref.member]
+             entry = {"reference": ref.index, "member": ref.member, "levels": len(ref.levels)}
+             if self.detail:

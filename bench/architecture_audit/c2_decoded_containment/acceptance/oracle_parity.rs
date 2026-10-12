@@ -13,7 +13,12 @@ const OUTSIDE: &str = "decoded content outside bounding volume: ";
 
 fn limits(row: &Value) -> ValidationLimits {
     let mut l = ValidationLimits::default();
-    for (key, value) in row["limits"].as_object().into_iter().flatten() {
+    apply_c2_limits(&mut l, &row["limits"]);
+    l
+}
+
+fn apply_c2_limits(l: &mut ValidationLimits, limits: &Value) {
+    for (key, value) in limits.as_object().into_iter().flatten() {
         let v = value.as_u64().expect("oracle limit is u64");
         match key.as_str() {
             "containmentSpanBits" => l.containment_span_bits = v,
@@ -24,7 +29,6 @@ fn limits(row: &Value) -> ValidationLimits {
             other => panic!("unknown oracle limit {other}"),
         }
     }
-    l
 }
 
 /// Production result in the oracle's vocabulary.
@@ -59,7 +63,8 @@ fn production(file: &Path, limits: ValidationLimits) -> Value {
             };
             let n = |k: &str| fields[k].parse::<u64>().unwrap();
             json!({"outcome":"Outside","facts":{
-                "depth": n("depth"), "level": level, "role": role, "node": n("node"),
+                "depth": n("depth"), "level": level, "role": role, "member": fields["content"],
+                "node": n("node"),
                 "mesh": n("mesh"), "primitive": n("primitive"), "vertex": n("vertex")}})
         }
         Err(ValidationFailure::InvalidInput(m))
@@ -276,4 +281,462 @@ fn production_matches_every_c2wb_class_fixture() {
         skipped.iter().all(|id| id.ends_with("@large")),
         "unexpected missing fixtures {skipped:?}"
     );
+}
+
+// ---- C2 slice 3 (contract v3.1 §9.B–D): implicit archives ----
+
+/// Apply the I1 (C1) limit overrides of an oracle row (`ValidationLimits` field names).
+fn apply_i1_limits(l: &mut ValidationLimits, limits: &Value) {
+    for (key, value) in limits.as_object().into_iter().flatten() {
+        let v = value.as_u64().expect("oracle limit is u64");
+        match key.as_str() {
+            "hierarchy_visits" => l.hierarchy_visits = v,
+            "hierarchy_depth" => l.hierarchy_depth = v,
+            "references" => l.references = v,
+            "total_bytes_read" => l.total_bytes_read = v,
+            "document_decoded_bytes" => l.document_decoded_bytes = v,
+            "member_bytes" => l.member_bytes = v,
+            "document_items" => l.document_items = v,
+            "json_bytes" => l.json_bytes = v,
+            "json_depth" => l.json_depth = v,
+            other => panic!("unknown I1 limit {other}"),
+        }
+    }
+}
+
+/// O-implicit's own pre-#160 defaults (`implicit_read/oracle/i1_oracle.py`), under which the
+/// I1 controls run at their manifest limits (contract 9.A; as the I1 parity test does).
+fn i1_oracle_defaults() -> ValidationLimits {
+    ValidationLimits {
+        hierarchy_visits: 65_536,
+        hierarchy_depth: 128,
+        member_bytes: 64 << 20,
+        total_bytes_read: 2 << 30,
+        document_decoded_bytes: 64 << 20,
+        references: 262_144,
+        json_bytes: 8 << 20,
+        json_depth: 64,
+        document_items: 65_536,
+        ..ValidationLimits::default()
+    }
+}
+
+fn sha256_file(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    std::fs::read(path)
+        .ok()
+        .map(|b| format!("{:x}", Sha256::digest(&b)))
+}
+
+/// Production against one slice-3 oracle result (`controls/slice3/results.json` `oracle`, or a
+/// corpus witness row): outcome, sorted reasons, and for Outside the §3 facts the oracle
+/// reports (volume = role[:k], depth, member, vertex); for ResourceLimit the limit's kind.
+fn slice3_agrees(oracle: &Value, got: &Value) -> bool {
+    let sorted = |v: &Value| {
+        let mut r: Vec<String> = v
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|x| x.as_str().unwrap().to_owned())
+            .collect();
+        r.sort_unstable();
+        r.dedup();
+        json!(r)
+    };
+    match oracle["outcome"].as_str().unwrap() {
+        "Contained" => got["outcome"] == "Contained",
+        "NotInspected" => {
+            got["outcome"] == "NotInspected" && got["reasons"] == sorted(&oracle["reasons"])
+        }
+        "Outside" => {
+            let f = &got["facts"];
+            let volume = match f["level"].as_u64() {
+                Some(0) => f["role"].as_str().unwrap().to_owned(),
+                Some(k) => format!("{}:{k}", f["role"].as_str().unwrap()),
+                None => return false,
+            };
+            let o = &oracle["facts"];
+            got["outcome"] == "Outside"
+                && o["volume"] == json!(volume)
+                && o["depth"] == f["depth"]
+                && o["member"] == f["member"]
+                && o["vertex"] == f["vertex"]
+        }
+        "ResourceLimit" => {
+            got["outcome"] == "resource_limit"
+                && match oracle["facts"]["limit"].as_str() {
+                    Some("hierarchy_depth") => got["message"]
+                        .as_str()
+                        .is_some_and(|m| m.contains("depth limit")),
+                    Some("document_items") => got["message"]
+                        .as_str()
+                        .is_some_and(|m| m.contains("value-node limit")),
+                    _ => true,
+                }
+        }
+        other => panic!("unknown slice-3 oracle outcome {other}"),
+    }
+}
+
+/// Production's precheck total equals the oracle's `units` for a Contained archive.
+fn slice3_units(file: &Path, limits: ValidationLimits, oracle_units: &Value) -> Option<Value> {
+    let want = oracle_units.as_u64()?;
+    match containment_work_total(ValidationRequest::new(file), limits) {
+        Ok(got) if got == want => None,
+        other => Some(json!({"units": want, "production": format!("{other:?}")})),
+    }
+}
+
+/// Production outcome names for an oracle failure kind.
+fn kind(k: &str) -> Vec<&str> {
+    match k {
+        "InvalidInput" => vec!["invalid_input", "C1Hierarchy"],
+        "Unsupported" => vec!["unsupported"],
+        "ResourceLimit" => vec!["resource_limit"],
+        other => vec![other],
+    }
+}
+
+fn read_root(p: &str) -> Value {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_slice(&std::fs::read(root.join(p)).unwrap()).unwrap()
+}
+
+/// Contract 9.C/9.D: production against every slice-3 control of O-implicit-C2
+/// (`controls/slice3/manifest.json`, oracle results `results.json`): verdict, Outside facts and,
+/// for Contained cases, the precheck total. Forest-derived controls above 120 kB live outside the
+/// repository (`evidence:` rows); they run only when `C2S3_EVIDENCE_DIR` names their directory,
+/// and are otherwise listed as skipped. `C2S3_PARITY_OUT` receives the summary.
+#[test]
+fn production_matches_every_slice3_oracle_control() {
+    let dir = format!("{ROOT}/controls/slice3");
+    let manifest = read_root(&format!("{dir}/manifest.json"));
+    let results = read_root(&format!("{dir}/results.json"));
+    let oracle: BTreeMap<&str, &Value> = results["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["id"].as_str().unwrap(), r))
+        .collect();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(&dir);
+    let evidence = std::env::var_os("C2S3_EVIDENCE_DIR").map(std::path::PathBuf::from);
+    let (mut agree, mut skipped, mut disagree) = (Vec::new(), Vec::new(), Vec::new());
+    for case in manifest["cases"].as_array().unwrap() {
+        let id = case["id"].as_str().unwrap();
+        let file = case["file"].as_str().unwrap();
+        let path = match file.strip_prefix("evidence:") {
+            Some(name) => match &evidence {
+                Some(d) => d.join(name),
+                None => {
+                    skipped.push(id.to_owned());
+                    continue;
+                }
+            },
+            None => root.join(file),
+        };
+        assert_eq!(
+            sha256_file(&path).as_deref(),
+            case["sha256"].as_str(),
+            "{id}: fixture missing or re-hashed"
+        );
+        let o = oracle[id];
+        assert_eq!(o["agree"], true, "{id}: committed oracle run disagrees");
+        let mut l = ValidationLimits::default();
+        apply_i1_limits(&mut l, &case["i1Limits"]);
+        apply_c2_limits(&mut l, &case["limits"]);
+        let got = production(&path, l.clone());
+        let mut problems = Vec::new();
+        if !slice3_agrees(&o["oracle"], &got) {
+            problems.push(json!({"verdict": got}));
+        }
+        if o["oracle"]["outcome"] == "Contained" {
+            problems.extend(slice3_units(&path, l, &o["oracle"]["totals"]["units"]));
+        }
+        if problems.is_empty() {
+            agree.push(id.to_owned());
+        } else {
+            disagree.push(json!({"id": id, "oracle": o["oracle"], "problems": problems}));
+        }
+    }
+    let summary = json!({"cases": manifest["cases"].as_array().unwrap().len(),
+        "agree": agree.len(), "skipped": skipped, "disagree": disagree});
+    if let Some(out) = std::env::var_os("C2S3_PARITY_OUT") {
+        std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
+    }
+    assert!(
+        disagree.is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
+}
+
+/// Contract 9.C S3-18: production's C2 outcome on every I1 control after amendment 6, at its
+/// manifest limits, against O's sweep (`controls/slice3/results.json` `s3_18`). I1-refused
+/// cases must keep their I1 failure kind (no C2 verdict); C2 cases compare verdict, reasons,
+/// Outside volume/depth and, when Contained, the precheck total. The cases production refuses
+/// in C1 although O-implicit accepts them (C-10, R1b.full) keep production's recorded kind;
+/// R5 holds only under an injected allocation refusal and is listed, not run. Only the
+/// gitignored `--large` I1 controls may be absent. `C2S3_SWEEP_OUT` receives the summary.
+#[test]
+fn production_matches_the_slice3_sweep_of_every_i1_control() {
+    let i1 = "bench/architecture_audit/implicit_read/controls";
+    let manifest = read_root(&format!("{i1}/manifest.json"));
+    let sweep = read_root(&format!("{ROOT}/controls/slice3/results.json"));
+    let rows: BTreeMap<&str, &Value> = sweep["s3_18"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["id"].as_str().unwrap(), r))
+        .collect();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(i1);
+    let (mut agree, mut skipped, mut injected, mut disagree) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut categories: BTreeMap<String, usize> = BTreeMap::new();
+    let cases = manifest["cases"].as_array().unwrap();
+    assert_eq!(rows.len(), cases.len(), "S3-18 covers every I1 control");
+    for case in cases {
+        let id = case["id"].as_str().unwrap();
+        let row = rows[id];
+        let path = root.join(case["file"].as_str().unwrap());
+        if !path.exists() {
+            skipped.push(id.to_owned());
+            continue;
+        }
+        assert_eq!(
+            sha256_file(&path).as_deref(),
+            case["sha256"].as_str(),
+            "{id}: re-hashed"
+        );
+        let category = row["category"].as_str().unwrap();
+        if id == "R5" {
+            injected.push(id.to_owned());
+            continue;
+        }
+        *categories.entry(category.to_owned()).or_default() += 1;
+        let mut l = i1_oracle_defaults();
+        apply_i1_limits(&mut l, &case["limits"]);
+        let got = production(&path, l.clone());
+        let o = &row["oracle"];
+        let mut problems = Vec::new();
+        match category {
+            "I1-refused" => {
+                let want = row["i1Expected"]
+                    .as_str()
+                    .unwrap()
+                    .split(':')
+                    .next()
+                    .unwrap();
+                if !kind(want).contains(&got["outcome"].as_str().unwrap()) {
+                    problems.push(json!({"i1": want, "production": got}));
+                }
+            }
+            "production:InvalidInput" => {
+                if !kind("InvalidInput").contains(&got["outcome"].as_str().unwrap()) {
+                    problems.push(json!({"production": got}));
+                }
+            }
+            _ => {
+                let facts = json!({"volume": o["volume"], "depth": o["depth"]});
+                let oracle = json!({"outcome": o["outcome"], "reasons": o["reasons"],
+                    "facts": facts});
+                let same = match o["outcome"].as_str().unwrap() {
+                    // S3-18 records volume and depth only; compare those.
+                    "Outside" => {
+                        got["outcome"] == "Outside"
+                            && got["facts"]["depth"] == o["depth"]
+                            && slice3_agrees(
+                                &json!({"outcome":"Outside","facts":{"volume":o["volume"],
+                                "depth":o["depth"],"member":got["facts"]["member"],
+                                "vertex":got["facts"]["vertex"]}}),
+                                &got,
+                            )
+                    }
+                    _ => slice3_agrees(&oracle, &got),
+                };
+                if !same {
+                    problems.push(json!({"oracle": oracle, "production": got}));
+                }
+                if o["outcome"] == "Contained" {
+                    problems.extend(slice3_units(&path, l, &o["units"]));
+                }
+            }
+        }
+        if problems.is_empty() {
+            agree.push(id.to_owned());
+        } else {
+            disagree.push(json!({"id": id, "category": category, "problems": problems}));
+        }
+    }
+    // Contract 9.E "charging reference" pairs. `references` keeps its C1 meaning (I1 §2a step 10):
+    // one per actual caller resource visit (C1 contract, "C1 reads/references"). O-implicit's
+    // `referencesCharged` (implicit_read/oracle/README.md, "Accounting") counts contents,
+    // external-tileset links, subtree members, external buffers and reserved `E`, but not the
+    // read of each tileset document, which C1 charges through `reference()` (the root
+    // `tileset.json` and every external tileset). So the boundary is O's `referencesCharged` plus
+    // O's `tilesets`: that total admits the archive and one less is ResourceLimit. BQ has one
+    // tileset document; C-11 has an external implicit-root tileset (two). Emitted contents are
+    // reserved once and never charged again (the 9.E mutant flips both pairs).
+    let counts: BTreeMap<String, Value> = read_root(&format!("{i1}/oracle-results.json"))
+        ["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["id"].as_str().unwrap().to_owned(), r["counts"].clone()))
+        .collect();
+    for id in ["BQ", "C-11"] {
+        let c = &counts[id];
+        let total = c["referencesCharged"].as_u64().unwrap() + c["tilesets"].as_u64().unwrap();
+        let case = cases.iter().find(|c| c["id"] == id).unwrap();
+        let pair = |references: u64| {
+            let mut l = i1_oracle_defaults();
+            apply_i1_limits(&mut l, &case["limits"]);
+            l.references = references;
+            production(&root.join(case["file"].as_str().unwrap()), l)
+        };
+        let (at, under) = (pair(total), pair(total - 1));
+        let under_ok = under["outcome"] == "resource_limit"
+            && under["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("reference"));
+        let name = format!("{id}.references-pair");
+        if at == json!({"outcome":"Contained"}) && under_ok {
+            agree.push(name);
+        } else {
+            disagree.push(json!({"id": name, "references": total, "at": at, "under": under}));
+        }
+    }
+    let summary = json!({"cases": cases.len(), "agree": agree.len(), "categories": categories,
+        "skipped": skipped, "injectedOnly": injected, "disagree": disagree});
+    if let Some(out) = std::env::var_os("C2S3_SWEEP_OUT") {
+        std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
+    }
+    assert!(
+        disagree.is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
+    assert!(
+        skipped.iter().all(|id| id.starts_with('R')),
+        "unexpected missing fixtures {skipped:?}"
+    );
+}
+
+/// Contract 9.B and 9.D: production against O's forest witnesses (`corpus/slice3-manifest.json`:
+/// verdict and precheck total of every forest archive and `--explicit` twin) and the limit pairs,
+/// each value from O's totals (cap → Contained, one less → the named reason). Producer archives
+/// live outside the repository: forest rows run only when `C2S3_FOREST_DIR` names R's corpus
+/// directory (archives pinned by sha256; a missing or re-hashed archive fails). The in-tree
+/// repeated-URI pair always runs. `C2S3_FOREST_OUT` receives the summary.
+#[test]
+fn production_matches_the_slice3_forest_witnesses_and_limit_pairs() {
+    let corpus = read_root(&format!("{ROOT}/corpus/slice3-manifest.json"));
+    let forest = std::env::var_os("C2S3_FOREST_DIR").map(std::path::PathBuf::from);
+    let top = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
+    let (mut agree, mut skipped, mut disagree) = (Vec::new(), Vec::new(), Vec::new());
+    let witness = |id: &str| -> Option<std::path::PathBuf> {
+        let row = &corpus["witnesses"][id];
+        let path = forest.as_ref()?.join(row["archive"].as_str().unwrap());
+        assert_eq!(
+            sha256_file(&path).as_deref(),
+            row["sha256"].as_str(),
+            "{id}: forest archive missing or re-hashed"
+        );
+        Some(path)
+    };
+    for (id, row) in corpus["witnesses"].as_object().unwrap() {
+        let Some(path) = witness(id) else {
+            skipped.push(id.clone());
+            continue;
+        };
+        let got = production(&path, ValidationLimits::default());
+        let mut problems = Vec::new();
+        if !slice3_agrees(row, &got) {
+            problems.push(json!({"verdict": got}));
+        }
+        if row["outcome"] == "Contained" {
+            problems.extend(slice3_units(
+                &path,
+                ValidationLimits::default(),
+                &row["totals"]["units"],
+            ));
+        }
+        if problems.is_empty() {
+            agree.push(id.clone());
+        } else {
+            disagree.push(json!({"id": id, "problems": problems}));
+        }
+    }
+    let mut pairs = Vec::new();
+    for (name, pair) in corpus["pairs"].as_object().unwrap() {
+        let path = match pair["fixture"].as_str() {
+            Some(f) => {
+                let p = top.join(f.trim_start_matches(&format!("{ROOT}/")));
+                assert_eq!(
+                    sha256_file(&p).as_deref(),
+                    pair["sha256"].as_str(),
+                    "{name}"
+                );
+                Some(p)
+            }
+            None => witness(name.split('.').next().unwrap()),
+        };
+        let Some(path) = path else {
+            skipped.push(name.clone());
+            continue;
+        };
+        let at_value = pair["atValue"].as_u64().unwrap();
+        let mut at = ValidationLimits::default();
+        apply_c2_limits(&mut at, &json!({pair["limit"].as_str().unwrap(): at_value}));
+        let mut under = at.clone();
+        apply_c2_limits(
+            &mut under,
+            &json!({pair["limit"].as_str().unwrap(): at_value - 1}),
+        );
+        let (got_at, got_under) = (production(&path, at), production(&path, under));
+        // At the value the precheck passes, so production streams the (Contained) archive.
+        let want_under = json!({"outcome":"NotInspected","reasons":pair["underReasons"]});
+        let ok = got_at == json!({"outcome":"Contained"}) && got_under == want_under;
+        let record = json!({"pair": name, "atValue": at_value, "at": got_at, "under": got_under});
+        if ok {
+            pairs.push(record);
+        } else {
+            disagree.push(record);
+        }
+    }
+    let summary = json!({"witnesses": corpus["witnesses"].as_object().unwrap().len(),
+        "agree": agree.len(), "pairs": pairs, "skipped": skipped, "disagree": disagree});
+    if let Some(out) = std::env::var_os("C2S3_FOREST_OUT") {
+        std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
+    }
+    assert!(
+        disagree.is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
+    if forest.is_none() {
+        assert!(
+            skipped
+                .iter()
+                .all(|id| id.starts_with("F-") || id.starts_with("T-")),
+            "{skipped:?}"
+        );
+    }
+}
+
+/// Contract §10 item 2 (precheck-only arm), a timing helper, not an acceptance check: one
+/// `inspect_selected` of `C2S3_ARM_FILE`, with `containmentBytesRead` = `C2S3_ARM_BYTES` when set
+/// (O's total − 1 on F-MF2: the precheck runs to the last reference, then `workLimit`, no streaming),
+/// printing production's outcome. R times the test process against the same run of the
+/// `gltfUpAxis` twin (no precheck, no streaming).
+#[test]
+#[ignore = "perf helper: run explicitly with C2S3_ARM_FILE"]
+fn slice3_precheck_only_arm() {
+    let Some(file) = std::env::var_os("C2S3_ARM_FILE") else {
+        return;
+    };
+    let mut l = ValidationLimits::default();
+    if let Ok(bytes) = std::env::var("C2S3_ARM_BYTES") {
+        l.containment_bytes_read = bytes.parse().unwrap();
+    }
+    println!("{}", production(Path::new(&file), l));
 }

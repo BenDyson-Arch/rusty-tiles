@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 65ae7e6..c03db46 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -1720,7 +1720,7 @@ impl Check<'_> {
+             let mut bytes = 0u64;
+             let mut vertices = 0u64;
+             for (_, name) in &tile.contents {
+-                self.resources.reference_reserved(name)?;
++                self.resources.reference(name.clone())?;
+                 self.contents += 1;
+                 bytes = bytes
+                     .checked_add(
