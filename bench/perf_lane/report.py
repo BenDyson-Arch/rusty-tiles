@@ -326,7 +326,7 @@ def render(meta, columns, previous, explanations):
                for step, v in meta['pinned'].items()) + '.'] if meta.get('pinned') else []),
            *browser_lines(meta, ces, record),
            *([f'- Last milestone Cesium timings were measured with {superseded} rendering: shown as superseded and '
-              f"not compared with this {record['rendererClass']} run."] if superseded else []),
+              f"not compared with this {'GPU' if record['rendererClass'] == 'gpu' else record['rendererClass']} run."] if superseded else []),
            f"- Corpus sha256 `{meta['corpus'][:16]}` (pinned `corpus.py` inputs and the T1 fixture).",
            f"- Gate: >{RATIO:g}× worse than the last milestone and over the floor (0.1 s, 16 MiB, 0 B), unless "
            '`--explain`ed; any Cesium load failure, console error or failed request. Cesium time and tile '
