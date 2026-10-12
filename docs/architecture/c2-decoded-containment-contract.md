@@ -844,6 +844,28 @@ run records and hashes: `bench/architecture_audit/c2_decoded_containment/accepta
 other explicit twin ≤ 4%. `mf2-lod3-explicit` totals 438,590,913 units (81.7%), but C1 refuses
 that archive (`JSON exceeds value-node limit`, also at b51f83d), so it was not timed.
 
+**Acceptance amendments (final review, 2026-10-12).**
+
+- **A3 restated as ns/unit flatness.** The draft's "time per (instance, accessor +
+  primitive) within 1.25× of the shared class" is confounded by `T·V`: `quad` has
+  `T` = 120,000 drawn vertices against 40 for the shared-accessor class, so the measure
+  mostly counts vertex work. A3 is instead: after WB-B, the many-accessor classes cost no
+  more per unit than the linear range, and the cost stays flat as accessors × primitives ×
+  instances grows. Measured (P / E ns/unit): `quad` 4.92 / 8.54, `quadB` 4.60 / 8.04, and
+  the end-to-end case, about 12× the accessor × primitive × instance product of `quadB`,
+  4.46 / 7.74 (pre-fix 13.70 / 35.26, 26.72 / 77.23 and 47.61 / 83.66). All are below `τ`.
+- **§9.C production mutants, mapped to the control that catches each.**
+
+  | Mutant class | Caught by |
+  | --- | --- |
+  | Unit arithmetic (frozen weights, dropped step/level-0/`R0`/`B`/`Dec`/`J`/`Res`/`Prim`/`8·(L+1)` terms, sphere floor = box floor, node floor 128) | The 55 O-WB at-cap pairs (`acceptance/oracle_parity.rs`, `production_matches_every_c2wb_class_fixture`: `units` gives Contained, `units − 1` gives `workLimit`) and the per-term unit tests in `src/validate.rs` and `src/validate/containment.rs`; the oracle-side twins are `wb/mutants.py` (15/15) |
+  | Stale chain bits | `chain_bits_keep_precedence_after_the_precheck_stops` (`src/validate.rs:4039`) and the four `wb/` chain-bit controls |
+  | Default cap one step lower | The amended C1 limits pins (`c2wb_cap_amendment/2026-10-12`: every admitted report expects `containmentWorkUnits` 536870912), `tests/c2_containment.rs` and the Python API default-limits assertion |
+  | Re-scanning JSON admission; quadratic `mark`; `build_levels` before the gate | Performance only: the pre-fix gate rows (deep JSON numbers, `quad`, `quadB`, end-to-end) and the phase-1 twin check; a regression puts those rows above `τ` |
+
+  The slice-1 production mutants `precheck-depth-cap-off-by-one` and `reverse-tile-order`
+  are re-pinned at the C2-WB head (`acceptance/production-mutants/report.json`).
+
 **Proof limits.** One host, one build, one compiler. Classes outside the measured matrix are not
 claimed. E-core figures include shared-L2 contention below the run threshold. C1's own phase-1
 work is not in units. The bound is a calibration, not a guarantee.
