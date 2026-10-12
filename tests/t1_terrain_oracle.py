@@ -487,9 +487,9 @@ def corruption_controls(directory, plane=True, **plane_spec):
     if len(leaves)>1: faults.append('seam')
     # Pyramid controls need a coarse tile below the root.
     middle=[n for n in tiles if n['children'] and n['parent'] is not None and 'row' in n]
-    if middle: faults+=['understated-error','missing-skirt','parent-box-misses-skirt']
+    if middle: faults+=['understated-error','missing-skirt','leaf-box-misses-skirt']
     expected={'understated-error':'understated geometric error','missing-skirt':'missing skirt',
-              'parent-box-misses-skirt':'box'}
+              'leaf-box-misses-skirt':'content outside box'}
     for fault in faults:
         with tempfile.TemporaryDirectory() as temporary:
             copy=pathlib.Path(temporary)/'candidate';shutil.copytree(directory,copy)
@@ -505,9 +505,11 @@ def corruption_controls(directory, plane=True, **plane_spec):
                 # Still monotone over its leaf children, but below the measured distance.
                 node=max((n for n in middle if not any(c['children'] for c in n['children'])),key=lambda n:n['error'])
                 edit_row(copy,node,error=node['error']/4)
-            elif fault=='parent-box-misses-skirt':
-                # Lift the box floor to the tile's own lowest surface vertex: skirts fall out.
-                node=middle[0];patch=Patch(directory,node,json.loads((directory/'conversion.json').read_text()),manifest['root']['transform'])
+            elif fault=='leaf-box-misses-skirt':
+                # Lift a skirted leaf's box floor to its lowest surface vertex. The leaf has
+                # no child boxes, so only skirt containment can reject it.
+                node=next(n for n in leaves if 'row' in n and len(glb(directory/n['uri'])[1])==2)
+                patch=Patch(directory,node,json.loads((directory/'conversion.json').read_text()),manifest['root']['transform'])
                 floor=min(p[2] for p in patch.local);box=list(node['box'])
                 top=box[2]+box[11];box[2]=(floor+top)/2;box[11]=(top-floor)/2
                 edit_row(copy,node,box=box)
