@@ -1,5 +1,9 @@
 # F1c2/W1/API removal evidence
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Date: 2026-10-10. PR #147 merged at
 `e3d222a4c27a86e1f06e1e4b47db4e6a4fa5e24e` after local, supported-platform and
 official Blender acceptance for the declared F1c2/W1/package-removal scopes.

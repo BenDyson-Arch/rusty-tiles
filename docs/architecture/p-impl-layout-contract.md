@@ -1,5 +1,9 @@
 # P implicit layout contract: the bounded implicit forest
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Status: implemented on `feat/implicit-forest`, the combined I1 + P integration branch (shared
 writer `src/implicit/tileset.rs` `write_forest`; producers in `src/point_cloud.rs`, `src/tile.rs`,
 `src/tileset.rs` and `src/vector/pipeline/{store,reuse}.rs`). Independent acceptance (oracle

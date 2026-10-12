@@ -1,5 +1,9 @@
 # Vector compression foundation
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 The chosen codec, producer bridge and captured-file operation are independently
 accepted through [PR #154](https://github.com/BenDyson-Arch/rusty-tiles/pull/154),
 reviewed head `e9fb073184ad25a1f5c7839ea5d1cd9e02830887`, develop merge

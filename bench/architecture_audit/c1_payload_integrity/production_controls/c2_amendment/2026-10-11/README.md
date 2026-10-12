@@ -1,5 +1,9 @@
 # C2 amendment of the C1 payload-control expectations (2026-10-11)
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../../../README.md)).
+
 C2 (decoded-content containment, PR #157) changes the report of every archive
 that C1 admits. The C1 controls pinned on 2026-10-10 compare the whole report,
 so CI rejected every admitted case. Every refusal still matched, and every

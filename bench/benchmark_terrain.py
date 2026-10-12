@@ -3,6 +3,8 @@
 This script is retained only to reproduce recorded pre-T1 experiments using
 historical binaries. Use architecture_audit/terrain_acceptance/resource_probe.py
 for the current bounded mesh profile. It is not current producer acceptance.
+That probe was moved out of the tree at e29cd19d2f23; see the recovery note in
+bench/architecture_audit/terrain_acceptance/README.md.
 """
 import argparse
 import datetime
