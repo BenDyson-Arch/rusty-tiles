@@ -567,34 +567,43 @@ fn production_matches_the_slice3_sweep_of_every_i1_control() {
             disagree.push(json!({"id": id, "category": category, "problems": problems}));
         }
     }
-    // Contract 9.E "charging reference" pair: `references` at O-implicit's charged total for
-    // BQ (`referencesCharged`, implicit_read/controls/oracle-results.json) admits the archive;
-    // one less is ResourceLimit. Emitted contents are reserved once, never charged again.
-    let charged = read_root(&format!("{i1}/oracle-results.json"))["results"]
+    // Contract 9.E "charging reference" pairs. `references` keeps its C1 meaning (I1 §2a step 10):
+    // one per actual caller resource visit (C1 contract, "C1 reads/references"). O-implicit's
+    // `referencesCharged` (implicit_read/oracle/README.md, "Accounting") counts contents,
+    // external-tileset links, subtree members, external buffers and reserved `E`, but not the
+    // read of each tileset document, which C1 charges through `reference()` (the root
+    // `tileset.json` and every external tileset). So the boundary is O's `referencesCharged` plus
+    // O's `tilesets`: that total admits the archive and one less is ResourceLimit. BQ has one
+    // tileset document; C-11 has an external implicit-root tileset (two). Emitted contents are
+    // reserved once and never charged again (the 9.E mutant flips both pairs).
+    let counts: BTreeMap<String, Value> = read_root(&format!("{i1}/oracle-results.json"))
+        ["results"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["id"] == "BQ")
-        .unwrap()["counts"]["referencesCharged"]
-        .as_u64()
-        .unwrap();
-    let bq = cases.iter().find(|c| c["id"] == "BQ").unwrap();
-    let pair = |references: u64| {
-        let mut l = i1_oracle_defaults();
-        apply_i1_limits(&mut l, &bq["limits"]);
-        l.references = references;
-        production(&root.join(bq["file"].as_str().unwrap()), l)
-    };
-    let (at, under) = (pair(charged), pair(charged - 1));
-    let under_ok = under["outcome"] == "resource_limit"
-        && under["message"]
-            .as_str()
-            .is_some_and(|m| m.contains("reference"));
-    if at == json!({"outcome":"Contained"}) && under_ok {
-        agree.push("BQ.references-pair".into());
-    } else {
-        disagree.push(json!({"id": "BQ.references-pair", "references": charged,
-            "at": at, "under": under}));
+        .map(|r| (r["id"].as_str().unwrap().to_owned(), r["counts"].clone()))
+        .collect();
+    for id in ["BQ", "C-11"] {
+        let c = &counts[id];
+        let total = c["referencesCharged"].as_u64().unwrap() + c["tilesets"].as_u64().unwrap();
+        let case = cases.iter().find(|c| c["id"] == id).unwrap();
+        let pair = |references: u64| {
+            let mut l = i1_oracle_defaults();
+            apply_i1_limits(&mut l, &case["limits"]);
+            l.references = references;
+            production(&root.join(case["file"].as_str().unwrap()), l)
+        };
+        let (at, under) = (pair(total), pair(total - 1));
+        let under_ok = under["outcome"] == "resource_limit"
+            && under["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("reference"));
+        let name = format!("{id}.references-pair");
+        if at == json!({"outcome":"Contained"}) && under_ok {
+            agree.push(name);
+        } else {
+            disagree.push(json!({"id": name, "references": total, "at": at, "under": under}));
+        }
     }
     let summary = json!({"cases": cases.len(), "agree": agree.len(), "categories": categories,
         "skipped": skipped, "injectedOnly": injected, "disagree": disagree});
