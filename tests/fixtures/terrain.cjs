@@ -58,6 +58,8 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
       await page.getByRole('button', {name: 'Terrain extent', exact: true}).click();
       return page.evaluate(async oracle => {
         const C = Cesium, scene = viewer.scene, surface = window.terrainSurface;
+        // Rendered LOD selection at the extent view, before MostDetailed queries load leaves.
+        const selected = terrain._selectedTiles.map(tile => tile.content?.url?.replace(/^.*\/terrain\//, ''));
         const samples = oracle.samples.map((p, i) => C.Cartographic.fromDegrees(p.longitude, p.latitude, i % 2 ? 20000 : -25000));
         const outside = oracle.outside.map(p => C.Cartographic.fromDegrees(p.longitude, p.latitude));
         const heights = await surface.sampleHeights(samples);
@@ -85,7 +87,7 @@ assert(oracle.outside.some(p => Number.isFinite(p.underlyingMeshHeight)), 'decod
           rawBorderHeights: rawBorder.map(height),
           clamped: clamped.map(p => p && C.Cartographic.fromCartesian(p).height),
           missingClamp: missingClamp.map(p => !!p), invalidClamp: invalidClamp.map(p => !!p),
-          invalidSample: invalidSample.map(height), failures: window.failures};
+          invalidSample: invalidSample.map(height), failures: window.failures, selected};
       }, oracle);
     };
     await page.goto(process.argv[2]);
