@@ -301,6 +301,7 @@ fn decode_meshopt(
         "TRIANGLES" => super::meshopt::Mode::Triangles,
         _ => super::meshopt::Mode::Indices,
     };
+    super::meshopt::check_header(compressed, mode)?;
     let out = super::meshopt::decode(compressed, count, stride, mode)?;
     Ok((out, stride))
 }
@@ -2542,3 +2543,5 @@ mod tests {
 
 #[cfg(test)]
 mod controls;
+#[cfg(test)]
+mod meshopt_header_controls;
