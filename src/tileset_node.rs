@@ -50,14 +50,19 @@ pub(crate) fn box_half(value: &Value) -> Result<Vec3, Error> {
     Ok(half)
 }
 
-/// `a + b` rounded up: the least f64 at or above the exact sum. The rounding
-/// error comes from Knuth's TwoSum; a sum that was rounded down moves up one
-/// ulp, every other sum is returned unchanged.
-fn sum_up(a: f64, b: f64) -> f64 {
+/// The exact rounding error of `a + b`: `(a + b) - fl(a + b)` over the reals,
+/// itself an f64 (Knuth's TwoSum). Zero when the sum is exact.
+pub(crate) fn sum_error(a: f64, b: f64) -> f64 {
     let sum = a + b;
     let b_part = sum - a;
-    let error = (a - (sum - b_part)) + (b - b_part);
-    if error > 0. {
+    (a - (sum - b_part)) + (b - b_part)
+}
+
+/// `a + b` rounded up: the least f64 at or above the exact sum. A sum that
+/// was rounded down moves up one ulp; every other sum is returned unchanged.
+pub(crate) fn sum_up(a: f64, b: f64) -> f64 {
+    let sum = a + b;
+    if sum_error(a, b) > 0. {
         sum.next_up()
     } else {
         sum
