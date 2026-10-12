@@ -1,7 +1,10 @@
 //! C2 acceptance: production `inspect_selected` against every oracle witness and
 //! control fixture (coordinator-owned). Expectations come only from the oracle's
 //! committed reports; nothing here derives a verdict from production code.
-use crate::validate::{inspect_selected, ValidationFailure, ValidationLimits, ValidationRequest};
+use crate::validate::{
+    containment_work_facts, containment_work_total, inspect_selected, ValidationFailure,
+    ValidationLimits, ValidationRequest,
+};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, path::Path};
 
@@ -172,6 +175,105 @@ fn production_matches_every_oracle_witness_and_control() {
         skipped
             .iter()
             .all(|id| id.starts_with("repeated-index-three-payloads")),
+        "unexpected missing fixtures {skipped:?}"
+    );
+}
+
+/// C2-WB (contract draft v2.1, 9.B): production against O-WB's class fixtures.
+/// CI rows: the at-cap pair (`units` -> Contained, `units - 1` -> workLimit), the
+/// total and every per-URI fact. Matrix-size rows (`wb/large/`, gitignored): when
+/// present, C1 must admit them and the precheck total and facts must equal O-WB's.
+#[test]
+fn production_matches_every_c2wb_class_fixture() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(root.join("wb/manifest.json")).unwrap()).unwrap();
+    let cap = |units: u64| ValidationLimits {
+        containment_work_units: units,
+        ..ValidationLimits::default()
+    };
+    let (mut agree, mut skipped, mut disagree) = (Vec::new(), Vec::new(), Vec::new());
+    for row in manifest["fixtures"].as_array().unwrap() {
+        let id = format!(
+            "{}@{}",
+            row["id"].as_str().unwrap(),
+            row["size"].as_str().unwrap()
+        );
+        let file = root.join(row["file"].as_str().unwrap());
+        if !file.exists() {
+            skipped.push(id);
+            continue;
+        }
+        let mut problems = Vec::new();
+        if row.get("limits").is_some() {
+            let got = production(&file, limits(row));
+            if !agrees(&row["expected"], &row["oracle"], &got) {
+                problems.push(json!({"verdict": got}));
+            }
+        }
+        if let Some(units) = row["units"].as_u64() {
+            // Large rows exceed the default caps; facts are read with an open cap.
+            let open = || cap(1 << 62);
+            match containment_work_total(ValidationRequest::new(&file), open()) {
+                Ok(total) if total == units => {}
+                other => problems.push(json!({"units": units, "production": format!("{other:?}")})),
+            }
+            let facts =
+                containment_work_facts(ValidationRequest::new(&file), open()).unwrap_or_default();
+            for (uri, want) in row["payloadFacts"].as_object().into_iter().flatten() {
+                let Some(got) = facts.iter().find(|f| f.uri == *uri) else {
+                    problems.push(json!({"uri": uri, "production": "absent"}));
+                    continue;
+                };
+                for (key, value) in [
+                    ("T", got.t),
+                    ("Idx", got.idx),
+                    ("E", got.e),
+                    ("Dec", got.dec),
+                    ("B", got.b),
+                    ("J", got.json_nodes),
+                    ("Res", got.external_resources),
+                    ("Prim", got.instance_primitives),
+                ]
+                .into_iter()
+                .chain(got.nodes.map(|n| ("Nodes", n)))
+                {
+                    if want[key].as_u64() != Some(value) {
+                        problems.push(json!({"uri": uri, "fact": key,
+                            "oracle": want[key], "production": value}));
+                    }
+                }
+            }
+        }
+        if let Some(pair) = row.get("capPair") {
+            let units = pair["atCap"]["containmentWorkUnits"].as_u64().unwrap();
+            let at = production(&file, cap(units));
+            let under = production(&file, cap(units - 1));
+            if at != json!({"outcome":"Contained"})
+                || under != json!({"outcome":"NotInspected","reasons":["workLimit"]})
+            {
+                problems.push(json!({"atCap": at, "oneUnder": under}));
+            }
+        }
+        if problems.is_empty() {
+            agree.push(id);
+        } else {
+            disagree.push(json!({"id": id, "problems": problems}));
+        }
+    }
+    let summary = json!({"fixtures": manifest["fixtures"].as_array().unwrap().len(),
+        "agree": agree.len(), "skipped": skipped, "disagree": disagree});
+    if let Some(out) = std::env::var_os("C2WB_PARITY_OUT") {
+        std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
+    }
+    assert!(
+        disagree.is_empty(),
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
+    // Only the uncommitted matrix-size rows may be absent.
+    assert!(
+        skipped.iter().all(|id| id.ends_with("@large")),
         "unexpected missing fixtures {skipped:?}"
     );
 }

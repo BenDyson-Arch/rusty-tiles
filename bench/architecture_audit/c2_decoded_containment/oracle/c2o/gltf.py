@@ -162,7 +162,6 @@ class Payload:
         self.json_nodes += value_nodes(self.doc)
         self._buffers = {}
         self._views = {}
-        self._resolved = set()
         self._load_buffers_and_images()
 
     # ------------------------------------------------------------ resources
@@ -170,9 +169,8 @@ class Payload:
     def _read_resource(self, uri):
         name = resolve(self.member, uri)
         data = self.archive.read(name)
-        if name not in self._resolved:
-            self._resolved.add(name)
-            self.bytes_read += len(data)
+        # C1 resolves every buffer/image entry; two entries naming one member read it twice.
+        self.bytes_read += len(data)
         return data
 
     def _load_buffers_and_images(self):

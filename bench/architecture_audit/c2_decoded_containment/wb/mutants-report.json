@@ -581,8 +581,8 @@
    "namedPairFlips": true,
    "pairsFlipped": 1,
    "pass": true,
-   "patch": "--- a/oracle/c2o/gltf.py\n+++ b/oracle/c2o/gltf.py\n@@ -192,8 +192,9 @@\n             if uri.startswith(\"data:\"):\n                 data = _data_uri(uri)\n             else:\n+                seen = len(self._resolved)\n                 data = self._read_resource(uri)\n-                self.external_resources += 1\n+                self.external_resources += len(self._resolved) - seen\n             self.decoded_bytes += len(data)\n             self._buffers[i] = data\n         for image in self.doc.get(\"images\", []) or []:\n",
-   "patchSha256": "5e0d9d51740c8049564b415c6ecc7d33c27a4037b65b6c338889439f1f6408e6"
+   "patch": "--- a/oracle/c2o/gltf.py\n+++ b/oracle/c2o/gltf.py\n@@ -191,7 +191,9 @@\n                 data = _data_uri(uri)\n             else:\n                 data = self._read_resource(uri)\n-                self.external_resources += 1\n+                members = self.__dict__.setdefault('_members', set())\n+                self.external_resources += uri not in members\n+                members.add(uri)\n             self.decoded_bytes += len(data)\n             self._buffers[i] = data\n         for image in self.doc.get(\"images\", []) or []:\n",
+   "patchSha256": "607192e4fa08b0d39b1dc9304df9a4ec2dbd3a6aed67dd996a0d489cdf59fa87"
   }
  ],
  "pairs": 55

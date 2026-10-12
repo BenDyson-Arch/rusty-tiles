@@ -96,7 +96,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/rounded-normalized-quotient.patch",
-   "patchSha256": "b6705890c50acb9675a8595f35473c420d6d21842729d312ff5273158f2685d8"
+   "patchSha256": "903c5015e96f72d49b7b23562f023d2b6b8a4ddeedc681bfa65a363627c856d7"
   },
   {
    "flipped": 177,

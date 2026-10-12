@@ -302,7 +302,7 @@ def hand_payload(member, data, archive):
         doc = H.json_of(data)
     docs.append(doc)
     facts = H.gltf_counts(doc)
-    Bv, Dec, Res, seen = len(data), 0, 0, set()
+    Bv, Dec, Res = len(data), 0, 0
     for buf in doc.get("buffers", []):
         uri = buf.get("uri")
         if uri is None:
@@ -312,16 +312,12 @@ def hand_payload(member, data, archive):
             continue
         Res += 1
         Dec += len(archive[uri])
-        if uri not in seen:
-            seen.add(uri)
-            Bv += len(archive[uri])
+        Bv += len(archive[uri])
     for img in doc.get("images", []):
         uri = img.get("uri")
         if isinstance(uri, str) and not uri.startswith("data:"):
             Res += 1
-            if uri not in seen:
-                seen.add(uri)
-                Bv += len(archive[uri])
+            Bv += len(archive[uri])
     for view in doc.get("bufferViews", []):
         if "EXT_meshopt_compression" in view.get("extensions", {}):
             Dec += view["byteLength"]
@@ -389,7 +385,9 @@ def kid_layout(fx, member, K, q, frames=1, per_doc=5000):
     links = []
     for d in range(D):
         n = min(per_doc, K - d * per_doc)
-        kids = [tile(BOX2, content=member, geometric_error=0.0) for _ in range(n)]
+        # Distinct geometric errors (i * 2^-24, below the parent's): C1's tileset
+        # schema requires unique `children` items. Units do not depend on them.
+        kids = [tile(BOX2, content=member, geometric_error=i * 2.0 ** -24) for i in range(n)]
         fx.docs["e%d.json" % d] = B.tileset(tile(BOX2, children=kids))
         links.append(tile(BOX2, content="e%d.json" % d))
     path_docs(fx, frames, BOX2, {"children": links})
@@ -854,8 +852,9 @@ CHAIN_BITS = [chain_worklimit_then_rotated, chain_worklimit_base, chain_region_a
 
 def reading_res_duplicate_uri():
     """Contract reading probe: two buffer entries name the same external member.
-    O-WB reading: Res counts buffer/image entries with a non-data uri (2 here); B counts
-    the member once (slice-1 model); Dec counts each owned buffer (slice-1 model).
+    O-WB reading: Res counts buffer/image entries with a non-data uri (2 here); Dec counts
+    each owned buffer (slice-1 model). R's ruling against production (C1 resolves every
+    entry): B counts the member once per entry too (12 bytes more than once per member).
     A per-distinct-member Res would give 160 units less."""
     fx = Fx("reading-res-duplicate-uri", "reading probe (Res per entry)", "ci",
             ".gltf whose buffers 0 and 1 both name b0.bin x 2 references")

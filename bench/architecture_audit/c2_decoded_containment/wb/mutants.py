@@ -45,8 +45,9 @@ MUTANTS = [
      '        _table_json(data[bt_start:bt_start + btj], "batch table", where)', "json-flat-numbers-b3dm"),
     ("Res-counts-per-distinct-member", "c2o/gltf.py",
      "                data = self._read_resource(uri)\n                self.external_resources += 1",
-     "                seen = len(self._resolved)\n                data = self._read_resource(uri)\n"
-     "                self.external_resources += len(self._resolved) - seen", "reading-res-duplicate-uri"),
+     "                data = self._read_resource(uri)\n                members = self.__dict__.setdefault('_members', set())\n"
+     "                self.external_resources += uri not in members\n                members.add(uri)",
+     "reading-res-duplicate-uri"),
 ]
 
 RUNNER = r"""

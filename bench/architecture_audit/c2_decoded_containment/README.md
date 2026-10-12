@@ -440,7 +440,7 @@ fixtures follow those rulings. Each ruled item says which decision applies.
    | Fact | Oracle model |
    | --- | --- |
    | `E` | Σ over **all** document accessors of count × components |
-   | `B` | Member bytes plus each distinct resolved external buffer or image member, counted once |
+   | `B` | Member bytes plus the member bytes of every resolved external buffer or image **entry** (C2-WB: a member named by two entries is read, and counted, twice, as C1's resolver does) |
    | `Dec` | External and data-URI buffer bytes plus the decoded `byteLength` of **every** meshopt-compressed view, used or not |
    | `J` (C2-WB) | Value nodes (root plus every scalar/container value; keys are not nodes, C1 contract "JSON value nodes") of the glTF JSON or GLB JSON chunk (also inside a b3dm) plus the b3dm feature-table and batch-table JSON, each when its length is nonzero |
    | `Res` (C2-WB) | Buffer and image **entries** whose `uri` is not a `data:` URI (a repeated URI counts per entry; see wb/README.md, readings) |
@@ -613,6 +613,26 @@ Pins (read for this amendment):
 | `delta/review-delta.md` | `fbb99fafde66af13d0da67fa09c96bd69ec0bf36c696c5a71e9c8ca68c6bd2ab` |
 | `delta2/review-delta2.md` | `8f28d536ce88ea9dbf533795c6b9c3821b2c57492d26ab79d64fb62cdbf12c04` |
 | `docs/architecture/c1-payload-integrity-contract.md` (value-node meaning) | `3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3` |
+
+**R's reconciliation against production (2026-10-12).** The first production run of
+the `wb/` fixtures (`acceptance/oracle_parity.rs`,
+`production_matches_every_c2wb_class_fixture`) found two differences, both fixed in
+the fixtures and oracle, not in `src/`:
+
+- C1 refused every multi-reference `wb/` fixture (59 of 102 rows): identical sibling
+  leaf tiles break the tileset schema's `children` `uniqueItems`. `wb/generate.py`
+  now gives leaf `i` the geometric error `i·2^-24`. No unit total changed.
+- `B` with a repeated URI (`reading-res-duplicate-uri`). C1 resolves, and reads, the
+  member once per entry. Production therefore counts `B = 435` per reference. The
+  slice-1 oracle counted each member once (423). `c2o/gltf.py` and the hand facts now
+  count per entry. The probe's total is 5,602, its at-cap pair 5,602 / 5,601. No
+  witness, control or other `wb/` total changed. The `Res` reading (per entry) and
+  `data:` exclusion match production as written.
+
+After both, production agrees on all 102 `wb/` rows: the 55 at-cap pairs, the 4
+chain-bit controls, and the totals and per-URI facts of the 43 matrix-size rows
+(local, with `--large`). That also confirms C1 admits every large class fixture,
+including the meshopt INDICES/bits streams and the 800-character decimals.
 
 ## What remains
 

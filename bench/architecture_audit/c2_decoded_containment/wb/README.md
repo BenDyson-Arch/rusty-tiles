@@ -113,9 +113,9 @@ scored on the 55 CI at-cap pairs. Each must flip its named pair.
 | drop the level-0 base | `terms-base` | 55 |
 | drop `R0` (1152) | `tiny-refs-L4` | 55 |
 | drop `B` | `json-flat-string-glb` | 55 |
-| drop `Dec` | `meshopt-attributes-raw` | 8 |
+| drop `Dec` | `meshopt-attributes-raw` | 9 |
 | drop `J` | `unselected-nodes` | 55 |
-| drop `Res` | `extbuf-20` | 3 |
+| drop `Res` | `extbuf-20` | 4 |
 | drop `Prim` | `shared-accessor-160x20` | 55 |
 | node floor 128 | `terms-node` | 4 |
 | drop `8·(L_r+1)` | `tiny-refs-L103` | 55 |
@@ -144,9 +144,13 @@ not unit pairs.
    - O-WB counts **entries** (`Res = 2` in `reading-res-duplicate-uri`). A per-member
      count gives 160 units less per reference; the mutant
      `Res-counts-per-distinct-member` shows the probe separates the two.
-   - `B` counts the member once and `Dec` counts each owned buffer. Both follow the
-     slice-1 model and are unchanged.
-   - F and S should confirm the reading against C1's resolver.
+   - `Dec` counts each owned buffer (slice-1 model, unchanged).
+   - **Resolved by R against production (2026-10-12).** C1 calls the resolver once per
+     entry, and each call reads the member, so production counts `Res = 2` (this
+     reading) **and** `B` once per entry (`B = 435`, not the slice-1 oracle's
+     member-once 423). The oracle (`c2o/gltf.py`) and the hand facts now count `B` per
+     resolved entry, matching "archive bytes read during C1 inspection"; the probe's
+     total is 5,602.
 2. **`data:` URIs are not `Res`.** They need no member read; their decoded bytes are in
    `Dec`. Image data URIs are C1-refused.
 3. **`J` counts the root and only nonempty tables.**
@@ -164,7 +168,13 @@ not unit pairs.
    about 4% high on the vertex share. This does not affect the contract's own
    calibration, which R recomputes from O-explicit.
 7. **The C1 admission of the large shapes was not checked** (no production run by
-   O-WB). Assumptions made:
+   O-WB). R's production check (2026-10-12) found every multi-reference fixture
+   refused by C1's tileset schema: the identical sibling leaf tiles violate the
+   `children` `uniqueItems` rule. `kid_layout` now gives leaf `i` the geometric error
+   `i·2^-24` (leaf 0 keeps 0, so single-reference fixtures are byte-identical); units
+   are unchanged. After that, C1 admits every CI and matrix-size fixture
+   (`acceptance/oracle_parity.rs`, `production_matches_every_c2wb_class_fixture`).
+   Assumptions made:
    - every JSON document stays at or below 131,072 value nodes, 8 MiB and depth 64;
    - per-payload components stay at or below 4M;
    - tile chains are split across external tilesets every 25 tiles to respect JSON
@@ -256,4 +266,4 @@ CI units are the at-cap values: `containmentWorkUnits = units` gives Contained a
 | `chain-worklimit-base` | NotInspected ['workLimit'] at `{"containmentWorkUnits": 100}` |
 | `chain-region-ancestor` | NotInspected ['regionVolume'] at `{"containmentWorkUnits": 1}` |
 | `chain-external-rotated-content` | NotInspected ['rotatedBox'] at `{"containmentWorkUnits": 1}` |
-| `reading-res-duplicate-uri` | 5,578 |
+| `reading-res-duplicate-uri` | 5,602 |
