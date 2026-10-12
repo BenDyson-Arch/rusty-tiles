@@ -4,11 +4,17 @@
 // because the Basis Universal headers it includes contain inline code that
 // writes to stdout.
 //
-// Every entry point catches all C++ exceptions and returns a status code, so no
-// exception crosses the C ABI into Rust.
+// Every entry point validates its arguments before calling the library and
+// catches all C++ exceptions, returning a status code, so no exception crosses
+// the C ABI into Rust. That includes the library's internal consistency checks
+// in the guarded translation units (rt_basisu_invariant.h), which throw
+// InvariantFailure from rt_basisu_invariant_failure() below instead of calling
+// abort(). The abort paths that remain are listed in vendor/README.md.
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -38,7 +44,23 @@ enum Status : std::int32_t {
     kStartFailed = 6,
     kLevelMismatch = 7,
     kTranscodeFailed = 8,
+    kInvariantFailed = 9,
+    kContainerFailed = 10,
 };
+
+// Limits shared with src/basisu_ktx2.rs (MAX_EDGE, MAX_TEXELS, MAX_EFFORT); the
+// Rust side checks them first, the shim again so the C ABI never passes an
+// out-of-domain request to the library. 16384 is also the library's own edge
+// limit. The texel limit bounds the encoder's memory (about 55 bytes per texel
+// for ETC1S) far below any size_t overflow in its containers.
+constexpr std::uint32_t kMaxEdge = 16384;
+constexpr std::uint64_t kMaxTexels = 8192ull * 8192ull;
+constexpr std::int32_t kMaxEffort = 10;
+
+// Thrown by rt_basisu_invariant_failure() and rt_basisu_container_failure();
+// caught only by the entry points.
+struct InvariantFailure {};
+struct ContainerFailure {};
 
 enum Format : std::uint32_t {
     kEtc1s = 0,
@@ -60,7 +82,25 @@ void init_once() {
     });
 }
 
+// Records an exception's message with the call's diagnostics. This file is
+// compiled with rt_basisu_silence.h, so stderr goes to the capturing sink.
+void note_exception(const char *what) {
+    std::fprintf(stderr, "rusty-tiles shim: C++ exception: %s\n", what != nullptr ? what : "(no message)");
+}
+
 } // namespace
+
+// The replacement for abort() in the encoder's consistency checks
+// (rt_basisu_invariant.h).
+[[noreturn]] void rt_basisu_invariant_failure() {
+    throw InvariantFailure{};
+}
+
+// The replacement for std::terminate() in basisu::container_abort()
+// (rt_basisu_container.h).
+[[noreturn]] void rt_basisu_container_failure() {
+    throw ContainerFailure{};
+}
 
 extern "C" {
 
@@ -82,12 +122,26 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uin
     if (rgba == nullptr || (flags & ~kKnownFlags) != 0) {
         return kInvalidArgument;
     }
+    if (width == 0 || height == 0 || width > kMaxEdge || height > kMaxEdge ||
+        static_cast<std::uint64_t>(width) * height > kMaxTexels) {
+        return kInvalidArgument;
+    }
+    if (effort < 0 || effort > kMaxEffort) {
+        return kInvalidArgument;
+    }
     basist::basis_tex_format mode;
     switch (format) {
     case kEtc1s:
+        if (quality < 1 || quality > 100) {
+            return kInvalidArgument;
+        }
         mode = basist::basis_tex_format::cETC1S;
         break;
     case kUastcLdr4x4:
+        // 100 is the only UASTC setting used: no RDO.
+        if (quality != 100) {
+            return kInvalidArgument;
+        }
         mode = basist::basis_tex_format::cUASTC_LDR_4x4;
         break;
     default:
@@ -118,8 +172,37 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_encode(const std::uint8_t *rgba, std::uin
         *out = static_cast<std::uint8_t *>(data);
         *out_len = size;
         return kOk;
+    } catch (const InvariantFailure &) {
+        return kInvariantFailed;
+    } catch (const ContainerFailure &) {
+        return kContainerFailed;
     } catch (const std::bad_alloc &) {
         return kOutOfMemory;
+    } catch (const std::exception &error) {
+        note_exception(error.what());
+        return kException;
+    } catch (...) {
+        note_exception(nullptr);
+        return kException;
+    }
+}
+
+// For the tests: `which == 0` throws through the encoder checks' abort()
+// replacement; anything else calls the library's real container_abort(). Both
+// must come back as their status rather than end the process.
+RT_BASISU_ENTRY std::int32_t rt_basisu_selftest_failure(std::int32_t which) {
+    rt_basisu_clear_diagnostics();
+    try {
+        if (which == 0) {
+            std::fprintf(stderr, "rusty-tiles shim: self-test invariant failure\n");
+            rt_basisu_invariant_failure();
+        }
+        // The real container_abort(), compiled with rt_basisu_container.h.
+        basisu::container_abort("rusty-tiles shim: self-test container failure %d\n", which);
+    } catch (const InvariantFailure &) {
+        return kInvariantFailed;
+    } catch (const ContainerFailure &) {
+        return kContainerFailed;
     } catch (...) {
         return kException;
     }
@@ -171,9 +254,17 @@ RT_BASISU_ENTRY std::int32_t rt_basisu_decode_level_rgba(const std::uint8_t *ktx
             return kTranscodeFailed;
         }
         return kOk;
+    } catch (const InvariantFailure &) {
+        return kInvariantFailed;
+    } catch (const ContainerFailure &) {
+        return kContainerFailed;
     } catch (const std::bad_alloc &) {
         return kOutOfMemory;
+    } catch (const std::exception &error) {
+        note_exception(error.what());
+        return kException;
     } catch (...) {
+        note_exception(nullptr);
         return kException;
     }
 }

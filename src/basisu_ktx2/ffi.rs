@@ -4,6 +4,10 @@
 use std::os::raw::c_char;
 
 pub(super) const STATUS_OK: i32 = 0;
+pub(super) const STATUS_INVALID_ARGUMENT: i32 = 1;
+pub(super) const STATUS_OUT_OF_MEMORY: i32 = 3;
+pub(super) const STATUS_INVARIANT_FAILED: i32 = 9;
+pub(super) const STATUS_CONTAINER_FAILED: i32 = 10;
 
 pub(super) const FORMAT_ETC1S: u32 = 0;
 pub(super) const FORMAT_UASTC_LDR_4X4: u32 = 1;
@@ -28,6 +32,12 @@ extern "C" {
     ) -> i32;
 
     pub(super) fn rt_basisu_free(data: *mut u8);
+
+    /// `which == 0` throws through the replacement the encoder's checks call
+    /// instead of `abort()`; otherwise calls the library's real
+    /// `container_abort()`. Returns the status an entry point reports.
+    #[cfg(test)]
+    pub(super) fn rt_basisu_selftest_failure(which: i32) -> i32;
 
     /// Decodes one mip level to RGBA8. `out_len` must equal the level's
     /// `width * height * 4`; the decoder's level dimensions are returned.
