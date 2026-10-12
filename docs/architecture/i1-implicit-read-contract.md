@@ -104,7 +104,8 @@ roots on any explicit tile and roots inside explicit external tilesets. For each
    available content (`:299`).
 
 **Not covered:**
-- decoded containment (`decodedContentBounds.implicitTiling` remains);
+- decoded containment (`decodedContentBounds.implicitTiling` remained until C2 slice 3, which
+  replaced it; see the [C2 slice-3 amendment](c2-decoded-containment-contract.md#c2-slice-3-amendment-implicit-archives-2026-10-12));
 - non-interpreted metadata, content and subtree metadata (`metadataSemantics` remains);
 - viewer culling and selection.
 
@@ -1044,6 +1045,15 @@ committed files, not the modified worktree copy:
 **The rule** (README "Gate"). A case is flagged when head/base exceeds 1.25 **and** the growth
 exceeds the floor (0.1 s wall or 16 MiB RSS), or when head fails a case that base passes. There are
 no `--explain` waivers for I1's validate cases.
+
+**C2 slice-3 policy change (2026-10-12, C2 slice-3 contract v3.1 §10 item 5).** For one metric
+only, the lane run of the slice-3 head may pass
+`--explain 'validate:*.wallSeconds=C2 slice 3 streams implicit content; see C2-off parity and per-class bounds'`.
+The explanation holds only while §10 items 1–4 pass (C2-off parity against the absolute values
+below, the precheck-only arm, per-class ns/unit bounds and the absolute mf2-lod3 ceiling of 4.5 s
+best wall and 116.9 MiB peak RSS). RSS flags, output-byte flags, failures and every non-validate
+case keep the rule above with no waiver. The record is in the
+[C2 slice-3 amendment](c2-decoded-containment-contract.md#c2-slice-3-amendment-implicit-archives-2026-10-12).
 
 **Base and head.**
 - **Before** = the combined branch with I1's validator commits reverted (P only).

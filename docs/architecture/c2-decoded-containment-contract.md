@@ -10,8 +10,9 @@ the separate nonauthor review and its resolution are recorded on PR #157.
 This document is the frozen v3.3 contract text, plus the coordinator amendments listed at
 the end. Its preparation, reviews and decision log are retained
 [losslessly](../../bench/architecture_audit/c2_decoded_containment/preparation/). It claims
-nothing about implicit tiling, RTC, regions, rotated boxes, deformation, rendered extent,
-memory or release readiness.
+nothing about RTC, regions, rotated boxes, deformation, rendered extent, memory or release
+readiness. Implicit archives are covered since the
+[slice-3 amendment](#c2-slice-3-amendment-implicit-archives-2026-10-12) (except derived cells).
 
 
 ## Claim
@@ -89,7 +90,7 @@ admitted glTF/b3dm JSON, before any C2 position streaming.
 
 | Exclusion reason (frozen enum) | Applies when |
 | --- | --- |
-| `implicitTiling` | Any tile, in any tileset document, has `implicitTiling` |
+| `implicitTiling` (slice 1; replaced in the same position by `derivedImplicitVolume`, see the [slice-3 amendment](#c2-slice-3-amendment-implicit-archives-2026-10-12)) | Any tile, in any tileset document, has `implicitTiling` |
 | `tilesetExtension` | Any extension name is used or present in tileset `extensionsUsed`/`extensionsRequired` or on a tileset, tile, content or boundingVolume `extensions` object and is not on the tileset allowlist |
 | `tileMetadata` | Any tile has `metadata`, or any content has `metadata` |
 | `upAxisOverride` | Tileset `asset.gltfUpAxis` is present and is not `"Y"` |
@@ -764,7 +765,8 @@ The interface is in [ownership-plan.md](ownership-plan.md).
 
 The following are not provided:
 
-- implicit coverage (A2/D3), regions (#120), RTC (D6), rotated boxes (D5);
+- derived implicit cells (`derivedImplicitVolume`; slice 3 replaced "implicit coverage (A2/D3)"),
+  regions (#120), RTC (D6), rotated boxes (D5);
 - deformation;
 - rendered or GPU extent;
 - whole-process memory or RSS;
@@ -874,3 +876,83 @@ that archive (`JSON exceeds value-node limit`, also at b51f83d), so it was not t
 claimed. E-core figures include shared-L2 contention below the run threshold. C1's own phase-1
 work is not in units. The bound is a calibration, not a guarantee.
 
+
+## C2 slice-3 amendment (implicit archives, 2026-10-12)
+
+Source: the frozen C2 slice-3 contract v3.1 (sha256 `8bc534290c5a90ace963e345336dea1e04c45fafb3c869672ee4af1ba03331d6`,
+frozen on C2-WB head `92e8c04`), its ownership plan (`28285135…`), the precode and delta reviews it cites
+and the coordinator's decisions OD-1(a), OD-2(a) and OD-9 (defer D4). The preparation package, with the
+prototype probes that encode verdicts quarantined in `prototype-do-not-read/` (contract §9.G), is kept
+outside the repository:
+`~/.cache/rusty-tiles-evidence/architecture_audit/c2s3-preparation-20261012.tar.zst`, sha256
+`b079f78d41638d1b3203b5a70a6f747038dd6447193322c1b8125f81d5e942d6`. C2-WB's formula, the default cap
+2^29, τ_P = 8.10 and τ_E = 14.65 ns/unit and the class table are consumed unchanged.
+
+**Claim.** When `checks` contains `decodedContentContainment`, the slice-1 claim holds for every content
+reference of the archive, including every content emitted by the I1 walk of every implicit root
+(`VisitedTile.contents`). For an emitted content of implicit tile `t` at level `l` under root `R`, every
+drawn vertex lies, exactly, in the closed set of:
+
+1. `t`'s effective volume (I1 §4): its `TILE_BOUNDING_BOX` row, FLOAT32 widened exactly; for `l = 0`
+   without a row, exactly `R`'s JSON box (`DerivedRoot`);
+2. each implicit ancestor's effective volume and `I_0`'s (`V_0`);
+3. `R`'s own JSON volume `V_R`;
+4. when `R` roots an explicit external tileset, the referencing content's `boundingVolume`, after
+   `R.transform`;
+5. every explicit ancestor of `R`, as in slice 1.
+
+**Recorded interpretations.**
+
+- **I4.** `I_0` and `R` are two levels; `V_0` is tested before `V_R`, both exactly (I1's `V_0 ⊆ V_R`
+  check has the explicit-tile tolerance, so a vertex inside `V_0` but outside `V_R` is a proven Outside).
+- **I5.** A tile at level `l ≥ 1` without a row (`Derived` cell) is not evaluated. A reference whose chain
+  contains one is excluded with `derivedImplicitVolume` (chain-scoped: a derived tile that no reference
+  tests does not exclude the archive). The rounded box used for `hierarchyBounds` never enters C2.
+- **I6.** Subtree metadata tables do not set `tileMetadata`; a content-template header `metadata` entity
+  does (it is copied to every emitted content).
+- **I7.** Implicit levels have no content or external-content volume of their own.
+
+**Text deltas to this contract (slice-3 §8).**
+
+1. Enum: `implicitTiling` is replaced, in the same position, by `derivedImplicitVolume`; the enum keeps
+   15 names.
+2. Claim items and I4–I7 above.
+3. Frame chain step 4: implicit levels enter with no step (`to_parent: None`); `R.transform` steps out of
+   `V_R`'s level; an external-root `R`'s referencing content volume is tested at the next level (`l + 2`),
+   before that level's ancestor volume.
+4. B3: a chain has at most `hierarchy_depth + 2` levels (130 at the default 128): an implicit tile cannot
+   be an ancestor of another implicit root, so a chain holds at most one `I_0`. `TileFact.volume` became
+   `Option<VolumeFacts>`; the enum's tag niche keeps `size_of::<TileFact>()` unchanged (R's `size_of`
+   record below).
+5. Outside message: for implicit content, `depth` = `depth(R) + l` (I1's depth, not the chain length − 1);
+   `ancestor:1 … ancestor:l` are the implicit ancestors down to `I_0`, `ancestor:l+1` is `R`
+   (`V_R`), `externalContent:l+2` and `ancestor:l+2` are the referencing content and tile when `R` roots
+   an external tileset, and higher `k` are explicit levels as in slice 1.
+6. Proof limits: "implicit coverage (A2/D3)" becomes "derived implicit cells (`derivedImplicitVolume`)".
+7. D4: slice 3 meets D4's precondition only; D4 is deferred (OD-9).
+
+Implementation (F, `src/validate.rs` only): the `implicitTiling` exclusion is removed; each visited
+implicit tile is a `TileFact` (parent `R` for `I_0`, else the path parent), whose chain bits carry
+`derivedImplicitVolume` when its volume is `None`; each emitted content is registered with
+`Containment::reference` after C1's reservation-consuming `reference_reserved`, never the charging
+`ArchiveResources::reference`; `build_levels` treats a `None` volume as `InvalidState` (unreachable in
+domain); a template header with `metadata` sets `tileMetadata`. `src/validate/containment*` and
+`src/content_integrity/implicit*` are unchanged, so the M hoist (OD-8(c)) was not needed.
+
+**Exit-status changes versus the C2-WB merge.** X3-1: success with `notInspected(implicitTiling)` becomes
+success with `decodedContentContainment` for default point, vector and `mesh-to-3tz` output (all 17
+forest witnesses, subject to the 2^29 cap; none is `workLimit`). X3-2: implicit archives with a proven
+escape become InvalidInput (no producer output; the 32 pre-amendment I1 fixtures, whose payloads skipped
+the y-up rotation, are kept as S3-19 C2 controls and left the I1 manifest under I1 oracle amendment 6).
+X3-3: rowless subtrees on a reference chain report `derivedImplicitVolume`. X3-4: header `metadata`,
+rotated rows, `workLimit` and payload reasons replace `implicitTiling`. X3-6: the report enum change.
+
+**Acceptance (R).** Production equals the independent oracle O-implicit-C2 on all 80 slice-3 controls,
+the S3-18 sweep of the 181 I1 controls (R5 injection-only), the 34 regenerated forest archives with their
+precheck totals, the five 9.D limit pairs and two C1 `references` pairs; I1 parity stays 181/181. All 16
+slice-3 production mutants flip their paired control, and the 19 slice-1 mutants still flip. Performance
+(§10): mf2-lod3 3.444 s best wall and 104.8 MiB peak RSS (ceiling 4.5 s and 116.9 MiB); C2-off within the
+lane rule; per-class streaming 4.57–5.98 ns/unit on a P-core and 8.04–10.07 on an E-core, within
+τ_P/τ_E. The `--explain` policy note for I1's validate cases is in the
+[I1 contract](i1-implicit-read-contract.md). Full record, hashes and readings:
+[slice-3 acceptance](../../bench/architecture_audit/c2_decoded_containment/README.md#slice-3-acceptance-r-2026-10-12).
