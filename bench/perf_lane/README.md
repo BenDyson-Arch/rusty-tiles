@@ -116,7 +116,7 @@ python3 -I bench/perf_lane/process.py --base BASE_BIN --head HEAD_BIN \
   [--explain 'validate:*.wallSeconds=C2 adds payload checks']
 # Runtime: load each kept output in Cesium 1.146.0 (paths default to the local caches).
 python3 -I bench/perf_lane/cesium.py --work $W/cesium-head --out $W/cesium-head.json \
-  vector=$W/head/vector.3tz vector-explicit=$W/head/vector-explicit.3tz \
+  vector=$W/head/vector.3tz \
   point-cloud=$W/head/point-cloud.3tz mesh=$W/head/mesh.3tz terrain=$W/head/terrain \
   raster=$W/head/raster --hole "$(python3 -c 'import json,sys;print(*json.load(open(sys.argv[1]))["environment"]["rasterHoleDegrees"],sep=",")' $W/process.json)" \
   [--baseline $W/cesium-base.json]
@@ -132,8 +132,8 @@ sha256 of each input, and a mismatch stops the run.
 
 | Input | Content | Cases |
 | --- | --- | --- |
-| `vector.geojson` | 3,600 polygons (720 with holes), 400 lines with 100 vertices each, 6,000 points near Rome | `vector`, `vector-explicit` (`--jobs 2`) |
-| `points.las` | LAS 1.2 PDRF 3, 200,000 points, UTM 56S | `point-cloud`, `point-cloud-explicit` |
+| `vector.geojson` | 3,600 polygons (720 with holes), 400 lines with 100 vertices each, 6,000 points near Rome | `vector` (`--jobs 2`; `vector-explicit` retired with H6) |
+| `points.las` | LAS 1.2 PDRF 3, 200,000 points, UTM 56S | `point-cloud` (`point-cloud-explicit` retired with H6) |
 | `mesh.glb` | Textured Y-up height field: 96,800 triangles and a 512² PNG | `mesh-local` (`--leaf-triangles 20000`), `glb-wrap`, `mesh`, `mesh-explicit` |
 | `tests/fixtures/t1-multipatch-plane.tif` | Repository T1 DEM fixture, 33×17 | `terrain-fixture` (`--cells-per-leaf 16`) |
 | `dem.tif` | Float32 DEM, 1025², EPSG:4326 | `terrain` (defaults) |

@@ -759,6 +759,10 @@ fn feature_schemas(feature: &Feature) -> BTreeMap<String, String> {
         .collect()
 }
 
+/// Bytes held back from `maxBytes` for the JSON that implicit scene-root
+/// placement adds to a content when the forest rebases it.
+pub(super) const IMPLICIT_FRAMING_RESERVE: usize = 128;
+
 /// Test the exact full-detail encodings before admitting a source fragment.
 /// Later cross-feature schema changes remain a fatal hierarchy constraint.
 /// Implicit scene framing uses the same reservation as final candidate encoding.
@@ -795,8 +799,8 @@ pub(super) fn fits_feature(
     } else {
         bridge_len(source.document, source.binary, policy, attempt)?
     };
-    let reserve = if options.explicit { 0 } else { 128 };
-    Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
+    Ok(vertices <= options.max_vertices
+        && bytes <= options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE))
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -994,9 +998,7 @@ pub(super) fn encode(
     let content = json!({"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}});
     // Implicit scene-root placement adds JSON to the content. Reserve its
     // maximum framing increase before accepting a content candidate.
-    let byte_limit = options
-        .max_bytes
-        .saturating_sub(if options.explicit { 0 } else { 128 });
+    let byte_limit = options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE);
     if vertex_count > options.max_vertices || byte_count > byte_limit {
         result.reason = Some(if vertex_count > options.max_vertices {
             "vertices"
@@ -1596,7 +1598,6 @@ mod tests {
                 let base = VectorOptions {
                     meshopt,
                     quantize,
-                    explicit: true,
                     max_bytes: 1_000_000,
                     ..Default::default()
                 };
@@ -1637,7 +1638,8 @@ mod tests {
                 if !meshopt {
                     assert_eq!(actual, raw.bytes.len());
                 }
-                for (limit, accepted) in [(actual, true), (actual - 1, false)] {
+                let limit = actual + IMPLICIT_FRAMING_RESERVE;
+                for (limit, accepted) in [(limit, true), (limit - 1, false)] {
                     let options = VectorOptions {
                         max_bytes: limit,
                         ..base.clone()
@@ -1878,38 +1880,32 @@ mod tests {
         // Uncompressed fitting counts bytes (no trial GLB, no admission);
         // meshopt fitting still encodes the trial content. Against the full
         // trial-encode oracle, both accept a feature exactly at the byte and
-        // vertex limits and reject it one below, with and without implicit
-        // reservations, including a fill fragment and an outline piece.
+        // vertex limits (after the implicit framing reservation) and reject it
+        // one below, including a fill fragment and an outline piece.
         let fixtures = fitting_fixtures();
         for meshopt in [false, true] {
-            for explicit in [false, true] {
-                let policy = ProducerPolicy::new(meshopt).unwrap();
-                let base = VectorOptions {
-                    meshopt,
-                    explicit,
-                    ..Default::default()
-                };
-                for feature in &fixtures {
-                    let (vertices, bytes) = trial_encode(feature, &base, policy);
-                    let limit = bytes + if explicit { 0 } else { 128 };
-                    let fits = |max_bytes: usize, max_vertices: usize| {
-                        let options = VectorOptions {
-                            max_bytes,
-                            max_vertices,
-                            ..base.clone()
-                        };
-                        let run = crate::RunControl::default();
-                        let attempt = run.begin().unwrap();
-                        fits_feature(feature, false, &options, policy, &attempt).unwrap()
+            let policy = ProducerPolicy::new(meshopt).unwrap();
+            let base = VectorOptions {
+                meshopt,
+                ..Default::default()
+            };
+            for feature in &fixtures {
+                let (vertices, bytes) = trial_encode(feature, &base, policy);
+                let limit = bytes + IMPLICIT_FRAMING_RESERVE;
+                let fits = |max_bytes: usize, max_vertices: usize| {
+                    let options = VectorOptions {
+                        max_bytes,
+                        max_vertices,
+                        ..base.clone()
                     };
-                    let case = format!(
-                        "meshopt {meshopt} explicit {explicit} {:?}",
-                        feature.geometry
-                    );
-                    assert!(fits(limit, vertices), "{case}");
-                    assert!(!fits(limit - 1, vertices), "{case}");
-                    assert!(!fits(limit, vertices - 1), "{case}");
-                }
+                    let run = crate::RunControl::default();
+                    let attempt = run.begin().unwrap();
+                    fits_feature(feature, false, &options, policy, &attempt).unwrap()
+                };
+                let case = format!("meshopt {meshopt} {:?}", feature.geometry);
+                assert!(fits(limit, vertices), "{case}");
+                assert!(!fits(limit - 1, vertices), "{case}");
+                assert!(!fits(limit, vertices - 1), "{case}");
             }
         }
     }

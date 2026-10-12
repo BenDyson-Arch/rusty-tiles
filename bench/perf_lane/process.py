@@ -15,11 +15,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 ANCHOR = ['153.02', '-27.47', '10']
 CASES = [  # name, argv after the binary ({in}/{out} substituted), doctor command that must be ready
     ('vector', ['vector', '-i', '{in}/vector.geojson', '-o', '{out}.3tz', '--jobs', '2'], 'vector'),
-    ('vector-explicit', ['vector', '-i', '{in}/vector.geojson', '-o', '{out}.3tz', '--jobs', '2', '--explicit'], 'vector'),
     ('point-cloud', ['point-cloud', '-i', '{in}/points.las', '-o', '{out}.3tz', '--sourceCrs', 'EPSG:32756',
                      '--heightOffset', '0'], 'point-cloud'),
-    ('point-cloud-explicit', ['point-cloud', '-i', '{in}/points.las', '-o', '{out}.3tz', '--sourceCrs', 'EPSG:32756',
-                              '--heightOffset', '0', '--explicit'], 'point-cloud'),
     ('mesh-local', ['mesh-local-to-3tz', '-i', '{in}/mesh.glb', '-o', '{out}.3tz', '--leaf-triangles', '20000',
                     '--anchor', *ANCHOR], 'mesh-local-to-3tz'),
     ('glb-wrap', ['glb-to-3tz', '-i', '{in}/mesh.glb', '-o', '{out}.3tz', '--anchor', *ANCHOR], 'glb-to-3tz'),

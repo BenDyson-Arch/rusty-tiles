@@ -12,13 +12,29 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def raw_payloads(archive, state):
+    """Raw payloads of the producer hierarchy H, keyed by their `t/<sha256>.glb` name:
+    published in place, or restored from the rebased member recorded in the payload map."""
+    names = archive.namelist()
+    raw = {n: archive.read(n) for n in names if n.startswith('t/')}
+    for key, entry in state['payloads'].items():
+        assert entry['member'].startswith('implicit-content/') and entry['member'] in names
+        restored = restore(archive.read(entry['member']), entry)
+        assert sha(restored) == key, 'payload record does not restore its raw bytes'
+        raw.setdefault('t/' + key + '.glb', restored)
+    return raw
+
+
 def inventory(path):
+    """Producer hierarchy H (`explicitRoot` in vector-build.json) and its raw payloads."""
     import zipfile
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         assert len(names) == len(set(names)), 'duplicate archive members'
-        tree = json.loads(archive.read('tileset.json'))
+        state = json.loads(archive.read('vector-build.json'))
+        tree = dict(root=state['explicitRoot'])
         report = json.loads(archive.read('conversion.json'))
+        raws = raw_payloads(archive, state)
         diagnostics = [json.loads(x) for x in archive.read('geometry-reports.jsonl').splitlines()]
         references, leaves = set(), set()
         def walk(node):
@@ -30,19 +46,18 @@ def inventory(path):
             for child in node.get('children', []):
                 walk(child)
         walk(tree['root'])
-        members = {n for n in names if n.startswith('t/')}
+        members = set(raws)
         assert references == members, (references - members, members - references)
         identity, payloads = set(), {}
-        maximum_bytes = maximum_vertices = 0
+        maximum_vertices = 0
         for name in sorted(members):
-            data = archive.read(name)
+            data = raws[name]
             payloads[name] = sha(data)
             assert pathlib.PurePosixPath(name).stem == sha(data), 'content-address mismatch'
             assert data[:4] == b'glTF' and struct.unpack_from('<I', data, 8)[0] == len(data)
             size, kind = struct.unpack_from('<II', data, 12)
             assert kind == 0x4E4F534A
             doc = json.loads(data[20:20 + size])
-            maximum_bytes = max(maximum_bytes, len(data))
             position_accessors = {primitive['attributes']['POSITION'] for mesh in doc['meshes'] for primitive in mesh['primitives']}
             maximum_vertices = max(maximum_vertices, sum(doc['accessors'][i]['count'] for i in position_accessors))
             start = 20 + size
@@ -84,7 +99,8 @@ def inventory(path):
                                     used.add(int(value))
                     assert used == set(range(table['count'])), 'unrendered accepted metadata rows'
                     identity.update((columns['_source_layer'][i], columns['_source_id'][i]) for i in used)
-        assert report['maximumTileBytes'] == maximum_bytes, 'published byte inventory disagrees with report'
+        # Published (rebased) tile bytes are recomputed from the members themselves.
+        checked_statistics(archive, report)
         assert report['maximumTileVertices'] == maximum_vertices, 'published vertex inventory disagrees with report'
         assert report['reuse']['publishedContents'] == len(members), 'published content count disagrees with inventory'
         return dict(report=report, diagnostics=diagnostics, identities=sorted(identity),
@@ -225,13 +241,6 @@ def checked_statistics(archive, report):
     return statistics
 
 
-def explicit_inventory(path):
-    import zipfile
-    with zipfile.ZipFile(path) as archive:
-        report = json.loads(archive.read('conversion.json'))
-        return dict(report=report, statistics=checked_statistics(archive, report))
-
-
 def forest_inventory(path):
     """Default (implicit forest) archive: each payload once, every raw content recoverable."""
     import zipfile
@@ -266,7 +275,7 @@ def forest_inventory(path):
         assert report['reuse']['publishedContents'] == len(contents)
         statistics = checked_statistics(archive, report)
         rebased = sum(entry['delta'] != [0, 0, 0] for entry in mapped.values())
-        return dict(report=report, mapped_only=len(only), mapped=len(mapped), rebased=rebased, statistics=statistics,
+        return dict(report=report, hierarchy=state['explicitRoot'], mapped_only=len(only), mapped=len(mapped), rebased=rebased, statistics=statistics,
                     # Per-build reports and the offset index are not tile content.
                     payloads={n: sha(archive.read(n)) for n in names
                               if n not in ('conversion.json', 'geometry-reports.jsonl', '@3dtilesIndex1@')})
@@ -303,7 +312,7 @@ def run_forest(binary, evidence):
             proc = subprocess.run(command, capture_output=True, text=True)
             record = dict(command=command, exit_code=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
             if proc.returncode == 0:
-                record['inventory'] = (explicit_inventory if '--explicit' in flags else forest_inventory)(output)
+                record['inventory'] = forest_inventory(output)
                 (evidence / ('forest-' + name + '.3tz')).write_bytes(output.read_bytes())
             else:
                 assert not output.exists(), 'failed conversion published output'
@@ -315,21 +324,28 @@ def run_forest(binary, evidence):
         assert base['inventory']['mapped_only'] > 0, 'no payload is published only under implicit-content/'
         assert base['inventory']['rebased'] > 0, 'no payload is published with a nonzero rebase'
         # Report statistics: byte and primitive figures are recomputed from the members in
-        # forest_inventory; the rest must equal the --explicit build of the same hierarchy, whose
-        # report walks the manifest instead of the forest writer's tile records.
-        def same_statistics(forest, explicit):
-            forest, explicit = forest['inventory'], explicit['inventory']
-            for key in ('primitiveReferences', 'maximumTilePrimitives', 'uncompressedTileBytes'):
-                assert forest['report']['encoding'][key] == explicit['report']['encoding'][key], key
-            assert forest['report']['pointAggregation'] == explicit['report']['pointAggregation']
-        explicit, _ = convert('base-explicit', False, ['--explicit'])
-        assert explicit['exit_code'] == 0, explicit['stderr']
-        same_statistics(base, explicit)
+        # forest_inventory; the rest must equal a walk of the producer hierarchy H
+        # (`explicitRoot`), independent of the forest writer's tile records.
+        def same_statistics(forest):
+            forest = forest['inventory']
+            tiles = []
+            def walk(node):
+                tiles.append(node.get('extras', {}))
+                for child in node.get('children', []):
+                    walk(child)
+            walk(forest['hierarchy'])
+            primitives = [extras.get('primitives', 0) for extras in tiles]
+            expected = dict(primitiveReferences=sum(primitives), maximumTilePrimitives=max(primitives, default=0),
+                            uncompressedTileBytes=sum(extras.get('uncompressedBytes', 0) for extras in tiles))
+            for key, value in expected.items():
+                assert forest['report']['encoding'][key] == value, key
+            aggregated = sum('pointAggregation' in extras for extras in tiles)
+            assert forest['report']['pointAggregation']['contentTiles'] == aggregated
+        same_statistics(base)
         aggregated, _ = convert('points-aggregated', False, ['--aggregatePoints'], points())
-        aggregated_explicit, _ = convert('points-aggregated-explicit', False, ['--aggregatePoints', '--explicit'], points())
-        assert aggregated['exit_code'] == aggregated_explicit['exit_code'] == 0, aggregated['stderr']
+        assert aggregated['exit_code'] == 0, aggregated['stderr']
         assert aggregated['inventory']['report']['pointAggregation']['contentTiles'] > 0
-        same_statistics(aggregated, aggregated_explicit)
+        same_statistics(aggregated)
         same, _ = convert('same', False, ['--reuseTileset', str(previous)])
         assert same['exit_code'] == 0, same['stderr']
         assert same['inventory']['payloads'] == base['inventory']['payloads'], 'unchanged reuse changed published bytes'
@@ -368,7 +384,7 @@ def run(binary, evidence, native=False):
             if existing is not None:
                 output.write_bytes(existing)
             command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output),
-                       '--explicit', '--reproducible', '--sourceCrs', 'local', '--jobs', '1', '--lodLevels', '1', *flags]
+                       '--reproducible', '--sourceCrs', 'local', '--jobs', '1', '--lodLevels', '1', *flags]
             source_before = source.read_bytes()
             proc = subprocess.run(command, capture_output=True, text=True)
             assert source.read_bytes() == source_before, 'conversion changed source bytes'
@@ -491,7 +507,7 @@ def run(binary, evidence, native=False):
             source = root / ('concurrent-' + str(index) + '.geojson')
             source.write_text(json.dumps(dict(type='FeatureCollection', features=[point(index, [index * 10000, 0, 0])])) )
             output = root / ('concurrent-' + str(index) + '.3tz')
-            command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output), '--sourceCrs', 'local', '--explicit', '--reproducible']
+            command = [str(binary), '--json', 'vector', '-i', str(source), '-o', str(output), '--sourceCrs', 'local', '--reproducible']
             pending.append((index, output, command, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)))
         for index, output, command, proc in pending:
             stdout, stderr = proc.communicate()
@@ -540,7 +556,7 @@ def run_gpkg(binary, evidence):
         def convert(name, flags, existing=None):
             output = root/(name+'.3tz')
             if existing is not None:output.write_bytes(existing)
-            command=[str(binary),'--json','vector','-i',str(source),'-o',str(output),'--sourceCrs','local','--explicit','--reproducible','--jobs','1','--lodLevels','1','--maxBytes','4096',*flags]
+            command=[str(binary),'--json','vector','-i',str(source),'-o',str(output),'--sourceCrs','local','--reproducible','--jobs','1','--lodLevels','1','--maxBytes','4096',*flags]
             proc=subprocess.run(command,capture_output=True,text=True)
             item=dict(command=command,exit_code=proc.returncode,stdout=proc.stdout,stderr=proc.stderr,source_sha256=sha(before))
             assert source.read_bytes()==before, 'native source changed'

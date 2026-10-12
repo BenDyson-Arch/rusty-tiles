@@ -273,3 +273,7 @@ bash run_all.sh $W results
 python3 -I analyze.py $W/*.3tz > results/analyze.jsonl   # implicit and explicit archives
 python3 -I margins.py results > results/margins.json
 ```
+
+H6 (2026-10-13) removed `--explicit` from `vector` and `point-cloud`; later binaries refuse it as an unknown argument. `make_vector.sh points-78k-mf2-explicit` (no longer in its default
+list) and `explicit_threshold.sh` need a converter built at or before develop `7fad70c`; the recorded
+runs used `68b7531`. `validate` still reads the explicit archives they produce.
