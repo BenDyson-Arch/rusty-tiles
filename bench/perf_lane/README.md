@@ -316,7 +316,11 @@ JSON lists it under `gate`.
   when the baseline used the same renderer class. A baseline recorded
   before renderer capture counts as software. Cesium times (first tile,
   loaded, SSE 0 loaded) stay advisory in `REPORT.md`, and imagery request
-  counts depend on timing.
+  counts depend on timing. GPU noise, measured on the two 2026-10-12
+  baselines (d1874ef and b13a86d, nine cases with byte-identical outputs,
+  one sample each): sub-0.4 s loads moved by up to ±30% (at most 0.09 s),
+  and terrain by up to 8% (0.59/0.63 s default camera, 0.72/0.66 s SSE 0).
+  That noise is why the floor is 0.25 s.
 
 Anything else, such as improvements, sub-floor noise or explained growth, is
 reported, not gated.
