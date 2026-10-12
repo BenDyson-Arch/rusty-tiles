@@ -7,7 +7,7 @@ mod json;
 mod material;
 mod original_bounds;
 mod texture;
-pub(crate) use material::Material;
+pub(crate) use material::{Material, TextureSlot};
 pub(crate) use texture::{decode_image, ImageInfo};
 
 pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;

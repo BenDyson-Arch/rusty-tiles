@@ -2,7 +2,8 @@
 //! (`vendor/basis_universal`, provenance in `vendor/README.md`), with a
 //! mandatory post-encode verification.
 //!
-//! ML1 spike scope: no producer calls this module yet.
+//! The H8 leaf producer supplies complete class-correct mip chains; PNG lossless
+//! leaves bypass this codec. Semantic quality floors belong to that caller.
 //!
 //! Contract:
 //! - Supported domain: one 2D RGBA8 image, rows tightly packed, each edge
@@ -28,7 +29,7 @@
 //!   ([`ErrorFloor`]) and, where the input has enough within-block detail,
 //!   reproduce it ([`DetailFloor`]).
 //!   Any failure is `InvalidState`.
-// ML1 spike: nothing outside the tests calls this module yet.
+// Keep the bounded calibration/diagnostic entry points alongside the production API.
 #![allow(dead_code)]
 
 mod container;

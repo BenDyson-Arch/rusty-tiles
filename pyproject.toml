@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Self-contained mesh, vector, grid-free point cloud and 3D Tiles converters"
 readme = "bindings/python/README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "MIT AND Apache-2.0 AND BSD-3-Clause"
 # Upstream notices of vendored code (scripts/third_party_notices.py checks them).
 license-files = [
     "LICENSE",

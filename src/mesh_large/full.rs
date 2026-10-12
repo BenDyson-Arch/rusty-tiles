@@ -6,7 +6,11 @@ use super::{
     config::{self, JobsPlan, MemoryBound, ScratchNeed, TreeConfig},
     images::{self, ImageCaptureBounds, ImageSnapshot},
     input::StreamSource,
-    leaves::geometry::LatticePlan,
+    leaves::{
+        atlas::AtlasResources,
+        geometry::LatticePlan,
+        planning::{self, LeafPlan},
+    },
     records::TriangleRecord,
     tree::{self, TreeOutput},
 };
@@ -20,6 +24,7 @@ use serde_json::Value;
 use std::{mem::size_of, path::Path};
 
 const DECODER_ALLOWANCE: u64 = 192 << 20;
+const PLANNING_ALLOWANCE: u64 = 128 << 20;
 const SORT_THREAD_BYTES: u64 = 8_000_000;
 
 #[derive(Clone, Debug, Serialize)]
@@ -28,6 +33,7 @@ pub(crate) struct FullScratchNeed {
     pub full_capture_bytes: u64,
     pub retained_full_bytes: u64,
     pub corner_join_bytes: u64,
+    pub leaf_plan_bytes: u64,
     pub image_bytes: u64,
     pub extra_live_files: u64,
     pub logical_need_bytes: u64,
@@ -39,6 +45,7 @@ pub(crate) struct FullMemoryBound {
     pub geometry: MemoryBound,
     pub owned_metadata_bytes: u64,
     pub decoder_allowance_bytes: u64,
+    pub planning_allowance_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -67,6 +74,7 @@ pub(crate) struct FullCaptured {
     pub tree: TreeOutput,
     pub triangles: Sequence<FullTriangle>,
     pub corner_depths: Sequence<CornerDepth>,
+    pub leaf_plans: Sequence<LeafPlan>,
     pub images: Vec<ImageSnapshot>,
     pub image_info: Vec<ImageInfo>,
     pub materials: Vec<Material>,
@@ -84,6 +92,7 @@ impl FullCaptured {
             tree,
             triangles,
             corner_depths,
+            leaf_plans,
             images,
             scratch,
             ..
@@ -91,6 +100,7 @@ impl FullCaptured {
         drop(tree);
         drop(triangles);
         drop(corner_depths);
+        drop(leaf_plans);
         drop(images);
         scratch.close().map_err(Into::into)
     }
@@ -151,12 +161,15 @@ fn scratch_need(
         scan.triangles,
         6 * (RankCorner::SIZE + RankDepth::SIZE) as u64 + CornerDepth::SIZE as u64,
     )?;
+    // Every leaf holds at least one triangle. Include the owned plan sequence
+    // before the immutable lattice and published leaf bytes exist.
+    let leaf_plan_bytes = mul(scan.triangles, LeafPlan::SIZE as u64)?;
     let extra_logical = add(
         add(
             add(full_capture_bytes, retained_full_bytes)?,
             corner_join_bytes,
         )?,
-        image_bytes,
+        add(image_bytes, leaf_plan_bytes)?,
     )?;
     let capacity = ((config.sort.run_bytes / 2) / size_of::<FullTriangle>()).max(1) as u64;
     let counted = add(
@@ -165,7 +178,7 @@ fn scratch_need(
     )?;
     let inventory = add(mul(config.sort.fan_in as u64, 256)?, 32)?;
     // Add image sequences and retained full/depth sequences outside run inventory.
-    let extra_live_files = add(add(inventory.min(counted), image_count)?, 4)?;
+    let extra_live_files = add(add(inventory.min(counted), image_count)?, 5)?;
     let extra_reserve = add(
         add(mul(add(unit, 64 << 10)?, extra_live_files)?, 1 << 20)?,
         extra_logical,
@@ -178,6 +191,7 @@ fn scratch_need(
         full_capture_bytes,
         retained_full_bytes,
         corner_join_bytes,
+        leaf_plan_bytes,
         image_bytes,
         extra_live_files,
         logical_need_bytes,
@@ -240,12 +254,13 @@ fn memory_bound(
     )?;
     let bound_bytes = add(
         add(geometry.bound_bytes, owned_metadata_bytes)?,
-        DECODER_ALLOWANCE,
+        add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
     Ok(FullMemoryBound {
         geometry,
         owned_metadata_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
+        planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
     })
 }
@@ -392,7 +407,18 @@ pub(crate) fn capture(
         source.verify_unchanged()?;
         drop(source); // All subsequent operations read owned snapshot records only.
         config::preflight_remaining(&scratch, need.need_bytes)?;
-        let tree = tree::build(&scratch, projection.finish()?, config, workers, check)?;
+        let retained_allowance = need
+            .need_bytes
+            .checked_sub(need.h1.need_bytes)
+            .ok_or_else(|| invariant("full capture retained scratch allowance underflow"))?;
+        let tree = tree::build(
+            &scratch,
+            projection.finish()?,
+            config,
+            workers,
+            retained_allowance,
+            check,
+        )?;
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
         verify_rank_alignment(&triangles, &tree.triangles, check)?;
         config::preflight_remaining(&scratch, need.need_bytes)?;
@@ -410,6 +436,17 @@ pub(crate) fn capture(
                 return Err(invariant("tree depth summary exceeds height"));
             }
             extents[depth] = summary.maximum_extent;
+        }
+        let resources = AtlasResources {
+            materials: &materials,
+            textures: &textures,
+            samplers: &samplers,
+            image_info: &image_info,
+        };
+        let leaf_plans =
+            planning::preflight(&scratch, &triangles, &tree.nodes, resources, config, check)?;
+        if leaf_plans.len() != tree.stats.leaves {
+            return Err(invariant("leaf plan count differs from immutable tree"));
         }
         let lattice = LatticePlan::new(config.profile, scan.bounds, &extents)?;
         config::preflight_remaining(&scratch, need.need_bytes)?;
@@ -437,6 +474,7 @@ pub(crate) fn capture(
             tree,
             triangles,
             corner_depths,
+            leaf_plans,
             images,
             image_info,
             materials,
@@ -451,6 +489,7 @@ pub(crate) fn capture(
             tree,
             triangles,
             corner_depths,
+            leaf_plans,
             images,
             image_info,
             materials,
@@ -462,6 +501,7 @@ pub(crate) fn capture(
             tree,
             triangles,
             corner_depths,
+            leaf_plans,
             images,
             image_info,
             materials,
@@ -670,14 +710,14 @@ fn join_corner_depths(
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::super::{
         attributes::{COLOR, NORMAL, TANGENT, UV0, UV1},
         config::{Jobs, Profile},
     };
     use super::*;
     use std::{fs, num::NonZeroUsize, path::PathBuf};
-    fn fixture(parent: &Path, count: usize) -> PathBuf {
+    pub(crate) fn fixture(parent: &Path, count: usize) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut bytes = Vec::new();
         let mut views = Vec::new();
@@ -724,6 +764,44 @@ mod tests {
         let input = parent.join("scene.gltf");
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         input
+    }
+    #[test]
+    fn admitted_large_image_owners_survive_tree_scratch_recheck() {
+        use image::ImageEncoder;
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(work.path(), 1);
+        let mut pixels = Vec::with_capacity(2048 * 1024 * 4);
+        let mut state = 0x7159_ac23u32;
+        for _ in 0..2048 * 1024 * 4 {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            pixels.push(state as u8);
+        }
+        let file = fs::File::create(work.path().join("pixel.png")).unwrap();
+        image::codecs::png::PngEncoder::new_with_quality(
+            file,
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::NoFilter,
+        )
+        .write_image(&pixels, 2048, 1024, image::ExtendedColorType::Rgba8)
+        .unwrap();
+        let mut config = TreeConfig::new(Profile::Balanced);
+        config.sort.run_bytes = 8192;
+        config.sort.fan_in = 2;
+        config.sort.buffer_bytes = 64;
+        let captured = capture(&input, &config, &mut || Ok(())).unwrap();
+        assert_eq!(captured.scan.triangles, 1);
+        assert_eq!(captured.images.len(), 2);
+        assert!(
+            captured.report.image_capture.scratch_bytes > captured.report.scratch.h1.need_bytes,
+            "control must exceed the H1-only owner allowance"
+        );
+        assert!(
+            captured.report.scratch_logical_peak_bytes
+                <= captured.report.scratch.logical_need_bytes
+        );
+        captured.close().unwrap();
     }
     fn config(parent: &Path) -> TreeConfig {
         let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(2);

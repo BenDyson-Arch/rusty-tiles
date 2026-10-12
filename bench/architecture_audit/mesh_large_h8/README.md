@@ -1,8 +1,9 @@
-# H8 leaf foundations and remaining producer gates
+# H8 leaf producer and remaining acceptance gates
 
 This branch adds owned full-attribute and image capture over the merged H1
-tree, a frozen geometry lattice, and class-correct whole-image mip helpers.
-It does not yet emit leaf GLBs or constitute the first production ML1 caller.
+tree, a frozen geometry lattice, crop/pack atlases and an actual in-process ML1
+caller. `mesh-leaf-payloads` publishes leaf GLBs and a diagnostic manifest;
+it does not publish a tileset hierarchy. Producer acceptance is unfinished.
 The encoder API is on draft #163 and remains coordinated with the completed
 H8 producer. The user owns CI monitoring and merges.
 
@@ -27,7 +28,7 @@ representation. Focused tests cover mixed incidence, packed/synthetic depths
 through 31, negative positions, global lattice indices beyond `2^24`, exact
 terms, rounded sums, identity flattening and outward displacement/bounds.
 Actual source-derived snapped coordinates are exactly representable as f32.
-A future GLB writer must promote certified f32 scale/translation to f64 before
+The GLB writer promotes certified f32 scale/translation to f64 before
 JSON serialization: a shortest f32 decimal need not preserve its exact value
 when the independent validator parses it as f64. Geographic placement and
 renderer RTC arithmetic remain separate proof gates.
@@ -67,15 +68,51 @@ general-client support beyond two UV sets nor feature picking, atlas mip/LOD
 equivalence, quantization or normal-frame preservation. Its loopback server and
 private browser context are closed; no product viewer is installed.
 
-Before H8 can complete, implement and independently verify actual crop/pack
-atlases, per-slot UV remapping, source sampler support, sparse class mips,
+The producer emits dense per-slot UVs, original material factors/normalScale,
+source numeric picking metadata, required meshopt/quantization extensions and
+decoded content bounds. Only actual byte-budget failures permit lossy density
+retries; texture-fidelity failures abort publication. Physical crop/page planning
+is frozen before the all-depth geometry lattice. The tree's later scratch check
+includes retained full attributes and encoded images.
+
+Lossless PNG preserves decoded RGBA8 at level zero only, including transparent
+RGB and original normal bytes. Viewer-generated PNG mip levels are outside its
+texel-exact guarantee. KTX2 profiles carry complete caller-authored class chains
+and independently decode/check every level. Finite MASK checks preserve original
+vertex alpha and report the fixed semantic attainable gap; an optional one-byte
+alpha guard requires unchanged classifications at every checked geometry sample.
+This is a finite sample guarantee, not continuous surface coverage certification.
+
+Executed small published-artifact checks establish all five slots, complete KTX
+chains and unchanged class floors on an opaque low-variance D0 fixture for all
+three KTX profiles. PNG has an independent raw-texel check. Numeric GPU picking
+works in the pinned consumer, including reflected geometry. These fixtures use
+non-mip samplers. A new source-LOD counterexample exposes crop phase error and
+coarse mixing between packed charts for mipmapped samplers; the composite-chain
+quality oracle alone cannot certify source minification correspondence. The corrected mip-sampler path uses dedicated aligned pages and original-source
+class chains, with finite decoded-geometry sampler checks. Independent artifact
+checks have passed repeat, mirror and clamp fixtures; final checks remain pending.
+The reflected PBR diagnostic was traced to reference winding: independently
+flattening the source resolves its interior discrepancy. Original failed
+measurements remain preserved, including fast/balanced MASK-edge differences.
+
+Before H8 can complete, independently verify source sampler mip/LOD support,
 normalScale/filter correspondence and MASK coverage with original COLOR_0.
 Coverage discreteness must be established from an independent fixed semantic
 mip, never from the compressed candidate itself. Bind all five slots, every
 class/mip and each profile to decoded artifacts with unchanged quality floors.
-Resolve the lossless PNG/authored-mip representation policy, emit complete
-GLBs with provenance/metadata and actual decoded bounds, charge encoding and
-assembly resources, then run the 10-million textured producer, deterministic
-output controls and final GPU acceptance. Future implicit hierarchy integration
+Run the 10-million textured producer with encoding/assembly resource receipts,
+mixed-depth/packed decoded seam witnesses, deterministic output controls and
+final GPU acceptance. Future implicit hierarchy integration
 must use actual decoded content bounds through the existing metadata override
 contract, rather than treating centroid assignment cells as containing geometry.
+
+The implementation is published as a draft while final-source checks run. The
+first actual 10-million producer execution emitted 1,024 leaves in 60.95 seconds
+with measured peak RSS of 200,511,488 bytes. Its independent geometry/provenance
+check passed all triangles; this constant-texture fixture does not establish
+high-frequency texture quality. The resource wrapper falsely flagged unrelated
+concurrent cache directories, so its original failure is preserved and a final
+isolated repeat is required. Mixed-depth, packed and synthetic-depth seam
+artifacts pass all four profiles. Final resource, decoded texture and packaging
+receipts will supersede these provisional results without deleting failures.

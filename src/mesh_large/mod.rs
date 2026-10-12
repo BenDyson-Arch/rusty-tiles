@@ -12,6 +12,9 @@ mod input;
 mod leaves;
 mod records;
 mod tree;
+pub use leaves::producer::{
+    mesh_to_leaf_payloads, LeafOutputReport, LeafOutputRequest, LeafOutputResult, LeafProfile,
+};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -144,7 +147,7 @@ pub(crate) fn build(
             check,
         )?;
         config::preflight_remaining(&scratch, need.need_bytes)?;
-        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, check)?;
+        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, 0, check)?;
         member_gate(tree.stats.nodes, config.member_ceiling)?;
         check()?;
         if scratch.peak_bytes() > need.logical_need_bytes {
