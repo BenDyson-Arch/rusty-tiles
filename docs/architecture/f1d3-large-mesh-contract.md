@@ -1,11 +1,11 @@
 # F1d3: streaming large-mesh tiler (umbrella contract)
 
-Status: **READY TO FREEZE** (ML0, light process). Design v6.1 has landed with the v6 delta
-review's N1–N5 folded in, and that review says the umbrella may freeze with them. What freezes
-it is the **one fresh nonauthor review** of this text. That review also confirms the two places
-where this umbrella decides something v6.1 leaves silent or inconsistent: the lattice origin and
-δ (§4, O-D1), and how the vanished and filled sets are published (§6.7, O-D2). Nothing here
-records acceptance.
+Status: **READY TO FREEZE (v6.1).** Design v6.1 has landed with the v6 delta review's N1–N5
+folded in (that review says the umbrella may freeze with them), U4 is decided, and the
+coordinator accepted the lattice-origin rule (§4) on 2026-10-12. The one fresh nonauthor review
+of this text freezes it. That review also confirms the one form this umbrella pins where v6.1 is
+silent: how the vanished and filled sets are published (§6.7, O-D2). Nothing here records
+acceptance.
 
 This is the contract for 0.4.0's large textured photogrammetry tiler: `mesh-local-to-3tz` grown
 into a streaming, certified, multi-level tiler. It is the umbrella over slices ML1–ML10 and over
@@ -39,6 +39,7 @@ and the retirement of legacy options are in [the dispositions record](f1d3-surfa
 | U1 | Small primitives vanish from coarse tiles; present primitives keep exact identity; the certificate accounts for removed geometry | USER |
 | U2 | Accept and document the 3TZ member ceiling (178,956,970); refuse early with a typed error | USER |
 | **U4 = (c)** | At coarse depths small islands vanish and small holes are filled, both certified; holes reopen at finer depths; **the output publishes the vanished and filled sets** | USER (2026-10-12) |
+| O-U1, O-U2, O-U3 | Retire `--leaf-triangles` (`L` from the profile only); retire the root-proxy options and the full-detail mode, superseding F1d2's keep note; `--jobs` defaults to a memory-aware auto value (§9) | USER (2026-10-12) |
 | Rulings 1–7 | Re-parameterise and bake proxies; shared lattice; certify after quantization; validator sequencing; overclaims; one encoder, no ladder; slice sizing | Coordinator |
 | Pinned selections | E33 in-tree charts; E35 spacing `δ_d`; E37 cell-aligned grouping; E38 joint seam pass; E45 repair with unsimplified fallback; E46 monotone per-depth lattice with vertex-keyed snap; E48 octant packing; E49 pass-5a cell tree; E50 pass-5b order | ENG, pinned here |
 
@@ -83,7 +84,7 @@ The constants are provisional until ML9 freezes them. Profiles are the only tuni
 - **Layout.** The bounded implicit forest (P), OCTREE, as amended by the P amendment: two-phase
   streaming input, bottom-up document packing, preorder root names, one `.glb` slot per tile, a
   row on every implicit tile.
-- **Frames and lattice origin (decided here; O-D1).** The global lattice origin `O` (the
+- **Frames and lattice origin (O-D1; accepted by the coordinator 2026-10-12).** The global lattice origin `O` (the
   snapshot box minimum) is carried in the root tile's `transform`, composed with the F1c1
   placement. Below the root, translation-only transforms appear **only on explicit tiles and
   implicit roots**, and each is an integer multiple of the coarsest step `s_0` (so of every
@@ -319,6 +320,10 @@ U4 (c) requires the output to publish what each proxy removed or filled. Design 
   counted per tile). Refusal is `Io { InsufficientSpace, stage }`; after workspace creation F0
   cleans up. ENOSPC stays a typed Io failure. With δ ≡ 0 and final names after pass 5a (P-A1,
   P-A2), stage 2 needs no term for a second copy of an implicit subtree's payloads.
+- **Workers.** `--jobs` defaults to `max(1, min(cores, ⌊available memory ÷ per-job need⌋))`,
+  where the per-job need is the profile's `jobs ×` term above, read once at start; an explicit
+  value is used as given. The report states the chosen value, what it saw and which limit
+  decided. Output bytes do not depend on it (§11).
 - **Per item:** members ≤ `B_tile`; leaves ≤ `L`; proxies ≤ `2P`; seam vertex incidence ≤ 16
   entries (more is an endpoint; ℓ(v) is computed separately, §6.4).
 - **Producer obligation for C1:** per payload, view bytes plus meshopt-decoded bytes ≤ 128 MiB.
@@ -353,7 +358,8 @@ Nothing invalid is ever published.
 
 ## 13. Report
 
-The F0 result plus: the resolved profile and its constants; per-depth counts; seam statistics
+The F0 result plus: the resolved profile and its constants; the chosen `--jobs` value and its
+reason (§9); per-depth counts; seam statistics
 (edges kept, sweeps, hole edges); post-quantization fallback rounds; certificate statistics
 (phase-A caps, phase-B exhaustion, composed and direct per depth); vanished regions, vanished
 islands and filled holes per depth (§6.7); the `appearance` object, including any N5 mip drops;
@@ -387,23 +393,32 @@ Each slice's tests are in `slices.md` v6.1. This umbrella relies on these in par
 
 ## 15. Freeze checklist
 
-1. Design v6.1 landed with N1–N5 (done; §5, §6.1, §6.4, §6.6 fold them in).
-2. U4 decided by the user: (c) (done; §6.6, §6.7).
-3. The fresh nonauthor review of this text, confirming O-D1 (§4) and O-D2 (§6.7).
-4. Not gating this freeze: the C1, I1 and C2 amendments go through their own full treatment, and
-   the P amendment through its own review, before the slices that implement them.
+1. Design v6.1 landed with N1–N5: **done** (§5, §6.1, §6.4, §6.6 fold them in).
+2. U4 decided by the user, (c): **done** (§6.6, §6.7).
+3. Lattice origin and δ (O-D1): **accepted** by the coordinator, reconciled with v6.1 in §4 and
+   in P-A1.
+4. **Remaining:** the fresh nonauthor review of this text, which also confirms O-D2 (§6.7).
+5. Not gating this freeze: the C1, I1 and C2 amendments go through their own full treatment, the
+   P amendment through its own review, and the C1 meshopt-header defect gets its own fix PR.
 
-## 16. Open questions
+## 16. Settled values and remaining question
 
-- **O-D1 (design author; confirmed at the review).** Origin `O` in the root transform;
-  lattice-aligned translations only on explicit tiles and implicit roots; δ ≡ 0 and
-  `ε_rebase` = 0 (§4). The auditor's client-order decode must then apply tile translations as
-  the client does (in f64, before the f32 vertex stage) when it compares shared vertices across
-  implicit roots.
-- **O-D2 (design author; confirmed at the review).** The `rustyLodChanges` property table as the
-  published form of V and F (§6.7).
-- Public-surface questions for the user (O-U1 to O-U3) are in the dispositions record. They do
-  not change this contract's algorithms.
+**Settled (coordinator ruling 2026-10-12: v6.1's answer where it gives one, otherwise ML0's
+proposal):**
+
+| Item | Value | Source |
+| --- | --- | --- |
+| Lattice origin, δ | `O` in the root transform; lattice-aligned translations only on explicit tiles and implicit roots; δ ≡ 0; `ε_rebase` = 0 | ML0 proposal, accepted; supersedes four v6.1 sentences (P-A1) |
+| `κ_u`, `κ_r`, `κ_d` | 64, 2, 16 units or bytes per stored byte (provisional until ML9) | v6.1 for `κ_u`; ML0 proposal for `κ_r`, `κ_d` (A-C2-1) |
+| meshopt filters | none (NONE filter only) in every profile | v6.1 uses none |
+| Implicit-root names | P's preorder index, computed from the Morton-ordered post-order stream | v6.1 §9.1, reconciled in P-A4 |
+| Document packing | bottom-up for mesh output only; point and vector unchanged | coordinator (P-A3) |
+| Primary texts | KHR_texture_basisu at glTF `1bde276f…`, KTX 2.0 v2.0.4, PNG Third Edition REC 2025-06-24, with sha256s | C1 amendment identities |
+| `--jobs` default | memory-aware auto (§9) | USER O-U3 |
+
+**Remaining (confirmed at the freeze review):**
+- **O-D2.** The `rustyLodChanges` property table as the published form of V and F (§6.7). v6.1
+  names only "the sidecar".
 
 ## 17. Proof limits
 
