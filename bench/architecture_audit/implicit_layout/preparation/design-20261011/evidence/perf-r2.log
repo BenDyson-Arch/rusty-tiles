@@ -1,7 +1,0 @@
-{"name": "vector", "loaded": true, "seconds": 2.0202000000029803, "requests": 6, "bytes": 1563790, "problems": []}
-{"name": "pc-deep", "loaded": true, "seconds": 15.6455, "requests": 2649, "bytes": 12892981, "problems": []}
-{"name": "vector", "loaded": true, "seconds": 1.928, "requests": 5, "bytes": 1595269, "problems": []}
-{"name": "pc-deep", "loaded": true, "seconds": 16.02260000000894, "requests": 2242, "bytes": 12530286, "problems": []}
-{"name": "vector", "loaded": true, "seconds": 2.0851000000089406, "requests": 5, "bytes": 1573294, "problems": []}
-{"name": "vector", "loaded": true, "seconds": 2.573, "requests": 6, "bytes": 1563790, "problems": []}
-{"name": "pc-deep", "loaded": true, "seconds": 16.9505, "requests": 2649, "bytes": 12892981, "problems": []}

@@ -40,6 +40,14 @@ HERE = Path(__file__).resolve().parent
 CONTROLS = HERE.parents[1]
 REPO = HERE.parents[5]
 ORACLE_DIR = REPO / "bench/architecture_audit/c2_decoded_containment/oracle"
+if not (ORACLE_DIR / "c2o").is_dir():
+    sys.exit(
+        f"error: the C2 O-explicit oracle ({ORACLE_DIR.relative_to(REPO)}) was moved out of the tree "
+        "at e29cd19d2f23. Restore it with\n"
+        "  git archive e29cd19d2f23 bench/architecture_audit/c2_decoded_containment/oracle | tar -x\n"
+        "or from ~/.cache/rusty-tiles-evidence/architecture_audit/c2_decoded_containment.tar.zst "
+        "(SHA-256 in bench/architecture_audit/c2_decoded_containment/README.md)."
+    )
 sys.path.insert(0, str(ORACLE_DIR))
 
 from c2o.check import Oracle  # noqa: E402

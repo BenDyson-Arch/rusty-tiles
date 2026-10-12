@@ -1,5 +1,9 @@
 # C1 payload and JSON integrity ownership
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 The bounded [contract](c1-payload-integrity-contract.md) was independently
 approved before implementation. This slice replaces current C1's payload DOM
 and recursive JSON admission with private `content_integrity` owners. It does

@@ -1,5 +1,9 @@
 # C2 decoded-content containment contract (slice 1)
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Status: implemented on `feat/c2-decoded-containment` (PR #157). Acceptance evidence is indexed in
 [the C2 acceptance record](../../bench/architecture_audit/c2_decoded_containment/acceptance/README.md);
 the separate nonauthor review and its resolution are recorded on PR #157.

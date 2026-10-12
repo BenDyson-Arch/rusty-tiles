@@ -1,5 +1,9 @@
 # I1 implicit read contract
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Status: implemented on `feat/implicit-forest`, the combined I1 + P integration branch (I1 owner
 `src/content_integrity/implicit*`, validator migration in `src/validate.rs`). Independent
 acceptance (oracle parity, resource controls, perf lane and Cesium) is a separate step and is not

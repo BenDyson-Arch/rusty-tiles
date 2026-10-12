@@ -1,5 +1,15 @@
 # C2 decoded-content containment: O-explicit oracle (Slice 0a)
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 386 of 548 files remain:
+> this README, what CI or tests read, live tooling (oracle, witness generators,
+> self-tests, mutant sets) and the C2-WB (#164) additions. The full directory
+> last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/c2_decoded_containment | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/c2_decoded_containment.tar.zst`, SHA-256
+> `9174fd77147b1abcb79cc388ffc371e67ef68c7b3a38bde7af3edf0e834cd25c`.
+> Paths below that no longer exist refer to that snapshot.
+
 This directory is the independent reference for the C2 slice-1 claim. When
 `checks` contains `decodedContentContainment`, every vertex drawn by the
 selected static scene must lie inside these volumes, each in its own frame:

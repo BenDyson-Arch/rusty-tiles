@@ -1,5 +1,13 @@
 # F1b1 embedded texture acceptance
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 3 of 23 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1b1 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1b1.tar.zst`, SHA-256
+> `bec20bb7032e999774495f52c091c908b1a86fe5994d8d8e9fb0bd21c5952855`.
+> Paths below that no longer exist refer to that snapshot.
+
 First bounded slice of #121 after C1, audit baseline `fdc5d18`; final compiled
 source `07928888e808cfd51e0daab9575023898ede894f`. The
 [contract](../../../docs/architecture/f1b-contract.md) defines the supported

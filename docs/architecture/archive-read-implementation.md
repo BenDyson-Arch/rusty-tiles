@@ -1,5 +1,9 @@
 # Stored-archive reader implementation decisions
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Status: source implemented and local controls executed; separate final review and
 applicable PR CI/wheel acceptance precede a develop merge. The
 [reviewed contract](archive-read-foundation-contract.md) and its

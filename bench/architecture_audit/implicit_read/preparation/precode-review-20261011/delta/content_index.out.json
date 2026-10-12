@@ -1,9 +1,0 @@
-{
- "max_live_index_entries": 2007500,
- "L": 3,
- "K": 2500,
- "live_subtrees": 11,
- "references": 262144,
- "ratio": 7.66,
- "bytes_at_8B_per_entry": 16060000
-}

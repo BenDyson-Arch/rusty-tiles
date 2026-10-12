@@ -1,1 +1,0 @@
-{"error":{"code":"data","message":"convert-to-implicit: irregular explicit hierarchy (child bounds cross their midpoint cell beyond recorded padding); re-run point-cloud from source without --explicit"},"exitCode":3,"ok":false}

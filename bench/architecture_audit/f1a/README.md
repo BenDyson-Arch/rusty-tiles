@@ -1,5 +1,13 @@
 # F1a executable acceptance evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 11 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1a | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1a.tar.zst`, SHA-256
+> `bcfc5bc5269daa118268a5b1ac748495c22adfb5106717ee78360d443879f8d6`.
+> Paths below that no longer exist refer to that snapshot.
+
 The bounded contract is [f1a-contract.md](../../../docs/architecture/f1a-contract.md). The independent oracle and viewer procedures are described in [tests/f1a_oracle.md](../../../tests/f1a_oracle.md). This directory holds their machine-readable observations and the separate resource sampler; it does not turn sampled results into general correctness or memory proofs.
 
 ## Runs and provenance

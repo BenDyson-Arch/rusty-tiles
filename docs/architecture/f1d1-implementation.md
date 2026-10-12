@@ -1,5 +1,9 @@
 # F1d1: certified root proxy over full-detail leaves
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 This is the first implementation slice of #121, under the #113 foundation work
 blocking 0.4.0. It implements the [settled contract](mesh-approximation-contract.md)
 without closing either issue. Full-detail conversion remains the default.

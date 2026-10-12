@@ -1,5 +1,13 @@
 # F1b2 resource binding evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 51 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1b2 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1b2.tar.zst`, SHA-256
+> `550205e0293bc2415ceb3da90e3275119c3560d624876430acb9d119ccefb287`.
+> Paths below that no longer exist refer to that snapshot.
+
 The next bounded #121 slice admits local JSON glTF and GLB resources through the existing local mesh operation. Source parsing, metadata admission and payload decoding remain pure; the consumer owns relative file binding and one immutable capture per physical dependency. The encoder and F0 runtime do not discover source dependencies. See the [contract](../../../docs/architecture/f1b2-contract.md).
 
 Production source is pinned to `ce8a89c58e2781d72c2ac5dff686de2f8d340850`, following baseline `641e1b461f3b11621fd528fb05bfba45a6f930d6`. [build-manifest.json](build-manifest.json) hashes all 88 compiled source/resource inputs, both uniquely named frozen binaries and the installed wheel/extension. Later commits add acceptance and evidence; every compiled input must still match this pin. Frozen binaries were copied only after their owning Cargo build completed, with no Cargo operation running at the copy. Packaging verification may overwrite the shared target binary; that path is never an acceptance input.

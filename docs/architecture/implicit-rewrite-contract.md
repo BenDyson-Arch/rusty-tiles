@@ -1,5 +1,9 @@
 # A2: explicit archive to implicit rewrite proposal
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Status: retired 2026-10-11; see [Disposition](#disposition-2026-10-11). The
 draft below is historical: unproved, it authorizes no implementation retention,
 acceptance, legacy removal or release. It is the next operation audit under

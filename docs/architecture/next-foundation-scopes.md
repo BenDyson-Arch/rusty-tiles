@@ -1,5 +1,9 @@
 # Post-F0 foundation scopes and disposition
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Tracking gate: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Audit baseline: `d69ba2a7facb99b5b3f5a6efba4e4039bef26be5`, 2026-10-09.
 Three GPT-6.1 Sol agents reviewed API/contracts, ownership/resources, and
