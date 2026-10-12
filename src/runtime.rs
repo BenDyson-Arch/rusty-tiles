@@ -544,7 +544,7 @@ impl<'a> Staging<'a> {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        fs::create_dir_all(parent)
+        crate::dir_sync::create_dir_all_durable(parent)
             .map_err(|error| attempt.fail(JobError::io("create output parent", parent, error)))?;
         let file = tempfile::Builder::new()
             .prefix(".tiles-stage-")
@@ -635,9 +635,19 @@ impl SealedArtifact<'_> {
                 // tempfile's no-clobber fallback may install with hard_link and
                 // leave the old name. Success does not prove we still own that
                 // pathname: after a rename another writer may have occupied it.
-                let cleanup_diagnostics = inspect_postcommit_name(&temporary_name, files)
-                    .into_iter()
-                    .collect();
+                let mut cleanup_diagnostics: Vec<CleanupDiagnostic> =
+                    inspect_postcommit_name(&temporary_name, files)
+                        .into_iter()
+                        .collect();
+                // The rename is committed; a directory that cannot be synced
+                // leaves the output published but not yet crash-durable.
+                if let Err(error) = files.sync_parent(output) {
+                    let parent = crate::dir_sync::parent_of(output);
+                    cleanup_diagnostics.push(CleanupDiagnostic {
+                        error: JobError::io("synchronize output directory", &parent, error),
+                        path: parent,
+                    });
+                }
                 attempt.finish();
                 Ok(Published {
                     output: output.to_owned(),
@@ -666,6 +676,10 @@ impl SealedArtifact<'_> {
 trait FileOperations {
     fn sync(&self, file: &File) -> io::Result<()> {
         file.sync_all()
+    }
+    /// Make the output's directory entry durable after the install rename.
+    fn sync_parent(&self, output: &Path) -> io::Result<()> {
+        crate::dir_sync::sync_parent(output)
     }
     fn install(
         &self,

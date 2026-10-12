@@ -98,15 +98,24 @@ pub(super) fn emit<T: Serialize, E>(
     bytes[16..20].copy_from_slice(b"JSON");
     Ok(bytes)
 }
-pub(crate) fn write_generated_glb<T: Serialize, E>(
+/// The counted framing of one generated document: exact JSON length, padded
+/// JSON length and GLB total, after every byte, cardinality and working-storage
+/// limit that `write_generated_glb` applies before it writes bytes.
+struct Framed {
+    json: usize,
+    jpad: usize,
+    total: usize,
+    work: Working,
+}
+fn frame_generated<T: Serialize, E>(
     document: &T,
-    bin: &[u8],
+    bin: usize,
     metadata: bool,
     counts: GeneratedCounts,
     retained_working_bytes: usize,
     limits: &ValidatedCompressionLimits,
     checkpoint: &mut impl FnMut() -> std::result::Result<(), E>,
-) -> std::result::Result<Encoded, CodecError<E>> {
+) -> std::result::Result<Framed, CodecError<E>> {
     checkpoint().map_err(CodecError::Checkpoint)?;
     let l = limits.values;
     if counts.views > l.buffer_views
@@ -124,7 +133,7 @@ pub(crate) fn write_generated_glb<T: Serialize, E>(
             CodecError::EncodingFailure("generated JSON count")
         });
     }
-    let (jpad, _, total) = size(count.n, bin.len(), metadata)?;
+    let (jpad, _, total) = size(count.n, bin, metadata)?;
     if jpad > l.json_bytes {
         return Err(limit("generated padded JSON byte limit").into());
     }
@@ -136,7 +145,37 @@ pub(crate) fn write_generated_glb<T: Serialize, E>(
         65_536,
     )?;
     work.admit(add(total, parser)?)?;
-    let bytes = emit(document, bin, count.n, metadata)?;
+    Ok(Framed {
+        json: count.n,
+        jpad,
+        total,
+        work,
+    })
+}
+pub(crate) fn write_generated_glb<T: Serialize, E>(
+    document: &T,
+    bin: &[u8],
+    metadata: bool,
+    counts: GeneratedCounts,
+    retained_working_bytes: usize,
+    limits: &ValidatedCompressionLimits,
+    checkpoint: &mut impl FnMut() -> std::result::Result<(), E>,
+) -> std::result::Result<Encoded, CodecError<E>> {
+    let Framed {
+        json,
+        jpad,
+        total,
+        work,
+    } = frame_generated(
+        document,
+        bin.len(),
+        metadata,
+        counts,
+        retained_working_bytes,
+        limits,
+        checkpoint,
+    )?;
+    let bytes = emit(document, bin, json, metadata)?;
     {
         let _admitted =
             crate::content_integrity::json::admit(&bytes[20..20 + jpad], limits.json())?;
@@ -157,4 +196,34 @@ pub(crate) fn write_generated_glb<T: Serialize, E>(
             ..CompressionReceipt::default()
         },
     })
+}
+/// The exact length `write_generated_glb` would return for this document,
+/// refused by the same limits, without writing or re-admitting the bytes.
+///
+/// Skipping admission cannot change a decision for a serde_json `Value`
+/// whose depth and value-node count the caller already bounded with the same
+/// limits: its serialization is grammatical UTF-8 with unique object keys, the
+/// byte ceiling is checked here on the counted (and padded) length, and the
+/// depth and node rules are the ones `json::admit` applies. Only allocation
+/// failure inside the skipped writer or admission is not reproduced.
+pub(crate) fn generated_glb_len<T: Serialize, E>(
+    document: &T,
+    bin: usize,
+    metadata: bool,
+    counts: GeneratedCounts,
+    retained_working_bytes: usize,
+    limits: &ValidatedCompressionLimits,
+    checkpoint: &mut impl FnMut() -> std::result::Result<(), E>,
+) -> std::result::Result<usize, CodecError<E>> {
+    let framed = frame_generated(
+        document,
+        bin,
+        metadata,
+        counts,
+        retained_working_bytes,
+        limits,
+        checkpoint,
+    )?;
+    checkpoint().map_err(CodecError::Checkpoint)?;
+    Ok(framed.total)
 }

@@ -7,6 +7,7 @@ mod archive3tz;
 pub mod bbox;
 mod content_integrity;
 mod crs;
+mod dir_sync;
 pub mod error;
 pub mod fixtures;
 pub mod georef;

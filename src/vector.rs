@@ -587,6 +587,58 @@ mod foundation_tests {
         );
     }
     #[test]
+    fn cancellation_inside_admission_transaction_removes_spool() {
+        // Cancel right after a rejected feature's savepoint rolled back, while
+        // the in-memory-journal ingestion transaction is still open.
+        struct Cancel(std::sync::Mutex<Option<crate::CancellationHandle>>);
+        impl crate::Observer for Cancel {
+            fn observe(&self, event: &RunEvent<'_>) -> Result<(), JobError> {
+                if matches!(
+                    event,
+                    RunEvent::Warning {
+                        code: "vector-feature-rejected",
+                        ..
+                    }
+                ) {
+                    assert!(self.0.lock().unwrap().take().unwrap().cancel());
+                }
+                Ok(())
+            }
+        }
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source.geojson");
+        let output = work.path().join("output.3tz");
+        fs::write(&source, br#"{"type":"FeatureCollection","features":[
+            {"type":"Feature","id":"accepted","properties":{},"geometry":{"type":"Point","coordinates":[1,2,3]}},
+            {"type":"Feature","id":"rejected","properties":{"invalid":{}},"geometry":{"type":"Point","coordinates":[100,200,300]}},
+            {"type":"Feature","id":"later","properties":{},"geometry":{"type":"Point","coordinates":[4,5,6]}}]}"#).unwrap();
+        fs::write(&output, b"existing archive").unwrap();
+        let observer = Arc::new(Cancel(std::sync::Mutex::new(None)));
+        let run = RunControl::new(Some(observer.clone()));
+        *observer.0.lock().unwrap() = Some(run.cancellation_handle());
+        let options = VectorOptions {
+            source_crs: Some("local".into()),
+            skip_invalid: true,
+            lod: VectorLodOptions {
+                levels: 1,
+                ..VectorLodOptions::default()
+            },
+            ..VectorOptions::default()
+        };
+        let result = vector_to_archive(
+            VectorRequest::new(&source, &output, options).with_policy(OutputPolicy::Replace),
+            &run,
+        );
+        assert!(observer.0.lock().unwrap().is_none(), "rejection observed");
+        assert_eq!(result.unwrap_err().error.kind(), JobErrorKind::Cancelled);
+        assert_eq!(fs::read(&output).unwrap(), b"existing archive");
+        assert_eq!(
+            fs::read_dir(work.path()).unwrap().count(),
+            2,
+            "the scratch spool and staging must be removed"
+        );
+    }
+    #[test]
     fn cancellation_wins_over_reader_failure_without_duplicating_causes() {
         let run = RunControl::default();
         let attempt = run.begin().unwrap();
