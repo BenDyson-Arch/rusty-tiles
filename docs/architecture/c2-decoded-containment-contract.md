@@ -13,6 +13,8 @@ the end. Its preparation, reviews and decision log are retained
 nothing about RTC, regions, rotated boxes, deformation, rendered extent, memory or release
 readiness. Implicit archives are covered since the
 [slice-3 amendment](#c2-slice-3-amendment-implicit-archives-2026-10-12) (except derived cells).
+The [H7 amendment](#h7-amendment-legacy-content-unsupported-proposed-2026-10-13) (PROPOSED) removes
+b3dm from the domain: legacy content is a C1 Unsupported outcome and `rtcCenter` is never reported.
 
 
 ## Claim
@@ -962,3 +964,47 @@ lane rule; per-class streaming 4.57–5.98 ns/unit on a P-core and 8.04–10.07 
 τ_P/τ_E. The `--explain` policy note for I1's validate cases is in the
 [I1 contract](i1-implicit-read-contract.md). Full record, hashes and readings:
 [slice-3 acceptance](../../bench/architecture_audit/c2_decoded_containment/README.md#slice-3-acceptance-r-2026-10-12).
+
+## H7 amendment (legacy content Unsupported, PROPOSED 2026-10-13)
+
+**Status: PROPOSED.** This takes effect with the H7 production change; until then the text
+above describes `develop`. Rule and invariants:
+[C1 amendment H7](c1-legacy-content-unsupported-amendment.md). The claim, the span definition,
+the predicates and the C2-WB formula's structure are unchanged.
+
+**Text deltas.**
+
+1. **Domain predicate.** "admitted glTF/b3dm JSON" becomes "admitted glTF JSON". A b3dm, i3dm,
+   pnts or cmpt payload never reaches C2. C1 reports it as Unsupported (outcome 1 of R8: C1
+   outcomes, first failure in traversal order), whether it is detected by member suffix,
+   by its first four bytes or by an implicit content template.
+2. **`rtcCenter`.** The reason keeps its position in the frozen 15-name enum but is reserved:
+   its only carrier, a b3dm feature table, is no longer admitted, so it is never reported.
+   The `gltfExtension` row (`CESIUM_RTC`) is unchanged.
+3. **C2-WB `J(u)`.** It counts the glTF JSON or GLB JSON chunk only. The "also inside a b3dm"
+   clause and the b3dm feature- and batch-table terms are deleted. `B(u)`, `Dec(u)`,
+   `Res(u)` and `Prim(u)` are unchanged.
+4. **Ownership and disposition.** The Format owner no longer detects `RTC_CENTER`. The
+   `unwrap_b3dm` and `FeatureTable` rows of "Disposition of existing code" are superseded:
+   both are deleted.
+5. **Oracle.** O-explicit reads GLB and glTF only. Legacy content is the oracle outcome
+   `Unsupported` with `phase: "C1"` and facts `{format, member, rule: suffix|magic}`. A
+   non-`glb`/`gltf` suffix is Undecided, because C1 refuses it. The composed-oracle pins in
+   `c2o/implicit.py` were re-pinned for `check.py`, `gltf.py` and `i1_oracle.py`.
+
+**Exit-status changes versus slice 3.**
+
+- **XH7-1.** Success with `notInspected` `rtcCenter` becomes Unsupported (any b3dm with
+  `RTC_CENTER`).
+- **XH7-2.** Success, or any C2 outcome, of an archive that holds legacy content becomes
+  Unsupported.
+
+**Evidence to regenerate with the production change.** These are kept as committed now, and
+all 20 legacy archives among them are Unsupported under the amended oracle:
+
+- witnesses: `W01-ordered-node-U-RTC-tile-chain`, `RTC-binary-form` and `RTC-range-overrun`
+  retire. `W01-noRTC-variant` (with its 9 ulp variants) and `matrix-and-TRS` are re-emitted as
+  GLB;
+- controls: the `RTC-added` pair retires;
+- C2-WB: the six `json-*-b3dm*` classes and the mutant `J-without-b3dm-batch-table` retire.
+  Their GLB twins remain.

@@ -6,11 +6,32 @@ Python uses `validate(path)`. Rust returns a typed `ValidationReport`, which
 adapters serialize without adding domain decisions. There is no external-tool
 option or subprocess fallback.
 
-Supported payloads are GLB 2.0, archive-local glTF 2.0, and modern b3dm version 1
-with the 28-byte header and the same embedded GLB proof. b3dm table framing,
-JSON and required BATCH_LENGTH are inspected; feature/batch table meaning is
-explicitly not inspected. Truncated framing is invalid; unavailable versions
+Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
+
+> **PROPOSED (H7).** This takes effect with the H7 production change. Until then,
+> modern b3dm version 1 is still admitted: its 28-byte header, table framing, JSON,
+> required BATCH_LENGTH and embedded GLB are inspected, and its feature/batch table
+> meaning is not.
+
+Legacy 3D Tiles 1.0 content (b3dm, i3dm, pnts and cmpt) is Unsupported, never
+InvalidInput, and is never partially inspected. A payload counts as legacy in
+two cases:
+
+- its archive member name ends in `.b3dm`, `.i3dm`, `.pnts` or `.cmpt` (ASCII,
+  case-insensitive). This is decided before the payload is read;
+- its first four bytes are one of those magics, for example b3dm bytes in a `.glb`
+  member.
+
+An implicit content template whose normalized last segment has one of those
+suffixes is Unsupported at root admission, and no subtree is read. Nothing after
+the four-byte magic is interpreted, so the version, the tables, `RTC_CENTER` and
+cmpt inner tiles make no difference: a cmpt that wraps a GLB is Unsupported too.
+A missing member is still InvalidInput. The message names the format and the
+member, for example
+`legacy b3dm content is unsupported (glTF 2.0 content only): tile.b3dm`.
+Producers write only GLB; convert older archives again. See the
+[C1 H7 amendment](architecture/c1-legacy-content-unsupported-amendment.md).
 
 The glTF contract uses the published [glTF 2.0.1 registry specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html),
 identified by revision `8e798b02d254cea97659a333cfcb20875b62bdd4`.
@@ -93,7 +114,7 @@ evaluate; a reference through one is `notInspected` as `derivedImplicitVolume`. 
 header with `metadata` is `tileMetadata`; subtree metadata tables are not. It is reported only
 when the whole archive is in domain. Otherwise `notInspected` lists
 `decodedContentBounds.<reason>` entries, for example `derivedImplicitVolume`, `regionVolume`,
-`rtcCenter`, `numericSpan` or `workLimit`. A proven escape fails as InvalidInput, and the
+`numericSpan` or `workLimit`. A proven escape fails as InvalidInput, and the
 message names the member, tile depth, volume, node, mesh, primitive and vertex; for implicit
 content, `depth` is the root's depth plus the level, and `ancestor:k` counts implicit levels,
 then the root, then explicit ancestors. C2 runs only after C1 succeeds. Its own caps
@@ -111,7 +132,9 @@ Classes outside that matrix, other hosts, debug builds and C1's own inspection t
 covered. Archives over the cap are reported as `workLimit`. The
 frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling`), `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
-`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching
+`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. `rtcCenter`
+is reserved (PROPOSED, H7): its only carrier, a b3dm feature table, is Unsupported, so
+it is never reported. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own
