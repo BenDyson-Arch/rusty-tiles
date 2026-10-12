@@ -391,9 +391,59 @@ fn spilling_input() -> Vec<Wide> {
     (0..2_000).map(|i| wide(&mut rng, i, 500)).collect()
 }
 
-/// R = 100 records, F = 3: 20 runs and three intermediate merge levels.
+/// R = 100 records, F = 3: 20 runs (32,000 bytes). A full pass rewrites them into 7 runs
+/// (6 of 4,800 bytes, then 3,200); the next-to-last pass merges only the first 6 into 2,
+/// writing 28,800 bytes; the final merge streams 3 runs.
 fn spilling_config() -> SortConfig {
     config::<Wide>(100, 3, 2, 64)
+}
+
+#[test]
+fn next_to_last_pass_rewrites_only_leading_groups() {
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(65, 64), vec![2]);
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(20, 3), vec![3; 7]);
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(7, 3), vec![3, 3]);
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(8, 3), vec![3, 3, 2]);
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(4096, 64), vec![64; 64]);
+    assert_eq!(ExternalSorter::<Wide>::pass_groups(4097, 64), vec![64; 65]);
+
+    // 65 runs of 10 records at F = 64: one pass merging runs 0 and 1 only.
+    let mut rng = Rng(9);
+    let input: Vec<Wide> = (0..650).map(|i| wide(&mut rng, i, 40)).collect();
+    let mut expected = input.clone();
+    expected.sort();
+    let io = FaultIo::new(Faults::default());
+    let (_parent, scratch) = new_scratch(io.clone());
+    let (output, stats) = sort(&scratch, config::<Wide>(10, 64, 1, 64), &input).unwrap();
+    assert_eq!(output, expected);
+    assert_eq!((stats.runs, stats.merge_levels), (65, 1));
+    let generated = 650 * 16;
+    let written = io.counters.written.load(Ordering::Relaxed);
+    assert_eq!(written, generated + 2 * 10 * 16, "2 of 65 runs rewritten");
+    assert_eq!(stats.spilled_bytes, written);
+
+    // Stability and identity around the boundaries, with heavy ties.
+    let keyed = keyed_input(650, 3, 13);
+    let mut keyed_expected = keyed.clone();
+    keyed_expected.sort();
+    for (r, f, jobs, runs) in [
+        (10, 64, 1, 65),
+        (10, 64, 3, 65),
+        (11, 64, 2, 60),
+        (10, 8, 2, 65),
+        (9, 8, 1, 73),
+        (5, 3, 4, 130),
+        (650, 2, 3, 1),
+    ] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let (output, stats) = sort(&scratch, config::<Keyed>(r, f, jobs, 32), &keyed).unwrap();
+        assert_eq!(
+            pairs(&output),
+            pairs(&keyed_expected),
+            "R={r} F={f} jobs={jobs}"
+        );
+        assert_eq!(stats.runs.max(1), runs, "R={r}");
+    }
 }
 
 #[test]
@@ -557,7 +607,7 @@ fn read_faults_and_corrupt_runs_are_typed_and_clean_up() {
         ),
         (
             Faults {
-                // Intermediate levels read 32,000 + 32,000 bytes before the final stream.
+                // Intermediate passes read 32,000 + 28,800 bytes before the final stream.
                 read_error_at: Some(70_000),
                 ..Faults::default()
             },

@@ -418,12 +418,30 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         Ok(())
     }
 
+    /// Group sizes for one pass over `runs > F` runs. While a full pass would still leave more
+    /// than `F` runs, every run is merged in groups of `F`. Otherwise this is the next-to-last
+    /// pass: only enough leading groups are merged to leave exactly `F` runs, and the rest are
+    /// not rewritten. Each group of `g` runs removes `g - 1`.
+    pub(super) fn pass_groups(runs: usize, fan_in: usize) -> Vec<usize> {
+        if runs.div_ceil(fan_in) > fan_in {
+            return vec![fan_in; runs.div_ceil(fan_in)];
+        }
+        let excess = runs - fan_in;
+        let mut groups = vec![fan_in; excess / (fan_in - 1)];
+        if !excess.is_multiple_of(fan_in - 1) {
+            groups.push(excess % (fan_in - 1) + 1);
+        }
+        groups
+    }
+
+    /// One merge pass. Groups are consecutive and keep their position, and the final merge
+    /// breaks ties by lower source index, so order stays the stable sort of the input.
     fn merge_level(&mut self) -> Result<(), SpillError> {
-        let fan_in = self.config.fan_in;
+        let groups = Self::pass_groups(self.runs.len(), self.config.fan_in);
         let mut pending = std::mem::take(&mut self.runs).into_iter();
-        let mut merged = Vec::with_capacity(pending.len().div_ceil(fan_in));
-        loop {
-            let mut group: Vec<Run> = pending.by_ref().take(fan_in).collect();
+        let mut merged = Vec::with_capacity(pending.len());
+        for size in groups {
+            let mut group: Vec<Run> = pending.by_ref().take(size).collect();
             match group.len() {
                 0 => break,
                 1 => merged.append(&mut group),
@@ -443,6 +461,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                 }
             }
         }
+        merged.extend(pending);
         self.runs = merged;
         self.stats.merge_levels += 1;
         Ok(())
