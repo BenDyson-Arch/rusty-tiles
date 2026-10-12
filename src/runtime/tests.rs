@@ -572,3 +572,75 @@ fn resource_refusal_retains_typed_cause_and_shared_first_abort_identity() {
     assert_eq!(failure.error.kind(), JobErrorKind::ResourceLimit);
     assert!(!control.cancellation_handle().cancel());
 }
+
+#[test]
+fn install_syncs_the_destination_parent_after_the_rename() {
+    struct CountParentSync(std::sync::Mutex<Vec<(PathBuf, bool)>>);
+    impl FileOperations for CountParentSync {
+        fn sync_parent(&self, output: &Path) -> io::Result<()> {
+            self.0
+                .lock()
+                .unwrap()
+                .push((output.to_owned(), output.exists()));
+            crate::dir_sync::sync_parent(output)
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("result");
+    let files = CountParentSync(Default::default());
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let published = sealed(&output, &attempt)
+        .publish_with(&output, OutputPolicy::CreateNew, &files)
+        .unwrap();
+    assert!(published.cleanup_diagnostics.is_empty());
+    // Exactly one sync, taken after the output became visible.
+    assert_eq!(*files.0.lock().unwrap(), [(output, true)]);
+}
+
+#[test]
+fn failed_installs_do_not_sync_and_sync_failure_after_commit_is_a_diagnostic() {
+    struct Sync(bool, AtomicUsize);
+    impl FileOperations for Sync {
+        fn sync_parent(&self, _: &Path) -> io::Result<()> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            Err(io::Error::other("injected directory sync failure"))
+        }
+        fn install(
+            &self,
+            path: TempPath,
+            output: &Path,
+            policy: OutputPolicy,
+        ) -> Result<(), PathPersistError> {
+            if self.0 {
+                SystemFiles.install(path, output, policy)
+            } else {
+                Err(PathPersistError {
+                    error: io::Error::other("injected install failure"),
+                    path,
+                })
+            }
+        }
+    }
+    let work = tempfile::tempdir().unwrap();
+    let output = work.path().join("result");
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let files = Sync(false, AtomicUsize::new(0));
+    failed(sealed(&output, &attempt).publish_with(&output, OutputPolicy::CreateNew, &files));
+    assert_eq!(files.1.load(Ordering::SeqCst), 0);
+
+    let control = RunControl::default();
+    let attempt = control.begin().unwrap();
+    let files = Sync(true, AtomicUsize::new(0));
+    let published = sealed(&output, &attempt)
+        .publish_with(&output, OutputPolicy::CreateNew, &files)
+        .unwrap();
+    assert_eq!(files.1.load(Ordering::SeqCst), 1);
+    assert_eq!(fs::read(&output).unwrap(), b"complete candidate");
+    assert_eq!(published.cleanup_diagnostics.len(), 1);
+    assert!(published.cleanup_diagnostics[0]
+        .error
+        .message()
+        .contains("synchronize output directory"));
+}

@@ -2,7 +2,11 @@
 //! exclusively: output may be absent between these moves. A failed install
 //! restores exclusively or retains typed recovery. Concurrent attempts are not
 //! serialized; Replace captures the entry at hold time, not a preflight snapshot.
-//! Producers close all writers before sealing. No crash durability is promised.
+//! Producers close all writers before sealing. Sealing syncs every directory of
+//! the staged tree and publication syncs the destination parent after each
+//! rename or unlink (see `dir_sync`), so the install survives a crash on
+//! filesystems that do not order namespace updates; Windows has no directory
+//! fsync and skips it. Crash simulation is not tested.
 use super::{
     Attempt, CleanupDiagnostic, DirectoryRecovery, JobError, JobErrorKind, JobFailure,
     OutputPolicy, Published,
@@ -106,6 +110,7 @@ impl<'a> DirectoryStaging<'a> {
         self.tree.path()
     }
 
+    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
     pub(crate) fn fail(self, error: JobError) -> JobFailure {
         self.fail_with(error, &SystemDirectories)
     }
@@ -116,8 +121,19 @@ impl<'a> DirectoryStaging<'a> {
     }
 
     pub(crate) fn seal(self) -> Result<SealedDirectory<'a>, JobFailure> {
+        self.seal_with(&SystemDirectories)
+    }
+    fn seal_with(
+        self,
+        operations: &dyn DirectoryOperations,
+    ) -> Result<SealedDirectory<'a>, JobFailure> {
         if let Err(e) = self.attempt.check_sealable() {
-            return Err(self.fail(e));
+            return Err(self.fail_with(e, operations));
+        }
+        // Producers create and prune directories freely, so sync them all.
+        if let Err(e) = operations.sync_tree(self.tree.path()) {
+            let error = JobError::io("synchronize staged directories", self.tree.path(), e);
+            return Err(self.fail_with(error, operations));
         }
         Ok(SealedDirectory {
             tree: self.tree,
@@ -193,11 +209,14 @@ impl SealedDirectory<'_> {
             Ok(()) => {
                 self.attempt.finish();
                 // This rename is the commit point. Failure to retire the previous
-                // entry cannot change success. Recursive cleanup is confined to
-                // our holder and never follows a held symlink's referent.
+                // entry cannot change success, nor can failing to sync the
+                // parent. Recursive cleanup is confined to our holder and never
+                // follows a held symlink's referent.
+                sync_parent(output, operations, &mut diagnostics);
                 if let Some(previous) = previous {
-                    if let Some(diagnostic) = cleanup_diagnostic(previous.holder, operations) {
-                        diagnostics.push(diagnostic);
+                    match cleanup_diagnostic(previous.holder, operations) {
+                        Some(diagnostic) => diagnostics.push(diagnostic),
+                        None => sync_parent(output, operations, &mut diagnostics),
                     }
                 }
                 Ok(Published {
@@ -235,9 +254,31 @@ impl SealedDirectory<'_> {
                     }
                 }
                 cleanup(source, operations, &mut failure);
+                // Make the restore and the staged tree's removal durable too.
+                let mut unsynced = Vec::new();
+                sync_parent(output, operations, &mut unsynced);
+                failure
+                    .secondary
+                    .extend(unsynced.into_iter().map(|d| d.error));
                 Err(failure)
             }
         }
+    }
+}
+
+/// Sync `output`'s parent after a rename or unlink; failure is a diagnostic
+/// because the namespace change itself has already happened.
+fn sync_parent(
+    output: &Path,
+    operations: &dyn DirectoryOperations,
+    diagnostics: &mut Vec<CleanupDiagnostic>,
+) {
+    let parent = crate::dir_sync::parent_of(output);
+    if let Err(error) = operations.sync_directory(&parent) {
+        diagnostics.push(CleanupDiagnostic {
+            error: JobError::io("synchronize output directory", &parent, error),
+            path: parent,
+        });
     }
 }
 
@@ -256,6 +297,12 @@ trait DirectoryOperations {
     }
     fn install(&self, source: &Path, destination: &Path) -> io::Result<()> {
         platform::install(source, destination)
+    }
+    fn sync_directory(&self, directory: &Path) -> io::Result<()> {
+        crate::dir_sync::sync_directory(directory)
+    }
+    fn sync_tree(&self, root: &Path) -> io::Result<()> {
+        crate::dir_sync::sync_tree(root)
     }
     fn remove_empty(&self, path: &Path) -> io::Result<()> {
         fs::remove_dir(path)
@@ -1267,5 +1314,167 @@ mod tests {
         assert_eq!(failure.error.kind(), JobErrorKind::InvalidState);
         assert!(!private.exists());
         assert!(attempt.emit(&RunEvent::Note { message: "late" }).is_err());
+    }
+
+    /// Records directory syncs with the namespace state each one observed.
+    #[derive(Default)]
+    struct SyncLog {
+        trees: std::sync::Mutex<Vec<PathBuf>>,
+        directories: std::sync::Mutex<Vec<(PathBuf, bool, bool)>>,
+        fail_tree: bool,
+        fail_directory: bool,
+    }
+    impl DirectoryOperations for SyncLog {
+        fn sync_tree(&self, root: &Path) -> io::Result<()> {
+            assert!(
+                root.join("nested").is_dir() && root.join("nested/deeper").is_dir(),
+                "the whole staged tree exists when it is synced"
+            );
+            self.trees.lock().unwrap().push(root.to_owned());
+            if self.fail_tree {
+                return Err(io::Error::other("injected tree sync failure"));
+            }
+            crate::dir_sync::sync_tree(root)
+        }
+        fn sync_directory(&self, directory: &Path) -> io::Result<()> {
+            let output = directory.join("output");
+            let holders = fs::read_dir(directory)
+                .unwrap()
+                .filter(|e| {
+                    e.as_ref()
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".tiles-previous-")
+                })
+                .count();
+            self.directories.lock().unwrap().push((
+                directory.to_owned(),
+                output.exists(),
+                holders > 0,
+            ));
+            if self.fail_directory {
+                return Err(io::Error::other("injected directory sync failure"));
+            }
+            crate::dir_sync::sync_directory(directory)
+        }
+    }
+    fn staged_with_nested<'a>(
+        target: DirectoryTarget,
+        attempt: &'a Attempt,
+    ) -> DirectoryStaging<'a> {
+        let stage = target.stage(attempt).unwrap();
+        fs::create_dir_all(stage.path().join("nested/deeper")).unwrap();
+        fs::write(stage.path().join("nested/deeper/tile"), b"new").unwrap();
+        stage
+    }
+
+    #[test]
+    fn install_syncs_staged_tree_then_destination_parent_once() {
+        let root = platform::test_directory();
+        let run = RunControl::default();
+        let attempt = run.begin().unwrap();
+        let stage = staged_with_nested(target(root.path()), &attempt);
+        let private = stage.path().to_owned();
+        attempt.close_events().unwrap();
+        let log = SyncLog::default();
+        let published = stage.seal_with(&log).unwrap().publish_with(&log).unwrap();
+        assert!(published.cleanup_diagnostics.is_empty());
+        assert_eq!(*log.trees.lock().unwrap(), [private]);
+        let parent = fs::canonicalize(root.path()).unwrap();
+        // One parent sync, after the rename made the output visible.
+        assert_eq!(*log.directories.lock().unwrap(), [(parent, true, false)]);
+    }
+
+    #[test]
+    fn replace_syncs_parent_after_install_and_again_after_retiring_previous() {
+        let root = platform::test_directory();
+        old_tree(root.path());
+        let run = RunControl::default();
+        let attempt = run.begin().unwrap();
+        let stage = staged_with_nested(replacement(root.path()), &attempt);
+        attempt.close_events().unwrap();
+        let log = SyncLog::default();
+        let published = stage.seal_with(&log).unwrap().publish_with(&log).unwrap();
+        assert!(published.cleanup_diagnostics.is_empty());
+        let parent = fs::canonicalize(root.path()).unwrap();
+        assert_eq!(
+            *log.directories.lock().unwrap(),
+            // First with the held previous entry still present, then without it.
+            [(parent.clone(), true, true), (parent, true, false)]
+        );
+    }
+
+    #[test]
+    fn failed_install_still_syncs_parent_after_restore() {
+        let root = platform::test_directory();
+        old_tree(root.path());
+        let run = RunControl::default();
+        let attempt = run.begin().unwrap();
+        let stage = staged_with_nested(replacement(root.path()), &attempt);
+        attempt.close_events().unwrap();
+        struct Failing(SyncLog);
+        impl DirectoryOperations for Failing {
+            fn install(&self, _: &Path, _: &Path) -> io::Result<()> {
+                Err(io::Error::other("injected install failure"))
+            }
+            fn sync_tree(&self, root: &Path) -> io::Result<()> {
+                self.0.sync_tree(root)
+            }
+            fn sync_directory(&self, directory: &Path) -> io::Result<()> {
+                self.0.sync_directory(directory)
+            }
+        }
+        let ops = Failing(SyncLog::default());
+        let failure = stage
+            .seal_with(&ops)
+            .unwrap()
+            .publish_with(&ops)
+            .err()
+            .unwrap();
+        assert_eq!(failure.error.kind(), JobErrorKind::Io);
+        assert_old(root.path());
+        let parent = fs::canonicalize(root.path()).unwrap();
+        assert_eq!(*ops.0.directories.lock().unwrap(), [(parent, true, false)]);
+    }
+
+    #[test]
+    fn staged_tree_sync_failure_fails_sealing_and_publishes_nothing() {
+        let root = platform::test_directory();
+        let run = RunControl::default();
+        let attempt = run.begin().unwrap();
+        let stage = staged_with_nested(target(root.path()), &attempt);
+        let private = stage.path().to_owned();
+        attempt.close_events().unwrap();
+        let log = SyncLog {
+            fail_tree: true,
+            ..SyncLog::default()
+        };
+        let failure = stage.seal_with(&log).err().unwrap();
+        assert_eq!(failure.error.kind(), JobErrorKind::Io);
+        assert!(failure.error.message().contains("synchronize staged"));
+        assert!(!private.exists());
+        assert!(!root.path().join("output").exists());
+        assert!(log.directories.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn parent_sync_failure_after_commit_is_a_diagnostic_not_a_failure() {
+        let root = platform::test_directory();
+        let run = RunControl::default();
+        let attempt = run.begin().unwrap();
+        let stage = staged_with_nested(target(root.path()), &attempt);
+        attempt.close_events().unwrap();
+        let log = SyncLog {
+            fail_directory: true,
+            ..SyncLog::default()
+        };
+        let published = stage.seal_with(&log).unwrap().publish_with(&log).unwrap();
+        assert!(root.path().join("output/nested/deeper/tile").is_file());
+        assert_eq!(published.cleanup_diagnostics.len(), 1);
+        assert!(published.cleanup_diagnostics[0]
+            .error
+            .message()
+            .contains("synchronize output directory"));
     }
 }

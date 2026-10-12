@@ -57,7 +57,7 @@ impl Job {
     pub fn begin(output: &Path, force: bool) -> Result<Self, Error> {
         check_output(output, force)?;
         let parent = parent_dir(output);
-        fs::create_dir_all(parent)?;
+        crate::dir_sync::create_dir_all_durable(parent)?;
         let work = tempfile::Builder::new()
             .prefix(".tiles-work-")
             .tempdir_in(parent)?;
@@ -94,6 +94,16 @@ impl Job {
         files: &[(String, PathBuf)],
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
+        self.publish_3tz_with(files, report, crate::dir_sync::sync_parent)
+    }
+
+    /// `sync_parent` makes the install rename durable; it is a seam for tests.
+    fn publish_3tz_with(
+        self,
+        files: &[(String, PathBuf)],
+        report: Option<Value>,
+        sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+    ) -> Result<ConversionResult, Error> {
         check_members(files, &self.output)?;
         let mut temp = temp_archive(self.work.path())?;
         crate::archive3tz::write_archive(files, temp.as_file_mut())?;
@@ -110,6 +120,11 @@ impl Job {
             }
             _ => Error::Io(e.error),
         })?;
+        // The archive is installed. `ConversionResult` has no diagnostics
+        // channel, and returning an error would make a retry hit OutputExists
+        // for a published output, so a failed directory sync is ignored like
+        // the typed publishers' non-fatal cleanup diagnostics.
+        let _ = sync_parent(&self.output);
         Ok(self.result(true, report))
     }
 
@@ -339,5 +354,49 @@ mod tests {
         let entries = archive_entries(&output);
         assert!(entries.contains(&("tileset.json".into(), b"{\"new\":true}".to_vec())));
         assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn archive_publication_syncs_the_output_parent_after_the_rename() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let job = Job::begin(&output, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        let mut synced = Vec::new();
+        job.publish_3tz_with(&[("tileset.json".into(), manifest)], None, |path| {
+            synced.push((path.to_owned(), path.is_file()));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(synced, [(output, true)]);
+    }
+
+    #[test]
+    fn archive_publication_keeps_the_output_when_the_parent_sync_fails_and_skips_it_on_conflict() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let job = Job::begin(&output, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        let result = job
+            .publish_3tz_with(&[("tileset.json".into(), manifest)], None, |_| {
+                Err(std::io::Error::other("injected directory sync failure"))
+            })
+            .unwrap();
+        assert_eq!(result.output, output);
+        assert!(output.is_file());
+
+        let other = tmp.path().join("other.3tz");
+        let job = Job::begin(&other, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        fs::write(&other, b"raced").unwrap();
+        let error = job
+            .publish_3tz_with(&[("tileset.json".into(), manifest)], None, |_| {
+                panic!("a refused install must not sync")
+            })
+            .unwrap_err();
+        assert!(matches!(error, Error::OutputExists(_)), "{error}");
     }
 }
