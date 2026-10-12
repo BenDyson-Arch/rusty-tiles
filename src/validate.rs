@@ -371,8 +371,8 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
 }
 // ---- C2 decoded-content containment: operation owner ----
 use containment::{
-    Arena, Exclusion, LevelFacts, Local, Normalization, RawVertex, ReferenceFacts, Role, SpanCaps,
-    UriBounds, Verdict, VolumeFacts, Word,
+    Arena, Credit, Exclusion, LevelFacts, Local, Normalization, RawVertex, ReferenceFacts, Role,
+    SpanCaps, UriBounds, Verdict, VolumeFacts, Word,
 };
 use payload::scene::{
     ContentExclusions, Instance, NodeTransform, PositionFormat, PositionWord, SceneConsumer,
@@ -839,6 +839,8 @@ struct StreamConsumer<'a> {
     levels: &'a [LevelFacts],
     member: &'a str,
     depth: usize,
+    /// The stream's corner-walk budget (H11 V7).
+    credit: &'a mut Credit,
 }
 impl SceneConsumer for StreamConsumer<'_> {
     type Error = Error;
@@ -873,33 +875,28 @@ impl SceneConsumer for StreamConsumer<'_> {
             bitmap.fill(0);
             instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));
             let n = normalization(instance.format(accessor));
-            for (w, &bits) in bitmap.iter().enumerate() {
-                let mut bits = bits;
-                while bits != 0 {
-                    let vertex = w * 64 + bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    let raw = raw_vertex(instance.vertex(accessor, vertex));
-                    let verdict = containment::walk(self.arena, n, raw, self.levels);
-                    if self.arena.fault() {
-                        return Err(containment_fault());
-                    }
-                    if let Verdict::Outside { role, .. } = verdict {
-                        let volume = match role {
-                            Role::Own => "own".to_owned(),
-                            Role::Content => "content".to_owned(),
-                            Role::ExternalContent(k) => format!("externalContent:{k}"),
-                            Role::Ancestor(k) => format!("ancestor:{k}"),
-                        };
-                        let primitive = instance.primitive_drawing(accessor, vertex).unwrap_or(0);
-                        return Err(invalid(format!(
-                            "decoded content outside bounding volume: content={} depth={} volume={volume} node={} mesh={} primitive={primitive} vertex={vertex}",
-                            self.member,
-                            self.depth,
-                            instance.node(),
-                            instance.mesh(),
-                        )));
-                    }
-                }
+            let first =
+                containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {
+                    raw_vertex(instance.vertex(accessor, v))
+                });
+            if self.arena.fault() {
+                return Err(containment_fault());
+            }
+            if let Some((vertex, Verdict::Outside { role, .. })) = first {
+                let volume = match role {
+                    Role::Own => "own".to_owned(),
+                    Role::Content => "content".to_owned(),
+                    Role::ExternalContent(k) => format!("externalContent:{k}"),
+                    Role::Ancestor(k) => format!("ancestor:{k}"),
+                };
+                let primitive = instance.primitive_drawing(accessor, vertex).unwrap_or(0);
+                return Err(invalid(format!(
+                    "decoded content outside bounding volume: content={} depth={} volume={volume} node={} mesh={} primitive={primitive} vertex={vertex}",
+                    self.member,
+                    self.depth,
+                    instance.node(),
+                    instance.mesh(),
+                )));
             }
         }
         Ok(())
@@ -1157,12 +1154,14 @@ impl Check<'_> {
             None => Arena::reserve(self.c2.caps).map_err(|_| refused())?,
         };
         let mut bitmap = Vec::new();
+        let mut credit = Credit::default();
         let mut reread = 0u64;
         let cap = self.resources.limits.containment_bytes_read;
         let limits = self.resources.content_limits;
         let references = std::mem::take(&mut self.c2.references);
         for reference in &references {
             self.c2.build_levels(reference.tile, reference.content)?;
+            credit.accrue(self.c2.uris[reference.uri].1.t);
             let name = self.c2.uris[reference.uri].0.as_str();
             let archive = &mut *self.resources.archive;
             let bytes = read_rerun(archive, name, &mut reread, cap, limits.member_bytes as u64)?;
@@ -1172,6 +1171,7 @@ impl Check<'_> {
                 levels: &self.c2.levels,
                 member: name,
                 depth: self.c2.tiles[reference.tile].depth,
+                credit: &mut credit,
             };
             payload::inspect_scene(
                 payload_kind(name)?,
@@ -3182,6 +3182,50 @@ mod containment_controls {
         }
         // Omitting U would accept a box that only holds the y-up point.
         assert!(outside(run(&single(boxed([0.; 3], [1., 2., 3.]), payload))).contains("volume=own"));
+    }
+
+    /// H11: declared accessor `min`/`max` never decide containment. The fast path reads the drawn
+    /// words; a lying declaration over viewed storage is a C1 refusal, and over viewless (zero)
+    /// storage, where C1 allows any declaration, the zero words are still tested.
+    #[test]
+    fn declared_accessor_bounds_cannot_hide_an_escape() {
+        // 600 drawn vertices: enough corner credit (T/64 >= 2) for the fast path to run.
+        let mut positions: Vec<[f32; 3]> = (0..600)
+            .map(|i| [(i % 7) as f32 * 0.125, 0.0, (i % 5) as f32 * -0.125])
+            .collect();
+        positions[555] = [3.0, 0.0, 0.0];
+        let volume = boxed([0.5, 0.5, 0.0], [1.0, 1.0, 1.0]);
+        let (doc, bin) = points_doc(&positions, json!([{"mesh":0}]));
+        let message = "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=555";
+        assert_eq!(
+            outside(run(&single(volume.clone(), glb(&doc, &bin)))),
+            message
+        );
+        // Declaring the escaping maximum away is refused before C2 runs.
+        let mut lying = doc.clone();
+        lying["accessors"][0]["max"] = json!([0.75, 0.0, 0.0]);
+        match run(&single(volume.clone(), glb(&lying, &bin))) {
+            Err(Error::InvalidInput(m)) => {
+                assert!(m.contains("declared accessor bounds differ"), "{m}")
+            }
+            other => panic!("expected the C1 bounds refusal, got {other:?}"),
+        }
+        // Viewless storage: the declaration says [0.5, 0.75]^3, the words are zero, and the box
+        // holds the declaration but not the origin.
+        let viewless = json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "accessors":[{"componentType":5126,"type":"VEC3","count":600,
+                "min":[0.5,0.5,0.5],"max":[0.75,0.75,0.75]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let payload = glb(&viewless, &[]);
+        assert_eq!(
+            outside(run(&single(boxed([0.625, -0.625, 0.625], [0.125; 3]), payload.clone()))),
+            "decoded content outside bounding volume: content=a.glb depth=0 volume=own node=0 mesh=0 primitive=0 vertex=0"
+        );
+        assert!(contained(
+            &run(&single(boxed([0.5, -0.5, 0.5], [0.75; 3]), payload)).unwrap()
+        ));
     }
 
     #[test]
