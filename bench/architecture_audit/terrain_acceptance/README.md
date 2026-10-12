@@ -1,5 +1,13 @@
 # Terrain T1 audit and acceptance evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 15 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/terrain_acceptance | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/terrain_acceptance.tar.zst`, SHA-256
+> `91d0ded63e05517840f5d4f4e06d70f9dbbbf0cba44eb52ff2dd3f36188e57cb`.
+> Paths below that no longer exist refer to that snapshot.
+
 The replacement implementation has passed the focused local checks below;
 final PR CI and release gate #113 remain separate acceptance gates. The
 [representation decision](../../../docs/architecture/terrain-representation-decision.md)

@@ -1,5 +1,13 @@
 # D1 evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 22 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/directory | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/directory.tar.zst`, SHA-256
+> `45f3befac069e64460eb19735f99147878593c471eeeffb5352074ca4c8cf1f9`.
+> Paths below that no longer exist refer to that snapshot.
+
 The [directory contract](../../../docs/architecture/d1-directory-contract.md)
 and [raster contract](../../../docs/architecture/d1-raster-contract.md) define
 this slice. D2 replacement remains open in #118. [Platform sources](platforms.md)

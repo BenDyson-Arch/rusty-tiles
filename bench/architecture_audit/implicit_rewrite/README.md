@@ -1,5 +1,13 @@
 # A2 implicit rewrite audit and baseline probes
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 5 of 184 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/implicit_rewrite | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/implicit_rewrite.tar.zst`, SHA-256
+> `b8017abed7b4fc5a526154353cf164aa47b5cf3af4e900163b30ea12833847ba`.
+> Paths below that no longer exist refer to that snapshot.
+
 **Retired 2026-10-11.** The user retired `convert-to-implicit` for 0.4.0 instead
 of resolving the terminal external-template gate; producers already emit
 implicit tiling by default. See the contract's

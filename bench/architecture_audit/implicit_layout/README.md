@@ -1,5 +1,13 @@
 # P-IMPL oracle: bounded implicit forest checks (PO)
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 1170 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/implicit_layout | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/implicit_layout.tar.zst`, SHA-256
+> `afff22f4ce579b4cc5cd1416ef74c66321629db5b4270df29a689d4d5dce0370`.
+> Paths below that no longer exist refer to that snapshot.
+
 PO's independent acceptance checks for P-IMPL, the bounded implicit forest (design v3). They cover
 A-2 (forest checker and its sensitive controls), A-4 (equivalence to an `--explicit` build) and the
 Cesium probes of A-5. The checks were frozen before PO saw the writer diff.

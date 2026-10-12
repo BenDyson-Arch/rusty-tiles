@@ -1,5 +1,13 @@
 # F1b3 core PBR and authored companions
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 38 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1b3 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1b3.tar.zst`, SHA-256
+> `c59747f302738917bfd564552dd093bb62aecce28eb6c1b96e52c01de01748a8`.
+> Paths below that no longer exist refer to that snapshot.
+
 Bounded implementation of [#140](https://github.com/BenDyson-Arch/rusty-tiles/issues/140), under #121/#113, following merged F1b2 #139. The [contract](../../../docs/architecture/f1b3-contract.md) advances the existing local mesh operation; there is no compatibility route, legacy fallback, atlas or generated tangent basis. This does not close broader mesh migration or authorize a release.
 
 Production source is pinned to `92c7e02433efc2031df835290cd05d72a392ebdc`. [build-manifest.json](build-manifest.json) records all 89 compiled source/resource inputs, unique frozen portable/native binaries and the installed wheel/extension. Inputs match the Git pin and final worktree. Each binary was copied after its owning build finished, with no Cargo operation running. Later commits add tests, documentation and evidence. Shared target artifacts are never acceptance inputs.

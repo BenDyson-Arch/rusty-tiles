@@ -45,6 +45,16 @@ Do not merge into `main`, tag, publish or release under this authority. Keep
 foundation-first process and GPT-6.1 Sol fan-out with clear file ownership and
 a fresh separate nonauthor review; one coordinator owns shared Cargo builds.
 
+## Evidence and tree size
+
+Commit only what CI or tests execute or read, plus small fixtures (about 100 KB
+each) and hash manifests. Bulk evidence (raw runs, review transcripts, candidate
+and precode corpora, preparation output) goes to `~/.cache/rusty-tiles-evidence/`
+and is referenced from a tracked README by SHA-256 and the last commit that held
+it. `scripts/check_tree_budget.py` runs in CI and fails when a tracked file under
+`bench/` exceeds 1 MB or tracked `bench/` exceeds its total budget; raise the
+budget only with a stated reason.
+
 ## CPU load
 
 Keep local work considerate of other applications. Default to

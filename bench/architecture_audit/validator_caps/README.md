@@ -1,5 +1,13 @@
 # Validator caps for 100,000-tile default vector output (2026-10-11)
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 23 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/validator_caps | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/validator_caps.tar.zst`, SHA-256
+> `f727b6a43d15d4b20715c11bb5ca9cf167d30abbf84ce1ec8898a94bd2ce5055`.
+> Paths below that no longer exist refer to that snapshot.
+
 On 2026-10-11 the user decided to raise the validator's ceilings, with measured
 time and memory evidence, so that default vector output at the 100,000-tile
 `--maxTiles` default validates. The vector default stays unchanged.

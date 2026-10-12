@@ -1,5 +1,9 @@
 # Architecture audit evidence for #113
 
+> Bulk evidence was moved out of the tree on 2026-10-12; each subdirectory README
+> gives its archive SHA-256 and the last commit that contained it
+> (`e29cd19d2f236dc688e91a80a45170d4a573e20b`). Policy: [AGENTS.md](../../AGENTS.md).
+
 Baseline production revision: `8dfd74bd87dd23c86278e98d736c3f5912c246cf`.
 See the [architecture proposal](../../docs/architecture/README.md) and
 [release-blocking issue](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).

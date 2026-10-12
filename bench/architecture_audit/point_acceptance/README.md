@@ -1,5 +1,13 @@
 # P1 independent point acceptance
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 14 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/point_acceptance | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/point_acceptance.tar.zst`, SHA-256
+> `6d432c93efa13abdfee63712e01daf76b470df664808f0bab64ade9b4ef9cb3f`.
+> Paths below that no longer exist refer to that snapshot.
+
 The executable oracle is [`tests/p1_point_oracle.py`](../../../tests/p1_point_oracle.py). Its source and archive readers use Python's standard library. It imports no product parser, encoder, coordinate transform or implicit expander. The admitted domain and lifecycle decisions are in [`point-acceptance-contract.md`](../../../docs/architecture/point-acceptance-contract.md).
 
 The fixture writes LAS 1.2 formats 0/1/2/3 and LAS 1.4 formats 6/7/8 from literal public header, point-record and 192-byte scalar ExtraBytes descriptor layouts. A separate raw reader enumerates required dimensions from input bytes, independent of the output schema. Flags, signed scan angles, GPS time, RGB/NIR, every scalar ExtraBytes type, large exact integer values, independent scale/offset flags and noData/min/max declarations are checked. FLOAT32 declarations use exact widened FLOAT32 values in the LAS DOUBLE descriptor slots; the first actual record equals its noData sentinel and retains its original index. A finite declaration that cannot represent a FLOAT32 value is an explicit unsupported negative control. Byte-identical original records retain distinct enumeration indices; coverage compares a multiset of every original index, never a set of coordinates.

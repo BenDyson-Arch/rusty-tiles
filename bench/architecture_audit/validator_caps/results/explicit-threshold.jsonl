@@ -1,5 +1,0 @@
-{"points": 2000, "tilesetJsonValueNodes": 103381, "tilesetJsonBytes": 1346912, "contentTiles": 2047, "ok": true, "tiles": 2047, "error": null}
-{"points": 2200, "tilesetJsonValueNodes": 118733, "tilesetJsonBytes": 1541216, "contentTiles": 2351, "ok": true, "tiles": 2351, "error": null}
-{"points": 2300, "tilesetJsonValueNodes": 128833, "tilesetJsonBytes": 1667674, "contentTiles": 2551, "ok": true, "tiles": 2551, "error": null}
-{"points": 2400, "tilesetJsonValueNodes": 138933, "tilesetJsonBytes": 1794545, "contentTiles": 2751, "ok": false, "tiles": null, "error": "JSON exceeds value-node limit"}
-{"points": 2600, "tilesetJsonValueNodes": 159133, "tilesetJsonBytes": 2047260, "contentTiles": 3151, "ok": false, "tiles": null, "error": "JSON exceeds value-node limit"}

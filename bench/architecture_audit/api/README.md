@@ -1,5 +1,13 @@
 # API contract observations for architecture audit #113
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 4 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/api | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/api.tar.zst`, SHA-256
+> `5bd127e8afe3afb4eca32bffac013b9713f0104ba970e574ac49ac9fef5cb682`.
+> Paths below that no longer exist refer to that snapshot.
+
 These executable probes observe the portable Rust library, CLI and Python binding
 on develop `8dfd74bd87dd23c86278e98d736c3f5912c246cf`. They do not add regression
 tests that require the baseline's undesirable behavior to remain. A later fix

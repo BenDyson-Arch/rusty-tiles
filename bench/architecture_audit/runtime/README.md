@@ -1,5 +1,13 @@
 # Publication and vector transaction probes
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 15 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/runtime | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/runtime.tar.zst`, SHA-256
+> `d83bcb1193605addfb1641c17aa8ce73dd6678f9b577824ff579065cf6a261e8`.
+> Paths below that no longer exist refer to that snapshot.
+
 These standalone audit probes target baseline `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on Linux. They are excluded from the normal test suite and make no production changes. Recorded runs used Rust/Cargo 1.98.0, default features, two build jobs, and development debug information disabled.
 
 The [results](evidence/publication-vector.json) include exact commands, exit codes, stderr, binary and fixture hashes, archive inventories, conversion reports, and JSONL geometry reports. [Fixtures and actual converter archives](evidence/publication-vector-artifacts/) are retained. Each injected-source file has baseline and instrumented hashes in the [instrumentation manifest](evidence/publication-vector-instrumentation.json), with a [reviewable patch](evidence/publication-vector-instrumentation.patch).
