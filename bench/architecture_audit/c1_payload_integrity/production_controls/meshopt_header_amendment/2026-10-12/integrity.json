@@ -1,0 +1,69 @@
+{
+  "status": "Additive C1 meshopt stream-header lane; primary/ are relative symlinks to validator_caps_amendment/2026-10-11/stride_controls/primary",
+  "files": {
+    "fixtures/attributes-0xa0/input.3tz": {
+      "bytes": 1353,
+      "sha256": "46690e58248b24cf414000d6af0913b8dceb06882a59d651dfcb011c18f3fc76"
+    },
+    "fixtures/attributes-0xa1/input.3tz": {
+      "bytes": 1309,
+      "sha256": "ed2aa07903989585009256a9e0e39b518901a1b71b7df6ff3aced418181a12a7"
+    },
+    "fixtures/attributes-0xa2/input.3tz": {
+      "bytes": 1353,
+      "sha256": "63c7241b24506553cae48d791182042440e1934453f84773e13bf5cb78f3731a"
+    },
+    "fixtures/indices-0xd0/input.3tz": {
+      "bytes": 1385,
+      "sha256": "a3cfddf2b8c793fa0fd9b204eb879ad5b763aec0e6d6ca2ea3469abad5c54796"
+    },
+    "fixtures/indices-0xd1/input.3tz": {
+      "bytes": 1385,
+      "sha256": "5980f1d7cdb4f118efd31f8026279cfbc999eab38685fe5720a9638a9a6a04ac"
+    },
+    "fixtures/indices-0xd2/input.3tz": {
+      "bytes": 1385,
+      "sha256": "dc873ebdcbf0c084cf8f8a50db428e9d96b1e9bff99be9127562c115236e3bae"
+    },
+    "fixtures/manifest.json": {
+      "bytes": 15367,
+      "sha256": "2f6e19333e9966df112bbbfa94c30550b327b60d55e7d937155acb6c046f7adf"
+    },
+    "fixtures/triangles-0xe0/input.3tz": {
+      "bytes": 1501,
+      "sha256": "2f09f4f48bb8332461d50852f123f4fdc3b0a9842b408c300c5280d42c369dbe"
+    },
+    "fixtures/triangles-0xe1/input.3tz": {
+      "bytes": 1501,
+      "sha256": "6872939f3b75660fe5d7e323f3f2bb651d4a6f1dd00a4c660958ea1d78b752bd"
+    },
+    "fixtures/triangles-0xe2/input.3tz": {
+      "bytes": 1501,
+      "sha256": "b67abb43b7f2fad5fb25a7d6c4ec122f5c2f0060d03c440dbb3273ead3434be9"
+    },
+    "generator.py": {
+      "bytes": 11827,
+      "sha256": "d0dca6f5d890027fe37d4291a01ab2d938c631961b53bc54c3e9ce69f5d1cea4"
+    },
+    "primary/EXT_meshopt_compression.md": {
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+    },
+    "primary/glTF-core.adoc": {
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175"
+    },
+    "primary/meshopt_decoder.test.js": {
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac"
+    },
+    "primary/pins.json": {
+      "bytes": 1067,
+      "sha256": "718ca2301e0596da730ca01d361a4f38d041a5049e86107af5a9edeb5366d585"
+    },
+    "runner.py": {
+      "bytes": 4199,
+      "sha256": "2879dd9332871d29147ccad34f55efd5174e77a00879b03502ef8d1ec5397558"
+    }
+  }
+}

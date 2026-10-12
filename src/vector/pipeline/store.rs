@@ -33,6 +33,36 @@ fn cleanup_failure(original: FeatureFailure, cleanup: Error) -> Error {
     Error::Job(failure)
 }
 
+/// Open the private scratch spool. Feature admission rolls back savepoints, so
+/// the journal must support ROLLBACK; an in-memory journal does, without the
+/// journal-file writes. The spool is never reopened after a failed attempt, so
+/// it needs neither crash durability (`synchronous=OFF`) nor an on-disk journal.
+/// The in-memory savepoint sub-journal holds only pages that one source
+/// feature modifies, and RELEASE frees it.
+fn open_spool(path: &std::path::Path) -> Result<Connection, Error> {
+    let db = Connection::open(path).map_err(sql)?;
+    db.execute_batch("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-32768;
+        CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,fingerprint TEXT,sortkey TEXT);
+        CREATE INDEX paths ON features(path);
+        CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,PRIMARY KEY(x,y,z)) WITHOUT ROWID;").map_err(sql)?;
+    Ok(db)
+}
+
+/// After admission nothing rolls back: every later SQL failure is fatal and
+/// discards the spool. An in-memory journal would then hold an image of every
+/// page the fingerprint and partition updates touch, so drop the journal.
+fn end_admission(db: &Connection) -> Result<(), Error> {
+    let mode: String = db
+        .query_row("PRAGMA journal_mode=OFF", [], |r| r.get(0))
+        .map_err(sql)?;
+    if mode != "off" {
+        return Err(Error::Environment(format!(
+            "vector scratch spool kept journal mode {mode} after admission"
+        )));
+    }
+    Ok(())
+}
+
 fn emit(attempt: &Attempt, event: RunEvent<'_>) -> Result<(), Error> {
     attempt
         .emit(&event)
@@ -777,12 +807,8 @@ pub(super) fn convert(
     let mut reader = Reader::new(input, options, reuse.frame.clone(), output)?;
     let scratch = tempfile::tempdir_in(output)?;
     let spool: PathBuf = scratch.path().join("features.sqlite");
-    let db = Connection::open(&spool).map_err(sql)?;
-    db.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=OFF; PRAGMA temp_store=FILE; PRAGMA cache_size=-32768;
-        CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT,n INTEGER,estimate INTEGER,x REAL,y REAL,z REAL,lx REAL,ly REAL,lz REAL,hx REAL,hy REAL,hz REAL,fingerprint TEXT,sortkey TEXT);
-        CREATE INDEX paths ON features(path);
-        CREATE TABLE vertices(x REAL,y REAL,z REAL,owner INTEGER,shared INTEGER DEFAULT 0,PRIMARY KEY(x,y,z)) WITHOUT ROWID;
-        BEGIN;").map_err(sql)?;
+    let db = open_spool(&spool)?;
+    db.execute_batch("BEGIN;").map_err(sql)?;
     let counters = RefCell::new(Counters::default());
     let reports = RefCell::new(Reports {
         file: Box::new(std::fs::File::create(
@@ -858,6 +884,7 @@ pub(super) fn convert(
         },
     )?;
     db.execute_batch("COMMIT;").map_err(sql)?;
+    end_admission(&db)?;
     let mut counters = counters.into_inner();
     counters.skipped_features = failures.get();
     counters.features_without_geometry = reader.without_geometry();
@@ -1430,6 +1457,42 @@ mod countries_fragment_tests {
         let error = db.execute_batch("COMMIT;").map_err(sql).unwrap_err();
         assert!(matches!(error, Error::Io(_)));
         assert!(error.to_string().contains("not authorized"));
+    }
+
+    #[test]
+    fn production_spool_journal_rolls_back_feature_savepoints() {
+        // The scratch spool keeps a rollback-capable journal without a journal
+        // file: a rejected feature's rows and vertex locks must disappear.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("features.sqlite");
+        let db = open_spool(&path).unwrap();
+        let mode: String = db
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "memory");
+        db.execute_batch("BEGIN;").unwrap();
+        let feature = fixture_feature(Geometry::LineString(vec![[0., 0., 0.], [1., 0., 0.]]));
+        insert_row(&db, &feature, "").unwrap();
+        db.execute_batch("SAVEPOINT feature;").unwrap();
+        let rejected = fixture_feature(Geometry::LineString(vec![[1., 0., 0.], [2., 0., 0.]]));
+        insert_row(&db, &rejected, "").unwrap();
+        db.execute_batch("ROLLBACK TO feature; RELEASE feature; COMMIT;")
+            .unwrap();
+        let count = |sql: &str| db.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(count("SELECT COUNT(*) FROM features"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM vertices"), 2);
+        assert_eq!(count("SELECT COUNT(*) FROM vertices WHERE shared"), 0);
+        assert!(!dir.path().join("features.sqlite-journal").exists());
+        end_admission(&db).unwrap();
+        let mode: String = db
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "off");
+        // The switch is refused inside a transaction; that must not pass silently.
+        let db = open_spool(&dir.path().join("open.sqlite")).unwrap();
+        db.execute_batch("BEGIN; INSERT INTO vertices(x,y,z,owner) VALUES(0,0,0,1);")
+            .unwrap();
+        assert!(end_admission(&db).is_err());
     }
 
     #[test]

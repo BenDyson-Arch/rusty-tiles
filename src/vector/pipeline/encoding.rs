@@ -251,20 +251,21 @@ fn fault_generated_document(mut document: Value) -> Value {
     document
 }
 
-/// Emit the actual selected-framed raw source once. Old Value/BIN owners drop
-/// before codec preparation. Caller feature/model/worker state H is outside
-/// this codec-owner estimate; duplicate emit geometry has already been dropped.
-fn bridge(
+/// The checked bridge source shared by the writer and the counted fitting path:
+/// generated-profile facts, declared metadata padding and retained storage.
+fn bridge_source(
     document: Value,
-    binary: Vec<u8>,
+    binary: &[u8],
+    capacity: usize,
     policy: ProducerPolicy,
     attempt: &Attempt,
-) -> Result<(Vec<u8>, usize), Error> {
-    let mut checkpoint = || attempt.check();
-    checkpoint().map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
+) -> Result<(Value, BridgeFacts, usize), Error> {
+    attempt
+        .check()
+        .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
     #[cfg(test)]
     let document = fault_generated_document(document);
-    let facts = bridge_facts(&document, &binary, &policy.limits.values)
+    let facts = bridge_facts(&document, binary, &policy.limits.values)
         .map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
     let mut document = document;
     if facts.metadata {
@@ -289,9 +290,24 @@ fn bridge(
                 & !7,
         );
     }
-    let retained = add_storage(facts.document_storage, binary.capacity())
+    let retained = add_storage(facts.document_storage, capacity)
         .and_then(|n| add_storage(n, bridge_fixed_storage()))
         .map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
+    Ok((document, facts, retained))
+}
+
+/// Emit the actual selected-framed raw source once. Old Value/BIN owners drop
+/// before codec preparation. Caller feature/model/worker state H is outside
+/// this codec-owner estimate; duplicate emit geometry has already been dropped.
+fn bridge(
+    document: Value,
+    binary: Vec<u8>,
+    policy: ProducerPolicy,
+    attempt: &Attempt,
+) -> Result<(Vec<u8>, usize), Error> {
+    let mut checkpoint = || attempt.check();
+    let (document, facts, retained) =
+        bridge_source(document, &binary, binary.capacity(), policy, attempt)?;
     let raw = codec::write_generated_glb(
         &document,
         &binary,
@@ -321,27 +337,53 @@ fn bridge(
     Ok((bytes, before_bytes))
 }
 
+/// The exact length `bridge` returns for an uncompressed policy, with the same
+/// refusals, without writing the GLB or re-admitting its JSON.
+fn bridge_len(
+    document: Value,
+    binary: Vec<u8>,
+    policy: ProducerPolicy,
+    attempt: &Attempt,
+) -> Result<usize, Error> {
+    debug_assert!(!policy.compress);
+    let mut checkpoint = || attempt.check();
+    let (document, facts, retained) =
+        bridge_source(document, &binary, binary.capacity(), policy, attempt)?;
+    codec::generated_glb_len(
+        &document,
+        binary.len(),
+        facts.metadata,
+        facts.counts,
+        retained,
+        &policy.limits,
+        &mut checkpoint,
+    )
+    .map_err(|error| codec_failure(error, attempt))
+}
+
+/// The b3dm fill wrapper length for a GLB of `len` bytes held in `capacity`.
+fn fill_total(len: usize, capacity: usize, policy: ProducerPolicy) -> Result<usize, FormatError> {
+    if !len.is_multiple_of(8) {
+        return Err(invalid("selected vector fill GLB alignment"));
+    }
+    let total = add_storage(48, len)?;
+    if u32::try_from(total).is_err() {
+        return Err(resource("vector fill container size limit"));
+    }
+    let peak = add_storage(capacity, total).and_then(|n| add_storage(n, bridge_fixed_storage()))?;
+    if peak > policy.limits.values.working_bytes {
+        return Err(resource("vector fill requested storage limit"));
+    }
+    Ok(total)
+}
+
 fn wrap_fill(bytes: Vec<u8>, policy: ProducerPolicy, attempt: &Attempt) -> Result<Vec<u8>, Error> {
     const FEATURE_JSON: &[u8; 20] = b"{\"BATCH_LENGTH\":0}  ";
     attempt
         .check()
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
-    let checked = || -> Result<usize, FormatError> {
-        if !bytes.len().is_multiple_of(8) {
-            return Err(invalid("selected vector fill GLB alignment"));
-        }
-        let total = add_storage(48, bytes.len())?;
-        if u32::try_from(total).is_err() {
-            return Err(resource("vector fill container size limit"));
-        }
-        let peak = add_storage(bytes.capacity(), total)
-            .and_then(|n| add_storage(n, bridge_fixed_storage()))?;
-        if peak > policy.limits.values.working_bytes {
-            return Err(resource("vector fill requested storage limit"));
-        }
-        Ok(total)
-    };
-    let total = checked().map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
+    let total = fill_total(bytes.len(), bytes.capacity(), policy)
+        .map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
     let mut wrapped = Vec::new();
     wrapped.try_reserve_exact(total).map_err(|_| {
         codec_failure(
@@ -439,6 +481,40 @@ fn emit(
     policy: ProducerPolicy,
     attempt: &Attempt,
 ) -> FeatureResult<Encoded> {
+    let source = emit_source(
+        items, center, repair, schemas, fill_only, options, reports, attempt,
+    )?;
+    let (bytes, before_bytes) = bridge(source.document, source.binary, policy, attempt)?;
+    Ok(Encoded {
+        bytes,
+        vertices: source.vertices,
+        primitives: source.primitives,
+        rounding: source.rounding,
+        quantization: source.quantization,
+        before_bytes,
+    })
+}
+
+/// The generated glTF document and BIN of one tile, before the codec bridge.
+struct Source {
+    document: Value,
+    binary: Vec<u8>,
+    vertices: usize,
+    primitives: usize,
+    rounding: f64,
+    quantization: f64,
+}
+#[allow(clippy::too_many_arguments)]
+fn emit_source(
+    items: &[&Feature],
+    center: Point,
+    repair: bool,
+    schemas: &BTreeMap<String, String>,
+    fill_only: bool,
+    options: &VectorOptions,
+    reports: &mut Vec<Value>,
+    attempt: &Attempt,
+) -> FeatureResult<Source> {
     attempt
         .check()
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
@@ -639,15 +715,36 @@ fn emit(
     drop(all_positions);
     drop(batches);
     let (document, binary) = glb.into_parts();
-    let (bytes, before_bytes) = bridge(document, binary, policy, attempt)?;
-    Ok(Encoded {
-        bytes,
+    Ok(Source {
+        document,
+        binary,
         vertices,
         primitives,
         rounding,
         quantization,
-        before_bytes,
     })
+}
+
+/// The feature's own metadata schema used by full-detail fitting.
+fn feature_schemas(feature: &Feature) -> BTreeMap<String, String> {
+    feature
+        .properties
+        .iter()
+        .filter_map(|(name, value)| {
+            let kind = if value.is_boolean() {
+                "boolean"
+            } else if value.is_i64() || value.is_u64() {
+                "integer"
+            } else if value.is_number() {
+                "real"
+            } else if value.is_string() {
+                "string"
+            } else {
+                return None;
+            };
+            Some((name.clone(), kind.to_string()))
+        })
+        .collect()
 }
 
 /// Test the exact full-detail encodings before admitting a source fragment.
@@ -665,24 +762,7 @@ pub(super) fn fits_feature(
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
     let (lo, hi) = bounds(feature.rendered_points())?;
     let center = mul(add(lo, hi), 0.5);
-    let schemas: BTreeMap<_, _> = feature
-        .properties
-        .iter()
-        .filter_map(|(name, value)| {
-            let kind = if value.is_boolean() {
-                "boolean"
-            } else if value.is_i64() || value.is_u64() {
-                "integer"
-            } else if value.is_number() {
-                "real"
-            } else if value.is_string() {
-                "string"
-            } else {
-                return None;
-            };
-            Some((name.clone(), kind.to_string()))
-        })
-        .collect();
+    let schemas = feature_schemas(feature);
     let mut boundary = feature.clone();
     if feature.surface_fragment {
         boundary.geometry = Geometry::MultiLineString(
@@ -706,7 +786,7 @@ pub(super) fn fits_feature(
         if part.geometry.size() == 0 {
             continue;
         }
-        let encoded = emit(
+        let source = emit_source(
             &[part],
             center,
             repair,
@@ -714,16 +794,21 @@ pub(super) fn fits_feature(
             fill,
             options,
             &mut Vec::new(),
-            policy,
             attempt,
         )?;
-        vertices += encoded.vertices;
-        let content = if fill {
-            wrap_fill(encoded.bytes, policy, attempt)?
+        vertices += source.vertices;
+        let length = if policy.compress {
+            // The compressed length is only known by encoding.
+            let (encoded, _) = bridge(source.document, source.binary, policy, attempt)?;
+            if fill {
+                wrap_fill(encoded, policy, attempt)?.len()
+            } else {
+                encoded.len()
+            }
         } else {
-            encoded.bytes
+            fitted_len(source, fill, policy, attempt)?
         };
-        bytes = bytes.checked_add(content.len()).ok_or_else(|| {
+        bytes = bytes.checked_add(length).ok_or_else(|| {
             codec_failure(
                 CodecError::Format(resource("vector fitting size overflow")),
                 attempt,
@@ -733,6 +818,26 @@ pub(super) fn fits_feature(
     }
     let reserve = if options.explicit { 0 } else { contents * 128 };
     Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
+}
+
+/// The exact uncompressed content length `bridge` and `wrap_fill` produce,
+/// under the same refusals, without writing the bytes or re-admitting JSON.
+/// The final tile encoding still writes and admits every published GLB.
+fn fitted_len(
+    source: Source,
+    fill: bool,
+    policy: ProducerPolicy,
+    attempt: &Attempt,
+) -> Result<usize, Error> {
+    let raw = bridge_len(source.document, source.binary, policy, attempt)?;
+    if !fill {
+        return Ok(raw);
+    }
+    attempt
+        .check()
+        .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
+    // `write_generated_glb` reserves exactly its total, so capacity == length.
+    fill_total(raw, raw, policy).map_err(|error| codec_failure(CodecError::Format(error), attempt))
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -1539,6 +1644,272 @@ mod tests {
                     let result = result.unwrap();
                     assert_eq!(result.node.is_some(), accepted);
                     assert_eq!(result.reason, if accepted { None } else { Some("bytes") });
+                }
+            }
+        }
+    }
+
+    fn fitting_fixtures() -> Vec<Feature> {
+        let mut line = point_feature();
+        line.geometry = Geometry::MultiLineString(vec![
+            vec![[0., 0., 0.], [3., 1., 0.], [5., -2., 1.]],
+            vec![[1., 1., 1.], [2., 2., 2.]],
+        ]);
+        let mut polygon = point_feature();
+        polygon.geometry = Geometry::Polygon(vec![
+            vec![
+                [0., 0., 0.],
+                [10., 0., 0.],
+                [10., 10., 0.],
+                [0., 10., 0.],
+                [0., 0., 0.],
+            ],
+            vec![
+                [2., 2., 0.],
+                [2., 4., 0.],
+                [4., 4., 0.],
+                [4., 2., 0.],
+                [2., 2., 0.],
+            ],
+        ]);
+        let mut wide = polygon.clone();
+        for index in 0..40 {
+            wide.properties
+                .insert(format!("p{index}"), json!(format!("v{index}")));
+        }
+        vec![point_feature(), line, polygon, wide]
+    }
+
+    fn fitting_source(feature: &Feature, fill: bool, options: &VectorOptions) -> Source {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let schemas = BTreeMap::from([
+            ("flag".to_string(), "boolean".to_string()),
+            ("signed".to_string(), "integer".to_string()),
+            ("text".to_string(), "string".to_string()),
+        ]);
+        emit_source(
+            &[feature],
+            [1., 2., 0.],
+            false,
+            &schemas,
+            fill,
+            options,
+            &mut Vec::new(),
+            &attempt,
+        )
+        .unwrap()
+    }
+
+    fn written_len(source: Source, fill: bool, policy: ProducerPolicy) -> Result<usize, Error> {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let (bytes, _) = bridge(source.document, source.binary, policy, &attempt)?;
+        Ok(if fill {
+            wrap_fill(bytes, policy, &attempt)?.len()
+        } else {
+            bytes.len()
+        })
+    }
+
+    fn counted_len(source: Source, fill: bool, policy: ProducerPolicy) -> Result<usize, Error> {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        fitted_len(source, fill, policy, &attempt)
+    }
+
+    #[test]
+    fn counted_fitting_length_equals_written_and_admitted_content() {
+        let policy = ProducerPolicy::new(false).unwrap();
+        for quantize in [false, true] {
+            let options = VectorOptions {
+                quantize,
+                ..Default::default()
+            };
+            for feature in fitting_fixtures() {
+                let polygon = matches!(feature.geometry, Geometry::Polygon(_));
+                for fill in [false, true].into_iter().filter(|fill| !fill || polygon) {
+                    let written =
+                        written_len(fitting_source(&feature, fill, &options), fill, policy)
+                            .unwrap();
+                    let counted =
+                        counted_len(fitting_source(&feature, fill, &options), fill, policy)
+                            .unwrap();
+                    assert_eq!(counted, written, "quantize {quantize} fill {fill}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn counted_fitting_refuses_exactly_where_writing_and_admission_refuse() {
+        // The writer additionally serializes the bytes and runs json::admit.
+        // At and around each JSON threshold that admission enforces (bytes,
+        // value nodes, depth), the counted path must decide identically.
+        fn nodes(value: &Value) -> usize {
+            1 + match value {
+                Value::Array(values) => values.iter().map(nodes).sum(),
+                Value::Object(values) => values.values().map(nodes).sum(),
+                _ => 0,
+            }
+        }
+        fn depth(value: &Value) -> u64 {
+            match value {
+                Value::Array(values) => 1 + values.iter().map(depth).max().unwrap_or(0),
+                Value::Object(values) => 1 + values.values().map(depth).max().unwrap_or(0),
+                _ => 0,
+            }
+        }
+        let options = VectorOptions::default();
+        let feature = fitting_fixtures().pop().unwrap();
+        let probe = fitting_source(&feature, false, &options);
+        let (n, d) = (nodes(&probe.document), depth(&probe.document));
+        let total = written_len(probe, false, ProducerPolicy::new(false).unwrap()).unwrap();
+        let mut decided = [0usize; 2];
+        let mut check = |limits: codec::CompressionLimits| {
+            let policy = ProducerPolicy {
+                limits: limits.validate().unwrap(),
+                compress: false,
+            };
+            let written = written_len(fitting_source(&feature, false, &options), false, policy);
+            let counted = counted_len(fitting_source(&feature, false, &options), false, policy);
+            match (&written, &counted) {
+                (Ok(a), Ok(b)) => {
+                    assert_eq!(a, b);
+                    decided[0] += 1;
+                }
+                (Err(Error::Job(a)), Err(Error::Job(b))) => {
+                    assert_eq!(a.error.kind(), b.error.kind());
+                    assert_eq!(a.error.to_string(), b.error.to_string());
+                    decided[1] += 1;
+                }
+                _ => panic!("written {written:?} and counted {counted:?} disagree"),
+            }
+        };
+        let base = codec::CompressionLimits::default();
+        for json_bytes in total.saturating_sub(64)..=total {
+            check(codec::CompressionLimits { json_bytes, ..base });
+        }
+        for json_value_nodes in n - 2..=n + 1 {
+            check(codec::CompressionLimits {
+                json_value_nodes,
+                ..base
+            });
+        }
+        for json_depth in d - 1..=d + 1 {
+            check(codec::CompressionLimits { json_depth, ..base });
+        }
+        for source_bytes in total - 1..=total {
+            check(codec::CompressionLimits {
+                source_bytes,
+                ..base
+            });
+        }
+        assert!(decided[0] > 0 && decided[1] > 0, "{decided:?}");
+    }
+
+    /// The pre-counting fitting oracle: encode every trial content in full
+    /// (bridge writer, JSON admission, meshopt when requested, fill wrapper)
+    /// and return (vertices, content bytes, content count).
+    fn trial_encode(
+        feature: &Feature,
+        options: &VectorOptions,
+        policy: ProducerPolicy,
+    ) -> (usize, usize, usize) {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let (lo, hi) = bounds(feature.rendered_points()).unwrap();
+        let center = mul(add(lo, hi), 0.5);
+        let schemas = feature_schemas(feature);
+        let mut boundary = feature.clone();
+        boundary.geometry = Geometry::MultiLineString(
+            feature
+                .triangle_boundaries
+                .iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        );
+        let groups = if feature.surface_fragment {
+            vec![(feature, true), (&boundary, false)]
+        } else {
+            vec![(feature, false)]
+        };
+        let (mut vertices, mut bytes) = (0, 0);
+        for (part, fill) in &groups {
+            let encoded = emit(
+                &[*part],
+                center,
+                false,
+                &schemas,
+                *fill,
+                options,
+                &mut Vec::new(),
+                policy,
+                &attempt,
+            )
+            .unwrap();
+            vertices += encoded.vertices;
+            bytes += if *fill {
+                wrap_fill(encoded.bytes, policy, &attempt).unwrap().len()
+            } else {
+                encoded.bytes.len()
+            };
+        }
+        (vertices, bytes, groups.len())
+    }
+
+    #[test]
+    fn feature_at_exact_size_limit_fits_with_and_without_trial_encode() {
+        // Uncompressed fitting counts bytes (no trial GLB, no admission);
+        // meshopt fitting still encodes the trial content. Against the full
+        // trial-encode oracle, both accept a feature exactly at the byte and
+        // vertex limits and reject it one below, with and without implicit
+        // reservations, including fill + boundary surface content.
+        let mut fixtures = fitting_fixtures();
+        let mut surface = fixtures[2].clone();
+        surface.geometry = Geometry::Polygon(vec![vec![
+            [0., 0., 0.],
+            [10., 0., 0.],
+            [0., 10., 0.],
+            [0., 0., 0.],
+        ]]);
+        surface.surface_fragment = true;
+        surface.triangle_boundaries = vec![vec![vec![
+            [0., 0., 0.],
+            [10., 0., 0.],
+            [0., 10., 0.],
+            [0., 0., 0.],
+        ]]];
+        fixtures.push(surface);
+        for meshopt in [false, true] {
+            for explicit in [false, true] {
+                let policy = ProducerPolicy::new(meshopt).unwrap();
+                let base = VectorOptions {
+                    meshopt,
+                    explicit,
+                    ..Default::default()
+                };
+                for feature in &fixtures {
+                    let (vertices, bytes, contents) = trial_encode(feature, &base, policy);
+                    let limit = bytes + if explicit { 0 } else { contents * 128 };
+                    let fits = |max_bytes: usize, max_vertices: usize| {
+                        let options = VectorOptions {
+                            max_bytes,
+                            max_vertices,
+                            ..base.clone()
+                        };
+                        let run = crate::RunControl::default();
+                        let attempt = run.begin().unwrap();
+                        fits_feature(feature, false, &options, policy, &attempt).unwrap()
+                    };
+                    let case = format!(
+                        "meshopt {meshopt} explicit {explicit} {:?}",
+                        feature.geometry
+                    );
+                    assert!(fits(limit, vertices), "{case}");
+                    assert!(!fits(limit - 1, vertices), "{case}");
+                    assert!(!fits(limit, vertices - 1), "{case}");
                 }
             }
         }

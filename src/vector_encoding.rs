@@ -6,7 +6,7 @@ mod limits;
 mod plan;
 mod raw;
 mod rewrite;
-pub(crate) use framing::write_generated_glb;
+pub(crate) use framing::{generated_glb_len, write_generated_glb};
 pub use limits::CompressionLimits;
 pub(crate) use limits::ValidatedCompressionLimits;
 pub(crate) use plan::prepare;
