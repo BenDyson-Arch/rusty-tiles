@@ -321,20 +321,23 @@ pub(super) fn admit(
 
 impl Graph {
     /// Exclusion facts of the selected scene. `animations` is the root member.
+    /// Returns `Prim(u)`: Σ over the selected scene's instances (selected nodes
+    /// with a mesh) of that mesh's primitive count; 0 without a selected scene.
     pub(super) fn exclusions(
         &self,
         meshes: &MeshTable,
         animations: Raw<'_>,
         ceiling: usize,
         out: &mut ContentExclusions,
-    ) -> FormatResult<()> {
+    ) -> FormatResult<u64> {
         out.animation = animations.is_some_and(|raw| {
             array::<&RawValue>(Some(raw), ceiling).map_or(true, |a| !a.is_empty())
         });
         let Some(roots) = &self.roots else {
             out.scene_selection = true;
-            return Ok(());
+            return Ok(0);
         };
+        let mut instance_primitives = 0u64;
         let mut pending = Vec::new();
         for &root in roots {
             push(&mut pending, root, ceiling)?;
@@ -345,6 +348,10 @@ impl Graph {
             out.morph_targets |= node.weights;
             if let Some(mesh) = node.mesh {
                 let mesh = meshes.meshes[mesh];
+                // Each selected node is visited once, so this is at most
+                // nodes × primitives, both bounded by the JSON value nodes.
+                instance_primitives = instance_primitives
+                    .saturating_add((mesh.primitives.1 - mesh.primitives.0) as u64);
                 out.morph_targets |= mesh.weights
                     || meshes.primitives[mesh.primitives.0..mesh.primitives.1]
                         .iter()
@@ -354,7 +361,7 @@ impl Graph {
                 push(&mut pending, child, ceiling)?;
             }
         }
-        Ok(())
+        Ok(instance_primitives)
     }
 
     /// Walk the selected scene root-first, children in order. Without a

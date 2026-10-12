@@ -26,6 +26,21 @@ pub(crate) struct PayloadInspection {
     pub not_inspected: BTreeSet<String>,
     /// C2 format-owned exclusion facts of this payload.
     pub exclusions: scene::ContentExclusions,
+    // The three C2-WB facts below are read by the work formula in
+    // `validate.rs`; drop this allowance when that consumer lands.
+    /// `J(u)`: Σ `value_nodes()` over every JSON document admitted here: the
+    /// glTF JSON or GLB JSON chunk (a b3dm's embedded GLB included) and the
+    /// b3dm feature-table and batch-table JSON.
+    #[allow(dead_code)]
+    pub json_nodes: u64,
+    /// `Res(u)`: external resources resolved through the resolver, one per
+    /// buffer or image with a non-`data:` `uri`.
+    #[allow(dead_code)]
+    pub external_resources: u64,
+    /// `Prim(u)`: Σ over the selected scene's instances (selected nodes with a
+    /// mesh) of that mesh's primitive count; 0 without a selected scene.
+    #[allow(dead_code)]
+    pub instance_primitives: u64,
 }
 fn invalid(s: impl Into<String>) -> FormatError {
     FormatError::InvalidInput(s.into())
@@ -294,9 +309,10 @@ fn decode_meshopt(
     let out = super::meshopt::decode(compressed, count, stride, mode)?;
     Ok((out, stride))
 }
-/// The embedded GLB and whether the feature-table JSON has the `RTC_CENTER` key
-/// (JSON value or binary-body reference). The value and range are not consumed.
-fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], bool)> {
+/// The embedded GLB, whether the feature-table JSON has the `RTC_CENTER` key
+/// (JSON value or binary-body reference; the value and range are not consumed)
+/// and the value nodes of the admitted feature-table and batch-table JSON.
+fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], bool, u64)> {
     if bytes.len() < 28 || &bytes[..4] != b"b3dm" {
         return Err(invalid("truncated or invalid b3dm header"));
     }
@@ -313,10 +329,12 @@ fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], 
     }
     let mut offset = 28usize;
     let mut rtc_center = false;
+    let mut table_nodes = 0u64;
     for (index, length) in lengths.iter().enumerate() {
         let table = range(bytes, offset, *length)?;
         if index == 0 || (index == 2 && *length > 0) {
             let doc = json::admit(table, limits)?;
+            table_nodes += doc.value_nodes() as u64;
             let feature: records::FeatureTable<'_> = record(Some(doc.raw()))?;
             if index == 0 {
                 domain(feature.batch_length, u32::MAX as u64)?;
@@ -342,7 +360,7 @@ fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], 
     if bytes.len() - end > 7 || bytes[end..].iter().any(|b| *b != 0) {
         return Err(invalid("invalid b3dm trailing padding"));
     }
-    Ok((glb, rtc_center))
+    Ok((glb, rtc_center, table_nodes))
 }
 // Extension declarations are semantic checks. Opaque extras and extension bodies
 // remain outside this traversal; JSON admission already checked their structure.
@@ -425,10 +443,12 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         return Err(limit("payload exceeds member byte allowance").into());
     }
     let mut exclusions = scene::ContentExclusions::default();
+    let mut json_nodes = 0u64;
     let (source, bin) = match kind {
         PayloadKind::B3dm => {
-            let (glb, rtc_center) = unwrap_b3dm(bytes, limits.json)?;
+            let (glb, rtc_center, table_nodes) = unwrap_b3dm(bytes, limits.json)?;
             exclusions.rtc_center = rtc_center;
+            json_nodes = table_nodes;
             envelope(glb)?
         }
         PayloadKind::Glb => envelope(bytes)?,
@@ -436,6 +456,8 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     };
     let document = json::admit(source, limits.json)?;
     let slots = document.value_nodes();
+    json_nodes += slots as u64;
+    let mut external_resources = 0u64;
     let root: records::Root<'_> = record(Some(document.raw()))?;
     let asset: records::Asset<'_> = record(root.asset)?;
     if string(asset.version)? != "2.0" {
@@ -601,6 +623,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             if uri.starts_with("data:") {
                 Cow::Owned(decode_buffer_uri(&uri, limits.decoded_bytes, remaining)?)
             } else {
+                external_resources += 1;
                 Cow::Owned(
                     resolve(&uri, remaining)
                         .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?,
@@ -1135,6 +1158,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
                 .member_bytes
                 .checked_sub(resource_bytes)
                 .ok_or_else(|| limit("resource byte allowance exhausted"))?;
+            external_resources += 1;
             let data = resolve(&uri, remaining)
                 .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?;
             if data.len() > remaining {
@@ -1201,7 +1225,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     exclusions.gltf_extension = used
         .iter()
         .any(|name| !scene::GLTF_ALLOWLIST.contains(&name.as_str()));
-    graph.exclusions(&table, root.animations, slots, &mut exclusions)?;
+    let instance_primitives = graph.exclusions(&table, root.animations, slots, &mut exclusions)?;
     let draws = scene::Draws {
         accessors: &accessors,
         views: &views,
@@ -1218,6 +1242,9 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         materialized_bytes: materialized,
         not_inspected,
         exclusions,
+        json_nodes,
+        external_resources,
+        instance_primitives,
     })
 }
 fn reference_count(count: usize, raw: Raw<'_>) -> FormatResult<usize> {
