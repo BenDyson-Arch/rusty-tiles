@@ -84,7 +84,8 @@ fn is_header_error(result: &FormatResult<Vec<u8>>) -> bool {
     matches!(result, Err(FormatError::InvalidInput(m)) if m.starts_with("meshopt stream header"))
 }
 /// (mode, allowed stream, forbidden decodable twin, count, stride, expected bytes)
-fn twins() -> [(Mode, &'static [u8], &'static [u8], usize, usize, Vec<u8>); 3] {
+type Twin = (Mode, &'static [u8], &'static [u8], usize, usize, Vec<u8>);
+fn twins() -> [Twin; 3] {
     [
         (
             Mode::Attributes,
