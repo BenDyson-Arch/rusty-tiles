@@ -60,6 +60,10 @@ pub(crate) fn sync_parent(path: &Path) -> io::Result<()> {
 /// Only directory publication, which needs native support, stages trees.
 #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
 pub(crate) fn sync_tree(root: &Path) -> io::Result<()> {
+    sync_tree_with(root, sync_directory)
+}
+
+fn sync_tree_with(root: &Path, mut sync: impl FnMut(&Path) -> io::Result<()>) -> io::Result<()> {
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
         for entry in std::fs::read_dir(&directory)? {
@@ -68,7 +72,30 @@ pub(crate) fn sync_tree(root: &Path) -> io::Result<()> {
                 pending.push(entry.path());
             }
         }
-        sync_directory(&directory)?;
+        sync(&directory)?;
+    }
+    Ok(())
+}
+
+/// `create_dir_all` that also makes each directory it created durable: the
+/// parent of every new directory is synced, from the deepest new one up to the
+/// first ancestor that already existed.
+pub(crate) fn create_dir_all_durable(directory: &Path) -> io::Result<()> {
+    create_dir_all_with(directory, sync_directory)
+}
+
+fn create_dir_all_with(
+    directory: &Path,
+    mut sync: impl FnMut(&Path) -> io::Result<()>,
+) -> io::Result<()> {
+    let missing: Vec<&Path> = directory
+        .ancestors()
+        .take_while(|ancestor| !ancestor.as_os_str().is_empty() && !ancestor.exists())
+        .collect();
+    std::fs::create_dir_all(directory)?;
+    // `ancestors` yields the deepest path first, which is the sync order.
+    for created in missing {
+        sync(&parent_of(created))?;
     }
     Ok(())
 }
@@ -87,12 +114,64 @@ mod tests {
         sync_parent(&root.path().join("a")).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
-    fn a_missing_directory_is_an_error() {
+    fn a_sync_that_does_nothing_is_detected_by_missing_paths() {
+        // Only a real open-and-fsync can fail on an absent directory.
         let root = tempfile::tempdir().unwrap();
-        #[cfg(unix)]
         assert!(sync_directory(&root.path().join("missing")).is_err());
+        assert!(sync_parent(&root.path().join("missing/child")).is_err());
         assert!(sync_tree(&root.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn tree_sync_visits_the_root_and_every_nested_directory_once() {
+        let root = tempfile::tempdir().unwrap();
+        for dir in ["a/b/c", "a/d", "e"] {
+            std::fs::create_dir_all(root.path().join(dir)).unwrap();
+        }
+        std::fs::write(root.path().join("a/b/file"), b"x").unwrap();
+        let mut seen = Vec::new();
+        sync_tree_with(root.path(), |dir| {
+            seen.push(dir.strip_prefix(root.path()).unwrap().to_owned());
+            Ok(())
+        })
+        .unwrap();
+        seen.sort();
+        let expected: Vec<PathBuf> = ["", "a", "a/b", "a/b/c", "a/d", "e"]
+            .iter()
+            .map(PathBuf::from)
+            .collect();
+        assert_eq!(seen, expected);
+        // A failing sync stops the walk with its error.
+        let error = sync_tree_with(root.path(), |_| Err(io::Error::other("injected"))).unwrap_err();
+        assert_eq!(error.to_string(), "injected");
+    }
+
+    #[test]
+    fn create_dir_all_syncs_the_parent_of_each_new_directory_deepest_first() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("existing")).unwrap();
+        let target = root.path().join("existing/x/y/z");
+        let mut synced = Vec::new();
+        create_dir_all_with(&target, |dir| {
+            synced.push((dir.to_owned(), dir.is_dir()));
+            Ok(())
+        })
+        .unwrap();
+        assert!(target.is_dir());
+        let base = root.path().join("existing");
+        assert_eq!(
+            synced,
+            [
+                (base.join("x/y"), true),
+                (base.join("x"), true),
+                (base, true)
+            ]
+        );
+        // Nothing new, nothing to sync.
+        create_dir_all_with(&target, |_| panic!("no directory was created")).unwrap();
+        create_dir_all_durable(&root.path().join("existing/other/deep")).unwrap();
     }
 
     #[test]

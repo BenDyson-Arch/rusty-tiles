@@ -57,7 +57,7 @@ impl Job {
     pub fn begin(output: &Path, force: bool) -> Result<Self, Error> {
         check_output(output, force)?;
         let parent = parent_dir(output);
-        fs::create_dir_all(parent)?;
+        crate::dir_sync::create_dir_all_durable(parent)?;
         let work = tempfile::Builder::new()
             .prefix(".tiles-work-")
             .tempdir_in(parent)?;
@@ -98,9 +98,6 @@ impl Job {
     }
 
     /// `sync_parent` makes the install rename durable; it is a seam for tests.
-    /// Unlike the typed F0 publishers this legacy path has no diagnostics
-    /// channel, so a failed directory sync is returned after the archive is
-    /// already in place.
     fn publish_3tz_with(
         self,
         files: &[(String, PathBuf)],
@@ -123,7 +120,11 @@ impl Job {
             }
             _ => Error::Io(e.error),
         })?;
-        sync_parent(&self.output)?;
+        // The archive is installed. `ConversionResult` has no diagnostics
+        // channel, and returning an error would make a retry hit OutputExists
+        // for a published output, so a failed directory sync is ignored like
+        // the typed publishers' non-fatal cleanup diagnostics.
+        let _ = sync_parent(&self.output);
         Ok(self.result(true, report))
     }
 
@@ -372,18 +373,18 @@ mod tests {
     }
 
     #[test]
-    fn archive_publication_reports_a_failed_parent_sync_and_skips_it_on_conflict() {
+    fn archive_publication_keeps_the_output_when_the_parent_sync_fails_and_skips_it_on_conflict() {
         let tmp = tempfile::tempdir().unwrap();
         let output = tmp.path().join("out.3tz");
         let job = Job::begin(&output, false).unwrap();
         let manifest = job.path().join("tileset.json");
         fs::write(&manifest, b"{}").unwrap();
-        let error = job
+        let result = job
             .publish_3tz_with(&[("tileset.json".into(), manifest)], None, |_| {
                 Err(std::io::Error::other("injected directory sync failure"))
             })
-            .unwrap_err();
-        assert!(matches!(error, Error::Io(_)), "{error}");
+            .unwrap();
+        assert_eq!(result.output, output);
         assert!(output.is_file());
 
         let other = tmp.path().join("other.3tz");

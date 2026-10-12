@@ -544,7 +544,7 @@ impl<'a> Staging<'a> {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        fs::create_dir_all(parent)
+        crate::dir_sync::create_dir_all_durable(parent)
             .map_err(|error| attempt.fail(JobError::io("create output parent", parent, error)))?;
         let file = tempfile::Builder::new()
             .prefix(".tiles-stage-")
