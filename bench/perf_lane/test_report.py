@@ -256,6 +256,18 @@ class ParsePrevious(unittest.TestCase):
         self.assertFails(self.edited('| 2026-10-12 |', '| 12 Oct |'), 'unrecognised Milestones row')
 
 
+class PreviousReport(unittest.TestCase):
+    def test_skips_versions_recording_the_head_itself(self):
+        columns = dict(release=None, milestone=None, head=dict(vector=GOOD))
+        older, _ = report.render(meta('first'), columns, (None, {}, []), [])
+        later = meta('second'); later['head']['commit'] = 'f00ba12' + '0' * 33
+        newer, _ = report.render(later, columns, report.parse_previous(older), [])
+        self.assertIs(report.previous_report(iter([newer, older]), 'f00ba12' + '0' * 33), older)
+        self.assertIs(report.previous_report(iter([newer, older]), 'cafe000' + '0' * 33), newer)
+        self.assertEqual(report.previous_report(iter([older]), meta()['head']['commit']), '')
+        self.assertEqual(report.previous_report(iter(['']), 'x'), '')
+
+
 class Rendering(unittest.TestCase):
     def columns(self):
         return dict(release=dict(vector=metrics(wall=0.5), **{'mesh-local': dict(na='no mesh-local-to-3tz command')}),

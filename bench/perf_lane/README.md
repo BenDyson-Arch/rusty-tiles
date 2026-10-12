@@ -23,7 +23,8 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   after that. A corpus case whose command or flags the release CLI lacks
   shows `n/a`, with the reason under `## Not run or failed`.
 - The last milestone's per-case numbers come from the data block at the end of
-  the committed `REPORT.md` (git `HEAD`). `--milestone-label` makes this run the
+  the committed `REPORT.md` (git `HEAD`). If that version already records the
+  head being rendered, the next older version is used instead. `--milestone-label` makes this run the
   new milestone and appends a `## Milestones` row. Without it, the stored
   milestone and the rows carry forward unchanged. Hand edits such as
   whitespace or note lines are tolerated, but a missing, unclosed or garbled

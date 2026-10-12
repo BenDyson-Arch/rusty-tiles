@@ -543,11 +543,25 @@ def load_raw(directory):
     return meta, columns
 
 
-def committed_report(path):
+def report_history(path):
+    """Committed versions of the report, newest first (git HEAD, then older commits); else the working file."""
     relative = path.resolve().relative_to(ROOT)
-    shown = subprocess.run(['git', '-C', ROOT, 'show', f'HEAD:{relative}'], capture_output=True, text=True)
-    if shown.returncode == 0: return shown.stdout
-    return path.read_text() if path.exists() else ''
+    log = subprocess.run(['git', '-C', ROOT, 'log', '--format=%H', 'HEAD', '--', str(relative)], capture_output=True, text=True)
+    commits = log.stdout.split() if log.returncode == 0 else []
+    if not commits:
+        yield path.read_text() if path.exists() else ''
+    for commit in commits:
+        shown = subprocess.run(['git', '-C', ROOT, 'show', f'{commit}:{relative}'], capture_output=True, text=True)
+        yield shown.stdout if shown.returncode == 0 else ''  # '' where the file was deleted
+
+
+def previous_report(versions, head_commit):
+    """The newest report version whose milestone is not the head being rendered, so that re-rendering a
+    recorded milestone (--from-raw) compares it with the milestone before it, not with itself."""
+    for text in versions:
+        info = parse_previous(text)[0]
+        if not info or info['commit'] != head_commit: return text
+    return ''
 
 
 def main():
@@ -584,7 +598,8 @@ def main():
     meta, columns = load_raw(evidence)
     explanations = merge_explanations(meta.get('explanations', []), args.explain)
     if args.milestone_label: meta['label'] = args.milestone_label
-    previous = parse_previous(args.previous.read_text() if args.previous else committed_report(args.report))
+    previous = parse_previous(args.previous.read_text() if args.previous
+                              else previous_report(report_history(args.report), meta['head']['commit']))
     columns['milestone'] = previous[1] or None
     text, failures = render(meta, columns, previous, explanations)
     args.report.write_text(text)
