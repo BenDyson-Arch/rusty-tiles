@@ -301,6 +301,9 @@ B = 2^31 + 4·S
   every visit is charged, including re-entry of a shared document. A DAG of depth d that reaches
   2^d visits through one shared document earns one credit, so it still exceeds V. B is fixed
   before traversal.
+- **Base terms in controls.** The base terms are the defaults 2^18, 2^20 and 2^31. Private
+  controls (`inspect_selected`) may set them explicitly, as they set other limits today; no public
+  caller can lower them.
 - **Monotone.** Each budget is at least today's default (its base term), and every charge is
   unchanged. So **no verdict changes for an archive that today's defaults do not refuse with
   ResourceLimit.**
