@@ -52,7 +52,7 @@ I1_ORACLE_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "..", "implicit
 # The composed oracles, pinned (contract 9.A). `pins()` reports drift; the
 # self-test fails on it. Mutant copies of c2o are expected to drift.
 PINS = {
-    "c2o/check.py": "b419c57af9691571791a1471566b3367dd9383ddf1cbb024192f3d16ae4551ee",
+    "c2o/check.py": "e0209cb4db3dd09049e5ce8da10ecae11454213a2a31acc9eb310df10bbdf56f",
     "c2o/gltf.py": "00afbf3261eeabad9c3c00883dc7c21ad0dd6e05b7c8c8de934ad9caa9e825e2",
     "c2o/meshopt.py": "946cbe81bf3baedcd3c1adb6863d4fb6ff309e28defa53ad5f1b9dfa22ef21e6",
     "c2o/numbers.py": "d28df9e87fa957a1a755bdbe409a2cf1e2c4fe4f76a0cc30075ad759ff06b40c",
@@ -64,8 +64,8 @@ PINS = {
 }
 
 # Slice 3 consumes C2-WB's frozen default cap (contract header: 2^29). O-explicit's
-# DEFAULT_LIMITS still carries 2^28 (O-WB's file, not edited here), so the cap is
-# passed explicitly.
+# DEFAULT_LIMITS carried 2^28 when O wrote this; R's integration fix set it to 2^29
+# (and re-pinned c2o/check.py above). The explicit override is kept, now a no-op.
 SLICE3_LIMITS = dict(DEFAULT_LIMITS)
 SLICE3_LIMITS["containmentWorkUnits"] = 2 ** 29
 

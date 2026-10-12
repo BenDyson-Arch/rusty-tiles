@@ -41,7 +41,7 @@ REASONS = [
 
 DEFAULT_LIMITS = {
     "containmentSpanBits": 4096,
-    "containmentWorkUnits": 2 ** 28,  # coordinator cap decision (PR #157 review): was 2 ** 32
+    "containmentWorkUnits": 2 ** 29,  # C2-WB frozen default (PR #164); was 2 ** 28 (PR #157), 2 ** 32 before
     "containmentBytesRead": 2 ** 31,
     "containmentDecodedBytes": 2 ** 31,
     "containmentNodeDepth": 64,
