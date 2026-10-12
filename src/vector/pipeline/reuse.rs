@@ -94,6 +94,7 @@ fn encoder_with_framing(framing_source: &str) -> String {
         include_str!("../../georef.rs"),
         include_str!("../../implicit.rs"),
         include_str!("../../implicit/tileset.rs"),
+        include_str!("../../tileset_node.rs"),
         include_str!("../../../Cargo.lock"),
     ] {
         hasher.update(source.as_bytes());
