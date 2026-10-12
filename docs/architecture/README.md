@@ -1,5 +1,21 @@
 # Architecture foundations for 0.4.0
 
+## Current implementation direction — 2026-10-12
+
+The [0.4 delivery and 0.5 transition roadmap](04-tiles2-roadmap.md) governs new
+work and sequencing. **0.4 ships Tiles 1.1 / glTF 2.0**, including implicit tiling
+and the certified textured large-mesh tiler. Its owned tile data and output
+boundaries prepare for **0.5's official Tiles 2.0 / glTF 2.1 transition**.
+Draft experiments may inform design, but draft-format viewer support does not
+block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what
+continues, what is superseded, and how unfinished source can be recovered.
+
+This accepted correction supersedes PR #171's new-format shipping target for
+0.4, while retaining its consolidated sequence, recovery evidence and retirement
+policy. The unmerged ML0 sequence remains superseded. Existing foundation
+evidence remains limited to its recorded domain. The release gate below stays
+open; this planning change accepts no new output.
+
 Status: ongoing architecture gate; F0 is accepted and merged in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Baseline: `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on `develop`.
 
@@ -60,12 +76,15 @@ and failure outcomes carry their meaning. It does not mean banning every `if`
 or replacing branch statements with opaque policy tables. Real platform and
 geometry alternatives remain explicit in their owning module.
 
-The [post-F0 audit and ordered scopes](next-foundation-scopes.md) govern the next
-work. They separate a bounded first mesh milestone, directory publication, vector
-transactions and remaining subsystem proof obligations. Earlier API sketches
-remain proposals wherever the concrete scope has not adopted them.
+The [post-F0 audit and ordered scopes](next-foundation-scopes.md) retain the
+historical subsystem obligations and evidence. Their sequencing is superseded by
+the [current roadmap](04-tiles2-roadmap.md). Earlier API sketches remain proposals
+wherever the concrete scope has not adopted them.
 
 ## Audit documents
+
+- [0.4 delivery and 0.5 format-transition roadmap](04-tiles2-roadmap.md)
+- [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)
