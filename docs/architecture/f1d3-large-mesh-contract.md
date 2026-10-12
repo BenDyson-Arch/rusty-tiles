@@ -1,17 +1,17 @@
 # F1d3: streaming large-mesh tiler (umbrella contract)
 
-Status: **DRAFT. NOT FROZEN.** Written by the ML0 author under the light process (one fresh
-nonauthor review). The v5 precode delta review allows this text to be drafted but not frozen
-until its blockers B1–B4 are folded into the design text. The design author is fixing them in
-parallel (v6, in progress while this was written). Sections marked **[B1]**–**[B4]**, and the
-review's must-fix items **[C1]**–**[C4]**, record the review's required text and must be
-re-checked against the frozen v6 before this contract is frozen. Nothing here records acceptance.
+Status: **READY TO FREEZE** (ML0, light process). Design v6.1 has landed with the v6 delta
+review's N1–N5 folded in, and that review says the umbrella may freeze with them. What freezes
+it is the **one fresh nonauthor review** of this text. That review also confirms the two places
+where this umbrella decides something v6.1 leaves silent or inconsistent: the lattice origin and
+δ (§4, O-D1), and how the vanished and filled sets are published (§6.7, O-D2). Nothing here
+records acceptance.
 
 This is the contract for 0.4.0's large textured photogrammetry tiler: `mesh-local-to-3tz` grown
 into a streaming, certified, multi-level tiler. It is the umbrella over slices ML1–ML10 and over
 the amendments it needs to other frozen contracts:
 [C1](c1-large-mesh-ml0-amendment.md), [I1](i1-large-mesh-ml0-amendment.md),
-[C2](c2-large-mesh-ml0-amendment.md) and [P](p-large-mesh-ml0-amendment.md). Its public surface
+[C2](c2-large-mesh-ml0-amendment.md) and [P](p-large-mesh-ml0-amendment.md). The public surface
 and the retirement of legacy options are in [the dispositions record](f1d3-surface-dispositions.md).
 
 ## Identities
@@ -19,10 +19,10 @@ and the retirement of legacy options are in [the dispositions record](f1d3-surfa
 | Item | Identity |
 | --- | --- |
 | Base | `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26` |
-| Design (basis) | v5: `design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`, `open-decisions.md` `523ed2cd…eea`, `CHANGELOG.md` `5ed54eca…3f10` (preserved in `v5/`) |
-| Review | v5 delta review `698b3b61…c4ef`: GO-with-changes; ML0 may start; umbrella freeze waits for B1–B4 |
-| P0 evidence | design §12.1; `evidence/p0/src/main.rs` `a068cd11…`; bulk in `~/.cache/rusty-tiles-evidence/mlarge-p0-20261012/` |
-| Builds on | [F1a](f1a-contract.md), [F1b](f1b-contract.md)/[F1b2](f1b2-contract.md)/[F1b3](f1b3-contract.md), [F1c1](f1c1-contract.md), [F1c2](f1c2-contract.md), [F1d2](f1d2-certificate-contract.md), [P](p-impl-layout-contract.md) |
+| Design (basis) | **v6.1**: `design.md` `0bf9fd19…441b`, `slices.md` `705bb8f7…f225`, `open-decisions.md` `bbe4f928…ccd1`, `CHANGELOG.md` `9b4de127…7569` (`/tmp/rusty-tiles-mlarge-design-20261012/`; v1–v6 preserved there) |
+| Reviews | v5 delta `698b3b61…c4ef` (B1–B4, C1–C4, F1, F2); v6 delta `3f2c0583…ae6d` (GO-with-changes; freeze after N1–N5, now in v6.1) |
+| Evidence | P0 (design §12.1, `evidence/p0/`); p0b published-bytes snap audit (§12.2, `evidence/p0b/`); bulk in `~/.cache/rusty-tiles-evidence/` |
+| Builds on | [F1a](f1a-contract.md), [F1b](f1b-contract.md), [F1b2](f1b2-contract.md), [F1b3](f1b3-contract.md), [F1c1](f1c1-contract.md), [F1c2](f1c2-contract.md), [F1d2](f1d2-certificate-contract.md), [P](p-impl-layout-contract.md) |
 
 ## 1. Decisions in force
 
@@ -38,25 +38,26 @@ and the retirement of legacy options are in [the dispositions record](f1d3-surfa
 | V1/V2 (a)–(d) | Validator memory independent of size; linear work, no refusal for size; absolute volume caps opt-in; no producer tile-count ceiling | USER |
 | U1 | Small primitives vanish from coarse tiles; present primitives keep exact identity; the certificate accounts for removed geometry | USER |
 | U2 | Accept and document the 3TZ member ceiling (178,956,970); refuse early with a typed error | USER |
+| **U4 = (c)** | At coarse depths small islands vanish and small holes are filled, both certified; holes reopen at finer depths; **the output publishes the vanished and filled sets** | USER (2026-10-12) |
 | Rulings 1–7 | Re-parameterise and bake proxies; shared lattice; certify after quantization; validator sequencing; overclaims; one encoder, no ladder; slice sizing | Coordinator |
-| P0 | E33 in-tree charts; E35 seam spacing; E37 cell-aligned grouping; E38 joint seam pass; E45 topology repair; E46 mixed-depth snap | ENG, pinned here (§5, §6) |
+| Pinned selections | E33 in-tree charts; E35 spacing `δ_d`; E37 cell-aligned grouping; E38 joint seam pass; E45 repair with unsimplified fallback; E46 monotone per-depth lattice with vertex-keyed snap; E48 octant packing; E49 pass-5a cell tree; E50 pass-5b order | ENG, pinned here |
 
 ## 2. Domain
 
 **Input.** One local static glTF 2.0 or GLB scene in metres, Y-up, with captured confined
 dependencies (F1a, F1b2 snapshot semantics). F1b3 breadth: the five core PBR texture slots, UV0
 and UV1, TANGENT, COLOR_0. 8-bit images only (16-bit stays Unsupported, F1b1). Textured
-primitives have `0 ≤ uv ≤ 1` (D15). JSON count caps (design §2.5): nodes, meshes, primitives
-≤ 65,536 each; materials, textures, samplers, images ≤ 4,096; accessors and bufferViews
-≤ 262,144; buffers ≤ 4,096. Per image ≤ 2^28 pixels and ≤ 256 MiB encoded. No total triangle,
-byte or tile cap other than the 3TZ ceiling (U2).
+primitives have `0 ≤ uv ≤ 1` (D15). JSON count caps: nodes, meshes, primitives ≤ 65,536 each;
+materials, textures, samplers, images ≤ 4,096; accessors and bufferViews ≤ 262,144; buffers
+≤ 4,096. Per image ≤ 2^28 pixels and ≤ 256 MiB encoded. No total triangle, byte or tile cap
+other than the 3TZ ceiling (U2) and the height cap (§5).
 
 **Not in the domain** (typed Unsupported or InvalidRequest): source CRS, axes, height or offset
-options (retired; see dispositions); skins, morph targets, animation (F1a); 16-bit images; UVs
-outside [0, 1] on textured primitives.
+options (retired); skins, morph targets, animation (F1a); 16-bit images; UVs outside [0, 1] on
+textured primitives.
 
 **Placement.** F1c1 rigid placement: `--anchor` (WGS84 lon, lat, ellipsoidal height),
-`--orientation-xyzw`, `--scene-offset`. The source stays local metres.
+`--orientation-xyzw`, `--scene-offset`. The source stays in local metres.
 
 ## 3. Profiles
 
@@ -64,7 +65,7 @@ outside [0, 1] on textured primitives.
 | --- | --- | --- | --- | --- |
 | Leaf triangles `L` | 32,768 | 16,384 | 8,192 | 8,192 |
 | Proxy target `P` (hard cap `2P`) | 8,192 | 16,384 | 8,192 | 8,192 |
-| Geometry | u16 on the per-depth lattice | u16 on the per-depth lattice | f32 | f32 |
+| Geometry | u16 on the per-depth lattice | u16 on the per-depth lattice | f32, one origin per forest | f32, one origin per forest |
 | Colour (baseColor, emissive) | ETC1S q40 | ETC1S q90 | UASTC q100 + Zstd | PNG |
 | data-R (occlusion) | ETC1S q90 | ETC1S q90 | UASTC q100 + Zstd | PNG |
 | data-RGB (metallicRoughness), normal | UASTC q100 + Zstd | UASTC q100 + Zstd | UASTC q100 + Zstd | PNG |
@@ -72,193 +73,269 @@ outside [0, 1] on textured primitives.
 | Atlas page edge `A` | 2048 | 4096 | 4096 | 4096 |
 | Member budget `B_tile` | 96 MiB | 96 MiB | 96 MiB | 96 MiB |
 
-These constants are provisional until ML9 freezes them. Profiles are the only tuning surface;
-there are no per-constant options (O-U3).
+The constants are provisional until ML9 freezes them. Profiles are the only tuning surface.
 
 ## 4. Output representation
 
 - **Archive.** One `.3tz` through F0 staging and completed-file publication, written by the
   streaming archive writer (spilled central directory, sorted 3TZ index; ML3 part B, which keeps
   the full process with the archive owner).
-- **Layout.** The bounded implicit forest (P), OCTREE, as amended by the P amendment: streaming
-  two-phase input, bottom-up document packing, preorder root names, one `.glb` slot per tile,
-  rows on every implicit tile.
-- **Frames.** The root tile's `transform` is the F1c1 placement composed with a translation by
-  the global lattice origin O. No other tile has a transform, so the forest rebase δ is 0
-  everywhere and implicit payloads are byte copies (P-A1; O-D1 below asks the design author to
-  confirm, because design §3.1 still carries `ε_rebase`).
+- **Layout.** The bounded implicit forest (P), OCTREE, as amended by the P amendment: two-phase
+  streaming input, bottom-up document packing, preorder root names, one `.glb` slot per tile, a
+  row on every implicit tile.
+- **Frames and lattice origin (decided here; O-D1).** The global lattice origin `O` (the
+  snapshot box minimum) is carried in the root tile's `transform`, composed with the F1c1
+  placement. Below the root, translation-only transforms appear **only on explicit tiles and
+  implicit roots**, and each is an integer multiple of the coarsest step `s_0` (so of every
+  `s_d`), chosen so that every payload offset below it satisfies `|offset| < 2^24`. Implicit
+  tiles below an implicit root carry none, so P's rebase δ is 0 for every tile, implicit payloads
+  are byte copies, and `ε_rebase` = 0. Payload node TRS: `scale` = `s_d` and `translation` = an
+  integer multiple of `s_d` with `|offset| < 2^24` (u16 profiles), or the identity with positions
+  relative to the tile frame's lattice-aligned origin (f32 profiles). Every decoded position is
+  then an exact dyadic sum, and a shared vertex has the same exact value in every tile (§6.4).
+  A forest whose offsets stay below 2^24 at every depth needs only the root transform; with
+  `s_d ≈ ext_d/65535`, offsets reach 2^24 near depth 8, and deeper forests use the extra
+  transforms. Nothing is refused for width. This replaces
+  v6.1's "the node TRS carries the lattice origin" (§7) and "a forest wider than `2^24·s_d` uses
+  the per-forest rebase" (§3.4): P's δ is a per-tile sum of child translations below an implicit
+  root, not a per-forest shift, so the shift must be a tile transform above the payload.
 - **Payloads.** GLB with `KHR_mesh_quantization` (fast, balanced), `EXT_meshopt_compression`
   (NONE filter; vertex codec v0, index and sequence codec v1, A-C1-3), `KHR_texture_basisu`
-  required on fast/balanced/quality textures, `EXT_mesh_features` and `EXT_structural_metadata`
-  for identity. Nothing outside the C2 allowlist.
-- **Leaves** are non-indexed with F1c2 exact tables (D1). **Proxies** are indexed, TRIANGLES,
-  with `source_primitive` identity per region.
-- **Bounds.** Every tile's box contains its own decoded content and every descendant's box,
-  computed after the final geometry with exact (or directed) arithmetic (A-C2-2 obligations).
+  required on fast, balanced and quality textures, `EXT_mesh_features` and
+  `EXT_structural_metadata` for identity and for the published sets (§6.7). Nothing outside the
+  C2 allowlist.
+- **Leaves** are non-indexed with F1c2 exact tables (D1). Degenerate leaf triangles created by
+  quantization are **kept** (zero area; each provenance row keeps its triangle). **Proxies** are
+  indexed, TRIANGLES, with `source_primitive` identity per region.
+- **Bounds.** Every tile's box contains its own decoded content and every descendant's box. It is
+  computed after the final geometry (after the snap) with exact or directed arithmetic (A-C2-3).
 
-## 5. Hierarchy (E37; [B2], [B3], [B4])
+## 5. Hierarchy (E37, E48, E49)
 
-- **Cells.** An isotropic cube around the snapshot box, subdivided as an octree on the Morton key
-  of each triangle's centroid. **[B3]** The key depth must be stated (the v6 draft: 63 bits, 21
-  per axis).
-- **Leaves** are maximal cells with ≤ `L` triangles and ≤ `B_tile` projected member bytes.
-  Internal nodes are cells with more; their children are their non-empty octants, slot = octant.
-  LOD steps are depths.
-- **Octant packing [B2].** Required text from the review: adjacent *leaf* octants of one parent,
-  with no internal octant between them, merge while ≤ `L` and ≤ `B_tile`; identity (parent cell,
-  first octant); slot = first octant; lattice and LEAFNBR depth = parent depth + 1; incidence
-  keyed by the parent cell lifted. The bound is `leaves ≤ 2N/L + 2I` and `I` is not bounded by
-  `N/L`, so packing does not restore an `N`-only bound. A concrete leaf-count or mean-fill
-  target on Floreat-quality is set in ML2.
-- **Degenerate cells [B3].** A cell at the key depth with more than `L` triangles becomes an
-  8-ary run sub-hierarchy with synthetic slots 0–7, counted in the height.
-- **Height [B3].** Height > 32 is refused with a typed Unsupported before any LOD work, at the
-  same point as the U2 check (P-A6).
-- **Counts [B4].** The exact tile count and height come from a bounded-memory pass, not from
-  v5's two-sweep histogram, which the review found unimplementable. The v6 draft builds the cell
-  tree in pass 5a from the sorted `(key, projected bytes, box)` records; stage 1 refuses on a
-  sound lower bound and a stage "1b" on exact counts. Subtree and document counts are bounds.
+- **Cells.** An isotropic cube around the snapshot box, subdivided as an octree on a **63-bit
+  Morton key (21 bits per axis)** of each triangle's centroid. Cell depth 0–21.
+- **Cell tree (pass 5a, E49).** One streaming pass over the Morton-sorted `(key, projected bytes,
+  box)` records with a stack of at most 22 open cells (`M_tree` ≈ 13 KiB) decides leaves, internal
+  nodes, packing and run sub-hierarchies, and gives the exact tile count, the height and the
+  per-depth tile boxes.
+- **Projected bytes** per triangle: geometry bytes plus, per present slot, its UV footprint in
+  texels at the leaf texel size × the class's worst bytes per texel × the packing factor
+  **φ = 4**; overlapping UVs counted twice. This is a factor, not a guarantee (N5). If a leaf's
+  actual pages in pass 6a exceed its share of `B_tile`, the leaf is **never split**: lossy
+  profiles drop one mip level for that leaf's pages until they fit (reported in `appearance`
+  as a texel size above `t(n)`; geometry and `e` unchanged); `lossless` is a typed Unsupported
+  naming the tile. The pass-5a tile count is therefore exact and final.
+- **Leaves** are candidate cells (≤ `L` triangles and ≤ `B_tile` projected bytes) whose parent is
+  internal, or packed runs of them. **Internal nodes** are cells over either limit; children are
+  non-empty octants or packed runs, at most 8, slot = octant. LOD steps are depths.
+- **Octant packing (E48).** Under one internal parent, consecutive **leaf** octants merge while
+  the sum stays ≤ `L` and ≤ `B_tile`; an internal octant ends a run; empty octants do not break
+  one. A run is one contiguous range of Morton ranks. Identity `(parent cell, first octant)`;
+  slot = first octant; depth (lattice, LOD step, LEAFNBR) = parent depth + 1; box = union of its
+  triangles' boxes, inside the parent cell but not the slot's octant; at depth parent + 1 it is
+  **one** region per primitive for the ≥ 3-regions rule. Count bound per parent
+  `2c/L + m + 1` (m internal children), summed `leaves ≤ 2N/L + 2I`; `I` is not bounded by
+  `N/L`. ML2 target: Floreat quality ≤ 200 leaves.
+- **Degenerate cells (N4).** A depth-21 cell still over `L` or `B_tile` becomes an 8-ary run
+  sub-hierarchy of Morton-rank runs of at most `L`, synthetic slots 0–7, lattice depth
+  21 + level. Identity `(degenerate cell, run path)`; parent by dropping the last slot. Every
+  SAME, K, V and F key and the ≥ 3-regions incidence use this identity, so siblings never share
+  one.
+- **Height.** ≤ 21 + 1 + ⌈log8(N_cell/L)⌉. Over 32 is a typed Unsupported ("hierarchy height
+  h > 32", naming the outlier box) at **stage 1b**, after pass 5a and before any LOD work.
 
 ## 6. LOD per depth (F1d3)
 
-### 6.1 Order per depth [C1]
+### 6.1 Order (E50)
 
-On each depth's final keep set K and vanished set, and nothing earlier: seam fixed point →
-removal of vanished regions → per-region proposal → fold cleanup, validation and relock →
-`2P` check → quantize → snap → box, offset and u16 range → **topology re-validation on the
-quantized indices** → phase A/B certificate → direct bound on the same final proxy. Every earlier
-certificate is discarded.
+Per depth, certification runs once, on the final state:
+1. **Seam pass** (contraction only) to a fixed point; K and V change only between sweeps
+   (Jacobi), so the result is independent of `--jobs`. A sweep re-runs the nodes that had a newly
+   kept vertex as a removable chain vertex and every node facing a newly vanished region or
+   component. Cap: 64 sweeps, then a typed **Unsupported** naming the depth.
+2. Per node with the final K and V: chain contraction → removal of vanished regions and islands
+   → hole fills (§6.6) → meshopt proposal per region → fold cleanup, validation and relock
+   (fallback: the unsimplified region) → **2P check** (typed Unsupported naming the node).
+3. **Quantize** on the depth lattice with the vertex-keyed snap → box, offset and u16 range from
+   the snapped codes → **post-quantization validation** (proxies: weld identical codes, drop
+   degenerate triangles, cancel or deduplicate coincident pairs, no edge with more than 2
+   triangles unless the source had it). **Fallback (N3):** lock the offending triangles'
+   vertices and input 1-rings at their pre-quantization positions, re-simplify through the
+   repair loop and re-quantize, at most 4 rounds; then quantize the node's unsimplified regions
+   (the children's content, already valid on finer lattices); only then a typed Unsupported
+   naming the node. Leaves (pass 7) are quantized with the snap and keep degenerate triangles.
+4. **Certificate** (§7) on the quantized published proxy against the children's quantized
+   published content, then the **direct bound** on the same proxy. Earlier bounds are discarded.
 
-### 6.2 Seams (E38, E34, E47, E35 [C4])
+### 6.2 Seams (E38, E34, E47, E35)
 
-As design v5 §3.4, pinned:
-- adjacency on welded positions after the node bake (exact f32 bits); primitive borders are chains;
-- classes SAME, LEAFNBR (locked), GLOBAL, NONMAN (never decimated);
-- local endpoints, the joint keep set K published by both sides, iterated to a fixed point;
-  **Jacobi semantics**: K and the vanished set change only between sweeps, so the result is
-  independent of `--jobs` [C2(iii)]; a stated iteration bound with a typed failure if a configured
-  cap is reached (review L1);
-- closed chains start at the minimum-key vertex and keep ≥ 3 vertices (subject to U4); a border
-  inside one node is processed once, by the smaller primitive index;
-- GLOBAL chains are decimated and then locked (E34); the source incidence flag applies to
-  non-GLOBAL chains only (E47);
-- **spacing [C4]:** `δ_d = d0·sqrt(T̄_d/P)` with `T̄_d` the mean source triangle count over
-  *internal nodes at depth d*. P0 ran the approximation `4^k·L̄`; ML5 tests the `T̄_d` form on an
-  octree, non-2.5D input;
-- link veto: full vertex **and** edge link condition on both sides; a failing side adds the
+As design v6.1 §3.4, pinned:
+- adjacency on welded positions after the node bake (exact f32 bits); primitive borders are
+  chains; capture drops degenerate source triangles;
+- classes SAME, LEAFNBR (locked), GLOBAL, NONMAN (never decimated), and **HOLE** (facing a
+  vanished region or component: locked, treated as GLOBAL for chains, persisted in the seam
+  records with the vanished id so that shallower depths find it through the chain record);
+- local endpoints, and the joint keep set K published by both sides;
+- closed chains start at the minimum-key vertex and keep ≥ 3 vertices unless U4 removes them;
+  a border inside one node is processed once, by the smaller primitive index;
+- GLOBAL chains decimated then locked (E34); the source incidence flag applies to non-GLOBAL
+  chains only (E47);
+- **spacing** `δ_d = d0·sqrt(T̄_d/P)`, `T̄_d` = mean source triangles over internal nodes at depth
+  d (exact from the cell tree); retention by endpoint, hash level or the gap rule; digon rule;
+  collapse onto the nearer kept neighbour;
+- **link veto:** full vertex and edge link condition on both sides; a failing side adds the
   vertex to K.
 
-### 6.3 Topology repair (E45 [C3])
+### 6.3 Topology repair (E45)
 
-Per region after meshopt: fold cleanup, validation (no new edge with > 2 triangles; output
-boundary equals input boundary), relock of offending vertices with their input 1-rings, at most
-16 rounds. **Give-up (review C3, adopted in this draft):** fall back to the unsimplified region,
-which is valid by construction, then let the `2P` cap decide (typed Unsupported naming the node).
-`InvalidState` is only for bugs. The negative test injects folds and three-triangle edges through
-a test hook, so a meshopt bump cannot make it vacuous (the repository pins `meshopt = "0.6"`).
+Per region after meshopt: fold cleanup; validation (no new edge with > 2 triangles, output
+boundary equals input boundary); relock of offending vertices with their input 1-rings; at most
+16 rounds, or until no new lock is possible; then the **unsimplified region**, valid by
+construction; then the 2P check. `InvalidState` only for internal bugs. Folds and three-triangle
+edges are injected by a test hook in the negative test.
 
-### 6.4 Lattice and mixed depths (E46 replaced [B1])
+### 6.4 Per-depth lattice and the vertex-keyed snap (E46, N1)
 
-Required text from the review (the v6 draft adopts it):
-- one lattice per depth for **every** tile at that depth, leaf or proxy, forced monotone from deep
-  to shallow: `s_d = max(2^⌈log2(ext_d/65535)⌉, s_{d+1})`, with one origin O;
-- the snap is keyed on the **vertex**: every tile at depth d that publishes a vertex incident (by
-  source incidence) to a tile at a shallower depth stores it at the shallowest such lattice; this
-  covers proxy–leaf, leaf–leaf and corner (SAME-neighbour) cases;
-- offset, u16 range and box are computed after the snap;
-- a leaf's `e` is `sqrt(3)/2 ×` the coarsest step any of its vertices was snapped to;
-- f32 profiles store positions relative to the one origin O, so shared vertices have identical
-  bits and need no snap;
-- node translations are integer multiples of `s_d` with `|offset| < 2^24`, exact in f32. This
-  needs O outside the node translation (§4 Frames; O-D1).
+- **Lattice (u16 profiles).** One step `s_d` for **every** tile at depth d, leaf or proxy, one
+  origin `O`: `s_d = max(2^⌈log2(ext_d/65535)⌉, s_{d+1})` from the deepest depth up, `ext_d` the
+  largest tile extent at depth d after snap growth (`box ⊕ s_ℓmin(t)/2` per side), computed at
+  the end of pass 5a; a depth that still fails the u16 range doubles its step and monotonicity is
+  re-imposed. Steps are powers of two and monotone, so each depth's lattice nests in every
+  coarser one.
+- **ℓ(v) (N1).** The shallowest depth of any leaf containing v: the **exact minimum over all
+  incident triangles**, computed in pass 5a by a sort of `(welded vertex id, leaf depth)` per
+  triangle corner reduced by a streaming minimum, then joined back by vertex id. Never from the
+  16-entry incidence list.
+- **Snap.** Every tile at depth `d ≥ ℓ(v)` that publishes v, leaf or proxy, stores it at
+  `q(v, s_ℓ(v))`; tiles at `d < ℓ(v)` quantize v normally. Tiles that can be shown together at one
+  level (proxies at depth d with leaves at depth ≤ d) therefore store the same lattice point for
+  every shared vertex.
+- **f32 profiles** store positions relative to their tile frame's lattice-aligned origin (§4);
+  shared vertices have identical exact values; no snap.
+- Box, offset and u16 range are computed **after** the snap.
 
-### 6.5 U1 vanishing [C2]
+### 6.5 U1: vanishing primitives
 
-As design v5 §3.5, with the review's additions:
-- regions are ranked by source area (ties by primitive index); a region whose area-share target
-  rounds to 0 vanishes; if region floors still exceed `2P`, the smallest-area regions vanish in
-  order until they fit; one remaining region alone over `2P` is Unsupported;
-- **persistence across depths [C2(i)]:** hole edges are written into the published content's
-  seam records, so a shallower depth finds them through the chain record first;
-- **re-run trigger [C2(ii)]:** a vanish re-runs every node with a chain facing the vanished region;
-- **cap after repair [C2(iv)]:** the `2P` check runs after the topology repair;
-- identity: every proxy triangle comes from one (node, primitive) region and carries that
-  primitive's `_FEATURE_ID_0`; primitives are never merged;
-- the certificate bounds every child face against the **whole** proxy; the nearest-point search
-  is never filtered by primitive.
+Regions (node, primitive) are ranked by source area (ties by primitive index). A region whose
+area-share target rounds to 0 vanishes; if region floors still exceed `2P`, the smallest-area
+regions vanish in order until they fit; one remaining region alone over `2P` is Unsupported.
+Every proxy triangle comes from one region and carries that primitive's `_FEATURE_ID_0`;
+primitives are never merged. The certificate bounds every child face against the **whole** proxy;
+the nearest-point search is never filtered by primitive. A vanished primitive cannot be picked at
+that level.
 
-### 6.6 Feature density (U4, needs the user)
+### 6.6 U4 (c): islands vanish, small holes are filled
 
-Closed chains (holes and islands inside one primitive) each keep ≥ 3 vertices at every depth.
-The review requires the choice to be made here, not in ML5, because it changes output semantics
-as U1 does. The v6 draft raises it as USER decision U4 with options: (a) keep every closed chain
-and refuse inputs whose floor exceeds `2P`; (b) islands vanish by the U1 rule per component,
-holes stay; (c) islands vanish and small holes are filled by a certified fan (recommended there).
-**This draft cannot freeze until the user decides.**
+Per node at depth d, after U1 removal and before meshopt:
+- **Island:** a connected component of a region lying wholly inside the node whose area-share
+  target rounds to 0. It vanishes by the U1 rule applied per component (ranked by area, ties by
+  minimum vertex key). **Component id** `(node, primitive, minimum welded vertex key)`; V
+  records components (a whole vanished region is the component set of its primitive). An island
+  bordering another primitive's region in the same node makes that region's facing edges HOLE
+  edges keyed by the component id; those chain vertices stay locked.
+- **Small hole:** a closed GLOBAL chain wholly inside one region of the node whose decimated arc
+  length is `< δ_d`. It is filled by a fan from its minimum-key kept vertex over its kept
+  vertices; the fill triangles belong to the enclosing region and carry its `_FEATURE_ID_0`.
+  **Fill check (N2b):** the fan is added only if no fan edge already exists in the region outside
+  the hole, no fan triangle is degenerate or duplicates an existing one, and every chain edge
+  then has exactly 2 triangles; otherwise the hole is not filled. **Unlock:** a chain vertex is
+  unlocked for meshopt only if it is not in K, not an endpoint and not on another chain.
+- Holes touching a node border are open chains and are never filled; seams are unaffected.
+- **Certified:** fill faces are faces of the proxy and are bounded against the children by phase
+  A/B and by the direct bound's proxy→source direction, so `e(n)` grows by about the hole radius;
+  removed islands are bounded in the children→proxy direction, as in U1.
+- **Reopen:** deeper tiles keep their own holes. The cross-level bound `e(n_k) + e(n_{k+1})`
+  covers the transition.
+
+### 6.7 Published vanished and filled sets (decided here; O-D2)
+
+U4 (c) requires the output to publish what each proxy removed or filled. Design v6.1 names only
+"the sidecar", which §2.7 counts as scratch. This umbrella pins the published form:
+
+- **Where.** Inside each proxy's own GLB, as one `EXT_structural_metadata` property table
+  `rustyLodChanges` in the payload's schema. No new archive member (an unreferenced member is C1
+  InvalidInput), no tile or content `metadata` in tileset JSON (that would exclude the archive
+  from C2 as `tileMetadata`), no new glTF extension, no extras. Leaves have no table.
+- **Rows**, one per record of that node at its depth, sorted by `(kind, primitive, key)`:
+  - `kind` (UINT8 enum): `VANISHED_REGION`, `VANISHED_ISLAND`, `FILLED_HOLE`;
+  - `primitive` (UINT32): the source primitive id used by the tile's identity tables;
+  - `key` (UINT64): the minimum welded vertex key of the island or hole chain; 0 for a whole
+    region.
+- **Complete per tile.** A tile's table lists every record of its own node, so a reader needs
+  only that tile. A proxy with no record has no table.
+- **Bounded.** Rows per tile ≤ regions + closed chains of the node, inside `B_tile` and
+  `accessor_elements`; no JSON value node per row (binary property table).
+- **Consumers.** The output auditor accepts a missing GLOBAL boundary at depth d only for a
+  `FILLED_HOLE` row of that tile, and a HOLE edge only for a `VANISHED_*` row. `validate` gives
+  the table no semantic claim (`metadataSemantics` stays in `notInspected`); C2's treatment is in
+  A-C2-4.
+- **Report.** The F0 result counts vanished regions, vanished islands and filled holes per depth.
 
 ## 7. Certificate and error
 
 - `e(n) ≥ d_H(C_n, S_n)` over the tile's whole surface, where `C_n` is the published geometry
-  after quantization and snap, and `S_n` the source surface of the node's cell.
-- **Phase A** (reserved, `Q_A` = 64 face evaluations per face, out of `W_n = 512·(|S|+|T|)`)
-  bounds every face. **Phase B** (budgeted, F1d2 dyadic subdivision, `D` = 8, `Q` = 4096) refines
-  faces above `τ = 1.25λ`; an unfinished face keeps its phase-A bound. No face is unbounded.
-- λ is uncapped, or the open-frontier inward bound when capped. Box distances round inward.
+  after quantization and snap (and after fills and removals), and `S_n` the source surface of the
+  node.
+- **Phase A** (reserved, `Q_A` = 64 face evaluations per face out of `W_n = 512·(|S|+|T|)`)
+  bounds every face. **Phase B** (budgeted, F1d2 dyadic subdivision, `D` = 8, `Q` = 4096)
+  refines faces above `τ = 1.25λ`; an unfinished face keeps its phase-A bound. No face is
+  unbounded. λ is uncapped, or the open-frontier inward bound. Box distances round inward;
   F1d2's interval witnesses and outward rounding are kept.
-- `e(n) = min(s(n) ⊕ max_c e(c), direct(n))`; the direct bound streams the node's contiguous
-  Morton range (cell-aligned nodes are one range) with a patch budget `M_patch` (default 2^22
-  patches); when full, refinement stops and the current sound bounds stand.
-- Leaves: §6.4. f32 profiles: `sqrt(3)/2 · ulp_f32(max |p − O|)`.
-- Published `geometricError` is `e(n)`; the texel bound is reported separately (§8).
+- `e(n) = min(s(n) ⊕ max_c e(c), direct(n))`. The direct bound streams the node's contiguous
+  Morton range with a patch budget `M_patch` (default 2^22 patches); when full, the current
+  sound bounds stand.
+- **Leaves:** `e = sqrt(3)/2 · max_v s_ℓ(v)` (u16 profiles); `sqrt(3)/2 · ulp_f32(max |p − O_frame|)`
+  (f32 profiles, `O_frame` the tile frame's origin). `ε_rebase` = 0 (§4).
+- Published `geometricError` is `e(n)`. The texel bound is reported separately (§8).
 
 ## 8. Textures and appearance
 
 - **Leaves:** atlases keyed by (tile, image, UV set, class), real-texel gutters, no rotation,
-  paged at ≤ `A`, full resolution; tiles are cut so a member stays ≤ `B_tile`. The single-triangle
-  exception: lossy profiles use mip ≥ 1; `lossless` is Unsupported.
+  paged at ≤ `A`, full resolution except the N5 mip drop (§5). Single-triangle exception: lossy
+  profiles use mip ≥ 1; `lossless` is Unsupported.
 - **Proxies:** in-tree charts (E33: 60° normal cones, orthographic projection, strict-interior
-  overlap check, translation-only shelf packing; per-chart density compensation and chart merging
-  in ML6), then a closest-point **bake** from the children's **pre-encode** atlases for every
-  present slot; normals re-expressed in the proxy's tangent space with generated, stored TANGENTs.
-- **Encoding:** one encoder, vendored Basis Universal v2.50, in process, silent, single-threaded
-  calls. Per-class flags and DFD as design §5.2; linear classes get their primaries patched to
-  UNSPECIFIED (E42). Every page is verified after encoding (container, DFD, level count,
-  transcode floor); a failure is `InvalidState`. If ML1's five-target or determinism gate fails,
-  work stops for USER decision U3.
+  overlap check, translation-only shelf packing; per-chart density compensation and chart
+  merging in ML6), then a closest-point **bake** from the children's **pre-encode** atlases for
+  every present slot; normals re-expressed in the proxy's tangent space with generated, stored
+  TANGENTs.
+- **Encoding:** vendored Basis Universal v2.50, in process, silent, single-threaded calls; per-
+  class flags and DFD; linear classes get primaries patched to UNSPECIFIED (E42); every page is
+  verified after encoding (container, DFD, level count, transcode floor), and failure is
+  `InvalidState`. If ML1's five-target or determinism gate fails, work stops for USER decision U3.
 - **`lossless`:** PNG; texel-exact at leaves against the pinned decoders (`zune-jpeg` 0.5.15
-  through `image` 0.25.10, `png` 0.18.1), checked by independent decode.
-- **`appearance` report per tile:** displacement ≤ `e(n)` per texel; resolution
-  `t(n) = max(k_prof·e(n)/16, max_c t(c))`; one bilinear resample per level (stated, not bounded).
+  through `image` 0.25.10, `png` 0.18.1), by independent decode.
+- **`appearance` per tile:** displacement ≤ `e(n)` per texel; resolution
+  `t(n) = max(k_prof·e(n)/16, max_c t(c))`, or larger where the N5 mip drop fired; one bilinear
+  resample per level (stated, not bounded).
 
 ## 9. Resources
 
-- **Memory** ≤ `M_base + M_dec + M_sort + M_layout + M_page + jobs × max(M_node, M_bake + M_atlas
-  + M_enc, B_tile)` (design §2.6), every term a configuration value or a per-item cap. tmpfs scratch
-  is RAM, outside the bound, and reported (`scratch_memory_backed`).
-- **Scratch preflight** is a true upper bound, not a reservation: stage 1 before the workspace
-  (geometry passes), a stage after the hierarchy is exact [B4], and stage 2 after pass 5 before
-  any texture byte (exact chart and page plans, texel reuse counted per tile). Refusal is
-  `Io { InsufficientSpace, stage }`; after workspace creation F0 cleans up. ENOSPC stays a typed Io
-  failure.
-- **Per item:** members ≤ `B_tile`; leaves ≤ `L` triangles; proxies ≤ `2P` (hard); seam vertex
-  incidence ≤ 16 entries (more is an endpoint).
-- **Producer obligation for C1:** per payload, view bytes plus meshopt-decoded bytes ≤ 128 MiB
-  (`documentDecodedBytes`).
+- **Memory** ≤ `M_base + M_dec + M_sort + M_layout + M_page + M_tree + M_K + jobs ×
+  max(M_node, M_bake + M_atlas + M_enc, B_tile)` (design §2.6), every term a configuration value
+  or a per-item cap. tmpfs scratch is RAM, outside the bound, and reported.
+- **Scratch preflight**, a true upper bound and not a reservation: **stage 1** before the
+  workspace (geometry passes, worst-case counts); **stage 1b** after pass 5a (exact counts);
+  **stage 2** after pass 5b, before any texture byte (exact chart and page plans; texel reuse
+  counted per tile). Refusal is `Io { InsufficientSpace, stage }`; after workspace creation F0
+  cleans up. ENOSPC stays a typed Io failure. With δ ≡ 0 and final names after pass 5a (P-A1,
+  P-A2), stage 2 needs no term for a second copy of an implicit subtree's payloads.
+- **Per item:** members ≤ `B_tile`; leaves ≤ `L`; proxies ≤ `2P`; seam vertex incidence ≤ 16
+  entries (more is an endpoint; ℓ(v) is computed separately, §6.4).
+- **Producer obligation for C1:** per payload, view bytes plus meshopt-decoded bytes ≤ 128 MiB.
 
 ## 10. Archive ceiling (U2)
 
-The 3TZ index must fit a u32 local header, so an archive holds at most **178,956,970 members**
-(about 1.7×10^12 balanced triangles). Over it is `Unsupported { reason: "3TZ member ceiling",
-members, ceiling }`, checked from a sound count before the workspace and from exact counts once
-the hierarchy is known [B4], and rechecked at stage 2. The CLI help and `docs/` state the
-ceiling. No ZIP64 index header is designed.
+At most **178,956,970 members** (the 3TZ index must fit a u32 local header; about 1.7×10^12
+balanced triangles). **Stage 1** refuses only on the sound lower bound `⌈N/L⌉ + 1` tiles
++ 1 subtree + 1 document + 3; **stage 1b** refuses on the exact tile count from pass 5a plus
+bounds for subtrees and documents. Both give `Unsupported { reason: "3TZ member ceiling",
+members, ceiling }`. The CLI help and `docs/` state the ceiling. No ZIP64 index header.
 
 ## 11. Determinism
 
 Output bytes are a function of the input bytes, the profile and the placement only. They do not
-depend on `--jobs`, run size `R`, fan-in `F`, scratch location or timing (Jacobi seam sweeps,
-total-order keys, single-threaded encoder calls). Promised per target, not across targets (D14).
-Reports carry no timings.
+depend on `--jobs`, run size `R`, fan-in `F`, scratch location or timing. Promised per target, not
+across targets (D14). Reports carry no timings.
 
 ## 12. Failures
 
@@ -266,7 +343,7 @@ Reports carry no timings.
 | --- | --- |
 | InvalidRequest | Unknown profile; malformed placement; retired options (dispositions) |
 | InvalidInput | Malformed source (F1a/F1b2 admission); source changed during capture |
-| Unsupported | Outside the domain (§2); one region alone over `2P`; `lossless` single triangle over `B_tile`; height > 32; 3TZ member ceiling; feature density under U4 option (a) |
+| Unsupported | Outside the domain (§2); height > 32; 3TZ member ceiling; one region alone over `2P`; a node over `2P` after repair; post-quantization validation after its fallback; seam sweep cap; `lossless` single triangle or leaf pages over `B_tile` |
 | ResourceLimit | Per-item caps of §2 and §9 |
 | Io | Including `InsufficientSpace` with its stage; ENOSPC |
 | Cancelled, Conflict, ObserverFailure | As F0 |
@@ -276,65 +353,64 @@ Nothing invalid is ever published.
 
 ## 13. Report
 
-The F0 result plus: the resolved profile and its constants; per-level counts; seam statistics
-(edges kept, iterations, hole edges); certificate statistics (phase-A caps, phase-B exhaustion,
-composed and direct per level); the `appearance` object; preflight stage fields
-(`scratch_need_bytes` by stage, `output_need_bytes`, peaks, `scratch_memory_backed`); vanished
-primitives per level. `conversion.json` names the profile and constants.
+The F0 result plus: the resolved profile and its constants; per-depth counts; seam statistics
+(edges kept, sweeps, hole edges); post-quantization fallback rounds; certificate statistics
+(phase-A caps, phase-B exhaustion, composed and direct per depth); vanished regions, vanished
+islands and filled holes per depth (§6.7); the `appearance` object, including any N5 mip drops;
+preflight stage fields (`scratch_need_bytes` by stage, `output_need_bytes`, peaks,
+`scratch_memory_backed`). `conversion.json` names the profile and constants.
 
 ## 14. Acceptance (light process, per slice)
 
-Each slice's tests are listed in `slices.md`. This umbrella adds, from the review (F1, F2), which
-make the light process sufficient:
-- **A reusable output auditor** (a test utility, not a validator change) that decodes the
-  emitted tiles as the client does (GLB → meshopt → `u·scale + translation` in f32) for every
-  tile that publishes a shared vertex, including leaves, packed leaves, snapped corners and
-  leaf–leaf boundaries across depths; checks 0 unmatched same-depth seam edges, hole edges
-  against the published vanished set, and a sampled brute-force lower bound ≤ `e(n)`. It runs in
-  ML5, in ML6 (positions unchanged) and in ML9's scale gates and constant tuning.
-- **Negative tests:** snap disabled on a fixture whose lattices really differ; certify before
-  quantize or snap on a coarse-lattice fixture; a crack relabelled as a hole; a primitive-filtered
-  nearest search (the 10 m floating-primitive fixture).
-- **One combined certificate fixture:** a mixed-depth leaf, a packed leaf, a vanished primitive
-  and a relocked region, under one brute-force check.
-- **Scale rows that can fail:** ML5 gates 0 unmatched edges and 0 decoded mismatches on published
-  bytes, every hole edge accounted for, the sampled lower bound, VmHWM within §9, scratch within
-  the stage-1 bound and a wall-time budget; ML6 gates displacement ≤ `e(n)` on every texel and
-  VmHWM within `M_bake`; ML5's run uses the production octree path; a U1 row with about 10^4
-  primitives per root.
+Each slice's tests are in `slices.md` v6.1. This umbrella relies on these in particular:
+- **The output auditor** (design §12): reads production archives (GLB, `KHR_mesh_quantization`,
+  meshopt, with δ(t) applied, in client order) and checks bit-identical decoded shared vertices
+  for every set of tiles shown together (packed leaves, snapped corners, leaf–leaf across
+  depths, f32 path); every boundary edge without a SAME partner is GLOBAL, NONMAN, LEAFNBR, a HOLE
+  edge with a `VANISHED_*` row, or a missing boundary with a `FILLED_HOLE` row; no degenerate
+  proxy triangle and no edge with more than 2 triangles unless the source had it (degenerate leaf
+  triangles counted, not failed); ℓ(v) recomputed from the emitted leaves equals the production
+  value; a sampled brute-force lower bound ≤ `e(n)`; proxy ≤ 2P, member ≤ `B_tile`, height ≤ 32.
+  It runs in ML5, ML6 and ML9.
+- **Negative tests:** veto off; repair off with injected folds; snap off on really different
+  lattices; certify before quantize or snap; a crack relabelled as a hole; a primitive-filtered
+  nearest search; an ℓ(v) taken from the capped incidence list (ML2 fixture beyond 16 entries);
+  a fill that fails the N2b check is not added.
+- **Combined certificate fixture:** a mixed-depth leaf, a packed leaf, a vanished primitive, a
+  vanished island, a filled hole and a relocked region, under one brute-force check.
+- **Pass/fail scale gates** (design §13): the spilled 5.26×10^8 synthetic on the production
+  octree path; the U1/U4 input with 10^4 primitives and 10^4 holes and islands per root tile,
+  every proxy ≤ 2P and every missing GLOBAL boundary accounted for in F; the ML6 bake gate; the
+  N3 post-quantization gate on the steep synthetic and Floreat (0 Unsupported from that path).
 - **Validation:** every perf-lane output validates with `implicitAddressingAndAvailability` and
   `decodedContentContainment` (within caps; at scale after ML7c).
 
 ## 15. Freeze checklist
 
-1. v6 frozen with B1–B4 folded; §5, §6.4 and §10 re-checked against it.
-2. C1–C4 of the review reflected (§6.1, §6.5, §6.3, §6.2).
-3. U4 decided by the user (§6.6).
-4. O-D1 (origin and δ) answered.
-5. The C1, I1 and C2 amendments through their full treatment (owners, oracle, mutants, precode
-   review); the P amendment through its nonauthor review.
-6. The dispositions record's USER questions answered.
-7. One fresh nonauthor review of this text.
+1. Design v6.1 landed with N1–N5 (done; §5, §6.1, §6.4, §6.6 fold them in).
+2. U4 decided by the user: (c) (done; §6.6, §6.7).
+3. The fresh nonauthor review of this text, confirming O-D1 (§4) and O-D2 (§6.7).
+4. Not gating this freeze: the C1, I1 and C2 amendments go through their own full treatment, and
+   the P amendment through its own review, before the slices that implement them.
 
 ## 16. Open questions
 
-- **O-D1 (design author).** Where does the lattice origin O live? The v6 draft says both "the node
-  TRS carries the lattice origin and step" (§7) and "offsets … `|offset| < 2^24`, so the f32
-  translation is exact" (§3.4). Both hold only if O is outside the node translation. This draft
-  puts O in the root tile transform with no child transforms (δ ≡ 0). The v6 draft also says a
-  forest wider than `2^24·s_d` "uses the per-forest rebase (P §4.1)". P's δ is a per-tile sum of
-  child translations below an implicit root, not a per-forest shift, so that sentence needs
-  restating.
-- **O-D2 (design author).** Confirm the C3 fallback (unsimplified region) is adopted. The v6
-  draft's E45 does.
-- **U4 (user).** §6.6.
-- **O-U1 to O-U4 (user):** in the dispositions record.
+- **O-D1 (design author; confirmed at the review).** Origin `O` in the root transform;
+  lattice-aligned translations only on explicit tiles and implicit roots; δ ≡ 0 and
+  `ε_rebase` = 0 (§4). The auditor's client-order decode must then apply tile translations as
+  the client does (in f64, before the f32 vertex stage) when it compares shared vertices across
+  implicit roots.
+- **O-D2 (design author; confirmed at the review).** The `rustyLodChanges` property table as the
+  published form of V and F (§6.7).
+- Public-surface questions for the user (O-U1 to O-U3) are in the dispositions record. They do
+  not change this contract's algorithms.
 
 ## 17. Proof limits
 
 P0 is a prototype on one synthetic family (2.5D quadtree, integer x and y) and Floreat (10^6
-triangles); certificates, the direct bound and baking were not run at its scale; packing and U1
-vanishing were not exercised; the mixed-depth snap check was tautological (review B1). The
+triangles); certificates, the direct bound and baking were not run at its scale; packing and
+U1/U4 were not exercised there. The p0b audit tested the snap rule on modelled bytes with an
+oracle ℓ(v) and packing off (v6 review limits i–v); the auditor closes these in ML5. The
 prototypes are f64 without interval arithmetic. Watertightness rests on the validate-and-retry
-repair loop, not a proof. One host and one target (x86_64). The time-per-GB of C2 for this
-output is not yet measured (A-C2-1).
+repair loop, not a proof. One host and one target (x86_64). C2 time per GB for this output is not
+yet measured (A-C2-1).
