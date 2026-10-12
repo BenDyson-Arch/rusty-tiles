@@ -229,7 +229,10 @@ case overruns its budget, its process group is killed and the case fails with
   31–37% of a SwiftShader terrain load, because each of those frames redrew
   every tile.
 - 3D Tiles: `Cesium3DTileset.fromUrl` with `maximumScreenSpaceError` 16 (the
-  default camera). The camera is `viewBoundingSphere(root sphere,
+  default camera; a bench-only `--maximum-sse N` changes it, for example `1`
+  to load nearly every tile of a LOD tileset from the same camera, and such a
+  run is a report: baseline comparisons go to each case's `advisory` list and
+  do not fail it, while absolute failures still do). The camera is `viewBoundingSphere(root sphere,
   HeadingPitchRange(-0.8, -0.65, max(3r, 5)))`, the preview's framing.
   `.3tz` archives are unpacked and served as files, as the archive viewers do.
   Each tileset case then loads again in a fresh context with
@@ -312,7 +315,7 @@ JSON lists it under `gate`.
   - a failed render probe. Console warnings are recorded
   but do not fail. With `--baseline`, it also flags these metrics by case name
   when they exceed 1.25× and the floor: `requests` (+2), `requestBytes`
-  (+64 KiB) and `secondsToLoaded` (+0.25 s). Load time is compared only
+  (+64 KiB) and `secondsToLoaded` (+0.25 s), except under `--maximum-sse`. Load time is compared only
   when the baseline used the same renderer class. A baseline recorded
   before renderer capture counts as software. Cesium times (first tile,
   loaded, SSE 0 loaded) stay advisory in `REPORT.md`, and imagery request

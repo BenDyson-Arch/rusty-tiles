@@ -281,6 +281,9 @@ def main():
                         'RequestScheduler.throttleRequests=false and record the per-frame request cap\'s effect (not gated)')
     parser.add_argument('--check-renderer', action='store_true', help='print the preflight renderer facts and exit; '
                         f'exit {ENVIRONMENT_EXIT} unless the renderer matches the mode')
+    parser.add_argument('--maximum-sse', type=float, default=16, help='3D Tiles maximumScreenSpaceError (default 16). '
+                        'Any other value is a report-only probe, such as 1 for near-full refinement: baseline '
+                        'comparisons are recorded as advisory and do not fail the run')
     for key, value in DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=pathlib.Path, default=value)
     args = parser.parse_args()
     os.sched_setaffinity(0, {int(c) for c in args.cpus.split(',')}); os.setpriority(os.PRIO_PROCESS, 0, 10)
@@ -330,7 +333,7 @@ def main():
     try:
         for name, kind, identity, directory in plans:
             spec = dict(base_spec, kind=kind, url=f'/data/{name}/' + ('' if kind == 'raster' else 'tileset.json'))
-            if kind == 'tileset': spec['maximumScreenSpaceError'] = 16
+            if kind == 'tileset': spec['maximumScreenSpaceError'] = args.maximum_sse
             if kind == 'raster' and args.inset:
                 spec['insetDegrees'] = inset_degrees(args.inset, json.loads((directory / 'tilejson.json').read_text())['maxzoom'])
             if kind == 'raster' and args.hole:
@@ -365,7 +368,9 @@ def main():
             case.update(name=name, kind=kind, output=identity, spec=spec, budgetSeconds=budget, screenshot=str(shot))
             if spec.get('insetDegrees'): case['warnings'] = [f"raster rectangle inset {spec['insetDegrees']} degrees: not the exact bounds"]
             shots = [shot] + [shot.with_name(f"{name}-{view['name']}.png") for view in case.get('views', [])]
-            case['problems'] = problems(case, baseline.get(name), renderer)
+            case['problems'] = problems(case, baseline.get(name) if args.maximum_sse == 16 else None, renderer)
+            if args.maximum_sse != 16:  # report-only probe: baseline comparisons are advisory
+                case['advisory'] = [p for p in problems(case, baseline.get(name), renderer) if p not in case['problems']]
             passes = [('default', spec, case)]
             if kind == 'tileset' and not args.no_refined:
                 refined_spec = dict(spec, maximumScreenSpaceError=REFINED_SSE)
@@ -412,6 +417,7 @@ def main():
                                    cpuAffinity=sorted(os.sched_getaffinity(0)),
                                    baseline=str(args.baseline) if args.baseline else None,
                                    baselineTimingCompared=bool(args.baseline) and timing_comparable, rasterInset=args.inset,
+                                   maximumScreenSpaceError=args.maximum_sse,
                                    stepTimeoutSeconds=args.timeout,
                                    scriptSha256={name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
                                                  for name in ('cesium.py', 'cesium.cjs')}),
