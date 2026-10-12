@@ -271,7 +271,7 @@ def primitive_triangles(positions, indices=None, node=0, mesh=0, primitive=0,
 
 
 def write_fixture(directory, name, positions, indices=None, component=5125,
-                  stride=12, matrix=None, instances=1, glb=False):
+                  stride=12, matrix=None, instances=1, glb=False, full_attributes=False):
     directory = Path(directory) / name
     directory.mkdir(parents=True, exist_ok=True)
     positions = [[f32(value) for value in p] for p in positions]
@@ -294,6 +294,19 @@ def write_fixture(directory, name, positions, indices=None, component=5125,
         accessors.append({"bufferView": 1, "componentType": component,
                           "count": len(indices), "type": "SCALAR"})
         primitive["indices"] = 1
+    if full_attributes:
+        attributes = {"NORMAL": ("VEC3", [0, 0, 1]), "TANGENT": ("VEC4", [1, 0, 0, 1]),
+                      "TEXCOORD_0": ("VEC2", [0, 0]), "TEXCOORD_1": ("VEC2", [.25, .5]),
+                      "COLOR_0": ("VEC4", [.2, .3, .4, 1])}
+        for name, (shape, values) in attributes.items():
+            while len(payload) % 4:
+                payload.append(0)
+            start = len(payload)
+            payload.extend(struct.pack("<" + "f" * len(values), *values) * len(positions))
+            primitive["attributes"][name] = len(accessors)
+            accessors.append({"bufferView": len(views), "componentType": 5126,
+                              "count": len(positions), "type": shape})
+            views.append({"buffer": 0, "byteOffset": start, "byteLength": len(payload) - start})
     doc = {"asset": {"version": "2.0"}, "scene": 0,
            "scenes": [{"nodes": list(range(instances))}],
            "nodes": [{"mesh": 0, **({"matrix": matrix} if matrix else {})} for _ in range(instances)],
@@ -314,7 +327,8 @@ def write_fixture(directory, name, positions, indices=None, component=5125,
         path.write_text(json.dumps(doc, separators=(",", ":")) + "\n")
     truth = []
     for instance in range(instances):
-        truth.extend(primitive_triangles(positions, indices, node=instance, matrix=matrix))
+        truth.extend(primitive_triangles(positions, indices, node=instance, matrix=matrix,
+                        projected=projected_geometry_bytes(True, True, 2, True) if full_attributes else None))
     (directory / "truth.json").write_text(json.dumps(truth, separators=(",", ":")) + "\n")
     return path, truth
 
@@ -332,6 +346,7 @@ def corpus(directory):
             stride=20, glb=component == 5123)
     add("reflected-instances", triangle, indices=[0, 1, 2] * 7, instances=3,
         matrix=[-2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 1, 0, 13, -5, 7, 1])
+    add("attribute-byte-charge", triangle, indices=[0, 1, 2] * 7, full_attributes=True)
     add("coincident-runs", triangle, indices=[0, 1, 2] * 137)
     add("degenerates", [[0, 0, -0.0], [0, 0, 0], [1, 0, 0],
                         [0, 0, 0], [1, 0, 0], [2, 0, 0]])
@@ -444,6 +459,8 @@ def run_corpus(binary, directory, label):
     for case in cases:
         previous = {}
         for variant, (jobs, run_bytes, fan_in, buffer_bytes, scratch_index, leaf_triangles, tile_bytes) in enumerate(configurations):
+            if variant == 5:
+                tile_bytes = 2 * max(t["bytes"] for t in json.loads(Path(case["truth"]).read_text()))
             output = directory / f"{case['name']}-{variant}"
             env = dict(os.environ, H1_INPUT=case["input"], H1_OUTPUT=str(output),
                        H1_SCRATCH=str(scratch[scratch_index]), H1_JOBS=str(jobs),
