@@ -84,6 +84,48 @@ pub(super) struct MeshTable {
     pub meshes: Vec<MeshFact>,
     pub primitives: Vec<PrimitiveFact>,
     pub positions: Vec<usize>,
+    /// Parallel to `positions`: the range of `grouped`, relative to the mesh's
+    /// primitive range, that holds the primitives using that POSITION accessor.
+    pub groups: Vec<(usize, usize)>,
+    /// Parallel to `primitives`: per mesh, the mesh-relative primitive indices
+    /// grouped by POSITION slot, in primitive order within each group.
+    pub grouped: Vec<usize>,
+}
+
+impl MeshTable {
+    /// Group the primitives of `fact`, the mesh just completed, by POSITION
+    /// accessor. `slot[a]` is the index of accessor `a` within the mesh's
+    /// distinct-POSITION range. A stable counting sort: O(primitives + positions).
+    pub(super) fn group(
+        &mut self,
+        fact: &MeshFact,
+        slot: &[usize],
+        ceiling: usize,
+    ) -> FormatResult<()> {
+        let (p0, p1) = fact.primitives;
+        let (s0, s1) = fact.positions;
+        debug_assert_eq!((self.grouped.len(), self.groups.len()), (p0, s0));
+        // starts[k + 1] counts slot k; the prefix sum makes starts[k] its start.
+        let mut starts = allocation(s1 - s0 + 1, 0usize)?;
+        for p in &self.primitives[p0..p1] {
+            starts[slot[p.position] + 1] += 1;
+        }
+        for k in 1..starts.len() {
+            starts[k] += starts[k - 1];
+        }
+        for k in 0..s1 - s0 {
+            push(&mut self.groups, (starts[k], starts[k + 1]), ceiling)?;
+        }
+        records::reserve(&mut self.grouped, p1 - p0, ceiling)?;
+        self.grouped.resize(p1, 0);
+        let grouped = &mut self.grouped[p0..p1];
+        for (i, p) in self.primitives[p0..p1].iter().enumerate() {
+            let cursor = &mut starts[slot[p.position]];
+            grouped[*cursor] = i;
+            *cursor += 1;
+        }
+        Ok(())
+    }
 }
 
 struct NodeFact {
@@ -377,12 +419,15 @@ impl Graph {
             return Ok(Ok(()));
         };
         let prune = consumer.instances_only();
+        // Accessor -> slot in the current instance's distinct-POSITION range,
+        // refilled per instance; stale entries fail the check in `mark`.
+        let mut slot = allocation(draws.accessors.len(), usize::MAX)?;
         let mut stack: Vec<(usize, usize)> = Vec::new();
         for &root in roots {
             if prune && !self.draws_below[root] {
                 continue;
             }
-            if let Err(e) = self.visit(root, 1, meshes, draws, consumer) {
+            if let Err(e) = self.visit(root, 1, meshes, draws, &mut slot, consumer) {
                 return Ok(Err(e));
             }
             push(&mut stack, (root, self.nodes[root].children.0), ceiling)?;
@@ -395,7 +440,7 @@ impl Graph {
                         continue;
                     }
                     let depth = stack.len() as u64 + 1;
-                    if let Err(e) = self.visit(child, depth, meshes, draws, consumer) {
+                    if let Err(e) = self.visit(child, depth, meshes, draws, &mut slot, consumer) {
                         return Ok(Err(e));
                     }
                     push(&mut stack, (child, self.nodes[child].children.0), ceiling)?;
@@ -413,17 +458,27 @@ impl Graph {
         depth: u64,
         meshes: &MeshTable,
         draws: Draws<'_, '_>,
+        slot: &mut [usize],
         consumer: &mut C,
     ) -> Result<(), C::Error> {
         let node = &self.nodes[n];
         consumer.enter(&node.transform, depth)?;
         if let Some(mesh) = node.mesh {
             let fact = meshes.meshes[mesh];
+            let (p0, p1) = fact.primitives;
+            let (s0, s1) = fact.positions;
+            let positions = &meshes.positions[s0..s1];
+            for (k, &accessor) in positions.iter().enumerate() {
+                slot[accessor] = k;
+            }
             consumer.instance(&Instance {
                 node: n,
                 mesh,
-                primitives: &meshes.primitives[fact.primitives.0..fact.primitives.1],
-                positions: &meshes.positions[fact.positions.0..fact.positions.1],
+                primitives: &meshes.primitives[p0..p1],
+                positions,
+                groups: &meshes.groups[s0..s1],
+                grouped: &meshes.grouped[p0..p1],
+                slot,
                 draws,
             })?;
         }
@@ -444,6 +499,12 @@ pub(crate) struct Instance<'d, 'v> {
     mesh: usize,
     primitives: &'d [PrimitiveFact],
     positions: &'d [usize],
+    /// Parallel to `positions`: ranges of `grouped`.
+    groups: &'d [(usize, usize)],
+    /// Primitive indices grouped by POSITION slot, primitive order within a group.
+    grouped: &'d [usize],
+    /// Accessor -> index in `positions`, valid for this instance's accessors only.
+    slot: &'d [usize],
     draws: Draws<'d, 'v>,
 }
 
@@ -507,8 +568,27 @@ impl Instance<'_, '_> {
         }
         false
     }
-    /// Report every drawn vertex index of `accessor` (with repeats).
+    /// Report every drawn vertex index of `accessor` (with repeats), primitive
+    /// by primitive in mesh order. Visits only that accessor's primitives.
     pub(crate) fn mark(&self, accessor: usize, mut mark: impl FnMut(usize)) {
+        let Some(&k) = self.slot.get(accessor) else {
+            return;
+        };
+        // A stale slot (another mesh's) never names `accessor` here.
+        if self.positions.get(k) != Some(&accessor) {
+            return;
+        }
+        let (a, b) = self.groups[k];
+        for &p in &self.grouped[a..b] {
+            self.primitive_draws(&self.primitives[p], |v| {
+                mark(v);
+                true
+            });
+        }
+    }
+    /// The pre-C2-WB `mark`, O(primitives) per call: the equivalence reference.
+    #[cfg(test)]
+    pub(crate) fn mark_scan(&self, accessor: usize, mut mark: impl FnMut(usize)) {
         for p in self.primitives.iter().filter(|p| p.position == accessor) {
             self.primitive_draws(p, |v| {
                 mark(v);

@@ -863,8 +863,12 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         meshes: Vec::new(),
         primitives: Vec::new(),
         positions: Vec::new(),
+        groups: Vec::new(),
+        grouped: Vec::new(),
     };
     let mut position_stamp = allocation(accessors.len(), usize::MAX)?;
+    // Slot of a POSITION accessor within the current mesh's distinct range.
+    let mut position_slot = allocation(accessors.len(), 0usize)?;
     for (mesh_index, mesh) in array::<&RawValue>(root.meshes, slots)?
         .into_iter()
         .enumerate()
@@ -1128,14 +1132,17 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             )?;
             if position_stamp[position] != mesh_index {
                 position_stamp[position] = mesh_index;
+                position_slot[position] = table.positions.len() - fact.positions.0;
                 push(&mut table.positions, position, slots)?;
             }
         }
         fact.primitives.1 = table.primitives.len();
         fact.positions.1 = table.positions.len();
+        table.group(&fact, &position_slot, slots)?;
         push(&mut table.meshes, fact, slots)?;
     }
     drop(position_stamp);
+    drop(position_slot);
     for (index, accessor) in accessors.iter().enumerate() {
         if accessor.component == 5125 && !index_accessors[index] {
             return Err(
@@ -2077,6 +2084,439 @@ mod tests {
         )
         .unwrap();
         assert_eq!(facts.materialized_bytes, 40);
+    }
+    /// Value nodes as C1 counts them: the root, every container and every
+    /// scalar; object keys are not nodes.
+    fn count_value_nodes(v: &Value) -> u64 {
+        1 + match v {
+            Value::Array(items) => items.iter().map(count_value_nodes).sum(),
+            Value::Object(members) => members.values().map(count_value_nodes).sum(),
+            _ => 0,
+        }
+    }
+    fn b3dm_tables(glb: &[u8], feature: &Value, batch: Option<&Value>) -> Vec<u8> {
+        let mut ft = serde_json::to_vec(feature).unwrap();
+        while !(28 + ft.len()).is_multiple_of(8) {
+            ft.push(b' ');
+        }
+        let mut bt = batch.map_or(Vec::new(), |b| serde_json::to_vec(b).unwrap());
+        while !bt.len().is_multiple_of(8) {
+            bt.push(b' ');
+        }
+        let mut result = b"b3dm".to_vec();
+        result.extend(1u32.to_le_bytes());
+        result.extend(0u32.to_le_bytes());
+        for n in [ft.len(), 0, bt.len(), 0] {
+            result.extend((n as u32).to_le_bytes());
+        }
+        result.extend(ft);
+        result.extend(bt);
+        result.extend(glb);
+        while !result.len().is_multiple_of(8) {
+            result.push(0);
+        }
+        let length = result.len() as u32;
+        result[8..12].copy_from_slice(&length.to_le_bytes());
+        result
+    }
+    #[test]
+    fn json_nodes_sum_value_nodes_of_every_admitted_document() {
+        let doc = scene_doc();
+        let doc_nodes = count_value_nodes(&doc);
+        let doc_bytes = serde_json::to_vec(&doc).unwrap();
+        assert_eq!(
+            json::admit(&doc_bytes, fixture_limits().json)
+                .unwrap()
+                .value_nodes() as u64,
+            doc_nodes,
+            "the reference count agrees with C1's value_nodes()"
+        );
+        assert_eq!(glb_facts(&doc).unwrap().json_nodes, doc_nodes);
+        // A local .gltf with a data: buffer counts its one document.
+        let mut local = doc.clone();
+        local["buffers"][0]["uri"] = json!(format!(
+            "data:application/octet-stream;base64,{}",
+            "A".repeat(48)
+        ));
+        let local_facts = inspect(
+            "a.gltf",
+            &serde_json::to_vec(&local).unwrap(),
+            4_000_000,
+            |_| panic!(),
+        )
+        .unwrap();
+        assert_eq!(local_facts.json_nodes, count_value_nodes(&local));
+        let glb = frame(&doc, &[0; 36]);
+        let feature = json!({"BATCH_LENGTH":2,"RTC_CENTER":[1,2,3]});
+        let batch = json!({"id":[1,2],"name":["a","b"],"nested":{"k":[{"x":null},true]}});
+        for (batch, expected) in [
+            (None, count_value_nodes(&feature) + doc_nodes),
+            (
+                Some(&batch),
+                count_value_nodes(&feature) + count_value_nodes(&batch) + doc_nodes,
+            ),
+        ] {
+            let bytes = b3dm_tables(&glb, &feature, batch);
+            let facts = inspect("a.b3dm", &bytes, 4_000_000, |_| panic!()).unwrap();
+            assert_eq!(facts.json_nodes, expected, "batch table {batch:?}");
+        }
+        // Hand count for the smallest b3dm: {"BATCH_LENGTH":0} is 2 nodes.
+        let facts = inspect(
+            "a.b3dm",
+            &b3dm_tables(&glb, &json!({"BATCH_LENGTH":0}), None),
+            4_000_000,
+            |_| panic!(),
+        )
+        .unwrap();
+        assert_eq!(facts.json_nodes, 2 + doc_nodes);
+    }
+    #[test]
+    fn external_resources_count_resolved_buffer_and_image_uris() {
+        assert_eq!(glb_facts(&scene_doc()).unwrap().external_resources, 0);
+        let mut doc = scene_doc();
+        doc["buffers"] = json!([
+            {"uri":"a.bin","byteLength":36},
+            {"uri":"data:application/octet-stream;base64,AAAA","byteLength":3},
+            {"uri":"b.bin","byteLength":4}
+        ]);
+        doc["images"] = json!([{"uri":"t.png"}, {"uri":"u.png"}]);
+        let mut resolved = Vec::new();
+        let facts = inspect(
+            "a.gltf",
+            &serde_json::to_vec(&doc).unwrap(),
+            4_000_000,
+            |uri| {
+                resolved.push(uri.to_owned());
+                Ok(vec![0; if uri == "a.bin" { 36 } else { 4 }])
+            },
+        )
+        .unwrap();
+        // Two external buffers and two images; the data: buffer is not resolved.
+        assert_eq!(resolved, ["a.bin", "b.bin", "t.png", "u.png"]);
+        assert_eq!(facts.external_resources, 4);
+        // An image stored in a bufferView is not an external resource.
+        let mut doc = scene_doc();
+        doc["buffers"][0]["byteLength"] = json!(40);
+        doc["bufferViews"] = json!([
+            {"buffer":0,"byteLength":36},
+            {"buffer":0,"byteOffset":36,"byteLength":4}
+        ]);
+        doc["images"] = json!([{"bufferView":1,"mimeType":"image/png"}]);
+        let facts = inspect("a.glb", &frame(&doc, &[0; 40]), 4_000_000, |_| panic!()).unwrap();
+        assert_eq!(facts.external_resources, 0);
+    }
+    #[test]
+    fn instance_primitives_sum_selected_instances_mesh_primitive_counts() {
+        let mut doc = scene_doc();
+        let p = json!({"attributes":{"POSITION":0}});
+        doc["meshes"] = json!([
+            {"primitives":[p.clone(), p.clone()]},
+            {"primitives":[p.clone(), p.clone(), p.clone()]}
+        ]);
+        // Selected scene 0: node 0 (mesh 0, 2) with child 1 (mesh 1, 3), node 2
+        // (mesh 1, 3), node 4 without a mesh. Node 3 (mesh 0) is unselected.
+        doc["nodes"] = json!([
+            {"mesh":0,"children":[1]},
+            {"mesh":1},
+            {"mesh":1,"translation":[1,0,0]},
+            {"mesh":0},
+            {}
+        ]);
+        doc["scenes"] = json!([{"nodes":[0,2,4]},{"nodes":[3]}]);
+        doc["scene"] = json!(0);
+        assert_eq!(glb_facts(&doc).unwrap().instance_primitives, 2 + 3 + 3);
+        doc["scene"] = json!(1);
+        assert_eq!(glb_facts(&doc).unwrap().instance_primitives, 2);
+        // No selected scene: no instances.
+        doc.as_object_mut().unwrap().remove("scene");
+        assert_eq!(glb_facts(&doc).unwrap().instance_primitives, 0);
+        assert_eq!(glb_facts(&triangle()).unwrap().instance_primitives, 0);
+    }
+    /// xorshift64*: a deterministic generator for the equivalence corpus.
+    struct Rng(u64);
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            (self.0.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 32) as usize % n
+        }
+    }
+    /// A random valid GLB: shared and repeated POSITION accessors across meshes,
+    /// u8 index accessors with repeated values, and a random node forest.
+    fn random_scene(rng: &mut Rng) -> (Value, Vec<u8>, usize) {
+        let positions = 1 + rng.below(80);
+        let index_count = rng.below(40);
+        let mut bin = Vec::new();
+        for _ in 0..4 {
+            for v in [1f32, -1., 1.] {
+                bin.extend(v.to_le_bytes());
+            }
+        }
+        let mut accessors = Vec::new();
+        let mut counts = Vec::new();
+        for _ in 0..positions {
+            let count = 1 + rng.below(4);
+            counts.push(count);
+            accessors.push(json!({"bufferView":0,"componentType":5126,"type":"VEC3","count":count,"min":[1,-1,1],"max":[1,-1,1]}));
+        }
+        let mut index_bytes = Vec::new();
+        let mut index_max = Vec::new();
+        for _ in 0..index_count {
+            let n = 1 + rng.below(12);
+            let top = rng.below(4);
+            let offset = index_bytes.len();
+            for _ in 0..n {
+                index_bytes.push(rng.below(top + 1) as u8);
+            }
+            index_max.push(top);
+            accessors.push(json!({"bufferView":1,"byteOffset":offset,"componentType":5121,"type":"SCALAR","count":n}));
+        }
+        let mut views = vec![json!({"buffer":0,"byteLength":48,"byteStride":12})];
+        if !index_bytes.is_empty() {
+            views.push(json!({"buffer":0,"byteOffset":48,"byteLength":index_bytes.len()}));
+        }
+        bin.extend(&index_bytes);
+        let mut meshes = Vec::new();
+        for _ in 0..1 + rng.below(6) {
+            let mut primitives = Vec::new();
+            for _ in 0..1 + rng.below(50) {
+                // Half the primitives draw from a small pool, so groups repeat.
+                let pool = if rng.below(2) == 0 {
+                    positions.min(5)
+                } else {
+                    positions
+                };
+                let position = rng.below(pool);
+                let mut p = json!({"attributes":{"POSITION":position},"mode":0});
+                if index_count > 0 && rng.below(2) == 0 {
+                    let i = rng.below(index_count);
+                    if index_max[i] < counts[position] {
+                        p["indices"] = json!(positions + i);
+                    }
+                }
+                primitives.push(p);
+            }
+            meshes.push(json!({ "primitives": primitives }));
+        }
+        let node_count = 1 + rng.below(30);
+        let mut nodes = Vec::new();
+        let mut roots = Vec::new();
+        for n in 0..node_count {
+            let mut node = json!({});
+            if rng.below(4) != 0 {
+                node["mesh"] = json!(rng.below(meshes.len()));
+            }
+            nodes.push(node);
+            if n > 0 && rng.below(3) == 0 {
+                let parent = rng.below(n);
+                let children = nodes[parent]
+                    .as_object_mut()
+                    .unwrap()
+                    .entry("children")
+                    .or_insert(json!([]));
+                children.as_array_mut().unwrap().push(json!(n));
+            } else {
+                roots.push(n);
+            }
+        }
+        let doc = json!({
+            "asset":{"version":"2.0"},
+            "buffers":[{"byteLength":bin.len()}],
+            "bufferViews":views,
+            "accessors":accessors,
+            "meshes":meshes,
+            "nodes":nodes,
+            "scenes":[{"nodes":roots}],
+            "scene":0
+        });
+        (doc, bin, positions + index_count)
+    }
+    /// Compares `mark` with the pre-C2-WB `mark_scan` for every accessor of
+    /// every instance, in order, in reverse and over every accessor id.
+    struct Equivalence {
+        accessors: usize,
+        calls: usize,
+        marked: usize,
+    }
+    impl scene::SceneConsumer for Equivalence {
+        type Error = ();
+        fn instances_only(&self) -> bool {
+            false
+        }
+        fn enter(&mut self, _: &scene::NodeTransform, _: u64) -> Result<(), ()> {
+            Ok(())
+        }
+        fn leave(&mut self, _: &scene::NodeTransform) {}
+        fn instance(&mut self, i: &scene::Instance<'_, '_>) -> Result<(), ()> {
+            let order = i
+                .positions()
+                .iter()
+                .copied()
+                .chain(i.positions().iter().rev().copied())
+                .chain(0..self.accessors + 2);
+            for a in order {
+                let (mut new, mut old) = (Vec::new(), Vec::new());
+                i.mark(a, |v| new.push(v));
+                i.mark_scan(a, |v| old.push(v));
+                assert_eq!(new, old, "node {} mesh {} accessor {a}", i.node(), i.mesh());
+                self.calls += 1;
+                self.marked += new.len();
+            }
+            Ok(())
+        }
+    }
+    #[test]
+    fn grouped_mark_equals_the_scan_on_random_scenes() {
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        let (mut calls, mut marked, mut instances) = (0, 0, 0);
+        for seed in 0..300 {
+            let (doc, bin, accessors) = random_scene(&mut rng);
+            let mut consumer = Equivalence {
+                accessors,
+                calls: 0,
+                marked: 0,
+            };
+            let facts = super::inspect_scene(
+                PayloadKind::Glb,
+                &frame(&doc, &bin),
+                fixture_limits(),
+                4_000_000,
+                |_, _| -> Result<Vec<u8>, ()> { panic!() },
+                &mut consumer,
+            )
+            .unwrap_or_else(|e| panic!("scene {seed}: {e:?}"));
+            calls += consumer.calls;
+            marked += consumer.marked;
+            instances += facts.instance_primitives;
+        }
+        eprintln!("mark equivalence: 300 scenes, {calls} mark calls, {marked} marks, {instances} instance-primitive pairs");
+        assert!(calls > 10_000 && marked > 10_000 && instances > 10_000);
+    }
+    /// The review's many-accessor shape (`quadB` in the C2-WB probes): `a`
+    /// POSITION accessors of one vertex on one strided view, one POINTS mesh
+    /// whose primitive `i` uses accessor `i % a`, and `m` root instances.
+    fn quad_shape(a: usize, p: usize, m: usize) -> Vec<u8> {
+        let accessor = json!({"bufferView":0,"componentType":5126,"type":"VEC3","count":1,"min":[1,-1,1],"max":[1,-1,1]});
+        let doc = json!({
+            "asset":{"version":"2.0"},
+            "buffers":[{"byteLength":12}],
+            "bufferViews":[{"buffer":0,"byteLength":12,"byteStride":12}],
+            "accessors":vec![accessor; a],
+            "meshes":[{"primitives":(0..p).map(|i| json!({"attributes":{"POSITION":i % a},"mode":0})).collect::<Vec<_>>()}],
+            "nodes":vec![json!({"mesh":0}); m],
+            "scenes":[{"nodes":(0..m).collect::<Vec<_>>()}],
+            "scene":0
+        });
+        let mut bin = Vec::new();
+        for v in [1f32, -1., 1.] {
+            bin.extend(v.to_le_bytes());
+        }
+        frame(&doc, &bin)
+    }
+    /// Times the streaming consumer's marking loop (bitmap per accessor).
+    struct MarkTimer {
+        scan: bool,
+        nanos: u128,
+        marked: u64,
+        bitmap: Vec<u64>,
+    }
+    impl scene::SceneConsumer for MarkTimer {
+        type Error = ();
+        fn instances_only(&self) -> bool {
+            true
+        }
+        fn enter(&mut self, _: &scene::NodeTransform, _: u64) -> Result<(), ()> {
+            Ok(())
+        }
+        fn leave(&mut self, _: &scene::NodeTransform) {}
+        fn instance(&mut self, i: &scene::Instance<'_, '_>) -> Result<(), ()> {
+            let start = std::time::Instant::now();
+            for &a in i.positions() {
+                let words = i.count(a).div_ceil(64);
+                self.bitmap.clear();
+                self.bitmap.resize(words, 0);
+                let bitmap = &mut self.bitmap;
+                if self.scan {
+                    i.mark_scan(a, |v| bitmap[v / 64] |= 1 << (v % 64));
+                } else {
+                    i.mark(a, |v| bitmap[v / 64] |= 1 << (v % 64));
+                }
+                self.marked += bitmap
+                    .iter()
+                    .map(|w| u64::from(w.count_ones()))
+                    .sum::<u64>();
+            }
+            self.nanos += start.elapsed().as_nanos();
+            Ok(())
+        }
+    }
+    fn time_marks(bytes: &[u8], scan: bool) -> (u128, u64) {
+        let mut limits = fixture_limits();
+        limits.json.bytes = 32 << 20;
+        limits.json.value_nodes = 1 << 22;
+        let mut timer = MarkTimer {
+            scan,
+            nanos: 0,
+            marked: 0,
+            bitmap: Vec::new(),
+        };
+        super::inspect_scene(
+            PayloadKind::Glb,
+            bytes,
+            limits,
+            4_000_000,
+            |_, _| -> Result<Vec<u8>, ()> { panic!() },
+            &mut timer,
+        )
+        .unwrap();
+        (timer.nanos, timer.marked)
+    }
+    /// Linearity control (C2-WB A3): marking time per instance·(A + P) on the
+    /// many-accessor shapes against the shared-accessor class, before (the
+    /// scan) and after (grouped). Release build:
+    /// `cargo test --release --lib mark_linearity -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "timing control; run in release"]
+    fn mark_linearity_control() {
+        let shapes = [
+            ("shared-16000-200", 1, 16_000, 200),
+            ("quad-6000-20", 6_000, 6_000, 20),
+            ("quadB-5000-16000-40", 5_000, 16_000, 40),
+            ("e2e-quadB-5000-15500-500", 5_000, 15_500, 500),
+        ];
+        let mut per_unit = Vec::new();
+        for (name, a, p, m) in shapes {
+            let bytes = quad_shape(a, p, m);
+            let units = (m * (a + p)) as f64;
+            // Grouped: minimum of five runs.
+            let mut after = u128::MAX;
+            let mut marked = 0;
+            for _ in 0..5 {
+                let (nanos, n) = time_marks(&bytes, false);
+                after = after.min(nanos);
+                marked = n;
+            }
+            let (before, before_marked) = time_marks(&bytes, true);
+            assert_eq!(marked, before_marked);
+            assert_eq!(marked, (m * a) as u64, "every accessor's vertex 0 is drawn");
+            let (b, f) = (before as f64 / units, after as f64 / units);
+            eprintln!(
+                "mark-linearity {name}: A={a} P={p} instances={m} units={units} before={:.3}s ({b:.2} ns/unit) after={:.4}s ({f:.2} ns/unit) speedup={:.1}x",
+                before as f64 / 1e9,
+                after as f64 / 1e9,
+                b / f
+            );
+            per_unit.push((name, b, f));
+        }
+        let shared = per_unit[0].2;
+        for (name, before, after) in &per_unit[1..] {
+            assert!(
+                *after <= 4.0 * shared,
+                "{name}: {after:.2} ns/unit against shared {shared:.2}"
+            );
+            assert!(*before >= 10.0 * after, "{name}: scan not slower");
+        }
     }
     #[test]
     fn independent_meshopt_golden_stream_decodes() {
