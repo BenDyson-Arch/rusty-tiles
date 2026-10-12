@@ -82,10 +82,14 @@ escape fails as InvalidInput, and the message names the member, tile depth, volu
 mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
 (`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
 `containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^28 units, 2 GiB,
-2 GiB and 64) yield `notInspected`, never ResourceLimit. At the measured release-build unit costs the default work cap bounds
-unit-charged C2 work to about 3 s; debug builds are slower, and the separately capped re-reads
-and re-decoding (2 GiB each) and per-primitive vertex marking are not included in that
-figure. Archives over the cap are reported as `workLimit`. The
+2 GiB and 64) yield `notInspected`, never ResourceLimit. The work units do not yet bound time uniformly: on typical producer
+archives C2 costs about 10–20 ns per unit in release builds (a few seconds at the default cap),
+but cheap-unit shapes measured at about 193–776 ns per unit (narrow spans, tile transforms and
+sphere volumes per level), so an adversarial archive within the default cap can take on the
+order of 1–3.5 minutes. A per-reference cost (about 10–50 µs) is also not charged. A corrected
+unit formula is planned; until it lands, treat `containmentWorkUnits` as a work cap, not a time
+bound. Debug builds are slower, and the separately capped re-reads and re-decoding (2 GiB each)
+are not included. Archives over the cap are reported as `workLimit`. The
 frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching

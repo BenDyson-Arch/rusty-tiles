@@ -31,7 +31,7 @@ Measured cost (Linux, release, 2 CPUs; develop f2238cd compared with this branch
 The work cap, not C1's element ceiling, bounds C2 time: instancing, shared index accessors and
 repeated references all multiply work. The original default of 2^32 units therefore allowed
 about 43 s in release (minutes in debug). After the nonauthor review, the coordinator set the
-default to 2^28. That bounds C2 work at the defaults to about 2.7 s at the most expensive
+default to 2^28. Correction (2026-10-12, C2 slice-3 precode review): this does not bound time uniformly. Adversarial cheap-unit shapes measured 193–776 ns/unit, about 52–208 s at 2^28; a corrected formula is planned. The original claim was that this bounds C2 work at the defaults to about 2.7 s at the most expensive
 measured unit cost, and `legal_shared_indices` becomes `workLimit`. Re-reads are separately
 capped by `containmentBytesRead`. The nonauthor review noted that per-reference C1
 re-validation and drawn-vertex marking across many primitives have no dedicated unit; that
