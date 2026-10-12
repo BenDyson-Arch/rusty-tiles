@@ -1,0 +1,41 @@
+{
+  "record": "C2-WB cap amendment of the validator-caps-amended C1 payload-control expectations (additive; inputs unchanged).",
+  "raised": {
+    "containmentWorkUnits": {
+      "old": 268435456,
+      "new": 536870912
+    }
+  },
+  "bundles": [
+    {
+      "input": "corrected-205-caps-fixtures.tar.gz",
+      "inputSha256": "b8b0499e456dbc48af4d071d95b12a9765c88add3231c6a73b3fbd07a03035c3",
+      "inputManifestSha256": "55057d9df744d977044d909875f1cbed6c981867ff2d30e7e22085796a4c039e",
+      "amended": "corrected-205-c2wb-fixtures.tar.gz",
+      "amendedSha256": "eee7f3777b0c96926f7fec860ff2d4446c3dd78313298cae4d5ee3e1cda4189f",
+      "amendedManifestSha256": "09c195d7e13b6e8635abe89a07283a365913d36ddd43997648b5f198c12dce3a",
+      "cases": 205,
+      "admittedAmended": 77
+    },
+    {
+      "input": "polygon-sensitive-5-caps-fixtures.tar.gz",
+      "inputSha256": "7f5488810f3bc69dbdcc49df8e2c420315af7b24b6b0c8f44d4ee5d6c5e95ef4",
+      "inputManifestSha256": "3f956fb18f8a7e3e9a42070706a8a105ad197242c5d82f6d13fef5826bcbe9bc",
+      "amended": "polygon-sensitive-5-c2wb-fixtures.tar.gz",
+      "amendedSha256": "1355d6975deb5e9c08ab803fcaf2166149e3b2d38c5204e64fb999e1fee71a10",
+      "amendedManifestSha256": "3b59cb2ab47180111817c6a71583b83e5b09412404acbe6914644e0aef8cf3b8",
+      "cases": 5,
+      "admittedAmended": 1
+    }
+  ],
+  "strideLane": {
+    "input": "validator_caps_amendment/2026-10-11/stride_controls",
+    "inputManifestSha256": "a934bc207fe17670cb095f0b4023842dd4241ef1b65c9556bbd65aff4bde7040",
+    "inputIntegritySha256": "925429a64023bf5aa0ed8e1e5e037b694609ef97d593cba30ae8b6ae02010bbc",
+    "amended": "c2wb_cap_amendment/2026-10-12/stride_controls",
+    "amendedManifestSha256": "c89a9382a90783f0a95df668abd1babf9f53719457f9cef0b80552abd21397ff",
+    "cases": 6,
+    "admittedAmended": 4
+  },
+  "behaviourChanges": []
+}

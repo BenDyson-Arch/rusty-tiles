@@ -87,7 +87,7 @@ fn contained_and_outside_pair_with_cli_parity() {
         "skins, animations, morph targets and rendered extent"
     )));
     assert_eq!(report["limits"]["containmentSpanBits"], 4096);
-    assert_eq!(report["limits"]["containmentWorkUnits"], 268435456u64);
+    assert_eq!(report["limits"]["containmentWorkUnits"], 536870912u64);
     assert_eq!(report["limits"]["containmentBytesRead"], 2147483648u64);
     assert_eq!(report["limits"]["containmentDecodedBytes"], 2147483648u64);
     assert_eq!(report["limits"]["containmentNodeDepth"], 64);

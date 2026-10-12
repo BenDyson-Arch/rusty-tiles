@@ -29,14 +29,16 @@ def main():
     # from the independent C2 oracle; the 2026-10-10 bundles stay as historical evidence.
     # Validator-caps amendment (2026-10-11): the C2-amended bundles with the raised
     # ValidationLimits defaults in admitted reports; the C2 bundles stay as history.
-    amendment = controls / 'validator_caps_amendment/2026-10-11'
+    # C2-WB cap amendment (2026-10-12): containmentWorkUnits 2^28 -> 2^29 in admitted
+    # reports; the validator-caps bundles stay as history.
+    amendment = controls / 'c2wb_cap_amendment/2026-10-12'
     bundles = [
-        ('corrected205', 'corrected-205-caps-fixtures.tar.gz',
-         'b8b0499e456dbc48af4d071d95b12a9765c88add3231c6a73b3fbd07a03035c3',
-         '55057d9df744d977044d909875f1cbed6c981867ff2d30e7e22085796a4c039e', 205),
-        ('polygon5', 'polygon-sensitive-5-caps-fixtures.tar.gz',
-         '7f5488810f3bc69dbdcc49df8e2c420315af7b24b6b0c8f44d4ee5d6c5e95ef4',
-         '3f956fb18f8a7e3e9a42070706a8a105ad197242c5d82f6d13fef5826bcbe9bc', 5),
+        ('corrected205', 'corrected-205-c2wb-fixtures.tar.gz',
+         'eee7f3777b0c96926f7fec860ff2d4446c3dd78313298cae4d5ee3e1cda4189f',
+         '09c195d7e13b6e8635abe89a07283a365913d36ddd43997648b5f198c12dce3a', 205),
+        ('polygon5', 'polygon-sensitive-5-c2wb-fixtures.tar.gz',
+         '1355d6975deb5e9c08ab803fcaf2166149e3b2d38c5204e64fb999e1fee71a10',
+         '3b59cb2ab47180111817c6a71583b83e5b09412404acbe6914644e0aef8cf3b8', 5),
     ]
     phases = {}
     status = 1
