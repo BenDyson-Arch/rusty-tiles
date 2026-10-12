@@ -20,9 +20,8 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
   native-geospatial` from `git archive` of the tag, under the shared cargo lock
   on CPUs 0 and 1 (`--cargo-wrap`). It is cached in
   `~/.cache/perf-lane/baselines/<tag>/` (`BUILD.json` records how) and reused
-  after that. A corpus case whose command
-  or flags the release CLI lacks shows `n/a`, with the reason under
-  `## Not run or failed`.
+  after that. A corpus case whose command or flags the release CLI lacks
+  shows `n/a`, with the reason under `## Not run or failed`.
 - The last milestone's per-case numbers come from the data block at the end of
   the committed `REPORT.md` (git `HEAD`). `--milestone-label` makes this run the
   new milestone and appends a `## Milestones` row. Without it, the stored
