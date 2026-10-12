@@ -62,6 +62,15 @@ pub(crate) const ETC1S_FLOOR: ErrorFloor = ErrorFloor {
     ratio: 4,
     slack_per_byte: 16,
 };
+
+/// ETC1S shares a palette across the chain. Tiny nonbase levels can therefore
+/// exceed the standalone base-image allowance. Independent caller-mip measurements
+/// needed at most 158.75 squared-error slack per byte; use 256 for <=16 texels.
+/// This remains a corruption guard, not a per-class/profile quality floor.
+const ETC1S_SMALL_MIP_FLOOR: ErrorFloor = ErrorFloor {
+    ratio: 4,
+    slack_per_byte: 256,
+};
 pub(crate) const UASTC_FLOOR: ErrorFloor = ErrorFloor {
     ratio: 1,
     slack_per_byte: 4,
@@ -657,6 +666,14 @@ pub(crate) fn verify_ktx2_mips(
             if level == 0 {
                 base_sse = level_sse;
             }
+            let floor = if level != 0
+                && u64::from(w) * u64::from(h) <= 16
+                && matches!(mode, Mode::Etc1s { .. })
+            {
+                ETC1S_SMALL_MIP_FLOOR
+            } else {
+                floor
+            };
             let allowed =
                 floor.ratio * level_block_mean + floor.slack_per_byte * input.len() as u64;
             if level_sse > allowed {

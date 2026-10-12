@@ -915,12 +915,18 @@ fn hostile_inputs_return_errors_without_ending_the_process() {
 fn etc1s_detail_floor_rejects_a_wrong_decode_the_error_floor_accepts() {
     // On pure noise the block-mean error floor cannot tell the right input
     // from another noise image; the detail floor must.
+    // This control concerns the base level. A q1 shared-palette pyramid can
+    // legitimately fail the newly enforced nonbase detail gate (pinned below).
+    let params = Params {
+        mipmaps: false,
+        ..COLOUR
+    };
     for (width, height, seed) in [(64, 64, 31), (256, 256, 32)] {
         let image = noise(width, height, seed, false);
         let other = noise(width, height, seed + 100, false);
         for quality in [1, 40, 90] {
             let mode = Mode::Etc1s { quality };
-            let encoded = encode_fixture(&image, width, height, mode, COLOUR).unwrap();
+            let encoded = encode_fixture(&image, width, height, mode, params).unwrap();
             let decoded = decode_level_rgba(&encoded, 0, width, height).unwrap();
             let allowed = ETC1S_FLOOR.ratio * block_mean_sse(&other, width, height)
                 + ETC1S_FLOOR.slack_per_byte * other.len() as u64;
@@ -928,11 +934,19 @@ fn etc1s_detail_floor_rejects_a_wrong_decode_the_error_floor_accepts() {
                 sse(&other, &decoded) <= allowed,
                 "control: the error floor alone accepts the wrong input"
             );
-            let error = verify_fixture(&encoded, &other, width, height, mode, COLOUR).unwrap_err();
+            let error = verify_fixture(&encoded, &other, width, height, mode, params).unwrap_err();
             assert_eq!(error.kind(), JobErrorKind::InvalidState);
             assert!(error.to_string().contains("detail"), "{error}");
         }
     }
+}
+
+#[test]
+fn nonbase_detail_loss_is_still_refused() {
+    let image = noise(256, 256, 32, false);
+    let error = encode_fixture(&image, 256, 256, Mode::Etc1s { quality: 1 }, COLOUR).unwrap_err();
+    assert_eq!(error.kind(), JobErrorKind::InvalidState);
+    assert!(error.to_string().contains("mip 3 detail"), "{error}");
 }
 
 #[test]
