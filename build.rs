@@ -75,13 +75,12 @@ fn main() {
 /// Vendored Basis Universal v2.50 (see vendor/README.md):
 /// the encoder sources listed by upstream CMake's ENCODER_LIB_SRC_LIST plus the
 /// Android ASTC decompressor it enables by default. OpenCL and SSE are off.
+/// The two files in BASISU_GUARDED_SOURCES are the rest of that list.
 const BASISU_CXX_SOURCES: &[&str] = &[
-    "encoder/basisu_backend.cpp",
     "encoder/basisu_basis_file.cpp",
     "encoder/basisu_comp.cpp",
     "encoder/basisu_enc.cpp",
     "encoder/basisu_etc.cpp",
-    "encoder/basisu_frontend.cpp",
     "encoder/basisu_gpu_texture.cpp",
     "encoder/basisu_pvrtc1_4.cpp",
     "encoder/basisu_resampler.cpp",
@@ -106,7 +105,23 @@ const BASISU_CXX_SOURCES: &[&str] = &[
     "encoder/basisu_xbc7_encode.cpp",
     "encoder/basisu_tinyexr.cpp",
     "encoder/3rdparty/android_astc_decomp.cpp",
-    "transcoder/basisu_transcoder.cpp",
+];
+
+/// The rest of the source list: translation units that end the process on
+/// failure, each compiled with a second force-included header that turns
+/// that into a C++ exception the shim reports as a status:
+/// - the encoder's internal consistency checks call abort();
+/// - the one definition of basisu::container_abort(), called on allocation
+///   failure, size overflow or a failed span check, calls std::terminate().
+const BASISU_GUARDED_SOURCES: &[(&[&str], &str)] = &[
+    (
+        &["encoder/basisu_backend.cpp", "encoder/basisu_frontend.cpp"],
+        "rt_basisu_invariant.h",
+    ),
+    (
+        &["transcoder/basisu_transcoder.cpp"],
+        "rt_basisu_container.h",
+    ),
 ];
 
 /// Compiles the vendored encoder, its Zstandard copy and the rusty-tiles shim
@@ -114,7 +129,9 @@ const BASISU_CXX_SOURCES: &[&str] = &[
 /// - optimized and NDEBUG even in dev builds, so tests exercise the shipped code;
 /// - no floating-point contraction, so FMA availability does not change bytes;
 /// - every vendored translation unit force-includes rt_basisu_silence.h, which
-///   routes its stdio output to the capturing sinks in rt_basisu_sink.cpp.
+///   routes its stdio output to the capturing sinks in rt_basisu_sink.cpp;
+/// - C++ exceptions are enabled on every target (MSVC needs /EHsc), so the
+///   shim can catch them and the guarded sources' checks can unwind to it.
 fn compile_basisu() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let vendor = manifest.join("vendor/basis_universal");
@@ -124,7 +141,7 @@ fn compile_basisu() {
     let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
     let silence = native.join("rt_basisu_silence.h");
 
-    let configure = |build: &mut cc::Build, cpp: bool, silenced: bool| {
+    let configure = |build: &mut cc::Build, cpp: bool, force_includes: &[&PathBuf]| {
         build
             .cpp(cpp)
             .include(&vendor)
@@ -144,33 +161,52 @@ fn compile_basisu() {
         }
         if msvc {
             build.flag("/bigobj").flag("/fp:precise").flag("/utf-8");
-            if silenced {
-                build.flag(format!("/FI{}", silence.display()));
+            if cpp {
+                build.flag("/EHsc");
+            }
+            for header in force_includes {
+                build.flag(format!("/FI{}", header.display()));
             }
         } else {
             build
                 .flag("-fno-strict-aliasing")
                 .flag("-ffp-contract=off")
                 .flag("-fvisibility=hidden");
-            if silenced {
-                build.flag("-include").flag(silence.as_os_str());
+            if cpp {
+                build.flag("-fexceptions");
+            }
+            for header in force_includes {
+                build.flag("-include").flag(header.as_os_str());
             }
         }
     };
 
+    // Objects only; they go into the rt_basisu_vendor archive below.
+    let mut guarded_objects = Vec::new();
+    for (sources, guard) in BASISU_GUARDED_SOURCES {
+        let mut guarded = cc::Build::new();
+        configure(&mut guarded, true, &[&silence, &native.join(guard)]);
+        guarded_objects.extend(
+            guarded
+                .files(sources.iter().map(|source| vendor.join(source)))
+                .compile_intermediates(),
+        );
+    }
+
     let mut cxx = cc::Build::new();
-    configure(&mut cxx, true, true);
+    configure(&mut cxx, true, &[&silence]);
     cxx.files(BASISU_CXX_SOURCES.iter().map(|source| vendor.join(source)))
         .file(native.join("rt_basisu_shim.cpp"))
+        .objects(guarded_objects)
         .compile("rt_basisu_vendor");
 
     let mut zstd = cc::Build::new();
-    configure(&mut zstd, false, true);
+    configure(&mut zstd, false, &[&silence]);
     zstd.file(vendor.join("zstd/zstd.c"))
         .compile("rt_basisu_zstd");
 
     let mut sink = cc::Build::new();
-    configure(&mut sink, true, false);
+    configure(&mut sink, true, &[]);
     sink.file(native.join("rt_basisu_sink.cpp"))
         .compile("rt_basisu_sink");
 }

@@ -87,6 +87,7 @@ cc = { version = "1.2", features = ["parallel"] }
 pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
+basisu = "=0.1.0"
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }
 
