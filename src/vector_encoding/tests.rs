@@ -41,6 +41,10 @@ fn physical_records_preserve_nonzero_padding_and_second_pass_identity() {
     assert_eq!(e["byteStride"], 8);
     let start = 28 + j + e["byteOffset"].as_u64().unwrap() as usize;
     let n = e["byteLength"].as_u64().unwrap() as usize;
+    assert_eq!(
+        out.bytes[start], 0xa0,
+        "EXT_meshopt_compression ATTRIBUTES header"
+    );
     let decoded =
         meshopt::encoding::decode_vertex_buffer::<[u8; 8]>(&out.bytes[start..start + n], 2)
             .unwrap();
@@ -575,4 +579,53 @@ fn metadata_aligned_declaration_recounts_decimal_digit_transition() {
     assert_eq!(tail_start + n, 99);
     assert_eq!(doc["buffers"][0]["byteLength"], 104);
     assert_eq!(glb_parts(&output).1.len(), 104);
+}
+/// First-pass output re-framed with its stream replaced by the same 2x8-byte data
+/// encoded at meshoptimizer vertex codec `version`.
+fn existing_at_version(version: i32) -> Vec<u8> {
+    let (doc, bin) = ordinary();
+    let out = compress(&frame(&doc, &bin, false), CompressionLimits::default()).unwrap();
+    let j = u32::from_le_bytes(out.bytes[12..16].try_into().unwrap()) as usize;
+    let mut parsed: Value = serde_json::from_slice(&out.bytes[20..20 + j]).unwrap();
+    let mut stream = vec![0u8; 1024];
+    let n = unsafe {
+        meshopt::ffi::meshopt_encodeVertexBufferLevel(
+            stream.as_mut_ptr(),
+            stream.len(),
+            bin.as_ptr().cast(),
+            2,
+            8,
+            2,
+            version,
+        )
+    };
+    assert!(n > 0);
+    stream.truncate(n);
+    assert_eq!(
+        meshopt::encoding::decode_vertex_buffer::<[u8; 8]>(&stream, 2)
+            .unwrap()
+            .concat(),
+        bin
+    );
+    let e = &mut parsed["bufferViews"][0]["extensions"]["EXT_meshopt_compression"];
+    assert_eq!(e["byteOffset"], 0);
+    e["byteLength"] = json!(n);
+    let mut physical = stream;
+    physical.resize(n.next_multiple_of(4), 0);
+    parsed["buffers"][0]["byteLength"] = json!(physical.len());
+    frame(&parsed, &physical, false)
+}
+#[test]
+fn existing_stream_with_a_forbidden_header_is_refused_not_passed_through() {
+    // Control: the allowed vertex v0 header (0xa0) passes through as an existing view.
+    let allowed = existing_at_version(0);
+    let out = compress(&allowed, CompressionLimits::default()).unwrap();
+    assert_eq!(out.receipt.existing_views, 1);
+    // Vertex v1 (0xa1) decodes with the linked decoder, but EXT forbids it, and
+    // `validate` would refuse the output.
+    let forbidden = existing_at_version(1);
+    assert!(matches!(
+        compress(&forbidden, CompressionLimits::default()),
+        Err(CodecError::Format(FormatError::InvalidInput(m))) if m.starts_with("meshopt stream header 0xa1")
+    ));
 }
