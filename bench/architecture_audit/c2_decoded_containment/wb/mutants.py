@@ -46,7 +46,14 @@ MUTANTS = [
     ("Res-counts-per-distinct-member", "c2o/gltf.py",
      "                data = self._read_resource(uri)\n                self.external_resources += 1",
      "                data = self._read_resource(uri)\n                members = self.__dict__.setdefault('_members', set())\n"
-     "                self.external_resources += uri not in members\n                members.add(uri)",
+     "                name = resolve(self.member, uri)\n"
+     "                self.external_resources += name not in members\n                members.add(name)",
+     "reading-res-duplicate-uri"),
+    ("B-dedups-per-member", "c2o/gltf.py",
+     "        self.bytes_read += len(data)\n        return data",
+     "        read = self.__dict__.setdefault('_read_members', set())\n"
+     "        if name not in read:\n            read.add(name)\n            self.bytes_read += len(data)\n"
+     "        return data",
      "reading-res-duplicate-uri"),
 ]
 

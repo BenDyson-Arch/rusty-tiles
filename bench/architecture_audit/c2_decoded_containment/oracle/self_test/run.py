@@ -17,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from c2o import meshopt  # noqa: E402
+from c2o.gltf import Payload  # noqa: E402
 from c2o.check import level_operations  # noqa: E402
 from c2o import spans as S  # noqa: E402
 from c2o.numbers import JsonNumberError, Overflow, contains_overflow, f32_exact, f32_bits, load_json, lowbit_highbit, value_nodes  # noqa: E402
@@ -332,8 +333,30 @@ def test_integer_predicate():
     check("non-permutation box is rotatedBox", vol.kind == "rotatedBox")
 
 
+def test_repeated_resource_bytes():
+    """B and Res count every buffer/image entry, also when two entries name one member: C1
+    payload contract (c1-payload-integrity-contract.md:330-331), "Repeated resource
+    declarations charge repeated actual bytes; no digest/URI deduplication changes that
+    meaning"."""
+    class Members:
+        def __init__(self, members):
+            self.members = members
+
+        def read(self, name):
+            return self.members[name]
+    doc = {"asset": {"version": "2.0"},
+           "buffers": [{"uri": "b.bin", "byteLength": 12}, {"uri": "./b.bin", "byteLength": 12},
+                       {"uri": "b.bin", "byteLength": 12}],
+           "images": [{"uri": "b.bin"}]}
+    gltf = json.dumps(doc).encode()
+    p = Payload(Members({"g.gltf": gltf, "b.bin": bytes(12)}), "g.gltf")
+    check("C2-WB B counts a member once per resolved entry (3 buffers + 1 image naming b.bin)",
+          p.bytes_read == len(gltf) + 4 * 12, (p.bytes_read, len(gltf) + 4 * 12))
+    check("C2-WB Res counts entries, aliases included", p.external_resources == 4, p.external_resources)
+
+
 def main():
-    for test in (test_meshopt, test_worked_example, test_wb_weights, test_identity_equivalence, test_soundness,
+    for test in (test_meshopt, test_worked_example, test_wb_weights, test_repeated_resource_bytes, test_identity_equivalence, test_soundness,
                  test_identities, test_integer_predicate):
         try:
             test()

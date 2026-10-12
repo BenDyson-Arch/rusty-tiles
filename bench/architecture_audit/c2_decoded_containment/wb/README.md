@@ -103,7 +103,7 @@ step leaves the pairs unchanged.
 ## Formula mutants (`mutants.py`)
 
 `mutants.py` writes `mutants-report.json` (gitignored; the 2026-10-12 run is kept outside the
-repository, sha256 `0195cdf1b7ca2d40ff7fc28ffaa6a91918851bfd823387d7d31fc87bfda13826`).
+repository, sha256 `87a0a17e1097e86f5feb6a8d51137b4a7d475dd3678e368a5da10153984370b7`).
 
 These are the unit-arithmetic subset of contract 9.C, applied to a copy of `c2o` and
 scored on the 55 CI at-cap pairs. Each must flip its named pair.
@@ -123,9 +123,10 @@ scored on the 55 CI at-cap pairs. Each must flip its named pair.
 | node floor 128 | `terms-node` | 4 |
 | drop `8·(L_r+1)` | `tiny-refs-L103` | 55 |
 | `J` without the b3dm batch table | `json-flat-numbers-b3dm` | 6 |
-| `Res` per distinct member (reading probe) | `reading-res-duplicate-uri` | 1 |
+| `Res` per distinct resolved member (reading probe) | `reading-res-duplicate-uri` | 1 |
+| `B` deduplicated per member (undoes per-entry `B`; also caught by `oracle/self_test`) | `reading-res-duplicate-uri` | 1 |
 
-All 14 pass. The production mutants that concern performance (re-scanning JSON
+All 15 pass. The production mutants that concern performance (re-scanning JSON
 admission, quadratic `mark`, `build_levels` before the gate) are R's perf controls,
 not unit pairs.
 
@@ -152,7 +153,7 @@ not unit pairs.
      So `B` counts the member once per entry (`B = 435`, not the slice-1 oracle's
      member-once 423). The oracle (`c2o/gltf.py`) and the hand facts now count `B` per
      resolved entry; the probe's total is 5,602. Production agrees (checked afterwards,
-     not used as the source).
+     not used as the source). The mutant `B-dedups-per-member` guards it.
 2. **`data:` URIs are not `Res`.** They need no member read; their decoded bytes are in
    `Dec`. Image data URIs are C1-refused.
 3. **`J` counts the root and only nonempty tables.**
