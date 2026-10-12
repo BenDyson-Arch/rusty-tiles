@@ -853,8 +853,10 @@ CHAIN_BITS = [chain_worklimit_then_rotated, chain_worklimit_base, chain_region_a
 def reading_res_duplicate_uri():
     """Contract reading probe: two buffer entries name the same external member.
     O-WB reading: Res counts buffer/image entries with a non-data uri (2 here); Dec counts
-    each owned buffer (slice-1 model). R's ruling against production (C1 resolves every
-    entry): B counts the member once per entry too (12 bytes more than once per member).
+    each owned buffer (slice-1 model). B counts the member once per entry too (12 bytes
+    more than once per member), per the C1 payload contract (c1-payload-integrity-contract.md
+    :330-331): "Repeated resource declarations charge repeated actual bytes; no digest/URI
+    deduplication changes that meaning."
     A per-distinct-member Res would give 160 units less."""
     fx = Fx("reading-res-duplicate-uri", "reading probe (Res per entry)", "ci",
             ".gltf whose buffers 0 and 1 both name b0.bin x 2 references")

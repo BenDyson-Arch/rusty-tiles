@@ -169,7 +169,8 @@ class Payload:
     def _read_resource(self, uri):
         name = resolve(self.member, uri)
         data = self.archive.read(name)
-        # C1 resolves every buffer/image entry; two entries naming one member read it twice.
+        # C1 payload contract (c1-payload-integrity-contract.md:330-331): repeated resource
+        # declarations charge repeated actual bytes; no URI deduplication.
         self.bytes_read += len(data)
         return data
 

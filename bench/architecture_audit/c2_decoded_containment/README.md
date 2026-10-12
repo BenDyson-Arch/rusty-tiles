@@ -622,10 +622,10 @@ the fixtures and oracle, not in `src/`:
 - C1 refused every multi-reference `wb/` fixture (59 of 102 rows): identical sibling
   leaf tiles break the tileset schema's `children` `uniqueItems`. `wb/generate.py`
   now gives leaf `i` the geometric error `i·2^-24`. No unit total changed.
-- `B` with a repeated URI (`reading-res-duplicate-uri`). C1 resolves, and reads, the
-  member once per entry. Production therefore counts `B = 435` per reference. The
-  slice-1 oracle counted each member once (423). `c2o/gltf.py` and the hand facts now
-  count per entry. The probe's total is 5,602, its at-cap pair 5,602 / 5,601. No
+- `B` with a repeated URI (`reading-res-duplicate-uri`). The C1 payload contract (`docs/architecture/c1-payload-integrity-contract.md:330-331`): "Repeated resource declarations charge repeated actual bytes; no digest/URI deduplication changes that meaning."
+  So `B = 435` per reference; the slice-1 oracle counted each member once (423), which the
+  C1 clause rules out. `c2o/gltf.py` and the hand facts now count per entry (production
+  also gives 435). The probe's total is 5,602, its at-cap pair 5,602 / 5,601. No
   witness, control or other `wb/` total changed. The `Res` reading (per entry) and
   `data:` exclusion match production as written.
 

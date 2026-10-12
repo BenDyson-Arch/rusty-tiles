@@ -148,12 +148,11 @@ not unit pairs.
      count gives 160 units less per reference; the mutant
      `Res-counts-per-distinct-member` shows the probe separates the two.
    - `Dec` counts each owned buffer (slice-1 model, unchanged).
-   - **Resolved by R against production (2026-10-12).** C1 calls the resolver once per
-     entry, and each call reads the member, so production counts `Res = 2` (this
-     reading) **and** `B` once per entry (`B = 435`, not the slice-1 oracle's
+   - **`B` is per entry by the C1 specification (R, 2026-10-12).** The C1 payload contract (`docs/architecture/c1-payload-integrity-contract.md:330-331`): "Repeated resource declarations charge repeated actual bytes; no digest/URI deduplication changes that meaning."
+     So `B` counts the member once per entry (`B = 435`, not the slice-1 oracle's
      member-once 423). The oracle (`c2o/gltf.py`) and the hand facts now count `B` per
-     resolved entry, matching "archive bytes read during C1 inspection"; the probe's
-     total is 5,602.
+     resolved entry; the probe's total is 5,602. Production agrees (checked afterwards,
+     not used as the source).
 2. **`data:` URIs are not `Res`.** They need no member read; their decoded bytes are in
    `Dec`. Image data URIs are C1-refused.
 3. **`J` counts the root and only nonempty tables.**
