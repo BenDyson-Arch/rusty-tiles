@@ -186,6 +186,8 @@ mod tests {
             assert_eq!(start % 4, 0);
             let data = &bin[start..start + e["byteLength"].as_u64().unwrap() as usize];
             let count = e["count"].as_u64().unwrap() as usize;
+            // The only header bytes EXT_meshopt_compression admits (C1 rule H-1).
+            assert_eq!(data[0], if e["mode"] == "TRIANGLES" { 0xe1 } else { 0xa0 });
             if e["mode"] == "TRIANGLES" {
                 // The index codec may rotate a triangle's corners; winding
                 // and triangle order are preserved.

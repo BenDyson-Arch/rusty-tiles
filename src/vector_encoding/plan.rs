@@ -846,6 +846,12 @@ pub(crate) fn prepare<'a, E>(
             {
                 return Err(unsupported("meshopt mode/filter outside canonical identity").into());
             }
+            // Passed through byte for byte, so it must carry the one header the pinned
+            // EXT text admits (C1 H-1); the linked decoder also reads other versions.
+            meshopt::check_header(
+                bytes(&bin[..lengths[0]], encoded)?,
+                meshopt::Mode::Attributes,
+            )?;
             Action::Existing {
                 encoded,
                 stride,
