@@ -4,6 +4,12 @@ The output is a quadtree implicit forest. The oracle expands it from the
 subtree bytes, recovers each vertex's source-lattice node from its decoded
 ECEF position, and recomputes every tile's geometric error by dense brute force.
 
+Tiles are EXT_meshopt_compression streams of uint16 KHR_mesh_quantization (or
+Float32) positions. ``ext_meshopt_spec`` decodes them; it is written from the
+pinned extension text and shares no code with meshoptimizer. Positions are then
+dequantized through the node's translation and scale, so every check below
+sees what a consumer draws.
+
 Run with ``python tests/t1_terrain_oracle.py DIRECTORY``. Fixture creation uses
 GDAL only to write explicitly described source values, never to sample them.
 """
@@ -12,6 +18,10 @@ import json
 import math
 import pathlib
 import struct
+
+import ext_meshopt_spec as meshopt
+
+MESHOPT, QUANTIZATION = 'EXT_meshopt_compression', 'KHR_mesh_quantization'
 
 
 def ecef(lon, lat, height):
@@ -26,8 +36,7 @@ def ecef(lon, lat, height):
             (n * (1 - e2) + height) * math.sin(lat))
 
 
-def glb(path):
-    data = pathlib.Path(path).read_bytes()
+def glb_parts(data):
     assert len(data) >= 28, "truncated GLB"
     magic, version, length = struct.unpack_from('<4sII', data)
     assert (magic, version, length) == (b'glTF', 2, len(data)), "GLB envelope"
@@ -40,24 +49,61 @@ def glb(path):
         chunks.append((kind, data[at:at + count]))
         at += count
     assert [kind for kind, _ in chunks] == [b'JSON', b'BIN\x00'], "GLB chunks"
-    document = json.loads(chunks[0][1])
-    binary = chunks[1][1]
+    return json.loads(chunks[0][1]), chunks[1][1]
+
+
+def decoded_views(document, binary):
+    """Every bufferView's bytes, decoding EXT_meshopt_compression streams."""
+    used, required = set(document.get('extensionsUsed', [])), set(document.get('extensionsRequired', []))
+    assert required <= used <= {MESHOPT, QUANTIZATION}, 'terrain glTF extensions'
+    buffers = document['buffers']
+    assert 'uri' not in buffers[0] and buffers[0]['byteLength'] <= len(binary), 'GLB binary buffer'
+    for fallback in buffers[1:]:
+        assert 'uri' not in fallback and fallback.get('extensions', {}).get(MESHOPT, {}).get('fallback') is True, 'fallback buffer'
+    views = []
+    for view in document['bufferViews']:
+        compressed = view.get('extensions', {}).get(MESHOPT)
+        if compressed is None:
+            assert view.get('buffer', 0) == 0, 'uncompressed view outside the GLB binary'
+            start = view.get('byteOffset', 0)
+            assert start + view['byteLength'] <= len(binary), 'view range'
+            views.append(binary[start:start + view['byteLength']])
+            continue
+        assert MESHOPT in required, 'compressed view without required EXT_meshopt_compression'
+        assert view['buffer'] > 0, 'compressed view must use a fallback buffer'
+        assert compressed.get('buffer') == 0 and compressed.get('filter', 'NONE') == 'NONE', 'compressed stream source'
+        start, count, stride = compressed.get('byteOffset', 0), compressed['count'], compressed['byteStride']
+        assert start + compressed['byteLength'] <= len(binary), 'compressed stream range'
+        assert count * stride == view['byteLength'], 'decoded view size'
+        stream = binary[start:start + compressed['byteLength']]
+        if compressed['mode'] == 'ATTRIBUTES':
+            views.append(meshopt.decode_attributes(stream, count, stride))
+        else:
+            assert compressed['mode'] == 'TRIANGLES' and stride in (2, 4), 'terrain index streams are triangle lists'
+            views.append(meshopt.pack_indices(meshopt.decode_triangles(stream, count), stride))
+    return views
+
+
+def glb(path):
+    """Document and drawn primitives: decoded positions (node translation and scale
+    applied, glTF y-up) and triangles as position tuples."""
+    document, binary = glb_parts(pathlib.Path(path).read_bytes())
     assert document['asset']['version'] == '2.0'
-    assert len(document['buffers']) == 1 and 'uri' not in document['buffers'][0]
-    assert document['buffers'][0]['byteLength'] <= len(binary)
+    views = decoded_views(document, binary)
+    required = set(document.get('extensionsRequired', []))
 
     def accessor(index):
         record = document['accessors'][index]
         assert not record.get('normalized', False) and 'sparse' not in record
         view = document['bufferViews'][record['bufferView']]
-        assert view.get('buffer', 0) == 0
+        raw = views[record['bufferView']]
         fmt, size = {5121: ('B', 1), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}[record['componentType']]
         width = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3}[record['type']]
-        offset = view.get('byteOffset', 0) + record.get('byteOffset', 0)
+        offset = record.get('byteOffset', 0)
         stride = view.get('byteStride', width * size)
         end = offset + (record['count'] - 1) * stride + width * size
-        assert end <= view.get('byteOffset', 0) + view['byteLength'] <= len(binary), 'accessor payload'
-        values = [struct.unpack_from('<' + fmt * width, binary, offset + i * stride)
+        assert end <= len(raw), 'accessor payload'
+        values = [struct.unpack_from('<' + fmt * width, raw, offset + i * stride)
                   for i in range(record['count'])]
         assert all(math.isfinite(component) for value in values for component in value)
         if record['type'] == 'VEC3' and 'min' in record:
@@ -66,13 +112,21 @@ def glb(path):
                 assert record['max'][axis] >= max(v[axis] for v in values)
         return values
 
+    assert len(document['nodes']) == 1 and set(document['nodes'][0]) <= {'mesh', 'translation', 'scale'}, 'one TS-only node'
+    node = document['nodes'][0]
+    translation, scale = node.get('translation', [0., 0., 0.]), node.get('scale', [1., 1., 1.])
     primitives = []
     for mesh in document['meshes']:
         for primitive in mesh['primitives']:
             assert primitive.get('mode', 4) == 4
-            positions = accessor(primitive['attributes']['POSITION'])
+            record = document['accessors'][primitive['attributes']['POSITION']]
+            if record['componentType'] != 5126:
+                assert record['componentType'] == 5123 and QUANTIZATION in required, 'uint16 positions require KHR_mesh_quantization'
+            positions = [tuple(translation[i] + scale[i] * v[i] for i in range(3))
+                         for v in accessor(primitive['attributes']['POSITION'])]
             indices = [v[0] for v in accessor(primitive['indices'])] if 'indices' in primitive else list(range(len(positions)))
             assert len(indices) % 3 == 0 and all(0 <= i < len(positions) for i in indices)
+            assert len(set(indices)) == len(positions), 'every vertex is drawn'
             triangles = [tuple(positions[i] for i in indices[start:start + 3]) for start in range(0, len(indices), 3)]
             primitives.append((positions, triangles))
     return document, primitives
@@ -239,16 +293,20 @@ def tree(directory):
 
 
 class Patch:
-    """One decoded tile: lattice parameters and frame positions of every vertex."""
+    """One decoded tile: lattice parameters and frame positions of every vertex.
+
+    The single primitive holds surface triangles (three lattice nodes) and skirt
+    triangles (two nodes: a curtain under an edge)."""
 
     def __init__(self, directory, node, report, frame):
         document, primitives = glb(directory/node['uri'])
-        assert len(document['nodes']) == 1 and not any(k in document['nodes'][0] for k in ('matrix','translation','rotation','scale'))
-        assert len(primitives) in (1, 2), 'surface primitive and optional skirt'
-        mesh = document['meshes'][0]['primitives']
-        for index, primitive in enumerate(mesh):
-            material = document['materials'][primitive['material']]
-            assert primitive['material'] == index and material['alphaMode'] == 'OPAQUE' and not material['doubleSided'], 'opaque single-sided materials'
+        assert len(primitives) == 1, 'one primitive per tile: the skirt shares the surface draw call'
+        assert len(document['materials']) == 1, 'one material per tile'
+        primitive = document['meshes'][0]['primitives'][0]
+        material = document['materials'][primitive['material']]
+        assert material['alphaMode'] == 'OPAQUE' and not material['doubleSided'], 'opaque single-sided material'
+        self.compressed = all(MESHOPT in view.get('extensions', {}) for view in document['bufferViews'])
+        self.scale = document['nodes'][0].get('scale') if QUANTIZATION in document.get('extensionsRequired', []) else None
         west, south, east, north = report['bounds']
         pixel = report['sourcePixelDegrees']
 
@@ -260,10 +318,18 @@ class Patch:
             assert abs(x - node[0]) < .25 and abs(y - node[1]) < .25, 'vertex off the source lattice'
             return local, node, height
 
-        positions, self.triangles = primitives[0]
-        self.points = [decode(p) for p in positions]
+        positions, triangles = primitives[0]
+        decoded = {p: decode(p) for p in positions}
+        self.triangles, skirt = [], []
+        for triangle in triangles:
+            distinct = len({decoded[p][1] for p in triangle})
+            assert distinct in (2, 3), 'degenerate triangle'
+            (self.triangles if distinct == 3 else skirt).append(triangle)
+        surface = list(dict.fromkeys(p for triangle in self.triangles for p in triangle))
+        self.glb_surface = surface
+        self.points = [decoded[p] for p in surface]
         self.local = [p[0] for p in self.points]
-        self.node = {position: point[1] for position, point in zip(positions, self.points)}
+        self.node = {position: decoded[position][1] for position in surface}
         self.surface_triangles = [tuple(self.node[p] for p in triangle) for triangle in self.triangles]
         nodes = [point[1] for point in self.points]
         self.xs = sorted({n[0] for n in nodes})
@@ -272,8 +338,8 @@ class Patch:
         self.footprint = (self.xs[0], self.ys[0], self.xs[-1], self.ys[-1])
         self.position = {point[1]: point[0] for point in self.points}
         self.height = {point[1]: point[2] for point in self.points}
-        self.skirt = [] if len(primitives) == 1 else [tuple(decode(p) for p in triangle) for triangle in primitives[1][1]]
-        self.skirt_points = [] if len(primitives) == 1 else [decode(p) for p in primitives[1][0]]
+        self.skirt = [tuple(decoded[p] for p in triangle) for triangle in skirt]
+        self.skirt_points = [decoded[p] for p in positions if p not in self.node]
         self.cells = {}
         for triangle in self.surface_triangles:
             key = (min(n[0] for n in triangle), min(n[1] for n in triangle))
@@ -308,15 +374,19 @@ def check_directory(directory, samples=4):
     assert all(leaf['depth'] == depth and leaf['error'] == 0 for leaf in leaves), 'uniform full-detail leaves'
     inventory = {node['uri'] for node in tiles}
     assert len(inventory) == len(tiles), 'one payload per tile'
-    # Structure: one stored position per lattice node across all tiles (coarse
-    # vertices are leaf vertices), upward triangles, children partition their
-    # parent's footprint, and boxes nest and contain content.
+    # Structure: one stored position per lattice node in each level (a level's
+    # tiles share one grid; coarse levels round the same nodes more coarsely),
+    # upward triangles, children partition their parent's footprint, and boxes
+    # nest and contain content. Every view is a meshopt stream and every coarse
+    # tile quantized; only leaves may keep Float32 positions.
     stored = {}
     west, south = report['bounds'][:2]
     for node in tiles:
         patch = patches[id(node)]
+        assert patch.compressed, 'uncompressed terrain view'
+        assert patch.scale is not None or not node['children'], 'coarse tile without quantized positions'
         for key, position in patch.position.items():
-            assert stored.setdefault(key, position) == position, 'shared node changed stored coordinates'
+            assert stored.setdefault((node['depth'], key), position) == position, 'shared node changed stored coordinates'
         for triangle in patch.surface_triangles:
             a, b, c = (transform(frame, patch.position[n]) for n in triangle)
             u, v = [b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)]
@@ -356,9 +426,11 @@ def check_directory(directory, samples=4):
                     measured = max(measured, math.dist(a, b))
         node['measured'] = measured
         assert node['error'] >= measured - 1e-9, f'understated geometric error {node["error"]} < {measured}'
-    # Skirts: on interior edges only, outward, at least e(t) + e(root) and 1 m deep.
+    # Skirts: on interior edges only, outward, and their decoded bottoms at least
+    # e(t) + e(root) and 1 m below the decoded surface (only geodetic arithmetic
+    # is tolerated: the producer deepens skirts by their storage error).
     root_error = tiles[0]['error']
-    tolerance = 2 * report['positionErrorMetres'] + 1e-6
+    tolerance = 1e-6
     for node in tiles:
         patch = patches[id(node)]
         x0, y0, x1, y1 = patch.footprint
@@ -412,8 +484,9 @@ def check_directory(directory, samples=4):
 
 
 def check_plane(directory, width=4, height=4, pixel=.25, west=10., north_edge=21.):
-    """Complete independent node and oriented-cell inventory for t1-plane.tif leaves;
-    every coarse vertex is the identical stored leaf vertex."""
+    """Complete independent node and oriented-cell inventory for t1-plane.tif leaves.
+    Every vertex is its analytic lattice position as stored: Float32-rounded, or
+    within half a quantization step per axis; a level's tiles agree on shared nodes."""
     from collections import Counter
     directory=pathlib.Path(directory)
     report=json.loads((directory/'conversion.json').read_text())
@@ -427,35 +500,41 @@ def check_plane(directory, width=4, height=4, pixel=.25, west=10., north_edge=21
     origin=ecef((west+east_edge)/2,(south+north_edge)/2,0.)
     expected_transform=[*east,0.,*north,0.,*up,0.,*origin,1.]
     assert all(abs(a-b)<=1e-8 for a,b in zip(root['transform'],expected_transform)), 'root ENU frame'
-    expected={}
+    expected,exact={},{}
     for j in range(height+1):
         for i in range(width+1):
             sample_height=100.+2*max(0.,min(width-1.,i-.5))+3*max(0.,min(height-1.,height-j-.5))+report['heightOffsetMetres']
             xyz=ecef(west+i*pixel,south+j*pixel,sample_height)
             relative=[a-b for a,b in zip(xyz,origin)]
             enu=[sum(a*b for a,b in zip(relative,axis)) for axis in [east,north,up]]
-            expected[(i,j)]=tuple(struct.unpack('<f',struct.pack('<f',v))[0] for v in [enu[0],enu[2],-enu[1]])
+            exact[(i,j)]=(enu[0],enu[2],-enu[1])
+            expected[(i,j)]=tuple(struct.unpack('<f',struct.pack('<f',v))[0] for v in exact[(i,j)])
+    # The index codec may rotate a triangle's corners; winding is what counts.
+    rotated=lambda t:min(t[k:]+t[:k] for k in range(3))
     found=Counter();seen={}
+    depth=max(n['depth'] for n in tiles)
     for node in sorted(tiles,key=lambda n:-n['depth']):
-        _,primitives=glb(directory/node['uri'])
+        patch=Patch(directory,node,report,root['transform'])
+        reference=expected if patch.scale is None else exact
+        limits=[.002]*3 if patch.scale is None else [step/2+1e-9 for step in patch.scale]
         def identify(p):
-            key=min(expected,key=lambda k:sum((a-b)**2 for a,b in zip(p,expected[k])))
-            assert max(abs(a-b) for a,b in zip(p,expected[key]))<=.002, 'source elevation/position'
-            if key in seen: assert seen[key]==p, 'shared seam changed stored coordinates'
-            seen[key]=p
+            key=min(reference,key=lambda k:sum((a-b)**2 for a,b in zip(p,reference[k])))
+            assert all(abs(a-b)<=limit for a,b,limit in zip(p,reference[key],limits)), 'source elevation/position'
+            if (node['depth'],key) in seen: assert seen[(node['depth'],key)]==p, 'shared seam changed stored coordinates'
+            seen[(node['depth'],key)]=p
             return key
-        positions,triangles=primitives[0]
-        for p in positions: identify(p)
+        for p in patch.glb_surface: identify(p)
         if not node['children']:
-            for triangle in triangles: found[tuple(identify(p) for p in triangle)]+=1
+            for triangle in patch.triangles: found[rotated(tuple(identify(p) for p in triangle))]+=1
     wanted=Counter()
     for j in range(height):
         for i in range(width):
-            wanted[((i,j),(i+1,j),(i,j+1))]+=1
-            wanted[((i+1,j),(i+1,j+1),(i,j+1))]+=1
+            wanted[rotated(((i,j),(i+1,j),(i,j+1)))]+=1
+            wanted[rotated(((i+1,j),(i+1,j+1),(i,j+1)))]+=1
     assert found==wanted, 'missing/duplicated/reversed terrain cells'
-    assert set(seen)==set(expected), 'source lattice nodes missing'
-    return dict(nodes=len(seen),triangles=sum(found.values()))
+    leaf_nodes={key for level,key in seen if level==depth}
+    assert leaf_nodes==set(expected), 'source lattice nodes missing'
+    return dict(nodes=len(leaf_nodes),triangles=sum(found.values()))
 
 
 def edit_row(copy, node, box=None, error=None):
@@ -473,15 +552,61 @@ def edit_row(copy, node, box=None, error=None):
     path.write_bytes(data)
 
 
+def rewrite_tile(path, mutate):
+    """Re-store a tile after ``mutate(document, views)`` edits its decoded views
+    (bytearrays) in place; every view becomes a new valid meshopt stream."""
+    document, binary = glb_parts(path.read_bytes())
+    views = [bytearray(view) for view in decoded_views(document, binary)]
+    mutate(document, views)
+    out, fallback = bytearray(), 0
+    for view, raw in zip(document['bufferViews'], views):
+        stream = view['extensions'][MESHOPT]
+        stride = stream['byteStride']
+        count = len(raw) // stride
+        if stream['mode'] == 'ATTRIBUTES':
+            encoded = meshopt.encode_attributes(bytes(raw), count, stride)
+        else:
+            encoded = meshopt.encode_triangles(meshopt.unpack_indices(bytes(raw), stride))
+        out += bytes(-len(out) % 4)
+        stream.update(byteOffset=len(out), byteLength=len(encoded), count=count)
+        out += encoded
+        view.update(byteOffset=fallback, byteLength=len(raw))
+        fallback += len(raw) + (-len(raw) % 4)
+    out += bytes(-len(out) % 4)
+    document['buffers'][0]['byteLength'] = len(out)
+    document['buffers'][1]['byteLength'] = fallback
+    text = json.dumps(document).encode()
+    text += b' ' * (-len(text) % 4)
+    path.write_bytes(struct.pack('<4sII', b'glTF', 2, 28 + len(text) + len(out)) + struct.pack('<I4s', len(text), b'JSON')
+                     + text + struct.pack('<I4s', len(out), b'BIN\x00') + bytes(out))
+
+
+def restamp_bytes(directory):
+    """Make conversion.json's byte receipt match re-stored payloads, so payload
+    controls are not rejected by the receipt alone."""
+    path = directory/'conversion.json'
+    report = json.loads(path.read_text())
+    others = sum(p.stat().st_size for p in directory.rglob('*') if p.is_file() and p != path)
+    while True:
+        text = json.dumps(report, indent=2)
+        if report['generatedBytes'] == others + len(text.encode()):
+            break
+        report['generatedBytes'] = others + len(text.encode())
+    path.write_text(text)
+
+
 def corruption_controls(directory, plane=True, **plane_spec):
     """Demonstrate source, frame, topology, seams, bounds, error, skirt and receipt sensitivity.
 
+    Payload faults edit decoded views and re-store them as new meshopt streams;
+    the identity re-store is accepted first, so each rejection is the fault's.
     Without the analytic plane reference, the frame control is omitted."""
     import shutil, tempfile
     directory=pathlib.Path(directory)
     check_directory(directory)
     if plane: check_plane(directory,**plane_spec)
     _,_,tiles=tree(directory)
+    report=json.loads((directory/'conversion.json').read_text())
     leaves=[n for n in tiles if not n['children']]
     faults=['position','winding','bounds']+(['frame'] if plane else [])+['row','missing-triangle','report-inventory']
     if len(leaves)>1: faults.append('seam')
@@ -490,17 +615,22 @@ def corruption_controls(directory, plane=True, **plane_spec):
     if middle: faults+=['understated-error','missing-skirt','leaf-box-misses-skirt']
     expected={'understated-error':'understated geometric error','missing-skirt':'missing skirt',
               'leaf-box-misses-skirt':'content outside box'}
-    for fault in faults:
+    def patch_of(node,manifest):
+        return Patch(directory,node,report,manifest['root']['transform'])
+    reasons={}
+    for fault in ['identity']+faults:
         with tempfile.TemporaryDirectory() as temporary:
             copy=pathlib.Path(temporary)/'candidate';shutil.copytree(directory,copy)
             manifest=json.loads((copy/'tileset.json').read_text())
-            if fault in ['bounds','frame']:
+            if fault=='identity':
+                for node in tiles: rewrite_tile(copy/node['uri'],lambda document,views:None)
+            elif fault in ['bounds','frame']:
                 if fault=='bounds': manifest['root']['boundingVolume']['box'][3]=0.
                 else: manifest['root']['transform'][12]+=10.
                 (copy/'tileset.json').write_text(json.dumps(manifest))
             elif fault=='report-inventory':
-                path=copy/'conversion.json';report=json.loads(path.read_text());report['tiles']+=1
-                path.write_text(json.dumps(report))
+                path=copy/'conversion.json';changed=json.loads(path.read_text());changed['tiles']+=1
+                path.write_text(json.dumps(changed))
             elif fault=='understated-error':
                 # Still monotone over its leaf children, but below the measured distance.
                 node=max((n for n in middle if not any(c['children'] for c in n['children'])),key=lambda n:n['error'])
@@ -508,68 +638,97 @@ def corruption_controls(directory, plane=True, **plane_spec):
             elif fault=='leaf-box-misses-skirt':
                 # Lift a skirted leaf's box floor to its lowest surface vertex. The leaf has
                 # no child boxes, so only skirt containment can reject it.
-                node=next(n for n in leaves if 'row' in n and len(glb(directory/n['uri'])[1])==2)
-                patch=Patch(directory,node,json.loads((directory/'conversion.json').read_text()),manifest['root']['transform'])
+                node=next(n for n in leaves if 'row' in n and patch_of(n,manifest).skirt)
+                patch=patch_of(node,manifest)
                 floor=min(p[2] for p in patch.local);box=list(node['box'])
                 top=box[2]+box[11];box[2]=(floor+top)/2;box[11]=(top-floor)/2
                 edit_row(copy,node,box=box)
             elif fault=='missing-skirt':
-                node=next(n for n in middle if len(glb(directory/n['uri'])[1])==2)
-                path=copy/node['uri'];data=bytearray(path.read_bytes())
-                json_length=struct.unpack_from('<I',data,12)[0];document=json.loads(data[20:20+json_length])
-                document['meshes'][0]['primitives'].pop();document['materials'].pop()
-                text=json.dumps(document).encode();text+=b' '*(-len(text)%4)
-                data=data[:12]+struct.pack('<I',len(text))+b'JSON'+text+data[20+json_length:]
-                struct.pack_into('<I',data,8,len(data));path.write_bytes(data)
+                # Drop the skirt triangles and their bottom vertices, which follow the surface.
+                node=next(n for n in middle if patch_of(n,manifest).skirt)
+                patch=patch_of(node,manifest)
+                vertices,indices=len(patch.glb_surface),3*len(patch.triangles)
+                def drop(document,views):
+                    primitive=document['meshes'][0]['primitives'][0]
+                    position=document['accessors'][primitive['attributes']['POSITION']]
+                    index=document['accessors'][primitive['indices']]
+                    stride=document['bufferViews'][position['bufferView']]['byteStride']
+                    width=document['bufferViews'][index['bufferView']]['extensions'][MESHOPT]['byteStride']
+                    kept=meshopt.unpack_indices(bytes(views[index['bufferView']]),width)[:indices]
+                    assert max(kept)<vertices, 'surface triangles come first'
+                    del views[position['bufferView']][vertices*stride:]
+                    views[index['bufferView']][:]=meshopt.pack_indices(kept,width)
+                    position['count'],index['count']=vertices,indices
+                    if position['componentType']==5123:
+                        values=[struct.unpack_from('<3H',views[position['bufferView']],i*stride) for i in range(vertices)]
+                    else:
+                        values=[struct.unpack_from('<3f',views[position['bufferView']],i*stride) for i in range(vertices)]
+                    position['min'],position['max']=[min(v[a] for v in values) for a in range(3)],[max(v[a] for v in values) for a in range(3)]
+                rewrite_tile(copy/node['uri'],drop)
             else:
                 leaf=leaves[1 if fault=='seam' else 0]
-                path=copy/leaf['uri']
-                data=bytearray(path.read_bytes());json_length=struct.unpack_from('<I',data,12)[0]
-                document=json.loads(data[20:20+json_length]);binary_start=28+json_length
-                primitive=document['meshes'][0]['primitives'][0]
-                position_fault=fault in ['position','row','seam']
-                index=primitive['attributes']['POSITION'] if position_fault else primitive['indices']
-                accessor=document['accessors'][index];view=document['bufferViews'][accessor['bufferView']]
-                at=binary_start+view.get('byteOffset',0)+accessor.get('byteOffset',0)
-                if fault=='position':
-                    value=struct.unpack_from('<f',data,at)[0];struct.pack_into('<f',data,at,value+10.)
-                elif fault=='seam':
-                    bits=struct.unpack_from('<I',data,at)[0];struct.pack_into('<I',data,at,bits+1)
-                elif fault=='row':
-                    # Exchange complete stored vertices, preserving count and
-                    # values while corrupting their row/topology association.
-                    other=at+(accessor['count']-1)*12
-                    first,last=bytes(data[at:at+12]),bytes(data[other:other+12])
-                    data[at:at+12],data[other:other+12]=last,first
-                else:
-                    fmt={5121:'B',5123:'H',5125:'I'}[accessor['componentType']];size=struct.calcsize(fmt)
-                    if fault=='missing-triangle':
-                        first=struct.unpack_from('<'+fmt,data,at)[0]
-                        struct.pack_into('<'+fmt,data,at+size,first)
+                def corrupt(document,views):
+                    primitive=document['meshes'][0]['primitives'][0]
+                    position=document['accessors'][primitive['attributes']['POSITION']]
+                    index=document['accessors'][primitive['indices']]
+                    stride=document['bufferViews'][position['bufferView']]['byteStride']
+                    vertices=views[position['bufferView']]
+                    quantized=position['componentType']==5123
+                    if fault in ['position','seam']:
+                        if not quantized:
+                            if fault=='position':
+                                struct.pack_into('<f',vertices,0,struct.unpack_from('<f',vertices,0)[0]+10.)
+                            else:
+                                struct.pack_into('<I',vertices,0,struct.unpack_from('<I',vertices,0)[0]+1)
+                        else:
+                            # Move x by about 10 m (position) or one grid step (seam),
+                            # inside the accessor range.
+                            q=struct.unpack_from('<H',vertices,0)[0];high=position['max'][0]
+                            step=document['nodes'][0]['scale'][0]
+                            delta=max(1,round(10./step)) if fault=='position' else 1
+                            struct.pack_into('<H',vertices,0,q+min(delta,high-q) if q<high else q-min(delta,q))
+                    elif fault=='row':
+                        # Exchange complete stored vertices, preserving count and
+                        # values while corrupting their row/topology association.
+                        other=(position['count']-1)*stride
+                        vertices[:stride],vertices[other:other+stride]=vertices[other:other+stride],vertices[:stride]
                     else:
-                        a,b=struct.unpack_from('<'+fmt*2,data,at+size)
-                        struct.pack_into('<'+fmt*2,data,at+size,b,a)
-                path.write_bytes(data)
+                        width=document['bufferViews'][index['bufferView']]['extensions'][MESHOPT]['byteStride']
+                        values=meshopt.unpack_indices(bytes(views[index['bufferView']]),width)
+                        if fault=='missing-triangle': values[1]=values[0]
+                        else: values[1],values[2]=values[2],values[1]
+                        views[index['bufferView']][:]=meshopt.pack_indices(values,width)
+                    # Keep the declared range consistent, so only the geometry is wrong.
+                    fmt='<3H' if quantized else '<3f'
+                    values=[struct.unpack_from(fmt,vertices,i*stride) for i in range(position['count'])]
+                    position['min'],position['max']=[min(v[a] for v in values) for a in range(3)],[max(v[a] for v in values) for a in range(3)]
+                rewrite_tile(copy/leaf['uri'],corrupt)
+            if fault in ['identity','missing-skirt','position','winding','row','missing-triangle','seam']:
+                restamp_bytes(copy)
             try:
                 if plane: check_plane(copy,**plane_spec)
                 check_directory(copy)
             except (AssertionError,KeyError) as error:
+                assert fault!='identity', f'oracle rejected an identity re-store: {error}'
                 if fault in expected:
                     assert expected[fault] in str(error), f'{fault} rejected for another reason: {error}'
+                reasons[fault]=str(error) or type(error).__name__
                 continue
+            if fault=='identity': continue
             raise AssertionError('oracle accepted corruption: '+fault)
-    return {'rejected_corruptions':faults}
+    return {'rejected_corruptions':faults,'reasons':reasons}
 
 
 def decoded_ecef_triangles(directory):
     """Full-detail leaf surface triangles in ECEF: what MostDetailed queries intersect."""
     directory = pathlib.Path(directory)
     _, root, tiles = tree(directory)
+    report = json.loads((directory/'conversion.json').read_text())
+    frame = root.get('transform', IDENTITY)
     triangles=[]
     for leaf in (n for n in tiles if not n['children']):
-        _, primitives=glb(directory/leaf['uri'])
-        for face in primitives[0][1]:
-            triangles.append(tuple(transform(root.get('transform',IDENTITY),(p[0],-p[2],p[1])) for p in face))
+        for face in Patch(directory, leaf, report, frame).triangles:
+            triangles.append(tuple(transform(frame,(p[0],-p[2],p[1])) for p in face))
     return triangles
 
 

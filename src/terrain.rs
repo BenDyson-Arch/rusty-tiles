@@ -18,6 +18,8 @@ use std::{fs, io::Write, path::Path};
 mod glb;
 #[cfg(feature = "native-geospatial")]
 mod raster;
+#[cfg(feature = "native-geospatial")]
+use glb::Storage;
 #[derive(Clone, Debug)]
 pub struct TerrainOptions {
     pub cells_per_leaf: u16,
@@ -78,15 +80,21 @@ pub struct TerrainReport {
     pub levels: u32,
     pub tiles: u64,
     pub tiles_per_level: Vec<u64>,
-    /// Surface vertices of every tile; skirt vertices are counted separately.
+    /// Surface vertices of every tile. Skirts reuse those as their tops and
+    /// add `skirt_vertices` bottoms.
     pub vertices: u64,
     pub skirt_vertices: u64,
     pub height_offset_metres: f64,
     pub fill_height_metres: f64,
+    /// The largest distance from a decoded full-detail (leaf) vertex, surface
+    /// or skirt, to the geodetic position it stores.
     pub position_error_metres: f64,
     pub height_range: [f64; 2],
     pub generated_bytes: u64,
     pub surface_reference: &'static str,
+    /// Per level, coarsest first: the glTF (y-up) axis steps (node scale) of
+    /// uint16 quantized positions, or `None` for Float32 positions.
+    pub quantization_step_metres: Vec<Option<[f64; 3]>>,
     /// The largest certified geometric error per level, coarsest first.
     pub geometric_error_metres: Vec<f64>,
     pub root_geometric_error_metres: f64,
@@ -299,34 +307,36 @@ fn surface_height(
     }
     Ok(height)
 }
-/// The decoded z-up frame position of a stored Y-up vertex.
+/// The z-up frame position of a decoded glTF (y-up) vertex.
 #[cfg(feature = "native-geospatial")]
-fn decoded(p: [f32; 3]) -> [f64; 3] {
-    [f64::from(p[0]), -f64::from(p[2]), f64::from(p[1])]
+fn decoded(p: [f64; 3]) -> [f64; 3] {
+    [p[0], -p[2], p[1]]
 }
-/// Float32 storage of a geodetic point, its decoded position and storage error.
+/// The stored (decoded glTF) position of a geodetic point, its decoded frame
+/// position and storage error.
 #[cfg(feature = "native-geospatial")]
 fn place(
     frame: &Frame,
+    storage: Storage,
     lon: f64,
     lat: f64,
     height: f64,
-) -> Result<([f32; 3], [f64; 3], f64), JobError> {
+) -> Result<([f64; 3], [f64; 3], f64), JobError> {
     let p = crate::georef::geodetic_to_ecef(crate::georef::Cartographic::new(lon, lat, height));
     let local = frame.local(p);
-    let encoded = [local[0] as f32, local[2] as f32, -local[1] as f32];
-    if !encoded.iter().all(|v| v.is_finite()) {
+    let stored = storage.store([local[0], local[2], -local[1]]);
+    if !stored.iter().all(|v| v.is_finite()) {
         return Err(error(
             JobErrorKind::Unsupported,
             "terrain local positions exceed finite Float32",
         ));
     }
-    let position = decoded(encoded);
+    let position = decoded(stored);
     let error = ((0..3)
         .map(|axis| (position[axis] - local[axis]).powi(2))
         .sum::<f64>())
     .sqrt();
-    Ok((encoded, position, error))
+    Ok((stored, position, error))
 }
 #[cfg(feature = "native-geospatial")]
 fn extend(bounds: &mut [[f64; 3]; 2], p: [f64; 3]) {
@@ -337,14 +347,13 @@ fn extend(bounds: &mut [[f64; 3]; 2], p: [f64; 3]) {
 }
 #[cfg(feature = "native-geospatial")]
 fn grid(
-    raster: &raster::PreparedRaster,
+    pyramid: &Pyramid,
     xs: &[usize],
     ys: &[usize],
-    frame: &Frame,
-    offset: f64,
-    fill: f64,
-    attempt: &Attempt,
+    storage: Storage,
 ) -> Result<glb::Grid, JobError> {
+    let (raster, frame, attempt) = (pyramid.raster, pyramid.frame, pyramid.attempt);
+    let (offset, fill) = (pyramid.offset, pyramid.fill);
     let columns = xs.len();
     let rows = ys.len();
     let mut positions = Vec::with_capacity(columns * rows);
@@ -358,13 +367,13 @@ fn grid(
             let height = surface_height(raster, lon, lat, offset, fill)?;
             height_range[0] = height_range[0].min(height);
             height_range[1] = height_range[1].max(height);
-            let (encoded, position, error) = place(frame, lon, lat, height)?;
+            let (encoded, position, error) = place(frame, storage, lon, lat, height)?;
             extend(&mut bounds, position);
             max_position_error = max_position_error.max(error);
             positions.push(encoded);
         }
     }
-    // Reject topology that Float32 storage collapses or turns away from the
+    // Reject topology that storage collapses or turns away from the
     // footprint's geodetic normal. Scene height queries require a surface.
     for row in 0..rows - 1 {
         attempt.check()?;
@@ -387,7 +396,7 @@ fn grid(
                 if !triangle_is_surface(positions[a], positions[b], positions[c], up) {
                     return Err(error(
                         JobErrorKind::Unsupported,
-                        "terrain Float32 topology collapses or reverses a footprint triangle",
+                        "terrain stored topology collapses or reverses a footprint triangle",
                     ));
                 }
             }
@@ -403,9 +412,8 @@ fn grid(
     })
 }
 #[cfg(feature = "native-geospatial")]
-fn triangle_is_surface(a: [f32; 3], b: [f32; 3], c: [f32; 3], up: [f64; 3]) -> bool {
-    let enu = |p: [f32; 3]| [f64::from(p[0]), -f64::from(p[2]), f64::from(p[1])];
-    let (a, b, c) = (enu(a), enu(b), enu(c));
+fn triangle_is_surface(a: [f64; 3], b: [f64; 3], c: [f64; 3], up: [f64; 3]) -> bool {
+    let (a, b, c) = (decoded(a), decoded(b), decoded(c));
     let u: [f64; 3] = std::array::from_fn(|i| b[i] - a[i]);
     let v: [f64; 3] = std::array::from_fn(|i| c[i] - a[i]);
     let cross = [
@@ -435,7 +443,7 @@ fn box_for(bounds: [[f64; 3]; 2]) -> [f64; 12] {
 struct Sheet {
     xs: Vec<usize>,
     ys: Vec<usize>,
-    positions: Vec<[f32; 3]>,
+    positions: Vec<[f64; 3]>,
 }
 #[cfg(feature = "native-geospatial")]
 impl Sheet {
@@ -530,6 +538,9 @@ struct Pyramid<'a> {
     depth: u32,
     offset: f64,
     fill: f64,
+    /// Largest quantized coordinate a tile may use ([`glb::QUANTIZED_STEPS`]
+    /// outside tests, which coarsen the grid to expose quantization).
+    quantization_steps: f64,
     attempt: &'a Attempt,
 }
 #[cfg(feature = "native-geospatial")]
@@ -554,6 +565,7 @@ impl<'a> Pyramid<'a> {
             depth: leaves.next_power_of_two().trailing_zeros(),
             offset,
             fill,
+            quantization_steps: glb::QUANTIZED_STEPS,
             attempt,
         }
     }
@@ -583,19 +595,12 @@ impl<'a> Pyramid<'a> {
             hierarchy: [[0.; 3]; 2],
         }
     }
-    fn grid(&self, patch: &Patch) -> Result<glb::Grid, JobError> {
-        grid(
-            self.raster,
-            &patch.columns(),
-            &patch.rows(),
-            self.frame,
-            self.offset,
-            self.fill,
-            self.attempt,
-        )
+    fn grid(&self, patch: &Patch, storage: Storage) -> Result<glb::Grid, JobError> {
+        grid(self, &patch.columns(), &patch.rows(), storage)
     }
     /// Plan one tile after its children (post-order), keeping only their
-    /// surfaces while this tile's error is measured.
+    /// surfaces while this tile's error is measured. Errors are measured on
+    /// the decoded positions every level stores.
     fn visit(
         &self,
         level: u32,
@@ -617,9 +622,12 @@ impl<'a> Pyramid<'a> {
             }
         }
         self.attempt.check()?;
-        let g = self.grid(&patch)?;
+        let g = self.grid(&patch, plan.storage[level as usize])?;
         plan.vertices += g.positions.len() as u64;
-        plan.position_error = plan.position_error.max(g.max_position_error);
+        if level == self.depth {
+            // The full-detail leaves are the reference surface.
+            plan.position_error = plan.position_error.max(g.max_position_error);
+        }
         plan.height_range[0] = plan.height_range[0].min(g.height_range[0]);
         plan.height_range[1] = plan.height_range[1].max(g.height_range[1]);
         patch.surface = g.bounds;
@@ -636,56 +644,76 @@ impl<'a> Pyramid<'a> {
                 .map(|&c| plan.patches[c].error)
                 .fold(0., f64::max);
             let sum = deviation(&patch, &sheet, &children, self.cells) + below;
-            patch.error = if sum > 0. { sum.next_up() } else { 0. };
+            patch.error = if sum > 0. { outward(sum, &sheet) } else { 0. };
         }
         plan.patches.push(patch);
         Ok((plan.patches.len() - 1, sheet))
     }
     /// Curtains from each interior edge node down to `height - depth`, wound
-    /// to face away from the tile under its single-sided material.
+    /// to face away from the tile under its single-sided material. The tops
+    /// are the tile's own surface vertices.
     fn skirt(
         &self,
         patch: &Patch,
+        storage: Storage,
         depth: f64,
     ) -> Result<(glb::Skirt, [[f64; 3]; 2], f64), JobError> {
         let (xs, ys) = (patch.columns(), patch.rows());
-        let (east, north) = (xs[xs.len() - 1], ys[ys.len() - 1]);
+        let (columns, rows) = (xs.len(), ys.len());
         let edges: [Vec<(usize, usize)>; 4] = [
-            ys.iter().map(|&y| (xs[0], y)).collect(),
-            ys.iter().rev().map(|&y| (east, y)).collect(),
-            xs.iter().rev().map(|&x| (x, ys[0])).collect(),
-            xs.iter().map(|&x| (x, north)).collect(),
+            (0..rows).map(|r| (0, r)).collect(),
+            (0..rows).rev().map(|r| (columns - 1, r)).collect(),
+            (0..columns).rev().map(|c| (c, 0)).collect(),
+            (0..columns).map(|c| (c, rows - 1)).collect(),
         ];
         let mut skirt = glb::Skirt {
-            positions: vec![],
+            bottoms: vec![],
             indices: vec![],
         };
+        let surface = (columns * rows) as u32;
         let mut bounds = patch.surface;
         let mut worst: f64 = 0.;
         for (nodes, _) in edges.iter().zip(patch.interior).filter(|(_, i)| *i) {
             self.attempt.check()?;
-            for (k, &(x, y)) in nodes.iter().enumerate() {
-                let (lon, lat) = coordinates(self.raster, x, y);
+            let mut previous = None;
+            for &(c, r) in nodes {
+                let (lon, lat) = coordinates(self.raster, xs[c], ys[r]);
                 let height = surface_height(self.raster, lon, lat, self.offset, self.fill)?;
-                let (top, _, _) = place(self.frame, lon, lat, height)?;
-                let (bottom, position, error) = place(self.frame, lon, lat, height - depth)?;
+                let (bottom, position, error) =
+                    place(self.frame, storage, lon, lat, height - depth)?;
                 extend(&mut bounds, position);
                 worst = worst.max(error);
-                let base = skirt.positions.len() as u16;
-                skirt.positions.extend([top, bottom]);
-                if k > 0 {
-                    let b = base - 2;
-                    skirt.indices.extend([b, b + 2, b + 1, b + 2, b + 3, b + 1]);
+                let (top, base) = (
+                    (r * columns + c) as u32,
+                    surface + skirt.bottoms.len() as u32,
+                );
+                skirt.bottoms.push(bottom);
+                if let Some((t, b)) = previous {
+                    skirt.indices.extend([t, top, b, top, base, b]);
                 }
+                previous = Some((top, base));
             }
         }
         Ok((skirt, bounds, worst))
     }
 }
+/// `value` rounded up past the floating-point error of a deviation evaluated
+/// on `sheet`'s coordinates: a few units in the last place of the largest one.
+#[cfg(feature = "native-geospatial")]
+fn outward(value: f64, sheet: &Sheet) -> f64 {
+    let magnitude = sheet
+        .positions
+        .iter()
+        .flatten()
+        .fold(1f64, |m, v| m.max(v.abs()));
+    (value + 64. * f64::EPSILON * (magnitude + value)).next_up()
+}
 #[cfg(feature = "native-geospatial")]
 struct PreparedPlan {
     /// Post-order: children precede parents and the root is last.
     patches: Vec<Patch>,
+    /// Position storage per level, coarsest first.
+    storage: Vec<Storage>,
     vertices: u64,
     skirt_vertices: u64,
     position_error: f64,
@@ -696,6 +724,93 @@ impl PreparedPlan {
     fn root(&self) -> &Patch {
         self.patches.last().expect("a plan has a root")
     }
+    fn storage(&self, patch: &Patch) -> Storage {
+        self.storage[patch.level as usize]
+    }
+}
+/// Largest admitted storage error of the full-detail reference surface.
+#[cfg(feature = "native-geospatial")]
+const POSITION_LIMIT: f64 = 0.05;
+/// The glTF (y-up) range of decoded frame `bounds`.
+#[cfg(feature = "native-geospatial")]
+fn stored_range(bounds: [[f64; 3]; 2]) -> [[f64; 3]; 2] {
+    [
+        [bounds[0][0], bounds[0][2], -bounds[1][1]],
+        [bounds[1][0], bounds[1][2], -bounds[0][1]],
+    ]
+}
+/// The smallest power of two at least `value` (positive and finite).
+#[cfg(feature = "native-geospatial")]
+fn power_of_two(value: f64) -> f64 {
+    let mut step = 2f64.powi(value.log2().ceil() as i32);
+    while step < value {
+        step *= 2.
+    }
+    while step / 2. >= value {
+        step /= 2.
+    }
+    step
+}
+/// Per level, the finest power-of-two grid, one step for every axis, on which
+/// every tile of the level, surface and skirt, spans at most `steps` steps. Coarse levels
+/// always quantize: their grid error is part of their measured error. The
+/// leaves are the reference surface, so they fall back to Float32 when their
+/// grid could move a vertex more than [`POSITION_LIMIT`].
+#[cfg(feature = "native-geospatial")]
+fn storage_for(plan: &PreparedPlan, depth: u32, steps: f64) -> Vec<Storage> {
+    let levels = depth as usize + 1;
+    let mut extent = vec![[0f64; 3]; levels];
+    let mut magnitude = vec![[0f64; 3]; levels];
+    for patch in &plan.patches {
+        let [low, high] = stored_range(patch.bounds);
+        let level = patch.level as usize;
+        for axis in 0..3 {
+            extent[level][axis] = extent[level][axis].max(high[axis] - low[axis]);
+            magnitude[level][axis] = magnitude[level][axis]
+                .max(low[axis].abs())
+                .max(high[axis].abs());
+        }
+    }
+    (0..levels)
+        .map(|level| {
+            // Rounding each end can add one step; leave headroom for the
+            // estimate's skirts deepening by their grid margin. One step for
+            // all three axes: vertical precision matches horizontal, which
+            // keeps the height stream as compressible as the others.
+            let step = (0..3)
+                .map(|axis| {
+                    (extent[level][axis] * (1. + 1. / 1024.) / (steps - 1.))
+                        .max(magnitude[level][axis] * 2f64.powi(-40))
+                })
+                .fold(2f64.powi(-40), f64::max);
+            let storage = Storage::Quantized([power_of_two(step); 3]);
+            if level == depth as usize && storage.margin(0.) / 2. > POSITION_LIMIT {
+                Storage::Float
+            } else {
+                storage
+            }
+        })
+        .collect()
+}
+/// A coarser grid for each level where some tile spans more than `steps`
+/// steps, or `None` when every tile fits.
+#[cfg(feature = "native-geospatial")]
+fn refit(plan: &PreparedPlan, steps: f64) -> Option<Vec<Storage>> {
+    let mut storage = plan.storage.clone();
+    for patch in &plan.patches {
+        let Storage::Quantized(step) = &mut storage[patch.level as usize] else {
+            continue;
+        };
+        let [low, high] = stored_range(patch.bounds);
+        for axis in 0..3 {
+            let span = high[axis] - low[axis];
+            if span / step[axis] > steps {
+                let coarser = power_of_two(span / (steps - 1.)).max(2. * step[axis]);
+                *step = [coarser; 3];
+            }
+        }
+    }
+    (storage != plan.storage).then_some(storage)
 }
 #[cfg(feature = "native-geospatial")]
 fn plan(pyramid: &Pyramid) -> Result<PreparedPlan, JobError> {
@@ -716,8 +831,42 @@ fn plan(pyramid: &Pyramid) -> Result<PreparedPlan, JobError> {
             "terrain plan exceeds 10000 leaves or 1 GiB conservative output budget",
         ));
     }
+    // Unrounded positions size each level's grid; the stored plan is then
+    // measured on decoded positions and coarsened until every tile fits.
+    let exact = vec![Storage::Exact; pyramid.depth as usize + 1];
+    let estimate = plan_with(pyramid, exact, tiles)?;
+    let mut storage = storage_for(&estimate, pyramid.depth, pyramid.quantization_steps);
+    drop(estimate);
+    for _ in 0..64 {
+        let plan = plan_with(pyramid, storage, tiles)?;
+        match refit(&plan, pyramid.quantization_steps) {
+            Some(coarser) => storage = coarser,
+            None => {
+                if plan.position_error > POSITION_LIMIT {
+                    return Err(error(
+                        JobErrorKind::Unsupported,
+                        "terrain Float32 position error exceeds 0.05 metres",
+                    ));
+                }
+                return Ok(plan);
+            }
+        }
+    }
+    Err(error(
+        JobErrorKind::InvalidState,
+        "terrain quantization grids did not converge",
+    ))
+}
+/// One complete plan with fixed per-level storage.
+#[cfg(feature = "native-geospatial")]
+fn plan_with(
+    pyramid: &Pyramid,
+    storage: Vec<Storage>,
+    tiles: usize,
+) -> Result<PreparedPlan, JobError> {
     let mut plan = PreparedPlan {
         patches: Vec::with_capacity(tiles),
+        storage,
         vertices: 0,
         skirt_vertices: 0,
         position_error: 0.,
@@ -725,13 +874,27 @@ fn plan(pyramid: &Pyramid) -> Result<PreparedPlan, JobError> {
     };
     pyramid.visit(0, 0, 0, &mut plan)?;
     // Neighbours at different levels each lie within their errors of the leaf
-    // edge, so a T-junction gap is at most e(t) + e(root).
+    // edge, so a T-junction gap is at most e(t) + e(root). Each skirt also
+    // drops by its storage margin, so its decoded bottom is that far below
+    // the decoded surface.
     let root_error = plan.root().error;
     for id in 0..plan.patches.len() {
-        let depth = (plan.patches[id].error + root_error).max(1.);
-        let (skirt, bounds, error) = pyramid.skirt(&plan.patches[id], depth)?;
-        plan.skirt_vertices += skirt.positions.len() as u64;
-        plan.position_error = plan.position_error.max(error);
+        let storage = plan.storage(&plan.patches[id]);
+        let mut depth = (plan.patches[id].error + root_error).max(1.);
+        let magnitude = plan.patches[id]
+            .surface
+            .iter()
+            .flatten()
+            .fold(0f64, |m, v| m.max(v.abs()));
+        let margin = storage.margin(magnitude + depth + 1.);
+        if margin > 0. {
+            depth = (depth + margin).next_up();
+        }
+        let (skirt, bounds, error) = pyramid.skirt(&plan.patches[id], storage, depth)?;
+        plan.skirt_vertices += skirt.bottoms.len() as u64;
+        if plan.patches[id].level == pyramid.depth {
+            plan.position_error = plan.position_error.max(error);
+        }
         let mut hierarchy = bounds;
         for &child in &plan.patches[id].children {
             let b = box_for(plan.patches[child].hierarchy);
@@ -742,12 +905,6 @@ fn plan(pyramid: &Pyramid) -> Result<PreparedPlan, JobError> {
         patch.skirt_depth = depth;
         patch.bounds = bounds;
         patch.hierarchy = hierarchy;
-    }
-    if plan.position_error > 0.05 {
-        return Err(error(
-            JobErrorKind::Unsupported,
-            "terrain Float32 position error exceeds 0.05 metres",
-        ));
     }
     Ok(plan)
 }
@@ -785,7 +942,7 @@ fn plan_report(
         }
     }
     Ok(TerrainReport {
-        schema_version: 2,
+        schema_version: 3,
         profile: "t1-terrain-lod-mesh-3dtiles-1.1",
         source_crs: raster.source_crs.clone(),
         source_bytes: raster.source_bytes,
@@ -805,7 +962,15 @@ fn plan_report(
         height_range: plan.height_range,
         generated_bytes: 0,
         surface_reference:
-            "decoded Float32 triangle mesh; no certified bound on the continuous source surface",
+            "decoded full-detail triangle mesh; no certified bound on the continuous source surface",
+        quantization_step_metres: plan
+            .storage
+            .iter()
+            .map(|storage| match storage {
+                Storage::Quantized(step) => Some(*step),
+                Storage::Exact | Storage::Float => None,
+            })
+            .collect(),
         geometric_error_metres: errors,
         root_geometric_error_metres: root.error,
         tileset_geometric_error_metres: crate::tileset_node::top_level_error(
@@ -968,15 +1133,16 @@ fn payloads(
     let mut bytes = 0;
     for (i, patch) in plan.patches.iter().enumerate() {
         attempt.check()?;
-        let g = pyramid.grid(patch)?;
-        let (skirt, bounds, _) = pyramid.skirt(patch, patch.skirt_depth)?;
+        let storage = plan.storage(patch);
+        let g = pyramid.grid(patch, storage)?;
+        let (skirt, bounds, _) = pyramid.skirt(patch, storage, patch.skirt_depth)?;
         if g.bounds != patch.surface || bounds != patch.bounds {
             return Err(error(
                 JobErrorKind::InvalidInput,
                 "terrain plan changed during encoding",
             ));
         }
-        let encoded = glb::encode(&g, &skirt, || attempt.check())?;
+        let encoded = glb::encode(&g, &skirt, storage, || attempt.check())?;
         let destination = path.join(patch.name());
         fs::create_dir_all(destination.parent().unwrap())
             .map_err(|e| JobError::io("create terrain tile parent", &destination, e))?;
@@ -1193,11 +1359,11 @@ mod tests {
             }
         })
     }
-    fn sheet(pyramid: &Pyramid, patch: &Patch) -> Sheet {
+    fn sheet(pyramid: &Pyramid, plan: &PreparedPlan, patch: &Patch) -> Sheet {
         Sheet {
             xs: patch.columns(),
             ys: patch.rows(),
-            positions: pyramid.grid(patch).unwrap().positions,
+            positions: pyramid.grid(patch, plan.storage(patch)).unwrap().positions,
         }
     }
     fn parents(plan: &PreparedPlan) -> BTreeMap<usize, usize> {
@@ -1606,7 +1772,7 @@ mod tests {
             positions: ys
                 .iter()
                 .flat_map(|&y| xs.iter().map(move |&x| (x, y)))
-                .map(|(x, y)| [x as f32, h(x, y) as f32, -(y as f32)])
+                .map(|(x, y)| [x as f64, h(x, y), -(y as f64)])
                 .collect(),
             xs,
             ys,
@@ -1833,7 +1999,11 @@ mod tests {
             let frame = Frame::new(r.bounds);
             let pyramid = Pyramid::new(&r, 16, &frame, 0., fill, &attempt);
             let plan = plan(&pyramid).unwrap();
-            let sheets: Vec<_> = plan.patches.iter().map(|p| sheet(&pyramid, p)).collect();
+            let sheets: Vec<_> = plan
+                .patches
+                .iter()
+                .map(|p| sheet(&pyramid, &plan, p))
+                .collect();
             let leaves: Vec<_> = (0..plan.patches.len())
                 .filter(|&i| plan.patches[i].level == pyramid.depth)
                 .collect();
@@ -1880,11 +2050,16 @@ mod tests {
                 .all(|w| w[0] >= w[1]));
             assert_eq!(report.root_geometric_error_metres, plan.root().error);
         }
-        // A constant height only leaves the Earth-curvature sag of decimated chords.
+        // A constant height only leaves the Earth-curvature sag of decimated
+        // chords and the root and leaf grid errors.
         let r = raster::test_raster_with(64, 64, 1e-4, |_, _| 120.);
         let frame = Frame::new(r.bounds);
         let plan = plan(&Pyramid::new(&r, 16, &frame, 0., 0., &attempt)).unwrap();
-        assert!(plan.root().error < 1e-3, "{}", plan.root().error);
+        // Each level's grid error enters the chain of level-to-level distances
+        // at most twice.
+        let grids: f64 = plan.storage.iter().map(|s| s.margin(0.)).sum();
+        assert!(grids > 0. && grids < 0.06, "{grids}");
+        assert!(plan.root().error < 1e-3 + grids, "{}", plan.root().error);
     }
     #[test]
     fn skirts_cover_every_mixed_level_seam_and_face_outward() {
@@ -1895,25 +2070,47 @@ mod tests {
             let pyramid = Pyramid::new(&r, 16, &frame, 0., fill, &attempt);
             let plan = plan(&pyramid).unwrap();
             let root = plan.root().error;
-            let sheets: Vec<_> = plan.patches.iter().map(|p| sheet(&pyramid, p)).collect();
+            let sheets: Vec<_> = plan
+                .patches
+                .iter()
+                .map(|p| sheet(&pyramid, &plan, p))
+                .collect();
             for patch in &plan.patches {
                 assert!(patch.skirt_depth >= patch.error + root && patch.skirt_depth >= 1.);
-                let (skirt, _, _) = pyramid.skirt(patch, patch.skirt_depth).unwrap();
-                let surface = pyramid.grid(patch).unwrap().positions;
+                let storage = plan.storage(patch);
+                let (skirt, _, _) = pyramid.skirt(patch, storage, patch.skirt_depth).unwrap();
+                let surface = pyramid.grid(patch, storage).unwrap().positions;
+                let vertex = |i: u32| {
+                    let i = i as usize;
+                    decoded(
+                        *surface
+                            .get(i)
+                            .unwrap_or_else(|| &skirt.bottoms[i - surface.len()]),
+                    )
+                };
                 let edges = patch.interior.iter().filter(|i| **i).count();
                 assert_eq!(skirt.indices.is_empty(), edges == 0);
                 let centre: [f64; 3] =
                     std::array::from_fn(|i| (patch.surface[0][i] + patch.surface[1][i]) / 2.);
-                for pair in skirt.positions.chunks(2) {
-                    assert!(
-                        surface.contains(&pair[0]),
-                        "skirt tops are surface vertices"
-                    );
-                    let drop = distance(decoded(pair[0]), decoded(pair[1]));
-                    assert!((drop - patch.skirt_depth).abs() <= 0.1, "{drop}");
+                // Each quad [t, top, b, top, base, b] hangs bottoms below surface tops.
+                for quad in skirt.indices.chunks(6) {
+                    for (top, bottom) in [(quad[0], quad[2]), (quad[1], quad[4])] {
+                        assert!(
+                            (top as usize) < surface.len(),
+                            "skirt tops are surface vertices"
+                        );
+                        assert!(bottom as usize >= surface.len());
+                        let drop = distance(vertex(top), vertex(bottom));
+                        // Rounding moves each end by at most half the margin.
+                        let margin = storage.margin(1e5);
+                        assert!(
+                            (drop - patch.skirt_depth).abs() <= margin,
+                            "{drop} {margin}"
+                        );
+                    }
                 }
                 for t in skirt.indices.chunks(3) {
-                    let [a, b, c] = [0, 1, 2].map(|k| decoded(skirt.positions[t[k] as usize]));
+                    let [a, b, c] = [0, 1, 2].map(|k| vertex(t[k]));
                     let (u, v) = (
                         [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
                         [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
@@ -1983,19 +2180,280 @@ mod tests {
         let plan = plan(&pyramid).unwrap();
         let parents = parents(&plan);
         for (id, patch) in plan.patches.iter().enumerate() {
-            let (skirt, _, _) = pyramid.skirt(patch, patch.skirt_depth).unwrap();
-            let grid = pyramid.grid(patch).unwrap();
+            let storage = plan.storage(patch);
+            let (skirt, _, _) = pyramid.skirt(patch, storage, patch.skirt_depth).unwrap();
+            let grid = pyramid.grid(patch, storage).unwrap();
             let mut ancestors = vec![id];
             while let Some(&p) = parents.get(ancestors.last().unwrap()) {
                 ancestors.push(p);
             }
             assert_eq!(*ancestors.last().unwrap(), plan.patches.len() - 1);
-            for p in grid.positions.iter().chain(&skirt.positions) {
+            for p in grid.positions.iter().chain(&skirt.bottoms) {
                 for &a in &ancestors {
                     assert!(inside(box_for(plan.patches[a].hierarchy), decoded(*p)));
                 }
             }
         }
+    }
+    /// A tile GLB read back through its own JSON, the meshopt decoders and the
+    /// node's translation and scale: the decoded glTF positions and indices.
+    fn decode_tile(bytes: &[u8]) -> (serde_json::Value, Vec<[f64; 3]>, Vec<u32>) {
+        let json = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&bytes[20..20 + json]).unwrap();
+        let binary = &bytes[28 + json..];
+        let stream = |view: usize| {
+            let e = &document["bufferViews"][view]["extensions"]["EXT_meshopt_compression"];
+            assert_eq!(e["buffer"], 0);
+            let start = e["byteOffset"].as_u64().unwrap() as usize;
+            &binary[start..start + e["byteLength"].as_u64().unwrap() as usize]
+        };
+        let primitive = &document["meshes"][0]["primitives"][0];
+        let (position, index) = (
+            &document["accessors"][primitive["attributes"]["POSITION"].as_u64().unwrap() as usize],
+            &document["accessors"][primitive["indices"].as_u64().unwrap() as usize],
+        );
+        let (count, indices) = (
+            position["count"].as_u64().unwrap() as usize,
+            index["count"].as_u64().unwrap() as usize,
+        );
+        let node = &document["nodes"][0];
+        let vector = |key: &str, default: f64| -> [f64; 3] {
+            node.get(key).map_or([default; 3], |v| {
+                std::array::from_fn(|i| v[i].as_f64().unwrap())
+            })
+        };
+        let (translation, scale) = (vector("translation", 0.), vector("scale", 1.));
+        // The only header bytes EXT_meshopt_compression admits for these modes.
+        let (vertices, triangles) = (stream(0), stream(1));
+        assert_eq!((vertices[0], triangles[0]), (0xa0, 0xe1));
+        let positions: Vec<[f64; 3]> = match position["componentType"].as_u64().unwrap() {
+            5123 => meshopt::encoding::decode_vertex_buffer::<[u16; 4]>(vertices, count)
+                .unwrap()
+                .iter()
+                .map(|q| std::array::from_fn(|i| translation[i] + scale[i] * f64::from(q[i])))
+                .collect(),
+            5126 => meshopt::encoding::decode_vertex_buffer::<[f32; 3]>(vertices, count)
+                .unwrap()
+                .iter()
+                .map(|p| std::array::from_fn(|i| translation[i] + scale[i] * f64::from(p[i])))
+                .collect(),
+            other => panic!("position component type {other}"),
+        };
+        let indices = meshopt::encoding::decode_index_buffer::<u16>(triangles, indices)
+            .unwrap()
+            .into_iter()
+            .map(u32::from)
+            .collect();
+        (document, positions, indices)
+    }
+    #[test]
+    fn tiles_are_one_meshopt_quantized_primitive_that_decodes_to_the_plan() {
+        let control = RunControl::default();
+        let attempt = control.begin().unwrap();
+        // ~110 m pixels quantize every level; ~1.1 km pixels give leaves a
+        // grid coarser than the storage limit, so only they stay Float32.
+        let plane =
+            raster::test_raster_with(33, 17, 1e-2, |c, r| 100. + 2. * c as f64 + 3. * r as f64);
+        for (r, leaves_quantized) in [(bump(67, 45), true), (plane, false)] {
+            let frame = Frame::new(r.bounds);
+            let pyramid = Pyramid::new(&r, 16, &frame, 0., 0., &attempt);
+            let plan = plan(&pyramid).unwrap();
+            for (level, storage) in plan.storage.iter().enumerate() {
+                let quantized = matches!(storage, Storage::Quantized(_));
+                assert_eq!(
+                    quantized,
+                    level < pyramid.depth as usize || leaves_quantized,
+                    "{level} {storage:?}"
+                );
+            }
+            for patch in &plan.patches {
+                let storage = plan.storage(patch);
+                let grid = pyramid.grid(patch, storage).unwrap();
+                let (skirt, _, _) = pyramid.skirt(patch, storage, patch.skirt_depth).unwrap();
+                let bytes = glb::encode(&grid, &skirt, storage, || Ok(())).unwrap();
+                let (document, positions, indices) = decode_tile(&bytes);
+                // One draw call: the skirt shares the surface primitive and material.
+                assert_eq!(
+                    document["meshes"][0]["primitives"]
+                        .as_array()
+                        .unwrap()
+                        .len(),
+                    1
+                );
+                assert_eq!(document["materials"].as_array().unwrap().len(), 1);
+                let required = document["extensionsRequired"].as_array().unwrap();
+                match storage {
+                    Storage::Quantized(step) => {
+                        assert_eq!(
+                            required,
+                            &["EXT_meshopt_compression", "KHR_mesh_quantization"]
+                        );
+                        assert_eq!(document["nodes"][0]["scale"], serde_json::json!(step));
+                    }
+                    _ => {
+                        assert_eq!(required, &["EXT_meshopt_compression"]);
+                        assert!(document["nodes"][0].get("scale").is_none());
+                    }
+                }
+                let expected: Vec<_> = grid
+                    .positions
+                    .iter()
+                    .chain(&skirt.bottoms)
+                    .copied()
+                    .collect();
+                assert_eq!(positions, expected, "decoding is exact");
+                // The index codec may rotate a triangle's corners, never its
+                // winding or the triangle order.
+                let rotated = |t: &[u32]| {
+                    let k = (0..3).min_by_key(|&k| t[k]).unwrap();
+                    [t[k], t[(k + 1) % 3], t[(k + 2) % 3]]
+                };
+                let columns = grid.columns as u32;
+                let mut wanted = vec![];
+                for y in 0..grid.rows as u32 - 1 {
+                    for x in 0..columns - 1 {
+                        let a = y * columns + x;
+                        wanted.extend([a, a + 1, a + columns, a + 1, a + columns + 1, a + columns]);
+                    }
+                }
+                wanted.extend(&skirt.indices);
+                assert_eq!(indices.len(), wanted.len());
+                for (found, wanted) in indices.chunks(3).zip(wanted.chunks(3)) {
+                    assert_eq!(rotated(found), rotated(wanted));
+                }
+            }
+        }
+    }
+    /// The frame point's geodetic height.
+    fn geodetic_height(frame: &Frame, p: [f64; 3]) -> f64 {
+        let ecef = std::array::from_fn(|i| {
+            frame.origin[i]
+                + (0..3)
+                    .map(|axis| p[axis] * frame.axes[axis][i])
+                    .sum::<f64>()
+        });
+        crate::georef::ecef_to_cartographic(ecef).unwrap().height_m
+    }
+    #[test]
+    fn certification_holds_on_decoded_quantized_positions() {
+        let control = RunControl::default();
+        let attempt = control.begin().unwrap();
+        let r = bump(67, 45);
+        let frame = Frame::new(r.bounds);
+        let mut pyramid = Pyramid::new(&r, 16, &frame, 0., 0., &attempt);
+        // A 10-bit grid: metre steps on coarse tiles, so certifying unrounded
+        // positions would visibly understate their distance to the leaves.
+        pyramid.quantization_steps = 1023.;
+        let plan = plan(&pyramid).unwrap();
+        let depth = pyramid.depth as usize;
+        for (level, storage) in plan.storage.iter().enumerate() {
+            match storage {
+                Storage::Quantized(step) => {
+                    assert!(level < depth && step[0] >= 1., "{level} {storage:?}")
+                }
+                _ => assert_eq!((level, *storage), (depth, Storage::Float)),
+            }
+        }
+        // Every tile as a consumer decodes it from its GLB.
+        let decoded: Vec<(Sheet, Vec<[f64; 3]>)> = plan
+            .patches
+            .iter()
+            .map(|patch| {
+                let storage = plan.storage(patch);
+                let grid = pyramid.grid(patch, storage).unwrap();
+                let (skirt, _, _) = pyramid.skirt(patch, storage, patch.skirt_depth).unwrap();
+                let bytes = glb::encode(&grid, &skirt, storage, || Ok(())).unwrap();
+                let (_, positions, _) = decode_tile(&bytes);
+                let positions: Vec<_> = positions.into_iter().map(decoded).collect();
+                let (xs, ys) = (patch.columns(), patch.rows());
+                let surface = positions[..xs.len() * ys.len()]
+                    .iter()
+                    .map(|p| [p[0], p[2], -p[1]])
+                    .collect();
+                (
+                    Sheet {
+                        xs,
+                        ys,
+                        positions: surface,
+                    },
+                    positions,
+                )
+            })
+            .collect();
+        let parents = parents(&plan);
+        let root = plan.root().error;
+        let mut measured = vec![0f64; plan.patches.len()];
+        for (id, patch) in plan.patches.iter().enumerate() {
+            // Boxes contain the decoded surface and skirt of the tile and its descendants.
+            let mut ancestors = vec![id];
+            while let Some(&p) = parents.get(ancestors.last().unwrap()) {
+                ancestors.push(p);
+            }
+            for &p in &decoded[id].1 {
+                for &a in &ancestors {
+                    assert!(inside(box_for(plan.patches[a].hierarchy), p));
+                }
+            }
+            // Decoded skirt bottoms drop at least max(e + e_root, 1) below their tops.
+            let surface = decoded[id].0.positions.len();
+            let vertex = |i: usize| decoded[id].1[i];
+            let storage = plan.storage(patch);
+            let grid = pyramid.grid(patch, storage).unwrap();
+            let (skirt, _, _) = pyramid.skirt(patch, storage, patch.skirt_depth).unwrap();
+            for quad in skirt.indices.chunks(6) {
+                let (top, bottom) = (quad[1] as usize, quad[4] as usize);
+                assert!(top < surface && bottom >= surface && grid.positions.len() == surface);
+                let drop =
+                    geodetic_height(&frame, vertex(top)) - geodetic_height(&frame, vertex(bottom));
+                let required = (patch.error + root).max(1.);
+                assert!(
+                    drop >= required - 1e-6,
+                    "{drop} < {required} at level {} {storage:?}",
+                    patch.level
+                );
+            }
+            if patch.level as usize == depth {
+                continue;
+            }
+            // Brute-force distance to the decoded leaves at the same lattice parameters.
+            for (leaf, l) in plan.patches.iter().enumerate() {
+                if l.level as usize != depth
+                    || l.x < patch.x
+                    || l.x1 > patch.x1
+                    || l.y < patch.y
+                    || l.y1 > patch.y1
+                {
+                    continue;
+                }
+                for j in 0..=(l.y1 - l.y) * 4 {
+                    for i in 0..=(l.x1 - l.x) * 4 {
+                        let (x, y) = (l.x as f64 + i as f64 / 4., l.y as f64 + j as f64 / 4.);
+                        let d = distance(decoded[id].0.at(x, y), decoded[leaf].0.at(x, y));
+                        measured[id] = measured[id].max(d);
+                    }
+                }
+            }
+            assert!(
+                patch.error >= measured[id],
+                "{} < {}",
+                patch.error,
+                measured[id]
+            );
+        }
+        // Control: the same pyramid certified on unrounded positions understates
+        // the decoded distance, so the checks above fail for that certification.
+        let unrounded = plan_with(&pyramid, vec![Storage::Exact; depth + 1], 0).unwrap();
+        let understated = plan
+            .patches
+            .iter()
+            .zip(&unrounded.patches)
+            .enumerate()
+            .filter(|(id, (p, u))| {
+                assert_eq!((p.level, p.column, p.row), (u.level, u.column, u.row));
+                u.error < measured[*id] - 0.1
+            })
+            .count();
+        assert!(understated > 0, "{measured:?}");
     }
     fn validated(directory: &Path) -> serde_json::Value {
         let archive = directory.with_extension("3tz");
