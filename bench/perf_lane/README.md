@@ -59,7 +59,10 @@ When to run it:
   (`git checkout bench/perf_lane/REPORT.md`).
 - **On merge to develop** of an output-affecting slice: run it on a release
   build of the merged develop with `--milestone-label '<slice> merged'` and
-  commit the regenerated `REPORT.md`. Its git history is the trend log.
+  commit the regenerated `REPORT.md`. Its git history is the trend log. Commit
+  a milestone only when `report.py` exits 0, or when every remaining gated flag
+  has a stated reason: re-render with `--from-raw DIR --explain
+  CASE.METRIC=REASON`, with no rerun.
 
 Raw results never go into git: `.gitignore` admits only the scripts,
 `README.md` and `REPORT.md` under `bench/perf_lane/`.
