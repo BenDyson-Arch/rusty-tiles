@@ -42,10 +42,25 @@ impl PreflightStage {
 pub(crate) struct Volume {
     pub available_bytes: u64,
     pub memory_backed: bool,
+    /// Filesystem allocation fragment/cluster size. Logical spill byte counts exclude this
+    /// per-file rounding and filesystem metadata; the producer reserves those separately.
+    pub allocation_unit_bytes: u64,
 }
 
 pub(crate) fn inspect_volume(path: &Path) -> Result<Volume, SpillError> {
-    implementation::inspect(path).map_err(|e| SpillError::io("inspect scratch volume", path, e))
+    implementation::inspect(path)
+        .and_then(validate_volume)
+        .map_err(|e| SpillError::io("inspect scratch volume", path, e))
+}
+
+fn validate_volume(volume: Volume) -> io::Result<Volume> {
+    if volume.allocation_unit_bytes == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "filesystem reported a zero allocation unit",
+        ));
+    }
+    Ok(volume)
 }
 
 /// Refuses before any workspace exists when `available < needed`.
@@ -65,7 +80,8 @@ pub(super) fn preflight_with(
     stage: PreflightStage,
     inspect: impl FnOnce(&Path) -> Result<Volume, SpillError>,
 ) -> Result<Volume, SpillError> {
-    let volume = inspect(path)?;
+    let volume = validate_volume(inspect(path)?)
+        .map_err(|e| SpillError::io("inspect scratch volume", path, e))?;
     if volume.available_bytes < needed {
         return Err(SpillError::InsufficientSpace(InsufficientSpace {
             path: path.to_owned(),
@@ -106,6 +122,7 @@ mod implementation {
         Ok(Volume {
             available_bytes: (stat.f_bavail as u64).saturating_mul(unit),
             memory_backed: memory_backed(&path)?,
+            allocation_unit_bytes: unit,
         })
     }
 
@@ -147,6 +164,7 @@ mod implementation {
         Ok(Volume {
             available_bytes: (stat.f_bavail as u64).saturating_mul(stat.f_bsize as u64),
             memory_backed: false,
+            allocation_unit_bytes: stat.f_bsize as u64,
         })
     }
 }
@@ -163,16 +181,59 @@ mod implementation {
             total: *mut u64,
             total_free: *mut u64,
         ) -> i32;
+        fn GetVolumePathNameW(
+            filename: *const u16,
+            volume_path: *mut u16,
+            buffer_length: u32,
+        ) -> i32;
+        fn GetDiskFreeSpaceW(
+            root: *const u16,
+            sectors_per_cluster: *mut u32,
+            bytes_per_sector: *mut u32,
+            free_clusters: *mut u32,
+            total_clusters: *mut u32,
+        ) -> i32;
     }
     pub(super) fn inspect(path: &Path) -> io::Result<Volume> {
-        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
-        if wide.contains(&0) {
+        if path.as_os_str().encode_wide().any(|c| c == 0) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "path contains NUL",
             ));
         }
+        // Resolve relative paths against the actual working directory. GetVolumePathNameW
+        // otherwise interprets an unqualified relative path using the boot volume.
+        let canonical = std::fs::canonicalize(path)?;
+        let mut wide: Vec<u16> = canonical.as_os_str().encode_wide().collect();
         wide.push(0);
+        // The mount-point string is no longer than this full path plus its trailing slash.
+        // A full-path-sized buffer also avoids GetVolumePathNameW's truncated-root behavior.
+        let root_length = wide.len().checked_add(2).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "volume path is too long")
+        })?;
+        let root_length = u32::try_from(root_length)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "volume path is too long"))?;
+        let mut root = vec![0u16; root_length as usize];
+        // SAFETY: wide is terminated, root contains root_length writable WCHARs.
+        if unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), root_length) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let (mut sectors, mut sector_bytes, mut free_clusters, mut total_clusters) =
+            (0u32, 0u32, 0u32, 0u32);
+        // SAFETY: root is the terminated mount point returned by GetVolumePathNameW; every
+        // DWORD output points to a writable u32. Only cluster geometry is consumed here.
+        if unsafe {
+            GetDiskFreeSpaceW(
+                root.as_ptr(),
+                &mut sectors,
+                &mut sector_bytes,
+                &mut free_clusters,
+                &mut total_clusters,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
         let mut available = 0u64;
         // SAFETY: wide is terminated; available is a writable ULARGE_INTEGER; the optional
         // totals are null, which the API permits.
@@ -190,6 +251,7 @@ mod implementation {
         Ok(Volume {
             available_bytes: available,
             memory_backed: false,
+            allocation_unit_bytes: u64::from(sectors) * u64::from(sector_bytes),
         })
     }
 }

@@ -71,8 +71,10 @@ impl SortConfig {
     ///   elements per sorting thread, which exceeds `n / 2` for small chunks, so the margin is
     ///   `jobs × 8 MB`, plus the merge heap (`F` entries).
     ///
-    /// The run and merge phases do not overlap, so the sum is conservative. Saturates at
-    /// `u64::MAX` rather than wrapping.
+    /// Run payload/sort scratch and merge payload phases do not overlap, so their sum is
+    /// conservative. The owner must additionally account for the bounded run inventory
+    /// using `ExternalSorter::inventory_memory_bound` and its actual scratch path length.
+    /// Saturates at `u64::MAX` rather than wrapping.
     pub(crate) fn memory_bound<T: Record>(&self) -> u64 {
         const SORT_MIN_SCRATCH: u64 = 8_000_000;
         let (run, buffer, fan_in, jobs) = (
@@ -103,7 +105,8 @@ pub(crate) struct SortStats {
     pub records: u64,
     /// Sorted runs written from the run buffer (0 when the input fit in memory).
     pub runs: u64,
-    /// Intermediate merge levels before the final streamed merge.
+    /// Highest online compaction generation, plus final intermediate merge passes.
+    /// The final streamed merge is not counted.
     pub merge_levels: u64,
     /// Total bytes written to scratch.
     pub spilled_bytes: u64,
@@ -112,6 +115,8 @@ pub(crate) struct SortStats {
 struct Run {
     file: SpillFile,
     records: u64,
+    /// Online compaction generation; runs stay in original input order.
+    generation: u8,
 }
 
 trait Cursor<T> {
@@ -292,10 +297,18 @@ fn write_run<T: Record>(
     let mut count = 0u64;
     while let Some(record) = records.next_record()? {
         record.encode(&mut encoded);
+        let next_count = count.checked_add(1).ok_or(SpillError::Overflow)?;
+        // A failing write_all may write a prefix before returning its error. Pre-account
+        // the entire attempted record so failure peaks cannot omit that prefix.
+        file.completed(
+            next_count
+                .checked_mul(T::SIZE as u64)
+                .ok_or(SpillError::Overflow)?,
+        );
         writer
             .write_all(&encoded)
             .map_err(|e| SpillError::io("write spill run", file.path(), e))?;
-        count += 1;
+        count = next_count;
     }
     writer
         .flush()
@@ -308,6 +321,7 @@ fn write_run<T: Record>(
     Ok(Run {
         file,
         records: count,
+        generation: 0,
     })
 }
 
@@ -387,7 +401,11 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             self.buffer.reserve_exact(target.saturating_sub(capacity));
         }
         self.buffer.push(record);
-        self.stats.records += 1;
+        self.stats.records = self
+            .stats
+            .records
+            .checked_add(1)
+            .ok_or(SpillError::Overflow)?;
         Ok(())
     }
 
@@ -400,6 +418,11 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
 
     pub(crate) fn stats(&self) -> SortStats {
         self.stats
+    }
+
+    #[cfg(test)]
+    pub(super) fn inventory_len(&self) -> usize {
+        self.runs.len()
     }
 
     fn flush_run(&mut self) -> Result<(), SpillError> {
@@ -419,7 +442,68 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         self.stats.spilled_bytes += run.file_bytes();
         self.buffer.clear();
         self.runs.push(run);
+        self.compact_inventory()?;
         Ok(())
+    }
+
+    /// Keep run descriptors bounded independently of the input count. Delay the first
+    /// compaction until 64F runs so ordinary inputs retain the selective final-pass policy.
+    /// Higher generations hold fewer than F descriptors. Since each such generation
+    /// represents at least F times the records of its predecessor, u64 counts permit no
+    /// more than 64 generations: fewer than 128F descriptors in all.
+    fn compact_inventory(&mut self) -> Result<(), SpillError> {
+        let mut generation = 0u8;
+        loop {
+            let threshold = if generation == 0 {
+                self.config
+                    .fan_in
+                    .checked_mul(64)
+                    .ok_or(SpillError::Overflow)?
+            } else {
+                self.config.fan_in
+            };
+            let Some(first) = self
+                .runs
+                .iter()
+                .position(|run| run.generation == generation)
+            else {
+                break;
+            };
+            let count = self.runs[first..]
+                .iter()
+                .take_while(|run| run.generation == generation)
+                .count();
+            if count < threshold {
+                break;
+            }
+            let readers = self
+                .runs
+                .drain(first..first + self.config.fan_in)
+                .map(|run| RunReader::<T>::open(self.scratch, run, self.config.buffer_bytes))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut merger = Merger::new(readers)?;
+            let mut run = write_run(self.scratch, self.config.buffer_bytes, &mut merger)?;
+            run.generation = generation.checked_add(1).ok_or(SpillError::Overflow)?;
+            self.stats.spilled_bytes += run.file_bytes();
+            self.stats.merge_levels = self.stats.merge_levels.max(u64::from(run.generation));
+            drop(merger);
+            self.runs.insert(first, run);
+            generation += 1;
+        }
+        Ok(())
+    }
+
+    /// Upper bound for descriptor inventory and its Vec reallocations, including owned
+    /// paths. The owning producer adds this to its resident-memory declaration.
+    pub(crate) fn inventory_memory_bound(config: SortConfig, scratch_path_bytes: usize) -> u64 {
+        (config.fan_in as u64)
+            .saturating_mul(128)
+            .saturating_mul(2)
+            .saturating_mul(
+                (size_of::<Run>() as u64)
+                    .saturating_add((scratch_path_bytes as u64).saturating_mul(2))
+                    .saturating_add(64),
+            )
     }
 
     /// Group sizes for one pass over `runs > F` runs. While a full pass would still leave more

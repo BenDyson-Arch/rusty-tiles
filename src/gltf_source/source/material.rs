@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::mesh_archive) enum TextureSlot {
+pub(crate) enum TextureSlot {
     BaseColor,
     MetallicRoughness,
     Normal,
@@ -54,21 +54,21 @@ const SLOTS: [SlotSpec; 5] = [
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::mesh_archive) struct TextureBinding {
+pub(crate) struct TextureBinding {
     pub texture: usize,
     pub texcoord: usize,
     pub slot: TextureSlot,
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::mesh_archive) struct Material {
+pub(crate) struct Material {
     value: Value,
     bindings: [Option<TextureBinding>; 5],
 }
 
 impl Material {
     /// The root proxy profile preserves untextured opaque core factors.
-    pub(in crate::mesh_archive) fn proxy_eligible(&self) -> bool {
+    pub(crate) fn proxy_eligible(&self) -> bool {
         self.bindings().next().is_none()
             && self
                 .value
@@ -76,20 +76,17 @@ impl Material {
                 .is_none_or(|mode| mode == "OPAQUE")
     }
 
-    pub(in crate::mesh_archive) fn bindings(&self) -> impl Iterator<Item = &TextureBinding> {
+    pub(crate) fn bindings(&self) -> impl Iterator<Item = &TextureBinding> {
         self.bindings.iter().flatten()
     }
 
-    pub(in crate::mesh_archive) fn has_normal_texture(&self) -> bool {
+    pub(crate) fn has_normal_texture(&self) -> bool {
         self.bindings()
             .any(|binding| binding.slot == TextureSlot::Normal)
     }
 
     /// Preserve every admitted field, including omissions; replace only indices.
-    pub(in crate::mesh_archive) fn remap(
-        &self,
-        texture_ids: &BTreeMap<usize, usize>,
-    ) -> Result<Value> {
+    pub(crate) fn remap(&self, texture_ids: &BTreeMap<usize, usize>) -> Result<Value> {
         let mut value = self.value.clone();
         for (spec, binding) in SLOTS.iter().zip(&self.bindings) {
             let Some(binding) = binding else {
@@ -169,10 +166,10 @@ fn binding(
     }))
 }
 
-pub(super) fn parse(doc: &Value) -> Result<Vec<Material>> {
+pub(super) fn parse(doc: &Value, max: usize) -> Result<Vec<Material>> {
     let input = list(doc, "materials")?;
-    if input.len() > 256 {
-        return Err(unsupported("core material count exceeds 256"));
+    if input.len() > max {
+        return Err(unsupported(format!("core material count exceeds {max}")));
     }
     let texture_count = list(doc, "textures")?.len();
     let mut materials = Vec::with_capacity(input.len());
@@ -280,7 +277,7 @@ mod tests {
             "emissiveTexture":{"index":2,"texCoord":1},
             "emissiveFactor":[0.1,0.2,0.3],"alphaMode":"MASK","doubleSided":false
         });
-        let material = parse(&document(original)).unwrap().remove(0);
+        let material = parse(&document(original), 256).unwrap().remove(0);
         assert!(material.has_normal_texture());
         assert_eq!(
             material
@@ -352,13 +349,13 @@ mod tests {
             ),
             (json!({"alphaMode":"BLEND"}), JobErrorKind::Unsupported),
         ] {
-            assert_eq!(parse(&document(material)).unwrap_err().kind(), kind);
+            assert_eq!(parse(&document(material), 256).unwrap_err().kind(), kind);
         }
     }
 
     #[test]
     fn no_textures_and_boundary_scalars_preserve_presence() {
-        let plain = parse(&json!({"materials":[{}]})).unwrap().remove(0);
+        let plain = parse(&json!({"materials":[{}]}), 256).unwrap().remove(0);
         assert_eq!(plain.bindings().count(), 0);
         assert!(!plain.has_normal_texture());
         assert_eq!(plain.remap(&BTreeMap::new()).unwrap(), json!({}));
@@ -366,7 +363,7 @@ mod tests {
             for strength in [0.0, 1.0] {
                 let value = json!({"normalTexture":{"index":0,"scale":scale},
                     "occlusionTexture":{"index":0,"strength":strength}});
-                let material = parse(&document(value.clone())).unwrap().remove(0);
+                let material = parse(&document(value.clone()), 256).unwrap().remove(0);
                 assert_eq!(material.remap(&BTreeMap::from([(0, 0)])).unwrap(), value);
             }
         }
@@ -386,7 +383,7 @@ mod tests {
             (json!({"normalTexture":{"index":0}}), false),
         ] {
             assert_eq!(
-                parse(&document(value)).unwrap()[0].proxy_eligible(),
+                parse(&document(value), 256).unwrap()[0].proxy_eligible(),
                 eligible
             );
         }

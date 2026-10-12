@@ -117,6 +117,11 @@ impl Scratch {
         self.volume.available_bytes
     }
 
+    /// Filesystem fragment/cluster size observed by the preflight.
+    pub(crate) fn allocation_unit_bytes(&self) -> u64 {
+        self.volume.allocation_unit_bytes
+    }
+
     /// Bytes currently held by live spill files.
     pub(crate) fn live_bytes(&self) -> u64 {
         self.accounting.live.load(Ordering::Relaxed)
@@ -137,6 +142,10 @@ impl Scratch {
 
     pub(super) fn io(&self) -> &dyn SpillIo {
         &*self.io
+    }
+
+    pub(super) fn io_handle(&self) -> Arc<dyn SpillIo> {
+        self.io.clone()
     }
 
     pub(super) fn new_file(&self, stem: &str) -> SpillFile {
@@ -168,8 +177,9 @@ impl SpillFile {
 
     /// Records the completed size for scratch accounting.
     pub(super) fn completed(&mut self, bytes: u64) {
+        debug_assert!(bytes >= self.bytes);
+        self.accounting.add(bytes - self.bytes);
         self.bytes = bytes;
-        self.accounting.add(bytes);
     }
 }
 
