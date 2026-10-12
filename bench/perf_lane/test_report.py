@@ -118,6 +118,18 @@ class Flags(unittest.TestCase):
         self.assertEqual(self.flags(dict(na='no command'), GOOD), [])  # nothing to compare against
         self.assertEqual(self.flags(None, GOOD), [])
 
+    def test_head_failure_is_flagged_without_references(self):
+        failed = dict(failed='exit 101: panicked')
+        for columns in (dict(release=None, milestone=None, head=dict(vector=failed)),
+                        dict(release=dict(vector=dict(na='no command')), milestone={}, head=dict(vector=failed)),
+                        dict(release=dict(vector=GOOD), milestone=dict(vector=GOOD), head=dict(vector=failed))):
+            flags, failures = report.all_flags(columns, [])
+            self.assertEqual([(f['ref'], f['key'], f['text']) for f in flags],
+                             [('head', 'vector.exit', 'head failed: exit 101: panicked')])
+            self.assertEqual(len(failures), 1)
+        _, failures = report.all_flags(dict(release=None, milestone=None, head=dict(vector=failed)), [('vector.exit', 'known')])
+        self.assertEqual(failures, [])
+
     def test_gate_reference_and_cesium(self):
         columns = dict(release=dict(vector=metrics(wall=0.5)), milestone=dict(vector=GOOD),
                        head=dict(vector=metrics(wall=1.1, problems=['console errors: 1'])))

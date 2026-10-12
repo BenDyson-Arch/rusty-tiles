@@ -86,6 +86,7 @@ def explained(pattern_pairs, key):
 def compare(case, ref_name, ref, head, explanations):
     """Flags for one case against one reference column (same rule as process.py: >RATIO and > floor)."""
     flags = []
+    if 'failed' in head: return flags  # all_flags flags a head failure once, whatever the references
     if not usable(ref): return flags
     if not usable(head):
         key = f'{case}.exit'
@@ -110,13 +111,17 @@ def all_flags(columns, explanations):
     gate_ref = 'milestone' if columns.get('milestone') else 'release'
     flags = []
     for case, head in columns['head'].items():
+        if 'failed' in head:  # a head failure is gated even with no usable reference column
+            key = f'{case}.exit'
+            flags.append(dict(case=case, ref='head', metric='exit', key=key, gated=True, explanation=explained(explanations, key),
+                              text=f"head failed: {head['failed']}"))
         for ref_name in ('milestone', 'release'):
             if columns.get(ref_name): flags += compare(case, ref_name, columns[ref_name].get(case), head, explanations)
         for problem in head.get('problems', []):
             flags.append(dict(case=case, ref='cesium', metric='load', key=f'{case}.cesium', gated=True, explanation=None,
                               text=f'Cesium: {problem}'))
     for flag in flags:
-        flag['fails'] = flag['gated'] and not flag['explanation'] and flag['ref'] in (gate_ref, 'cesium')
+        flag['fails'] = flag['gated'] and not flag['explanation'] and flag['ref'] in (gate_ref, 'cesium', 'head')
     return flags, [f for f in flags if f['fails']]
 
 
@@ -244,7 +249,7 @@ def render(meta, columns, previous, explanations):
     for f in sorted(flags, key=lambda f: (not f['fails'], f['case'], f['ref'])):
         verdict = ('REGRESSION' if f['fails'] else f"explained: {f['explanation']}" if f['explanation']
                else 'advisory' if not f['gated'] else 'not gated')
-        ref = {'release': f'vs {tag}', 'milestone': 'vs milestone', 'cesium': 'head'}[f['ref']]
+        ref = {'release': f'vs {tag}', 'milestone': 'vs milestone', 'cesium': 'head', 'head': 'head'}[f['ref']]
         out.append(f"- {f['case']} {ref}: {f['text']} — {verdict}")
     grouped = {}  # (column, reason): [cases]
     for col, label in (('release', tag), ('head', 'head')):
