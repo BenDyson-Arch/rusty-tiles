@@ -816,7 +816,7 @@ recorded separately.
     sha256 equal. Cases:
     - default, `--quantize`, `--meshopt` and both GLBs, taken as frozen copies of the
       `evidence/v3` payloads;
-    - a b3dm-wrapped GLB;
+    - a b3dm-wrapped GLB (since #75: refused, because vector fills are glTF only);
     - δ = 0 (a byte copy);
     - a raw root with and without `translation`;
     - JSON chunks aligned to 4 and to 8.
@@ -923,7 +923,7 @@ As implemented on the integration branch:
   `tileset.json` reserves 64 nodes and 4 KiB for producer edits after the writer, such as vector's
   `asset.extras.vectorBuildStateSha256`.
 - **D-4 (rebase domain).** A zero δ is a byte copy for any suffix. Otherwise `rebase_payload`
-  admits a GLB, or a b3dm-wrapped GLB, with exactly one scene root node carrying a translation or
+  admits a GLB with exactly one scene root node (a b3dm-wrapped GLB was also admitted until #75 made vector fills glTF only) carrying a translation or
   an affine `matrix`; several scene roots, both `matrix` and TRS, a non-affine or non-finite
   matrix, or a malformed node are typed errors. `restore_payload` reports malformed records and
   payloads as "invalid previous payload record", and reuse checks every restored payload against

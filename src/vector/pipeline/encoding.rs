@@ -409,13 +409,14 @@ fn polygon_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
     glb.accessor(json!({"bufferView":v,"componentType":5123,"count":values.len(),"type":"SCALAR"}))
 }
 /// CesiumJS 1.146.0 (`appendBufferPolygons`) sizes its vertex remap by the
-/// loopIndices count but indexes it by primitive vertex number, so a vertex
-/// numbered at or beyond that count silently drops its triangles. Polygons
-/// reference only loop vertices and every polygon or fill triangle owns its
-/// vertices, so the loop list (with restarts) is never shorter than the vertex
-/// list. Refuse rather than publish content that would lose triangles.
-fn cesium_loop_remap_fits(vertices: usize, loops: &[u32]) -> FeatureResult<()> {
-    if vertices > loops.len() {
+/// loopIndices count but indexes it by triangle vertex number, so a triangle
+/// corner numbered at or beyond that count silently loses its triangle.
+/// `polygon_for` refuses a polygon with a vertex outside its loops when the
+/// feature is admitted (and again for simplified parents), and each polygon or
+/// fill triangle owns its vertices, so the loop list (with restarts) is never
+/// shorter than the vertex list here. This is the final guard before publication.
+fn cesium_loop_remap_fits(vertices: usize, indices: &[u32], loops: &[u32]) -> FeatureResult<()> {
+    if vertices > loops.len() || indices.iter().any(|i| *i as usize >= loops.len()) {
         return Err(FeatureFailure::reject(
             "polygon vertices outnumber their loop indices; CesiumJS would drop triangles",
         ));
@@ -591,7 +592,7 @@ fn emit_source(
     for (mode, batch) in &batches {
         let mut ext = json!({"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(items.len(), 0, Some(0))});
         if *mode == 4 {
-            cesium_loop_remap_fits(batch.points.len(), &batch.loops)?;
+            cesium_loop_remap_fits(batch.points.len(), &batch.indices, &batch.loops)?;
             ext["EXT_mesh_polygon"] = json!({"count":batch.triangles.len(),"indicesOffsets":polygon_accessor(&mut glb,&batch.triangles),
                 "loopIndices":polygon_accessor(&mut glb,&batch.loops),"loopIndicesOffsets":polygon_accessor(&mut glb,&batch.loop_offsets)});
             glb::add_extension(&mut glb.document, "EXT_mesh_polygon", false)?;
@@ -1951,9 +1952,131 @@ mod tests {
 
     #[test]
     fn cesium_loop_remap_check_refuses_uncovered_vertices() {
-        assert!(cesium_loop_remap_fits(3, &[0, 1, 2]).is_ok());
-        assert!(cesium_loop_remap_fits(6, &[0, 1, 2, u32::MAX, 3, 4, 5]).is_ok());
-        assert!(cesium_loop_remap_fits(4, &[0, 1, 2]).is_err());
+        assert!(cesium_loop_remap_fits(3, &[0, 1, 2], &[0, 1, 2]).is_ok());
+        let two = [0, 1, 2, u32::MAX, 3, 4, 5];
+        assert!(cesium_loop_remap_fits(6, &[0, 1, 2, 3, 4, 5], &two).is_ok());
+        assert!(cesium_loop_remap_fits(4, &[0, 1, 2], &[0, 1, 2]).is_err());
+        // A triangle corner at or beyond the loop count is refused even when
+        // the vertex count alone would pass.
+        assert!(cesium_loop_remap_fits(3, &[0, 1, 3], &[0, 1, 2]).is_err());
+    }
+
+    #[test]
+    fn polygon_accessors_use_16_bits_only_below_the_restart_value() {
+        for (values, component) in [
+            (vec![0, 65534, u32::MAX], 5123),
+            (vec![u32::MAX], 5123),
+            (vec![0, 65535], 5125),
+            (vec![70000, u32::MAX], 5125),
+        ] {
+            let mut glb = MetadataGlb::new("test");
+            let accessor = polygon_accessor(&mut glb, &values);
+            let (document, binary) = glb.into_parts();
+            let accessor = &document["accessors"][accessor];
+            assert_eq!(accessor["componentType"], component, "{values:?}");
+            assert_eq!(accessor["count"], values.len());
+            let view = &document["bufferViews"][accessor["bufferView"].as_u64().unwrap() as usize];
+            let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+            let decoded: Vec<u32> = (0..values.len())
+                .map(|i| match component {
+                    5123 => match u16::from_le_bytes(
+                        binary[offset + 2 * i..offset + 2 * i + 2]
+                            .try_into()
+                            .unwrap(),
+                    ) {
+                        u16::MAX => u32::MAX,
+                        v => v as u32,
+                    },
+                    _ => u32::from_le_bytes(
+                        binary[offset + 4 * i..offset + 4 * i + 4]
+                            .try_into()
+                            .unwrap(),
+                    ),
+                })
+                .collect();
+            assert_eq!(decoded, values);
+        }
+    }
+
+    /// A tile mixing a fragmented fill and an ordinary polygon with a hole:
+    /// one triangle primitive whose polygons keep separate offsets, loops
+    /// that cover their own triangles, and Cesium's remap invariant.
+    #[test]
+    fn merged_fill_and_holed_polygon_share_one_polygon_primitive() {
+        let mut fill = point_feature();
+        fill.geometry = Geometry::MultiPolygon(vec![
+            vec![vec![[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 0.]]],
+            vec![vec![[0., 0., 0.], [1., 0., 1.], [0., 0., 1.], [0., 0., 0.]]],
+        ]);
+        fill.surface_fragment = true;
+        let mut holed = point_feature();
+        holed.properties.insert("_source_id".into(), json!("h"));
+        holed.geometry = Geometry::Polygon(vec![
+            vec![
+                [10., 0., 0.],
+                [14., 0., 0.],
+                [14., 0., 4.],
+                [10., 0., 4.],
+                [10., 0., 0.],
+            ],
+            vec![
+                [11., 0., 1.],
+                [11., 0., 2.],
+                [12., 0., 2.],
+                [12., 0., 1.],
+                [11., 0., 1.],
+            ],
+        ]);
+        let options = VectorOptions::default();
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let encoded = emit(
+            &[&fill, &holed],
+            [0.; 3],
+            false,
+            &BTreeMap::new(),
+            &options,
+            &mut Vec::new(),
+            ProducerPolicy::new(false).unwrap(),
+            &attempt,
+        )
+        .unwrap();
+        let (document, views) = read_views(&encoded.bytes);
+        let primitives = document["meshes"][0]["primitives"].as_array().unwrap();
+        assert_eq!(primitives.len(), 1);
+        let primitive = &primitives[0];
+        let polygon = &primitive["extensions"]["EXT_mesh_polygon"];
+        assert_eq!(polygon["count"], 3);
+        let (_, indices) = scalars(&document, &views, &primitive["indices"]);
+        let (_, offsets) = scalars(&document, &views, &polygon["indicesOffsets"]);
+        let (_, loops) = scalars(&document, &views, &polygon["loopIndices"]);
+        let (_, loop_offsets) = scalars(&document, &views, &polygon["loopIndicesOffsets"]);
+        assert_eq!(offsets[..2], [0, 3]);
+        assert_eq!(loop_offsets[..2], [0, 4]);
+        assert!(indices.iter().all(|i| (*i as usize) < loops.len()));
+        let ends =
+            |list: &[u32], n: usize, all: usize| list.get(n + 1).map_or(all, |v| *v as usize);
+        for n in 0..3 {
+            let triangles = &indices[offsets[n] as usize..ends(&offsets, n, indices.len())];
+            let edges: BTreeSet<_> = triangles
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+                .collect();
+            let own = &loops[loop_offsets[n] as usize..ends(&loop_offsets, n, loops.len())];
+            let rings: Vec<_> = own
+                .split(|i| *i == 0xFFFF)
+                .filter(|r| !r.is_empty())
+                .collect();
+            assert_eq!(rings.len(), if n == 2 { 2 } else { 1 }, "polygon {n}");
+            for ring in rings {
+                for k in 0..ring.len() {
+                    let edge = (ring[k], ring[(k + 1) % ring.len()]);
+                    assert!(edges.contains(&edge), "polygon {n} loop edge {edge:?}");
+                }
+            }
+        }
     }
 
     #[test]

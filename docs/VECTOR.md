@@ -170,14 +170,14 @@ Buffered grid clipping and coverage-wide edge reconciliation are not implemented
 
 ### Fills are glTF only
 
-Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 picks its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`, and that decoder requires polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Fills are now encoded like any other polygon: each triangle is one `EXT_mesh_polygon` polygon. The archive contains only glTF content, with no `b3dm`.
+Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`. That decoder needs polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Each fill triangle is now one `EXT_mesh_polygon` polygon. It is stored in the same GLB as the polygon's boundary lines and the tile's other features. Archives contain only glTF content.
 
-- Rings follow the pinned draft: exteriors are counterclockwise and holes clockwise, seen from local up. Triangles face up: away from the earth's centre for geographic polygons, and towards local up along the best-fit plane otherwise. Each exterior loop then winds the same way as its triangles, and each hole the opposite way. This also holds for thin geographic triangles, whose lon/lat orientation can differ from their 3D orientation. A vertical polygon has no up side, so it gets a fixed horizontal side instead.
-- Loop indices and polygon offsets are 16-bit when every value fits. They use 32 bits otherwise.
-- CesiumJS 1.146.0 sizes a per-vertex lookup by the length of the loop list. A polygon vertex numbered past that length loses its triangles. Every polygon vertex is a loop vertex, so the encoder refuses a primitive with more vertices than loop indices.
-- Each fill triangle carries its own loop and two polygon offsets: 12 bytes per fill triangle with 16-bit indices, before compression.
+- **Winding.** Rings follow the pinned draft: exteriors are counterclockwise and holes clockwise, seen from local up. Triangles face up: away from the earth's centre for geographic polygons, and towards local up (+Y) on the best-fit plane otherwise. A vertical polygon has no up side, so it gets a fixed horizontal side. Every loop is wound so that its polygon's triangles lie on its left. This holds for thin geographic triangles, whose lon/lat orientation can disagree with their 3D shape, and for rings that span a hemisphere.
+- **Index size.** Loop indices and polygon offsets are 16-bit when every value is below 65535, and 32-bit otherwise.
+- **Loop coverage.** CesiumJS 1.146.0 sizes a per-vertex lookup by the length of the loop list. A triangle corner numbered past that length loses its triangle. A polygon with a vertex outside its loops is refused when its feature is read. The encoder refuses any primitive that would break the rule.
+- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Sharing one GLB with the boundary lines saves more than this, so fragmented archives are smaller than before.
 
-`--reuse-tileset` refuses an earlier archive that contains `b3dm` fills: "previous archive has legacy b3dm polygon fills". Convert once without `--reuse-tileset` to make a new baseline.
+`--reuse-tileset` refuses an earlier archive that contains `b3dm` fills, with the message "previous archive has legacy b3dm polygon fills". Convert once without `--reuse-tileset` to make a new baseline.
 
 ### Memory and scratch disk
 

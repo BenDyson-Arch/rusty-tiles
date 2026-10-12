@@ -378,6 +378,10 @@ fn polygon_in_chart(
             }
             filled.extend(tri);
         }
+        // Trailing parts whose triangles all collapsed start at the end.
+        for start in &mut triangle_offsets[offset..] {
+            *start = filled.len() as u32;
+        }
         indices = filled;
     }
 
@@ -385,13 +389,18 @@ fn polygon_in_chart(
     if indices.is_empty() {
         return Err(data("polygon produced no triangles"));
     }
-    orient_loops(
-        &positions,
-        &indices,
-        &mut loops,
-        &triangle_offsets,
-        &loop_offsets,
-    );
+    orient_loops(&indices, &mut loops, &triangle_offsets, &loop_offsets);
+    // CesiumJS 1.146.0 sizes its polygon vertex remap by the loop list, so
+    // every vertex, and so every triangle corner, must be a loop vertex.
+    let mut looped = vec![false; positions.len()];
+    for i in loops.iter().filter(|i| **i != u32::MAX) {
+        looped[*i as usize] = true;
+    }
+    if !looped.iter().all(|v| *v) || indices.iter().any(|i| !looped[*i as usize]) {
+        return Err(data(
+            "polygon triangulation uses vertices outside its boundary loops",
+        ));
+    }
     Ok(Polygon {
         positions,
         source_positions,
@@ -405,47 +414,44 @@ fn polygon_in_chart(
     })
 }
 
-/// Wind each polygon's exterior loop like its triangles' front faces and its
-/// holes the other way, as 3D vector areas. Triangles already face up (best-fit
-/// plane) or away from the earth (geographic charts), so exteriors are
-/// counterclockwise and holes clockwise seen from up, per the pinned
-/// EXT_mesh_polygon draft. The 3D comparison matters for thin geographic
-/// triangles, whose chart orientation can disagree with their 3D chords.
+/// Wind every loop so that its polygon lies on its left, seen from the
+/// triangles' front faces: exteriors counterclockwise and holes clockwise
+/// seen from up, per the pinned EXT_mesh_polygon draft. Triangles already face
+/// up (best-fit plane) or away from the earth (geographic charts). Each loop
+/// edge is a triangle edge, and that triangle (counterclockwise) traverses it
+/// in the loop's direction. This local test also holds for thin geographic
+/// triangles, whose chart orientation can disagree with their 3D chords, and
+/// for rings spanning a hemisphere, where no single plane sees the polygon.
 fn orient_loops(
-    positions: &[Point],
     indices: &[u32],
     loops: &mut [u32],
     triangle_offsets: &[u32],
     loop_offsets: &[u32],
 ) {
-    let end = |offsets: &[u32], part: usize, len: usize| {
-        offsets.get(part + 1).map_or(len, |o| *o as usize)
+    let range = |offsets: &[u32], part: usize, len: usize| {
+        let end = offsets
+            .get(part + 1)
+            .map_or(len, |o| (*o as usize).min(len));
+        (offsets[part] as usize).min(end)..end
     };
-    for part in 0..loop_offsets.len() {
-        let triangles =
-            &indices[triangle_offsets[part] as usize..end(triangle_offsets, part, indices.len())];
-        let front = triangles.as_chunks::<3>().0.iter().fold([0.; 3], |sum, t| {
-            let [a, b, c] = t.map(|i| positions[i as usize]);
-            add(sum, cross(sub(b, a), sub(c, a)))
-        });
-        if front == [0.; 3] {
-            continue;
-        }
-        let range = loop_offsets[part] as usize..end(loop_offsets, part, loops.len());
-        for (ring, loop_) in loops[range].split_mut(|i| *i == u32::MAX).enumerate() {
-            // The restart that separates this part from the next ends its range.
-            if loop_.is_empty() {
-                continue;
+    for part in 0..loop_offsets.len().min(triangle_offsets.len()) {
+        let edges: BTreeSet<(u32, u32)> = indices[range(triangle_offsets, part, indices.len())]
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+            .collect();
+        let loop_range = range(loop_offsets, part, loops.len());
+        // The restart that separates this part from the next yields an empty ring.
+        for ring in loops[loop_range].split_mut(|i| *i == u32::MAX) {
+            let (mut along, mut against) = (0, 0);
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                along += usize::from(edges.contains(&(a, b)));
+                against += usize::from(edges.contains(&(b, a)));
             }
-            // Relative to the first vertex: distant small rings keep precision.
-            let origin = positions[loop_[0] as usize];
-            let area = (1..loop_.len()).fold([0.; 3], |sum, i| {
-                let a = sub(positions[loop_[i] as usize], origin);
-                let b = sub(positions[loop_[(i + 1) % loop_.len()] as usize], origin);
-                add(sum, cross(a, b))
-            });
-            if (dot(area, front) > 0.) != (ring == 0) {
-                loop_.reverse();
+            if against > along {
+                ring.reverse();
             }
         }
     }
@@ -914,6 +920,70 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every loop edge must be traversed by a front-facing triangle in the
+    /// loop's direction (polygon on the left), including in repaired
+    /// multi-part polygons.
+    fn assert_loops_follow_triangles(mesh: &Polygon) {
+        let edges: BTreeSet<_> = mesh
+            .indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+            .collect();
+        for ring in mesh.loops.split(|i| *i == u32::MAX) {
+            for i in 0..ring.len() {
+                let edge = (ring[i], ring[(i + 1) % ring.len()]);
+                assert!(
+                    !edges.contains(&(edge.1, edge.0)),
+                    "loop edge {edge:?} runs against its triangle"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn multipart_repaired_polygon_loops_wind_with_their_parts() {
+        // A bowtie repairs into two parts; with a tilt and both source
+        // directions, every part's exterior must be counterclockwise from up.
+        for reversed in [false, true] {
+            let mut ring = vec![
+                [0., 0., 0.],
+                [2., 0.02, 2.],
+                [2., 0.02, 0.],
+                [0., 0., 2.],
+                [0., 0., 0.],
+            ];
+            if reversed {
+                ring.reverse();
+            }
+            let mesh = polygon(&[ring], true).unwrap();
+            assert_eq!(mesh.loop_offsets.len(), 2);
+            for ring in mesh.loops.split(|i| *i == u32::MAX) {
+                assert!(up_area(&mesh.positions, ring) > 0.);
+            }
+            assert_loops_follow_triangles(&mesh);
+        }
+        let holed = vec![
+            vec![[0., 0., 0.], [0., 0., 4.], [4., 0., 4.], [4., 0., 0.]],
+            vec![[1., 0., 1.], [2., 0., 1.], [2., 0., 2.], [1., 0., 2.]],
+        ];
+        let mesh = polygon(&holed, false).unwrap();
+        assert_loops_follow_triangles(&mesh);
+    }
+
+    #[test]
+    fn orient_loops_reverses_against_triangles_and_tolerates_empty_trailing_parts() {
+        // Part 0: one triangle (0,1,2) with its loop reversed. Part 1: all of
+        // its triangles collapsed, so its offset is the end of the indices.
+        let indices = [0, 1, 2];
+        let mut loops = vec![2, 1, 0, u32::MAX, 3, 4, 5];
+        orient_loops(&indices, &mut loops, &[0, 3], &[0, 4]);
+        assert_eq!(loops, [0, 1, 2, u32::MAX, 3, 4, 5]);
+        // An out-of-range offset is clamped rather than sliced.
+        orient_loops(&indices, &mut loops, &[0, 9], &[0, 99]);
     }
 
     /// CesiumJS 1.146.0 sizes its polygon vertex remap by the loop list, so

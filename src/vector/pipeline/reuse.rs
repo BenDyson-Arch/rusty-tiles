@@ -119,7 +119,7 @@ fn encoder_with_framing(framing_source: &str) -> String {
 /// Fragmented polygon fills were b3dm-wrapped before glTF-only fills. Their
 /// payloads cannot be reused; the archive must be rebuilt.
 const LEGACY_FILL: &str = "previous archive has legacy b3dm polygon fills; fills are now glTF \
-     vector content. Run a fresh conversion without --reuse-tileset";
+     vector content. Run a fresh conversion without reuseTileset (--reuse-tileset)";
 
 fn has_legacy_fill(node: &Value) -> bool {
     contents(node).iter().any(|content| {
@@ -673,7 +673,7 @@ mod codec_reuse_tests {
                 Ok(_) => panic!("b3dm fill archive must not be reused"),
             }
         }
-        assert!(LEGACY_FILL.contains("without --reuse-tileset"));
+        assert!(LEGACY_FILL.contains("without reuseTileset"));
     }
 
     /// Exercise the real subtree signature and restore decision: an unchanged
