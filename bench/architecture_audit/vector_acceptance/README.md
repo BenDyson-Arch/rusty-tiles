@@ -1,5 +1,13 @@
 # Independent vector acceptance evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 6 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/vector_acceptance | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/vector_acceptance.tar.zst`, SHA-256
+> `38b2af34648eff4b9b6aa4e6ef8117692af1c32047350e1f4b8b839d71823cb0`.
+> Paths below that no longer exist refer to that snapshot.
+
 The source-derived oracle is `tests/vector_acceptance_oracle.py`. It imports only Python standard-library ZIP, JSON, SQLite and binary decoding. It does not import the converter, frozen Python vector encoder, OGR fixture writers or prior test helpers. Expected identities come from invented fixtures. GeoJSON IDs use JSON string representation; native GeoPackage IDs use numeric FIDs serialized as strings.
 
 Replay portable and native builds separately:

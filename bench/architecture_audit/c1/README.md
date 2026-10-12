@@ -1,5 +1,13 @@
 # C1 payload inspection evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 23 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/c1 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/c1.tar.zst`, SHA-256
+> `ee54328d8bf06ebca0b2badd6e84b87bf85bb29143ab5084e3b78506bfd794b2`.
+> Paths below that no longer exist refer to that snapshot.
+
 Final functional source: `0a1cc94e467f92f615215ddc6327d59d7b3a64c0`, based on develop
 `00a9d1c34c3017a9475e6099c2805d6d2366d70a`.
 Frozen native binary SHA-256: `d4f2bae195067d7b93aec1e98cb82085553c1410f17f9bac3163b5120f5b7eef`.

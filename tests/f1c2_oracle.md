@@ -1,5 +1,9 @@
 # Independent source identity acceptance
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../bench/architecture_audit/README.md)).
+
 `f1c2_oracle.py` is a standard-library source/GLB decoder. It imports no Rust
 encoder, production serializer, or older repository oracle. Source truth comes
 from authored node, mesh, primitive and original TRIANGLES indices before

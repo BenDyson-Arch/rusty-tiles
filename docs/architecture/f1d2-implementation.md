@@ -1,5 +1,9 @@
 # F1d2: bounded adaptive complete-surface certification
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 This is the next #121 foundation slice after merged PR #149, under #113, which
 continues to block 0.4.0. The [contract](f1d2-certificate-contract.md) was settled
 through separate math, ownership and evidence audits before implementation.

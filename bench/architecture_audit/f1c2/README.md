@@ -1,5 +1,13 @@
 # F1c2 evidence storage
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 3 of 89 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1c2 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1c2.tar.zst`, SHA-256
+> `32a160a60731a81f5a5940f45dd29f4cd4aa153bbc14fad883dbc0d995f62e1a`.
+> Paths below that no longer exist refer to that snapshot.
+
 The 30 verbose JSON receipts are stored verbatim as adjacent `.json.gz` files.
 [storage-index.json](storage-index.json) maps their original paths to storage
 paths and records both uncompressed and compressed sizes and SHA256 values.

@@ -1,4 +1,0 @@
-cesium: vector (tileset)
-{"name": "vector", "loaded": true, "seconds": 1.9865, "requests": 5, "bytes": 1595269, "problems": []}
-cesium: pc-deep (tileset)
-{"name": "pc-deep", "loaded": true, "seconds": 14.480800000011921, "requests": 2242, "bytes": 12530286, "problems": []}

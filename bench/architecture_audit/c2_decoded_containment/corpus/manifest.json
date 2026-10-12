@@ -83,7 +83,7 @@
     "bytes": 4416,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 551
+    "units": 10939
    },
    "producerExit": 0,
    "references": 1,
@@ -172,7 +172,7 @@
     "bytes": 4392,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 342
+    "units": 11362
    },
    "producerExit": 0,
    "references": 1,
@@ -265,7 +265,7 @@
     "bytes": 6616,
     "decoded": 464,
     "maxNodeDepth": 1,
-    "units": 551
+    "units": 15459
    },
    "producerExit": 0,
    "references": 1,
@@ -351,7 +351,7 @@
     "bytes": 25584,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 26301
+    "units": 73934
    },
    "producerExit": 0,
    "references": 1,
@@ -440,7 +440,7 @@
     "bytes": 22800,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 11035
+    "units": 67948
    },
    "producerExit": 0,
    "references": 1,
@@ -533,7 +533,7 @@
     "bytes": 11816,
     "decoded": 23332,
     "maxNodeDepth": 1,
-    "units": 26301
+    "units": 84490
    },
    "producerExit": 0,
    "references": 1,
@@ -616,7 +616,7 @@
     "bytes": 4661848,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 5987468
+    "units": 17492428
    },
    "producerExit": 0,
    "references": 63,
@@ -680,7 +680,7 @@
     "bytes": 670080,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 1376272
+    "units": 2731984
    },
    "producerExit": 0,
    "references": 16,
@@ -740,7 +740,7 @@
     "bytes": 670080,
     "decoded": 0,
     "maxNodeDepth": 1,
-    "units": 1376272
+    "units": 2731984
    },
    "producerExit": 0,
    "references": 16,
@@ -782,7 +782,7 @@
     "bytes": 2479,
     "decoded": 1740,
     "maxNodeDepth": 1,
-    "units": 3037
+    "units": 11597
    },
    "producerExit": 0,
    "references": 1,
@@ -837,7 +837,7 @@
     "bytes": 2479,
     "decoded": 1740,
     "maxNodeDepth": 1,
-    "units": 3037
+    "units": 11597
    },
    "producerExit": 0,
    "references": 1,
@@ -880,7 +880,7 @@
     "bytes": 2752,
     "decoded": 1740,
     "maxNodeDepth": 2,
-    "units": 10132
+    "units": 23837
    },
    "producerExit": 0,
    "references": 1,
@@ -936,7 +936,7 @@
     "bytes": 2752,
     "decoded": 1740,
     "maxNodeDepth": 2,
-    "units": 10132
+    "units": 23837
    },
    "producerExit": 0,
    "references": 1,
@@ -979,7 +979,7 @@
     "bytes": 5491,
     "decoded": 1740,
     "maxNodeDepth": 20,
-    "units": 1385556
+    "units": 1535056
    },
    "producerExit": 0,
    "references": 1,
@@ -1035,7 +1035,7 @@
     "bytes": 5491,
     "decoded": 1740,
     "maxNodeDepth": 20,
-    "units": 1385556
+    "units": 1535056
    },
    "producerExit": 0,
    "references": 1,
@@ -1148,7 +1148,7 @@
     "bytes": 98264,
     "decoded": 141612,
     "maxNodeDepth": 1,
-    "units": 511037
+    "units": 979358
    },
    "producerExit": 0,
    "references": 25,
@@ -1191,7 +1191,7 @@
     "bytes": 1474,
     "decoded": 96,
     "maxNodeDepth": 1,
-    "units": 177
+    "units": 4060
    },
    "producerExit": 0,
    "references": 1,

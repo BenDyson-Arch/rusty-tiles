@@ -23,9 +23,10 @@ def main():
     controls = root / 'bench/architecture_audit/c1_payload_integrity/production_controls'
     lanes = [
         # C2 amendment (2026-10-11): stride_controls/2026-10-10 with C2 report expectations,
-        # then the validator-caps amendment (2026-10-11) with the raised limits defaults.
-        ('stride6', controls / 'validator_caps_amendment/2026-10-11/stride_controls',
-         'a934bc207fe17670cb095f0b4023842dd4241ef1b65c9556bbd65aff4bde7040', 6),
+        # then the validator-caps amendment (2026-10-11) with the raised limits defaults,
+        # then the C2-WB cap amendment (2026-10-12): containmentWorkUnits 2^29.
+        ('stride6', controls / 'c2wb_cap_amendment/2026-10-12/stride_controls',
+         '83ca40eb831ad802e1ce1fbbfb1b4ede45905761c305dd91821c8b58bd08d345', 6),
         ('parent1', controls / 'stride_parent_control/2026-10-10',
          '9a049a589538aef1e0d5d566460b4200966063f6eda7b7007f08f3b0fdd063f0', 1),
     ]

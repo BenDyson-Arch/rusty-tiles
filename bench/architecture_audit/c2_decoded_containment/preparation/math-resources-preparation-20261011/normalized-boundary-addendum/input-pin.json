@@ -1,6 +1,0 @@
-{
-  "originalPackage": "/tmp/rusty-tiles-c2-math-resources-preparation-20261011",
-  "originalIntegritySha256": "12e02dcedb0e2536072bc560017270a509a7a669779ce18f1d6ada93c628cfbb",
-  "originalModelSha256": "40080211b50f27e7629bc4b6964e5731290f515c56f3f6ef653f37dd1e9d2b82",
-  "change": "Add four normalized closed-boundary cases and initialize exact0/\u00b11/signed saturation before widened nontrivial rational division. Original frozen35 records remain unchanged."
-}

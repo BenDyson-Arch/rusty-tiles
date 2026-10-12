@@ -1,5 +1,9 @@
 # F1b1 independent texture and resource acceptance
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../bench/architecture_audit/README.md)).
+
 Current replay uses schema4/profile `f1c1-placed-gltf-v1` with an explicit identity root transform and typed Local placement report under the [F1c1 contract](../docs/architecture/f1c1-contract.md). This remains local geometry/resource regression evidence. The separate [F1c1 oracle](f1c1_oracle.md) proves Earth placement and the full world transform chain; historical receipts below retain their original scope.
 
 The earlier F1b3 replay advanced to `f1b-core-pbr-gltf-v1` under the [F1b3 contract](../docs/architecture/f1b3-contract.md). The historical blanket material/UV1/tangent refusals are explicitly replaced with remaining texture-extension/UV2/COLOR1 and missing-authored-tangent boundaries. New admitted positives and extended-corner proof are in [f1b3_oracle.md](f1b3_oracle.md); the historical receipts below retain their original scope and profile.

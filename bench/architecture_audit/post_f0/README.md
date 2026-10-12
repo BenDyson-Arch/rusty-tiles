@@ -1,5 +1,13 @@
 # Post-F0 audit evidence (2026-10-09)
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 13 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/post_f0 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/post_f0.tar.zst`, SHA-256
+> `916a482d445c30bef1cb971ace842fbedea8c9dfeda39ac5eb37f09d027bdb6a`.
+> Paths below that no longer exist refer to that snapshot.
+
 Contract/ownership/evidence audit baseline:
 `d69ba2a7facb99b5b3f5a6efba4e4039bef26be5`. Three GPT-6.1 Sol agents conducted
 separate reviews; coordinator consolidation and issue order are in

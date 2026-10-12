@@ -1,0 +1,7963 @@
+{
+ "fixtures": [
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 7968,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 252189,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 252188,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/extTS-L16.3tz",
+   "id": "extTS-L16",
+   "matrix": "two spheres + step per level, 16 levels (extTS-L16)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 252189,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 3888,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 252189
+    }
+   ],
+   "sha256": "0453bde1685022c185f58401b18ae7ae7385ea24ab245f1ebbf088109a31ebbd",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 248832
+   },
+   "title": "external chain, two spheres and a step per level",
+   "units": 252189
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 14544,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 501149,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 501148,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/extTS-L32.3tz",
+   "id": "extTS-L32",
+   "matrix": "two spheres + step per level, 32 levels (extTS-L32)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 501149,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 7776,
+     "count": 1,
+     "levels": 32,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 501149
+    }
+   ],
+   "sha256": "24d3ae91798f89e616bd50d9654e8c61d30ff2d1c18cca7a68fddf8bb7f25a76",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 256,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 497664
+   },
+   "title": "external chain, two spheres and a step per level",
+   "units": 501149
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 2936,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 91485,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 91484,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/sphere-chain-L16.3tz",
+   "id": "sphere-chain-L16",
+   "matrix": "sphere chain, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 91485,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 1377,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 91485
+    }
+   ],
+   "sha256": "61400f2b904d28e544e659759b6293e990801f4487e4f1dcb75aece61f3322d5",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 88128
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 91485
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4648,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 59357,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 59356,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/box-step-L16.3tz",
+   "id": "box-step-L16",
+   "matrix": "box + step, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 59357,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 875,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 59357
+    }
+   ],
+   "sha256": "278f94f16eec7be6ff57bde2c4f058798419e619fd7105a6faf9191b546fce1e",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 56000
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 59357
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 3400,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 30557,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 30556,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/box-chain-L16.3tz",
+   "id": "box-chain-L16",
+   "matrix": "box chain, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 30557,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 425,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 30557
+    }
+   ],
+   "sha256": "7e018f0f45cedaaf789f1d44652312da86e0370aae468ab77c54647f2468a44c",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 27200
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 30557
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12992,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 261221,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 261220,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/own-content-sphere-1M.3tz",
+   "id": "own-content-sphere-1M",
+   "matrix": "own + content sphere, 1M vertices",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 261221,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 12416,
+     "Dec": 0,
+     "E": 3000,
+     "Idx": 1000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 243,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      81
+     ],
+     "unitsPerReference": 261221
+    }
+   ],
+   "sha256": "1b80fa1fc778a7b12d87a8ca87bd2a7cd7abfba9e9ed941415446ccf2fa527af",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 12416,
+    "Dec": 0,
+    "E": 3000,
+    "Idx": 1000,
+    "Nodes": 1,
+    "vertex": 243000
+   },
+   "title": "one tile",
+   "units": 261221
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12975,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 68221,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 68220,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/one-box-1M.3tz",
+   "id": "one-box-1M",
+   "matrix": "one box, 1M vertices",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 68221,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 12416,
+     "Dec": 0,
+     "E": 3000,
+     "Idx": 1000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 50,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      25
+     ],
+     "unitsPerReference": 68221
+    }
+   ],
+   "sha256": "05ea2a26b0cf9e70f719f74e33ddbf6d5ce56ea7e9db586363dfb91497142500",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 12416,
+    "Dec": 0,
+    "E": 3000,
+    "Idx": 1000,
+    "Nodes": 1,
+    "vertex": 50000
+   },
+   "title": "one tile",
+   "units": 68221
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1769,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 11429,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 11428,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/large-span-box-8-limbs.3tz",
+   "id": "large-span-box-8-limbs",
+   "matrix": "large spans (box 8 limbs)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 11429,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 128,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      64
+     ],
+     "unitsPerReference": 11429
+    }
+   ],
+   "sha256": "cbcc89d264a5b69e95c5664fa8f78f8723bd00c3795de23a4452860922f821e9",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 8192
+   },
+   "title": "one tile",
+   "units": 11429
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1746,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 36005,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 36004,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/large-span-sphere-16-limbs.3tz",
+   "id": "large-span-sphere-16-limbs",
+   "matrix": "large spans (sphere 16 limbs)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 36005,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1176,
+     "Dec": 0,
+     "E": 192,
+     "Idx": 64,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 64,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 512,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      256
+     ],
+     "unitsPerReference": 36005
+    }
+   ],
+   "sha256": "92a3a437ff9eb49dc11a24f56da83b81c0123395f0f3e8bc132a041df4a2d87c",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 1176,
+    "Dec": 0,
+    "E": 192,
+    "Idx": 64,
+    "Nodes": 1,
+    "vertex": 32768
+   },
+   "title": "one tile",
+   "units": 36005
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 3944,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 58774,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 58773,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/nodes-translation.3tz",
+   "id": "nodes-translation",
+   "matrix": "translation-only / rotated nodes",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 58774,
+   "payloadFacts": {
+    "n.glb": {
+     "B": 2708,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 50,
+     "J": 387,
+     "Nodes": 12800,
+     "Prim": 50,
+     "Res": 0,
+     "T": 50,
+     "nodeQ": {
+      "1": 50
+     },
+     "skipped": 0,
+     "steps": 50
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "n.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 29387
+    }
+   ],
+   "sha256": "7e1549386840cd646ce64caaddc0d7ba4808e65c2d07f4deb55881a65f6c3fad",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 12384,
+    "4Prim": 400,
+    "8levels": 64,
+    "B": 5416,
+    "Dec": 0,
+    "E": 6,
+    "Idx": 100,
+    "Nodes": 25600,
+    "vertex": 12500
+   },
+   "title": "50 translation-only nodes x 2 references",
+   "units": 58774
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 6924,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 103934,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 103933,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/nodes-rotated.3tz",
+   "id": "nodes-rotated",
+   "matrix": "translation-only / rotated nodes",
+   "notes": [
+    "generic quaternions: node and level spans are taken from the oracle (B1); every weight, count and term is still applied by hand"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 103934,
+   "payloadFacts": {
+    "n.glb": {
+     "B": 5688,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 50,
+     "J": 437,
+     "Nodes": 25600,
+     "Prim": 50,
+     "Res": 0,
+     "T": 50,
+     "nodeQ": {
+      "4": 50
+     },
+     "skipped": 0,
+     "steps": 50
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 245,
+     "count": 2,
+     "levels": 4,
+     "member": "n.glb",
+     "q": [
+      49,
+      49,
+      49,
+      49
+     ],
+     "unitsPerReference": 51967
+    }
+   ],
+   "sha256": "fc27fef55811a1ffa4f0338c03435a19c7de9730dedadc707da883a739661b0b",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 13984,
+    "4Prim": 400,
+    "8levels": 64,
+    "B": 11376,
+    "Dec": 0,
+    "E": 6,
+    "Idx": 100,
+    "Nodes": 51200,
+    "vertex": 24500
+   },
+   "title": "50 rotated nodes x 2 references",
+   "units": 103934
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 2778,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 23620,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 23619,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/tiny-refs-L4.3tz",
+   "id": "tiny-refs-L4",
+   "matrix": "10 tiny references, depth 1",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 23620,
+   "payloadFacts": {
+    "t.glb": {
+     "B": 404,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 10,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 10,
+     "levels": 4,
+     "member": "t.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2362
+    }
+   ],
+   "sha256": "e930c6653a1211aa42cd4fa11432fa3e9f230cd1af62326832d0bee64348ed13",
+   "size": "ci",
+   "terms": {
+    "1152": 11520,
+    "160Res": 0,
+    "16J": 6400,
+    "4Prim": 40,
+    "8levels": 320,
+    "B": 4040,
+    "Dec": 0,
+    "E": 30,
+    "Idx": 10,
+    "Nodes": 10,
+    "vertex": 1250
+   },
+   "title": "10 references to a one-vertex payload, 4 levels each",
+   "units": 23620
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 14373,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 56290,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 56289,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/tiny-refs-L103.3tz",
+   "id": "tiny-refs-L103",
+   "matrix": "10 tiny references, depth 100",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 56290,
+   "payloadFacts": {
+    "t.glb": {
+     "B": 404,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 10,
+   "referencesHand": [
+    {
+     "V": 2600,
+     "count": 10,
+     "levels": 103,
+     "member": "t.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 5629
+    }
+   ],
+   "sha256": "293d5d4ef0e4c4dacf67ade2d6afbc17478c9b8c3d2331517de84489cbe0a2b6",
+   "size": "ci",
+   "terms": {
+    "1152": 11520,
+    "160Res": 0,
+    "16J": 6400,
+    "4Prim": 40,
+    "8levels": 8240,
+    "B": 4040,
+    "Dec": 0,
+    "E": 30,
+    "Idx": 10,
+    "Nodes": 10,
+    "vertex": 26000
+   },
+   "title": "10 references to a one-vertex payload, 103 levels each",
+   "units": 56290
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 22371,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 3097680,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 3097679,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/refs-to-mid-payload.3tz",
+   "id": "refs-to-mid-payload",
+   "matrix": "20,000 references to a W3 payload (own mid-size payload)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 3097680,
+   "payloadFacts": {
+    "m.glb": {
+     "B": 18576,
+     "Dec": 0,
+     "E": 6000,
+     "Idx": 3000,
+     "J": 54,
+     "Nodes": 256,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000,
+     "nodeQ": {
+      "1": 1
+     },
+     "skipped": 0,
+     "steps": 1
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "m.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 154884
+    }
+   ],
+   "sha256": "743e9a8abebb009ee8f1a475462cffda7c8cc4d7aec922302b860b84e7789e7f",
+   "size": "ci",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 17280,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 371520,
+    "Dec": 0,
+    "E": 120000,
+    "Idx": 60000,
+    "Nodes": 5120,
+    "vertex": 2500000
+   },
+   "title": "20 references to a 1,000-vertex, 3,000-index payload",
+   "units": 3097680
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 3440,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 27524,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 27523,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/unselected-nodes.3tz",
+   "id": "unselected-nodes",
+   "matrix": "unselected {} nodes, 60,000 x 20 references",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 27524,
+   "payloadFacts": {
+    "u.glb": {
+     "B": 2204,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 640,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "u.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 13762
+    }
+   ],
+   "sha256": "5376be81bab2b96f6e58b6557a3f401aed89fe0993709342bb70550bac7f70ce",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 20480,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 4408,
+    "Dec": 0,
+    "E": 6,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": "600 unselected {} nodes x 2 references",
+   "units": 27524
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 3644,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 28564,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 28563,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/skipped-nodes.3tz",
+   "id": "skipped-nodes",
+   "matrix": "selected skipped nodes, 30,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 28564,
+   "payloadFacts": {
+    "s.glb": {
+     "B": 2408,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 641,
+     "Nodes": 301,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 301,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "s.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 14282
+    }
+   ],
+   "sha256": "0d2a622b557241df2b76678c84dc22a7d10508063ee5a988864212816c8dcf93",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 20512,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 4816,
+    "Dec": 0,
+    "E": 6,
+    "Idx": 2,
+    "Nodes": 602,
+    "vertex": 250
+   },
+   "title": "300 selected skipped {} children x 2 references",
+   "units": 28564
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4584,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 14516,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 14515,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/extbuf-20.3tz",
+   "id": "extbuf-20",
+   "matrix": "external buffers, 2,000 / 20,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 14516,
+   "payloadFacts": {
+    "g.gltf": {
+     "B": 1084,
+     "Dec": 88,
+     "E": 3,
+     "Idx": 1,
+     "J": 98,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 20,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "g.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 7258
+    }
+   ],
+   "sha256": "6a9d3a8735a4b153e13e6832e33f38345d43f90ef6de8376b8c3cfd726ee253a",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 6400,
+    "16J": 3136,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 2168,
+    "Dec": 176,
+    "E": 6,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": ".gltf with 20 external buffers (one 12-byte, the rest 4-byte) x 2 references",
+   "units": 14516
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 32064,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 104356,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 104355,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/extbuf-200.3tz",
+   "id": "extbuf-200",
+   "matrix": "external buffers, 2,000 / 20,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 104356,
+   "payloadFacts": {
+    "g.gltf": {
+     "B": 7844,
+     "Dec": 808,
+     "E": 3,
+     "Idx": 1,
+     "J": 638,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 200,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "g.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 52178
+    }
+   ],
+   "sha256": "67a7fb3f36bb0ab050d9c27fcbe28daf25366bb6d81d678614410d4b874a795c",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 64000,
+    "16J": 20416,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 15688,
+    "Dec": 1616,
+    "E": 6,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": ".gltf with 200 external buffers (one 12-byte, the rest 4-byte) x 2 references",
+   "units": 104356
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 7738,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 22495,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 22494,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/shared-accessor-160x4.3tz",
+   "id": "shared-accessor-160x4",
+   "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 22495,
+   "payloadFacts": {
+    "p.glb": {
+     "B": 6644,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 640,
+     "J": 685,
+     "Nodes": 4,
+     "Prim": 640,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 4,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "p.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 22495
+    }
+   ],
+   "sha256": "12c4fb194a9e8ecf2e47c9762f5895ef087f39e5f21344ac32a8641f94e22104",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 10960,
+    "4Prim": 2560,
+    "8levels": 32,
+    "B": 6644,
+    "Dec": 0,
+    "E": 3,
+    "Idx": 640,
+    "Nodes": 4,
+    "vertex": 500
+   },
+   "title": "160 POINTS primitives on one accessor x 4 instances, one reference",
+   "units": 22495
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 7958,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 38299,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 38298,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/shared-accessor-160x20.3tz",
+   "id": "shared-accessor-160x20",
+   "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 38299,
+   "payloadFacts": {
+    "p.glb": {
+     "B": 6864,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 3200,
+     "J": 733,
+     "Nodes": 20,
+     "Prim": 3200,
+     "Res": 0,
+     "T": 20,
+     "nodeQ": {},
+     "skipped": 20,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "p.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 38299
+    }
+   ],
+   "sha256": "69e671078ef7b12d0758dad00e628cbfc42d37df4c678128ba3172625ab1f189",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 11728,
+    "4Prim": 12800,
+    "8levels": 32,
+    "B": 6864,
+    "Dec": 0,
+    "E": 3,
+    "Idx": 3200,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": "160 POINTS primitives on one accessor x 20 instances, one reference",
+   "units": 38299
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4480,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 119950,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 119949,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-flat-numbers-glb.3tz",
+   "id": "json-flat-numbers-glb",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 119950,
+   "payloadFacts": {
+    "j.glb": {
+     "B": 2816,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1241,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "j.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 23990
+    }
+   ],
+   "sha256": "a5d7e98c9f9730fc0a5a9d6a837f4ecafa225cc91c29dbba4827ec3be754efc9",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 99280,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14080,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers-glb, 1200 numbers x 5 references",
+   "units": 119950
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4535,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 120430,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 120429,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-flat-numbers-b3dm.3tz",
+   "id": "json-flat-numbers-b3dm",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 120430,
+   "payloadFacts": {
+    "j.b3dm": {
+     "B": 2864,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1244,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "j.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 24086
+    }
+   ],
+   "sha256": "b782b1d139ebe5c83737d5960a7ca59ae1ae663d782ccc738b51e3abe8e002ef",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 99520,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14320,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers-b3dm, 1200 numbers x 5 references",
+   "units": 120430
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12320,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 63150,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 63149,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-flat-string-glb.3tz",
+   "id": "json-flat-string-glb",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 63150,
+   "payloadFacts": {
+    "j.glb": {
+     "B": 10656,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 41,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "j.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 12630
+    }
+   ],
+   "sha256": "c74a687e2f0ed2339699c5d5800dade7bb15960a0fa5254723bb9c788b9f5c64",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 3280,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 53280,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "string-glb, 10240 characters x 5 references",
+   "units": 63150
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 13063,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 126790,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 126789,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-gltf-1MiB-refs.3tz",
+   "id": "json-gltf-1MiB-refs",
+   "matrix": "1 MiB JSON payload x 1,000 references",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 126790,
+   "payloadFacts": {
+    "j.gltf": {
+     "B": 10677,
+     "Dec": 12,
+     "E": 3,
+     "Idx": 1,
+     "J": 42,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 10,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 10,
+     "levels": 4,
+     "member": "j.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 12679
+    }
+   ],
+   "sha256": "4708ff49ecc8ea90f2b517d94c52d5ad8cb87c93dbb335f90b49a8a838c85ff1",
+   "size": "ci",
+   "terms": {
+    "1152": 11520,
+    "160Res": 0,
+    "16J": 6720,
+    "4Prim": 40,
+    "8levels": 320,
+    "B": 106770,
+    "Dec": 120,
+    "E": 30,
+    "Idx": 10,
+    "Nodes": 10,
+    "vertex": 1250
+   },
+   "title": ".gltf with a 10240-character extras string and a data-URI buffer x 10 references",
+   "units": 126790
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12440,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 68550,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 68549,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-string-glb-60.3tz",
+   "id": "json-deep-string-glb-60",
+   "matrix": "deep string (GLB extras), depth 60",
+   "notes": [
+    "deepest value at JSON depth 61 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 68550,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 10776,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 101,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 13710
+    }
+   ],
+   "sha256": "47e954957caf1903022590d696ff7875610fe61142e1a667eb21b389fb9074d6",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 8080,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 53880,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "string nested 60 deep in glb x 5 references",
+   "units": 68550
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12495,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 69030,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 69029,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-string-b3dm-60.3tz",
+   "id": "json-deep-string-b3dm-60",
+   "matrix": "deep string (b3dm batch table), depth 60",
+   "notes": [
+    "deepest value at JSON depth 61 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 69030,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 10824,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 104,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 13806
+    }
+   ],
+   "sha256": "493d31f9d91fbb905306b8e3020e544c625a65e8c5b054eda680c3d5d7443172",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 8320,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 54120,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "string nested 60 deep in b3dm x 5 references",
+   "units": 69030
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4480,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 120030,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 120029,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-glb-1.3tz",
+   "id": "json-deep-numbers-glb-1",
+   "matrix": "deep numbers (GLB extras), depth 1",
+   "notes": [
+    "deepest value at JSON depth 3 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 120030,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 2816,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1242,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 24006
+    }
+   ],
+   "sha256": "052cb08e0786661530039e9efb7024ba891372e5044452c932d24b4d5d22fa73",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 99360,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14080,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 1 deep in glb x 5 references",
+   "units": 120030
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4540,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 122650,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 122649,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-glb-30.3tz",
+   "id": "json-deep-numbers-glb-30",
+   "matrix": "deep numbers (GLB extras), depth 30",
+   "notes": [
+    "deepest value at JSON depth 32 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 122650,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 2876,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1271,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 24530
+    }
+   ],
+   "sha256": "09499e58e478d939febb04918afae48591547f9a55fc25672fe42851b1e78012",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 101680,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14380,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 30 deep in glb x 5 references",
+   "units": 122650
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4604,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 125530,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 125529,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-glb-62.3tz",
+   "id": "json-deep-numbers-glb-62",
+   "matrix": "deep numbers (GLB extras), depth 62",
+   "notes": [
+    "deepest value at JSON depth 64 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 125530,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 2940,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1303,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 25106
+    }
+   ],
+   "sha256": "998efc8d979126fec1f81cf8712f0186573eecc7ffc047f70b5f23ee65eb22f5",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 104240,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14700,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 62 deep in glb x 5 references",
+   "units": 125530
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4543,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 120550,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 120549,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-b3dm-1.3tz",
+   "id": "json-deep-numbers-b3dm-1",
+   "matrix": "deep numbers (b3dm batch table), depth 1",
+   "notes": [
+    "deepest value at JSON depth 3 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 120550,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 2872,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1245,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 24110
+    }
+   ],
+   "sha256": "95793b9403938a82994fdc1de712c99c83da1bfe99beb7da602a706240799d68",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 99600,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14360,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 1 deep in b3dm x 5 references",
+   "units": 120550
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4599,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 123150,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 123149,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-b3dm-30.3tz",
+   "id": "json-deep-numbers-b3dm-30",
+   "matrix": "deep numbers (b3dm batch table), depth 30",
+   "notes": [
+    "deepest value at JSON depth 32 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 123150,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 2928,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1274,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 24630
+    }
+   ],
+   "sha256": "03ae9edcd4f8c0413b3f9615a03bbb59dacd8a6cf50e5d21f3e61f2f68357f3e",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 101920,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14640,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 30 deep in b3dm x 5 references",
+   "units": 123150
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4655,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 125830,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 125829,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-b3dm-60.3tz",
+   "id": "json-deep-numbers-b3dm-60",
+   "matrix": "deep numbers (b3dm batch table), depth 60",
+   "notes": [
+    "deepest value at JSON depth 62 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 125830,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 2984,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1304,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 25166
+    }
+   ],
+   "sha256": "26d018099230e3327c9be9f3353706045cb25ec7b4adbe0a7d3cd629cc582019",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 104320,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14920,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 60 deep in b3dm x 5 references",
+   "units": 125830
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4663,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 126030,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 126029,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/json-deep-numbers-b3dm-62.3tz",
+   "id": "json-deep-numbers-b3dm-62",
+   "matrix": "deep numbers (b3dm batch table), depth 62",
+   "notes": [
+    "deepest value at JSON depth 64 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 126030,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 2992,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 1306,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 5,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 5,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 25206
+    }
+   ],
+   "sha256": "365b2832f05912f2e24188850dfa3f45713622d0723a4c40b30c558bab7b44bf",
+   "size": "ci",
+   "terms": {
+    "1152": 5760,
+    "160Res": 0,
+    "16J": 104480,
+    "4Prim": 20,
+    "8levels": 160,
+    "B": 14960,
+    "Dec": 0,
+    "E": 15,
+    "Idx": 5,
+    "Nodes": 5,
+    "vertex": 625
+   },
+   "title": "numbers nested 62 deep in b3dm x 5 references",
+   "units": 126030
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 10234,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 42842,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 42841,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/quad.3tz",
+   "id": "quad",
+   "matrix": "one accessor per primitive, 6,000 x 20 (quad)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 42842,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 9140,
+     "Dec": 0,
+     "E": 180,
+     "Idx": 120,
+     "J": 1046,
+     "Nodes": 2,
+     "Prim": 120,
+     "Res": 0,
+     "T": 120,
+     "nodeQ": {},
+     "skipped": 2,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 42842
+    }
+   ],
+   "sha256": "0439f0b9256d0363385087c11388851a3978d601aad0845dbae293741bbafe94",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 16736,
+    "4Prim": 480,
+    "8levels": 32,
+    "B": 9140,
+    "Dec": 0,
+    "E": 180,
+    "Idx": 120,
+    "Nodes": 2,
+    "vertex": 15000
+   },
+   "title": "60 primitives each with its own accessor x 2 instances, one reference",
+   "units": 42842
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 13150,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 62746,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 62745,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/quadB.3tz",
+   "id": "quadB",
+   "matrix": "5,000 accessors x 16,000 primitives x 40 (quadB)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 62746,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 12056,
+     "Dec": 0,
+     "E": 150,
+     "Idx": 640,
+     "J": 1322,
+     "Nodes": 4,
+     "Prim": 640,
+     "Res": 0,
+     "T": 200,
+     "nodeQ": {},
+     "skipped": 4,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 62746
+    }
+   ],
+   "sha256": "6ea64833f59e6742fd2f63b83cfb9518bfe36290c2cf9605d5d87f723970602c",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 21152,
+    "4Prim": 2560,
+    "8levels": 32,
+    "B": 12056,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 640,
+    "Nodes": 4,
+    "vertex": 25000
+   },
+   "title": "50 accessors x 160 primitives (primitive i uses accessor i mod A) x 4 instances, one reference",
+   "units": 62746
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12970,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 69220,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 69219,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/e2e.3tz",
+   "id": "e2e",
+   "matrix": "end-to-end, 5,000 x 15,500 x 500 (one reference; the many-accessor case)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 69220,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 11876,
+     "Dec": 0,
+     "E": 150,
+     "Idx": 775,
+     "J": 1305,
+     "Nodes": 5,
+     "Prim": 775,
+     "Res": 0,
+     "T": 250,
+     "nodeQ": {},
+     "skipped": 5,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 69220
+    }
+   ],
+   "sha256": "dc769e690e779b2882fb1b5f7ae56946ee503ce2299afb0ac30b85d1d1d2c4f8",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 20880,
+    "4Prim": 3100,
+    "8levels": 32,
+    "B": 11876,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 775,
+    "Nodes": 5,
+    "vertex": 31250
+   },
+   "title": "50 accessors x 155 primitives (primitive i uses accessor i mod A) x 5 instances, one reference",
+   "units": 69220
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1692,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 12956,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 12955,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/viewless-SCALAR.3tz",
+   "id": "viewless-SCALAR",
+   "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 12956,
+   "payloadFacts": {
+    "v.glb": {
+     "B": 456,
+     "Dec": 0,
+     "E": 4003,
+     "Idx": 1,
+     "J": 44,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "v.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 6478
+    }
+   ],
+   "sha256": "527b8dd0a68ac6296c634a839f6d081e9b7a9f70a07160c2e968c062c9df21c6",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 1408,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 912,
+    "Dec": 0,
+    "E": 8006,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": "unused viewless SCALAR accessor, 4000 components x 2 references",
+   "units": 12956
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1688,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 12948,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 12947,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/viewless-MAT4.3tz",
+   "id": "viewless-MAT4",
+   "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 12948,
+   "payloadFacts": {
+    "v.glb": {
+     "B": 452,
+     "Dec": 0,
+     "E": 4003,
+     "Idx": 1,
+     "J": 44,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "v.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 6474
+    }
+   ],
+   "sha256": "d36775d8cfcf82a62c2e142ef09c6987956fa90d1820cb1073ad8966a0f1b904",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 1408,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 904,
+    "Dec": 0,
+    "E": 8006,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": "unused viewless MAT4 accessor, 4000 components x 2 references",
+   "units": 12948
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 44240,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 104636,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 104635,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/long-decimals.3tz",
+   "id": "long-decimals",
+   "matrix": "long-significand decimals in node matrix/TRS and accessor min/max (5.1)",
+   "notes": [
+    "every literal rounds to a simple value (1, 0.25, 0.5, ...) only after its last digit: the exact midpoint below the target, zeros, then 1"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 104636,
+   "payloadFacts": {
+    "l.glb": {
+     "B": 43004,
+     "Dec": 0,
+     "E": 34,
+     "Idx": 32,
+     "J": 189,
+     "Nodes": 1024,
+     "Prim": 4,
+     "Res": 0,
+     "T": 32,
+     "nodeQ": {
+      "1": 4
+     },
+     "skipped": 0,
+     "steps": 4
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "l.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 52318
+    }
+   ],
+   "sha256": "fc28061d0c38aa9eca62ec44dfd25a0e8c52efc3dd374ac74f579492fc65194c",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 6048,
+    "4Prim": 32,
+    "8levels": 64,
+    "B": 86008,
+    "Dec": 0,
+    "E": 68,
+    "Idx": 64,
+    "Nodes": 2048,
+    "vertex": 8000
+   },
+   "title": "2 matrix + 2 TRS selected nodes and 10 bounded accessors with 800-character literals x 2 references",
+   "units": 104636
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 5748,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 97922,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 97921,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/meshopt-attributes-raw.3tz",
+   "id": "meshopt-attributes-raw",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-raw",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 97922,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 4512,
+     "Dec": 3600,
+     "E": 900,
+     "Idx": 300,
+     "J": 60,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 300,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 48961
+    }
+   ],
+   "sha256": "73d13f3788c1f38716d50d3d7dd071487118812618ea35514acd7d851ad8f5a8",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 1920,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 9024,
+    "Dec": 7200,
+    "E": 1800,
+    "Idx": 600,
+    "Nodes": 2,
+    "vertex": 75000
+   },
+   "title": "300 vertices via ATTRIBUTES (raw groups) x 2 references",
+   "units": 97922
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 2728,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 91882,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 91881,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/meshopt-attributes-bits.3tz",
+   "id": "meshopt-attributes-bits",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-bits",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 91882,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 1492,
+     "Dec": 3600,
+     "E": 900,
+     "Idx": 300,
+     "J": 60,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 300,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 45941
+    }
+   ],
+   "sha256": "26fa2ff2b536dfdf1c5f9f2ea956d985c2cec89dd17a1a0dbf24f8f5859793f4",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 1920,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 2984,
+    "Dec": 7200,
+    "E": 1800,
+    "Idx": 600,
+    "Nodes": 2,
+    "vertex": 75000
+   },
+   "title": "300 vertices via ATTRIBUTES (bits groups) x 2 references",
+   "units": 91882
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 7548,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 112330,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 112329,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/meshopt-triangles.3tz",
+   "id": "meshopt-triangles",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): triangles",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 112330,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 6312,
+     "Dec": 7200,
+     "E": 1800,
+     "Idx": 900,
+     "J": 79,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 300,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 56165
+    }
+   ],
+   "sha256": "49b56a6b6576957a6c5a2ae0fd984dccb8a1a795f67854fd3c5acba22485d5ba",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 2528,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 12624,
+    "Dec": 14400,
+    "E": 3600,
+    "Idx": 1800,
+    "Nodes": 2,
+    "vertex": 75000
+   },
+   "title": "300 vertices via ATTRIBUTES (raw groups), 900 u32 indices via TRIANGLES x 2 references",
+   "units": 112330
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 6932,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 111098,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 111097,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/meshopt-indices.3tz",
+   "id": "meshopt-indices",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): indices",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 111098,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 5696,
+     "Dec": 7200,
+     "E": 1800,
+     "Idx": 900,
+     "J": 79,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 300,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 55549
+    }
+   ],
+   "sha256": "4a6703363337acf493de0199dd898d1f4c0ebb2f8867358c49a32034bbf6bb11",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 2528,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 11392,
+    "Dec": 14400,
+    "E": 3600,
+    "Idx": 1800,
+    "Nodes": 2,
+    "vertex": 75000
+   },
+   "title": "300 vertices via ATTRIBUTES (raw groups), 900 u32 indices via INDICES x 2 references",
+   "units": 111098
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1071,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2593,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2592,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-base.3tz",
+   "id": "terms-base",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2593,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2593
+    }
+   ],
+   "sha256": "44b368d4689e8aa8c055bff25a07dac5dfdfa620be42728d9ab189e38d7a4257",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 180
+   },
+   "title": "u16 points, one tile box: V = 20 + 25",
+   "units": 2593
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1146,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2693,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2692,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-content-box.3tz",
+   "id": "terms-content-box",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2693,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 70,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2693
+    }
+   ],
+   "sha256": "8b7c89c5fbf5d4abfccb11dea1ae5661c0b53ce09509fd44f0142e880f12f9a6",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 280
+   },
+   "title": "+ content box: +25 per vertex",
+   "units": 2693
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1117,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2721,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2720,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-content-sphere.3tz",
+   "id": "terms-content-sphere",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2721,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 77,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2721
+    }
+   ],
+   "sha256": "b56de068463fc0c723d6fd1fd8b4dfdcbccca35e9df97d06d7f40c22f5aa5a89",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 308
+   },
+   "title": "+ content sphere: +32 per vertex (sphere floor)",
+   "units": 2721
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1182,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2701,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2700,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-parent.3tz",
+   "id": "terms-parent",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2701,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 70,
+     "count": 1,
+     "levels": 2,
+     "member": "w.glb",
+     "q": [
+      1,
+      1
+     ],
+     "unitsPerReference": 2701
+    }
+   ],
+   "sha256": "798556e52f403b8bb8fbc24c05d61d3728ccafb9b1eb4ed569d41caac4dcc365",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 280
+   },
+   "title": "+ parent box, no transform: +25 per vertex, +8",
+   "units": 2701
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1260,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2821,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2820,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-parent-step.3tz",
+   "id": "terms-parent-step",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2821,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 100,
+     "count": 1,
+     "levels": 2,
+     "member": "w.glb",
+     "q": [
+      1,
+      1
+     ],
+     "unitsPerReference": 2821
+    }
+   ],
+   "sha256": "5ca51b385d81eabf43a2b59e95307f6e2077c08b90d955c84fbd814a036fa95f",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 400
+   },
+   "title": "+ parent box, child transform: +(30 + 25) per vertex, +8",
+   "units": 2821
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1231,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2849,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2848,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-parent-sphere-step.3tz",
+   "id": "terms-parent-sphere-step",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2849,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 107,
+     "count": 1,
+     "levels": 2,
+     "member": "w.glb",
+     "q": [
+      1,
+      1
+     ],
+     "unitsPerReference": 2849
+    }
+   ],
+   "sha256": "0a572924f76b100db74b7e519874825e5cb4c60f192ec8e5eb80a6bfe0ec6741",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 720,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 512,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 428
+   },
+   "title": "+ parent sphere, child transform: +(30 + 32) per vertex, +8",
+   "units": 2849
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1099,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2940,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2939,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-node.3tz",
+   "id": "terms-node",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2940,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 540,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 49,
+     "Nodes": 256,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {
+      "1": 1
+     },
+     "skipped": 0,
+     "steps": 1
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2940
+    }
+   ],
+   "sha256": "dc393927436bded01ada298a431ecac8f14e169f0feb757f547ca5c5a633f573",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 784,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 540,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 256,
+    "vertex": 180
+   },
+   "title": "non-skipped node (translation): Nodes 1 -> 256",
+   "units": 2940
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1095,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2713,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2712,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-json.3tz",
+   "id": "terms-json",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2713,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 536,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 51,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2713
+    }
+   ],
+   "sha256": "8d33d1c53a3ac1fc3f5322c029a21472187e88364c941517278937979587ab3c",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 816,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 536,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 180
+   },
+   "title": "+ extras {k: [0, 0, 0, 0]}: J + 6",
+   "units": 2713
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1107,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2701,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2700,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-prim.3tz",
+   "id": "terms-prim",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2701,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 548,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 8,
+     "J": 49,
+     "Nodes": 1,
+     "Prim": 2,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2701
+    }
+   ],
+   "sha256": "428ead42e780884a9cbce58ca397ea00aea21390a6fb4956a7e8ead92b2dcae9",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 784,
+    "4Prim": 8,
+    "8levels": 8,
+    "B": 548,
+    "Dec": 0,
+    "E": 12,
+    "Idx": 8,
+    "Nodes": 1,
+    "vertex": 180
+   },
+   "title": "two primitives on one accessor: Prim 2, Idx 8, T unchanged",
+   "units": 2701
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1167,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 2784,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 2783,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-res.3tz",
+   "id": "terms-res",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 2784,
+   "payloadFacts": {
+    "w.gltf": {
+     "B": 495,
+     "Dec": 32,
+     "E": 12,
+     "Idx": 4,
+     "J": 46,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 1,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.gltf",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2784
+    }
+   ],
+   "sha256": "e07e072f7c356817fb38c28b18859177bd9eb61558c1c78d30d6555013a563dc",
+   "size": "ci",
+   "terms": {
+    "1152": 1152,
+    "160Res": 160,
+    "16J": 736,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 495,
+    "Dec": 32,
+    "E": 12,
+    "Idx": 4,
+    "Nodes": 1,
+    "vertex": 180
+   },
+   "title": ".gltf with one external buffer: Res 1, Dec and B count it",
+   "units": 2784
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1208,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 5294,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 5293,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/terms-two-refs.3tz",
+   "id": "terms-two-refs",
+   "matrix": "per-term identity (C2-WB 3.1/3.2)",
+   "notes": [],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 5294,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 512,
+     "Dec": 0,
+     "E": 12,
+     "Idx": 4,
+     "J": 45,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 4,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 45,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      1
+     ],
+     "unitsPerReference": 2593
+    },
+    {
+     "V": 70,
+     "count": 1,
+     "levels": 2,
+     "member": "w.glb",
+     "q": [
+      1,
+      1
+     ],
+     "unitsPerReference": 2701
+    }
+   ],
+   "sha256": "724ff522ca907988d79d1cd7dd0124c1bd8644433e350bec3bdc0bb00c652cdd",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 0,
+    "16J": 1440,
+    "4Prim": 8,
+    "8levels": 24,
+    "B": 1024,
+    "Dec": 0,
+    "E": 24,
+    "Idx": 8,
+    "Nodes": 2,
+    "vertex": 460
+   },
+   "title": "two references (root and child) to one URI: the per-URI facts twice",
+   "units": 5294
+  },
+  {
+   "agree": true,
+   "bytes": 2560,
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "rotatedBox"
+    ]
+   },
+   "file": "wb/fixtures/chain-worklimit-then-rotated-content.3tz",
+   "id": "chain-worklimit-then-rotated-content",
+   "limits": {
+    "containmentWorkUnits": 100
+   },
+   "matrix": "chain bits (C2-WB 3.3)",
+   "notes": [],
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "rotatedBox"
+    ]
+   },
+   "problems": [],
+   "references": 0,
+   "sha256": "0bab4ed9496d5543a936fe5827b97eb589b373926355be840b38ceb1a851bda7",
+   "size": "ci",
+   "title": "reference 0 exceeds the cap; reference 1's content volume is rotated: rotatedBox, not workLimit"
+  },
+  {
+   "agree": true,
+   "bytes": 2559,
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "workLimit"
+    ]
+   },
+   "file": "wb/fixtures/chain-worklimit-base.3tz",
+   "id": "chain-worklimit-base",
+   "limits": {
+    "containmentWorkUnits": 100
+   },
+   "matrix": "chain bits (C2-WB 3.3)",
+   "notes": [],
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "workLimit"
+    ]
+   },
+   "problems": [],
+   "references": 0,
+   "sha256": "f945bb5db3d53760393c6dbebd1f45200098b848b26ddb43c8150f082c67f792",
+   "size": "ci",
+   "title": "the same archive with an axis-aligned content box: workLimit at the same cap"
+  },
+  {
+   "agree": true,
+   "bytes": 1236,
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "regionVolume"
+    ]
+   },
+   "file": "wb/fixtures/chain-region-ancestor.3tz",
+   "id": "chain-region-ancestor",
+   "limits": {
+    "containmentWorkUnits": 1
+   },
+   "matrix": "chain bits (C2-WB 3.3)",
+   "notes": [],
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "regionVolume"
+    ]
+   },
+   "problems": [],
+   "references": 0,
+   "sha256": "217b49811987ddd708c69b144701ffdd173cce5f1216e6150bc1ffa3c96f2bd3",
+   "size": "ci",
+   "title": "region-only hierarchy, region ancestors two levels up, cap 1: regionVolume, not workLimit"
+  },
+  {
+   "agree": true,
+   "bytes": 1578,
+   "expected": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "rotatedBox"
+    ]
+   },
+   "file": "wb/fixtures/chain-external-rotated-content.3tz",
+   "id": "chain-external-rotated-content",
+   "limits": {
+    "containmentWorkUnits": 1
+   },
+   "matrix": "chain bits (C2-WB 3.3)",
+   "notes": [],
+   "oracle": {
+    "outcome": "NotInspected",
+    "reasons": [
+     "rotatedBox"
+    ]
+   },
+   "problems": [],
+   "references": 0,
+   "sha256": "b1bcbdeaa53e4cda70177def458bc203266d3403679bbdd32090a2d1f2069336",
+   "size": "ci",
+   "title": "external tileset referenced through a rotated content volume, cap 1: rotatedBox"
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1775,
+   "capPair": {
+    "atCap": {
+     "containmentWorkUnits": 5602,
+     "ok": true,
+     "outcome": "Contained",
+     "reasons": null
+    },
+    "oneUnder": {
+     "containmentWorkUnits": 5601,
+     "ok": true,
+     "outcome": "NotInspected",
+     "reasons": [
+      "workLimit"
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/fixtures/reading-res-duplicate-uri.3tz",
+   "id": "reading-res-duplicate-uri",
+   "matrix": "reading probe (Res per entry)",
+   "notes": [
+    "reading: Res = 2 (per buffer entry); per distinct member it would be 1 (-160 per reference)"
+   ],
+   "oracle": {
+    "outcome": "Contained"
+   },
+   "oracleUnits": 5602,
+   "payloadFacts": {
+    "g.gltf": {
+     "B": 435,
+     "Dec": 24,
+     "E": 3,
+     "Idx": 1,
+     "J": 44,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 2,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 2,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 2,
+     "levels": 4,
+     "member": "g.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2801
+    }
+   ],
+   "sha256": "09bc427ec676a080acadd39b7acbe99f1a74975085682b6010e839b8a0f60503",
+   "size": "ci",
+   "terms": {
+    "1152": 2304,
+    "160Res": 640,
+    "16J": 1408,
+    "4Prim": 8,
+    "8levels": 64,
+    "B": 870,
+    "Dec": 48,
+    "E": 6,
+    "Idx": 2,
+    "Nodes": 2,
+    "vertex": 250
+   },
+   "title": ".gltf whose buffers 0 and 1 both name b0.bin x 2 references",
+   "units": 5602
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 247212,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/extTS-L16.3tz",
+   "id": "extTS-L16",
+   "matrix": "two spheres + step per level, 16 levels (extTS-L16)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 78082345,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 240420,
+     "Dec": 0,
+     "E": 60000,
+     "Idx": 20000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 20000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 3888,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 78082345
+    }
+   ],
+   "sha256": "5ab2fdfcfa72b396b07cc532cfe9b46867659255842eb8649de995ea2697e8a0",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 240420,
+    "Dec": 0,
+    "E": 60000,
+    "Idx": 20000,
+    "Nodes": 1,
+    "vertex": 77760000
+   },
+   "title": "external chain, two spheres and a step per level",
+   "units": 78082345
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 253788,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/extTS-L32.3tz",
+   "id": "extTS-L32",
+   "matrix": "two spheres + step per level, 32 levels (extTS-L32)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 155842473,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 240420,
+     "Dec": 0,
+     "E": 60000,
+     "Idx": 20000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 20000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 7776,
+     "count": 1,
+     "levels": 32,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 155842473
+    }
+   ],
+   "sha256": "179faa11d282bdb9653be8728a6074614df0024e4b9f754ccea949a30fe04d60",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 256,
+    "B": 240420,
+    "Dec": 0,
+    "E": 60000,
+    "Idx": 20000,
+    "Nodes": 1,
+    "vertex": 155520000
+   },
+   "title": "external chain, two spheres and a step per level",
+   "units": 155842473
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 242180,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/sphere-chain-L16.3tz",
+   "id": "sphere-chain-L16",
+   "matrix": "sphere chain, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 27862345,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 240420,
+     "Dec": 0,
+     "E": 60000,
+     "Idx": 20000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 20000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 1377,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81,
+      81
+     ],
+     "unitsPerReference": 27862345
+    }
+   ],
+   "sha256": "fbfeae4eef5c6c4995e40edded8b6cd1f67a773575bb19b2c669d7e4b5db7f5a",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 240420,
+    "Dec": 0,
+    "E": 60000,
+    "Idx": 20000,
+    "Nodes": 1,
+    "vertex": 27540000
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 27862345
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 243892,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/box-step-L16.3tz",
+   "id": "box-step-L16",
+   "matrix": "box + step, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 17822345,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 240420,
+     "Dec": 0,
+     "E": 60000,
+     "Idx": 20000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 20000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 875,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 17822345
+    }
+   ],
+   "sha256": "0ae1b0a1c5419a2d46464c7c2eff73ef539df17c2eb0ff7da147d17ff00f1a21",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 240420,
+    "Dec": 0,
+    "E": 60000,
+    "Idx": 20000,
+    "Nodes": 1,
+    "vertex": 17500000
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 17822345
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 242644,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/box-chain-L16.3tz",
+   "id": "box-chain-L16",
+   "matrix": "box chain, 16 levels",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 8822345,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 240420,
+     "Dec": 0,
+     "E": 60000,
+     "Idx": 20000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 20000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 425,
+     "count": 1,
+     "levels": 16,
+     "member": "w.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 8822345
+    }
+   ],
+   "sha256": "d6d4f5c23340c1deb4e07682cf69338383ef2b191fae79ee9a85fe8425750890",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 128,
+    "B": 240420,
+    "Dec": 0,
+    "E": 60000,
+    "Idx": 20000,
+    "Nodes": 1,
+    "vertex": 8500000
+   },
+   "title": "nested tiles, payload at the leaf",
+   "units": 8822345
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12001000,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/own-content-sphere-1M.3tz",
+   "id": "own-content-sphere-1M",
+   "matrix": "own + content sphere, 1M vertices",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 259002229,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 12000424,
+     "Dec": 0,
+     "E": 3000000,
+     "Idx": 1000000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 243,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      81
+     ],
+     "unitsPerReference": 259002229
+    }
+   ],
+   "sha256": "f1df24bb7846c08c4f0964c174f0d7b450798343e05754059a1878366bbfa805",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 12000424,
+    "Dec": 0,
+    "E": 3000000,
+    "Idx": 1000000,
+    "Nodes": 1,
+    "vertex": 243000000
+   },
+   "title": "one tile",
+   "units": 259002229
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 12000983,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/one-box-1M.3tz",
+   "id": "one-box-1M",
+   "matrix": "one box, 1M vertices",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 66002229,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 12000424,
+     "Dec": 0,
+     "E": 3000000,
+     "Idx": 1000000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 50,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      25
+     ],
+     "unitsPerReference": 66002229
+    }
+   ],
+   "sha256": "f47ec3dfe6ac4afa3c5c1fff0515a5835712d1ad8726fe73dea37f45ade58444",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 12000424,
+    "Dec": 0,
+    "E": 3000000,
+    "Idx": 1000000,
+    "Nodes": 1,
+    "vertex": 50000000
+   },
+   "title": "one tile",
+   "units": 66002229
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1201017,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/large-span-box-8-limbs.3tz",
+   "id": "large-span-box-8-limbs",
+   "matrix": "large spans (box 8 limbs)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 14402229,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1200424,
+     "Dec": 0,
+     "E": 300000,
+     "Idx": 100000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 100000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 128,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      64
+     ],
+     "unitsPerReference": 14402229
+    }
+   ],
+   "sha256": "fdab874f395b9a3a18490b928477f288e806d4188914ad2c49fa9f7ec5beec7f",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 1200424,
+    "Dec": 0,
+    "E": 300000,
+    "Idx": 100000,
+    "Nodes": 1,
+    "vertex": 12800000
+   },
+   "title": "one tile",
+   "units": 14402229
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1200994,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/large-span-sphere-16-limbs.3tz",
+   "id": "large-span-sphere-16-limbs",
+   "matrix": "large spans (sphere 16 limbs)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 52802229,
+   "payloadFacts": {
+    "w.glb": {
+     "B": 1200424,
+     "Dec": 0,
+     "E": 300000,
+     "Idx": 100000,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 100000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 512,
+     "count": 1,
+     "levels": 1,
+     "member": "w.glb",
+     "q": [
+      256
+     ],
+     "unitsPerReference": 52802229
+    }
+   ],
+   "sha256": "de5522f2d6741f34b85f58fab96dee821af17401916190090c41dc98548a4703",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 640,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 1200424,
+    "Dec": 0,
+    "E": 300000,
+    "Idx": 100000,
+    "Nodes": 1,
+    "vertex": 51200000
+   },
+   "title": "one tile",
+   "units": 52802229
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 746871,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/nodes-translation.3tz",
+   "id": "nodes-translation",
+   "matrix": "translation-only / rotated nodes",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 164297100,
+   "payloadFacts": {
+    "n.glb": {
+     "B": 743076,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 15000,
+     "J": 105037,
+     "Nodes": 3840000,
+     "Prim": 15000,
+     "Res": 0,
+     "T": 15000,
+     "nodeQ": {
+      "1": 15000
+     },
+     "skipped": 0,
+     "steps": 15000
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "n.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 8214855
+    }
+   ],
+   "sha256": "54bb70c452b16f5b3162f4d69cd0915bb1ec1537275ff1fb28e23917987ce779",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 33611840,
+    "4Prim": 1200000,
+    "8levels": 640,
+    "B": 14861520,
+    "Dec": 0,
+    "E": 60,
+    "Idx": 300000,
+    "Nodes": 76800000,
+    "vertex": 37500000
+   },
+   "title": "15000 translation-only nodes x 20 references",
+   "units": 164297100
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "Contained",
+   "bytes": 1634871,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/nodes-rotated.3tz",
+   "id": "nodes-rotated",
+   "matrix": "translation-only / rotated nodes",
+   "notes": [
+    "generic quaternions: node and level spans are taken from the oracle (B1); every weight, count and term is still applied by hand"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 299925900,
+   "payloadFacts": {
+    "n.glb": {
+     "B": 1631076,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 15000,
+     "J": 120037,
+     "Nodes": 7693440,
+     "Prim": 15000,
+     "Res": 0,
+     "T": 15000,
+     "nodeQ": {
+      "4": 14979,
+      "9": 21
+     },
+     "skipped": 0,
+     "steps": 15000
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 245,
+     "count": 20,
+     "levels": 4,
+     "member": "n.glb",
+     "q": [
+      49,
+      49,
+      49,
+      49
+     ],
+     "unitsPerReference": 14996295
+    }
+   ],
+   "sha256": "b95a255de9652bdf81a33fb46ee079f9c9f256d559cdb11302bb98eb5d22f30b",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 38411840,
+    "4Prim": 1200000,
+    "8levels": 640,
+    "B": 32621520,
+    "Dec": 0,
+    "E": 60,
+    "Idx": 300000,
+    "Nodes": 153868800,
+    "vertex": 73500000
+   },
+   "title": "15000 rotated nodes x 20 references",
+   "units": 299925900
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 14255100,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/tiny-refs-L4.3tz",
+   "id": "tiny-refs-L4",
+   "matrix": "100,000 tiny references, depth 1",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 236200000,
+   "payloadFacts": {
+    "t.glb": {
+     "B": 404,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 100000,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 100000,
+     "levels": 4,
+     "member": "t.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2362
+    }
+   ],
+   "sha256": "32afeddd9adcb094193ad8d4262b46333369eef4653ef0e06a7728cfd0c16fe8",
+   "size": "large",
+   "terms": {
+    "1152": 115200000,
+    "160Res": 0,
+    "16J": 64000000,
+    "4Prim": 400000,
+    "8levels": 3200000,
+    "B": 40400000,
+    "Dec": 0,
+    "E": 300000,
+    "Idx": 100000,
+    "Nodes": 100000,
+    "vertex": 12500000
+   },
+   "title": "100000 references to a one-vertex payload, 4 levels each",
+   "units": 236200000
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "workLimit",
+   "bytes": 14266695,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/tiny-refs-L103.3tz",
+   "id": "tiny-refs-L103",
+   "matrix": "100,000 tiny references, depth 100",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 562900000,
+   "payloadFacts": {
+    "t.glb": {
+     "B": 404,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 40,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 100000,
+   "referencesHand": [
+    {
+     "V": 2600,
+     "count": 100000,
+     "levels": 103,
+     "member": "t.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 5629
+    }
+   ],
+   "sha256": "e8ce913e47b08eb36701ac16786e321f376fbaf188e52fd544c77af8a8f64bc6",
+   "size": "large",
+   "terms": {
+    "1152": 115200000,
+    "160Res": 0,
+    "16J": 64000000,
+    "4Prim": 400000,
+    "8levels": 82400000,
+    "B": 40400000,
+    "Dec": 0,
+    "E": 300000,
+    "Idx": 100000,
+    "Nodes": 100000,
+    "vertex": 260000000
+   },
+   "title": "100000 references to a one-vertex payload, 103 levels each",
+   "units": 562900000
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "workLimit",
+   "bytes": 2869946,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/refs-to-mid-payload.3tz",
+   "id": "refs-to-mid-payload",
+   "matrix": "20,000 references to a W3 payload (own mid-size payload)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 3097680000,
+   "payloadFacts": {
+    "m.glb": {
+     "B": 18576,
+     "Dec": 0,
+     "E": 6000,
+     "Idx": 3000,
+     "J": 54,
+     "Nodes": 256,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000,
+     "nodeQ": {
+      "1": 1
+     },
+     "skipped": 0,
+     "steps": 1
+    }
+   },
+   "problems": [],
+   "references": 20000,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20000,
+     "levels": 4,
+     "member": "m.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 154884
+    }
+   ],
+   "sha256": "c921030cc1b13adb86cc4f1375258bfbbf7d26b1d36e94dedb7e49f8ce5564c5",
+   "size": "large",
+   "terms": {
+    "1152": 23040000,
+    "160Res": 0,
+    "16J": 17280000,
+    "4Prim": 80000,
+    "8levels": 640000,
+    "B": 371520000,
+    "Dec": 0,
+    "E": 120000000,
+    "Idx": 60000000,
+    "Nodes": 5120000,
+    "vertex": 2500000000
+   },
+   "title": "20000 references to a 1,000-vertex, 3,000-index payload",
+   "units": 3097680000
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 184199,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/unselected-nodes.3tz",
+   "id": "unselected-nodes",
+   "matrix": "unselected {} nodes, 60,000 x 20 references",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 22847240,
+   "payloadFacts": {
+    "u.glb": {
+     "B": 180404,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 60040,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "u.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1142362
+    }
+   ],
+   "sha256": "722feacc9938acdadb7e13bf7d131a6f0f18a9fed82c396cc468a6abb754dab5",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 19212800,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 3608080,
+    "Dec": 0,
+    "E": 60,
+    "Idx": 20,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": "60000 unselected {} nodes x 20 references",
+   "units": 22847240
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 263107,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/skipped-nodes.3tz",
+   "id": "skipped-nodes",
+   "matrix": "selected skipped nodes, 30,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 25025720,
+   "payloadFacts": {
+    "s.glb": {
+     "B": 259312,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 60041,
+     "Nodes": 30001,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 30001,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "s.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1251286
+    }
+   ],
+   "sha256": "76f6732cedbd4e6201876a8dd85ffe316317c4600befe977152056729b33c5ad",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 19213120,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 5186240,
+    "Dec": 0,
+    "E": 60,
+    "Idx": 20,
+    "Nodes": 600020,
+    "vertex": 2500
+   },
+   "title": "30000 selected skipped {} children x 20 references",
+   "units": 25025720
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 314841,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/extbuf-2000.3tz",
+   "id": "extbuf-2000",
+   "matrix": "external buffers, 2,000 / 20,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 10063560,
+   "payloadFacts": {
+    "g.gltf": {
+     "B": 77244,
+     "Dec": 8008,
+     "E": 3,
+     "Idx": 1,
+     "J": 6038,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 2000,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "g.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 503178
+    }
+   ],
+   "sha256": "12d41c34475896c0d974c021f9fb266db6c90fc9eb3733c966cd63f0a4ade02e",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 6400000,
+    "16J": 1932160,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 1544880,
+    "Dec": 160160,
+    "E": 60,
+    "Idx": 20,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": ".gltf with 2000 external buffers (one 12-byte, the rest 4-byte) x 20 references",
+   "units": 10063560
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 3170841,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/extbuf-20000.3tz",
+   "id": "extbuf-20000",
+   "matrix": "external buffers, 2,000 / 20,000 x 20",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 100623560,
+   "payloadFacts": {
+    "g.gltf": {
+     "B": 789244,
+     "Dec": 80008,
+     "E": 3,
+     "Idx": 1,
+     "J": 60038,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 20000,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "g.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 5031178
+    }
+   ],
+   "sha256": "ac7208c1928a31b3c2d180997904fc4df19c6e558ea7650fe4d4491a61b6b3ad",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 64000000,
+    "16J": 19212160,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 15784880,
+    "Dec": 1600160,
+    "E": 60,
+    "Idx": 20,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": ".gltf with 20000 external buffers (one 12-byte, the rest 4-byte) x 20 references",
+   "units": 100623560
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 625998,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/shared-accessor-16000x40.3tz",
+   "id": "shared-accessor-16000x40",
+   "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 4857579,
+   "payloadFacts": {
+    "p.glb": {
+     "B": 624904,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 640000,
+     "J": 64153,
+     "Nodes": 40,
+     "Prim": 640000,
+     "Res": 0,
+     "T": 40,
+     "nodeQ": {},
+     "skipped": 40,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "p.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 4857579
+    }
+   ],
+   "sha256": "c7b6cf7a53e3a3edf804c2e8ff14cbcba2c7e97fa0512b697239f08dc1bd9420",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 1026448,
+    "4Prim": 2560000,
+    "8levels": 32,
+    "B": 624904,
+    "Dec": 0,
+    "E": 3,
+    "Idx": 640000,
+    "Nodes": 40,
+    "vertex": 5000
+   },
+   "title": "16000 POINTS primitives on one accessor x 40 instances, one reference",
+   "units": 4857579
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 628338,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/shared-accessor-16000x200.3tz",
+   "id": "shared-accessor-16000x200",
+   "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 17687759,
+   "payloadFacts": {
+    "p.glb": {
+     "B": 627244,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 3200000,
+     "J": 64633,
+     "Nodes": 200,
+     "Prim": 3200000,
+     "Res": 0,
+     "T": 200,
+     "nodeQ": {},
+     "skipped": 200,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "p.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 17687759
+    }
+   ],
+   "sha256": "26405830879013a5dfb8ec6202064a2601ca39bc9098125811149fbf5be71ebc",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 1034128,
+    "4Prim": 12800000,
+    "8levels": 32,
+    "B": 627244,
+    "Dec": 0,
+    "E": 3,
+    "Idx": 3200000,
+    "Nodes": 200,
+    "vertex": 25000
+   },
+   "title": "16000 POINTS primitives on one accessor x 200 instances, one reference",
+   "units": 17687759
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248490,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-flat-numbers-glb.3tz",
+   "id": "json-flat-numbers-glb",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108119500,
+   "payloadFacts": {
+    "j.glb": {
+     "B": 240416,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120041,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "j.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2162390
+    }
+   ],
+   "sha256": "cd447053fd7d9bef4f9c54f664bb43c60fb79a7d7c53387ecdc62a6370207585",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96032800,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12020800,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers-glb, 120000 numbers x 50 references",
+   "units": 108119500
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248590,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-flat-numbers-b3dm.3tz",
+   "id": "json-flat-numbers-b3dm",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108124300,
+   "payloadFacts": {
+    "j.b3dm": {
+     "B": 240464,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120044,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "j.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2162486
+    }
+   ],
+   "sha256": "66d7aea695d19ceb29ebfd9c74b042b0c6b345acd26144b61c8cc0ecff5bae29",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96035200,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12023200,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers-b3dm, 120000 numbers x 50 references",
+   "units": 108124300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1057066,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-flat-string-glb.3tz",
+   "id": "json-flat-string-glb",
+   "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 52548300,
+   "payloadFacts": {
+    "j.glb": {
+     "B": 1048992,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 41,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "j.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1050966
+    }
+   ],
+   "sha256": "0e404b3117c4578db2283554085e06dada8725a033b57292a5b5bba261e3b9e2",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 32800,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 52449600,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "string-glb, 1048576 characters x 50 references",
+   "units": 52548300
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "workLimit",
+   "bytes": 1193308,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-gltf-1MiB-refs.3tz",
+   "id": "json-gltf-1MiB-refs",
+   "matrix": "1 MiB JSON payload x 1,000 references",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 1051015000,
+   "payloadFacts": {
+    "j.gltf": {
+     "B": 1049013,
+     "Dec": 12,
+     "E": 3,
+     "Idx": 1,
+     "J": 42,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1000,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1000,
+     "levels": 4,
+     "member": "j.gltf",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1051015
+    }
+   ],
+   "sha256": "bac8e7028d0feced60837b3e3084d469792784db6288a70f1e1d4dda9ff0ff07",
+   "size": "large",
+   "terms": {
+    "1152": 1152000,
+    "160Res": 0,
+    "16J": 672000,
+    "4Prim": 4000,
+    "8levels": 32000,
+    "B": 1049013000,
+    "Dec": 12000,
+    "E": 3000,
+    "Idx": 1000,
+    "Nodes": 1000,
+    "vertex": 125000
+   },
+   "title": ".gltf with a 1048576-character extras string and a data-URI buffer x 1000 references",
+   "units": 1051015000
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1057186,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-string-glb-60.3tz",
+   "id": "json-deep-string-glb-60",
+   "matrix": "deep string (GLB extras), depth 60",
+   "notes": [
+    "deepest value at JSON depth 61 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 52602300,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 1049112,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 101,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1052046
+    }
+   ],
+   "sha256": "677f38b98a100d2e68b573eea5af1155d5518cae1ff293a8a7ec3f1456b880ff",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 80800,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 52455600,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "string nested 60 deep in glb x 50 references",
+   "units": 52602300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1057286,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-string-b3dm-60.3tz",
+   "id": "json-deep-string-b3dm-60",
+   "matrix": "deep string (b3dm batch table), depth 60",
+   "notes": [
+    "deepest value at JSON depth 61 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 52607100,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 1049160,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 104,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 1052142
+    }
+   ],
+   "sha256": "a97b50c032e9b2b703e13e09b6dbf3ffa03d9049efe675085eef299944b2741c",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 83200,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 52458000,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "string nested 60 deep in b3dm x 50 references",
+   "units": 52607100
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248490,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-glb-1.3tz",
+   "id": "json-deep-numbers-glb-1",
+   "matrix": "deep numbers (GLB extras), depth 1",
+   "notes": [
+    "deepest value at JSON depth 3 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108120300,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 240416,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120042,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2162406
+    }
+   ],
+   "sha256": "eef5d5d1b46923223052f24b955839389d9e2cb557d71b046c0666066bdf34cc",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96033600,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12020800,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 1 deep in glb x 50 references",
+   "units": 108120300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248550,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-glb-30.3tz",
+   "id": "json-deep-numbers-glb-30",
+   "matrix": "deep numbers (GLB extras), depth 30",
+   "notes": [
+    "deepest value at JSON depth 32 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108146500,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 240476,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120071,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2162930
+    }
+   ],
+   "sha256": "0ebb0a29fbd1fb85d8b3a2fe1daad8165b708115ab3e97162490599a79ea484f",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96056800,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12023800,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 30 deep in glb x 50 references",
+   "units": 108146500
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248614,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-glb-62.3tz",
+   "id": "json-deep-numbers-glb-62",
+   "matrix": "deep numbers (GLB extras), depth 62",
+   "notes": [
+    "deepest value at JSON depth 64 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108175300,
+   "payloadFacts": {
+    "d.glb": {
+     "B": 240540,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120103,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2163506
+    }
+   ],
+   "sha256": "c14849f577c1708ee0d03e41902e86b404a242cd01889aaf158fb4965ba5483c",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96082400,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12027000,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 62 deep in glb x 50 references",
+   "units": 108175300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248598,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-b3dm-1.3tz",
+   "id": "json-deep-numbers-b3dm-1",
+   "matrix": "deep numbers (b3dm batch table), depth 1",
+   "notes": [
+    "deepest value at JSON depth 3 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108125500,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 240472,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120045,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2162510
+    }
+   ],
+   "sha256": "c2b95978e7e8f233bb9a014bee0f5d567ad4e9562799acce555b22748cb295b8",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96036000,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12023600,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 1 deep in b3dm x 50 references",
+   "units": 108125500
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248654,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-b3dm-30.3tz",
+   "id": "json-deep-numbers-b3dm-30",
+   "matrix": "deep numbers (b3dm batch table), depth 30",
+   "notes": [
+    "deepest value at JSON depth 32 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108151500,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 240528,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120074,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2163030
+    }
+   ],
+   "sha256": "3b921404fa02dad5f1141c087783558f55ae6bbb071a3a8f159dd4cd2453c67c",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96059200,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12026400,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 30 deep in b3dm x 50 references",
+   "units": 108151500
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248710,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-b3dm-60.3tz",
+   "id": "json-deep-numbers-b3dm-60",
+   "matrix": "deep numbers (b3dm batch table), depth 60",
+   "notes": [
+    "deepest value at JSON depth 62 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108178300,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 240584,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120104,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2163566
+    }
+   ],
+   "sha256": "ef88812dc529d041bd5b25ac3c8cfce500a4b6fbc40db09e10b932551bc021d3",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96083200,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12029200,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 60 deep in b3dm x 50 references",
+   "units": 108178300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 248718,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/json-deep-numbers-b3dm-62.3tz",
+   "id": "json-deep-numbers-b3dm-62",
+   "matrix": "deep numbers (b3dm batch table), depth 62",
+   "notes": [
+    "deepest value at JSON depth 64 (root 0)"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 108180300,
+   "payloadFacts": {
+    "d.b3dm": {
+     "B": 240592,
+     "Dec": 0,
+     "E": 3,
+     "Idx": 1,
+     "J": 120106,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 50,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 50,
+     "levels": 4,
+     "member": "d.b3dm",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 2163606
+    }
+   ],
+   "sha256": "8bcf3bc9b4db31520b7d0956f63feb1ae75da7967fad5c8f43dfccbe64535326",
+   "size": "large",
+   "terms": {
+    "1152": 57600,
+    "160Res": 0,
+    "16J": 96084800,
+    "4Prim": 200,
+    "8levels": 1600,
+    "B": 12029600,
+    "Dec": 0,
+    "E": 150,
+    "Idx": 50,
+    "Nodes": 50,
+    "vertex": 6250
+   },
+   "title": "numbers nested 62 deep in b3dm x 50 references",
+   "units": 108180300
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 900498,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/quad.3tz",
+   "id": "quad",
+   "matrix": "one accessor per primitive, 6,000 x 20 (quad)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 18151888,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 899404,
+     "Dec": 0,
+     "E": 18000,
+     "Idx": 120000,
+     "J": 102080,
+     "Nodes": 20,
+     "Prim": 120000,
+     "Res": 0,
+     "T": 120000,
+     "nodeQ": {},
+     "skipped": 20,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 18151888
+    }
+   ],
+   "sha256": "30d7783c2f4d56670088f6385ff06859c7607f291bd390c47f131db5a4063ef4",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 1633280,
+    "4Prim": 480000,
+    "8levels": 32,
+    "B": 899404,
+    "Dec": 0,
+    "E": 18000,
+    "Idx": 120000,
+    "Nodes": 20,
+    "vertex": 15000000
+   },
+   "title": "6000 primitives each with its own accessor x 20 instances, one reference",
+   "units": 18151888
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 1209450,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/quadB.3tz",
+   "id": "quadB",
+   "matrix": "5,000 accessors x 16,000 primitives x 40 (quadB)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 31490820,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 1208356,
+     "Dec": 0,
+     "E": 15000,
+     "Idx": 640000,
+     "J": 129140,
+     "Nodes": 40,
+     "Prim": 640000,
+     "Res": 0,
+     "T": 200000,
+     "nodeQ": {},
+     "skipped": 40,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 31490820
+    }
+   ],
+   "sha256": "43dbd5bbbb5e3cd5ae61335c5bcb517fa83310b8e876268653787eeee5ec472c",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2066240,
+    "4Prim": 2560000,
+    "8levels": 32,
+    "B": 1208356,
+    "Dec": 0,
+    "E": 15000,
+    "Idx": 640000,
+    "Nodes": 40,
+    "vertex": 25000000
+   },
+   "title": "5000 accessors x 16000 primitives (primitive i uses accessor i mod A) x 40 instances, one reference",
+   "units": 31490820
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "Contained",
+   "bytes": 1195790,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/e2e.3tz",
+   "id": "e2e",
+   "matrix": "end-to-end, 5,000 x 15,500 x 500 (one reference; the many-accessor case)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 354517700,
+   "payloadFacts": {
+    "q.glb": {
+     "B": 1194696,
+     "Dec": 0,
+     "E": 15000,
+     "Idx": 7750000,
+     "J": 128520,
+     "Nodes": 500,
+     "Prim": 7750000,
+     "Res": 0,
+     "T": 2500000,
+     "nodeQ": {},
+     "skipped": 500,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 1,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 1,
+     "levels": 4,
+     "member": "q.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 354517700
+    }
+   ],
+   "sha256": "7cd044b86ed73d1f500682c506a970b9a4581f72480b4bc7ba6776aad00acc81",
+   "size": "large",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2056320,
+    "4Prim": 31000000,
+    "8levels": 32,
+    "B": 1194696,
+    "Dec": 0,
+    "E": 15000,
+    "Idx": 7750000,
+    "Nodes": 500,
+    "vertex": 312500000
+   },
+   "title": "5000 accessors x 15500 primitives (primitive i uses accessor i mod A) x 500 instances, one reference",
+   "units": 354517700
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4255,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/viewless-SCALAR.3tz",
+   "id": "viewless-SCALAR",
+   "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 80049480,
+   "payloadFacts": {
+    "v.glb": {
+     "B": 460,
+     "Dec": 0,
+     "E": 3999995,
+     "Idx": 1,
+     "J": 44,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "v.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 4002474
+    }
+   ],
+   "sha256": "13beecdc8ef8f0ac4daa281bc2a96fedf04a8f848a59d39bc9bcae01b0f0887f",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 14080,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 9200,
+    "Dec": 0,
+    "E": 79999900,
+    "Idx": 20,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": "unused viewless SCALAR accessor, 3999992 components x 20 references",
+   "units": 80049480
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4251,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/viewless-MAT4.3tz",
+   "id": "viewless-MAT4",
+   "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 80047000,
+   "payloadFacts": {
+    "v.glb": {
+     "B": 456,
+     "Dec": 0,
+     "E": 3999875,
+     "Idx": 1,
+     "J": 44,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "v.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 4002350
+    }
+   ],
+   "sha256": "172b5abe28379f6472c39db5d2659e5ff3d82efdce0f766acddb3cf51d29e37c",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 14080,
+    "4Prim": 80,
+    "8levels": 640,
+    "B": 9120,
+    "Dec": 0,
+    "E": 79997500,
+    "Idx": 20,
+    "Nodes": 20,
+    "vertex": 2500
+   },
+   "title": "unused viewless MAT4 accessor, 3999872 components x 20 references",
+   "units": 80047000
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 5758187,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/long-decimals.3tz",
+   "id": "long-decimals",
+   "matrix": "long-significand decimals in node matrix/TRS and accessor min/max (5.1)",
+   "notes": [
+    "every literal rounds to a simple value (1, 0.25, 0.5, ...) only after its last digit: the exact midpoint below the target, zeros, then 1"
+   ],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 130909840,
+   "payloadFacts": {
+    "l.glb": {
+     "B": 5754392,
+     "Dec": 0,
+     "E": 2524,
+     "Idx": 2400,
+     "J": 25437,
+     "Nodes": 76800,
+     "Prim": 300,
+     "Res": 0,
+     "T": 2400,
+     "nodeQ": {
+      "1": 300
+     },
+     "skipped": 0,
+     "steps": 300
+    }
+   },
+   "problems": [],
+   "references": 20,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 20,
+     "levels": 4,
+     "member": "l.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 6545492
+    }
+   ],
+   "sha256": "8d863214ef0d4e73f0460efbe04543ca236e970ebaf03c6ea0ad9aca9ef0f64d",
+   "size": "large",
+   "terms": {
+    "1152": 23040,
+    "160Res": 0,
+    "16J": 8139840,
+    "4Prim": 24000,
+    "8levels": 640,
+    "B": 115087840,
+    "Dec": 0,
+    "E": 50480,
+    "Idx": 48000,
+    "Nodes": 1536000,
+    "vertex": 6000000
+   },
+   "title": "150 matrix + 150 TRS selected nodes and 2500 bounded accessors with 800-character literals x 20 references",
+   "units": 130909840
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "workLimit",
+   "bytes": 12189850,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/meshopt-attributes-raw.3tz",
+   "id": "meshopt-attributes-raw",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-raw",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 612761908,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 12188328,
+     "Dec": 12000000,
+     "E": 3000000,
+     "Idx": 1000000,
+     "J": 60,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 4,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 4,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 153190477
+    }
+   ],
+   "sha256": "a029d8495a4b554320b1059991ed3cc7dad524dad7b62e022612dc0d5d638aa6",
+   "size": "large",
+   "terms": {
+    "1152": 4608,
+    "160Res": 0,
+    "16J": 3840,
+    "4Prim": 16,
+    "8levels": 128,
+    "B": 48753312,
+    "Dec": 48000000,
+    "E": 12000000,
+    "Idx": 4000000,
+    "Nodes": 4,
+    "vertex": 500000000
+   },
+   "title": "1000000 vertices via ATTRIBUTES (raw groups) x 4 references",
+   "units": 612761908
+  },
+  {
+   "agree": true,
+   "at2^28": "workLimit",
+   "at2^29": "workLimit",
+   "bytes": 2246762,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/meshopt-attributes-bits.3tz",
+   "id": "meshopt-attributes-bits",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-bits",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 572989556,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 2245240,
+     "Dec": 12000000,
+     "E": 3000000,
+     "Idx": 1000000,
+     "J": 60,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 1000000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 4,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 4,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 143247389
+    }
+   ],
+   "sha256": "7bdb1a7ead48ce78d9f544352fc237dc02a1be90bbecea1e090bc9d6bdb8b23d",
+   "size": "large",
+   "terms": {
+    "1152": 4608,
+    "160Res": 0,
+    "16J": 3840,
+    "4Prim": 16,
+    "8levels": 128,
+    "B": 8980960,
+    "Dec": 48000000,
+    "E": 12000000,
+    "Idx": 4000000,
+    "Nodes": 4,
+    "vertex": 500000000
+   },
+   "title": "1000000 vertices via ATTRIBUTES (bits groups) x 4 references",
+   "units": 572989556
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 6221478,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/meshopt-triangles.3tz",
+   "id": "meshopt-triangles",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): triangles",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 152889636,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 6219956,
+     "Dec": 13200000,
+     "E": 3300000,
+     "Idx": 3000000,
+     "J": 79,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 100000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 4,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 4,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 38222409
+    }
+   ],
+   "sha256": "45694989f0dfe10d407b74f16476c0d97c8bb4b80c1867819770ce192a826872",
+   "size": "large",
+   "terms": {
+    "1152": 4608,
+    "160Res": 0,
+    "16J": 5056,
+    "4Prim": 16,
+    "8levels": 128,
+    "B": 24879824,
+    "Dec": 52800000,
+    "E": 13200000,
+    "Idx": 12000000,
+    "Nodes": 4,
+    "vertex": 50000000
+   },
+   "title": "100000 vertices via ATTRIBUTES (raw groups), 3000000 u32 indices via TRIANGLES x 4 references",
+   "units": 152889636
+  },
+  {
+   "agree": true,
+   "at2^28": "Contained",
+   "at2^29": "Contained",
+   "bytes": 4221446,
+   "expected": {
+    "outcome": "Contained"
+   },
+   "file": "wb/large/meshopt-indices.3tz",
+   "id": "meshopt-indices",
+   "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): indices",
+   "notes": [],
+   "oracle": {
+    "outcome": "PrecheckPassed"
+   },
+   "oracleUnits": 144889508,
+   "payloadFacts": {
+    "o.glb": {
+     "B": 4219924,
+     "Dec": 13200000,
+     "E": 3300000,
+     "Idx": 3000000,
+     "J": 79,
+     "Nodes": 1,
+     "Prim": 1,
+     "Res": 0,
+     "T": 100000,
+     "nodeQ": {},
+     "skipped": 1,
+     "steps": 0
+    }
+   },
+   "problems": [],
+   "references": 4,
+   "referencesHand": [
+    {
+     "V": 125,
+     "count": 4,
+     "levels": 4,
+     "member": "o.glb",
+     "q": [
+      25,
+      25,
+      25,
+      25
+     ],
+     "unitsPerReference": 36222377
+    }
+   ],
+   "sha256": "f3c0ddc71394af7cac776516371d58a976239b2fd8e6e0d5d87ce33fb978a6b3",
+   "size": "large",
+   "terms": {
+    "1152": 4608,
+    "160Res": 0,
+    "16J": 5056,
+    "4Prim": 16,
+    "8levels": 128,
+    "B": 16879696,
+    "Dec": 52800000,
+    "E": 13200000,
+    "Idx": 12000000,
+    "Nodes": 4,
+    "vertex": 50000000
+   },
+   "title": "100000 vertices via ATTRIBUTES (raw groups), 3000000 u32 indices via INDICES x 4 references",
+   "units": 144889508
+  }
+ ],
+ "record": "C2-WB class fixtures (O-WB). `units` is the expected C2-WB total; the oracle's total and the per-URI facts must equal the hand derivation. CI-size rows carry the at-cap pair (containmentWorkUnits = units -> Contained; units - 1 -> NotInspected(workLimit)).",
+ "summary": {
+  "agree": 102,
+  "capPairs": 55,
+  "disagree": [],
+  "fixtures": 102,
+  "workedExampleIdentity": true
+ },
+ "workedExample": {
+  "V": 100,
+  "agree": true,
+  "facts": {
+   "B": 652,
+   "Dec": 0,
+   "E": 12,
+   "Idx": 4,
+   "J": 56,
+   "Prim": 1,
+   "Res": 0,
+   "T": 4
+  },
+  "file": "controls/fixtures/worked-example-adjusted-containmentSpanBits-29.3tz",
+  "formula": "400 + 256 + 4 + E + Dec + B + 16 J + 160 Res + 4 Prim + 1152 + 16",
+  "id": "worked-example-identity",
+  "nodeUnits": 256,
+  "oracleUnits": 3392,
+  "units": 3392,
+  "vertexUnits": 400
+ }
+}

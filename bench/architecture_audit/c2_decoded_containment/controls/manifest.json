@@ -543,7 +543,7 @@
     "file": "controls/fixtures/work-containmentWorkUnits-at-sum.3tz",
     "id": "work-containmentWorkUnits-at-sum",
     "limits": {
-     "containmentWorkUnits": 422
+     "containmentWorkUnits": 5040
     },
     "oracle": {
      "facts": null,
@@ -564,7 +564,7 @@
     "file": "controls/fixtures/work-containmentWorkUnits-sum-minus-1.3tz",
     "id": "work-containmentWorkUnits-sum-minus-1",
     "limits": {
-     "containmentWorkUnits": 421
+     "containmentWorkUnits": 5039
     },
     "oracle": {
      "facts": null,
@@ -576,7 +576,7 @@
     },
     "sha256": "e2f951edb5f337d588f104f33e395ef5470897124f5e54cc90695bebdc672cd0"
    },
-   "what": "containmentWorkUnits = archive total (422), then total - 1"
+   "what": "containmentWorkUnits = archive total (5040), then total - 1"
   },
   {
    "agree": true,
@@ -738,7 +738,7 @@
     "file": "controls/large/repeated-index-three-payloads-units-minus-1.3tz",
     "id": "repeated-index-three-payloads-units-minus-1",
     "limits": {
-     "containmentWorkUnits": 24000419
+     "containmentWorkUnits": 48008576
     },
     "oracle": {
      "facts": null,
@@ -761,7 +761,7 @@
     "file": "controls/large/repeated-index-three-payloads-units-at-sum.3tz",
     "id": "repeated-index-three-payloads-units-at-sum",
     "limits": {
-     "containmentWorkUnits": 24000420
+     "containmentWorkUnits": 48008577
     },
     "oracle": {
      "facts": null,
@@ -782,7 +782,7 @@
     "file": "controls/large/repeated-index-three-payloads-units-minus-1.3tz",
     "id": "repeated-index-three-payloads-units-minus-1",
     "limits": {
-     "containmentWorkUnits": 24000419
+     "containmentWorkUnits": 48008576
     },
     "oracle": {
      "facts": null,
@@ -794,7 +794,7 @@
     },
     "sha256": "57c359962778525bb60a583382fafa5912edc436008cc21ddf490a38f64cb763"
    },
-   "what": "containmentWorkUnits exactly the deduplicated sum (24000420), then one below; charging T per index occurrence instead of per distinct vertex exceeds the cap"
+   "what": "containmentWorkUnits exactly the deduplicated sum (48008577), then one below; charging T per index occurrence instead of per distinct vertex exceeds the cap"
   }
  ],
  "record": "C2 slice-1 data controls: base and mutated fixtures with expected verdicts. Production and the oracle must both report both verdicts."

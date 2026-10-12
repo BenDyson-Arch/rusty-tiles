@@ -1,5 +1,9 @@
 # F0 implementation evidence (#115)
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Initial implementation source: `36db8b2941db8d93a66c81c49efdd917711e6e41`.
 Destination-binding fix and full verification: `c777180f178df5cc2f524f7b20f4251ba9d522e0`.
 CLI fixture follow-up: `4b51b32bc63e789296f9eaaaaaa2fc0b2dee8e1d` (3 portable / 4 native CLI contract tests pass; production unchanged).

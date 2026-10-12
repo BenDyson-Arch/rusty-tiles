@@ -1,5 +1,15 @@
 # C2 decoded-content containment: O-explicit oracle (Slice 0a)
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 386 of 548 files remain:
+> this README, what CI or tests read, live tooling (oracle, witness generators,
+> self-tests, mutant sets) and the C2-WB (#164) additions. The full directory
+> last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/c2_decoded_containment | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/c2_decoded_containment.tar.zst`, SHA-256
+> `9174fd77147b1abcb79cc388ffc371e67ef68c7b3a38bde7af3edf0e834cd25c`.
+> Paths below that no longer exist refer to that snapshot.
+
 This directory is the independent reference for the C2 slice-1 claim. When
 `checks` contains `decodedContentContainment`, every vertex drawn by the
 selected static scene must lie inside these volumes, each in its own frame:
@@ -25,18 +35,23 @@ nothing from the repository. It is pure Python 3 standard library.
 | `witnesses/` | `generate.py` and `build.py` (fixture writer, independent of `c2o`), pinned `inputs/`, generated `fixtures/` and `report.json` |
 | `controls/` | `manifest.json` with base/mutated fixture pairs, hashes and expected verdicts; `fixtures/`. `large/` is generated, not committed |
 | `corpus/` | `run.py` and `manifest.json`: the oracle outcome for each artifact of R's producer corpus |
+| `wb/` | C2-WB (O-WB): the calibration-matrix class fixtures, per-term identities, chain-bit controls, the independent hand formula and the formula mutants. See [wb/README.md](wb/README.md) |
 
 ## Replay
 
 From this directory:
 
 ```sh
-python3 -I oracle/self_test/run.py            # 36 checks, exit 0
+python3 -I oracle/self_test/run.py            # 59 checks, exit 0
 python3 -I witnesses/generate.py --large      # 261 cases, 16 control pairs; exit 0 when all agree
 python3 -I oracle/mutants/run.py              # 13 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
-python3 -I oracle/c2_oracle.py some.3tz --json
+python3 -I wb/generate.py [--large]           # C2-WB class fixtures (wb/README.md)
+python3 -I wb/mutants.py                      # 14 C2-WB formula mutants, each must flip its named pair
+python3 -I oracle/c2_oracle.py some.3tz --json [--precheck-only] [--no-detail]
 ```
+
+All runs in this record were single-threaded under `taskset -c 0,1 nice -n 10`.
 
 Without `--large`, the generator skips the 24 MB repeated-index control and its
 pair. Those fixtures are written as stored ZIPs, so their hash is reproducible
@@ -75,16 +90,18 @@ The oracle's defaults mirror `ValidationLimits`:
 | Limit | Default |
 | --- | --- |
 | `containmentSpanBits` | 4096 |
-| `containmentWorkUnits` | 2^28 = 268,435,456 (coordinator decision for PR #157, from measured per-unit cost; was 2^32) |
+| `containmentWorkUnits` | 2^29 = 536,870,912 (C2-WB WB-6, from the measured class matrix; 2^28 from PR #157 until C2-WB, 2^32 before that) |
 | `containmentBytesRead` | 2 GiB |
 | `containmentDecodedBytes` | 2 GiB |
 | `containmentNodeDepth` | 64 |
 
 Override any of them with `--limit NAME=VALUE`.
 
-The lower work-units default changes no expectation. The largest archive
-totals are 24,000,420 units among the witnesses and controls (the repeated-index
-control) and 5,987,468 in the corpus (point cloud explicit).
+The lower work-units default changes no expectation. Under the C2-WB formula
+(2026-10-12) the largest archive totals are 48,008,577 units among the witnesses
+and controls (the repeated-index control) and 17,492,428 in the corpus (point
+cloud explicit); no witness, control or corpus verdict changes. The default cap
+itself is R's decision (C2-WB WB-6); the oracle keeps 2^28 until it changes.
 
 ### Oracle work bounds
 
@@ -207,12 +224,15 @@ The artifacts were treated as data and are not committed.
 
 ## Results
 
-- **Self-test: 36/36 pass.** The checks are:
+- **Self-test: 59/59 pass** (36 before C2-WB). The checks are:
   - the upstream golden vectors: TRIANGLES `kIndexDataV1`, INDICES
     `kIndexSequenceV1` and ATTRIBUTES `kVertexDataV0`;
   - the spec's 4-bit sentinel and varint examples;
-  - the worked example, bit-exact: `sInst = 5`, level spans `[23, 29]`,
-    8 vertex units and 128 node units;
+  - the worked example, bit-exact: `sInst = 5`, level spans `[23, 29]`;
+    under C2-WB 3.6, `V = (20 + 25) + (30 + 25) = 100`, 400 vertex units and
+    256 node units (slice 1 had 8 and 128);
+  - one identity per C2-WB weight (level-0 base, step, box and sphere floors,
+    q above the floors, the node floor) and the value-node count;
   - identity-node pair equivalence;
   - pair soundness: about 98k exact quantities over random chains, with 0
     values outside their pair;
@@ -296,12 +316,18 @@ The artifacts were treated as data and are not committed.
     `containmentWorkUnits` to the hand-derived deduplicated sum and expects
     Contained. The derivation is the `REPEATED_INDEX_UNITS` constant in
     `witnesses/generate.py`.
-    - The sum is `3 × (3·(25+25) + 1 + 3,999,990 + 3,999,999) = 24,000,420`.
-      The oracle's computed total and production's number agree with it.
+    - Slice 1: `3 × (3·(25+25) + 1 + 3,999,990 + 3,999,999) = 24,000,420`.
+    - **C2-WB (2026-10-12):** per payload `3·75 + 1 + 3,999,990 + 3,999,999 +
+      Dec 0 + B 8,000,624 + 16·53 + 160·0 + 4·1 + 1152 + 8·2 = 16,002,859`, so
+      the sum is **48,008,577** (`V = max(20,25) + 25 + 25 = 75`; `B` and
+      `J = 53` are counted from the payload bytes by the generator, not by `c2o`).
+      The oracle's total agrees.
     - The `units-minus-1` fixture now takes its cap from the same constant.
     - New pair `repeated-index-work-units-at-cap` separates per-vertex from
       per-occurrence charging of `T`.
-- **Mutants: 13/13 flip their named fixture.**
+- **Mutants: 13/13 flip their named fixture.** Under C2-WB, `reverse-tile-order`
+  flips 19 and `skip-ancestors` 26 (18 and 25 before): units now depend on the
+  per-level volumes and steps, so each also flips the work-units at-cap pair.
   - Omit U and double U flip 130 fixtures each.
   - The 1e-6 slack flips 177.
   - Reusing the URI verdict and defaulting to scene 0 flip one fixture each.
@@ -424,8 +450,11 @@ fixtures follow those rulings. Each ruled item says which decision applies.
    | Fact | Oracle model |
    | --- | --- |
    | `E` | Σ over **all** document accessors of count × components |
-   | `B` | Member bytes plus each distinct resolved external buffer or image member, counted once |
+   | `B` | Member bytes plus the member bytes of every resolved external buffer or image **entry** (C2-WB: a member named by two entries is read, and counted, twice, as C1's resolver does) |
    | `Dec` | External and data-URI buffer bytes plus the decoded `byteLength` of **every** meshopt-compressed view, used or not |
+   | `J` (C2-WB) | Value nodes (root plus every scalar/container value; keys are not nodes, C1 contract "JSON value nodes") of the glTF JSON or GLB JSON chunk (also inside a b3dm) plus the b3dm feature-table and batch-table JSON, each when its length is nonzero |
+   | `Res` (C2-WB) | Buffer and image **entries** whose `uri` is not a `data:` URI (a repeated URI counts per entry; see wb/README.md, readings) |
+   | `Prim` (C2-WB) | Σ over selected instances (nodes with `mesh`) of the mesh's `primitives` length |
 
    The work and repeated-index controls are built so that these models
    coincide with any natural alternative. Each of those fixtures has only
@@ -551,12 +580,78 @@ verdict.
 
 Unreadable ZIP members now make the oracle `Undecided` instead of crashing.
 
+## C2-WB amendment (O-WB, 2026-10-12)
+
+O-WB re-implemented the C2-WB unit arithmetic (contract draft v2.1, sections 3.1,
+3.2 and 3.6) in `c2o` from the contract text, the existing oracle and the delta
+reviews only. It did not read `src/`, R's `probes/`, or the J/S/F branches.
+
+| Where | Change |
+| --- | --- |
+| `c2o/check.py` | `level_operations` (per-operation weights `max(F, ⌈s/64⌉²)`, F = 20 base, 30 step, 25 box, 32 sphere), `reference_units` (`Dec + B + 16·J + 160·Res + 4·Prim + 1152 + 8·(L_r+1)`), `Prim`; per-reference `V`, `levelOps`, `referenceUnits`; a `terms` breakdown of the totals; `precheck_only` and `detail` options |
+| `c2o/scene.py` | Node visits: 1 skipped, otherwise `max(256, 128·⌈s_step/64⌉²)`; per-span visit counts |
+| `c2o/gltf.py`, `c2o/numbers.py` | `J` (now also parses the b3dm batch-table JSON) and `Res` |
+| `c2o/tileset.py` | Sibling references share ancestor levels at distance ≥ 2 (memory only; 100k references × 103 levels) |
+| `witnesses/generate.py` | `REPEATED_INDEX_UNITS` re-derived by hand (48,008,577) |
+| `preparation/contract-20261011/verify/frozen_bound_probe.py` | `--wb` writes `frozen-bound-observed-wb.json` (gitignored; C2-WB units of the same chains and the 3.6 worked example by the probe's own span engine; the 2026-10-12 output, sha256 `2926e31aa50dfddd33cbb938bd8b74fd7777054cea7995daf575e5e36c5fd543`, is kept outside the repository); the slice-1 output is byte-identical |
+
+**At-cap pairs whose expected totals changed** (fixture bytes unchanged; only the
+cap values in `controls/manifest.json`):
+
+| Pair | Fixture | Slice 1 | C2-WB |
+| --- | --- | --- | --- |
+| `containmentWorkUnits-at-cap-and-one-over` | `work-containmentWorkUnits-at-sum` / `-sum-minus-1` | 422 / 421 | **5,040 / 5,039** |
+| `repeated-index-work-units` (`--large`) | `repeated-index-three-payloads` / `-units-minus-1` | — / 24,000,419 | — / **48,008,576** |
+| `repeated-index-work-units-at-cap` (`--large`) | `repeated-index-three-payloads-units-at-sum` / `-units-minus-1` | 24,000,420 / 24,000,419 | **48,008,577 / 48,008,576** |
+
+`work-base-meshopt` breaks down as vertex 390 (T 3 × V 130) + Nodes 513 + Idx 3 +
+E 12 + Dec 42 + B 1,404 + 16·94 + 4·1 + 1152 + 8·2. The bytes, decoded, depth and
+span pairs are unchanged. Every other witness and control keeps its verdict at
+the default cap; their per-row totals in `witnesses/report.json` are informative.
+
+Corpus totals (no verdict changes): vector explicit 10,939–84,490, point cloud
+explicit 17,492,428, F1c2 mesh 2,731,984, W1 plain 11,597, near-window 23,837,
+deep20 1,535,056, legacy explicit 979,358 and small 4,060 (`corpus/manifest.json`).
+
+Pins (read for this amendment):
+
+| File | sha256 |
+| --- | --- |
+| C2-WB `contract-draft.md` v2.1 | `ea7b3acff2d4768d1ab68333b6730c080b30eb7495060c449bbe0a8bef8eac97` |
+| C2-WB `ownership-plan.md` v2.1 | `3334b3acc6de0fd8c369e8f68b2c39f91116ce8e0f1f7010357ec4bd97cb3fe4` |
+| C2-WB `change-log.md` v2.1 | `6e1bb99ae0632c2959f46f6259871fe4f6f733ef764f0c6bb7d7b1796f1e2f64` |
+| `delta/review-delta.md` | `fbb99fafde66af13d0da67fa09c96bd69ec0bf36c696c5a71e9c8ca68c6bd2ab` |
+| `delta2/review-delta2.md` | `8f28d536ce88ea9dbf533795c6b9c3821b2c57492d26ab79d64fb62cdbf12c04` |
+| `docs/architecture/c1-payload-integrity-contract.md` (value-node meaning) | `3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3` |
+
+**R's reconciliation against production (2026-10-12).** The first production run of
+the `wb/` fixtures (`acceptance/oracle_parity.rs`,
+`production_matches_every_c2wb_class_fixture`) found two differences, both fixed in
+the fixtures and oracle, not in `src/`:
+
+- C1 refused every multi-reference `wb/` fixture (59 of 102 rows): identical sibling
+  leaf tiles break the tileset schema's `children` `uniqueItems`. `wb/generate.py`
+  now gives leaf `i` the geometric error `i·2^-24`. No unit total changed.
+- `B` with a repeated URI (`reading-res-duplicate-uri`). The C1 payload contract (`docs/architecture/c1-payload-integrity-contract.md:330-331`): "Repeated resource declarations charge repeated actual bytes; no digest/URI deduplication changes that meaning."
+  So `B = 435` per reference; the slice-1 oracle counted each member once (423), which the
+  C1 clause rules out. `c2o/gltf.py` and the hand facts now count per entry (production
+  also gives 435). The probe's total is 5,602, its at-cap pair 5,602 / 5,601. No
+  witness, control or other `wb/` total changed. The `Res` reading (per entry) and
+  `data:` exclusion match production as written.
+
+After both, production agrees on all 102 `wb/` rows: the 55 at-cap pairs, the 4
+chain-bit controls, and the totals and per-URI facts of the 43 matrix-size rows
+(local, with `--large`). That also confirms C1 admits every large class fixture,
+including the meshopt INDICES/bits streams and the 800-character decimals.
+
 ## What remains
 
 - Production verdicts for `witnesses/report.json`, `controls/manifest.json`
   and `corpus/manifest.json`, once M and F land. Each Outside row needs a
   recorded disposition. The corpus has none.
-- R's measurement of the cap values. The work controls are pinned to the
-  oracle's computed totals, so they must be regenerated if a formula
-  reconciliation changes `E`, `B` or `Dec`.
+- Done (2026-10-12): R's measurement of the cap value (C2-WB WB-6): 2^29, from
+  `τ_E = 14.65` ns/unit (`acceptance/README.md`, "C2-WB gate"). The work controls and the
+  `wb/` at-cap pairs are pinned to the oracle's computed totals, so they must be
+  regenerated if a formula reconciliation changes `E`, `B`, `Dec`, `J`, `Res`
+  or `Prim`.
 - O-implicit (Slice 0b), for implicit coverage.

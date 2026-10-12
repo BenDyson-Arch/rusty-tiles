@@ -1,5 +1,9 @@
 # F1d1: one certified root proxy
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 Implementation contract for #121, settled from the error, identity/appearance
 and pipeline fan-out audits against `a5f618e7cf8e3ba82a4b3e9afcfa55c101384da1`.
 Acceptance remains pending final-source execution and separate nonauthor review.

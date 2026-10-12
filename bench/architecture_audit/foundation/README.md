@@ -1,5 +1,13 @@
 # Bounded job-lifetime design model
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 4 of 9 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/foundation | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/foundation.tar.zst`, SHA-256
+> `0cb3ae72c70f4380823ded9d85143f1be4383fadf502289479241b3fde233687`.
+> Paths below that no longer exist refer to that snapshot.
+
 This is executable evidence for a proposed contract, **not a production runtime
 test or proof of filesystem/FFI correctness**. It does not modify a converter,
 the normal test suite, or any production source. It proposes a small lifecycle

@@ -371,8 +371,8 @@ fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
 }
 // ---- C2 decoded-content containment: operation owner ----
 use containment::{
-    Arena, Exclusion, LevelFacts, Local, Normalization, RawVertex, Role, SpanCaps, UriBounds,
-    Verdict, VolumeFacts, Word,
+    Arena, Exclusion, LevelFacts, Local, Normalization, RawVertex, ReferenceFacts, Role, SpanCaps,
+    UriBounds, Verdict, VolumeFacts, Word,
 };
 use payload::scene::{
     ContentExclusions, Instance, NodeTransform, PositionFormat, PositionWord, SceneConsumer,
@@ -523,8 +523,8 @@ struct UriFacts {
     nodes: Option<u64>,
     idx: u64,
     e: u64,
-    dec: u64,
-    b: u64,
+    /// `B`, `Dec`, `J`, `Res`, `Prim`: charged again on every reference (C2-WB §3.1).
+    per_reference: ReferenceFacts,
     max_depth: u64,
     exclusions: u16,
 }
@@ -537,6 +537,19 @@ struct TileFact {
     external: Option<VolumeFacts>,
     parent: Option<usize>,
     depth: usize,
+    /// Inherited chain exclusions (C2-WB §3.3): the caller's own bits, ORed at
+    /// registration with the shape exclusions of `volume` and `external` and
+    /// the parent's `chain`. Every level of a reference's chain except its
+    /// content volume is covered, so `Containment::reference` needs no walk.
+    chain: u16,
+}
+/// The reason bit of a volume's shape exclusion, if any.
+fn shape_bit(volume: &VolumeFacts) -> u16 {
+    match containment::volume_exclusion(volume) {
+        Some(Exclusion::RegionVolume) => Reason::RegionVolume.bit(),
+        Some(Exclusion::RotatedBox) => Reason::RotatedBox.bit(),
+        Some(Exclusion::NumericSpan) | None => 0,
+    }
 }
 /// One payload content reference, in traversal order.
 struct Reference {
@@ -595,7 +608,11 @@ impl Containment {
         }
         Ok(arena.as_mut().unwrap())
     }
-    fn tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+    /// Register a tile; its `chain` gains its own shape bits and its parent's.
+    fn tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
+        fact.chain |= shape_bit(&fact.volume)
+            | fact.external.as_ref().map_or(0, shape_bit)
+            | fact.parent.map_or(0, |p| self.tiles[p].chain);
         try_push(&mut self.tiles, fact)?;
         Ok(self.tiles.len() - 1)
     }
@@ -628,8 +645,9 @@ impl Containment {
         }
         Ok(())
     }
-    /// Collect chain exclusions and run the precheck step for one reference, in
-    /// traversal order. The precheck stops at its first violation.
+    /// Collect chain exclusions in O(1) and run the precheck step for one
+    /// reference, in traversal order. The precheck stops at its first violation;
+    /// the level chain is built only when the precheck step runs (C2-WB §3.3).
     fn reference(
         &mut self,
         tile: usize,
@@ -645,27 +663,22 @@ impl Containment {
         };
         try_push(&mut self.references, Reference { tile, uri, content })?;
         let facts = self.uris[uri].1;
-        self.exclusions |= facts.exclusions;
-        self.build_levels(tile, content)?;
-        let mut chain = 0;
-        for level in &self.levels {
-            for (_, volume) in level.volumes.iter().flatten() {
-                match containment::volume_exclusion(volume) {
-                    Some(Exclusion::RegionVolume) => chain |= Reason::RegionVolume.bit(),
-                    Some(Exclusion::RotatedBox) => chain |= Reason::RotatedBox.bit(),
-                    Some(Exclusion::NumericSpan) | None => {}
-                }
-            }
-        }
-        self.exclusions |= chain;
-        // Any exclusion anywhere overrides the precheck reason, so the precheck
-        // only runs while the archive is still entirely in domain.
+        // Chain bits are ORed even after the precheck has stopped: any exclusion
+        // anywhere overrides the precheck reason.
+        self.exclusions |= facts.exclusions
+            | self.tiles[tile].chain
+            | content.map_or(0, |c| shape_bit(&self.content_volumes[c]));
+        // The precheck only runs while the archive is still entirely in domain.
         if self.exclusions != 0 || self.precheck.is_some() {
             return Ok(());
         }
+        self.build_levels(tile, content)?;
         self.precheck = self.precheck_step(&facts);
         Ok(())
     }
+    /// One reference's charge: `T·V + Nodes + Idx + E` plus the per-reference
+    /// terms (C2-WB §3.1), against the work cap; `B` and `Dec` also against
+    /// their own caps. Requires `self.levels` built for this reference.
     fn precheck_step(&mut self, facts: &UriFacts) -> Option<Reason> {
         let vertex_units = match &facts.bounds {
             None => 0,
@@ -682,11 +695,16 @@ impl Containment {
         if facts.max_depth > self.caps.node_depth {
             return Some(Reason::WorkLimit);
         }
+        let per_reference = &facts.per_reference;
         let units = facts.nodes.and_then(|nodes| {
             vertex_units
                 .checked_add(nodes)?
                 .checked_add(facts.idx)?
-                .checked_add(facts.e)
+                .checked_add(facts.e)?
+                .checked_add(containment::reference_units(
+                    self.levels.len(),
+                    per_reference,
+                )?)
         });
         let within = |total: u64, add: Option<u64>, cap: u64| {
             add.and_then(|add| total.checked_add(add))
@@ -694,8 +712,8 @@ impl Containment {
         };
         let (Some(units), Some(bytes), Some(decoded)) = (
             within(self.units, units, self.work_cap),
-            within(self.bytes, Some(facts.b), self.bytes_cap),
-            within(self.decoded, Some(facts.dec), self.decoded_cap),
+            within(self.bytes, Some(per_reference.b), self.bytes_cap),
+            within(self.decoded, Some(per_reference.dec), self.decoded_cap),
         ) else {
             return Some(Reason::WorkLimit);
         };
@@ -1073,8 +1091,13 @@ impl Check<'_> {
             nodes: consumer.nodes,
             idx: consumer.idx,
             e: facts.elements_checked,
-            dec: facts.materialized_bytes,
-            b: self.resources.bytes_read - bytes_before,
+            per_reference: ReferenceFacts {
+                b: self.resources.bytes_read - bytes_before,
+                dec: facts.materialized_bytes,
+                json_nodes: facts.json_nodes,
+                external_resources: facts.external_resources,
+                instance_primitives: facts.instance_primitives,
+            },
             max_depth: consumer.max_depth,
             exclusions,
         };
@@ -1411,6 +1434,7 @@ impl Check<'_> {
             external: link.external,
             parent: link.parent,
             depth,
+            chain: 0,
         })?;
         if let Some(parent) = &parent {
             if !contains(parent, &bounds, &m)? {
@@ -1778,6 +1802,9 @@ pub(crate) struct UriWork {
     pub e: u64,
     pub dec: u64,
     pub b: u64,
+    pub json_nodes: u64,
+    pub external_resources: u64,
+    pub instance_primitives: u64,
     pub max_node_depth: u64,
 }
 #[cfg(test)]
@@ -1794,11 +1821,24 @@ pub(crate) fn containment_work_facts(
             nodes: f.nodes,
             idx: f.idx,
             e: f.e,
-            dec: f.dec,
-            b: f.b,
+            dec: f.per_reference.dec,
+            b: f.per_reference.b,
+            json_nodes: f.per_reference.json_nodes,
+            external_resources: f.per_reference.external_resources,
+            instance_primitives: f.per_reference.instance_primitives,
             max_node_depth: f.max_depth,
         })
         .collect())
+}
+/// The precheck's accumulated work units of one successful inspection
+/// (C2-WB §3.1). Test-only: 0 when an exclusion stopped the precheck before
+/// its first reference; the units before the violation when it stopped.
+#[cfg(test)]
+pub(crate) fn containment_work_total(
+    request: ValidationRequest,
+    limits: ValidationLimits,
+) -> Result<u64, Error> {
+    inspect_facts(request, limits).map(|inspection| inspection.units)
 }
 
 /// The implicit tiles of one successful inspection, in traversal order (RC-16).
@@ -1816,6 +1856,8 @@ struct Inspection {
     report: ValidationReport,
     #[cfg(test)]
     uris: Vec<(String, UriFacts)>,
+    #[cfg(test)]
+    units: u64,
     #[cfg(test)]
     implicit: Vec<ImplicitTileFact>,
 }
@@ -2041,6 +2083,8 @@ fn inspect_facts(
         report,
         #[cfg(test)]
         uris: std::mem::take(&mut check.c2.uris),
+        #[cfg(test)]
+        units: check.c2.units,
         #[cfg(test)]
         implicit: check.implicit_facts,
     })
@@ -3657,8 +3701,10 @@ mod containment_controls {
 
     #[test]
     fn work_bytes_decoded_and_depth_caps_at_the_sum_and_one_below() {
-        // One FLOAT vertex, a skipped {"mesh":0} node, one level of span 277:
-        // units = T·⌈277/64⌉² + Nodes + Idx + E = 1·25 + 1 + 1 + 3 = 30.
+        // One FLOAT vertex, two skipped nodes, one level of span 277 (q = 25)
+        // with the own box: T·V + Nodes + Idx + E = 1·(max(20, 25) + max(25, 25))
+        // + 2 + 1 + 3, plus the per-reference terms (C2-WB §3.1): 1152 + 8·1 +
+        // B + Dec + 16·J + 160·1 (a.bin) + 4·1 (one instance, one primitive).
         let (mut doc, bin) = points_doc(&[[0., 0., 0.]], json!([{"children":[1]},{"mesh":0}]));
         doc["buffers"][0]["uri"] = json!("a.bin");
         let gltf = serde_json::to_vec(&doc).unwrap();
@@ -3668,7 +3714,8 @@ mod containment_controls {
             ("a.bin", bin.clone()),
         ];
         let read = (gltf.len() + bin.len()) as u64;
-        let units = 25 + 2 + 1 + 3;
+        let json_nodes = value_nodes(&doc);
+        let units = 50 + 2 + 1 + 3 + 1152 + 8 + read + bin.len() as u64 + 16 * json_nodes + 160 + 4;
         for (field, at_cap) in [
             ("units", units),
             ("bytes", read),
@@ -3707,9 +3754,360 @@ mod containment_controls {
                 e: 3,
                 dec: bin.len() as u64,
                 b: read,
+                json_nodes,
+                external_resources: 1,
+                instance_primitives: 1,
                 max_node_depth: 2,
             }]
         );
+        assert_eq!(
+            containment_work_total(ValidationRequest::new(&path), ValidationLimits::default())
+                .unwrap(),
+            units
+        );
+    }
+
+    /// `J`: every JSON value counts one node, containers included.
+    fn value_nodes(v: &Value) -> u64 {
+        1 + match v {
+            Value::Array(items) => items.iter().map(value_nodes).sum(),
+            Value::Object(members) => members.values().map(value_nodes).sum(),
+            _ => 0,
+        }
+    }
+    /// One unnormalized u8 POSITION vertex: every span stays within one limb (q = 1).
+    fn quantized_doc(nodes: Value) -> Value {
+        let (mut doc, _) = points_doc(&[[0., 0., 0.]], nodes);
+        doc["extensionsUsed"] = json!(["KHR_mesh_quantization"]);
+        doc["extensionsRequired"] = json!(["KHR_mesh_quantization"]);
+        doc["accessors"][0]["componentType"] = json!(5121);
+        doc["accessors"][0]["min"] = json!([0, 0, 0]);
+        doc["accessors"][0]["max"] = json!([0, 0, 0]);
+        doc["buffers"][0]["byteLength"] = json!(4);
+        doc["bufferViews"][0] = json!({"buffer":0,"byteLength":4,"byteStride":4});
+        doc
+    }
+    fn work_total(files: &[(&str, Vec<u8>)]) -> u64 {
+        let (_work, path) = package(files);
+        containment_work_total(ValidationRequest::new(&path), ValidationLimits::default()).unwrap()
+    }
+    fn work_facts(files: &[(&str, Vec<u8>)]) -> Vec<UriWork> {
+        let (_work, path) = package(files);
+        containment_work_facts(ValidationRequest::new(&path), ValidationLimits::default()).unwrap()
+    }
+    fn at_cap_pair(files: &[(&str, Vec<u8>)], units: u64) {
+        let cap = |units| ValidationLimits {
+            containment_work_units: units,
+            ..ValidationLimits::default()
+        };
+        assert!(contained(&run_with(files, cap(units)).unwrap()));
+        assert_eq!(
+            not_inspected(run_with(files, cap(units - 1))),
+            ["workLimit"]
+        );
+    }
+
+    #[test]
+    fn level_operations_are_charged_at_their_floors() {
+        // T = 1 and q = 1 at every level, so each difference is one floor per
+        // operation plus 8 per added level; the payload terms are identical.
+        let payload = glb(&quantized_doc(json!([{"mesh":0}])), &[0; 4]);
+        let facts = work_facts(&single(wide(), payload.clone()));
+        assert_eq!(facts[0].t, 1, "{facts:?}");
+        let base = work_total(&single(wide(), payload.clone()));
+        let f = &facts[0];
+        // Level 0: base 20 and the own box 25.
+        assert_eq!(
+            base,
+            20 + 25
+                + f.nodes.unwrap()
+                + f.idx
+                + f.e
+                + 1152
+                + 8
+                + f.b
+                + f.dec
+                + 16 * f.json_nodes
+                + 4
+        );
+        let with_root = |root: Value, extra: &[(&'static str, Vec<u8>)]| {
+            let mut files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+            files.extend_from_slice(extra);
+            work_total(&files) - base
+        };
+        // An own sphere instead of the box: 32.
+        let sphere = json!({"sphere":[0, 0, 0, 10]});
+        assert_eq!(
+            with_root(content_tile(sphere.clone(), "a.glb"), &[]),
+            32 - 25
+        );
+        // A content box beside the own box at level 0: 25.
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["boundingVolume"] = boxed([0.; 3], [5.; 3]);
+        assert_eq!(with_root(root, &[]), 25);
+        // A child tile without a transform: the parent's box at level 1, no step.
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(boxed([0.; 3], [5.; 3]), "a.glb")]);
+        assert_eq!(with_root(root.clone(), &[]), 25 + 8);
+        // With a transform the child also pays the step: 30.
+        let mut m = IDENTITY;
+        m[12] = 1.;
+        root["children"][0]["transform"] = json!(m);
+        assert_eq!(with_root(root, &[]), 30 + 25 + 8);
+        // A sphere parent: 32 at level 1.
+        let mut root = tile(sphere);
+        root["children"] = json!([content_tile(boxed([0.; 3], [5.; 3]), "a.glb")]);
+        assert_eq!(with_root(root, &[]), 32 + 8);
+        // Through an external tileset the link's content box is tested at
+        // level 1 beside the parent's own box.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json","boundingVolume":boxed([0.; 3], [5.; 3])}]);
+        let ext = tileset(content_tile(boxed([0.; 3], [5.; 3]), "a.glb"));
+        assert_eq!(with_root(root, &[("ext.json", ext)]), 25 + 25 + 8);
+    }
+
+    #[test]
+    fn per_reference_terms_are_charged_on_every_reference() {
+        // Two instances of a two-primitive mesh, an external buffer: Prim = 4,
+        // Res = 1; V = 20 + 25 per (instance, accessor) vertex.
+        let mut doc = quantized_doc(json!([{"children":[1, 2]},{"mesh":0},{"mesh":0}]));
+        doc["scenes"][0]["nodes"] = json!([0]);
+        let primitive = doc["meshes"][0]["primitives"][0].clone();
+        doc["meshes"][0]["primitives"] = json!([primitive.clone(), primitive]);
+        doc["buffers"][0]["uri"] = json!("a.bin");
+        let gltf = serde_json::to_vec(&doc).unwrap();
+        let files = |root: Value, gltf: &[u8]| {
+            vec![
+                ("tileset.json", tileset(root)),
+                ("a.gltf", gltf.to_vec()),
+                ("a.bin", vec![0; 4]),
+            ]
+        };
+        let one = files(content_tile(wide(), "a.gltf"), &gltf);
+        let f = work_facts(&one).remove(0);
+        let read = gltf.len() as u64 + 4;
+        assert_eq!(
+            (
+                f.b,
+                f.dec,
+                f.json_nodes,
+                f.external_resources,
+                f.instance_primitives
+            ),
+            (read, 4, value_nodes(&doc), 1, 2 * 2),
+            "{f:?}"
+        );
+        let units = 45 * f.t
+            + f.nodes.unwrap()
+            + f.idx
+            + f.e
+            + 1152
+            + 8
+            + read
+            + 4
+            + 16 * value_nodes(&doc)
+            + 160
+            + 4 * 4;
+        assert_eq!(work_total(&one), units);
+        at_cap_pair(&one, units);
+        // A second reference to the same URI pays every term again.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"a.gltf"}, {"uri":"a.gltf"}]);
+        let two = files(root, &gltf);
+        assert_eq!(work_total(&two), 2 * units);
+        at_cap_pair(&two, 2 * units);
+        // J: five more value nodes (an object, an array, three numbers) cost 16
+        // each beside their bytes.
+        let mut extra = doc.clone();
+        extra["extras"] = json!({"k":[1, 2, 3]});
+        let longer = serde_json::to_vec(&extra).unwrap();
+        let more = files(content_tile(wide(), "a.gltf"), &longer);
+        assert_eq!(work_facts(&more)[0].json_nodes, value_nodes(&doc) + 5);
+        assert_eq!(
+            work_total(&more) - units,
+            16 * 5 + (longer.len() - gltf.len()) as u64
+        );
+        // Res: the same bytes as a data URI resolve nothing (Res = 0) and are
+        // read with the JSON; Dec, J and Prim are unchanged.
+        let mut inline = doc.clone();
+        inline["buffers"][0]["uri"] = json!("data:application/octet-stream;base64,AAAAAA==");
+        let inline = serde_json::to_vec(&inline).unwrap();
+        let data = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.gltf"))),
+            ("a.gltf", inline.clone()),
+        ];
+        let g = work_facts(&data).remove(0);
+        assert_eq!(
+            (
+                g.b,
+                g.dec,
+                g.json_nodes,
+                g.external_resources,
+                g.instance_primitives
+            ),
+            (inline.len() as u64, 4, value_nodes(&doc), 0, 4)
+        );
+        assert_eq!(
+            i128::from(units) - i128::from(work_total(&data)),
+            160 + i128::from(read) - inline.len() as i128
+        );
+    }
+
+    #[test]
+    fn worked_example_total_reproduces_the_c2wb_formula() {
+        // §3.6: spans [23, 29], V = (20 + 25) + (30 + 25) = 100; one TRS node
+        // with s_step = 5: 256; two levels: 1152 + 16; Res = 0, Prim = 1.
+        let doc = json!({
+            "asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],
+            "extensionsRequired":["KHR_mesh_quantization"],"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0,"translation":[10.5,0,-3],"scale":[2,4,0.25]}],
+            "buffers":[{"byteLength":8}],"bufferViews":[{"buffer":0,"byteLength":8,"byteStride":8}],
+            "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"type":"VEC3",
+                "count":1,"min":[0,0,0],"max":[0,0,0]}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0}]}]
+        });
+        let mut child = content_tile(json!({"box":[1.5,3,2,100,0,0,0,0,0,0,0,50]}), "a.glb");
+        let mut m = IDENTITY;
+        m[12] = 1000.25;
+        m[13] = -20.;
+        child["transform"] = json!(m);
+        let mut root = tile(boxed([0.; 3], [2048.; 3]));
+        root["children"] = json!([child]);
+        let payload = glb(&doc, &[0; 8]);
+        let files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+        let f = work_facts(&files).remove(0);
+        assert_eq!(
+            (
+                f.nodes,
+                f.external_resources,
+                f.instance_primitives,
+                f.json_nodes
+            ),
+            (Some(256), 0, 1, value_nodes(&doc)),
+            "{f:?}"
+        );
+        assert_eq!(f.b, payload.len() as u64);
+        let units = f.t * 100 + 256 + f.idx + f.e + f.dec + f.b + 16 * f.json_nodes + 4 + 1152 + 16;
+        assert_eq!(work_total(&files), units);
+        at_cap_pair(&files, units);
+    }
+
+    #[test]
+    fn chain_bits_are_inherited_at_registration_and_ored_per_reference() {
+        let rotated = json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]});
+        let small = || boxed([0.; 3], [0.25; 3]);
+        let payload = points(&[[0., 0., 0.]]);
+        let with = |root: Value, extra: Option<(&'static str, Vec<u8>)>| {
+            let mut files = vec![("tileset.json", tileset(root)), ("a.glb", payload.clone())];
+            files.extend(extra);
+            files
+        };
+        // An ancestor's rotated box two levels up.
+        let mut mid = tile(small());
+        mid["children"] = json!([content_tile(small(), "a.glb")]);
+        let mut root = tile(rotated.clone());
+        root["children"] = json!([mid]);
+        assert_eq!(not_inspected(run(&with(root, None))), ["rotatedBox"]);
+        // An external-tileset link's content volume, inherited by the external root.
+        let mut root = tile(wide());
+        root["contents"] = json!([{"uri":"ext.json","boundingVolume":rotated.clone()}]);
+        let ext = tileset(content_tile(small(), "a.glb"));
+        assert_eq!(
+            not_inspected(run(&with(root, Some(("ext.json", ext))))),
+            ["rotatedBox"]
+        );
+        // The reference's own content volume (not part of the tile's chain).
+        let mut root = content_tile(wide(), "a.glb");
+        root["content"]["boundingVolume"] = rotated.clone();
+        assert_eq!(not_inspected(run(&with(root, None))), ["rotatedBox"]);
+        // A rotated tile that no reference passes through excludes nothing.
+        let mut root = content_tile(wide(), "a.glb");
+        root["children"] = json!([tile(rotated.clone())]);
+        assert!(contained(&run(&with(root, None)).unwrap()));
+        // A rotated sibling's content volume excludes nothing for the other reference.
+        let mut root = tile(wide());
+        let mut sibling = tile(wide());
+        sibling["contents"] = json!([{"uri":"ext.json","boundingVolume":rotated}]);
+        root["children"] = json!([content_tile(wide(), "a.glb"), sibling]);
+        let ext = tileset(tile(small()));
+        assert!(contained(
+            &run(&with(root, Some(("ext.json", ext)))).unwrap()
+        ));
+    }
+
+    #[test]
+    fn chain_bits_keep_precedence_after_the_precheck_stops() {
+        // The first reference stops the precheck at workLimit; a later reference
+        // through a rotated ancestor still lists rotatedBox, and only it.
+        let payload = points(&[[0., 0., 0.]]);
+        let mut excluded = tile(json!({"box":[0,0,0,1,1,0,-1,1,0,0,0,1]}));
+        excluded["children"] = json!([content_tile(boxed([0.; 3], [0.25; 3]), "a.glb")]);
+        let mut root = tile(wide());
+        root["children"] = json!([content_tile(wide(), "a.glb"), excluded]);
+        let files = vec![
+            ("tileset.json", tileset(root.clone())),
+            ("a.glb", payload.clone()),
+        ];
+        let limits = ValidationLimits {
+            containment_work_units: 1,
+            ..ValidationLimits::default()
+        };
+        assert_eq!(
+            not_inspected(run_with(&files, limits.clone())),
+            ["rotatedBox"]
+        );
+        // Control: without the later reference the same cap is workLimit.
+        root["children"].as_array_mut().unwrap().pop();
+        let files = vec![("tileset.json", tileset(root)), ("a.glb", payload)];
+        assert_eq!(not_inspected(run_with(&files, limits)), ["workLimit"]);
+    }
+
+    #[test]
+    fn levels_are_built_only_when_the_precheck_step_runs() {
+        let limits = ValidationLimits::default();
+        let mut c = Containment::new(&limits);
+        let facts = UriFacts {
+            bounds: None,
+            t: 0,
+            nodes: Some(0),
+            idx: 0,
+            e: 0,
+            per_reference: ReferenceFacts::default(),
+            max_depth: 0,
+            exclusions: 0,
+        };
+        c.uris.push(("a.glb".into(), facts));
+        let fact = |volume, parent, chain| TileFact {
+            transform: None,
+            volume,
+            external: None,
+            parent,
+            depth: 0,
+            chain,
+        };
+        let plain = VolumeFacts::Box([0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 1.]);
+        let root = c.tile(fact(plain, None, 0)).unwrap();
+        let child = c.tile(fact(plain, Some(root), 0)).unwrap();
+        assert_eq!(c.tiles[child].chain, 0);
+        c.reference(child, None, 0).unwrap();
+        assert_eq!((c.levels.len(), c.units), (2, 1152 + 16));
+        // A caller-supplied chain bit (slice 3's derived bit uses this path;
+        // here a stand-in) is inherited and ORed without building levels.
+        c.levels.clear();
+        let marked = c
+            .tile(fact(plain, Some(root), Reason::ImplicitTiling.bit()))
+            .unwrap();
+        let below = c.tile(fact(plain, Some(marked), 0)).unwrap();
+        assert_eq!(c.tiles[below].chain, Reason::ImplicitTiling.bit());
+        c.reference(below, None, 0).unwrap();
+        assert_eq!(c.exclusions, Reason::ImplicitTiling.bit());
+        assert!(c.levels.is_empty());
+        assert_eq!(c.units, 1152 + 16);
+        // A region tile's bit reaches its descendants' chains.
+        let region = c.tile(fact(VolumeFacts::Region, Some(root), 0)).unwrap();
+        let leaf = c.tile(fact(plain, Some(region), 0)).unwrap();
+        assert_eq!(c.tiles[leaf].chain, Reason::RegionVolume.bit());
+        assert_eq!(c.tiles[root].chain, 0);
     }
 
     #[test]

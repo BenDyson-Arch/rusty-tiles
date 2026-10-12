@@ -858,16 +858,39 @@ def hull_cases(contained, ni):
     return out
 
 
-# Hand derivation of the repeated-index archive's work units (contract Work bound):
-# per payload, FLOAT POSITION word pair (-149, 127), one skipped {"mesh":0} node so G = I
-# and W = (0, 0). Level 0 (child tile) and level 1 (root, no transform) carry the same
-# box c = (0.5, 0, 0.5), h = (0.5, 0, 0.5): D_0 = sum[(-149,127), (-1,-1)] = (-149, 128),
-# span 278, so s_0 = s_1 = 278 and ceil(278/64)^2 = 25 per level.
+# Hand derivation of the repeated-index archive's work units (C2-WB 3.1, 3.2;
+# independent of the oracle). Per payload: FLOAT POSITION word pair (-149, 127),
+# one skipped {"mesh":0} node so G = I and W = (0, 0). Level 0 (child tile) and
+# level 1 (root, no transform) carry the same box c = (0.5, 0, 0.5),
+# h = (0.5, 0, 0.5): D_0 = sum[(-149,127), (-1,-1)] = (-149, 128), span 278, so
+# s_0 = s_1 = 278 and q = ceil(278/64)^2 = 25 per level.
 #   T = 3 distinct vertices (deduplicated, not 3,999,990 occurrences)
-#   vertex units = 3 * (25 + 25) = 150; Nodes = 1 (skipped node)
+#   V = max(20, 25) + max(25, 25) [level 0: base + own box]
+#     + max(25, 25)               [level 1: root box, no step]       = 75
+#   vertex units = 3 * 75 = 225; Nodes = 1 (skipped node)
 #   Idx = 3,999,990 indices; E = 9 + 3,999,990 = 3,999,999
-#   per payload 8,000,140; three payloads, one reference each:
-REPEATED_INDEX_UNITS = 3 * (3 * 2 * (-(-278 // 64)) ** 2 + 1 + 3999990 + (9 + 3999990))
+#   Dec = 0 (no external, data-URI or meshopt buffer); Res = 0; Prim = 1
+#   B = the GLB member length; J = value nodes of its JSON chunk (counted below)
+#   + 1152 + 8 * 2 levels
+# three identical payloads, one reference each.
+REPEATED_INDEX_UNITS = None  # set by repeated_index_cases() from the payload bytes
+
+
+def json_value_nodes(value):
+    """Root plus every scalar/container value; object keys are not value nodes."""
+    if isinstance(value, dict):
+        return 1 + sum(json_value_nodes(v) for v in value.values())
+    if isinstance(value, list):
+        return 1 + sum(json_value_nodes(v) for v in value)
+    return 1
+
+
+def repeated_index_hand_units(glb):
+    json_len = struct.unpack_from("<I", glb, 12)[0]
+    J = json_value_nodes(json.loads(glb[20:20 + json_len]))
+    per_payload = (3 * (max(20, 25) + max(25, 25) + max(25, 25)) + 1 + 3999990 + (9 + 3999990)
+                   + 0 + len(glb) + 16 * J + 160 * 0 + 4 * 1 + 1152 + 8 * 2)
+    return 3 * per_payload
 
 
 def repeated_index_cases(contained, ni):
@@ -885,6 +908,10 @@ def repeated_index_cases(contained, ni):
         g.doc["scenes"] = [{"nodes": [0]}]
         g.doc["scene"] = 0
         case.payloads.append(("p%d.glb" % i, g.glb()))
+    global REPEATED_INDEX_UNITS
+    assert len({p for _, p in case.payloads}) == 1  # three identical payloads
+    REPEATED_INDEX_UNITS = repeated_index_hand_units(case.payloads[0][1])
+    for i in range(3):
         children.append(B.tile(B.tight_box([B.up(F(p)) for p in positions]), content="p%d.glb" % i))
     case.tilesets["tileset.json"] = B.tileset(B.tile(B.tight_box([B.up(F(p)) for p in positions]),
                                                      geometric_error=10.0, children=children))

@@ -1,5 +1,13 @@
 # F1d1 independent artifact evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 54 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/mesh_approximation | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/mesh_approximation.tar.zst`, SHA-256
+> `35f5e3128e520d0e386cf205aa5ab4ce961c40a6244dbe44eaca1cdd1b1705b4`.
+> Paths below that no longer exist refer to that snapshot.
+
 This is bounded evidence for the one-root approximation contract under #121.
 It does not close #121/#113, approve release, or certify textured HLOD, topology,
 appearance equivalence, recursive errors or general world/source coordinates.

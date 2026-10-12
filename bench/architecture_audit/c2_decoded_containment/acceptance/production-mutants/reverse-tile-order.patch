@@ -1,8 +1,8 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 8a94975..20a1146 100644
+index b5c9dc0..df5edd7 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
-@@ -612,6 +612,16 @@ impl Containment {
+@@ -643,6 +643,16 @@ impl Containment {
              try_push(&mut self.levels, fact)?;
              current = parent;
          }
@@ -18,4 +18,4 @@ index 8a94975..20a1146 100644
 +        }
          Ok(())
      }
-     /// Collect chain exclusions and run the precheck step for one reference, in
+     /// Collect chain exclusions in O(1) and run the precheck step for one

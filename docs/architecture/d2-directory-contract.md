@@ -1,5 +1,9 @@
 # D2 directory replacement and recovery
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 D2 extends the completed-tree publisher and real raster consumer from D1 with
 `OutputPolicy::Replace`. The producer still closes all writers, native handles,
 reports and required observations before sealing. One F0 Attempt grants
