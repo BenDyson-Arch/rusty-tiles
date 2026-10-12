@@ -128,6 +128,10 @@ class Traversal:
         self.caveats = []
         self.c1_caveats = []
         self.invalid = None  # TilesetInvalid met in traversal order, after self.references
+        # Ancestor levels at distance >= 2 depend only on the frames on the path, so
+        # sibling references share those Level objects (memory for archives with very
+        # many deep references). Keys hold the frame objects themselves.
+        self._ancestor_levels = {}
 
     def exclude(self, reason, where):
         self.exclusions.add(reason)
@@ -236,6 +240,11 @@ class Traversal:
     def _reference(self, target, uri, where, path, content_volume):
         levels = []
         for distance, frame in enumerate(reversed(path)):
+            key = (frame, path[len(path) - distance], distance) if distance >= 2 else None
+            shared = self._ancestor_levels.get(key) if key is not None else None
+            if shared is not None:
+                levels.append(shared)
+                continue
             level = Level(frame.where)
             if distance == 0:
                 level.volumes.append(LevelVolume("own", 0, frame.volume, frame.where))
@@ -252,6 +261,8 @@ class Traversal:
                                        for r in range(4)]
                     level.to_parent_pairs = [S.pair_of(exact(v)) for v in child.transform]
             levels.append(level)
+            if key is not None:
+                self._ancestor_levels[key] = level
         for level in levels:
             for lv in level.volumes:
                 reason = lv.volume.exclusion()
