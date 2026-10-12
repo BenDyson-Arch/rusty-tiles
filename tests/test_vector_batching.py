@@ -27,7 +27,7 @@ class VectorBatchingTests(unittest.TestCase):
         vector.emit(items,path,lambda p:np.asarray(p,dtype=float),encoding_report=report,**kwargs)
         return path,report
 
-    def test_vector_content_markers_are_optional_in_both_tiling_modes(self):
+    def test_vector_content_markers_are_optional_in_forest_and_hierarchy(self):
         # The c48ebdc schema requires vector:true on vector content; it does
         # not require the extension for clients that use triangle fallback.
         with tempfile.TemporaryDirectory() as tmp:
@@ -36,10 +36,11 @@ class VectorBatchingTests(unittest.TestCase):
                 dict(type='Feature',id=i,properties=dict(name=str(i)),
                     geometry=dict(type='LineString',coordinates=[[i*10,0,0],[i*10+1,1,0]]))
                 for i in range(4)])))
-            for explicit in (False,True):
-                out=root/str(explicit)
+            # The published forest and the producer hierarchy it was written from.
+            for view in (False,True):
+                out=root/str(view)
                 vector.run(types.SimpleNamespace(input=str(source),output=str(out),
-                    source_crs='local',max_features=2,explicit=explicit))
+                    source_crs='local',max_features=2,hierarchy_view=view))
                 checked=[]
                 def check(node):
                     for content in node.get('contents',[node['content']] if 'content' in node else []):

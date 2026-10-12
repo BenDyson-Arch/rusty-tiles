@@ -133,7 +133,7 @@ The converter automatically uses native fallback when that feature is built. Oth
 
 ### What the output keeps
 
-The default output uses a disk-backed midpoint octree written as the bounded implicit forest, with one binary subtree per implicit root. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
+The default output uses a disk-backed midpoint octree written as the bounded implicit forest, with one binary subtree per implicit root. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. The earlier `--explicit` binary partition and explicit manifest were removed in 0.4.0.
 
 - Points stream through disk-backed partitions. Chunk/leaf budgets limit record counts; schema, hierarchy and encoded metadata still contribute memory. P1 records measured RSS/scratch/descriptor growth rather than promising a whole-job bound.
 - Parents hold voxel samples. Leaves keep every point, including coincident points.

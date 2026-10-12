@@ -41,6 +41,10 @@ nothing from the repository. It is pure Python 3 standard library.
 
 From this directory:
 
+The recorded vector and point-cloud `--explicit` artifacts and forest twins are frozen inputs, pinned by
+sha256. H6 (2026-10-13) removed `--explicit` from `vector` and `point-cloud`; later binaries refuse it as an unknown argument. Regenerating
+them needs a converter built at or before develop `7fad70c`.
+
 ```sh
 python3 -I oracle/self_test/run.py            # 59 checks, exit 0
 python3 -I witnesses/generate.py --large      # 261 cases, 16 control pairs; exit 0 when all agree

@@ -509,12 +509,13 @@ def pack_glb(doc,binary):
 def controls(source,archive,max_points):
     """Mutations are validated by this reader; neither packaging nor product validator is the oracle."""
     with zipfile.ZipFile(archive) as z:members={n:z.read(n) for n in z.namelist()}
-    manifest=json.loads(members['tileset.json']);require('implicitTiling' not in manifest['root'],'explicit mutation control')
+    manifest=json.loads(members['tileset.json'])
+    root=expand_forest(manifest['root'],members,set(),'schema' in manifest,{'explicit':0,'implicit_roots':0,'documents':1})
     def leaves(node):
         if node.get('children'):
             for child in node['children']:yield from leaves(child)
         else:yield node['content']['uri']
-    leaf=next(leaves(manifest['root']));out=[]
+    leaf=next(leaves(root));out=[]
     for kind in ('wrong_position','missing_field','duplicate_record','truncated_bin','accessor_overrun','orphan_resource','missing_content'):
         modified=dict(members);doc,binary=glb(modified[leaf]);binary=bytearray(binary)
         table=doc['extensions']['EXT_structural_metadata']['propertyTables'][0]
@@ -592,16 +593,16 @@ def forest_controls(source,archive,max_points):
 def run(binary,output_dir,quick=False,baseline=False):
     binary=pathlib.Path(binary).resolve();directory=pathlib.Path(output_dir);directory.mkdir(parents=True,exist_ok=True)
     results=[];controls_result=[]
-    cases=[(3,'spread',False,11),(3,'spread',True,11),(3,'identical',True,3),(3,'outlier',False,1),(3,'reordered',True,17)]
-    cases.append((3,'spread',True,11,1))
+    # Explicit point output retired in 0.4.0 (H6); every case is the implicit forest.
+    cases=[(3,'spread',11),(3,'identical',3),(3,'outlier',1),(3,'reordered',17)]
+    cases.append((3,'spread',11,1))
     # A chain deeper than one document's skeleton: links and external documents.
-    cases.append((3,'deep',True,11))
-    if not quick:cases.extend((fmt,'spread',implicit,3) for fmt in FORMATS if fmt!=3 for implicit in (False,True))
+    cases.append((3,'deep',11))
+    if not quick:cases.extend((fmt,'spread',3) for fmt in FORMATS if fmt!=3)
     for number,case in enumerate(cases):
-        fmt,variant,implicit,chunk=case[:4];budget=case[4] if len(case)>4 else 16
+        fmt,variant,chunk=case[:3];budget=case[3] if len(case)>3 else 16
         source=directory/f'{number}-{fmt}-{variant}.las';archive=source.with_suffix('.3tz');fixture(source,fmt=fmt,variant=variant)
         command=[str(binary),'--json','point-cloud','-i',str(source),'-o',str(archive),'--sourceCrs','local','--maxPoints',str(budget),'--chunkPoints',str(chunk)]
-        if not implicit:command.append('--explicit')
         completed=subprocess.run(command,capture_output=True,text=True)
         require(completed.returncode==0,'conversion failed: '+completed.stdout+completed.stderr)
         result=audit(source,archive,budget);result.update(format=fmt,variant=variant,chunk_points=chunk,max_points=budget);results.append(result)
@@ -626,7 +627,7 @@ def invoke(binary,source,archive,options=()):
 def profile_controls(binary,directory,baseline=False):
     results=[]
     source=directory/'schema.las';archive=source.with_suffix('.3tz');fixture(source,metadata=True)
-    completed,response=invoke(binary,source,archive,['--sourceCrs','local','--explicit','--maxPoints','16','--metadata-attributes'])
+    completed,response=invoke(binary,source,archive,['--sourceCrs','local','--maxPoints','16','--metadata-attributes'])
     require(completed.returncode==0,'schema control conversion: '+completed.stdout)
     try:observed=audit(source,archive,16)
     except AssertionError as error:
@@ -638,25 +639,21 @@ def profile_controls(binary,directory,baseline=False):
     for flags in (8,16):
         source=directory/f'single-scale-flag-{flags}.las';archive=source.with_suffix('.3tz');fixture(source,count=23)
         content=bytearray(source.read_bytes());content[227+54+10*192+3]=flags;source.write_bytes(content)
-        completed,_=invoke(binary,source,archive,['--sourceCrs','local','--maxPoints','16','--explicit'])
+        completed,_=invoke(binary,source,archive,['--sourceCrs','local','--maxPoints','16'])
         require(completed.returncode==0,'independent scale/offset flag conversion')
         results.append({'case':'independent ExtraBytes scale/offset flags','flags':flags,'result':audit(source,archive,16)})
     # Analytic WGS84 geographic-to-ECEF; literals at equator/central meridian,
     # independent ellipsoid formula at 45 degrees. No production transform call.
-    for explicit in (False,True):
-        source=directory/f'geographic-{explicit}.las';archive=source.with_suffix('.3tz');fixture(source,count=23,variant='geographic')
-        options=['--sourceCrs','EPSG:4326','--heightOffset','7','--maxPoints','16','--chunkPoints','3']
-        if explicit:options.append('--explicit')
-        completed,_=invoke(binary,source,archive,options);require(completed.returncode==0,'analytic geographic conversion: '+completed.stdout)
-        observed=audit(source,archive,16,geographic=True,height=7.);results.append({'case':'analytic WGS84 ECEF','explicit':explicit,'result':observed})
-    for explicit in (False,True):
-        source=directory/f'utm-origin-{explicit}.las';archive=source.with_suffix('.3tz');fixture(source,count=23,variant='projected_origin')
-        options=['--sourceCrs','EPSG:32632','--heightOffset','7','--maxPoints','16','--chunkPoints','3']
-        if explicit:options.append('--explicit')
-        completed,_=invoke(binary,source,archive,options);require(completed.returncode==0,'analytic UTM origin conversion: '+completed.stdout)
-        position=ecef({'source_x':9.,'source_y':0.,'source_z':123.},7.)
-        observed=audit(source,archive,16,expected_positions_override=[position]*23)
-        results.append({'case':'analytic UTM32 false easting/equator ECEF','explicit':explicit,'reference':'EPSG32632 false easting500000/northing0 is longitude9deg/latitude0; independent WGS84 ellipsoid formula at h130m','result':observed})
+    source=directory/'geographic.las';archive=source.with_suffix('.3tz');fixture(source,count=23,variant='geographic')
+    options=['--sourceCrs','EPSG:4326','--heightOffset','7','--maxPoints','16','--chunkPoints','3']
+    completed,_=invoke(binary,source,archive,options);require(completed.returncode==0,'analytic geographic conversion: '+completed.stdout)
+    observed=audit(source,archive,16,geographic=True,height=7.);results.append({'case':'analytic WGS84 ECEF','result':observed})
+    source=directory/'utm-origin.las';archive=source.with_suffix('.3tz');fixture(source,count=23,variant='projected_origin')
+    options=['--sourceCrs','EPSG:32632','--heightOffset','7','--maxPoints','16','--chunkPoints','3']
+    completed,_=invoke(binary,source,archive,options);require(completed.returncode==0,'analytic UTM origin conversion: '+completed.stdout)
+    position=ecef({'source_x':9.,'source_y':0.,'source_z':123.},7.)
+    observed=audit(source,archive,16,expected_positions_override=[position]*23)
+    results.append({'case':'analytic UTM32 false easting/equator ECEF','reference':'EPSG32632 false easting500000/northing0 is longitude9deg/latitude0; independent WGS84 ellipsoid formula at h130m','result':observed})
     for kind in ('scaled_u64','scaled_i64','vector_extra','nonfinite_extra','truncated_source','local_height','missing_height','source_alias','hardlink_alias','zero_scale','negative_scale','scaled_overflow','header_size_zero','point_offset_zero','point_offset_u32max','point_offset_beyond_file','evlr_offset_u64max','evlr_offset_beyond_file','f32_unrepresentable_nodata','duplicate_projected_geokey','duplicate_geographic_geokey','untyped_extra','waveform_format'):
         source=directory/f'refused-{kind}.las';target=directory/f'refused-{kind}.3tz'
         if kind=='source_alias':source=target

@@ -39,6 +39,6 @@ call(['terrain','-i',str(source),'-o',str(root/'terrain'),'--cells-per-leaf','16
       '--height-offset','10.25','--fill-height','-999.125'])
 source=root/'cloud.las';fixture(source,crs=CRS.from_epsg(32632))
 run(types.SimpleNamespace(input=str(source),output=str(root/'cloud'),source_crs='header',
-    max_points=32,chunk_points=31,height_offset=10,explicit=False))
+    max_points=32,chunk_points=31,height_offset=10))
 generate(root/'annotations',quantize=True,meshopt_helper=cli_binary,batch=True,aggregate_points=True)
 print('Serve the selected mesh, cloud, annotations, imagery and terrain directories with rusty-tiles preview.')

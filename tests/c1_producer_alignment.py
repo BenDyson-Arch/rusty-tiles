@@ -7,7 +7,7 @@ def main():
  ring=json.loads(source.read_text())['features'][0]['geometry']['coordinates'][0]
  assert len(ring)-1==50 and ring[0]==ring[-1]
  area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(ring,ring[1:])))/2;assert area==300
- target=a.work/'staircase.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--sourceCrs','local','--explicit','--reproducible','--maxVertices','32','--maxBytes','16384','--json']
+ target=a.work/'staircase.3tz';command=[str(a.binary.resolve()),'vector','-i',str(source.resolve()),'-o',str(target.resolve()),'--sourceCrs','local','--reproducible','--maxVertices','32','--maxBytes','16384','--json']
  run=subprocess.run(command,capture_output=True,text=True,timeout=120);assert run.returncode==0,(run.stdout,run.stderr)
  report=json.loads(run.stdout);assert report['counts']['features']==1 and report['counts']['fragmentedPolygons']==1 and report['counts']['skippedFeatures']==0,report
  controls=[]

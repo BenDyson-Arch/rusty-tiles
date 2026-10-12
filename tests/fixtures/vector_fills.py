@@ -51,7 +51,7 @@ def main():
         source = fills / f'{name}.geojson'
         source.write_text(json.dumps(dict(type='FeatureCollection', features=[country])))
         vector.run(types.SimpleNamespace(
-            input=str(source), output=str(fills / name), explicit=False,
+            input=str(source), output=str(fills / name), hierarchy_view=False,
             max_vertices=64, max_bytes=16384, lod_levels=3, lod_tolerance=1000,
             quantize=args.compressed, meshopt=args.compressed,
         ))

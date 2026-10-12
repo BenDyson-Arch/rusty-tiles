@@ -33,11 +33,6 @@ def native_run(args):
     with tempfile.TemporaryDirectory(dir=output.parent) as scratch:
         archive = pathlib.Path(scratch) / 'output.3tz'
         command = [BIN, 'vector', '-i', str(args.input), '-o', str(archive)]
-        # Frozen oracle and explicit-hierarchy audits retain their original
-        # contract. Browser fixtures and forest reuse tests opt into the
-        # converter's implicit-forest default with explicit=False.
-        if getattr(args, 'explicit', True):
-            command.append('--explicit')
         single = dict(jobs='jobs', max_features='maxFeatures', max_parent_features='maxParentFeatures',
             max_vertices='maxVertices', max_bytes='maxBytes', max_tiles='maxTiles',
             max_source_vertices='maxSourceVertices', lod_tolerance='lodTolerance', lod_levels='lodLevels',
@@ -64,10 +59,45 @@ def native_run(args):
             raise ValueError(result.stderr.strip())
         output.mkdir(parents=True, exist_ok=True)
         (output / 't').mkdir(exist_ok=True)
+        # The published archive stays beside the directory for reuse tests.
+        published(output).write_bytes(archive.read_bytes())
         with zipfile.ZipFile(archive) as tiles:
+            if getattr(args, 'hierarchy_view', True):
+                hierarchy_view(tiles, output)
+                return
             for name in tiles.namelist():
                 if name != '@3dtilesIndex1@':
                     tiles.extract(name, output)
+
+
+def published(output):
+    """The archive `native_run` published for the directory `output`."""
+    output = pathlib.Path(output)
+    return output.with_name(output.name + '.published.3tz')
+
+
+def hierarchy_view(tiles, output):
+    """Materialize the producer hierarchy H of a published forest archive.
+
+    Explicit vector output retired in 0.4.0 (H6). Hierarchy audits read H as the
+    producer recorded it: `tileset.json` is the published manifest with its root
+    replaced by `explicitRoot` from `vector-build.json`, and every raw payload is
+    written to its content address `t/<sha256>.glb`, published in place or
+    restored byte for byte (sha256-checked) from its rebased forest member by the
+    independent acceptance oracle. Build state and reports are copied unchanged;
+    forest-only members (implicit content, subtrees, external documents) are not.
+    Tests of the published layout pass hierarchy_view=False."""
+    from vector_acceptance_oracle import raw_payloads
+    state = json.loads(tiles.read('vector-build.json'))
+    manifest = json.loads(tiles.read('tileset.json'))
+    view = {key: manifest[key] for key in ('asset', 'extensionsUsed', 'geometricError') if key in manifest}
+    view['root'] = state['explicitRoot']
+    (output / 'tileset.json').write_text(json.dumps(view))
+    for name, data in raw_payloads(tiles, state).items():
+        (output / name).write_bytes(data)
+    for name in ('vector-build.json', 'conversion.json', 'geometry-reports.jsonl'):
+        if name in tiles.namelist():
+            tiles.extract(name, output)
 
 
 # Tests call vector.run and vector.emit; both use the native CLI.

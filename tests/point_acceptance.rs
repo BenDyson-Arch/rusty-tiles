@@ -35,7 +35,6 @@ fn request(input: &Path, output: &Path) -> PointCloudRequest {
         output,
         PointCloudCoordinates::LocalMetres,
         PointCloudOptions {
-            explicit: true,
             max_points: 3,
             chunk_points: 2,
             ..Default::default()

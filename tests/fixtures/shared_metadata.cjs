@@ -1,6 +1,6 @@
 // Optional acceptance against CesiumJS 1.146.0 and Chromium. Run the native
 // metadata tests with RUSTY_TILES_METADATA_ACCEPTANCE_DIR, serve mesh-false-true
-// and point-false with `preview`, then pass its URL to this probe.
+// and point with `preview`, then pass its URL to this probe.
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 (async () => {
