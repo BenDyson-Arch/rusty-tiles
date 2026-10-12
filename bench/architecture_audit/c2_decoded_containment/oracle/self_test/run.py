@@ -17,9 +17,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from c2o import meshopt  # noqa: E402
+from c2o.gltf import Payload  # noqa: E402
+from c2o.check import level_operations  # noqa: E402
 from c2o import spans as S  # noqa: E402
-from c2o.numbers import JsonNumberError, Overflow, contains_overflow, f32_exact, f32_bits, load_json, lowbit_highbit  # noqa: E402
-from c2o.scene import QUAT_WINDOW, Walk, mat_mul, node_matrix, quaternion_excess  # noqa: E402
+from c2o.numbers import JsonNumberError, Overflow, contains_overflow, f32_exact, f32_bits, load_json, lowbit_highbit, value_nodes  # noqa: E402
+from c2o.scene import QUAT_WINDOW, Walk, mat_mul, node_matrix, node_visit_units, quaternion_excess  # noqa: E402
 from c2o.tileset import Level, LevelVolume  # noqa: E402
 from c2o.volumes import LevelTest, parse_volume  # noqa: E402
 
@@ -87,7 +89,8 @@ def _encode_raw_attributes(data, count, stride):
 # ---------------------------------------------------------------- spans
 
 def test_worked_example():
-    """Contract 'Worked example' (B1): sInst=5, level spans [23, 29], 8 vertex, 128 node units."""
+    """Contract 'Worked example' (B1): sInst=5, level spans [23, 29]. Units per C2-WB 3.6:
+    V = (20 + 25) + (30 + 25) = 100, vertex units 4 x 100 = 400, node units 256."""
     doc = {"scene": 0, "scenes": [{"nodes": [0]}], "meshes": [{}],
            "nodes": [{"translation": [10.5, 0, -3], "scale": [2, 4, 0.25], "mesh": 0}]}
     walk = Walk(doc, 0)
@@ -107,9 +110,45 @@ def test_worked_example():
           P == [(-1, 20), (-2, 18), (2, 18)] and W == (0, 15), (P, W))
     check("worked example sInst == 5", inst.s_inst == 5, inst.s_inst)
     check("worked example level spans == [23, 29]", spans == [23, 29], spans)
-    vertex_units = 4 * sum((-(-s // 64)) ** 2 for s in spans)
-    check("worked example vertex units == 8", vertex_units == 8, vertex_units)
-    check("worked example node units == 128", walk.node_units == 128, walk.node_units)
+    V, rows = level_operations([l0, l1], spans)
+    check("C2-WB worked example V == (20 + 25) + (30 + 25) == 100", V == 100, (V, rows))
+    check("C2-WB worked example vertex units == 4 x 100 == 400", 4 * V == 400, 4 * V)
+    check("C2-WB worked example node units == max(256, 128) == 256", walk.node_units == 256, walk.node_units)
+
+
+def test_wb_weights():
+    """One identity per C2-WB weight (3.1, 3.2), on synthetic levels."""
+    def level(volumes, step=False):
+        lv = Level("t")
+        for kind in volumes:
+            vol = parse_volume({"box": [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]} if kind == "box"
+                               else {"sphere": [0, 0, 0, 1]}, "t")
+            lv.volumes.append(LevelVolume("own", 0, vol, "t"))
+        if step:
+            lv.to_parent_pairs = [S.ONE] * 16
+        return lv
+    small = 64  # q = 1: every floor applies
+    for name, levels, spans, want in (
+            ("level-0 base 20 + box 25", [level(["box"])], [small], 45),
+            ("level-0 base 20 + sphere 32", [level(["sphere"])], [small], 52),
+            ("level >= 1 step 30 + box 25", [level(["box"]), level(["box"], True)], [small, small], 45 + 55),
+            ("level >= 1 without transform: box only", [level(["box"]), level(["box"])], [small, small], 45 + 25),
+            ("two spheres + step at level 1", [level(["box"]), level(["sphere", "sphere"], True)], [small, small],
+             45 + 30 + 64),
+            ("q above every floor (s=577 -> q=100)", [level(["box", "sphere"]), level(["box", "sphere"], True)],
+             [577, 577], 300 + 300),
+            ("q between floors (s=320 -> q=25)", [level(["box", "sphere"]), level(["sphere"], True)],
+             [320, 320], (25 + 25 + 32) + (30 + 32)),
+            ("q = 0 (s = 0) uses the floors", [level(["box"])], [0], 45)):
+        got, _ = level_operations(levels, spans)
+        check("C2-WB V: " + name, got == want, (got, want))
+    for s_step, want in ((0, 256), (64, 256), (65, 512), (128, 512), (129, 1152), (577, 12800)):
+        check("C2-WB node visit units s_step=%d -> %d" % (s_step, want), node_visit_units(s_step) == want,
+              node_visit_units(s_step))
+    for text, want in (("{}", 1), ("[]", 1), ("0", 1), ('{"a":[1,2,{"b":null}],"c":"x"}', 7),
+                       ("[[[[[1]]]]]", 6), ('{"a":{},"b":[]}', 3)):
+        check("C2-WB value nodes %s == %d" % (text, want), value_nodes(load_json(text)) == want,
+              value_nodes(load_json(text)))
 
 
 def test_identity_equivalence():
@@ -294,8 +333,30 @@ def test_integer_predicate():
     check("non-permutation box is rotatedBox", vol.kind == "rotatedBox")
 
 
+def test_repeated_resource_bytes():
+    """B and Res count every buffer/image entry, also when two entries name one member: C1
+    payload contract (c1-payload-integrity-contract.md:330-331), "Repeated resource
+    declarations charge repeated actual bytes; no digest/URI deduplication changes that
+    meaning"."""
+    class Members:
+        def __init__(self, members):
+            self.members = members
+
+        def read(self, name):
+            return self.members[name]
+    doc = {"asset": {"version": "2.0"},
+           "buffers": [{"uri": "b.bin", "byteLength": 12}, {"uri": "./b.bin", "byteLength": 12},
+                       {"uri": "b.bin", "byteLength": 12}],
+           "images": [{"uri": "b.bin"}]}
+    gltf = json.dumps(doc).encode()
+    p = Payload(Members({"g.gltf": gltf, "b.bin": bytes(12)}), "g.gltf")
+    check("C2-WB B counts a member once per resolved entry (3 buffers + 1 image naming b.bin)",
+          p.bytes_read == len(gltf) + 4 * 12, (p.bytes_read, len(gltf) + 4 * 12))
+    check("C2-WB Res counts entries, aliases included", p.external_resources == 4, p.external_resources)
+
+
 def main():
-    for test in (test_meshopt, test_worked_example, test_identity_equivalence, test_soundness,
+    for test in (test_meshopt, test_worked_example, test_wb_weights, test_repeated_resource_bytes, test_identity_equivalence, test_soundness,
                  test_identities, test_integer_predicate):
         try:
             test()

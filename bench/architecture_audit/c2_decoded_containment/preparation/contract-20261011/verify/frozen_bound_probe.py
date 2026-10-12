@@ -10,6 +10,12 @@ Checks soundness (lo <= lowbit, hi >= highbit) of every quantity and every left-
 flat sum against exact Fractions; reports producer spans incl. the {"mesh":0} node, identity-TRS
 equivalence, sphere vs box admitted depth, tiny-quaternion blow-up, and the worked example.
 Single-threaded, deterministic, stdlib only (python3 -I).
+
+C2-WB (O-WB, 2026-10-12): `--wb` also writes frozen-bound-observed-wb.json with the C2-WB
+units of the same chains (per-operation weights max(F, ceil(s/64)^2), F = 20 base, 30 step,
+25 box, 32 sphere; node visits max(256, 128 ceil(s_step/64)^2)) and the C2-WB worked
+example. The C2-WB computations run after the slice-1 ones and restore the soundness
+counters, so frozen-bound-observed.json is byte-identical with or without `--wb`.
 """
 import json
 import math
@@ -205,6 +211,42 @@ def chain_spans(nodes, kind, raw, normalized, levels):
     return ti.max, out
 
 
+WB_FLOOR = {'base': 20, 'step': 30, 'box': 25, 'sphere': 32}
+
+
+def wb_vertex_units(levels, spans):
+    """C2-WB 3.1 V(r) for `levels` as passed to chain_spans and their spans."""
+    total = 0
+    for idx, ((T, vols), s) in enumerate(zip(levels, spans)):
+        q = (-(-s // 64)) ** 2
+        total += max(WB_FLOOR['base'], q) if idx == 0 else 0
+        total += max(WB_FLOOR['step'], q) if idx >= 1 and T is not None else 0
+        total += sum(max(WB_FLOOR[v[0]], q) for v in vols)
+    return total
+
+
+def wb_node_units(nodes):
+    """C2-WB 3.2 Nodes for a root-first node path: 1 per skipped node, otherwise
+    max(256, 128 ceil(s_step/64)^2), s_step over that node's L quantities, G.L products
+    and resulting G entries (D1). Restores the soundness counters."""
+    saved, saved_examples = dict(STATS), list(EXAMPLES)
+    G = [[ONE if i == j else inp(0) for j in range(4)] for i in range(4)]
+    units, steps = 0, []
+    for nd in nodes:
+        if not has_step(nd):
+            units += 1
+            continue
+        t = Track()
+        L = local(t, nd)
+        G = [[fsum(t, [mul(t, G[i][k], L[k][j]) for k in range(4)]) for j in range(4)] for i in range(4)]
+        steps.append(t.max)
+        units += max(256, 128 * (-(-t.max // 64)) ** 2)
+    STATS.clear()
+    STATS.update(saved)
+    EXAMPLES[:] = saved_examples
+    return units, steps
+
+
 def quat(rng, style):
     if style == 'generic':
         v = [rng.gauss(0, 1) for _ in range(4)]
@@ -244,6 +286,7 @@ def main():
     res['vectorQuantizeDepth16'] = {'sInst': si, 'maxLevelSpan': max(sl)}
     # 2. rotated depth: box vs sphere, generic / near-axis / tiny
     rows = []
+    wb_rows = []
     for style in ('generic', 'near-axis', 'tiny'):
         for k in (1, 2, 4, 6, 8, 10, 12, 14, 16):
             nodes = [{'mesh': 0, 'rotation': quat(rng, style), 'scale': [rng.uniform(0.1, 10) for _ in range(3)],
@@ -252,6 +295,8 @@ def main():
             sb = chain_spans(nodes, 'f32', pos, False, [(None, [abox]), (T, [abox])])
             ss = chain_spans(nodes, 'f32', pos, False, [(None, [('sphere', [1.5, 2.0, 3.0], 5000.0)]), (T, [abox])])
             rows.append({'style': style, 'depth': k, 'boxMax': max([sb[0]] + sb[1]), 'sphereMax': max([ss[0]] + ss[1])})
+            wb_rows.append((style, k, nodes, [(None, [abox]), (T, [abox])], sb,
+                            [(None, [('sphere', [1.5, 2.0, 3.0], 5000.0)]), (T, [abox])], ss))
     res['rotatedDepth'] = rows
     cap = 4096
     res['admittedDepthAtCap4096'] = {s: {'box': max([r['depth'] for r in rows if r['style'] == s and r['boxMax'] <= cap], default=0),
@@ -310,6 +355,23 @@ def main():
     Path(__file__).with_name('frozen-bound-observed.json').write_text(json.dumps(res, indent=1) + '\n')
     print(json.dumps({k: res[k] for k in ('producerTranslationChainDepth20', 'vectorQuantizeDepth16', 'admittedDepthAtCap4096', 'workedExample')}))
     print(json.dumps(res['soundness']))
+    if '--wb' in sys.argv[1:]:
+        wb = {}
+        node_units, steps = wb_node_units(ex_nodes)
+        V = wb_vertex_units(ex_levels, sl)
+        wb['workedExample'] = {'levelSpans': sl, 'q': [(-(-s // 64)) ** 2 for s in sl], 'V': V,
+                               'expectedV': (20 + 25) + (30 + 25), 'vertexUnitsForAccessorCount4': T_u * V,
+                               'nodeStepSpans': steps, 'nodeUnits': node_units,
+                               'identity': 'units = 400 + 256 + 4 + E + Dec + B + 16 J + 160 Res + 4 Prim + 1152 + 16'}
+        wb['rotatedDepth'] = []
+        for style, k, nodes, lb, sb, ls, ss in wb_rows:
+            nu, st = wb_node_units(nodes)
+            wb['rotatedDepth'].append({'style': style, 'depth': k, 'nodeUnits': nu, 'maxNodeStepSpan': max(st),
+                                       'boxV': wb_vertex_units(lb, sb[1]), 'sphereV': wb_vertex_units(ls, ss[1]),
+                                       'frozenBoxPerVertex': sum((-(-s // 64)) ** 2 for s in sb[1]),
+                                       'frozenSpherePerVertex': sum((-(-s // 64)) ** 2 for s in ss[1])})
+        Path(__file__).with_name('frozen-bound-observed-wb.json').write_text(json.dumps(wb, indent=1) + '\n')
+        print(json.dumps(wb['workedExample']))
 
 
 if __name__ == '__main__':

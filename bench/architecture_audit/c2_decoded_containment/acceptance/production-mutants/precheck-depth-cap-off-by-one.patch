@@ -1,8 +1,8 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 8a94975..bd11de6 100644
+index b5c9dc0..fddd63b 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
-@@ -665,7 +665,7 @@ impl Containment {
+@@ -692,7 +692,7 @@ impl Containment {
                  },
              },
          };
@@ -10,4 +10,4 @@ index 8a94975..bd11de6 100644
 +        if facts.max_depth >= self.caps.node_depth {
              return Some(Reason::WorkLimit);
          }
-         let units = facts.nodes.and_then(|nodes| {
+         let per_reference = &facts.per_reference;

@@ -444,19 +444,23 @@ alignment).
 `element_cap` limits a VEC3 count to at most 4,000,000/3 (`payload.rs:415`), so the bitmap is at
 most **166,667 B**.
 
-**Level chain.** f64 facts only: transform, up to two volumes and roles, per level. That is at
-most 129 levels × 344 B, so **≤ 44 KiB**. Dyadics are created from the facts in the scratch area.
+**Level chain.** f64 facts only: transform, up to three volumes and roles, per level. That is at
+most 129 levels × 472 B (`size_of::<LevelFacts>()`, C2-WB restatement), so **≤ 60 KiB**. Dyadics are created from the facts in the scratch area.
 
 **Phase-1 and precheck facts** (D4):
 
-- Per URI, **120 B**: 4 hull pairs, `sInst`, `sPos`, and `T`, `Nodes`, `Idx`, `E`, `Dec`, `B` and
-  `maxNodeDepth` as u64. The maximum is 524,288 URIs (C1 `archive_entries`), **≤ 60 MiB**.
-- Tile arena: at most 262,144 tiles (C1 `hierarchy_visits`) × **≤ 336 B** (transform, own and
-  content volume, parent index, role), so **≤ 84 MiB**.
-- Reference list: at most 1,048,576 (C1 `references`) × 16 B, so **≤ 16 MiB**.
+- Per URI, **152 B** (`size_of::<UriFacts>()`, C2-WB restatement): hull facts, `sInst`, `sPos`,
+  `T`, `Nodes`, `Idx`, `E`, the per-reference `Dec`, `B`, `J`, `Res`, `Prim`, `maxNodeDepth` and the
+  exclusion bits. The maximum is 524,288 URIs (C1 `archive_entries`), **≤ 76 MiB**.
+- Tile arena: at most 262,144 tiles (C1 `hierarchy_visits`) × **376 B** (`size_of::<TileFact>()`:
+  transform, own and external-content volume, parent index, depth and the C2-WB `chain` bits),
+  so **≤ 94 MiB**.
+- Reference list: at most 1,048,576 (C1 `references`) × 32 B (`size_of::<Reference>()`), so
+  **≤ 32 MiB**.
 
-**Peak C2-added memory:** at most **about 160 MiB** of facts plus **about 0.8 MiB** of phase-2
-working storage at the current caps. This excludes C1's own live decode owners and process
+**Peak C2-added memory:** at most **about 202 MiB** of facts plus **about 0.8 MiB** of phase-2
+working storage at the current caps (sizes measured with `size_of` on x86_64 Linux at the C2-WB
+final source; they were estimated at about 160 MiB before C2-WB). This excludes C1's own live decode owners and process
 baseline; it is not an RSS claim. (The C1 entry, visit and reference caps were raised on
 2026-10-11 from 65,536, 65,536 and 262,144, when these figures were 7.5, 21 and 4 MiB, about
 33.5 MiB in total; measured whole-process costs are in
@@ -469,7 +473,9 @@ first vertex test of the stream.
 ## Work bound (frozen formulas; R2, D1–D4)
 
 The cap **values** are proposals that R measures and may retune before merge. Retuning changes
-coverage only, never semantics. The **formulas** below are frozen.
+coverage only, never semantics. The **formulas** below are frozen; the C2-WB amendment
+(2026-10-12, contract draft v2.1) replaced the per-reference units, the node units and the
+default cap, and added the facts `J`, `Res` and `Prim` (see "C2-WB amendment" at the end).
 
 All counts use checked u64 arithmetic. Overflow counts as exceeding the cap.
 
@@ -485,11 +491,14 @@ integrity facts:
 | `sInst(u)` | Maximum span over node-step and composite quantities over all instances |
 | `sPos(u)` | Maximum span over the level-0 position products and sums, and `W`, over all (instance, accessor) pairs |
 | `T(u)` | `Σ_instances Σ_{distinct POSITION accessors a referenced by that instance's mesh primitives} a.count`. Two primitives that share an accessor in one instance count it **once** |
-| `Nodes(u)` | `Σ` over node visits in the selected-scene tree of: 1 for a skipped node, otherwise `128·⌈s_step/64⌉²`, where `s_step` is the maximum span of that node's `L` quantities, its `G·L` products and the resulting `G` entries (D1) |
+| `Nodes(u)` | `Σ` over node visits in the selected-scene tree of: 1 for a skipped node, otherwise `max(256, 128·⌈s_step/64⌉²)` (C2-WB §3.2), where `s_step` is the maximum span of that node's `L` quantities, its `G·L` products and the resulting `G` entries (D1) |
 | `Idx(u)` | `Σ_instances Σ_primitives` (`indices.count` if indexed, else `POSITION.count`) (D2) |
 | `E(u)` | C1 `elements_checked` for the payload (`PayloadInspection.elements_checked`) (D3) |
 | `Dec(u)` | Bytes that C1 materializes while inspecting `u`: owned external and data-URI buffers plus meshopt-decoded views. F adds this C1 fact (D3) |
-| `B(u)` | Archive bytes read during C1 inspection of `u`: the member plus resolved buffers and images (D3) |
+| `B(u)` | Archive bytes read during C1 inspection of `u`: the member plus resolved buffers and images (D3). C1 resolves, and reads, a member once per buffer or image entry, so a member named by two entries counts twice |
+| `J(u)` (C2-WB) | Σ `CheckedDocument::value_nodes()` over every JSON document C1 admits for `u`: the glTF JSON or GLB JSON chunk (also inside a b3dm) and the nonempty b3dm feature-table and batch-table JSON |
+| `Res(u)` (C2-WB) | Buffer and image **entries** with a non-`data:` `uri`: one per resolver call. `data:` buffers are not resources; their bytes are in `Dec` |
+| `Prim(u)` (C2-WB) | Σ over the instances of the selected scene of the instance mesh's primitive count |
 | `maxNodeDepth(u)` | Deepest selected node path, counting all nodes, including skipped ones |
 
 ### Per reference `r` to URI `u`, levels `0..L_r`
@@ -499,7 +508,12 @@ integrity facts:
    normative span definition.
 3. If `max(sInst(u), s₀(r), …, s_L(r)) > containmentSpanBits`, the result is `numericSpan`.
 4. Otherwise:
-   - `units(r) = T(u)·Σ_ℓ ⌈s_ℓ(r)/64⌉² + Nodes(u) + Idx(u) + E(u)`.
+   - `units(r) = T(u)·V(r) + Nodes(u) + Idx(u) + E(u) + Dec(u) + B(u) + 16·J(u) + 160·Res(u)
+     + 4·Prim(u) + 1152 + 8·(L_r + 1)` (C2-WB §3.1), with `q_ℓ = ⌈s_ℓ(r)/64⌉²` and
+     `V(r) = Σ_{ℓ=0..L_r} ([ℓ = 0]·max(20, q_ℓ) + [ℓ ≥ 1 and the child tile has a transform]·max(30, q_ℓ)
+     + Σ_{box volumes tested at ℓ} max(25, q_ℓ) + Σ_{sphere volumes tested at ℓ} max(32, q_ℓ))`.
+     The per-reference terms apply to every reference, including one to a URI with no drawn
+     instance (there `T·V = 0`).
    - `bytes(r) = B(u)`.
    - `decoded(r) = Dec(u)`.
    - If `maxNodeDepth(u) > containmentNodeDepth`, the result is `workLimit`.
@@ -529,8 +543,11 @@ reason.
 
 So phase-2 time ≤ `c × containmentWorkUnits` primitive operations, plus the decode of at most
 `containmentDecodedBytes` materialized bytes and `containmentBytesRead` archive bytes. R measures
-`c` per unit class. The weights (1 for `Idx` and `E`, 128 for nodes, `⌈s/64⌉²` for vertices) are
-frozen.
+`c` per unit class. The weights (1 for `Idx` and `E`, 128 for nodes, `⌈s/64⌉²` for vertices) were
+frozen in slice 1. C2-WB replaced them with per-operation floors (20 level-0 base, 30 step, 25
+box, 32 sphere, 256 node) and per-reference charges for bytes, JSON value nodes, resources and
+primitives, because cheap-unit shapes cost up to 776 ns per slice-1 unit; R's measured `c` per
+class is in the C2-WB amendment below.
 
 ### Stream algorithm (normative for cost; M and F)
 
@@ -620,7 +637,7 @@ The order is deterministic:
 | New **ResourceLimit** | Host allocation refusal only, for the fallible reservations of the per-URI facts, tile arena, reference list, dyadic arena or bitmap (B3). No new counter produces ResourceLimit: every cap gives `numericSpan` / `workLimit` |
 | Other behaviour | No change to Unsupported, Io, `totalBytesRead`, `total_payload_elements` or `hierarchyBounds` |
 | Report schema | `checks` / `notInspected` entries and the payload-label split |
-| **Public Rust API** | Five new `pub` fields on `ValidationLimits`. This breaks external struct literals (O-b). Default `containmentWorkUnits` is 2^28, set from measured per-unit cost (coordinator, after review) |
+| **Public Rust API** | Five new `pub` fields on `ValidationLimits`. This breaks external struct literals (O-b). Default `containmentWorkUnits` is 2^29 (C2-WB WB-6: the largest power of two with `cap × τ_E ≤ 8 s` on the measurement host; it was 2^28 before C2-WB) |
 | New **InvalidState** | `ValidationFailure::InvalidState` (`invalid_state`, exit 1) for an internal capacity-invariant breach only; never a verdict about the archive |
 
 ## Ownership of representation
@@ -747,7 +764,8 @@ The following are not provided:
 - deformation;
 - rendered or GPU extent;
 - whole-process memory or RSS;
-- per-unit timings.
+- per-unit timings outside the C2-WB class matrix, on other hosts, or for debug builds
+  (the C2-WB calibration is a measurement on one host, not a bound).
 
 Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publication.
 
@@ -777,3 +795,78 @@ The amendments with semantic effect:
 - **C1 first.** C1 refusals precede C2.
 - **Internal faults.** An internal capacity fault is the public
   `ValidationFailure::InvalidState` (`invalid_state`, exit 1). It is never a verdict.
+
+## C2-WB amendment (work bound, 2026-10-12)
+
+Source: C2-WB contract draft v2.1 (`/tmp/rusty-tiles-c2wb-contract-20261012/contract-draft.md`,
+sha256 `ea7b3acf…`), after delta reviews 1 (NO-GO on v1) and 2 (GO-WITH-CHANGES on v2). The
+claim, domain, span definition (B1), predicates and outcome precedence are unchanged.
+
+**Algorithms (preconditions; verdicts and counts unchanged).**
+
+- WB-A: C1 JSON admission is one O(bytes) pass in the legacy failure order (C1 note
+  `c1-json-admission-wb-a-amendment.md`).
+- WB-B: `InstanceView::mark` groups primitives by POSITION accessor, so it is
+  O(accessors + primitives + index reads) per instance.
+
+**Formula.** Per-reference units, node units and the facts `J`, `Res`, `Prim` are as stated in
+"Per-URI facts" and "Per reference" above. Phase 1 carries one `chain: u16` per tile (its own and
+its external-content volume's shape exclusions ORed with the parent's), so
+`Containment::reference` is O(1) and `build_levels` runs only before `precheck_step`.
+
+**Worked example (§3.6).** Spans `[23, 29]`, `q = [1, 1]`: `V = (20 + 25) + (30 + 25) = 100`,
+vertex units 400, node units 256, so the slice-1 worked-example fixture totals
+`400 + 256 + 4 + E 12 + Dec 0 + B 652 + 16·56 + 160·0 + 4·1 + 1152 + 16 = 3,392`. Oracle, hand
+derivation and production agree.
+
+**Calibration and default cap (WB-6).** R measured the final source (merge `706b082` plus the
+acceptance-only commit `e8cf53a`; release build with only the default cap raised, so every
+class streams) on an Intel i7-12700KF under contract §9.D: a run counts only with own-CPU
+foreign busy ≤ 5% and contention neighbour ≤ 10% (P-core: SMT sibling; E-core: busiest other
+E-core of 16–19); each class is the median of 7 clean A/B pairs (A against its
+`gltfUpAxis` twin). 95 classes were decided on both core types: O-WB's matrix-size class
+fixtures, R's probe matrix (1-limb chains, large spans, references), the b51f83d producer
+twins and an images-by-URI class.
+
+| | τ (max over classes, ns/unit) | Worst class | Default cap | Bound at the cap |
+| --- | --- | --- | --- | --- |
+| E-core (stated) | **14.65** | box + step, 8 levels, translations of magnitude 2^300 (`boxT-E300-L8`) | **2^29** | **≤ 7.87 s** |
+| P-core | 8.10 | same | 2^29 | ≤ 4.35 s |
+
+`τ_E ≤ 14.9`, so the cap is 2^29 (rule of §6: the largest power of two with
+`cap × τ_E ≤ 8 s`). The margin is small (1.7%). The pre-fix super-linear rows fell to the
+linear range (E-core): deep JSON numbers at depth 62 from 22.22 to 2.33 ns/unit; `quad` from
+35.26 to 8.54; `quadB` from 77.23 to 8.04; the end-to-end case from 83.66 to 7.74. Full table,
+run records and hashes: `bench/architecture_audit/c2_decoded_containment/acceptance/README.md`
+("C2-WB gate").
+
+**Producer coverage at 2^29 (oracle units).** W5 vec-perf twins 38–40%, W2 26%, W3 7%, every
+other explicit twin ≤ 4%. `mf2-lod3-explicit` totals 438,590,913 units (81.7%), but C1 refuses
+that archive (`JSON exceeds value-node limit`, also at b51f83d), so it was not timed.
+
+**Acceptance amendments (final review, 2026-10-12).**
+
+- **A3 restated as ns/unit flatness.** The draft's "time per (instance, accessor +
+  primitive) within 1.25× of the shared class" is confounded by `T·V`: `quad` has
+  `T` = 120,000 drawn vertices against 40 for the shared-accessor class, so the measure
+  mostly counts vertex work. A3 is instead: after WB-B, the many-accessor classes cost no
+  more per unit than the linear range, and the cost stays flat as accessors × primitives ×
+  instances grows. Measured (P / E ns/unit): `quad` 4.92 / 8.54, `quadB` 4.60 / 8.04, and
+  the end-to-end case, about 12× the accessor × primitive × instance product of `quadB`,
+  4.46 / 7.74 (pre-fix 13.70 / 35.26, 26.72 / 77.23 and 47.61 / 83.66). All are below `τ`.
+- **§9.C production mutants, mapped to the control that catches each.**
+
+  | Mutant class | Caught by |
+  | --- | --- |
+  | Unit arithmetic (frozen weights, dropped step/level-0/`R0`/`B`/`Dec`/`J`/`Res`/`Prim`/`8·(L+1)` terms, sphere floor = box floor, node floor 128) | The 55 O-WB at-cap pairs (`acceptance/oracle_parity.rs`, `production_matches_every_c2wb_class_fixture`: `units` gives Contained, `units − 1` gives `workLimit`) and the per-term unit tests in `src/validate.rs` and `src/validate/containment.rs`; the oracle-side twins are `wb/mutants.py` (15/15) |
+  | Stale chain bits | `chain_bits_keep_precedence_after_the_precheck_stops` (`src/validate.rs:4039`) and the four `wb/` chain-bit controls |
+  | Default cap one step lower | The amended C1 limits pins (`c2wb_cap_amendment/2026-10-12`: every admitted report expects `containmentWorkUnits` 536870912), `tests/c2_containment.rs` and the Python API default-limits assertion |
+  | Re-scanning JSON admission; quadratic `mark`; `build_levels` before the gate | Performance only: the pre-fix gate rows (deep JSON numbers, `quad`, `quadB`, end-to-end) and the phase-1 twin check; a regression puts those rows above `τ` |
+
+  The slice-1 production mutants `precheck-depth-cap-off-by-one` and `reverse-tile-order`
+  are re-pinned at the C2-WB head (`acceptance/production-mutants/report.json`).
+
+**Proof limits.** One host, one build, one compiler. Classes outside the measured matrix are not
+claimed. E-core figures include shared-L2 contention below the run threshold. C1's own phase-1
+work is not in units. The bound is a calibration, not a guarantee.
+

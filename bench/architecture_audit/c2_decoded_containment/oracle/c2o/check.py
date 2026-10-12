@@ -55,9 +55,50 @@ ORACLE_LIMITS = {
 
 U = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
 
+# C2-WB 3.1 (frozen text), re-implemented from the contract only.
+FLOOR_BASE = 20     # level 0, once per level-0 visit
+FLOOR_STEP = 30     # level >= 1 whose child tile has a transform
+FLOOR_BOX = 25      # each box volume tested at the level
+FLOOR_SPHERE = 32   # each sphere volume tested at the level
+REFERENCE_FIXED = 1152
+PER_LEVEL = 8       # 8 * (L_r + 1)
+PER_JSON_NODE = 16
+PER_RESOURCE = 160
+PER_INSTANCE_PRIMITIVE = 4
+
 
 def ceil_div(a, b):
     return -(-a // b)
+
+
+def level_operations(levels, spans):
+    """Per-level C2-WB operation units for one reference.
+
+    Returns (V, rows): V = sum over levels of the per-operation units
+    max(F_op, q_l) with q_l = ceil(s_l/64)^2, and one row per level:
+    [q, base, step, boxes, spheres, units]."""
+    total = 0
+    rows = []
+    for index, (level, s) in enumerate(zip(levels, spans)):
+        q = ceil_div(s, 64) ** 2
+        base = 1 if index == 0 else 0
+        step = 1 if index >= 1 and level.to_parent_pairs is not None else 0
+        boxes = sum(1 for lv in level.volumes if lv.volume.kind == "box")
+        spheres = sum(1 for lv in level.volumes if lv.volume.kind == "sphere")
+        if boxes + spheres != len(level.volumes):
+            raise OracleUndecided("level %d holds a volume without a C2-WB weight" % index)
+        units = (base * max(FLOOR_BASE, q) + step * max(FLOOR_STEP, q)
+                 + boxes * max(FLOOR_BOX, q) + spheres * max(FLOOR_SPHERE, q))
+        rows.append([q, base, step, boxes, spheres, units])
+        total += units
+    return total, rows
+
+
+def reference_units(facts, level_count):
+    """The per-reference terms of C2-WB 3.1 outside T*V, Nodes, Idx and E:
+    Dec + B + 16*J + 160*Res + 4*Prim + 1152 + 8*(L_r + 1)."""
+    return (facts.Dec + facts.B + PER_JSON_NODE * facts.J + PER_RESOURCE * facts.Res
+            + PER_INSTANCE_PRIMITIVE * facts.Prim + REFERENCE_FIXED + PER_LEVEL * level_count)
 
 
 def _extension_names(obj, out, inside_extras=False):
@@ -151,6 +192,9 @@ class UriFacts:
         self.E = sum(p.accessor_elements(i) for i in range(len(doc.get("accessors", []))))
         self.B = p.bytes_read
         self.Dec = p.decoded_bytes
+        self.J = p.json_nodes
+        self.Res = p.external_resources
+        self.Prim = 0  # sum over selected instances of the instance mesh's primitive count
         self.T = 0
         self.Idx = 0
         self.s_inst = 0
@@ -165,6 +209,7 @@ class UriFacts:
             prims = mesh.get("primitives", [])
             if not isinstance(prims, list):
                 raise PayloadError("mesh %d primitives malformed" % inst.mesh)
+            self.Prim += len(prims)
             accessors = []  # distinct POSITION accessors, first-appearance order
             users = {}
             for pi, prim in enumerate(prims):
@@ -203,15 +248,23 @@ class UriFacts:
         return {
             "member": self.member, "kind": self.payload.kind, "T": self.T,
             "Nodes": self.node_units, "Idx": self.Idx, "E": self.E, "Dec": self.Dec,
-            "B": self.B, "maxNodeDepth": self.max_depth, "sInst": self.s_inst,
+            "B": self.B, "J": self.J, "Res": self.Res, "Prim": self.Prim,
+            "skippedNodeVisits": self.walk.skipped_visits if self.walk else 0,
+            "nodeStepSpans": {str(k): v for k, v in sorted((self.walk.step_spans if self.walk else {}).items())},
+            "maxNodeDepth": self.max_depth, "sInst": self.s_inst,
             "sPos": self.s_pos, "instances": len(self.walk.instances) if self.walk else 0,
             "exclusions": sorted(self.exclusions),
         }
 
 
 class Oracle:
-    def __init__(self, path, limits=None, oracle_limits=None):
+    def __init__(self, path, limits=None, oracle_limits=None, precheck_only=False, detail=True):
+        """`precheck_only` stops after a passed precheck with outcome
+        "PrecheckPassed" (units only; never a verdict). `detail=False` drops the
+        per-reference precheck rows (large archives); totals are kept."""
         self.path = path
+        self.precheck_only = precheck_only
+        self.detail = detail
         self.limits = dict(DEFAULT_LIMITS)
         self.limits.update(limits or {})
         self.oracle_limits = dict(ORACLE_LIMITS)
@@ -265,31 +318,52 @@ class Oracle:
         stop = self._precheck(trav.references)
         if stop is not None:
             return stop
+        if self.precheck_only:
+            return {"outcome": "PrecheckPassed"}
         return self._stream(trav.references)
 
     def _precheck(self, references):
         totals = {"units": 0, "bytes": 0, "decoded": 0}
         per_ref = []
-        self.report["precheck"] = {"totals": totals, "references": per_ref}
+        terms = dict.fromkeys(("vertex", "Nodes", "Idx", "E", "Dec", "B", "16J", "160Res", "4Prim",
+                               "1152", "8levels"), 0)
+        self.report["precheck"] = {"totals": totals, "references": per_ref, "terms": terms}
         cap = self.limits
+        level_cache = {}  # (id(levels), member) -> (levels, spans, V, rows); levels may be shared
         for ref in references:
             facts = self.uri_facts[ref.member]
             entry = {"reference": ref.index, "member": ref.member, "levels": len(ref.levels)}
-            per_ref.append(entry)
+            if self.detail:
+                per_ref.append(entry)
             if facts.has_instances():
-                level_spans = S.level_spans(facts.pair0, facts.s_pos, ref.levels)
+                cached = level_cache.get((id(ref.levels), ref.member))
+                if cached is None:
+                    spans_ = S.level_spans(facts.pair0, facts.s_pos, ref.levels)
+                    cached = (ref.levels, spans_) + level_operations(ref.levels, spans_)
+                    level_cache[(id(ref.levels), ref.member)] = cached
+                level_spans = cached[1]
                 entry["sInst"] = facts.s_inst
                 entry["levelSpans"] = level_spans
                 if max([facts.s_inst] + level_spans) > cap["containmentSpanBits"]:
                     return {"outcome": "NotInspected", "reasons": ["numericSpan"],
                             "precheckStop": {"reference": ref.index, "member": ref.member,
                                              "reason": "numericSpan"}}
-                vertex_units = facts.T * sum(ceil_div(s, 64) ** 2 for s in level_spans)
+                V, level_rows = cached[2], cached[3]
+                vertex_units = facts.T * V
+                entry["V"] = V
+                entry["levelOps"] = level_rows
             else:
                 vertex_units = 0
-            units = vertex_units + facts.node_units + facts.Idx + facts.E
-            entry.update({"units": units, "vertexUnits": vertex_units, "bytes": facts.B,
-                          "decoded": facts.Dec, "maxNodeDepth": facts.max_depth})
+            fixed = reference_units(facts, len(ref.levels))
+            units = vertex_units + facts.node_units + facts.Idx + facts.E + fixed
+            entry.update({"units": units, "vertexUnits": vertex_units, "referenceUnits": fixed,
+                          "bytes": facts.B, "decoded": facts.Dec, "maxNodeDepth": facts.max_depth})
+            for key, value in (("vertex", vertex_units), ("Nodes", facts.node_units), ("Idx", facts.Idx),
+                               ("E", facts.E), ("Dec", facts.Dec), ("B", facts.B),
+                               ("16J", PER_JSON_NODE * facts.J), ("160Res", PER_RESOURCE * facts.Res),
+                               ("4Prim", PER_INSTANCE_PRIMITIVE * facts.Prim), ("1152", REFERENCE_FIXED),
+                               ("8levels", PER_LEVEL * len(ref.levels))):
+                terms[key] += value
             totals["units"] += units
             totals["bytes"] += facts.B
             totals["decoded"] += facts.Dec

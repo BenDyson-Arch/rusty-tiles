@@ -404,19 +404,88 @@ pub(crate) fn level_spans<'a>(
 fn limbs_squared(s: u32) -> u64 {
     u64::from(s).div_ceil(64).pow(2)
 }
-/// `T·Σ_ℓ ⌈s_ℓ/64⌉²`, checked.
+/// Per-operation floors `F_op` of `max(F_op, q_ℓ)` (C2-WB §3.1): the level-0
+/// base, a child-transform step, one box test and one sphere test.
+const LEVEL0_FLOOR: u64 = 20;
+const STEP_FLOOR: u64 = 30;
+const BOX_FLOOR: u64 = 25;
+const SPHERE_FLOOR: u64 = 32;
+/// Node visits (§3.2): `max(256, 128·⌈s_step/64⌉²)`, 1 for a skipped node.
+const NODE_FLOOR: u64 = 256;
+const NODE_LIMB_WEIGHT: u64 = 128;
+/// Per-reference terms (§3.1): fixed, per level, per JSON value node, per
+/// external resource and per (instance, primitive).
+const REFERENCE_FIXED: u64 = 1152;
+const PER_LEVEL: u64 = 8;
+const PER_JSON_NODE: u64 = 16;
+const PER_RESOURCE: u64 = 160;
+const PER_INSTANCE_PRIMITIVE: u64 = 4;
+/// One level's `V` term for `q = ⌈s/64⌉²`: the level-0 base or, at `ℓ ≥ 1`, the
+/// step when the child tile has a transform, plus one test per box or sphere.
+/// At most four operations of `q ≤ 2^52` each, so the sum cannot overflow.
+fn level_units(l: usize, level: &LevelFacts, s: u32) -> u64 {
+    let op = |floor: u64| floor.max(limbs_squared(s));
+    let frame = match (l, level.to_parent) {
+        (0, _) => op(LEVEL0_FLOOR),
+        (_, Some(_)) => op(STEP_FLOOR),
+        (_, None) => 0,
+    };
+    let tests: u64 = level
+        .volumes
+        .iter()
+        .flatten()
+        .map(|(_, v)| match v {
+            VolumeFacts::Box(_) => op(BOX_FLOOR),
+            VolumeFacts::Sphere(_) => op(SPHERE_FLOOR),
+            // Excluded by `level_spans` before any span list exists; never tested.
+            VolumeFacts::Region => 0,
+        })
+        .sum();
+    frame + tests
+}
+/// `T·V(r)`, `V(r) = Σ_ℓ` of the level's per-operation units, checked.
 pub(crate) fn vertex_units(t_count: u64, spans: &SmallSpanList) -> Option<u64> {
     spans
         .iter()
-        .try_fold(0u64, |a, s| a.checked_add(limbs_squared(s)))?
+        .zip(spans.levels)
+        .enumerate()
+        .try_fold(0u64, |a, (l, (s, level))| {
+            a.checked_add(level_units(l, level, s))
+        })?
         .checked_mul(t_count)
 }
-/// 1 for a skipped node (`s_step = 0`), otherwise `128·⌈s_step/64⌉²`.
+/// 1 for a skipped node (`s_step = 0`), otherwise `max(256, 128·⌈s_step/64⌉²)`.
 pub(crate) fn node_units(s_step: u32) -> u64 {
     match s_step {
         0 => 1,
-        s => 128 * limbs_squared(s),
+        s => NODE_FLOOR.max(NODE_LIMB_WEIGHT * limbs_squared(s)),
     }
+}
+/// Per-URI C1 facts charged again on every reference to the URI (§3.1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ReferenceFacts {
+    /// `B(u)`: archive bytes read by the URI's C1 inspection.
+    pub(crate) b: u64,
+    /// `Dec(u)`: bytes materialized by decoding.
+    pub(crate) dec: u64,
+    /// `J(u)`: JSON value nodes admitted.
+    pub(crate) json_nodes: u64,
+    /// `Res(u)`: external resources resolved.
+    pub(crate) external_resources: u64,
+    /// `Prim(u)`: Σ (selected instance × its mesh's primitives).
+    pub(crate) instance_primitives: u64,
+}
+/// `1152 + 8·levels + B + Dec + 16·J + 160·Res + 4·Prim`, checked, where
+/// `levels = L_r + 1` is the length of the reference's level chain.
+pub(crate) fn reference_units(levels: usize, f: &ReferenceFacts) -> Option<u64> {
+    PER_LEVEL
+        .checked_mul(u64::try_from(levels).ok()?)?
+        .checked_add(REFERENCE_FIXED)?
+        .checked_add(f.b)?
+        .checked_add(f.dec)?
+        .checked_add(PER_JSON_NODE.checked_mul(f.json_nodes)?)?
+        .checked_add(PER_RESOURCE.checked_mul(f.external_resources)?)?
+        .checked_add(PER_INSTANCE_PRIMITIVE.checked_mul(f.instance_primitives)?)
 }
 
 // ---- exact evaluation ----
@@ -861,8 +930,9 @@ mod tests {
         let levels = worked_levels(LITERAL_CENTRE);
         let at_cap = level_spans(&u, &levels, caps(29)).unwrap();
         assert_eq!(at_cap.iter().collect::<Vec<_>>(), [23, 29]);
-        assert_eq!(vertex_units(4, &at_cap), Some(8));
-        assert_eq!(node_units(s_step), 128);
+        // C2-WB §3.6: q = [1, 1], V = (20 + 25) + (30 + 25) = 100, T = 4.
+        assert_eq!(vertex_units(4, &at_cap), Some(400));
+        assert_eq!(node_units(s_step), 256);
         assert_eq!(
             level_spans(&u, &levels, caps(28)).err(),
             Some(Exclusion::NumericSpan)
@@ -1640,17 +1710,164 @@ mod tests {
     #[test]
     fn units_are_checked() {
         assert_eq!(node_units(0), 1);
-        assert_eq!(node_units(1), 128);
-        assert_eq!(node_units(64), 128);
+        // Floor 256 up to two limbs (128·4 = 512 from 65 bits).
+        assert_eq!(node_units(1), 256);
+        assert_eq!(node_units(64), 256);
         assert_eq!(node_units(65), 512);
+        assert_eq!(node_units(129), 128 * 9);
         assert_eq!(node_units(u32::MAX), 128 * (1 << 26) * (1 << 26));
         let u = uri(&[], Normalization::None(Word::F32));
         let levels = [level(None, &[(Role::Own, bx([0.0; 3], [1.0; 3]))])];
         let s = level_spans(&u, &levels, caps(4096)).unwrap();
         assert_eq!(s.iter().collect::<Vec<_>>(), [277]);
-        assert_eq!(vertex_units(3, &s), Some(3 * 25));
+        // q = 25: base max(20, 25) + box max(25, 25).
+        assert_eq!(vertex_units(3, &s), Some(3 * 50));
         assert_eq!(vertex_units(u64::MAX, &s), None);
         assert_eq!(vertex_units(0, &s), Some(0));
+    }
+
+    #[test]
+    fn each_level_operation_is_charged_at_its_own_floor() {
+        let (own, content) = (
+            (Role::Own, bx([0.0; 3], [1.0; 3])),
+            (Role::Content, VolumeFacts::Sphere([1.5, 0.0, 2.0, 100.0])),
+        );
+        let base = level(None, &[]);
+        let step = level(Some(affine([1.0; 3], [0.0; 3])), &[]);
+        // One operation alone at q = 1: its floor.
+        assert_eq!(level_units(0, &base, 1), 20);
+        assert_eq!(level_units(1, &step, 1), 30);
+        assert_eq!(level_units(1, &level(None, &[own]), 1), 25);
+        assert_eq!(level_units(1, &level(None, &[content]), 1), 32);
+        // Level 0 never steps; a level ≥ 1 without a transform has no frame term.
+        assert_eq!(level_units(0, &step, 1), 20);
+        assert_eq!(level_units(1, &base, 1), 0);
+        // Region volumes are never tested (excluded before spans exist).
+        assert_eq!(
+            level_units(1, &level(None, &[(Role::Own, VolumeFacts::Region)]), 1),
+            0
+        );
+        // Every operation of the level, at q = 1, 25 (from 277 bits) and 36 (384 bits).
+        let full = |to_parent| {
+            level(
+                to_parent,
+                &[
+                    own,
+                    content,
+                    (Role::ExternalContent(1), bx([0.0; 3], [2.0; 3])),
+                ],
+            )
+        };
+        for (s, base, step, boxes, sphere) in [
+            (1, 20, 30, 25, 32),
+            (64, 20, 30, 25, 32),
+            (65, 20, 30, 25, 32),
+            (277, 25, 30, 25, 32),
+            (384, 36, 36, 36, 36),
+        ] {
+            assert_eq!(
+                level_units(0, &full(None), s),
+                base + 2 * boxes + sphere,
+                "{s}"
+            );
+            assert_eq!(
+                level_units(2, &full(Some(affine([1.0; 3], [0.0; 3]))), s),
+                step + 2 * boxes + sphere,
+                "{s}"
+            );
+            assert_eq!(level_units(2, &full(None), s), 2 * boxes + sphere, "{s}");
+        }
+    }
+
+    #[test]
+    fn vertex_units_sum_levels_then_multiply_by_t() {
+        // §3.6 shape with a sphere added at level 0: s = [23, 29], q = [1, 1].
+        let u = uri(&[WORKED_NODE], Normalization::U16);
+        let [mut l0, l1] = worked_levels(ADJUSTED_CENTRE);
+        l0.volumes[1] = Some((Role::Content, VolumeFacts::Sphere([1.5, 0.0, 2.0, 100.0])));
+        let levels = [l0, l1];
+        let spans = level_spans(&u, &levels, caps(4096)).unwrap();
+        assert!(
+            spans.iter().all(|s| s <= 64),
+            "{:?}",
+            spans.iter().collect::<Vec<_>>()
+        );
+        // (20 + 25 + 32) + (30 + 25) = 132.
+        assert_eq!(vertex_units(1, &spans), Some(132));
+        assert_eq!(vertex_units(7, &spans), Some(7 * 132));
+    }
+
+    #[test]
+    fn reference_units_charge_each_term() {
+        let zero = ReferenceFacts::default();
+        assert_eq!(reference_units(1, &zero), Some(1152 + 8));
+        assert_eq!(reference_units(4, &zero), Some(1152 + 32));
+        let one = |f: ReferenceFacts| reference_units(1, &f).map(|u| u - 1160);
+        assert_eq!(one(ReferenceFacts { b: 7, ..zero }), Some(7));
+        assert_eq!(one(ReferenceFacts { dec: 5, ..zero }), Some(5));
+        assert_eq!(
+            one(ReferenceFacts {
+                json_nodes: 3,
+                ..zero
+            }),
+            Some(48)
+        );
+        assert_eq!(
+            one(ReferenceFacts {
+                external_resources: 2,
+                ..zero
+            }),
+            Some(320)
+        );
+        assert_eq!(
+            one(ReferenceFacts {
+                instance_primitives: 5,
+                ..zero
+            }),
+            Some(20)
+        );
+        let all = ReferenceFacts {
+            b: 7,
+            dec: 5,
+            json_nodes: 3,
+            external_resources: 2,
+            instance_primitives: 5,
+        };
+        assert_eq!(
+            reference_units(2, &all),
+            Some(1152 + 16 + 7 + 5 + 48 + 320 + 20)
+        );
+        // Checked: every product and sum.
+        for f in [
+            ReferenceFacts {
+                b: u64::MAX,
+                ..zero
+            },
+            ReferenceFacts {
+                dec: u64::MAX,
+                ..zero
+            },
+            ReferenceFacts {
+                json_nodes: u64::MAX / 16 + 1,
+                ..zero
+            },
+            ReferenceFacts {
+                external_resources: u64::MAX / 160 + 1,
+                ..zero
+            },
+            ReferenceFacts {
+                instance_primitives: u64::MAX / 4 + 1,
+                ..zero
+            },
+            ReferenceFacts {
+                json_nodes: u64::MAX / 16,
+                b: u64::MAX / 2,
+                ..zero
+            },
+        ] {
+            assert_eq!(reference_units(1, &f), None, "{f:?}");
+        }
+        assert_eq!(reference_units(usize::MAX, &zero), None);
     }
 
     #[test]

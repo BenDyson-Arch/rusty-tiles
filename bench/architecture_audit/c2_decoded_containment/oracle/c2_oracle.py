@@ -14,6 +14,8 @@ Prints one JSON report. `outcome` is one of:
   Undecided      (why)          the oracle could not decide (its own limits, an
                                 unmodelled format, or data C1 should reject);
                                 never a verdict
+  PrecheckPassed                only with --precheck-only: the precheck passed and
+                                streaming was not run; never a verdict
 `c1Caveats` lists conditions under which production may stop in C1 first.
 Exit status: 0 when a report was written, 2 on usage errors.
 """
@@ -46,6 +48,10 @@ def main(argv=None):
                         help="ValidationLimits C2 cap, e.g. containmentSpanBits=29")
     parser.add_argument("--oracle-limit", action="append", metavar="NAME=VALUE",
                         help="the oracle's own work bounds, e.g. maxVertexLevelTests=1000")
+    parser.add_argument("--precheck-only", action="store_true",
+                        help="stop after a passed precheck (outcome PrecheckPassed: units only, no verdict)")
+    parser.add_argument("--no-detail", action="store_true",
+                        help="omit the per-reference precheck rows (totals and terms are kept)")
     args = parser.parse_args(argv)
     try:
         limits = _limits(args.limit, DEFAULT_LIMITS, "limit")
@@ -53,7 +59,8 @@ def main(argv=None):
     except SystemExit as err:
         print(err, file=sys.stderr)
         return 2
-    report = Oracle(args.archive, limits, oracle_limits).run()
+    report = Oracle(args.archive, limits, oracle_limits, precheck_only=args.precheck_only,
+                    detail=not args.no_detail).run()
     json.dump(report, sys.stdout, indent=1, sort_keys=True)
     sys.stdout.write("\n")
     return 0

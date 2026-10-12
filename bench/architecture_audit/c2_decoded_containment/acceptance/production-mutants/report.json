@@ -138,7 +138,7 @@
    "kind": "oracle-mirror",
    "what": "level l takes the transform of the tile at chain position l-1 counted from the root (oracle: path[distance - 1]) instead of the child tile on the reference's side",
    "patch": "production-mutants/reverse-tile-order.patch",
-   "patchSha256": "a55a477e1be26ab32b65541785f24e20199d3b2012ef67167b162115903c2e16",
+   "patchSha256": "cbf818dc63dad775739c715add462c23d21f9bdce017c7faea56da0b4b2dd1a9",
    "status": "ok",
    "cases": 257,
    "agree": 239,
@@ -172,7 +172,49 @@
    "pairedFixture": "W01-noRTC-variant",
    "pairedFixtureSource": "oracle namedFixture of the same-named oracle mutant",
    "pairedFixtureFlipped": true,
-   "oracleFlipped": 18
+   "oracleFlipped": 18,
+   "rePin": {
+    "date": "2026-10-12",
+    "reason": "the slice-1 patch no longer applies at the C2-WB head; the same edit is re-expressed against it",
+    "base": "766ed94 (feat/c2-work-bound)",
+    "previousPatchSha256": "a55a477e1be26ab32b65541785f24e20199d3b2012ef67167b162115903c2e16",
+    "patchSha256": "cbf818dc63dad775739c715add462c23d21f9bdce017c7faea56da0b4b2dd1a9",
+    "cases": 261,
+    "agree": 239,
+    "skipped": [
+     "repeated-index-three-payloads",
+     "repeated-index-three-payloads-units-at-sum",
+     "repeated-index-three-payloads-units-minus-1"
+    ],
+    "flipped": 19,
+    "flippedIds": [
+     "W01-noRTC-variant",
+     "W11-external-tileset-root-in-chain",
+     "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r0",
+     "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r1",
+     "W11-external-tileset-root-in-chain~ulp-L2-ancestor-r2",
+     "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r0",
+     "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r1",
+     "W11-external-tileset-root-in-chain~ulp-L2-externalContent-r2",
+     "identity-node-equivalence-identity-TRS",
+     "identity-node-equivalence-identity-matrix",
+     "identity-node-equivalence-mesh-only",
+     "work-base-meshopt",
+     "work-containmentBytesRead-at-sum",
+     "work-containmentDecodedBytes-at-sum",
+     "work-containmentNodeDepth-at-sum",
+     "work-containmentWorkUnits-at-sum",
+     "work-containmentWorkUnits-sum-minus-1",
+     "worked-example-adjusted-containmentSpanBits-28",
+     "worked-example-literal-containmentSpanBits-28"
+    ],
+    "pairedFixtureFlipped": true,
+    "c2wbFixturesFlipped": [
+     "terms-parent-step@ci",
+     "terms-parent-sphere-step@ci"
+    ],
+    "clean": "258/261 agree with the 3 --large controls absent; 59/59 wb CI rows"
+   }
   },
   {
    "name": "skip-ancestors",
@@ -495,7 +537,7 @@
    "kind": "production-specific",
    "what": "maxNodeDepth >= containmentNodeDepth is a workLimit (>= instead of >)",
    "patch": "production-mutants/precheck-depth-cap-off-by-one.patch",
-   "patchSha256": "4e5e1a2aa8d5b6865f355fc58c1161b8d4cd157be1fd86a8fdaef6d7e00a5bbd",
+   "patchSha256": "02c8ce35612542979e8afa91f1437705ebec248b0de6c7711017b253ca8b2b52",
    "status": "ok",
    "cases": 257,
    "agree": 256,
@@ -510,7 +552,28 @@
    "newlyC1PreconditionRefused": [],
    "pairedFixture": "work-containmentNodeDepth-at-sum",
    "pairedFixtureSource": "chosen for this production-specific mutant (no oracle counterpart)",
-   "pairedFixtureFlipped": true
+   "pairedFixtureFlipped": true,
+   "rePin": {
+    "date": "2026-10-12",
+    "reason": "the slice-1 patch no longer applies at the C2-WB head; the same edit is re-expressed against it",
+    "base": "766ed94 (feat/c2-work-bound)",
+    "previousPatchSha256": "4e5e1a2aa8d5b6865f355fc58c1161b8d4cd157be1fd86a8fdaef6d7e00a5bbd",
+    "patchSha256": "02c8ce35612542979e8afa91f1437705ebec248b0de6c7711017b253ca8b2b52",
+    "cases": 261,
+    "agree": 257,
+    "skipped": [
+     "repeated-index-three-payloads",
+     "repeated-index-three-payloads-units-at-sum",
+     "repeated-index-three-payloads-units-minus-1"
+    ],
+    "flipped": 1,
+    "flippedIds": [
+     "work-containmentNodeDepth-at-sum"
+    ],
+    "pairedFixtureFlipped": true,
+    "c2wbFixturesFlipped": [],
+    "clean": "258/261 agree with the 3 --large controls absent; 59/59 wb CI rows"
+   }
   },
   {
    "name": "span-cap-off-by-one",

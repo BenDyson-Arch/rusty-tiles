@@ -30,3 +30,15 @@ C2_PARITY_OUT=/tmp/c2m/clean.json cargo test --locked --release --lib c2_oracle_
 ```
 
 Verify a patch hash with `sha256sum <name>.patch` against `report.json`.
+
+## C2-WB re-pin (2026-10-12)
+
+Two slice-1 patches no longer applied at the C2-WB head, whose `src/validate.rs` moved. The
+same edits are re-expressed against `feat/c2-work-bound` (`src/validate.rs` blob `b5c9dc0`) and
+re-run with the release parity test (the three `--large` controls absent; clean 258/261 and
+59/59 `wb/` CI rows). Each `report.json` entry keeps its slice-1 record and adds `rePin`.
+
+| Mutant | sha256 | Flipped | Paired fixture |
+| --- | --- | --- | --- |
+| `precheck-depth-cap-off-by-one` (`>=` at the `containmentNodeDepth` check) | `02c8ce35612542979e8afa91f1437705ebec248b0de6c7711017b253ca8b2b52` | 1 | `work-containmentNodeDepth-at-sum` flips |
+| `reverse-tile-order` (level `l` takes the root-side transform) | `cbf818dc63dad775739c715add462c23d21f9bdce017c7faea56da0b4b2dd1a9` | 19, plus `wb/` `terms-parent-step` and `terms-parent-sphere-step` | `W01-noRTC-variant` flips |

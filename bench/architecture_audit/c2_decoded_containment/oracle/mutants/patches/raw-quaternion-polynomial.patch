@@ -1,6 +1,6 @@
 --- a/oracle/c2o/scene.py
 +++ b/oracle/c2o/scene.py
-@@ -170,7 +170,7 @@
+@@ -181,7 +181,7 @@
      L = mat_identity()
      for r in range(3):
          for c in range(3):

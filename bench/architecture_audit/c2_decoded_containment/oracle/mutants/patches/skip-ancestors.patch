@@ -1,6 +1,6 @@
 --- a/oracle/c2o/tileset.py
 +++ b/oracle/c2o/tileset.py
-@@ -245,7 +245,7 @@
+@@ -254,7 +254,7 @@
                  if frame.external_content is not None:
                      vol, cwhere = frame.external_content
                      level.volumes.append(LevelVolume("externalContent", distance, vol, cwhere))
