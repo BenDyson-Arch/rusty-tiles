@@ -80,6 +80,8 @@ jobs:
           manylinux: '2_28'
           docker-options: -e RUSTY_TILES_DISABLE_NATIVE_JPEG=1
           args: --release --locked --out dist
+      - name: Check third-party notices in the wheel
+        run: python scripts/third_party_notices.py check dist/*.whl
       - name: Test with the minimum Python version
         run: python scripts/test_python_wheel.py dist/*.whl --report-json evidence/python-3.10.json
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5

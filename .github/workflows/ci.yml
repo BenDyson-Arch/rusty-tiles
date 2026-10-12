@@ -88,6 +88,10 @@ jobs:
           python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
       - name: Check formatting
         run: cargo fmt --all --check
+      - name: Check the crate package size and third-party notices
+        run: |
+          cargo package --locked --no-verify
+          python3 scripts/third_party_notices.py check --max-bytes 10000000 target/package/rusty-tiles-*.crate
       - name: Test native build
         shell: bash
         run: |
