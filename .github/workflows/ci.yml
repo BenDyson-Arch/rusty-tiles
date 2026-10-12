@@ -93,6 +93,25 @@ jobs:
         run: |
           cargo test --locked --features native-jpeg -- --nocapture --test-threads=1 2>&1 | tee "${{ runner.temp }}/c1-library.log"
           python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
+      - name: Independently check streamed mesh capture and tree records
+        shell: bash
+        run: |
+          cargo test --locked --lib --features native-jpeg --no-run --message-format=json > "${{ runner.temp }}/h1-artifacts.jsonl"
+          binary=$(python3 -c 'import json,sys; records=[json.loads(line) for line in open(sys.argv[1])]; print(next(r["executable"] for r in records if r.get("reason")=="compiler-artifact" and r.get("target",{}).get("name")=="rusty_tiles" and r.get("profile",{}).get("test") and r.get("executable")))' "${{ runner.temp }}/h1-artifacts.jsonl")
+          python3 -B tests/h1_tree_oracle.py self-test
+          python3 -B tests/h1_tree_oracle.py run-corpus "$binary" "${{ runner.temp }}/h1-corpus" --label ci-native-jpeg
+          python3 -B tests/h1_tree_oracle.py run-refusals "$binary" "${{ runner.temp }}/h1-refusals" --label ci-native-jpeg
+          python3 -B bench/architecture_audit/mesh_large_h1/physical_scratch_probe.py --binary "$binary" --work "${{ runner.temp }}/h1-physical" --label ci-native-jpeg
+      - name: Retain streamed mesh acceptance receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: h1-capture-tree-evidence
+          path: |
+            ${{ runner.temp }}/h1-corpus/receipt.json
+            ${{ runner.temp }}/h1-refusals/receipt.json
+            ${{ runner.temp }}/h1-physical/receipt.json
+          if-no-files-found: error
       - name: Independently check validation controls and finite work
         run: |
           python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"

@@ -723,6 +723,7 @@ fn fixed(available: u64) -> impl FnOnce(&Path) -> Result<Volume, SpillError> {
         Ok(Volume {
             available_bytes: available,
             memory_backed: false,
+            allocation_unit_bytes: 4096,
         })
     }
 }
@@ -932,5 +933,163 @@ fn spill_memory_is_flat_in_input_size() {
         large.1 - large.0 <= 11 * 1024,
         "large sort grew VmHWM by {} KiB",
         large.1 - large.0
+    );
+}
+
+#[test]
+fn online_compaction_bounds_inventory_and_keeps_equal_key_input_order() {
+    let input = keyed_input(2048, 7, 91);
+    let mut expected = input.clone();
+    expected.sort();
+    for fan_in in [2, 3] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(1, fan_in, 1, 31)).unwrap();
+        let mut largest = 0;
+        for record in &input {
+            sorter.push(*record).unwrap();
+            largest = largest.max(sorter.inventory_len());
+            assert!(
+                sorter.inventory_len() < 128 * fan_in,
+                "descriptor bound independent of count"
+            );
+        }
+        assert!(
+            largest < input.len() / 2,
+            "control exercises live compaction"
+        );
+        let output = sorter
+            .finish()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(pairs(&output), pairs(&expected));
+        assert_eq!(scratch.live_bytes(), 0);
+        assert!(
+            scratch.peak_bytes() <= SortConfig::scratch_need::<Keyed>(input.len() as u64).unwrap()
+        );
+    }
+}
+
+#[test]
+fn sequence_accounts_unfinished_bytes_and_replays_short_writes() {
+    let (_parent, scratch) = new_scratch(FaultIo::new(Faults {
+        max_write: Some(3),
+        ..Default::default()
+    }));
+    let input = keyed_input(20, 4, 77);
+    let mut writer = SequenceWriter::new(&scratch, "accounted-sequence", 7).unwrap();
+    for (i, record) in input.iter().enumerate() {
+        writer.push(record).unwrap();
+        assert_eq!(
+            scratch.live_bytes(),
+            (i as u64 + 1) * Keyed::SIZE as u64,
+            "unfinished output contributes to peak"
+        );
+    }
+    let sequence = writer.finish().unwrap();
+    assert_eq!(scratch.live_bytes(), 20 * Keyed::SIZE as u64);
+    assert_eq!(
+        pairs(
+            &sequence
+                .reader()
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        ),
+        pairs(&input)
+    );
+    drop(sequence);
+    assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn failed_partial_writes_contribute_to_peak_before_cleanup() {
+    let faults = Faults {
+        // The fault is checked before each write, so force a short first write to reach
+        // the failure while write_all still has bytes of this record left to emit.
+        max_write: Some(3),
+        write_error_at: Some((3, std::io::ErrorKind::StorageFull)),
+        ..Default::default()
+    };
+    let record = Wide {
+        morton: 0,
+        a: 1,
+        b: 2,
+    };
+    let sequence_io = FaultIo::new(faults.clone());
+    let (_parent, scratch) = new_scratch(sequence_io.clone());
+    let mut writer = SequenceWriter::new(&scratch, "partial-sequence", 1).unwrap();
+    assert!(writer.push(&record).is_err());
+    assert_eq!(sequence_io.counters.written.load(Ordering::Relaxed), 3);
+    assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
+    drop(writer);
+    assert_eq!(scratch.live_bytes(), 0);
+
+    let sorter_io = FaultIo::new(faults);
+    let (_parent, scratch) = new_scratch(sorter_io.clone());
+    let mut sorter = ExternalSorter::new(&scratch, config::<Wide>(1, 2, 1, 1)).unwrap();
+    sorter.push(record).unwrap();
+    assert!(sorter.push(record).is_err());
+    assert_eq!(sorter_io.counters.written.load(Ordering::Relaxed), 3);
+    assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
+    assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn allocation_unit_is_preserved_by_preflight_and_scratch() {
+    let parent = tempfile::tempdir().unwrap();
+    let scratch = Scratch::create_with(Some(parent.path()), 65536, Arc::new(FileIo), |_| {
+        Ok(Volume {
+            available_bytes: 65536,
+            memory_backed: true,
+            allocation_unit_bytes: 65536,
+        })
+    })
+    .unwrap();
+    assert_eq!(scratch.allocation_unit_bytes(), 65536);
+    assert!(scratch.memory_backed());
+    scratch.close().unwrap();
+    assert_eq!(entries(parent.path()), 0);
+}
+
+#[test]
+fn zero_allocation_unit_is_a_typed_fault_before_scratch_creation() {
+    let parent = tempfile::tempdir().unwrap();
+    let error = Scratch::create_with(Some(parent.path()), 0, Arc::new(FileIo), |_| {
+        Ok(Volume {
+            available_bytes: u64::MAX,
+            memory_backed: false,
+            allocation_unit_bytes: 0,
+        })
+    })
+    .err()
+    .expect("invalid filesystem geometry must be refused");
+    assert_eq!(io_kind(&error), io::ErrorKind::InvalidData);
+    assert_eq!(entries(parent.path()), 0);
+    let job = JobError::from(error);
+    assert_eq!(job.kind(), JobErrorKind::Io);
+    assert_eq!(job.path(), Some(parent.path()));
+}
+
+#[test]
+fn real_volume_reports_nonzero_allocation_unit() {
+    let parent = tempfile::tempdir().unwrap();
+    let volume = inspect_volume(parent.path()).unwrap();
+    assert!(volume.allocation_unit_bytes > 0);
+    let scratch = Scratch::create(Some(parent.path()), 0).unwrap();
+    assert_eq!(
+        scratch.allocation_unit_bytes(),
+        volume.allocation_unit_bytes
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn relative_windows_path_uses_the_actual_working_directory_volume() {
+    let relative = inspect_volume(Path::new(".")).unwrap();
+    let absolute = inspect_volume(&std::env::current_dir().unwrap()).unwrap();
+    assert_eq!(
+        relative.allocation_unit_bytes,
+        absolute.allocation_unit_bytes
     );
 }
