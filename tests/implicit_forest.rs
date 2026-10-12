@@ -697,6 +697,63 @@ fn short_octree_is_one_implicit_root_with_its_transform() {
     );
 }
 
+/// Implicit tiles are published at δ accumulated in f64 and their payloads are rebased in
+/// f64, so content drifts from H's exact placement by a few ulps where a sum is inexact
+/// (0.1 + 0.2 here, and 0.5 + 0.1 in tile 3's rebased root). The implicit root and its
+/// explicit ancestors grow outward by that drift; exact sums leave every box unchanged.
+#[test]
+fn inexact_translation_sums_widen_rows_and_ancestors_outward() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = tile(
+        &["glb"],
+        vec![tile(
+            &["glb"],
+            vec![tile(
+                &["glb"],
+                vec![tile(&["glb"], vec![leaf().moved([0.2, 0., 0.])]).moved([0.1, 0., 0.])],
+            )],
+        )],
+    );
+    let h = build(dir.path(), &spec);
+    let mut manifest = h.manifest.clone();
+    let output = write(dir.path(), &mut manifest, SubdivisionScheme::Octree).unwrap();
+    assert_eq!(
+        roles(&output)[..2],
+        [TileRole::Skeleton, TileRole::ImplicitRoot]
+    );
+    let skeleton = &manifest["root"];
+    let root = &skeleton["children"][0];
+    assert!(root.get("implicitTiling").is_some());
+    for tile in [skeleton, root] {
+        let b = tile["boundingVolume"]["box"].as_array().unwrap();
+        assert_eq!(b[3].as_f64(), Some(2f64.next_up()));
+        assert_eq!((b[7].as_f64(), b[11].as_f64()), (Some(3.), Some(1.)));
+    }
+    // Every row of the implicit root grows on x only, and only outward.
+    let expanded = expand_tileset(&manifest, reader(dir.path())).unwrap();
+    let ours = flatten(&expanded["root"]);
+    let theirs = flatten(&h.manifest["root"]);
+    for (index, ((ours, _), (theirs, _))) in ours.iter().zip(&theirs).enumerate() {
+        // Half axes, row major: x half at 0, y half at 4, z half at 8.
+        let (half, expected) = (ours.1, theirs.1);
+        assert!(half[0] > expected[0], "tile {index}");
+        assert_eq!(half[1..], expected[1..], "tile {index}");
+    }
+    // Only the payload rebase is inexact: δ = 0 + 0.1 is exact, but tile 1's raw scene
+    // root translation 0.5 + 0.1 rounds, so the implicit root still grows on x.
+    let dir = tempfile::tempdir().unwrap();
+    let spec = tile(&["glb"], vec![leaf().moved([0.1, 0., 0.])]);
+    let h = build(dir.path(), &spec);
+    let mut manifest = h.manifest.clone();
+    let output = write(dir.path(), &mut manifest, SubdivisionScheme::Octree).unwrap();
+    assert_eq!(roles(&output)[0], TileRole::ImplicitRoot);
+    let b = manifest["root"]["boundingVolume"]["box"]
+        .as_array()
+        .unwrap();
+    assert_eq!(b[3].as_f64(), Some(2f64.next_up()));
+    assert_eq!((b[7].as_f64(), b[11].as_f64()), (Some(3.), Some(1.)));
+}
+
 #[test]
 fn thirty_two_levels_link_two_documents_deep_and_thirty_three_are_refused() {
     let dir = tempfile::tempdir().unwrap();

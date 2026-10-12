@@ -50,10 +50,32 @@ pub(crate) fn box_half(value: &Value) -> Result<Vec3, Error> {
     Ok(half)
 }
 
+/// The exact rounding error of `a + b`: `(a + b) - fl(a + b)` over the reals,
+/// itself an f64 (Knuth's TwoSum). Zero when the sum is exact.
+pub(crate) fn sum_error(a: f64, b: f64) -> f64 {
+    let sum = a + b;
+    let b_part = sum - a;
+    (a - (sum - b_part)) + (b - b_part)
+}
+
+/// `a + b` rounded up: the least f64 at or above the exact sum. A sum that
+/// was rounded down moves up one ulp; every other sum is returned unchanged.
+pub(crate) fn sum_up(a: f64, b: f64) -> f64 {
+    let sum = a + b;
+    if sum_error(a, b) > 0. {
+        sum.next_up()
+    } else {
+        sum
+    }
+}
+
 /// Grow `half` (the parent's own, already padded content box) to enclose
 /// every child placed at `delta`, and return the largest of `error` and the
 /// children's geometric errors. Children carry their own padding, so the
-/// enclosure stays conservative. Malformed child bounds are data errors.
+/// enclosure stays conservative; each `|delta| + child half` is rounded
+/// outward, so the child box nests exactly (C2 decodedContentContainment
+/// tests every ancestor in exact arithmetic). Malformed child bounds are data
+/// errors.
 pub(crate) fn enclose_children<'a>(
     half: &mut Vec3,
     mut error: f64,
@@ -62,7 +84,7 @@ pub(crate) fn enclose_children<'a>(
     for (delta, child) in children {
         let child_half = box_half(&child["boundingVolume"]["box"])?;
         for i in 0..3 {
-            half[i] = half[i].max(delta[i].abs() + child_half[i]);
+            half[i] = half[i].max(sum_up(delta[i].abs(), child_half[i]));
         }
         error = error.max(child["geometricError"].as_f64().unwrap_or(0.));
     }
@@ -112,6 +134,22 @@ mod tests {
             Err(Error::Data(_))
         ));
         assert_eq!(top_level_error(0.5, 0.25, 2.), 1.);
+    }
+
+    #[test]
+    fn child_enclosure_rounds_outward() {
+        // 1 + 2^-53 is a tie that rounds to nearest (even) 1.0, half an ulp inside the child.
+        let child = json!({"boundingVolume":{"box":box_json(0., [2f64.powi(-53); 3])}});
+        let mut half = [0.; 3];
+        enclose_children(&mut half, 0., [([1., -1., 0.], &child)]).unwrap();
+        assert_eq!(half, [1f64.next_up(), 1f64.next_up(), 2f64.powi(-53)]);
+        // Exact and rounded-up sums are unchanged.
+        assert_eq!(sum_up(0.5, 0.25), 0.75);
+        assert_eq!(
+            sum_up(1., 2f64.powi(-52) + 2f64.powi(-53)),
+            1. + 2f64.powi(-51)
+        );
+        assert_eq!(sum_up(0.1, 0.2), 0.1 + 0.2);
         assert_eq!(top_level_error(3., 2., 2.), 4.);
     }
 }
