@@ -110,3 +110,6 @@ impl From<SpillError> for JobError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
