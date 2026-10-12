@@ -7,14 +7,76 @@ mod json;
 mod material;
 mod original_bounds;
 mod texture;
-pub(super) use material::Material;
+pub(crate) use material::Material;
 
-pub(super) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
-pub(super) const MAX_TRIANGLES: usize = 100_000;
-pub(super) const MAX_LEAVES: usize = 4096;
+pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
+pub(crate) const MAX_TRIANGLES: usize = 100_000;
+pub(crate) const MAX_LEAVES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
+/// Local-metre source and transformed position domain shared by both admission profiles.
+const MAX_LOCAL_COORDINATE: f64 = 1_000_000.;
+
+/// Explicit admission ceilings of one document profile. `None` means no total ceiling: the
+/// streaming large-mesh profile bounds memory by configuration, not by input size (D12), and
+/// keeps only explicit JSON count caps (design v6.1 §2.5).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Limits {
+    /// Message prefix of ceilings that name the profile.
+    pub label: &'static str,
+    pub root_bytes: Option<usize>,
+    pub json_bytes: usize,
+    pub declared_buffer_bytes: Option<usize>,
+    pub buffers: usize,
+    pub buffer_views: usize,
+    pub accessors: usize,
+    pub accessor_elements: Option<usize>,
+    pub meshes: usize,
+    pub primitives: usize,
+    pub nodes: usize,
+    pub materials: usize,
+    pub images: usize,
+    pub triangles: Option<usize>,
+}
+
+impl Limits {
+    /// The bounded in-memory F1a/F1c2 profile.
+    pub(crate) const F1A: Self = Self {
+        label: "F1a",
+        root_bytes: Some(MAX_SOURCE_BYTES),
+        json_bytes: MAX_JSON_BYTES,
+        declared_buffer_bytes: Some(MAX_SOURCE_BYTES),
+        buffers: 32,
+        buffer_views: usize::MAX,
+        accessors: usize::MAX,
+        accessor_elements: Some(1_000_000),
+        meshes: usize::MAX,
+        primitives: 4096,
+        nodes: 4096,
+        materials: 256,
+        images: 32,
+        triangles: Some(MAX_TRIANGLES),
+    };
+    /// The streaming large-mesh profile: JSON within `J` = 16 MiB and the explicit count caps
+    /// of design v6.1 §2.5; no byte, element or triangle total.
+    pub(crate) const LARGE: Self = Self {
+        label: "large-mesh",
+        root_bytes: None,
+        json_bytes: 16 << 20,
+        declared_buffer_bytes: None,
+        buffers: 4096,
+        buffer_views: 262_144,
+        accessors: 262_144,
+        accessor_elements: None,
+        meshes: 65_536,
+        primitives: 65_536,
+        nodes: 65_536,
+        materials: 4096,
+        images: 4096,
+        triangles: None,
+    };
+}
 type Result<T> = std::result::Result<T, JobError>;
-type Matrix = [[f64; 4]; 4];
+pub(crate) type Matrix = [[f64; 4]; 4];
 struct Instance {
     node: usize,
     mesh: usize,
@@ -30,7 +92,7 @@ const IDENTITY: Matrix = [
 ];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct SourceIdentity {
+pub(crate) struct SourceIdentity {
     pub node_index: u32,
     pub mesh_index: u32,
     pub primitive_index: u32,
@@ -43,7 +105,7 @@ impl SourceIdentity {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct Triangle {
+pub(crate) struct Triangle {
     pub source: SourceIdentity,
     /// Authored POSITION accessor keys, in the same reflected corner order.
     pub vertex_indices: [u32; 3],
@@ -55,7 +117,7 @@ pub(super) struct Triangle {
     pub material: Option<usize>,
 }
 
-pub(super) struct Image {
+pub(crate) struct Image {
     pub bytes: Vec<u8>,
     pub mime_type: &'static str,
     pub extension: &'static str,
@@ -64,12 +126,12 @@ pub(super) struct Image {
 }
 
 /// Tile-basis intervals enclosing unchanged authored source-node transforms.
-pub(super) struct OriginalBounds {
+pub(crate) struct OriginalBounds {
     pub min: [f64; 3],
     pub max: [f64; 3],
 }
 
-pub(super) fn original_bounds(
+pub(crate) fn original_bounds(
     document: &Document,
     supplied_buffers: &[&[u8]],
     check: impl FnMut() -> Result<()>,
@@ -77,7 +139,7 @@ pub(super) fn original_bounds(
     original_bounds::evaluate(document, supplied_buffers, check)
 }
 
-pub(super) struct Geometry {
+pub(crate) struct Geometry {
     pub node_names: Vec<Option<String>>,
     pub triangles: Vec<Triangle>,
     pub materials: Vec<Material>,
@@ -91,6 +153,9 @@ fn invalid(message: impl Into<String>) -> JobError {
 }
 fn unsupported(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::Unsupported, message)
+}
+fn exhausted(message: impl Into<String>) -> JobError {
+    JobError::new(JobErrorKind::ResourceLimit, message)
 }
 fn object<'a>(v: &'a Value, allowed: &[&str]) -> Result<&'a Map<String, Value>> {
     let o = v
@@ -154,69 +219,112 @@ fn reference<'a>(values: &'a [Value], v: &Value) -> Result<&'a Value> {
         .get(uint(v)?)
         .ok_or_else(|| invalid("GLB reference out of range"))
 }
-fn u32_at(bytes: &[u8], at: usize) -> Result<u32> {
-    let data = bytes
-        .get(at..at + 4)
-        .ok_or_else(|| invalid("truncated GLB envelope"))?;
-    Ok(u32::from_le_bytes(data.try_into().unwrap()))
+
+/// GLB v2 container layout: the JSON chunk and the optional BIN chunk as byte ranges.
+pub(crate) struct GlbLayout {
+    pub json: Range<u64>,
+    pub bin: Option<Range<u64>>,
 }
 
-fn envelope(bytes: &[u8]) -> Result<(&[u8], Option<Range<usize>>)> {
-    if bytes.len() > MAX_SOURCE_BYTES {
-        return Err(unsupported("source exceeds 32 MiB F1a ceiling"));
+fn word(read_at: &mut dyn FnMut(u64, &mut [u8]) -> Result<()>, at: u64) -> Result<u32> {
+    let mut bytes = [0; 4];
+    read_at(at, &mut bytes)?;
+    Ok(u32::from_le_bytes(bytes))
+}
+
+/// Reads the GLB header and chunk headers of a `len`-byte root through `read_at`, which fails
+/// with "truncated GLB envelope" outside the root. One implementation serves captured roots and
+/// streamed files, so both apply the same header, alignment and trailing-chunk rules.
+pub(crate) fn glb_layout(
+    len: u64,
+    limits: &Limits,
+    read_at: &mut dyn FnMut(u64, &mut [u8]) -> Result<()>,
+) -> Result<GlbLayout> {
+    const JSON: u32 = 0x4e4f534a;
+    const BIN: u32 = 0x004e4942;
+    if let Some(max) = limits.root_bytes {
+        if len > max as u64 {
+            return Err(unsupported(format!(
+                "source exceeds {} MiB {} ceiling",
+                max >> 20,
+                limits.label
+            )));
+        }
     }
-    if bytes.get(..4) != Some(b"glTF")
-        || u32_at(bytes, 4)? != 2
-        || u32_at(bytes, 8)? as usize != bytes.len()
-    {
+    let mut magic = [0; 4];
+    let magic_ok = len >= 4 && {
+        read_at(0, &mut magic)?;
+        &magic == b"glTF"
+    };
+    if !magic_ok || word(read_at, 4)? != 2 || u64::from(word(read_at, 8)?) != len {
         return Err(invalid("invalid GLB v2 header or file length"));
     }
-    let json_len = u32_at(bytes, 12)? as usize;
-    if json_len > MAX_JSON_BYTES {
-        return Err(unsupported("GLB JSON exceeds 1 MiB F1a ceiling"));
+    let json_len = u64::from(word(read_at, 12)?);
+    if json_len > limits.json_bytes as u64 {
+        return Err(unsupported(format!(
+            "GLB JSON exceeds {} MiB {} ceiling",
+            limits.json_bytes >> 20,
+            limits.label
+        )));
     }
-    if !json_len.is_multiple_of(4) || u32_at(bytes, 16)? != 0x4e4f534a {
+    if !json_len.is_multiple_of(4) || word(read_at, 16)? != JSON {
         return Err(invalid("first GLB chunk must be aligned JSON"));
     }
-    let json_end = 20usize
-        .checked_add(json_len)
-        .ok_or_else(|| invalid("GLB length overflow"))?;
-    let json = bytes
-        .get(20..json_end)
-        .ok_or_else(|| invalid("truncated JSON chunk"))?;
-    if json_end == bytes.len() {
-        return Ok((json, None));
+    let json_end = 20 + json_len;
+    if json_end > len {
+        return Err(invalid("truncated JSON chunk"));
     }
-    let bin_len = u32_at(bytes, json_end)? as usize;
-    if u32_at(bytes, json_end + 4)? != 0x004e4942 {
-        return Err(unsupported("F1a requires one BIN chunk after JSON"));
+    if json_end == len {
+        return Ok(GlbLayout {
+            json: 20..json_end,
+            bin: None,
+        });
+    }
+    let bin_len = u64::from(word(read_at, json_end)?);
+    if word(read_at, json_end + 4)? != BIN {
+        return Err(unsupported(format!(
+            "{} requires one BIN chunk after JSON",
+            limits.label
+        )));
     }
     let bin_start = json_end + 8;
-    let bin_end = bin_start
-        .checked_add(bin_len)
-        .ok_or_else(|| invalid("GLB length overflow"))?;
-    if !bin_len.is_multiple_of(4) || bin_end > bytes.len() {
+    let bin_end = bin_start + bin_len;
+    if !bin_len.is_multiple_of(4) || bin_end > len {
         return Err(invalid("invalid BIN length"));
     }
-    if bin_end < bytes.len() {
+    if bin_end < len {
         let mut cursor = bin_end;
-        while cursor < bytes.len() {
-            let len = u32_at(bytes, cursor)? as usize;
-            let kind = u32_at(bytes, cursor + 4)?;
-            cursor = cursor
-                .checked_add(8)
-                .and_then(|n| n.checked_add(len))
-                .ok_or_else(|| invalid("GLB chunk length overflow"))?;
-            if !len.is_multiple_of(4)
-                || cursor > bytes.len()
-                || [0x4e4f534a, 0x004e4942].contains(&kind)
-            {
+        while cursor < len {
+            let chunk = u64::from(word(read_at, cursor)?);
+            let kind = word(read_at, cursor + 4)?;
+            cursor = cursor + 8 + chunk;
+            if !chunk.is_multiple_of(4) || cursor > len || [JSON, BIN].contains(&kind) {
                 return Err(invalid("invalid extra GLB chunk"));
             }
         }
-        return Err(unsupported("unknown GLB chunks outside F1a"));
+        return Err(unsupported(format!(
+            "unknown GLB chunks outside {}",
+            limits.label
+        )));
     }
-    Ok((json, Some(bin_start..bin_end)))
+    Ok(GlbLayout {
+        json: 20..json_end,
+        bin: Some(bin_start..bin_end),
+    })
+}
+
+fn envelope(bytes: &[u8]) -> Result<(&[u8], Option<Range<usize>>)> {
+    let layout = glb_layout(bytes.len() as u64, &Limits::F1A, &mut |at, out| {
+        let at = at as usize;
+        out.copy_from_slice(
+            bytes
+                .get(at..at + out.len())
+                .ok_or_else(|| invalid("truncated GLB envelope"))?,
+        );
+        Ok(())
+    })?;
+    let range = |r: Range<u64>| r.start as usize..r.end as usize;
+    Ok((&bytes[range(layout.json)], layout.bin.map(range)))
 }
 
 #[derive(Clone, Copy)]
@@ -228,21 +336,101 @@ struct Accessor<'a> {
     normalized: bool,
     width: usize,
 }
+/// Byte size of an admitted component type.
+pub(crate) fn component_size(component: usize) -> usize {
+    match component {
+        5121 => 1,
+        5123 => 2,
+        _ => 4,
+    }
+}
+
+/// Little-endian value of one admitted component at the start of `bytes`.
+pub(crate) fn component_scalar(component: usize, bytes: &[u8]) -> f64 {
+    match component {
+        5121 => bytes[0] as f64,
+        5123 => u16::from_le_bytes(bytes[..2].try_into().unwrap()) as f64,
+        5125 => u32::from_le_bytes(bytes[..4].try_into().unwrap()) as f64,
+        5126 => f32::from_le_bytes(bytes[..4].try_into().unwrap()) as f64,
+        _ => unreachable!("admitted component type"),
+    }
+}
+
+/// Observed per-component extrema of one accessor, compared with its declared `min`/`max`.
+pub(crate) struct Extrema {
+    min: [f64; 4],
+    max: [f64; 4],
+}
+impl Extrema {
+    pub(crate) fn new() -> Self {
+        Self {
+            min: [f64::INFINITY; 4],
+            max: [f64::NEG_INFINITY; 4],
+        }
+    }
+    pub(crate) fn observe(&mut self, c: usize, x: f64) -> Result<()> {
+        if !x.is_finite() {
+            return Err(invalid("nonfinite accessor data"));
+        }
+        self.min[c] = self.min[c].min(x);
+        self.max[c] = self.max[c].max(x);
+        Ok(())
+    }
+    pub(crate) fn verify(&self, view: &AccessorView<'_>) -> Result<()> {
+        if view
+            .min
+            .is_some_and(|values| values != &self.min[..view.width])
+            || view
+                .max
+                .is_some_and(|values| values != &self.max[..view.width])
+        {
+            return Err(invalid("accessor bounds disagree with actual extrema"));
+        }
+        Ok(())
+    }
+}
+
+/// Source POSITION domain of local metres.
+pub(crate) fn check_source_position(position: [f64; 3]) -> Result<()> {
+    if position.iter().any(|v| v.abs() > MAX_LOCAL_COORDINATE) {
+        return Err(unsupported("source position outside local mesh domain"));
+    }
+    Ok(())
+}
+
+/// A triangle index must address a vertex and must not be the primitive-restart value.
+pub(crate) fn check_index(index: usize, vertices: usize, component: usize) -> Result<()> {
+    let reserved = match component {
+        5121 => u8::MAX as usize,
+        5123 => u16::MAX as usize,
+        _ => u32::MAX as usize,
+    };
+    if index >= vertices || index == reserved {
+        return Err(invalid(
+            "triangle index out of range or reserved restart value",
+        ));
+    }
+    Ok(())
+}
+
+/// Bakes a source position through its accumulated node transform: evaluated in f64, rounded
+/// once to f32, and kept inside the local-metre domain.
+pub(crate) fn bake_position(world: &[[f64; 4]; 4], position: [f64; 3]) -> Result<[f32; 3]> {
+    let mut baked = [0.; 3];
+    for (r, out) in baked.iter_mut().enumerate() {
+        let x = world[r][3] + (0..3).map(|c| world[r][c] * position[c]).sum::<f64>();
+        if !x.is_finite() || x.abs() > MAX_LOCAL_COORDINATE {
+            return Err(unsupported("transformed position outside local F1a domain"));
+        }
+        *out = x as f32;
+    }
+    Ok(baked)
+}
+
 impl Accessor<'_> {
     fn scalar(&self, i: usize, c: usize) -> f64 {
-        let size = match self.component {
-            5121 => 1,
-            5123 => 2,
-            _ => 4,
-        };
-        let start = i * self.stride + c * size;
-        match self.component {
-            5121 => self.bytes[start] as f64,
-            5123 => u16::from_le_bytes(self.bytes[start..start + 2].try_into().unwrap()) as f64,
-            5125 => u32::from_le_bytes(self.bytes[start..start + 4].try_into().unwrap()) as f64,
-            5126 => f32::from_le_bytes(self.bytes[start..start + 4].try_into().unwrap()) as f64,
-            _ => unreachable!("admitted component type"),
-        }
+        let start = i * self.stride + c * component_size(self.component);
+        component_scalar(self.component, &self.bytes[start..])
     }
     fn vec3(&self, i: usize) -> [f64; 3] {
         std::array::from_fn(|c| self.scalar(i, c))
@@ -322,6 +510,62 @@ impl AccessorShape {
     }
 }
 
+/// Read-only layout of one admitted accessor, for streaming readers outside this module.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AccessorView<'a> {
+    pub index: usize,
+    pub buffer: usize,
+    /// Byte offset of element zero within its buffer.
+    pub start: usize,
+    pub stride: usize,
+    pub count: usize,
+    pub component: usize,
+    pub width: usize,
+    pub normalized: bool,
+    pub min: Option<&'a [f64]>,
+    pub max: Option<&'a [f64]>,
+}
+impl AccessorView<'_> {
+    /// Bytes of one element's components (without stride padding).
+    pub(crate) fn element_bytes(&self) -> usize {
+        self.width * component_size(self.component)
+    }
+}
+
+/// One mesh primitive instanced by one node of the selected scene, in scene traversal order.
+pub(crate) struct ScenePrimitive<'a> {
+    pub node: u32,
+    pub mesh: u32,
+    pub primitive: u32,
+    pub world: &'a Matrix,
+    /// Negative for a mirroring transform; corners 1 and 2 are then swapped.
+    pub determinant: f64,
+    pub position: AccessorView<'a>,
+    pub indices: Option<AccessorView<'a>>,
+    pub triangles: usize,
+    pub has_normal: bool,
+    pub has_tangent: bool,
+    pub texcoord_sets: usize,
+    pub has_color: bool,
+}
+
+/// Borrowed metadata needed to check an authored primitive through bounded readers.
+pub(crate) struct PayloadPrimitive<'a> {
+    pub position: AccessorView<'a>,
+    pub indices: Option<AccessorView<'a>>,
+    pub tangent: Option<AccessorView<'a>>,
+    pub count: usize,
+    primitive: &'a Primitive,
+    accessors: &'a [AccessorLayout],
+}
+impl<'a> PayloadPrimitive<'a> {
+    pub(crate) fn attributes(&self) -> impl Iterator<Item = (VertexRole, AccessorView<'a>)> + '_ {
+        self.primitive
+            .attributes()
+            .map(|(role, i)| (role, self.accessors[i].view(i)))
+    }
+}
+
 struct AccessorLayout {
     buffer: usize,
     start: usize,
@@ -336,12 +580,36 @@ struct AccessorLayout {
     max: Option<Vec<f64>>,
 }
 
+impl AccessorLayout {
+    fn view(&self, index: usize) -> AccessorView<'_> {
+        AccessorView {
+            index,
+            buffer: self.buffer,
+            start: self.start,
+            stride: self.stride,
+            count: self.count,
+            component: self.component,
+            width: self.width,
+            normalized: self.normalized,
+            min: self.min.as_deref(),
+            max: self.max.as_deref(),
+        }
+    }
+}
+
 fn accessor_layouts(
     doc: &Value,
     buffer_lengths: &[usize],
+    limits: &Limits,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<AccessorLayout>> {
     let views = list(doc, "bufferViews")?;
+    if views.len() > limits.buffer_views || list(doc, "accessors")?.len() > limits.accessors {
+        return Err(unsupported(format!(
+            "bufferView/accessor count exceeds {}/{}",
+            limits.buffer_views, limits.accessors
+        )));
+    }
     for view in views {
         check()?;
         object(
@@ -400,9 +668,12 @@ fn accessor_layouts(
         let count = field(value, "count")?;
         total = total
             .checked_add(count)
-            .ok_or_else(|| unsupported("accessor count overflow"))?;
-        if total > 1_000_000 {
-            return Err(unsupported("F1a accessor count ceiling exceeded"));
+            .ok_or_else(|| exhausted("accessor count overflow"))?;
+        if limits.accessor_elements.is_some_and(|max| total > max) {
+            return Err(unsupported(format!(
+                "{} accessor count ceiling exceeded",
+                limits.label
+            )));
         }
         if count == 0 {
             return Err(invalid("empty accessor"));
@@ -566,32 +837,16 @@ fn decode_accessors<'a>(
             normalized: layout.normalized,
             width: layout.width,
         };
-        let mut actual_min = [f64::INFINITY; 4];
-        let mut actual_max = [f64::NEG_INFINITY; 4];
+        let mut extrema = Extrema::new();
         for i in 0..layout.count {
             if i.is_multiple_of(1024) {
                 check()?;
             }
             for c in 0..layout.width {
-                let x = accessor.scalar(i, c);
-                if !x.is_finite() {
-                    return Err(invalid("nonfinite accessor data"));
-                }
-                actual_min[c] = actual_min[c].min(x);
-                actual_max[c] = actual_max[c].max(x);
+                extrema.observe(c, accessor.scalar(i, c))?;
             }
         }
-        if layout
-            .min
-            .as_ref()
-            .is_some_and(|values| values.as_slice() != &actual_min[..layout.width])
-            || layout
-                .max
-                .as_ref()
-                .is_some_and(|values| values.as_slice() != &actual_max[..layout.width])
-        {
-            return Err(invalid("accessor bounds disagree with actual extrema"));
-        }
+        extrema.verify(&layout.view(usize::MAX))?;
         result.push(accessor);
     }
     Ok(result)
@@ -750,7 +1005,7 @@ fn transform(node: &Value) -> Result<Matrix> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum VertexRole {
+pub(crate) enum VertexRole {
     Position,
     Normal,
     Tangent,
@@ -758,6 +1013,31 @@ enum VertexRole {
     Color,
 }
 impl VertexRole {
+    /// Payload semantics independent of whether accessor bytes were captured or streamed.
+    pub(crate) fn check_payload(self, values: &[f64]) -> Result<()> {
+        match self {
+            Self::Position => check_source_position([values[0], values[1], values[2]])?,
+            Self::Normal | Self::Tangent => {
+                if (length([values[0], values[1], values[2]]) - 1.).abs() > 1e-4 {
+                    return Err(invalid("source NORMAL/TANGENT XYZ must be unit length"));
+                }
+                if self == Self::Tangent && ![-1., 1.].contains(&values[3]) {
+                    return Err(invalid("source TANGENT W must be exactly -1 or +1"));
+                }
+            }
+            Self::Texcoord(_) => {
+                if values.iter().any(|v| v.abs() > 1_000_000.) {
+                    return Err(unsupported("TEXCOORD outside supported finite magnitude"));
+                }
+            }
+            Self::Color => {
+                if values.iter().any(|v| !(0.0..=1.0).contains(v)) {
+                    return Err(unsupported("COLOR_0 outside bounded [0,1] profile"));
+                }
+            }
+        }
+        Ok(())
+    }
     fn validate(self, accessor: &AccessorLayout) -> Result<()> {
         let float = accessor.component == 5126 && !accessor.normalized;
         let normalized = [5121, 5123].contains(&accessor.component) && accessor.normalized;
@@ -818,8 +1098,12 @@ fn primitives(
     doc: &Value,
     data: &[AccessorLayout],
     materials: &[Material],
+    limits: &Limits,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<Vec<Primitive>>> {
+    if list(doc, "meshes")?.len() > limits.meshes {
+        return Err(unsupported(format!("mesh count exceeds {}", limits.meshes)));
+    }
     let get = |i: usize| {
         data.get(i)
             .ok_or_else(|| invalid("primitive accessor out of range"))
@@ -846,7 +1130,7 @@ fn primitives(
         Ok(&doc["bufferViews"][index])
     };
     let mut meshes = Vec::new();
-    let mut total = 0;
+    let mut total = 0usize;
     let mut primitive_count = 0;
     let mut used_indices = vec![false; data.len()];
     for mesh in list(doc, "meshes")? {
@@ -859,8 +1143,11 @@ fn primitives(
         for p in values {
             check()?;
             primitive_count += 1;
-            if primitive_count > 4096 {
-                return Err(unsupported("F1a primitive ceiling exceeded"));
+            if primitive_count > limits.primitives {
+                return Err(unsupported(format!(
+                    "{} primitive ceiling exceeded",
+                    limits.label
+                )));
             }
             object(p, &["attributes", "indices", "material", "mode"])?;
             if p.get("mode").map(uint).transpose()?.unwrap_or(4) != 4 {
@@ -947,8 +1234,10 @@ fn primitives(
             if !primitive.count.is_multiple_of(3) {
                 return Err(invalid("TRIANGLES count must be divisible by three"));
             }
-            total += primitive.count / 3;
-            if total > MAX_TRIANGLES {
+            total = total
+                .checked_add(primitive.count / 3)
+                .ok_or_else(|| exhausted("declared triangle count overflow"))?;
+            if limits.triangles.is_some_and(|max| total > max) {
                 return Err(unsupported("declared triangle ceiling exceeded"));
             }
             if let Some(i) = primitive.material {
@@ -1015,50 +1304,18 @@ fn validate_primitive_payload(
                 if i.is_multiple_of(1024) {
                     check()?;
                 }
-                match role {
-                    VertexRole::Position => {
-                        if a.vec3(i).iter().any(|v| v.abs() > 1_000_000.) {
-                            return Err(unsupported("source position outside local mesh domain"));
-                        }
-                    }
-                    VertexRole::Normal | VertexRole::Tangent => {
-                        if (length(a.vec3(i)) - 1.).abs() > 1e-4 {
-                            return Err(invalid("source NORMAL/TANGENT XYZ must be unit length"));
-                        }
-                        if role == VertexRole::Tangent && ![-1., 1.].contains(&a.scalar(i, 3)) {
-                            return Err(invalid("source TANGENT W must be exactly -1 or +1"));
-                        }
-                    }
-                    VertexRole::Texcoord(_) => {
-                        if (0..2).any(|c| a.value(i, c).abs() > 1_000_000.) {
-                            return Err(unsupported("TEXCOORD outside supported finite magnitude"));
-                        }
-                    }
-                    VertexRole::Color => {
-                        if (0..a.width).any(|c| !(0.0..=1.0).contains(&a.value(i, c))) {
-                            return Err(unsupported("COLOR_0 outside bounded [0,1] profile"));
-                        }
-                    }
-                }
+                let values: [f64; 4] =
+                    std::array::from_fn(|c| if c < a.width { a.value(i, c) } else { 0. });
+                role.check_payload(&values[..a.width])?;
             }
         }
         if let Some(index_accessor) = p.indices.filter(|i| indices.insert((*i, pos.count))) {
             let a = &data[index_accessor];
-            let reserved = match a.component {
-                5121 => u8::MAX as usize,
-                5123 => u16::MAX as usize,
-                _ => u32::MAX as usize,
-            };
             for i in 0..a.count {
                 if i.is_multiple_of(1024) {
                     check()?;
                 }
-                let index = a.scalar(i, 0) as usize;
-                if index >= pos.count || index == reserved {
-                    return Err(invalid(
-                        "triangle index out of range or reserved restart value",
-                    ));
-                }
+                check_index(a.scalar(i, 0) as usize, pos.count, a.component)?;
             }
         }
         if let Some(tangent) = p.tangent {
@@ -1083,23 +1340,29 @@ fn validate_primitive_payload(
 }
 
 #[derive(Clone, Debug)]
-pub(super) enum BufferSource {
+pub(crate) enum BufferSource {
     Embedded(Range<usize>),
     External(usize),
 }
 #[derive(Clone, Debug)]
-pub(super) enum ImageSource {
+pub(crate) enum ImageSource {
     BufferView(usize),
     External(usize),
 }
+/// A GLB BIN chunk located in the root, with its last (at most three) bytes for the padding
+/// check, so the payload itself need not be resident.
+pub(crate) struct BinChunk {
+    pub range: Range<usize>,
+    pub tail: Vec<u8>,
+}
 #[derive(Clone, Debug)]
-pub(super) struct ResourceRequest {
+pub(crate) struct ResourceRequest {
     pub uri: String,
 }
 
 /// Pure parsed metadata and layout plans. Root and dependency byte owners stay
 /// in the consumer; embedded data is a range rather than a self-reference.
-pub(super) struct Document {
+pub(crate) struct Document {
     value: Value,
     buffers: Vec<BufferSource>,
     buffer_lengths: Vec<usize>,
@@ -1119,15 +1382,34 @@ impl Document {
         if bytes.len() > MAX_SOURCE_BYTES {
             return Err(unsupported("root document exceeds 32 MiB"));
         }
-        let (doc, bin) = if bytes.starts_with(b"glTF") {
+        if bytes.starts_with(b"glTF") {
             let (json, bin) = envelope(bytes)?;
-            (json::parse(json, true)?, bin)
+            let bin = bin.map(|range| BinChunk {
+                tail: bytes[range.end - range.len().min(3)..range.end].to_vec(),
+                range,
+            });
+            Self::parse_parts(json, true, bin, &Limits::F1A, check)
         } else {
-            if bytes.len() > MAX_JSON_BYTES {
-                return Err(unsupported("glTF JSON exceeds 1 MiB"));
-            }
-            (json::parse(bytes, false)?, None)
-        };
+            Self::parse_parts(bytes, false, None, &Limits::F1A, check)
+        }
+    }
+
+    /// Parses a root given as its JSON bytes and, for GLB, its BIN chunk position. Streaming
+    /// consumers read only these bytes; buffer payloads stay on disk.
+    pub(crate) fn parse_parts(
+        json: &[u8],
+        glb: bool,
+        bin: Option<BinChunk>,
+        limits: &Limits,
+        mut check: impl FnMut() -> Result<()>,
+    ) -> Result<Self> {
+        if !glb && json.len() > limits.json_bytes {
+            return Err(unsupported(format!(
+                "glTF JSON exceeds {} MiB",
+                limits.json_bytes >> 20
+            )));
+        }
+        let doc = json::parse(json, glb)?;
         validate_document(&doc)?;
         let mut resources = Vec::new();
         let mut buffers = Vec::new();
@@ -1136,8 +1418,11 @@ impl Document {
         if declarations.is_empty() {
             return Err(invalid("mesh document requires buffers"));
         }
-        if declarations.len() > 32 {
-            return Err(unsupported("buffer count exceeds 32"));
+        if declarations.len() > limits.buffers {
+            return Err(unsupported(format!(
+                "buffer count exceeds {}",
+                limits.buffers
+            )));
         }
         let mut total_declared = 0usize;
         for (i, buffer) in declarations.iter().enumerate() {
@@ -1149,9 +1434,14 @@ impl Document {
             }
             total_declared = total_declared
                 .checked_add(declared)
-                .ok_or_else(|| unsupported("declared buffer byte sum overflow"))?;
-            if total_declared > MAX_SOURCE_BYTES {
-                return Err(unsupported("declared buffers exceed 32 MiB"));
+                .ok_or_else(|| exhausted("declared buffer byte sum overflow"))?;
+            if let Some(max) = limits.declared_buffer_bytes {
+                if total_declared > max {
+                    return Err(unsupported(format!(
+                        "declared buffers exceed {} MiB",
+                        max >> 20
+                    )));
+                }
             }
             buffer_lengths.push(declared);
             if let Some(uri) = buffer.get("uri") {
@@ -1167,12 +1457,13 @@ impl Document {
                 if i != 0 {
                     return Err(unsupported("only GLB buffer zero may omit URI"));
                 }
-                let range = bin
-                    .clone()
+                let chunk = bin
+                    .as_ref()
                     .ok_or_else(|| invalid("URI-less buffer requires GLB BIN"))?;
-                if declared > range.len()
-                    || range.len() - declared > 3
-                    || bytes[range.start + declared..range.end]
+                let length = chunk.range.len();
+                if declared > length
+                    || length - declared > 3
+                    || chunk.tail[chunk.tail.len() - (length - declared)..]
                         .iter()
                         .any(|&b| b != 0)
                 {
@@ -1180,15 +1471,18 @@ impl Document {
                         "BIN payload does not match buffer byteLength/padding",
                     ));
                 }
-                buffers.push(BufferSource::Embedded(range.start..range.start + declared));
+                buffers.push(BufferSource::Embedded(
+                    chunk.range.start..chunk.range.start + declared,
+                ));
             }
         }
-        let accessors = accessor_layouts(&doc, &buffer_lengths, &mut check)?;
-        let materials = material::parse(&doc)?;
-        let (images, textures, samplers) = texture::metadata(&doc, &mut resources, &mut check)?;
-        let meshes = primitives(&doc, &accessors, &materials, &mut check)?;
+        let accessors = accessor_layouts(&doc, &buffer_lengths, limits, &mut check)?;
+        let materials = material::parse(&doc, limits.materials)?;
+        let (images, textures, samplers) =
+            texture::metadata(&doc, &mut resources, limits.images, &mut check)?;
+        let meshes = primitives(&doc, &accessors, &materials, limits, &mut check)?;
         validate_accessor_profile(&accessors, &mut check)?;
-        let (instances, triangle_count) = scene_plan(&doc, &meshes, &mut check)?;
+        let (instances, triangle_count) = scene_plan(&doc, &meshes, limits, &mut check)?;
         check()?;
         Ok(Self {
             value: doc,
@@ -1213,6 +1507,51 @@ impl Document {
     }
     pub fn image_sources(&self) -> &[ImageSource] {
         &self.images
+    }
+    /// Declared byte lengths of the buffers, in declaration order.
+    pub(crate) fn buffer_lengths(&self) -> &[usize] {
+        &self.buffer_lengths
+    }
+    /// Expanded triangle count of the selected scene.
+    pub(crate) fn triangle_count(&self) -> usize {
+        self.triangle_count
+    }
+    /// Every declared accessor, including those in unselected meshes.
+    pub(crate) fn accessor_views(&self) -> impl Iterator<Item = AccessorView<'_>> {
+        self.accessors.iter().enumerate().map(|(i, a)| a.view(i))
+    }
+    /// Every authored primitive is validated before any selected-scene capture is accepted.
+    pub(crate) fn payload_primitives(&self) -> impl Iterator<Item = PayloadPrimitive<'_>> {
+        self.meshes.iter().flatten().map(|p| PayloadPrimitive {
+            position: self.accessors[p.position].view(p.position),
+            indices: p.indices.map(|i| self.accessors[i].view(i)),
+            tangent: p.tangent.map(|i| self.accessors[i].view(i)),
+            count: p.count,
+            primitive: p,
+            accessors: &self.accessors,
+        })
+    }
+    /// Every instanced primitive in scene traversal order, then primitive order.
+    pub(crate) fn scene_primitives(&self) -> impl Iterator<Item = ScenePrimitive<'_>> + '_ {
+        self.instances.iter().flat_map(move |instance| {
+            self.meshes[instance.mesh]
+                .iter()
+                .enumerate()
+                .map(move |(primitive, p)| ScenePrimitive {
+                    node: instance.node as u32,
+                    mesh: instance.mesh as u32,
+                    primitive: primitive as u32,
+                    world: &instance.world,
+                    determinant: instance.determinant,
+                    position: self.accessors[p.position].view(p.position),
+                    indices: p.indices.map(|i| self.accessors[i].view(i)),
+                    triangles: p.count / 3,
+                    has_normal: p.normal.is_some(),
+                    has_tangent: p.tangent.is_some(),
+                    texcoord_sets: p.texcoords.iter().flatten().count(),
+                    has_color: p.color.is_some(),
+                })
+        })
     }
 }
 
@@ -1265,11 +1604,15 @@ fn validate_document(doc: &Value) -> Result<()> {
 fn scene_plan(
     doc: &Value,
     meshes: &[Vec<Primitive>],
+    limits: &Limits,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(Vec<Instance>, usize)> {
     let nodes = list(doc, "nodes")?;
-    if nodes.len() > 4096 {
-        return Err(unsupported("F1a node ceiling exceeded"));
+    if nodes.len() > limits.nodes {
+        return Err(unsupported(format!(
+            "{} node ceiling exceeded",
+            limits.label
+        )));
     }
     let mut locals = Vec::with_capacity(nodes.len());
     let mut parents = vec![None; nodes.len()];
@@ -1352,9 +1695,11 @@ fn scene_plan(
                 conformal(world)?;
             }
             for p in &meshes[mesh] {
-                triangle_count += p.count / 3;
+                triangle_count = triangle_count
+                    .checked_add(p.count / 3)
+                    .ok_or_else(|| exhausted("expanded triangle count overflow"))?;
             }
-            if triangle_count > MAX_TRIANGLES {
+            if limits.triangles.is_some_and(|max| triangle_count > max) {
                 return Err(unsupported(
                     "expanded selected-scene triangle ceiling exceeded",
                 ));
@@ -1377,7 +1722,7 @@ fn scene_plan(
     Ok((instances, triangle_count))
 }
 
-pub(super) fn decode(
+pub(crate) fn decode(
     document: &Document,
     supplied_buffers: &[&[u8]],
     image_resources: &[Option<&[u8]>],
@@ -1425,22 +1770,13 @@ pub(super) fn decode(
                 if *det < 0. {
                     vertices.swap(1, 2);
                 }
-                let mut positions = [[0.; 3]; 3];
+                let mut positions = [[0f32; 3]; 3];
                 let mut normals = p.normal.map(|_| [[0.; 3]; 3]);
                 let mut tangents = p.tangent.map(|_| [[0.; 4]; 3]);
                 let mut texcoords = p.texcoords.map(|a| a.map(|_| [[0.; 2]; 3]));
                 let mut colors = p.color.map(|_| [[0.; 4]; 3]);
                 for (corner, index) in vertices.into_iter().enumerate() {
-                    let pos = data[p.position].vec3(index);
-                    for r in 0..3 {
-                        let x = world[r][3] + (0..3).map(|c| world[r][c] * pos[c]).sum::<f64>();
-                        if !x.is_finite() || x.abs() > 1_000_000. {
-                            return Err(unsupported(
-                                "transformed position outside local F1a domain",
-                            ));
-                        }
-                        positions[corner][r] = x as f32;
-                    }
+                    positions[corner] = bake_position(world, data[p.position].vec3(index))?;
                     if let (Some(a), Some(output)) = (p.normal, &mut normals) {
                         let n = data[a].vec3(index);
                         let mapped: [f64; 3] = std::array::from_fn(|r| {
@@ -1518,6 +1854,28 @@ pub(super) fn decode(
 mod metadata_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn large_declared_buffer_sum_exhaustion_is_resource_limit() {
+        let bytes = serde_json::to_vec(&json!({
+            "asset":{"version":"2.0"},
+            "buffers":[
+                {"uri":"first.bin","byteLength":usize::MAX},
+                {"uri":"second.bin","byteLength":1}
+            ]
+        }))
+        .unwrap();
+        let error = Document::parse_parts(&bytes, false, None, &Limits::LARGE, || Ok(()))
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert_eq!(error.message(), "declared buffer byte sum overflow");
+        // The finite profile still refuses at its declared-byte ceiling before accounting
+        // exhaustion, preserving its existing Unsupported admission semantics.
+        let finite = Document::parse(&bytes, || Ok(())).err().unwrap();
+        assert_eq!(finite.kind(), JobErrorKind::Unsupported);
+        assert!(finite.message().contains("declared buffers exceed"));
+    }
 
     #[test]
     fn reflected_authored_keys_follow_the_decoded_corner_order() {

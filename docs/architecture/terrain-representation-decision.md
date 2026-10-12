@@ -136,6 +136,26 @@ The report moves to schema 2, profile `t1-terrain-lod-mesh-3dtiles-1.1`. The
 validator is unchanged: packed output passes its implicit, bounds and error-order
 checks, and C2 proves decoded containment of the explicit test variant.
 
+## Amendment: packed tiles (T-PACK)
+
+The terrain output-size slice (2026-10-12) amends T-LOD's "coarse vertices are
+the stored leaf vertices", "byte-identical leaf surface primitives" and
+"separate skirt primitive":
+
+- **Storage.** Tile GLBs require `EXT_meshopt_compression` and store positions
+  as unnormalized uint16 `KHR_mesh_quantization` on one power-of-two grid per
+  level (the same step on every axis), with node translations on the grid, so decoding is exact and
+  a level's tiles agree on shared nodes. Leaves keep Float32 where their grid
+  could move a vertex more than 0.05 m; such leaves keep the flat profile's
+  surface bytes after decoding (up to the index codec's corner rotation).
+- **Certification on decoded positions.** Errors, skirt depths and boxes are
+  computed on the decoded positions of every level, with outward rounding.
+  Skirts are deepened by twice their level's storage error bound.
+- **One draw call.** The skirt shares the surface primitive and material: its
+  triangles follow the surface triangles and its tops are the surface vertices.
+
+The report moves to schema 3 with `quantizationStepMetres`.
+
 ## Acceptance before retaining the replacement
 
 Independent literal/analytic sources must verify every lattice coordinate, height,
