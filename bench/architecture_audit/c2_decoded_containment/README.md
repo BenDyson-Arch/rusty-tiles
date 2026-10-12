@@ -726,6 +726,140 @@ I1 parity test does.
 4. **The witnesses are b51f83d**, not the slice-3 head (9.B). Re-run `corpus/slice3.py` and
    `controls/slice3/generate.py` on R's head-regenerated archives (update `WITNESSES` / `forest.INPUTS`).
 
+### Slice-3 acceptance (R, 2026-10-12)
+
+R integrated F (`feat/c2-implicit-containment`, rebased onto develop `1b1ff9d`) and O (`c2s3/oracle`
+`e83263e`) and owns everything below. Contract v3.1 (`8bc53429…`) governs. Raw outputs are outside the
+repository under `/home/bend/.cache/c2s3-evidence/` (listed by sha256 at the end).
+
+**R integration fixes to O's files (recorded, no verdict changed).**
+- `c2o/check.py` `DEFAULT_LIMITS["containmentWorkUnits"]` was O-WB's pre-C2-WB 2^28; it is now 2^29, and
+  `c2o/implicit.py` re-pins `c2o/check.py`. No slice-1 witness or control lies between the caps (the two
+  `wb/large` rows that do already expected Contained at 2^29). Self-tests 61/61 and 14/14; O's slice-3
+  oracle mutants still 15/15 (plus the unmutated copy).
+- Forest witnesses (9.B) regenerated at the integration head (below); `corpus/slice3.py` `WITNESSES` and
+  `controls/slice3/forest.py` `INPUTS` re-pinned, then O's generators re-run unchanged.
+- `implicit_read/oracle/README.md` ("Accounting") notes that O-implicit's `referencesCharged` omits C1's
+  tileset-document reads, so the C1 `references` boundary is `referencesCharged + tilesets`.
+
+**Forest corpus (9.B).** Every 9.B command and its `--explicit` twin (plus `W6d --noMeshopt` and its twin),
+release `--features native-geospatial` binary of the integration source (sha256 `6ade8f52…`; the validator
+and producer sources are identical at the final head), `produce.json` sha256 `bf050f45…`. Point, mesh and
+glb archives are byte-identical to b51f83d; vector archives differ only in `vector-build.json`'s encoder
+digest and `tileset.json`'s `vectorBuildStateSha256`. O's re-run: 34 archives, totals, spans, chain lengths
+and the 5 limit pairs identical to O's b51f83d reading; 80 controls (only forest-derived hashes change) and
+80 + 181 checks with 0 disagreements.
+
+**Production parity (release lib tests, `acceptance/oracle_parity.rs`; large and evidence files present).**
+
+| Test | Result |
+| --- | --- |
+| Slice-1 witnesses and controls | 261/261 |
+| C2-WB class fixtures | 102/102 |
+| Slice-3 controls (verdict, reasons, Outside volume/depth/member/vertex, Contained totals) | 80/80 |
+| S3-18 sweep over the 181 I1 controls | 180/181 (R5 is injection-only): 65 Contained, 106 I1-refused with the same kind, 4 `derivedImplicitVolume`, 2 `tileMetadata`, C-10 and R1b.full C1 refusals, Z-payload Contained; plus the 2 `references` pairs |
+| Forest witnesses and twins (verdict and units) | 34/34; `mf2-lod3-explicit` is ResourceLimit (`document_items`) in both |
+| 9.D pairs from O's totals | 5/5: F-MF2 `containmentWorkUnits` 447,748,743 / −1 `workLimit`, `containmentSpanBits` 290 / 289 `numericSpan`, `containmentBytesRead` 59,996,880 / −1 `workLimit`, F-W6d `containmentDecodedBytes` 57,736 / −1, repeated-URI 20,562 / 20,561 |
+| I1 parity / W corpus | 181/181 / 41/41 |
+
+Not checked in production: the precheck-only arm's stop point (the oracle records reference 12,526 of
+12,527; production exposes no stop index).
+
+**`references` pairs (9.E "charging reference").** The first witness took O-implicit's `referencesCharged`
+as the boundary and production refused it. The witness was wrong: `references` keeps its C1 meaning (I1
+§2a step 10; C1 contract "C1 reads/references": actual caller resource visits), and C1 charges the read of
+every tileset document. The pairs use `referencesCharged + tilesets`: BQ 28 admits, 27 refuses; C-11 (an
+external implicit-root tileset) 17 and 16.
+
+**Production mutants (9.E).** `acceptance/production-mutants/slice3/`: `mutants.py` and the 35 hashed
+patches; the report is evidence. Every mutant flips its paired control, and the unmutated tree flips
+nothing. Production-side names follow O's oracle named controls (O's reading 1): skip `I_0` →
+S3-17.ancestor2, merge `I_0` into `R` → S3-17.ancestor3 (also S3-5), own row only → S3-17.ancestor1 (also
+S3-3.W1). The 129-level capacity is synthetic, as in O's twin (13 = S3-16's `hierarchy_depth + 1`).
+
+| Mutant | Paired control | Cases flipped |
+| --- | --- | --- |
+| keep the `implicitTiling` exclusion (now the derived bit, archive-wide) | F-W7 (F-W1 with evidence) | 164 |
+| skip the `I_0` level | S3-17.ancestor2 | 62 |
+| skip `V_R` (`I_0` takes `R`'s transform, external volume and parent) | S3-17.ancestor3 | 93 |
+| own row only | S3-17.ancestor1 | 64 |
+| `R.transform` before `V_R` | S3-8.syn | 87 |
+| external content volume at `R`'s level | S3-17.externalContent4 | 1 |
+| `Cell::rounded_for_hierarchy_bounds` for derived tiles | S3-9 | 6 |
+| archive-scoped derived exclusion | S3-10 | 5 |
+| derived detected in `build_levels` only | S3-20 | 1 |
+| FLOAT32 rows through their shortest decimal | S3-14.syn.base | 10 |
+| subtree tileMetadata as `tileMetadata` | F-W7 | 148 |
+| ignore header `metadata` | S3-12.header | 3 |
+| `depth` = chain length − 1 | S3-17.own | 52 |
+| charging `ArchiveResources::reference` for emitted contents | BQ and C-11 `references` pairs | 2 |
+| units per URI | repeated-uri.cap-1 | 64 |
+| fixed chain capacity (synthetic) | S3-16 | 18 |
+
+The 19 slice-1 production mutants (`../scripts/mutants.py`; `skip-ancestors` and `skip-content-volume`
+re-expressed for the slice-3 `build_levels`) were re-run on the same suites: all 19 flip cases, and 10 flip
+slice-3 controls or forest witnesses. The other 9 (scene default, signed clamp, depth-cap off-by-one, raw
+quaternion polynomial, URI verdict cache, normalized quotient, content volume, undrawn vertices, slot order)
+concern features the forest output and slice-3 controls do not contain (no scene-less payloads, rotations,
+normalized positions or content volumes on implicit references); their slice-1 controls catch them.
+
+**Size (B3).** `size_of`: `TileFact` 376 B, `Reference` 32 B, `LevelFacts` 472 B;
+`Option<VolumeFacts>` = `VolumeFacts` = 104 B, so `TileFact` did not grow. Chains are at most
+`hierarchy_depth + 2` levels; observed at most 19 (F-MF2).
+
+**Performance (contract §10; Intel i7-12700KF, Linux, release; `validate --json`, child pinned to one
+quiet P-core with its SMT sibling idle, 5 clean runs per arm).** Before = develop `b13a86d` release binary
+(sha256 `706dbc1e…`; validator sources identical to the C2-WB merge); after = the integration binary;
+C2-off = after on the `gltfUpAxis = "Z"` twin.
+
+| Archive | Before s | After s | C2-off s | RSS before / after / C2-off MiB |
+| --- | --- | --- | --- | --- |
+| mf2-lod3 (gating) | 0.841 | **3.444** | 0.859 | 102.5 / **104.8** / 104.8 |
+| W5 vec-perf / quantize / meshopt | 0.101 / 0.098 / 0.116 | 1.265 / 1.334 / 1.254 | 0.102 / 0.100 / 0.116 | ≤ 90.2 / ≤ 88.3 / ≤ 88.0 |
+| W2 | 0.086 | 0.428 | 0.091 | 87.8 / 85.5 / 85.7 |
+| W3-pc-deep | 0.185 | 0.340 | 0.187 | 88.8 / 86.7 / 86.7 |
+| W1 | 0.048 | 0.079 | 0.048 | 87.1 / 84.8 / 84.6 |
+| W4 (6), W6, W6d, W6dn, W7 | 0.039–0.057 | 0.039–0.068 | 0.040–0.054 | ≤ 87.5 / ≤ 85.2 / ≤ 85.2 |
+| `--explicit` twins (17; C2 on before and after) | within the lane rule (largest growth +0.099 s, W5-quantize-explicit 1.263 → 1.362) | | | ≤ 102.0 / ≤ 97.3 / ≤ 97.2 |
+
+1. **C2-off parity:** every C2-off arm is within the lane rule (1.25×, 0.1 s floor, 16 MiB) of before, and
+   mf2-lod3 C2-off (0.859 s, 104.8 MiB) is within it of I1's absolute values (1.007 s, 100.9 MiB).
+2. **Precheck-only arm:** F-MF2 at `containmentBytesRead` = 59,996,879 (`workLimit` after the last
+   reference) minus its twin: 0.027 s child CPU (P-core, median of 7 clean pairs). C2-WB's 1,047,040-reference
+   construction under a 100-document chain: 0.596 s P / 0.991 s E (C2-WB: 0.58 / 0.99); depth 1: 0.068 /
+   0.098 s.
+3. **Per-class streaming (A − twin, median of 7 clean pairs, oracle units):**
+
+   | Class | Witness | P ns/unit | E ns/unit |
+   | --- | --- | --- | --- |
+   | FLOAT points | F-W2 | 4.57 | 8.04 |
+   | FLOAT vector | F-MF2 | 5.98 | 9.83 |
+   | quantized vector | F-W5-quantize | 5.94 | 10.07 |
+   | many references | F-W3 | 4.93 | 8.21 |
+   | zero-slack mesh | F-W6d | 5.16 | 8.30 |
+
+   All are within C2-WB's τ_P = 8.10 / τ_E = 14.65 and its producer-twin range (P 4.58–5.94, E 7.66–10.12).
+4. **Absolute ceiling:** mf2-lod3 best wall 3.444 s ≤ 4.5 s, peak RSS 104.8 MiB ≤ 116.9 MiB. The M hoist
+   (OD-8(c)) is not required.
+5. **Lane:** without C2 the validate cases do not move; with C2 the six implicit archives above 0.1 s growth
+   (W2, W3, W5 ×3, mf2-lod3) exceed 1.25× on wall only, the case §10 item 5 covers with the recorded
+   `--explain` (items 1–4 pass). No RSS flag (largest growth +2.3 MiB).
+
+Debug builds are slower; no claim is made for them.
+
+| Evidence (`/home/bend/.cache/c2s3-evidence/`) | sha256 |
+| --- | --- |
+| `forest-439b436/produce.json` (corpus argv, binary and archive hashes) | `bf050f45d0de3925bfaf2c5d81d029a95eebaf708e3eac4747e4d87c196af819` |
+| `twins/twins.json` (`gltfUpAxis` twins) | `e0f5193c8779adf0505ff42b2aa26ac0acdf48c78f0147493a5e72babb96e14d` |
+| `mutants/report.json` (36 rows, at `8c7bc9f`) | `d656c2f1e7071c36908d8e3b1e896e1f10c296f4dd3ce2ab3ed35e82224878b0` |
+| `perf/forest.json` (before / after / C2-off) | `3c774dddeba5bf0a360d572bbfdea8f79879ab9718d679901c5f34b21d93fd15` |
+| `perf/gate-P.jsonl`, `perf/gate-E.jsonl` (per-class, C2-WB `gate.py`) | `138ea744…`, `ce1e26b7…` |
+| `perf/arm-mf2.json` (precheck-only arm) | `d9accb9323ea648bd168afc2daaaef0f581cf287a0172143637db03d14780949` |
+| `arm/SHA256SUMS` (C2-WB arm archives, regenerated) | `082e6346aa3967c887e6b63b2afacf070eef0d1b07070c66f4ca4d173a4c076f` |
+
+Proof limits: one host and one compiler; per-class figures are measurements, not bounds; the precheck stop
+index is oracle-only; derived cells, RTC, regions and rotated boxes stay outside the claim; D4 is deferred.
+
 ## What remains
 
 - Production verdicts for `witnesses/report.json`, `controls/manifest.json`
@@ -736,5 +870,5 @@ I1 parity test does.
   `wb/` at-cap pairs are pinned to the oracle's computed totals, so they must be
   regenerated if a formula reconciliation changes `E`, `B`, `Dec`, `J`, `Res`
   or `Prim`.
-- Slice 3: production verdicts for `controls/slice3/manifest.json`, S3-18 and the forest witnesses at the
-  slice-3 head (R), with the limit pairs above.
+- Done (2026-10-12): slice-3 production verdicts, S3-18, the forest witnesses and the limit pairs at the
+  slice-3 integration head (R, below).
