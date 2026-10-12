@@ -14,8 +14,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Change scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      # Docs-only means every changed path is Markdown under docs/ or at the
+      # repository root. Markdown under bench/ and tests/ is hashed by oracles,
+      # so it counts as code, and so does any removal or rename (a missing
+      # README.md breaks cargo package). Any doubt (manual runs, new branches, API errors,
+      # truncated file lists) runs the full workflow.
+      - name: Classify changed paths
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          docs_only=false
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
+            if files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${HEAD}" --jq '.files[] | if (.status == "added" or .status == "modified") then .filename else "!" + .filename end') \
+              && [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -lt 300 ] \
+              && ! printf '%s\n' "$files" | grep -qvE '^(docs/.*|[^/]+)\.md$'; then
+              docs_only=true
+            fi
+          fi
+          printf '%s\n' "${files:-}"
+          echo "docs_only=$docs_only" | tee -a "$GITHUB_OUTPUT"
+
+  docs:
+    name: Docs-only checks
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check tracked size budget
+        run: python3 scripts/check_tree_budget.py
+
   rust:
     name: Rust
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -120,6 +167,9 @@ jobs:
 
   python-wheel:
     name: Python wheel (CPython ${{ matrix.python }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     strategy:
@@ -159,6 +209,9 @@ jobs:
 
   portable:
     name: Portable CLI (${{ matrix.target }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -199,6 +252,9 @@ jobs:
 
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
@@ -251,6 +307,9 @@ jobs:
 
   python:
     name: Python
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -457,6 +516,9 @@ jobs:
 
   python-free-runtime:
     name: Python-free runtime
+    needs: changes
+    # Skipped jobs satisfy required checks; a failed classifier runs everything.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
