@@ -3,7 +3,7 @@
   "status": "LocalH8helperfoundation;actualleafproducerUNIMPLEMENTED",
   "base_commit": "645a8e970f6e0b050ce97870082200680197bfd1",
   "source_identity_algorithm": "sorted tracked source/build/vendor path UTF8 + NUL + raw SHA256 digest; includes current staged new files",
-  "source_identity_sha256": "dc932884159c33cf0b0e1073c5f3451634230f537a159930e3523b735dfa9196",
+  "source_identity_sha256": "303cd306d636eaa974f7b020fa0e6020f92863bdc41572643e8830ecf3be9d34",
   "source_files": 250,
   "source_scope_sha256": {
     "Cargo.lock": "5f415d7b9c8651f59137e6291e524e9071fe1758a558d5483d02af9a1b418229",
@@ -35,12 +35,30 @@
     {
       "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-c5a67a26f88d4634",
       "sha256": "447a1b04433b1777ae7516827949e49d3966fcf452a39dc1230eda0b708ea28c",
-      "execution_log": "foundation-native-tests-typed-errors.log"
+      "execution_log": "foundation-native-tests-typed-errors.log",
+      "retained_at_path": false,
+      "note": "Historical pre-rebase execution hash; rebuilt binary now occupies this path. Raw execution/source records retained."
     },
     {
       "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-20fd29d463789220",
       "sha256": "828d63e4db109c4843999920d1c755e989e2cc6a306f39a51f58dbac70b6db53",
-      "execution_log": "foundation-portable-tests-typed-errors.log"
+      "execution_log": "foundation-portable-tests-typed-errors.log",
+      "retained_at_path": false,
+      "note": "Historical pre-rebase execution hash; rebuilt binary now occupies this path. Raw execution/source records retained."
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-c5a67a26f88d4634",
+      "sha256": "8f5c13e51eae960579a998cd7c978cb1a542fb65069e02dae221f7d67ef0f299",
+      "execution_log": "foundation-rebased-native-tests.log",
+      "source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+      "retained_at_path": true
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-h8-leaf-target/debug/deps/rusty_tiles-20fd29d463789220",
+      "sha256": "7a9b9651aad2d4bb01d4c9be92c5c7c93517bac44d029d708750959244633a18",
+      "execution_log": "foundation-rebased-portable-tests.log",
+      "source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+      "retained_at_path": true
     }
   ],
   "evidence": [
@@ -126,7 +144,7 @@
     },
     {
       "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/leaf-atlas-precode.json",
-      "sha256": "150338752563454c62da8a45ee6b023e5306c66c79189ae6752c84a397d794f0",
+      "sha256": "1321bfac3d0a3d853a037d69e6b0e34271d68f283e771b613be83f51c3cfa517",
       "classification": "PROVISIONALnoatlascode;losslesspolicyawaitinguser"
     },
     {
@@ -143,6 +161,36 @@
       "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-typed-native-portable-completion-review.json",
       "sha256": "52c3560e124b0ff726cc00a4ae2f5178c844a1458a46d37590e4c8a436b3af5b",
       "classification": "Freshnonauthorfinalsource/artifact/completionGOlocalhelpersONLY"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-native-tests.log",
+      "sha256": "ae7d9cd537bbc13ed0498e989f5aa089ca27f33f2dfa4db36c100c181b184607",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-portable-tests.log",
+      "sha256": "a23f8492c33c17c52ce2d5127751ce152ac36885cb4b1cc18f7c99bbe4cdaa7d",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-native-clippy.log",
+      "sha256": "e00a67a0242fed68c75960326db66bab1a912c5f856e8e9140a213cb0efc1659",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/foundation-rebased-portable-clippy.log",
+      "sha256": "dad14de8b485d8e4677a41bc650fb38e362eb17491606da8a2b887edbca7a044",
+      "classification": "PASSrebasedintegration;scopedhelpersonly"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/semantic-policy-probes-rebased.log",
+      "sha256": "27cd76b31055e68ceb1f159857c583891814ab89814fed7de776813feadaf563",
+      "classification": "PASS7boundedpolicyprobes;notatlasacceptance"
+    },
+    {
+      "path": "/home/bend/.cache/rusty-tiles-evidence/h8-leaves-20261013/final-rebased-integration-review.json",
+      "sha256": "976e7630cfcf56b047e2bbfa54e6c0a981035cf7a0d85d71e907e13b02515b19",
+      "classification": "Freshnonauthorfinalrebasedsource/artifact/manifestGOprivatehelpersDRAFTONLY"
     }
   ],
   "remaining_gates": [
@@ -154,5 +202,10 @@
     "10milliontexturedproductionanddeterminism",
     "FinalGPUacceptanceanduserCI/merge"
   ],
-  "release_authorized": false
+  "release_authorized": false,
+  "prior_execution_source_identity_sha256": "dc932884159c33cf0b0e1073c5f3451634230f537a159930e3523b735dfa9196",
+  "rebased_source_commit": "b8ef74f2feebc7e80c5493cb25d187490d3361a2",
+  "develop_base": "a4f14e616ba323b9aa5d20cbe1fa1e55f02750a3",
+  "rebase_scope": "PrivateH8/glTFsource/ML1/build/vendorfiles identical to9485880; only CI step order conflicts resolved retaining both steps. Point/terrain/vector updates are inherited from coordinator develop.",
+  "atlas_precode_current_sha256": "1321bfac3d0a3d853a037d69e6b0e34271d68f283e771b613be83f51c3cfa517"
 }
