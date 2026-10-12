@@ -259,7 +259,7 @@ Each invariant is checked by A-2. A-3 checks it through I1 where I1 can.
   - at most 8 (octree) or 4 (quadtree) children, with distinct slots;
   - translation-only child transforms (the root may carry any transform);
   - box volumes;
-  - payload suffixes glb, gltf or b3dm (gltf only at an implicit root or an explicit tile);
+  - payload suffixes glb or gltf (gltf only at an implicit root or an explicit tile; b3dm is refused since #75 made vector fills glTF only);
   - L ≤ 32.
 - **Validated domain.** P8 keeps every JSON document within the validator's limits at any H. The
   archive-level caps (`archive_entries`, `hierarchy_visits`, both 65,536 today) bound validated
@@ -354,7 +354,7 @@ archives non-baselines):
   - A feature fingerprint is `sha256(canonical feature JSON, including its source id ‖
     shared-vertex mask)` (`store.rs:400-426`).
   - Restoring a subtree restores its tiles' JSON, contents, records and cuts.
-- **The content identity:** the immutable raw name `t/<sha256(raw bytes)>.{glb,b3dm}`.
+- **The content identity:** the immutable raw name `t/<sha256(raw bytes)>.glb` (`.b3dm` fills before #75 are refused for reuse).
 
 **How reuse finds the bytes (new).**
 - `vector-build.json` gains a `payloads` map, keyed by raw sha256. There is one entry per raw
@@ -371,7 +371,7 @@ archives non-baselines):
 2. If there is an entry, apply `restore_payload`:
    - replace the root node object's text with `rootNode`;
    - pad the JSON chunk with spaces to `jsonLength`;
-   - recompute the GLB (and b3dm) lengths.
+   - recompute the GLB lengths.
 3. Require `sha256(result) == name`. Otherwise fail with today's "previous content checksum
    failed: …" (integrity, not a cache miss).
 4. Stage the raw bytes privately as `t/<sha256>` for the new build. The new build rebases or
@@ -816,7 +816,7 @@ recorded separately.
     sha256 equal. Cases:
     - default, `--quantize`, `--meshopt` and both GLBs, taken as frozen copies of the
       `evidence/v3` payloads;
-    - a b3dm-wrapped GLB;
+    - a b3dm-wrapped GLB (since #75: refused, because vector fills are glTF only);
     - δ = 0 (a byte copy);
     - a raw root with and without `translation`;
     - JSON chunks aligned to 4 and to 8.
@@ -923,7 +923,7 @@ As implemented on the integration branch:
   `tileset.json` reserves 64 nodes and 4 KiB for producer edits after the writer, such as vector's
   `asset.extras.vectorBuildStateSha256`.
 - **D-4 (rebase domain).** A zero δ is a byte copy for any suffix. Otherwise `rebase_payload`
-  admits a GLB, or a b3dm-wrapped GLB, with exactly one scene root node carrying a translation or
+  admits a GLB with exactly one scene root node (a b3dm-wrapped GLB was also admitted until #75 made vector fills glTF only) carrying a translation or
   an affine `matrix`; several scene roots, both `matrix` and TRS, a non-affine or non-finite
   matrix, or a malformed node are typed errors. `restore_payload` reports malformed records and
   payloads as "invalid previous payload record", and reuse checks every restored payload against
