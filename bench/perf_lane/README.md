@@ -18,18 +18,27 @@ python3 -I bench/perf_lane/report.py --head HEAD_BIN [--head-commit SHA] \
 
 - The release binary is built once with `--release --features
   native-geospatial` from `git archive` of the tag, under the shared cargo lock
-  on CPUs 0 and 1. It is cached in `~/.cache/perf-lane/baselines/<tag>/`
-  (`BUILD.json` records how) and reused after that. A corpus case whose command
+  on CPUs 0 and 1 (`--cargo-wrap`). It is cached in
+  `~/.cache/perf-lane/baselines/<tag>/` (`BUILD.json` records how) and reused
+  after that. A corpus case whose command
   or flags the release CLI lacks shows `n/a`, with the reason under
   `## Not run or failed`.
 - The last milestone's per-case numbers come from the data block at the end of
   the committed `REPORT.md` (git `HEAD`). `--milestone-label` makes this run the
   new milestone and appends a `## Milestones` row. Without it, the stored
   milestone and the rows carry forward unchanged.
-- Each benchmark step waits until the 1-minute load average is at most 4
-  (`--max-load`) and the pinned CPUs have been under 20% busy for three
-  5-second samples (`--max-cpu-busy`), so that other work does not skew the
-  numbers.
+- Benchmarks run on a hyperthread sibling pair from CPUs 4-7 or 12-15
+  (`--cpu-pool`; the cargo build locks use 0-3 and 8-11), not on the scripts'
+  default 0 and 1. Before each step (each process.py attempt, each Cesium pass)
+  a 5-second `/proc/stat` sample must show both cores at least 90% idle
+  (`--min-idle`). The previous pair is kept while it qualifies; otherwise the
+  idlest qualifying pair is used, and if none qualifies the step waits. The
+  per-core idle figures go into the report header. The global load average is
+  not used, because parallel lanes keep it high. `--cpus A,B` fixes the pair.
+- process.py is rerun (up to `--attempts`) while any best-wall sample is
+  contended (other work above 20% of its wall time on the pinned CPUs). The
+  cleanest attempt is kept, and any remaining contended cases are named in the
+  header.
 - Raw results go to `~/.cache/rusty-tiles-evidence/perf/<date>-<shortsha>/`:
   the process and Cesium JSON, run logs, screenshots and `meta.json`, plus
   `raw.tar.zst`, whose sha256 is printed in `REPORT.md`. Outputs stay under

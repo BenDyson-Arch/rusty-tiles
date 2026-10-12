@@ -227,9 +227,12 @@ def render(meta, columns, previous, explanations):
             f"{release['build']}." if release else '- Release column: not recorded in this run.'),
            f"- Last milestone: " + (f"`{info['commit'][:12]}` ({info['label']}, {info['date']})." if info else 'none.'),
            f"- CPU: {env['cpu']}; pinned to CPUs {','.join(map(str, env['cpuAffinity']))} at nice {env['niceness']}, "
-           f"RAYON_NUM_THREADS=2; best of {env['repeat']} ABBA runs; load average before {env['loadAverageBefore'][0]:.2f}; "
+           f"RAYON_NUM_THREADS=2; best of {env['repeat']} ABBA runs; "
            + (f"contended best samples (other work >20% of the wall time): {', '.join(meta['contended'])}."
               if meta.get('contended') else 'no contended best samples.'),
+           *([f"- Per-core idle over 5 s before each step (need ≥{meta.get('minIdle', 0.9):.0%}): " + '; '.join(
+               f"{step} CPUs {','.join(map(str, v['cpus']))} " + '/'.join(f'{x:.0%}' for x in v['idle'].values())
+               for step, v in meta['pinned'].items()) + '.'] if meta.get('pinned') else []),
            f"- Cesium {ces.get('cesium', '—')}, Playwright {ces.get('playwright', '—')}, Chromium "
            f"{chromium(ces.get('chromium'))} (SwiftShader, 1024×768).",
            f"- Corpus sha256 `{meta['corpus'][:16]}` (pinned `corpus.py` inputs and the T1 fixture).",
@@ -306,31 +309,68 @@ def baseline_binary(tag, cache, target, wrap):
     return binary, build
 
 
-def pinned_busy(cpus, seconds=5):
-    """Fraction of the pinned CPUs' capacity that other work used over a short sample."""
-    import process
-    before = process.busy(cpus); time.sleep(seconds)
-    return (process.busy(cpus) - before) / os.sysconf('SC_CLK_TCK') / seconds / len(cpus)
+def cpu_ticks():
+    """{cpu: (idle ticks, total ticks)} from /proc/stat; idle includes iowait."""
+    ticks = {}
+    for line in pathlib.Path('/proc/stat').read_text().splitlines():
+        name, *values = line.split()
+        if name[3:].isdigit():
+            values = [int(v) for v in values]; ticks[int(name[3:])] = (values[3] + values[4], sum(values[:8]))
+    return ticks
+
+
+def idle_fractions(cpus, seconds=5.0):
+    """Per-core idle fraction of the given CPUs over a short /proc/stat sample."""
+    before = cpu_ticks(); time.sleep(seconds); after = cpu_ticks()
+    return {c: (after[c][0] - before[c][0]) / max(after[c][1] - before[c][1], 1) for c in cpus}
+
+
+def sibling_pairs(pool):
+    """Hyperthread sibling pairs inside the pool (from sysfs), else consecutive pairs."""
+    pairs = []
+    for cpu in sorted(pool):
+        try:
+            text = pathlib.Path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list').read_text().strip()
+            siblings = tuple(sorted(int(x) for part in text.split(',') for x in
+                                    (range(int(part.split('-')[0]), int(part.split('-')[-1]) + 1))))
+        except (OSError, ValueError):
+            siblings = ()
+        pair = siblings if len(siblings) == 2 and set(siblings) <= pool else None
+        if pair and pair not in pairs: pairs.append(pair)
+    if not pairs:
+        ordered = sorted(pool); pairs = [tuple(ordered[i:i + 2]) for i in range(0, len(ordered) - 1, 2)]
+    return pairs
+
+
+def pick_pair(idle, pairs, current, min_idle):
+    """Keep the current pair if both cores are idle enough, else the idlest qualifying pair, else None."""
+    ok = [pair for pair in pairs if all(idle[c] >= min_idle for c in pair)]
+    if current in ok: return current
+    return max(ok, key=lambda pair: min(idle[c] for c in pair), default=None)
+
+
+def wait_for_idle(state, step, pairs, min_idle, interval, give_up):
+    """Before a benchmark step: wait until a CPU pair from the pool is at least min_idle idle per core
+    over a 5 s sample (keeping the previous pair when it qualifies) and record the figures."""
+    deadline, pool = time.monotonic() + give_up, sorted({c for pair in pairs for c in pair})
+    while True:
+        idle = idle_fractions(pool)
+        pair = pick_pair(idle, pairs, state.get('pair'), min_idle)
+        if pair:
+            state['pair'] = pair
+            state['steps'].append(dict(step=step, cpus=list(pair), idle={str(c): round(idle[c], 3) for c in pair}))
+            print(f'report: {step} on CPUs {pair}, idle ' + ', '.join(f'{idle[c]:.0%}' for c in pair), file=sys.stderr, flush=True)
+            return ','.join(map(str, pair))
+        figures = ' '.join(f'{c}:{idle[c]:.0%}' for c in pool)
+        if time.monotonic() > deadline: raise SystemExit(f'report: no CPU pair {min_idle:.0%} idle for {give_up:g} s ({figures})')
+        print(f'report: no pair {min_idle:.0%} idle (idle {figures}); waiting {interval:g} s', file=sys.stderr, flush=True)
+        time.sleep(interval)
 
 
 def contended(process):
     """Cases whose best-wall sample had other work using >20% of it on the pinned CPUs (process.py's rule)."""
     return sorted(f"{c['case']} {side}" for c in process['cases'] for side, v in c['sides'].items()
                   if v.get('ok') and v['foreignCpuSecondsAtBestWall'] > 0.2 * v['wallSeconds'])
-
-
-def wait_for_quiet(limit, interval, give_up, cpus, max_busy, samples=3):
-    """Wait until the 1-minute load average is at most the limit and the pinned CPUs were idle
-    (under max_busy) for several consecutive samples: other agents also time and pin work."""
-    deadline, quiet = time.monotonic() + give_up, 0
-    while quiet < samples:
-        load, busy = os.getloadavg()[0], pinned_busy(cpus)
-        if load <= limit and busy <= max_busy: quiet += 1; continue
-        quiet = 0
-        if time.monotonic() > deadline: raise SystemExit(f'report: not quiet for {give_up:g} s (load {load:.2f}, CPUs busy {busy:.0%})')
-        print(f'report: load average {load:.2f} (limit {limit}), pinned CPUs {busy:.0%} busy (limit {max_busy:.0%}); '
-              f'waiting {interval:g} s', file=sys.stderr, flush=True)
-        time.sleep(interval)
 
 
 def bundle(directory):
@@ -368,19 +408,24 @@ def collect(args, explanations):
     work = args.work / evidence.name
     shutil.rmtree(work, ignore_errors=True)
     py = [sys.executable, '-I']
-    cpus = {int(c) for c in args.cpus.split(',')}
+    pool = {int(c) for part in args.cpu_pool.split(',') for c in
+            range(int(part.split('-')[0]), int(part.split('-')[-1]) + 1)}
+    pairs = [tuple(int(c) for c in args.cpus.split(','))] if args.cpus else sibling_pairs(pool)
+    quiet = dict(pair=None, steps=[])
+    idle = lambda step: wait_for_idle(quiet, step, pairs, args.min_idle, args.idle_interval, args.idle_give_up)
     best = None
     for attempt in range(1, args.attempts + 1):  # rerun while other work contended the pinned CPUs
-        wait_for_quiet(args.max_load, args.load_interval, args.load_give_up, cpus, args.max_cpu_busy)
+        cpus = idle(f'process attempt {attempt}')
         out = evidence / f'process-attempt{attempt}.json'
         process = run([*py, HERE / 'process.py', '--base', base, '--head', head, '--work', work / 'process', '--out', out,
-                       '--repeat', args.repeat, '--cpus', args.cpus, *(x for e in args.explain for x in ('--explain', e))])
+                       '--repeat', args.repeat, '--cpus', cpus, *(x for e in args.explain for x in ('--explain', e))])
         if process.returncode not in (0, 1) or not out.exists(): raise SystemExit('report: process.py failed')
         noisy = contended(json.loads(out.read_text()))
         print(f'report: attempt {attempt}: {len(noisy)} contended case sides {noisy}', file=sys.stderr, flush=True)
-        if best is None or len(noisy) < best[1]: best = (out, len(noisy))
+        if best is None or len(noisy) < best[1]: best = (out, len(noisy), quiet['steps'][-1])
         if not noisy: break
     shutil.copy2(best[0], evidence / 'process.json')
+    pinned = dict(process=best[2])
     result = json.loads((evidence / 'process.json').read_text())
     hole = ','.join(map(str, result['environment']['rasterHoleDegrees']))
     for side in ('base', 'head'):
@@ -391,9 +436,10 @@ def collect(args, explanations):
             name = pathlib.PurePath(case['argv'][case['argv'].index('-o') + 1]).name
             targets.append(f"{case['case']}={work / 'process' / side / name}")
         if not targets: continue
-        wait_for_quiet(args.max_load, args.load_interval, args.load_give_up, cpus, args.max_cpu_busy)
+        cpus = idle(f'cesium {side}')
+        pinned[f'cesium-{side}'] = quiet['steps'][-1]
         check = run([*py, HERE / 'cesium.py', '--work', work / f'cesium-{side}', '--out', evidence / f'cesium-{side}.json',
-                     '--hole', hole, '--cpus', args.cpus, *targets])
+                     '--hole', hole, '--cpus', cpus, *targets])
         if check.returncode not in (0, 1) or not (evidence / f'cesium-{side}.json').exists():
             raise SystemExit(f'report: cesium.py failed for {side}')
         shutil.copytree(work / f'cesium-{side}' / 'screenshots', evidence / f'screenshots-{side}')
@@ -402,7 +448,7 @@ def collect(args, explanations):
     meta = dict(date=date, label=args.milestone_label, corpus=corpus_digest(result['environment']['inputs']),
                 head=dict(commit=commit, sha256=sha256(head), path=str(head)),
                 release=dict(tag=tag, commit=build['commit'], sha256=build['sha256'], build=build['build'], path=str(base)),
-                explanations=args.explain)
+                explanations=args.explain, pinned=pinned, idleChecks=quiet['steps'], minIdle=args.min_idle)
     (evidence / 'meta.json').write_text(json.dumps(meta, indent=2) + '\n')
     if not args.keep_work: shutil.rmtree(work, ignore_errors=True)
     return evidence
@@ -448,13 +494,13 @@ def main():
     parser.add_argument('--previous', type=pathlib.Path, help='earlier REPORT.md (default: the committed one at git HEAD)')
     parser.add_argument('--from-raw', type=pathlib.Path, help='re-render a recorded evidence directory instead of running')
     parser.add_argument('--repeat', type=int, default=3)
-    parser.add_argument('--cpus', default='0,1')
-    parser.add_argument('--max-load', type=float, default=4.0, help='wait while the 1-minute load average is above this')
-    parser.add_argument('--max-cpu-busy', type=float, default=0.2,
-                        help='wait while other work uses more than this fraction of the pinned CPUs')
-    parser.add_argument('--load-interval', type=float, default=60)
+    parser.add_argument('--cpu-pool', default='4-7,12-15',
+                        help='CPUs to benchmark on, as sibling pairs (cargo build locks use 0-3 and 8-11)')
+    parser.add_argument('--cpus', help='fixed CPU pair instead of choosing an idle pair from --cpu-pool')
+    parser.add_argument('--min-idle', type=float, default=0.9, help='per-core idle fraction required before each step')
+    parser.add_argument('--idle-interval', type=float, default=30)
+    parser.add_argument('--idle-give-up', type=float, default=4 * 3600)
     parser.add_argument('--attempts', type=int, default=4, help='process.py runs while best samples are contended')
-    parser.add_argument('--load-give-up', type=float, default=4 * 3600)
     parser.add_argument('--keep-work', action='store_true', help='keep the outputs under --work')
     args = parser.parse_args()
     explanations = [item.split('=', 1) for item in args.explain]

@@ -133,6 +133,22 @@ class Flags(unittest.TestCase):
         self.assertEqual([f['ref'] for f in failures], ['cesium'])
 
 
+class CpuChoice(unittest.TestCase):
+    PAIRS = [(4, 5), (6, 7), (12, 13), (14, 15)]
+
+    def test_pick_pair(self):
+        idle = {4: .95, 5: .97, 6: .99, 7: .99, 12: .5, 13: .99, 14: .91, 15: .2}
+        self.assertEqual(report.pick_pair(idle, self.PAIRS, (4, 5), .9), (4, 5))  # current pair still qualifies
+        self.assertEqual(report.pick_pair(idle, self.PAIRS, None, .9), (6, 7))  # else the idlest qualifying pair
+        self.assertEqual(report.pick_pair(idle, self.PAIRS, (12, 13), .9), (6, 7))  # one busy core disqualifies
+        self.assertIsNone(report.pick_pair({c: .5 for c in idle}, self.PAIRS, None, .9))
+
+    def test_sibling_pairs_stay_inside_the_pool(self):
+        for pair in report.sibling_pairs({4, 5, 6, 7, 12, 13, 14, 15}):
+            self.assertEqual(len(pair), 2)
+            self.assertTrue(set(pair) <= {4, 5, 6, 7, 12, 13, 14, 15})
+
+
 class Rendering(unittest.TestCase):
     def columns(self):
         return dict(release=dict(vector=metrics(wall=0.5), **{'mesh-local': dict(na='no mesh-local-to-3tz command')}),
@@ -159,7 +175,10 @@ class Rendering(unittest.TestCase):
         self.assertEqual([r.split('|')[3].strip() for r in report.parse_previous(again)[2]], ['first again'])
 
     def test_table_cells_and_notes(self):
-        text, _ = report.render(meta(), self.columns(), (None, {}, []), [])
+        recorded = meta()
+        recorded['pinned'] = {'process': dict(cpus=[6, 7], idle={'6': 0.995, '7': 0.96})}
+        text, _ = report.render(recorded, self.columns(), (None, {}, []), [])
+        self.assertIn('- Per-core idle over 5 s before each step (need ≥90%): process CPUs 6,7 100%/96%.', text)
         self.assertIn('| vector | v0.3.0 | last milestone | head | Δ v0.3.0 | Δ milestone |', text)
         self.assertIn('| wall s | 0.500 | 1.000 | 1.100 | **+120.0%** | +10.0% |', text)
         self.assertIn('| wall s | n/a | 1.000 | 1.000 |  | +0.0% |', text)
