@@ -92,7 +92,9 @@ def describe(binary, environment):
 
 def admits(info, argv, command):
     """Whether this binary's doctor reports the command ready and its --help lists every flag used."""
-    if not info['ready'].get(command):
+    if command not in info['ready']:
+        return f'no {command} command (doctor does not list it)'
+    if not info['ready'][command]:
         return f'doctor: {command} not ready (native GDAL build required for raster/terrain)'
     help_text = info['run'](argv[0], '--help')
     if help_text.returncode: return f'{argv[0]} --help failed'

@@ -6,3 +6,10 @@
 __pycache__/
 
 /output/
+
+# Perf lane: raw results stay local (~/.cache/rusty-tiles-evidence/perf); git gets the scripts and REPORT.md only.
+/bench/perf_lane/*
+!/bench/perf_lane/*.py
+!/bench/perf_lane/*.cjs
+!/bench/perf_lane/README.md
+!/bench/perf_lane/REPORT.md
