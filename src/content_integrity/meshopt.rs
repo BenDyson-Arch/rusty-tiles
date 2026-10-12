@@ -6,6 +6,30 @@ pub(crate) enum Mode {
     Triangles,
     Indices,
 }
+impl Mode {
+    /// The only first byte the pinned `EXT_meshopt_compression` text admits for this
+    /// mode (KhronosGroup/glTF 5ccac1cb, Appendix A): attributes `0xa0`, triangles
+    /// `0xe1`, indices `0xd1`. The linked decoder also accepts other codec versions.
+    pub(crate) const fn header(self) -> u8 {
+        match self {
+            Mode::Attributes => 0xa0,
+            Mode::Triangles => 0xe1,
+            Mode::Indices => 0xd1,
+        }
+    }
+}
+/// Rejects a stream whose header byte the pinned extension forbids for `mode`,
+/// before the decoder sees it.
+pub(crate) fn check_header(compressed: &[u8], mode: Mode) -> Result<(), FormatError> {
+    match compressed.first() {
+        Some(&byte) if byte == mode.header() => Ok(()),
+        Some(&byte) => Err(FormatError::InvalidInput(format!(
+            "meshopt stream header 0x{byte:02x} is not the 0x{:02x} EXT_meshopt_compression requires",
+            mode.header()
+        ))),
+        None => Err(invalid("meshopt stream header missing")),
+    }
+}
 fn invalid(s: &str) -> FormatError {
     FormatError::InvalidInput(s.into())
 }
