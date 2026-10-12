@@ -17,7 +17,7 @@ pub(crate) use scratch::{FileIo, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sort::{ExternalSorter, SortConfig, SortStats, SortedStream};
 #[allow(unused_imports)]
-pub(crate) use volume::{inspect_volume, preflight, SpaceRole, Volume};
+pub(crate) use volume::{inspect_volume, preflight, PreflightStage, SpaceRole, Volume};
 
 use crate::{JobError, JobErrorKind};
 use std::{fmt, io, path::PathBuf};
@@ -42,15 +42,17 @@ pub(crate) struct InsufficientSpace {
     pub needed: u64,
     pub available: u64,
     pub filesystem: SpaceRole,
+    pub stage: PreflightStage,
 }
 
 impl fmt::Display for InsufficientSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "insufficient free space on the {} filesystem at {}: need {} bytes, {} available",
+            "insufficient free space on the {} filesystem at {} ({} preflight): need {} bytes, {} available",
             self.filesystem.as_str(),
             self.path.display(),
+            self.stage.as_str(),
             self.needed,
             self.available
         )
@@ -98,15 +100,21 @@ impl From<SpillError> for JobError {
                 path,
                 source,
             } => JobError::io(operation, &path, source),
-            SpillError::InsufficientSpace(cause) => {
-                JobError::with_cause(JobErrorKind::Io, cause.to_string(), cause)
-            }
+            SpillError::InsufficientSpace(cause) => JobError::with_cause_at(
+                JobErrorKind::Io,
+                cause.to_string(),
+                &cause.path.clone(),
+                cause,
+            ),
             SpillError::InvalidConfig(_) => {
                 JobError::new(JobErrorKind::InvalidRequest, error.to_string())
             }
             SpillError::Overflow => JobError::new(JobErrorKind::ResourceLimit, error.to_string()),
             SpillError::Poisoned => JobError::new(JobErrorKind::InvalidState, error.to_string()),
-            SpillError::CorruptRun { .. } => JobError::new(JobErrorKind::Io, error.to_string()),
+            SpillError::CorruptRun { ref path, .. } => {
+                let path = path.clone();
+                JobError::with_cause_at(JobErrorKind::Io, error.to_string(), &path, error)
+            }
         }
     }
 }

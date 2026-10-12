@@ -19,6 +19,23 @@ impl SpaceRole {
     }
 }
 
+/// Design §2.7 preflight stage: `Geometry` (stage 1, passes 0–5, before the workspace and
+/// scratch exist) or `Texture` (stage 2, passes 6–8, after pass 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PreflightStage {
+    Geometry,
+    Texture,
+}
+
+impl PreflightStage {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Geometry => "geometry",
+            Self::Texture => "texture",
+        }
+    }
+}
+
 /// Free space available to this process, and whether the filesystem is RAM (tmpfs/ramfs).
 /// Memory-backed scratch is reported, not refused; it sits outside the memory bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,14 +49,20 @@ pub(crate) fn inspect_volume(path: &Path) -> Result<Volume, SpillError> {
 }
 
 /// Refuses before any workspace exists when `available < needed`.
-pub(crate) fn preflight(path: &Path, needed: u64, role: SpaceRole) -> Result<Volume, SpillError> {
-    preflight_with(path, needed, role, inspect_volume)
+pub(crate) fn preflight(
+    path: &Path,
+    needed: u64,
+    role: SpaceRole,
+    stage: PreflightStage,
+) -> Result<Volume, SpillError> {
+    preflight_with(path, needed, role, stage, inspect_volume)
 }
 
 pub(super) fn preflight_with(
     path: &Path,
     needed: u64,
     role: SpaceRole,
+    stage: PreflightStage,
     inspect: impl FnOnce(&Path) -> Result<Volume, SpillError>,
 ) -> Result<Volume, SpillError> {
     let volume = inspect(path)?;
@@ -49,6 +72,7 @@ pub(super) fn preflight_with(
             needed,
             available: volume.available_bytes,
             filesystem: role,
+            stage,
         }));
     }
     Ok(volume)

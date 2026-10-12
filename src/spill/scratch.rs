@@ -1,5 +1,5 @@
 //! The owned scratch directory, its file I/O seam and disk accounting.
-use super::{volume, SpaceRole, SpillError, Volume};
+use super::{volume, PreflightStage, SpaceRole, SpillError, Volume};
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
@@ -63,6 +63,7 @@ impl Scratch {
     /// Preflights `needed` bytes on `parent` (default: system temp dir), then creates the
     /// scratch directory inside it. Refusal happens before anything is created. An explicit
     /// `parent` (`--scratch-dir`) must already exist; a missing one is a typed `NotFound`.
+    /// Scratch is created after the stage-1 (geometry) preflight, so refusals carry that stage.
     pub(crate) fn create(parent: Option<&Path>, needed: u64) -> Result<Self, SpillError> {
         Self::create_with(parent, needed, Arc::new(FileIo), volume::inspect_volume)
     }
@@ -74,16 +75,21 @@ impl Scratch {
         inspect: impl FnOnce(&Path) -> Result<Volume, SpillError>,
     ) -> Result<Self, SpillError> {
         let parent = parent.map_or_else(Self::default_parent, Path::to_path_buf);
-        let volume = volume::preflight_with(&parent, needed, SpaceRole::Scratch, inspect).map_err(
-            |error| match error {
-                SpillError::Io { path, source, .. }
-                    if source.kind() == std::io::ErrorKind::NotFound =>
-                {
-                    SpillError::io("scratch directory does not exist", path, source)
-                }
-                other => other,
-            },
-        )?;
+        let volume = volume::preflight_with(
+            &parent,
+            needed,
+            SpaceRole::Scratch,
+            PreflightStage::Geometry,
+            inspect,
+        )
+        .map_err(|error| match error {
+            SpillError::Io { path, source, .. }
+                if source.kind() == std::io::ErrorKind::NotFound =>
+            {
+                SpillError::io("scratch directory does not exist", path, source)
+            }
+            other => other,
+        })?;
         let dir = tempfile::Builder::new()
             .prefix("rusty-tiles-spill-")
             .tempdir_in(&parent)

@@ -606,7 +606,9 @@ fn read_faults_and_corrupt_runs_are_typed_and_clean_up() {
         let (_parent, scratch) = new_scratch(FaultIo::new(faults));
         let error = run_to_error(&scratch, &input);
         assert!(matches!(error, SpillError::CorruptRun { .. }), "{error:?}");
-        assert_eq!(JobError::from(error).kind(), JobErrorKind::Io);
+        let job = JobError::from(error);
+        assert_eq!(job.kind(), JobErrorKind::Io);
+        assert!(job.path().is_some_and(|p| p.starts_with(scratch.path())));
     }
     for (faults, at) in [
         (
@@ -701,11 +703,14 @@ fn preflight_refuses_one_byte_short_before_creating_scratch() {
             needed: need,
             available: need - 1,
             filesystem: SpaceRole::Scratch,
+            stage: PreflightStage::Geometry,
         }
     );
     assert_eq!(entries(parent.path()), 0, "nothing created on refusal");
     let job = JobError::from(error);
     assert_eq!(job.kind(), JobErrorKind::Io);
+    assert_eq!(job.path(), Some(parent.path()));
+    assert!(job.message().contains("(geometry preflight)"), "{job}");
     let source = std::error::Error::source(&job).unwrap();
     assert_eq!(source.downcast_ref::<InsufficientSpace>(), Some(&cause));
 
@@ -714,11 +719,18 @@ fn preflight_refuses_one_byte_short_before_creating_scratch() {
     assert_eq!(scratch.available_at_start(), need);
     assert!(scratch.path().starts_with(parent.path()));
 
-    let output = preflight(parent.path(), u64::MAX, SpaceRole::Output).unwrap_err();
+    let output = preflight(
+        parent.path(),
+        u64::MAX,
+        SpaceRole::Output,
+        PreflightStage::Texture,
+    )
+    .unwrap_err();
     assert!(matches!(
         output,
         SpillError::InsufficientSpace(InsufficientSpace {
             filesystem: SpaceRole::Output,
+            stage: PreflightStage::Texture,
             ..
         })
     ));
