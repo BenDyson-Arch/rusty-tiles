@@ -589,6 +589,106 @@ fn large_tiles_use_exact_float_feature_ids_instead_of_wrapping_u16() {
     assert_eq!(glb.column("source_index").len(), 65_537 * 8);
 }
 
+/// Tile bounds are rounded outward over the f32 positions actually written: on this thin
+/// cloud the padded f64 extent estimate of implicit tile 2/1/1/3 sat 2^-52 inside its
+/// extreme vertex, which C2 decodedContentContainment reports as Outside. Every content's
+/// decoded positions must lie in its own box exactly.
+#[test]
+fn thin_cloud_tile_boxes_contain_every_written_position_exactly() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("thin.las");
+    let mut builder = las::Builder::from((1, 2));
+    builder.point_format = las::point::Format::new(3).unwrap();
+    let transform = las::Transform {
+        scale: 1e-7,
+        offset: 0.0,
+    };
+    builder.transforms = las::Vector {
+        x: transform,
+        y: transform,
+        z: transform,
+    };
+    let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+    for i in 0..60 {
+        writer
+            .write_point(las::Point {
+                x: f64::from(i) * 10.0 / 59.0,
+                y: f64::from(i) * 1e-6 / 59.0,
+                gps_time: Some(0.0),
+                color: Some(las::Color::default()),
+                ..Default::default()
+            })
+            .unwrap();
+    }
+    writer.close().unwrap();
+    let output = work.path().join("thin.3tz");
+    let options = ["--sourceCrs", "local", "--maxPoints", "10"];
+    let result = call_mode(&input, &output, &options, false);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+    let manifest = document(&mut zip, "tileset.json");
+    let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+        let mut bytes = Vec::new();
+        zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+        Ok(bytes)
+    })
+    .unwrap();
+    fn own(zip: &mut zip::ZipArchive<std::fs::File>, tile: &Value) -> usize {
+        let b: Vec<f64> = tile["boundingVolume"]["box"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert!([4, 5, 6, 8, 9, 10].iter().all(|&k| b[k] == 0.));
+        let Some(uri) = tile["content"]["uri"].as_str() else {
+            return tile["children"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|child| own(zip, child))
+                .sum();
+        };
+        let glb = Glb::read(zip, uri);
+        // An implicit tile's payload is rebased by its row centre, (c0, c2, -c1) in glTF
+        // axes; explicit tiles have a zero centre and no scene-root translation.
+        let t: [f64; 3] = glb.doc["nodes"][0]
+            .get("translation")
+            .map(|v| serde_json::from_value(v.clone()).unwrap())
+            .unwrap_or([0.; 3]);
+        assert_eq!([b[0], b[1], b[2]], [t[0], -t[2], t[1]]);
+        let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
+            ["POSITION"]
+            .as_u64()
+            .unwrap() as usize];
+        let bytes = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
+        for (vertex, p) in bytes.as_chunks::<12>().0.iter().enumerate() {
+            let p: [f64; 3] = std::array::from_fn(|i| {
+                f64::from(f32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().unwrap()))
+            });
+            // glTF (x, y, z) is z-up (x, -z, y); |v| <= h is exact in f64.
+            for (axis, v) in [p[0], -p[2], p[1]].into_iter().enumerate() {
+                assert!(
+                    v.abs() <= b[3 + 4 * axis],
+                    "{uri}: vertex {vertex} axis {axis}: {v} outside half {}",
+                    b[3 + 4 * axis]
+                );
+            }
+        }
+        1 + tile["children"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|child| own(zip, child))
+            .sum::<usize>()
+    }
+    assert!(own(&mut zip, &expanded["root"]) > 8);
+}
+
 #[test]
 fn empty_and_truncated_sources_fail_as_data_and_clean_staging() {
     let work = tempfile::tempdir().unwrap();
