@@ -1,4 +1,4 @@
-"""GLB / glTF JSON / b3dm payload reading and accessor decoding.
+"""GLB / glTF JSON payload reading and accessor decoding (legacy b3dm/i3dm/pnts/cmpt: Unsupported).
 
 This is not a C1 implementation. Where the oracle meets data that C1 is
 expected to reject (bad lengths, out-of-range views, unknown component types)
@@ -83,74 +83,79 @@ def split_glb(data, where):
     return chunks[0][1], binary
 
 
-def _table_json(raw, what, where):
-    try:
-        table = load_json(bytes(raw).rstrip(b" "))
-    except (ValueError, UnicodeDecodeError) as err:
-        raise PayloadError("b3dm %s JSON unreadable in %s: %s" % (what, where, err))
-    if not isinstance(table, dict):
-        raise PayloadError("b3dm %s JSON is not an object in %s" % (what, where))
-    return table
+# H7 (PROPOSED, c1-legacy-content-unsupported-amendment.md): legacy 3D Tiles 1.0
+# content is Unsupported in C1, before any format parse. Detection uses the member
+# name's final suffix (L1, ASCII case-insensitive, no bytes read) and otherwise the
+# first four bytes (L2). Nothing after the magic is read: no length, version, table
+# or cmpt inner tile.
+LEGACY_FORMATS = ("b3dm", "i3dm", "pnts", "cmpt")
 
 
-def split_b3dm(data, where):
-    """Return (feature-table JSON dict, glb bytes, J of both tables).
+class LegacyContent(Exception):
+    """A verdict, not OracleUndecided: C1 reports this payload as Unsupported."""
 
-    The third value is the C2-WB `J` share of the b3dm tables: the value nodes
-    of the feature-table JSON and of the batch-table JSON, each counted when
-    its JSON length is nonzero (C2-WB 3.1)."""
-    if len(data) < 28:
-        raise PayloadError("b3dm shorter than its header: %s" % where)
-    magic, version, length, ftj, ftb, btj, btb = struct.unpack_from("<4s6I", data, 0)
-    if magic != b"b3dm" or version != 1 or length != len(data):
-        raise PayloadError("b3dm header invalid in %s" % where)
-    start = 28 + ftj + ftb + btj + btb
-    if start > len(data):
-        raise PayloadError("b3dm table lengths overrun in %s" % where)
-    table = {}
-    nodes = 0
-    if ftj:
-        table = _table_json(data[28:28 + ftj], "feature table", where)
-        nodes += value_nodes(table)
-    if btj:
-        bt_start = 28 + ftj + ftb
-        nodes += value_nodes(_table_json(data[bt_start:bt_start + btj], "batch table", where))
-    return table, data[start:], nodes
+    def __init__(self, fmt, member, rule):
+        super().__init__("legacy %s content is unsupported (glTF 2.0 content only): %s (%s)" % (fmt, member, rule))
+        self.fmt = fmt
+        self.member = member
+        self.rule = rule
+
+
+def legacy_suffix(member):
+    """L1: the legacy format named by the member's final suffix, else None."""
+    tail = member.rsplit(".", 1)
+    if len(tail) != 2 or "/" in tail[1]:
+        return None
+    suffix = "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in tail[1])
+    return suffix if suffix in LEGACY_FORMATS else None
+
+
+def legacy_magic(head):
+    """L2: the legacy format named by the first four payload bytes, else None."""
+    magic = bytes(head[:4])
+    return magic.decode("ascii") if magic in tuple(f.encode() for f in LEGACY_FORMATS) else None
+
+
+def payload_suffix(member):
+    """C1's payload suffix admission (glb / gltf); None for any other suffix."""
+    tail = member.rsplit(".", 1)
+    suffix = tail[1].lower() if len(tail) == 2 and "/" not in tail[1] else ""
+    return suffix if suffix in ("glb", "gltf") else None
 
 
 class Payload:
-    """One decoded tile payload (GLB, glTF JSON or b3dm)."""
+    """One decoded tile payload (GLB or glTF JSON). Legacy content raises LegacyContent."""
 
     def __init__(self, archive, member):
         self.archive = archive
         self.member = member
+        if member not in archive.infos:
+            # L0: existence precedes classification (C1 reports a missing member).
+            raise PayloadError("archive member %r is missing (C1 is expected to reject)" % member)
+        fmt = legacy_suffix(member)
+        if fmt is not None:
+            raise LegacyContent(fmt, member, "suffix")
+        if payload_suffix(member) is None:
+            raise PayloadError("payload suffix of %r is outside C1's GLB/glTF admission (C1 refuses it, "
+                               "Unsupported)" % member)
         data = archive.read(member)
+        fmt = legacy_magic(data)
+        if fmt is not None:
+            raise LegacyContent(fmt, member, "magic")
         self.member_bytes = len(data)
         self.bytes_read = len(data)  # B(u): member plus resolved buffers/images
         self.decoded_bytes = 0  # Dec(u): owned external/data-URI buffers + meshopt views
-        self.rtc_center = False
         self.binary = None
         self.kind = None
         self.json_nodes = 0  # J(u): value nodes of every admitted JSON document (C2-WB 3.1)
         self.external_resources = 0  # Res(u): buffers and images with a non-data `uri`
         head = bytes(data[:4])
         try:
-            if head == b"b3dm":
-                self.kind = "b3dm"
-                table, glb, self.json_nodes = split_b3dm(data, member)
-                if len(glb) >= 12:
-                    # The embedded GLB may be followed by the b3dm's 8-byte padding.
-                    declared = struct.unpack_from("<I", glb, 8)[0]
-                    if 12 <= declared <= len(glb) and len(glb) - declared < 8:
-                        glb = glb[:declared]
-                self.rtc_center = "RTC_CENTER" in table
-                json_chunk, self.binary = split_glb(glb, member)
-                self.doc = load_json(bytes(json_chunk))
-            elif head == b"glTF":
+            if head == b"glTF":
                 self.kind = "glb"
                 json_chunk, self.binary = split_glb(data, member)
                 self.doc = load_json(bytes(json_chunk))
-            elif head in (b"pnts", b"i3dm", b"cmpt", b"vctr", b"geom"):
+            elif head in (b"vctr", b"geom"):
                 raise PayloadError("payload format %r is not modelled by the oracle" % head.decode())
             else:
                 self.kind = "gltf"

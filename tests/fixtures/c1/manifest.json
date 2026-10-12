@@ -205,41 +205,41 @@
     {
       "name": "b3dm",
       "path": "b3dm.3tz",
-      "expectedKind": null,
-      "exitCode": 0,
-      "analyticFact": "Modern 28-byte b3dm v1 header; uint32 BATCH_LENGTH zero; tables and embedded GLB start eight-byte aligned; external tile padding zero.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Modern 28-byte b3dm v1 header; uint32 BATCH_LENGTH zero; tables and embedded GLB start eight-byte aligned; external tile padding zero. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "b9ba0fc518f247466b999482c8ebc7619a034c17c5c2ac614f9000c6d481fb77"
     },
     {
       "name": "b3dm_short_header",
       "path": "b3dm_short_header.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Four-byte magic without modern 28-byte header.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Four-byte magic without modern 28-byte header. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "b3b16aaa1aea48c9b3d354bfe6e5ea4cd87fe818dbb268118e264c0fe6c34386"
     },
     {
       "name": "b3dm_total_length",
       "path": "b3dm_total_length.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Declared entire tile length exceeds actual bytes.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Declared entire tile length exceeds actual bytes. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "3268e30d316c4310ee547524000fc465443904a5ec420b67f69d62e635c4363c"
     },
     {
       "name": "b3dm_table_overclaim",
       "path": "b3dm_table_overclaim.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Feature JSON claims an out-of-resource table range.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Feature JSON claims an out-of-resource table range. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "a05d7c672ac498c1c0f061c493a3778ecbbc84230c8302c8add0e5f693130f94"
     },
     {
       "name": "b3dm_table_alignment",
       "path": "b3dm_table_alignment.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Feature JSON boundary moves the embedded GLB start off its eight-byte alignment.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Feature JSON boundary moves the embedded GLB start off its eight-byte alignment. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "ddb08868cf4236a0bc29f057f4b3bdca8b9d7eb91588be993c39eea876b3d9ca"
     },
     {
@@ -247,48 +247,112 @@
       "path": "b3dm_future_version.3tz",
       "expectedKind": "unsupported",
       "exitCode": 2,
-      "analyticFact": "Future b3dm version is not the admitted modern version one.",
+      "analyticFact": "Future b3dm version is not the admitted modern version one. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "7a4f01d3e4068b6f78bed687e160cd02317cea83e8f114d91cbf0dd93430847f"
     },
     {
       "name": "b3dm_missing_batch_length",
       "path": "b3dm_missing_batch_length.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Feature table is a JSON object but required BATCH_LENGTH is absent.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Feature table is a JSON object but required BATCH_LENGTH is absent. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "0886dcce0928c6b8c4cee4625e14d7d32a9a8d524520024cca8e265d94a295af"
     },
     {
       "name": "b3dm_duplicate_feature_key",
       "path": "b3dm_duplicate_feature_key.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Duplicate feature-table JSON keys must not silently overwrite.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Duplicate feature-table JSON keys must not silently overwrite. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "dbb4a3223b6cc1af2316c329c1dc62edaa89e0a67a3bb89e5fef1afb8d6323ab"
     },
     {
       "name": "b3dm_batch_binary_without_json",
       "path": "b3dm_batch_binary_without_json.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Header declares batch binary bytes with zero batch JSON length.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Header declares batch binary bytes with zero batch JSON length. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "91efb00b8095e1801a65f3b0bc30c5f64884e0b1959a7f3bb4abc666ab7fce9f"
     },
     {
       "name": "b3dm_embedded_glb_overclaim",
       "path": "b3dm_embedded_glb_overclaim.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Embedded GLB length claims bytes outside its tile.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Embedded GLB length claims bytes outside its tile. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "4d9329a3eeb2404379fad4eaa6089947fd34c021ba6a3376a9bf033592e59d96"
     },
     {
       "name": "b3dm_nonzero_tile_padding",
       "path": "b3dm_nonzero_tile_padding.3tz",
-      "expectedKind": "invalid_input",
-      "exitCode": 3,
-      "analyticFact": "Tile padding outside the embedded GLB length contains a nonzero byte.",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Tile padding outside the embedded GLB length contains a nonzero byte. Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.",
       "sha256": "24d567feab62642c9437abe4c95650691c392433cfd3094b887000607bfd78a0"
+    },
+    {
+      "name": "legacy_i3dm",
+      "path": "legacy_i3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "i3dm v1, one instance, gltfFormat 1 embedding the baseline GLB. Legacy content (H7): Unsupported by suffix.",
+      "sha256": "c72dfc54c20bb45d28d7645fd32ad22682dd9e5c20723f371b747736469a5683"
+    },
+    {
+      "name": "legacy_pnts",
+      "path": "legacy_pnts.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "pnts v1 with one POSITION point. Legacy content (H7): Unsupported by suffix.",
+      "sha256": "b74fe3c0342564088d16ede81216b95a1889d83a48d46f48e63ac89f3ec6ee73"
+    },
+    {
+      "name": "legacy_cmpt",
+      "path": "legacy_cmpt.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "cmpt v1 whose one inner tile is the modern b3dm control. Legacy content (H7): Unsupported by suffix.",
+      "sha256": "46e99a00577a4c06c46ec721672804ec9b4ec87211f9b97fa26c2f2c5c442f34"
+    },
+    {
+      "name": "legacy_cmpt_wrapping_glb",
+      "path": "legacy_cmpt_wrapping_glb.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "cmpt v1 whose one inner tile is a GLB: the GLB is not unwrapped. Legacy content (H7): Unsupported by suffix.",
+      "sha256": "1491cc275cc298a0ad716220431ea8db63b22fa9de1698cc41c18faf5d7520c8"
+    },
+    {
+      "name": "glb_holding_b3dm",
+      "path": "glb_holding_b3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .glb member whose first four bytes are b3dm. Legacy content (H7): Unsupported by magic before the GLB envelope; it was invalid_input before H7.",
+      "sha256": "1e95d81714abef99e78bc79d9cd4b069f5f53f83d0a8ea435f4748d51d7b455f"
+    },
+    {
+      "name": "glb_holding_i3dm",
+      "path": "glb_holding_i3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .glb member whose first four bytes are i3dm. Legacy content (H7): Unsupported by magic before the GLB envelope; it was invalid_input before H7.",
+      "sha256": "7b47abd4873d1364935155ce7702e9f30eee7ad2cc565cd05ec8994a9da63784"
+    },
+    {
+      "name": "glb_holding_pnts",
+      "path": "glb_holding_pnts.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .glb member whose first four bytes are pnts. Legacy content (H7): Unsupported by magic before the GLB envelope; it was invalid_input before H7.",
+      "sha256": "8227f3856e57910af1c10d64c80f3fd31a87e4cf2b38c38dd10a8065d191998b"
+    },
+    {
+      "name": "glb_holding_cmpt",
+      "path": "glb_holding_cmpt.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .glb member whose first four bytes are cmpt. Legacy content (H7): Unsupported by magic before the GLB envelope; it was invalid_input before H7.",
+      "sha256": "69c1aaefab53628a0bfa9986d80c87cd0eaf61fb21ac4cbfe10a8243d9229783"
     },
     {
       "name": "meshopt_none_golden",

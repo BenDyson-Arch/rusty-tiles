@@ -197,37 +197,66 @@ def generate(directory):
     doc['accessors'][0].update(componentType=5123, normalized=True, max=[65534,65534,0])
     emit('quantized_positions', glb(doc, struct.pack('<12H',0,0,0,0,65534,0,0,0,0,65534,0,0)+struct.pack('<3H',0,1,2)), None,
          'KHR_mesh_quantization normalized USHORT positions with separately aligned unsigned indices.')
+    # H7 (PROPOSED, docs/architecture/c1-legacy-content-unsupported-amendment.md): legacy
+    # 3D Tiles 1.0 content is Unsupported before any format parse. By name suffix (L1, no
+    # bytes read) every b3dm control below is Unsupported whatever its bytes; the facts
+    # still describe the byte defect each one carries, which C1 must no longer inspect.
     legacy = copy.deepcopy(tileset); legacy['root']['content']['uri'] = 'tile.b3dm'
     def b3dm(embedded, feature=b'{"BATCH_LENGTH":0}', feature_binary=b'', batch=b'', batch_binary=b''):
         feature += b' ' * (-(28+len(feature)) % 8)
         body = feature + feature_binary + batch + batch_binary + embedded
         body += b'\0' * (-(28+len(body)) % 8)
         return struct.pack('<4s6I',b'b3dm',1,28+len(body),len(feature),len(feature_binary),len(batch),len(batch_binary))+body
+    unsupported = ' Legacy content (H7): Unsupported by the .b3dm suffix before any byte is read.'
     wrapped=b3dm(glb(document,payload))
-    emit('b3dm',wrapped,None,
-         'Modern 28-byte b3dm v1 header; uint32 BATCH_LENGTH zero; tables and embedded GLB start eight-byte aligned; external tile padding zero.',manifest=legacy)
-    emit('b3dm_short_header',b'b3dm','invalid_input','Four-byte magic without modern 28-byte header.',manifest=legacy)
+    emit('b3dm',wrapped,'unsupported',
+         'Modern 28-byte b3dm v1 header; uint32 BATCH_LENGTH zero; tables and embedded GLB start eight-byte aligned; external tile padding zero.'+unsupported,manifest=legacy)
+    emit('b3dm_short_header',b'b3dm','unsupported','Four-byte magic without modern 28-byte header.'+unsupported,manifest=legacy)
     wrong=bytearray(wrapped);struct.pack_into('<I',wrong,8,len(wrong)+8)
-    emit('b3dm_total_length',bytes(wrong),'invalid_input','Declared entire tile length exceeds actual bytes.',manifest=legacy)
+    emit('b3dm_total_length',bytes(wrong),'unsupported','Declared entire tile length exceeds actual bytes.'+unsupported,manifest=legacy)
     wrong=bytearray(wrapped);struct.pack_into('<I',wrong,12,0xfffffffc)
-    emit('b3dm_table_overclaim',bytes(wrong),'invalid_input','Feature JSON claims an out-of-resource table range.',manifest=legacy)
+    emit('b3dm_table_overclaim',bytes(wrong),'unsupported','Feature JSON claims an out-of-resource table range.'+unsupported,manifest=legacy)
     wrong=bytearray(wrapped);struct.pack_into('<I',wrong,12,struct.unpack_from('<I',wrong,12)[0]-1)
-    emit('b3dm_table_alignment',bytes(wrong),'invalid_input','Feature JSON boundary moves the embedded GLB start off its eight-byte alignment.',manifest=legacy)
+    emit('b3dm_table_alignment',bytes(wrong),'unsupported','Feature JSON boundary moves the embedded GLB start off its eight-byte alignment.'+unsupported,manifest=legacy)
     wrong=bytearray(wrapped);struct.pack_into('<I',wrong,4,2)
-    emit('b3dm_future_version',bytes(wrong),'unsupported','Future b3dm version is not the admitted modern version one.',manifest=legacy)
-    emit('b3dm_missing_batch_length',b3dm(glb(document,payload),feature=b'{}'),'invalid_input',
-         'Feature table is a JSON object but required BATCH_LENGTH is absent.',manifest=legacy)
-    emit('b3dm_duplicate_feature_key',b3dm(glb(document,payload),feature=b'{"BATCH_LENGTH":0,"BATCH_LENGTH":0}'),'invalid_input',
-         'Duplicate feature-table JSON keys must not silently overwrite.',manifest=legacy)
-    emit('b3dm_batch_binary_without_json',b3dm(glb(document,payload),batch_binary=bytes(8)),'invalid_input',
-         'Header declares batch binary bytes with zero batch JSON length.',manifest=legacy)
+    emit('b3dm_future_version',bytes(wrong),'unsupported','Future b3dm version is not the admitted modern version one.'+unsupported,manifest=legacy)
+    emit('b3dm_missing_batch_length',b3dm(glb(document,payload),feature=b'{}'),'unsupported',
+         'Feature table is a JSON object but required BATCH_LENGTH is absent.'+unsupported,manifest=legacy)
+    emit('b3dm_duplicate_feature_key',b3dm(glb(document,payload),feature=b'{"BATCH_LENGTH":0,"BATCH_LENGTH":0}'),'unsupported',
+         'Duplicate feature-table JSON keys must not silently overwrite.'+unsupported,manifest=legacy)
+    emit('b3dm_batch_binary_without_json',b3dm(glb(document,payload),batch_binary=bytes(8)),'unsupported',
+         'Header declares batch binary bytes with zero batch JSON length.'+unsupported,manifest=legacy)
     wrong=bytearray(wrapped);embedded_offset=28+struct.unpack_from('<I',wrong,12)[0]
     struct.pack_into('<I',wrong,embedded_offset+8,0xfffffffc)
-    emit('b3dm_embedded_glb_overclaim',bytes(wrong),'invalid_input','Embedded GLB length claims bytes outside its tile.',manifest=legacy)
+    emit('b3dm_embedded_glb_overclaim',bytes(wrong),'unsupported','Embedded GLB length claims bytes outside its tile.'+unsupported,manifest=legacy)
     # Even if this particular GLB already ends on an eight-byte boundary,
     # append a full aligned block: trailing tile bytes must remain zero.
     wrong=bytearray(wrapped)+bytearray(8);wrong[-1]=1;struct.pack_into('<I',wrong,8,len(wrong))
-    emit('b3dm_nonzero_tile_padding',bytes(wrong),'invalid_input','Tile padding outside the embedded GLB length contains a nonzero byte.',manifest=legacy)
+    emit('b3dm_nonzero_tile_padding',bytes(wrong),'unsupported','Tile padding outside the embedded GLB length contains a nonzero byte.'+unsupported,manifest=legacy)
+    # The other three legacy formats by suffix, and all four by magic under a .glb name (L2).
+    def framed(magic, header_words, body):
+        # header_words: version, then the fields after byteLength; byteLength is computed.
+        header = 4 + 4*(len(header_words)+1)
+        body += b'\0' * (-(header+len(body)) % 8)
+        return struct.pack('<4s%dI' % (len(header_words)+1), magic, header_words[0], header+len(body), *header_words[1:]) + body
+    point_table = b'{"POINTS_LENGTH":1,"POSITION":{"byteOffset":0}}'; point_table += b' ' * (-(28+len(point_table)) % 8)
+    pnts = framed(b'pnts', [1, len(point_table), 16, 0, 0], point_table + bytes(16))
+    instance_table = b'{"INSTANCES_LENGTH":1,"POSITION":{"byteOffset":0}}'; instance_table += b' ' * (-(32+len(instance_table)) % 8)
+    embedded = glb(document, payload)
+    i3dm = framed(b'i3dm', [1, len(instance_table), 16, 0, 0, 1], instance_table + bytes(16) + embedded)
+    cmpt = framed(b'cmpt', [1, 1], wrapped)
+    cmpt_glb = framed(b'cmpt', [1, 1], embedded + b'\0' * (-len(embedded) % 8))
+    for fmt, data, fact in [('i3dm', i3dm, 'i3dm v1, one instance, gltfFormat 1 embedding the baseline GLB.'),
+                            ('pnts', pnts, 'pnts v1 with one POSITION point.'),
+                            ('cmpt', cmpt, 'cmpt v1 whose one inner tile is the modern b3dm control.')]:
+        manifest = copy.deepcopy(tileset); manifest['root']['content']['uri'] = 'tile.' + fmt
+        emit('legacy_' + fmt, data, 'unsupported', fact + ' Legacy content (H7): Unsupported by suffix.', manifest=manifest)
+    manifest = copy.deepcopy(tileset); manifest['root']['content']['uri'] = 'tile.cmpt'
+    emit('legacy_cmpt_wrapping_glb', cmpt_glb, 'unsupported',
+         'cmpt v1 whose one inner tile is a GLB: the GLB is not unwrapped. Legacy content (H7): Unsupported by suffix.', manifest=manifest)
+    for fmt, data in [('b3dm', wrapped), ('i3dm', i3dm), ('pnts', pnts), ('cmpt', cmpt)]:
+        emit('glb_holding_' + fmt, data, 'unsupported',
+             'A .glb member whose first four bytes are %s. Legacy content (H7): Unsupported by magic before the GLB envelope; it was invalid_input before H7.' % fmt)
     # MIT-licensed upstream golden stream and independently published decoded
     # bytes, not generated by rusty-tiles or its meshopt encoder.
     # https://github.com/zeux/meshoptimizer/blob/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js
