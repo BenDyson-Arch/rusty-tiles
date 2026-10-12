@@ -298,6 +298,9 @@ class Rendering(unittest.TestCase):
         recorded['pinned'] = {'process': dict(cpus=[6, 7], idle={'6': 0.995, '7': 0.96})}
         text, _ = report.render(recorded, self.columns(), (None, {}, []), [])
         self.assertIn('- Per-core idle over 5 s before each step (need ≥90%): process CPUs 6,7 100%/96%.', text)
+        self.assertNotIn('- Note:', text)
+        recorded['note'] = 'Built from d1874ef.'
+        self.assertIn('- Note: Built from d1874ef.', report.render(recorded, self.columns(), (None, {}, []), [])[0])
         self.assertIn('| vector | v0.3.0 | last milestone | head | Δ v0.3.0 | Δ milestone |', text)
         self.assertIn('| wall s | 0.500 | 1.000 | 1.100 | **+120.0%** | +10.0% |', text)
         self.assertIn('| wall s | n/a | 1.000 | 1.000 |  | +0.0% |', text)

@@ -263,6 +263,7 @@ def render(meta, columns, previous, explanations):
            + f"; binary sha256 `{meta['head']['sha256'][:16]}`.",
            (f"- {tag} column: tag commit `{release['commit'][:12]}`, binary sha256 `{release['sha256'][:16]}`, "
             f"{release['build']}." if release else '- Release column: not recorded in this run.'),
+           *([f"- Note: {meta['note']}"] if meta.get('note') else []),
            f"- Last milestone: " + (f"`{info['commit'][:12]}` ({info['label']}, {info['date']})." if info else 'none.'),
            f"- CPU: {env['cpu']}; pinned to CPUs {','.join(map(str, env['cpuAffinity']))} at nice {env['niceness']}, "
            f"RAYON_NUM_THREADS=2; best of {env['repeat']} ABBA runs; "
