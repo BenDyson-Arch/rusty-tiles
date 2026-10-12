@@ -1,7 +1,7 @@
 {
  "cases": [
   {
-   "bytes": 3070290,
+   "bytes": 3070291,
    "construction": null,
    "control": "witness",
    "expected": {
@@ -13,12 +13,12 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+   "sha256": "ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900",
    "source": "W1",
    "what": "producer archive, unchanged"
   },
   {
-   "bytes": 38840,
+   "bytes": 37304,
    "construction": null,
    "control": "witness",
    "expected": {
@@ -30,12 +30,12 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "d4a3772fef8423cf0c7a18a5ae8e90b24b40a9dc33540df999a5c0ca656fd27d",
+   "sha256": "5cc559a671e8c170d914d9f824e75b336b739edf0b6b3a1a2d53d8fdb0dcd757",
    "source": "W4-polygons",
    "what": "producer archive, unchanged"
   },
   {
-   "bytes": 18177516,
+   "bytes": 17736303,
    "construction": null,
    "control": "witness",
    "expected": {
@@ -47,7 +47,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "c4c1653eae33149f386178790532500d8aa80eaa82fbdb87de87f47e03386ae5",
+   "sha256": "057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b",
    "source": "W5-vec-perf-quantize",
    "what": "producer archive, unchanged"
   },
@@ -1420,7 +1420,7 @@
    "what": "unrotated implicit payloads (I1 control before amendment 6), as a C2 control only"
   },
   {
-   "bytes": 3070290,
+   "bytes": 3070291,
    "construction": {
     "X": "2/0/0/0",
     "axis": 0,
@@ -1445,12 +1445,12 @@
    "limits": {},
    "pair": "S3-2.W1.base",
    "role": "mutant",
-   "sha256": "fac0cb624fa8641faad3be25cb89adaf07e6901f4fc7dd1f7cf15b3d7fa0cbf9",
+   "sha256": "b4d5e2c936ac9c42baf7e3f633c441667f0c83adf696be2e64b1b66505d48963",
    "source": "W1",
    "what": "pred(h') on X"
   },
   {
-   "bytes": 3070290,
+   "bytes": 3070291,
    "construction": {
     "X": "2/0/0/0",
     "axis": 0,
@@ -1471,12 +1471,12 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "57c84f68a264ea76ce7091e43547dce28f720eee4ca4205bea81ec7f077ca7bb",
+   "sha256": "73a9281e2655195c53f3af479abaae08795b54131d3f135d3221941a1c1914aa",
    "source": "W1",
    "what": "whole-subtree-tight base at leaf 2/0/0/0, axis 0 sign +1"
   },
   {
-   "bytes": 38840,
+   "bytes": 37304,
    "construction": {
     "X": "0/0/0/0",
     "axis": 0,
@@ -1501,12 +1501,12 @@
    "limits": {},
    "pair": "S3-2.W4-polygons.base",
    "role": "mutant",
-   "sha256": "e6c22bf23bea635c5cd6c8afc5af5018a035390cdfb5b91e244bfedce1eae340",
+   "sha256": "1cdf84296b4784ca25bd00381bf044b47fef057efc8c7f68a9d9fea15f26904d",
    "source": "W4-polygons",
    "what": "pred(h') on X"
   },
   {
-   "bytes": 38840,
+   "bytes": 37304,
    "construction": {
     "X": "0/0/0/0",
     "axis": 0,
@@ -1527,12 +1527,12 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "c47fa68dd0bdfcf6e5a108e198f3073d61c1bebe814730f9f78c709729ec3545",
+   "sha256": "4920d7b1b8e12811c7644959856f601728f8a1f102689aa2de1be29c11e64bd8",
    "source": "W4-polygons",
    "what": "whole-subtree-tight base at leaf 0/0/0/0, axis 0 sign +1"
   },
   {
-   "bytes": 18177516,
+   "bytes": 17736303,
    "construction": {
     "X": "3/0/0/0",
     "axis": 2,
@@ -1557,12 +1557,12 @@
    "limits": {},
    "pair": "S3-2.W5-vec-perf-quantize.base",
    "role": "mutant",
-   "sha256": "a90198de22d38de6aea284fecc34f974d414a6d2a246eb0aeed5bb2c270d2ec5",
+   "sha256": "f5c596730916dbb66e832a8dc13ab7977d576ebe14ea21ea9d13d72eef8f5d6e",
    "source": "W5-vec-perf-quantize",
    "what": "pred(h') on X"
   },
   {
-   "bytes": 18177516,
+   "bytes": 17736303,
    "construction": {
     "X": "3/0/0/0",
     "axis": 2,
@@ -1583,7 +1583,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "97fcccffaca3c6306204a445fb1c5bce568f8b9a28f57889c7fc3b604c2bac0d",
+   "sha256": "c04774d7fa7fd8aa0a10e7c1d01a0a4102eced14effa385aa40c98fab1a7bf8f",
    "source": "W5-vec-perf-quantize",
    "what": "whole-subtree-tight base at leaf 3/0/0/0, axis 2 sign +1"
   },
@@ -1632,7 +1632,7 @@
    "what": "explicit a.glb first, then an implicit root with rows; cap 1 unit"
   },
   {
-   "bytes": 3070290,
+   "bytes": 3070291,
    "construction": {
     "X": "1/0/0/0",
     "axis": 0,
@@ -1654,12 +1654,12 @@
    "limits": {},
    "pair": "S3-3.W1.base",
    "role": "mutant",
-   "sha256": "51addc28041b0665f8effec55ad6e53424a523020556a9b7fb0972189acef2e1",
+   "sha256": "0dae326fc8119e3f1c6452e74e402279e57c4c56f27060142289e5e70534b76b",
    "source": "W1",
    "what": "pred(h') on X; X's own content stays inside, 2/1/0/0's does not"
   },
   {
-   "bytes": 3070290,
+   "bytes": 3070291,
    "construction": {
     "X": "1/0/0/0",
     "axis": 0,
@@ -1677,7 +1677,7 @@
    "limits": {},
    "pair": null,
    "role": "base",
-   "sha256": "e5ad297b2286ac4111d3605f34eaffc69a977dcc844a49bf456616a13145e8ca",
+   "sha256": "8cbcf49c2f1a048a056305542470bf15c7f14d9d99422cad9acd42a84f5ca247",
    "source": "W1",
    "what": "whole-subtree-tight base at ancestor 1/0/0/0"
   },
@@ -1782,7 +1782,7 @@
    "what": "V_R half-length on axis 0 one ulp smaller in tileset.json; V_0 untouched"
   },
   {
-   "bytes": 3070278,
+   "bytes": 3070279,
    "construction": {
     "X": "2/0/0/0",
     "axis": 0,
@@ -1809,12 +1809,12 @@
    "limits": {},
    "pair": "S3-2.W1.base",
    "role": "mutant",
-   "sha256": "8127833b7806e678e65e8d80af5ac0b5e2660a071fec1b5d23dd4a9ba6756ec8",
+   "sha256": "b50c5c00a0bea6bc81a1e4b8e49221f5c11f79d1cb492674140a84f0adaf5631",
    "source": "W1",
    "what": "X's payload root translation moved one ulp toward the tight face (JSON text edit)"
   },
   {
-   "bytes": 18177516,
+   "bytes": 17736303,
    "construction": null,
    "control": "S3-7",
    "expected": {
@@ -1826,7 +1826,7 @@
    "limits": {},
    "pair": "F-W5-vec-perf-quantize",
    "role": "mutant",
-   "sha256": "a8be47de8899f920e71ad700dc0b68268d6ef72f9193577052b02db860a6d5aa",
+   "sha256": "5e149894f1d01397414fe8846e572424814dec78ea13c49321caaab5a0bd6042",
    "source": "W5-vec-perf-quantize",
    "what": "first implicit payload with a root translation: (d0, d1, d2) written instead of (d0, d2, -d1)"
   },
@@ -1984,10 +1984,10 @@
  "contract": "8bc534290c5a90ace963e345336dea1e04c45fafb3c869672ee4af1ba03331d6",
  "evidenceDir": "/home/bend/.cache/c2s3-evidence/slice3",
  "forestInputs": {
-  "W1": "572e664409802600da9827fb508e31fbb99d3517f37ae6032616135f693e343d",
+  "W1": "ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900",
   "W2": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
-  "W4-polygons": "d4a3772fef8423cf0c7a18a5ae8e90b24b40a9dc33540df999a5c0ca656fd27d",
-  "W5-vec-perf-quantize": "c4c1653eae33149f386178790532500d8aa80eaa82fbdb87de87f47e03386ae5",
+  "W4-polygons": "5cc559a671e8c170d914d9f824e75b336b739edf0b6b3a1a2d53d8fdb0dcd757",
+  "W5-vec-perf-quantize": "057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b",
   "W6": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
   "W7": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe"
  },
