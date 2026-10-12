@@ -115,8 +115,9 @@ bytes on an E-core. The per-archive bound now grows with `S` instead of staying 
 - **AC-C2.5 No ResourceLimit.** Every cap violation yields `notInspected`, never ResourceLimit,
   for each of the three fields.
 - **AC-C2.6 Parity.** Every slice-1, C2-WB and slice-3 corpus archive with `S` ≤ 8 MiB gives an
-  identical report. The amended C1 limits pins (`c2wb_cap_amendment/2026-10-12`, which expect
-  536,870,912) stay valid; O lists each pinned fixture's `S`. For larger `S`, the verdict changes
+  identical report. The amended C1 limits pins
+  (`bench/architecture_audit/c1_payload_integrity/production_controls/c2wb_cap_amendment/2026-10-12/`,
+  which expect 536,870,912) stay valid; O lists each pinned fixture's `S`. For larger `S`, the verdict changes
   only from `workLimit`, and only where O's totals are within the new caps.
 - **AC-C2.7 Producer headroom (ML7c, ML9).** On every producer witness, including ML6 outputs,
   units, bytes and decoded are each ≤ ½ of the default caps.
