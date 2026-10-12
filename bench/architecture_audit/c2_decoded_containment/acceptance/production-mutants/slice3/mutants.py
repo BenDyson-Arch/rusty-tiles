@@ -233,7 +233,7 @@ def main(argv):
         finally:
             sh(["git", "checkout", "--", "src"])
         every = sorted({i for ids in res["flipped"].values() for i in ids})
-        failed = sorted(t for t, s in res["tests"].items() if s not in ("ok", "ignored"))
+        failed = sorted(t for t, s in res["tests"].items() if s != "ok" and not s.startswith("ignored"))
         slice3 = sorted({i for k in ("s3", "sweep", "forest") for i in res["flipped"].get(k, [])})
         if m["name"] == "clean":
             caught = not every and not failed and res["exit"] == 0

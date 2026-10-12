@@ -769,6 +769,7 @@ lower x face 2^-52 above the drawn x = −2.4576271120559694 of vertex 0. O-impl
 Outside (own, depth 2, member `implicit-content/r0-2-1-1-3-0.glb`, vertex 0), so C2 is right and the
 contract's "producer prediction: none" for X3-2 is falsified on degenerate input. Coordinator decision: the
 point producer rounds tile bounds outward in a separate slice that merges first; the test is unchanged.
+Resolved by #183 (merged into develop as `a4f14e6`): the test passes at the re-run below, unchanged.
 
 Not checked in production: the precheck-only arm's stop point (the oracle records reference 12,526 of
 12,527; production exposes no stop index).
@@ -869,6 +870,74 @@ Debug builds are slower; no claim is made for them.
 Proof limits: one host and one compiler; per-class figures are measurements, not bounds; the precheck stop
 index is oracle-only; derived cells, RTC, regions and rotated boxes stay outside the claim; D4 is deferred.
 
+### Re-run after merging develop (R, 2026-10-13)
+
+The branch merged develop `a4f14e6` (#177, #178, #180, #181, #184, #185 and #183, which rounds point tile
+bounds outward and widens implicit-writer drift) at `2d85208`, without conflicts. Develop changes no
+validator source (the branch's `src/` diff against develop is still `src/validate.rs` alone), so the
+re-run is about the producer output that the corpus and the forest-derived controls pin. Corpus re-pin at
+`f661e4e`. Contract v3.1 governs. **No verdict changed** anywhere below; only totals and hashes moved.
+
+- **Forest corpus (9.B):** `produce_slice3.py` (same argv as before) with the release `native-geospatial`
+  binary at `2d85208` (sha256 `b279325b…`). 23 of the 36 archives change: W1, W2-explicit and
+  W3-pc-deep-explicit (#183), and every vector archive and twin (#185). All W6/W7 mesh and glb archives are
+  byte-identical. #184 (terrain) has no forest witness. `corpus/slice3.py` `WITNESSES` and
+  `controls/slice3/forest.py` `INPUTS` were re-pinned, then O's generators were re-run unchanged.
+- **O's re-run.** Self-test 14/14. Corpus: 34 archives, every verdict, span and chain length as before (all
+  Contained except `mf2-lod3-explicit`, ResourceLimit `document_items`). Point and mesh units are unchanged.
+  Vector units moved: F-MF2 447,082,855; F-W5 / -quantize / -meshopt 202,075,102 / 198,307,104 /
+  207,876,074; F-W4 11,323–99,955. Limit pairs 5/5: F-MF2 `containmentWorkUnits` 447,082,855 / −1
+  `workLimit`, `containmentSpanBits` 290 / 289 `numericSpan`, `containmentBytesRead` 59,330,992 / −1 (stops at
+  reference 12,526), F-W6d `containmentDecodedBytes` 57,736 / −1, repeated-URI 20,562 / 20,561. Controls: 80
+  cases, `--check` 0 mismatches. 13 forest-derived rows change hash (F-W1, F-W4-polygons,
+  F-W5-vec-perf-quantize, S3-2 ×6, S3-3 ×2, S3-6, S3-7), and only their totals move: outcome, Outside volume,
+  depth, member and vertex are unchanged. `check.py`: 80 + 181, 0 disagreements. Oracle mutants 15/15, and
+  the unmutated copy flips nothing.
+- **Production parity** (release lib tests, large and evidence files present): slice-1 261/261, C2-WB
+  102/102, slice-3 controls 80/80, S3-18 sweep 181 cases with 0 disagreements (R5 injection-only, plus the
+  2 `references` pairs), forest 34/34 and the 5 pairs, I1 181/181, W corpus 41/41.
+- **Production mutants:** 36/36 at `f661e4e`, with patches byte-identical to the 2026-10-12 run. Every
+  slice-3 mutant flips its paired control. The clean tree flips nothing. All 19 slice-1 mutants flip
+  cases. Every mutant flips exactly the same case set as at `8c7bc9f`. Driver fix:
+  `mutants.py` counted the `#[ignore = "…"]` status `ignored, perf helper: …` as a failed test, so it
+  marked `clean` failed even though the clean run had 7 passed, 1 ignored and 0 failed. It now accepts any
+  `ignored` status. Only the clean row's pass bit depended on this.
+- **X3-2:** `tests/native_validate.rs::point_archive_and_feature_attributes_use_valid_core_types` passes,
+  unchanged. `cargo test --features native-geospatial`: 1,019 passed, 0 failed, 11 ignored. The native
+  vector and point oracles pass, and so does clippy `-D warnings` (native-geospatial). The local CI replay of
+  job `rust` passes every step (`steps.txt`): it now also runs the tree budget, the perf-lane controls and
+  the H1 tree oracle, the steps develop added. Native-jpeg tests: 905 passed, with the 82-execution
+  receipt. `cargo package` also passes.
+- **Perf lane** (`bench/perf_lane/process.py`, base = develop `a4f14e6` release `native-geospatial` (sha256
+  `53c62f90…`), head = `2d85208`, 5 ABBA rounds on P-core pair 6,7, no contended best-wall sample). All
+  producer outputs are identical to develop's except the volatile vector diagnostics, so Cesium was not
+  re-run. The validate rows:
+
+  | Case | develop s | head s | RSS develop / head MiB | Flag |
+  | --- | --- | --- | --- | --- |
+  | validate:vector (implicit) | 0.094 | 1.127 | 87.3 / 86.9 | wall ×12.0 |
+  | validate:vector-explicit | 1.134 | 1.138 | 92.5 / 92.5 | |
+  | validate:point-cloud (implicit) | 0.058 | 0.191 | 87.3 / 87.4 | wall ×3.3 |
+  | validate:point-cloud-explicit | 0.288 | 0.291 | 88.9 / 88.8 | |
+  | validate:mesh (implicit) | 0.044 | 0.099 | 84.3 / 86.4 | (+0.055 s, under the floor) |
+  | validate:mesh-explicit / mesh-local / glb-wrap | 0.082 / 0.211 / 0.060 | 0.082 / 0.208 / 0.061 | ≤ 88.9 / ≤ 88.8 | |
+
+  The two wall flags are the §10 item 5 case: implicit archives now get the containment that their
+  `--explicit` twins already had, and the implicit vector cost (1.127 s) matches its twin's (1.138 s). No
+  RSS flag. Forest (`perf_validate.py`, develop vs head, same corpus): mf2-lod3 0.837 → **3.295 s**,
+  100.4 → **104.5 MiB** (ceiling 4.5 s, 116.9 MiB). W5 ×3: 0.09–0.11 → 1.10–1.16 s. W2: 0.083 → 0.387 s.
+  W3: 0.178 → 0.329 s. The other implicit archives grow by at most +0.029 s. Every explicit twin is
+  within ±0.01 s. Per-class ns/unit and the precheck-only arm were not re-measured (validator unchanged).
+
+| Evidence (`/home/bend/.cache/c2s3-evidence/`) | sha256 |
+| --- | --- |
+| `forest-2d85208/produce.json` | `99b4452aba473ade3656a04d52760bf4abd91553ac8d0bee36f7364d14c76156` |
+| `r2/parity/{c2,c2wb,s3,sweep,forest,i1,i1-corpus}.json` | `877fa29e…`, `acd8ab87…`, `b68dec3e…`, `49bb69c6…`, `dd82e78a…`, `f0eaea4a…`, `d22fb7c5…` |
+| `r2/mutants/report.json` (36 rows, at `f661e4e`) | `443b9566fd2f4d10b6f8513e74f4708f44bd97bf781034c11e4f6c89455fa6af` |
+| `r2/perf/process.json` (perf lane, develop vs head) | `60b9f471e882f5725122f4993feb4e33a2c5556710b8710de178953129d94696` |
+| `r2/perf/forest.json` (forest, develop vs head) | `921e0d03f8b880bce41e31d86fb2017c8a4d63e448d92495adb58ad64a1c517a` |
+| `r2/native-geospatial-tests.log`, `r2/ci/steps.txt` | `75b7c2be…`, `86dd723f…` |
+
 ## What remains
 
 - Production verdicts for `witnesses/report.json`, `controls/manifest.json`
@@ -881,3 +950,5 @@ index is oracle-only; derived cells, RTC, regions and rotated boxes stay outside
   or `Prim`.
 - Done (2026-10-12): slice-3 production verdicts, S3-18, the forest witnesses and the limit pairs at the
   slice-3 integration head (R, below).
+- Done (2026-10-13): the same re-run after merging develop `a4f14e6` (#183 point bounds, #185 vector
+  output), with the X3-2 native test passing (R, "Re-run after merging develop").
