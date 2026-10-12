@@ -12,7 +12,7 @@ GeoJSON FeatureCollections use the same bounded semantic reader in every build, 
 
 ## Feature transaction
 
-`store::accept_feature` owns a feature savepoint, its SQL rows and vertex-lock mutations, provisional fragmentation counters and staged accepted geometry diagnostics. SQLite uses rollback-capable journaling. Recursive splitting and full-detail encoding feasibility checks occur before admission. A rejected fragment rejects the whole feature, including fragments inserted earlier in the same savepoint.
+`store::accept_feature` owns a feature savepoint, its SQL rows and vertex-lock mutations, provisional fragmentation counters and staged accepted geometry diagnostics. The scratch spool uses an in-memory rollback journal during admission, so savepoints roll back without journal-file writes. The spool is discarded on any failure, so it needs no crash durability. After the ingestion commit nothing rolls back and every SQL failure is fatal, so the spool runs without a journal. Recursive splitting and full-detail encoding feasibility checks occur before admission. A rejected fragment rejects the whole feature, including fragments inserted earlier in the same savepoint.
 
 Accepted diagnostics are written only after feature preparation and all fragment insertion have succeeded. Savepoint release must succeed before accepted counters are incremented and before the reader commits proposed state. SQL rollback alone is insufficient: counters and diagnostics are staged independently, and frame/schema state belongs to the reader's corresponding proposal.
 
