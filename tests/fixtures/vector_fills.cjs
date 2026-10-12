@@ -1,16 +1,20 @@
-// Issue #75: identical fragmented fills with/without b3dm in Cesium 1.146.
-// NODE_PATH exposes Playwright; CHROMIUM may override installed Chromium.
-// --expect-current-failure locks down the known decoder limitation. Without it,
-// this is an acceptance gate for a future Cesium release that fixes the issue.
+// Issue #75: fragmented glTF vector fills (one EXT_mesh_polygon polygon per
+// triangle) in Cesium 1.146: styling, picking, holes, boundaries and hiding on
+// initial load and a hard refresh. NODE_PATH exposes Playwright; CHROMIUM may
+// override installed Chromium. --cdp URL instead opens one new context in an
+// already running Chromium and closes only that context.
 const { chromium } = require('playwright');
 
 (async () => {
-  const browser = await chromium.launch({
+  const cdp = process.argv.indexOf('--cdp');
+  const browser = cdp > 0 ? await chromium.connectOverCDP(process.argv[cdp + 1]) : await chromium.launch({
     executablePath: process.env.CHROMIUM || '/usr/bin/chromium', headless: true,
     args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
   });
+  const context = await browser.newContext({ viewport: { width: 1100, height: 800 } });
   try {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+    const page = await context.newPage();
+    await page.bringToFront();
     const browserErrors = [];
     page.on('pageerror', error => browserErrors.push(String(error)));
     const network = await page.context().newCDPSession(page);
@@ -54,7 +58,7 @@ const { chromium } = require('playwright');
           return { rendered: !!feature, sourceId: feature?.getProperty?.('_source_id') };
         }
         const cases = [];
-        for (const format of ['wrapped', 'plain']) {
+        for (const format of ['fills']) {
           for (const entry of fixture.cases) {
             let tiles;
             const failures = [];
@@ -131,28 +135,20 @@ const { chromium } = require('playwright');
           }
         }
         return { version: C.VERSION, compressed: fixture.compressed,
-          unwrappedContents: fixture.unwrappedContents,
+          fillContents: fixture.fillContents,
           countrySourceSha256: fixture.countrySourceSha256, cases };
       });
       runs.push({ load, ...result });
     }
-    const knownFailure = process.argv.includes('--expect-current-failure');
     const picked = pick => pick?.rendered && pick.properties?._source_id &&
       pick.properties?._source_layer && pick.properties?.name;
     const styled = (pick, name) => picked(pick) && pick.color ===
       (pick.properties.name === name ? 'rgb(0,255,255)' : 'rgb(255,165,0)');
     let passed = !browserErrors.length;
     for (const run of runs) {
-      passed &&= run.cases.length === 14;
+      passed &&= run.cases.length === 7;
       for (const entry of run.cases) {
-        const fails = knownFailure && entry.format === 'plain' &&
-          ['fragmented', 'sudan', 'antarctica'].includes(entry.case);
-        if (fails) {
-          // Antarctica can retain a coarser native polygon as a fallback while
-          // some fragmented descendants fail. A pick alone misses lost detail.
-          passed &&= !entry.error && (entry.case === 'antarctica' || !entry.fine.pick.rendered) &&
-            entry.fine.failures.includes("Cannot read properties of undefined (reading 'loopIndices')");
-        } else {
+        {
           const fine = entry.fine;
           passed &&= !entry.error && !!fine && !fine.failures.length && !entry.coarse.failures.length &&
             styled(fine.pick, entry.propertyName) && !entry.hidden.rendered &&
@@ -166,10 +162,13 @@ const { chromium } = require('playwright');
         }
       }
     }
-    process.stdout.write(JSON.stringify({ expectedPlainFailure: knownFailure,
+    process.stdout.write(JSON.stringify({ browserVersion: browser.version(),
       passed, browserErrors, runs }, null, 2) + '\n');
     if (!passed) process.exitCode = 1;
   } finally {
-    await browser.close();
+    await context.close();
+    // A CDP connection keeps Node alive; leave the user's browser running.
+    if (cdp < 0) await browser.close();
+    else setImmediate(() => process.exit(process.exitCode || 0));
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

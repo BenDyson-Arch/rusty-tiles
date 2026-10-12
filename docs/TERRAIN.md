@@ -42,15 +42,31 @@ are Cartesian chords between samples.
 | --- | --- |
 | `tileset.json` | 3D Tiles 1.1 entrypoint, shared local frame, Cartesian bounds and implicit tiling |
 | `subtrees/*.subtree` | Quadtree availability with each tile's box and geometric error |
-| `implicit-content/*.glb`, `tiles/{level}/{row}/{column}.glb` | Opaque triangle mesh tiles: implicit tiles, and the explicit coarse levels of large pyramids |
+| `implicit-content/*.glb`, `tiles/{level}/{row}/{column}.glb` | Opaque triangle mesh tiles, one primitive each: implicit tiles, and the explicit coarse levels of large pyramids |
 | `conversion.json` | Typed source, sampling, height, level, error, placement and output receipt report |
 
 `--cells-per-leaf` accepts 16, 32, 64 or 128, with smaller boundary patches.
-The full-detail leaves are these patches. Adjacent patches store identical
-boundary positions. A shared local ENU frame places the mesh in WGS84 ECEF.
-Actual Float32 position storage error must be at most **0.05 metre**; larger
-extents that cannot meet this are refused. Collapsed or reversed decoded
-surface triangles are refused. There is no encoded normal or compression.
+The full-detail leaves are these patches. A shared local ENU frame places the
+mesh in WGS84 ECEF. There are no encoded normals.
+
+### Position storage and compression
+
+Every tile GLB requires `EXT_meshopt_compression`: its vertex and index views
+are meshopt attribute (`0xa0`) and triangle (`0xe1`) streams. Positions are
+unnormalized uint16 `KHR_mesh_quantization` integers, dequantized by the tile
+node's `translation` and `scale`. Each level has one power-of-two step for all
+three axes, chosen (with a little headroom) so that every tile of the level,
+surface and skirt, spans at most 65,535 steps, and every node translation is
+a multiple of it. Decoding is therefore exact, and tiles of one level store
+identical positions at shared nodes. Coarser levels round the same lattice
+nodes to their coarser grid.
+
+The leaves are the reference surface. If the leaf grid could move a vertex
+more than **0.05 metre**, leaf positions stay Float32 instead, and their actual
+Float32 storage error must then be at most 0.05 metre: larger extents that
+cannot meet this are refused. `positionErrorMetres` is the largest distance
+from a decoded leaf vertex, surface or skirt, to the geodetic position it
+stores. Collapsed or reversed decoded surface triangles are refused.
 
 ### Level of detail
 
@@ -58,27 +74,35 @@ The output is always a level-of-detail pyramid; there is no flat mode. With
 `N` leaves across the larger dimension there are `D = ⌈log2 N⌉` coarser levels.
 Level `L` keeps every `2^(D−L)`-th node of the leaf lattice, plus the clipped
 far edge of the footprint, in tiles of at most `cells-per-leaf` cells. Coarse
-vertices are the same stored positions as the leaf vertices at those nodes:
-there is no resampling, filtering or simplification. Each tile has up to four
+vertices are the leaf lattice nodes on the level's grid: there is no
+resampling, filtering or simplification. Each tile has up to four
 children, one per quadrant that meets the footprint. Leaves keep exactly the
 flat-profile surface triangles, diagonal and order.
 
-Leaf geometric error is zero relative to the discrete sampled mesh. A coarser
+Leaf geometric error is zero relative to the decoded leaf mesh. A coarser
 tile's error is a **certified bound** on the distance from its decoded surface
-to the leaf surface at the same lattice parameters: the exact maximum distance
+(as stored: quantized positions after dequantization) to the decoded leaf
+surface at the same lattice parameters, with outward rounding: the exact maximum distance
 to the next finer level, including where a clipped edge cell's diagonal crosses
 finer triangles, plus the largest child error. Errors never increase toward the
-leaves. Over smooth terrain the value is close to the vertical error. The
+leaves. Over smooth terrain the value is close to the vertical error plus
+the grid errors of the levels below, a few 65,535ths of the tile size. The
 tileset error leaves an interval in which the root renders. These errors do
 not bound the distance to the continuous DEM.
 
 Neighbours at different levels meet with T-junctions. Each tile edge shared
-with another tile of its level carries a **skirt**: a vertical curtain, in a
-second primitive with its own material, from each edge vertex down to its
-height minus `max(e + e_root, 1 m)`, where `e` is the tile's error and `e_root`
-the root's. Any gap between two such neighbours is at most the sum of their
-errors, so the skirt covers it. Skirts face outward under the opaque
-single-sided material. Outer footprint edges have no skirts.
+with another tile of its level carries a **skirt**: a vertical curtain from
+each edge vertex down to its height minus `max(e + e_root, 1 m)`, where `e` is
+the tile's error and `e_root` the root's. The skirt shares the surface's
+primitive and material, so each tile is one draw call: its triangles follow
+the surface triangles, its tops are the surface vertices, and its bottoms
+follow the surface vertices. Each skirt is deepened by twice its level's
+worst storage error, so the decoded bottoms are at least that far below the
+decoded surface. Any gap between two such neighbours is at most the sum of
+their errors, so the skirt covers it vertically. Horizontal offsets, from
+Cartesian chords and from coarse levels rounding shared nodes to their own
+grid (under a step), are not closed by vertical curtains. Skirts face outward
+under the opaque single-sided material. Outer footprint edges have no skirts.
 
 Every box contains its tile's decoded surface and skirt vertices and all of its
 descendants' boxes. The hierarchy is published as a bounded 3D Tiles implicit
@@ -93,9 +117,11 @@ leaves and a conservative 1 GiB plan over every level; encoding holds one tile
 at a time, and planning at most four child surfaces per level. These limits are
 not a whole-process RSS guarantee.
 
-`conversion.json` (schema 2, profile `t1-terrain-lod-mesh-3dtiles-1.1`) reports
-`levels`, `tiles` and `tilesPerLevel`, surface `vertices` and `skirtVertices`,
-the largest `geometricErrorMetres` per level (coarsest first),
+`conversion.json` (schema 3, profile `t1-terrain-lod-mesh-3dtiles-1.1`) reports
+`levels`, `tiles` and `tilesPerLevel`, surface `vertices` and `skirtVertices`
+(skirt bottoms), the per-level `quantizationStepMetres` (the node scale, the
+same step on each axis, or null for Float32 leaves), the largest `geometricErrorMetres` per level
+(coarsest first),
 `rootGeometricErrorMetres`, `tilesetGeometricErrorMetres` and the smallest and
 largest `skirtDepthMetres` (null without skirts).
 

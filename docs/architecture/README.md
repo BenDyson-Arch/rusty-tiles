@@ -85,6 +85,8 @@ wherever the concrete scope has not adopted them.
 
 - [0.4 delivery and 0.5 format-transition roadmap](04-tiles2-roadmap.md)
 - [Interrupted-track dispositions and recovery](04-track-dispositions.md)
+- [H1 streamed mesh capture and tree contract](h1-capture-tree-contract.md)
+- [H1 independent capture, tree and resource evidence](../../bench/architecture_audit/mesh_large_h1/README.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)

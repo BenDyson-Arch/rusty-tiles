@@ -25,14 +25,14 @@ fn invalid(message: impl Into<String>) -> JobError {
 fn unsupported(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::Unsupported, message)
 }
-fn changed(path: &Path) -> JobError {
+pub(crate) fn changed(path: &Path) -> JobError {
     invalid(format!(
         "mesh source changed during capture: {}",
         path.display()
     ))
 }
 
-pub(super) struct Snapshot {
+pub(crate) struct Snapshot {
     pub output: PathBuf,
     pub document: source::Document,
     root: Arc<Vec<u8>>,
@@ -44,7 +44,7 @@ pub(super) struct Snapshot {
 }
 /// Every admitted URI spelling retains its resolved member association, even
 /// when multiple names share one immutable captured file.
-pub(super) struct CapturedMember {
+pub(crate) struct CapturedMember {
     pub relative: PathBuf,
     pub bytes: Arc<Vec<u8>>,
 }
@@ -85,7 +85,7 @@ impl Snapshot {
 
 // Parse the URI once, segment by literal slash, and only then decode each
 // segment. Encoded separators never become filesystem path syntax.
-fn relative_uri(uri: &str) -> Result<PathBuf> {
+pub(crate) fn relative_uri(uri: &str) -> Result<PathBuf> {
     if uri.is_empty() {
         return Err(invalid("resource URI must not be empty"));
     }
@@ -169,7 +169,7 @@ fn relative_uri(uri: &str) -> Result<PathBuf> {
 
 /// Encode one source filename for a sibling manifest, using the same portable
 /// decoded path admission as captured resource references.
-pub(super) fn filename_uri(input: &Path) -> Result<String> {
+pub(crate) fn filename_uri(input: &Path) -> Result<String> {
     let name = input
         .file_name()
         .and_then(|name| name.to_str())
@@ -187,8 +187,12 @@ pub(super) fn filename_uri(input: &Path) -> Result<String> {
     Ok(uri)
 }
 
-fn open_file(path: &Path) -> Result<File> {
+pub(crate) fn open_file(path: &Path) -> Result<File> {
     open_file_with(path, false)
+}
+/// Reopening an admitted source classifies disappearance/rebinding as capture change.
+pub(crate) fn reopen_file(path: &Path) -> Result<File> {
+    open_file_with(path, true)
 }
 fn open_file_with(path: &Path, recheck: bool) -> Result<File> {
     let mut options = OpenOptions::new();
@@ -214,14 +218,14 @@ fn open_file_with(path: &Path, recheck: bool) -> Result<File> {
         JobError::io("open mesh source", path, error)
     })
 }
-fn identity(file: &File, path: &Path) -> Result<Handle> {
+pub(crate) fn identity(file: &File, path: &Path) -> Result<Handle> {
     let clone = file
         .try_clone()
         .map_err(|error| JobError::io("clone mesh source handle", path, error))?;
     Handle::from_file(clone)
         .map_err(|error| JobError::io("inspect mesh source identity", path, error))
 }
-fn same_metadata(left: &Metadata, right: &Metadata) -> bool {
+pub(crate) fn same_metadata(left: &Metadata, right: &Metadata) -> bool {
     let same = left.is_file()
         && right.is_file()
         && left.len() == right.len()
@@ -236,12 +240,12 @@ fn same_metadata(left: &Metadata, right: &Metadata) -> bool {
         same
     }
 }
-fn metadata(path: &Path) -> Result<Metadata> {
+pub(crate) fn metadata(path: &Path) -> Result<Metadata> {
     fs::symlink_metadata(path)
         .map_err(|error| JobError::io("inspect mesh source entry", path, error))
 }
 
-fn canonical_path(path: &Path, recheck: bool) -> Result<PathBuf> {
+pub(crate) fn canonical_path(path: &Path, recheck: bool) -> Result<PathBuf> {
     fs::canonicalize(path).map_err(|error| {
         if recheck
             && matches!(
@@ -256,7 +260,11 @@ fn canonical_path(path: &Path, recheck: bool) -> Result<PathBuf> {
     })
 }
 
-fn dependency_path(base: &Path, relative: &Path, recheck: bool) -> Result<(PathBuf, Metadata)> {
+pub(crate) fn dependency_path(
+    base: &Path,
+    relative: &Path,
+    recheck: bool,
+) -> Result<(PathBuf, Metadata)> {
     let mut path = base.to_owned();
     let count = relative.components().count();
     let mut leaf = None;
@@ -527,7 +535,7 @@ fn verify_path(path: &BoundPath, base: &Path, capture: &Captured) -> Result<()> 
     Ok(())
 }
 
-pub(super) fn load(
+pub(crate) fn load(
     input: &Path,
     output: &Path,
     mut check: impl FnMut() -> Result<()>,

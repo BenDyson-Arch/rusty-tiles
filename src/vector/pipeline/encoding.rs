@@ -130,7 +130,6 @@ fn bridge_facts(
                         | "EXT_mesh_polygon"
                         | "KHR_mesh_primitive_restart"
                         | "KHR_mesh_quantization"
-                        | "KHR_materials_unlit"
                 ) {
                     return Err(FormatError::Unsupported(
                         "generated vector declaration outside profile".into(),
@@ -251,20 +250,21 @@ fn fault_generated_document(mut document: Value) -> Value {
     document
 }
 
-/// Emit the actual selected-framed raw source once. Old Value/BIN owners drop
-/// before codec preparation. Caller feature/model/worker state H is outside
-/// this codec-owner estimate; duplicate emit geometry has already been dropped.
-fn bridge(
+/// The checked bridge source shared by the writer and the counted fitting path:
+/// generated-profile facts, declared metadata padding and retained storage.
+fn bridge_source(
     document: Value,
-    binary: Vec<u8>,
+    binary: &[u8],
+    capacity: usize,
     policy: ProducerPolicy,
     attempt: &Attempt,
-) -> Result<(Vec<u8>, usize), Error> {
-    let mut checkpoint = || attempt.check();
-    checkpoint().map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
+) -> Result<(Value, BridgeFacts, usize), Error> {
+    attempt
+        .check()
+        .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
     #[cfg(test)]
     let document = fault_generated_document(document);
-    let facts = bridge_facts(&document, &binary, &policy.limits.values)
+    let facts = bridge_facts(&document, binary, &policy.limits.values)
         .map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
     let mut document = document;
     if facts.metadata {
@@ -289,9 +289,24 @@ fn bridge(
                 & !7,
         );
     }
-    let retained = add_storage(facts.document_storage, binary.capacity())
+    let retained = add_storage(facts.document_storage, capacity)
         .and_then(|n| add_storage(n, bridge_fixed_storage()))
         .map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
+    Ok((document, facts, retained))
+}
+
+/// Emit the actual selected-framed raw source once. Old Value/BIN owners drop
+/// before codec preparation. Caller feature/model/worker state H is outside
+/// this codec-owner estimate; duplicate emit geometry has already been dropped.
+fn bridge(
+    document: Value,
+    binary: Vec<u8>,
+    policy: ProducerPolicy,
+    attempt: &Attempt,
+) -> Result<(Vec<u8>, usize), Error> {
+    let mut checkpoint = || attempt.check();
+    let (document, facts, retained) =
+        bridge_source(document, &binary, binary.capacity(), policy, attempt)?;
     let raw = codec::write_generated_glb(
         &document,
         &binary,
@@ -321,51 +336,28 @@ fn bridge(
     Ok((bytes, before_bytes))
 }
 
-fn wrap_fill(bytes: Vec<u8>, policy: ProducerPolicy, attempt: &Attempt) -> Result<Vec<u8>, Error> {
-    const FEATURE_JSON: &[u8; 20] = b"{\"BATCH_LENGTH\":0}  ";
-    attempt
-        .check()
-        .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
-    let checked = || -> Result<usize, FormatError> {
-        if !bytes.len().is_multiple_of(8) {
-            return Err(invalid("selected vector fill GLB alignment"));
-        }
-        let total = add_storage(48, bytes.len())?;
-        if u32::try_from(total).is_err() {
-            return Err(resource("vector fill container size limit"));
-        }
-        let peak = add_storage(bytes.capacity(), total)
-            .and_then(|n| add_storage(n, bridge_fixed_storage()))?;
-        if peak > policy.limits.values.working_bytes {
-            return Err(resource("vector fill requested storage limit"));
-        }
-        Ok(total)
-    };
-    let total = checked().map_err(|error| codec_failure(CodecError::Format(error), attempt))?;
-    let mut wrapped = Vec::new();
-    wrapped.try_reserve_exact(total).map_err(|_| {
-        codec_failure(
-            CodecError::Format(resource("vector fill reservation")),
-            attempt,
-        )
-    })?;
-    if wrapped.capacity() != total {
-        return Err(codec_failure(
-            CodecError::Format(resource("vector fill capacity differs")),
-            attempt,
-        ));
-    }
-    wrapped.extend_from_slice(b"b3dm");
-    for n in [1, total as u32, 20, 0, 0, 0] {
-        wrapped.extend_from_slice(&n.to_le_bytes());
-    }
-    wrapped.extend_from_slice(FEATURE_JSON);
-    wrapped.extend_from_slice(&bytes);
-    debug_assert_eq!(wrapped.len(), total);
-    attempt
-        .check()
-        .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
-    Ok(wrapped)
+/// The exact length `bridge` returns for an uncompressed policy, with the same
+/// refusals, without writing the GLB or re-admitting its JSON.
+fn bridge_len(
+    document: Value,
+    binary: Vec<u8>,
+    policy: ProducerPolicy,
+    attempt: &Attempt,
+) -> Result<usize, Error> {
+    debug_assert!(!policy.compress);
+    let mut checkpoint = || attempt.check();
+    let (document, facts, retained) =
+        bridge_source(document, &binary, binary.capacity(), policy, attempt)?;
+    codec::generated_glb_len(
+        &document,
+        binary.len(),
+        facts.metadata,
+        facts.counts,
+        retained,
+        &policy.limits,
+        &mut checkpoint,
+    )
+    .map_err(|error| codec_failure(error, attempt))
 }
 
 #[derive(Default)]
@@ -398,6 +390,39 @@ fn u32_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
     let bytes: Vec<_> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
     let v = view(glb, &bytes);
     glb.accessor(json!({"bufferView":v,"componentType":5125,"count":values.len(),"type":"SCALAR"}))
+}
+/// An EXT_mesh_polygon accessor: UNSIGNED_SHORT when every value fits below
+/// the 16-bit restart value, otherwise UNSIGNED_INT. A u32 restart value
+/// (`u32::MAX`) becomes the 16-bit restart value 65535.
+fn polygon_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
+    if values
+        .iter()
+        .any(|v| *v != u32::MAX && *v >= u32::from(u16::MAX))
+    {
+        return u32_accessor(glb, values);
+    }
+    let bytes: Vec<_> = values
+        .iter()
+        .flat_map(|v| (if *v == u32::MAX { u16::MAX } else { *v as u16 }).to_le_bytes())
+        .collect();
+    let v = view(glb, &bytes);
+    glb.accessor(json!({"bufferView":v,"componentType":5123,"count":values.len(),"type":"SCALAR"}))
+}
+/// CesiumJS 1.146.0 (`appendBufferPolygons`) sizes its vertex remap by the
+/// loopIndices count but indexes it by triangle vertex number, so a triangle
+/// corner numbered at or beyond that count silently loses its triangle.
+/// `polygon_for` refuses a polygon with a vertex outside its loops when the
+/// feature is admitted, and `simplify` re-runs it in the parent tile's frame,
+/// keeping the source polygon when it refuses a simplified one. Each polygon or
+/// fill triangle owns its vertices, so the loop list (with restarts) is never
+/// shorter than the vertex list here. This is the final guard before publication.
+fn cesium_loop_remap_fits(vertices: usize, indices: &[u32], loops: &[u32]) -> FeatureResult<()> {
+    if vertices > loops.len() || indices.iter().any(|i| *i as usize >= loops.len()) {
+        return Err(FeatureFailure::reject(
+            "polygon vertices outnumber their loop indices; CesiumJS would drop triangles",
+        ));
+    }
+    Ok(())
 }
 fn metadata(
     glb: &mut MetadataGlb,
@@ -433,12 +458,42 @@ fn emit(
     center: Point,
     repair: bool,
     schemas: &BTreeMap<String, String>,
-    fill_only: bool,
     options: &VectorOptions,
     reports: &mut Vec<Value>,
     policy: ProducerPolicy,
     attempt: &Attempt,
 ) -> FeatureResult<Encoded> {
+    let source = emit_source(items, center, repair, schemas, options, reports, attempt)?;
+    let (bytes, before_bytes) = bridge(source.document, source.binary, policy, attempt)?;
+    Ok(Encoded {
+        bytes,
+        vertices: source.vertices,
+        primitives: source.primitives,
+        rounding: source.rounding,
+        quantization: source.quantization,
+        before_bytes,
+    })
+}
+
+/// The generated glTF document and BIN of one tile, before the codec bridge.
+struct Source {
+    document: Value,
+    binary: Vec<u8>,
+    vertices: usize,
+    primitives: usize,
+    rounding: f64,
+    quantization: f64,
+}
+#[allow(clippy::too_many_arguments)]
+fn emit_source(
+    items: &[&Feature],
+    center: Point,
+    repair: bool,
+    schemas: &BTreeMap<String, String>,
+    options: &VectorOptions,
+    reports: &mut Vec<Value>,
+    attempt: &Attempt,
+) -> FeatureResult<Source> {
     attempt
         .check()
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
@@ -494,30 +549,30 @@ fn emit(
                 line_restart = true;
             }
             if let Some(polygon) = polygon {
-                if !fill_only {
-                    if !batch.loops.is_empty() {
-                        batch.loops.push(u32::MAX);
-                    }
-                    batch.triangles.extend(
-                        polygon
-                            .triangle_offsets
-                            .iter()
-                            .map(|offset| batch.indices.len() as u32 + offset),
-                    );
-                    batch.loop_offsets.extend(
-                        polygon
-                            .loop_offsets
-                            .iter()
-                            .map(|offset| batch.loops.len() as u32 + offset),
-                    );
-                    batch.loops.extend(polygon.loops.iter().map(|i| {
-                        if *i == u32::MAX {
-                            *i
-                        } else {
-                            base + i
-                        }
-                    }));
+                // Every polygon, including each triangle of a fragmented
+                // fill, is one EXT_mesh_polygon polygon with its own loops.
+                if !batch.loops.is_empty() {
+                    batch.loops.push(u32::MAX);
                 }
+                batch.triangles.extend(
+                    polygon
+                        .triangle_offsets
+                        .iter()
+                        .map(|offset| batch.indices.len() as u32 + offset),
+                );
+                batch.loop_offsets.extend(
+                    polygon
+                        .loop_offsets
+                        .iter()
+                        .map(|offset| batch.loops.len() as u32 + offset),
+                );
+                batch.loops.extend(polygon.loops.iter().map(|i| {
+                    if *i == u32::MAX {
+                        *i
+                    } else {
+                        base + i
+                    }
+                }));
                 batch
                     .indices
                     .extend(polygon.indices.iter().map(|i| base + i));
@@ -537,9 +592,10 @@ fn emit(
     let mut position_accessors = Vec::new();
     for (mode, batch) in &batches {
         let mut ext = json!({"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(items.len(), 0, Some(0))});
-        if *mode == 4 && !fill_only {
-            ext["EXT_mesh_polygon"] = json!({"count":batch.triangles.len(),"indicesOffsets":u32_accessor(&mut glb,&batch.triangles),
-                "loopIndices":u32_accessor(&mut glb,&batch.loops),"loopIndicesOffsets":u32_accessor(&mut glb,&batch.loop_offsets)});
+        if *mode == 4 {
+            cesium_loop_remap_fits(batch.points.len(), &batch.indices, &batch.loops)?;
+            ext["EXT_mesh_polygon"] = json!({"count":batch.triangles.len(),"indicesOffsets":polygon_accessor(&mut glb,&batch.triangles),
+                "loopIndices":polygon_accessor(&mut glb,&batch.loops),"loopIndicesOffsets":polygon_accessor(&mut glb,&batch.loop_offsets)});
             glb::add_extension(&mut glb.document, "EXT_mesh_polygon", false)?;
         }
         let values: Vec<Point> = batch
@@ -574,16 +630,6 @@ fn emit(
         let id_accessor=glb.accessor(json!({"bufferView":id_view,"componentType":if items.len()<=65536 {5123}else{5126},"count":batch.ids.len(),"type":"SCALAR"}));
         let index = u32_accessor(&mut glb, &batch.indices);
         glb.document["meshes"][0]["primitives"].as_array_mut().unwrap().push(json!({"mode":mode,"attributes":{"POSITION":position,"_FEATURE_ID_0":id_accessor},"indices":index,"extensions":ext}));
-    }
-    if fill_only {
-        glb::add_extension(&mut glb.document, "KHR_materials_unlit", false)?;
-        glb.document["materials"] = json!([{"doubleSided":true,"extensions":{"KHR_materials_unlit":{}},"pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1],"metallicFactor":0,"roughnessFactor":1}}]);
-        for primitive in glb.document["meshes"][0]["primitives"]
-            .as_array_mut()
-            .unwrap()
-        {
-            primitive["material"] = json!(0);
-        }
     }
     let rounding = all_positions
         .iter()
@@ -639,15 +685,36 @@ fn emit(
     drop(all_positions);
     drop(batches);
     let (document, binary) = glb.into_parts();
-    let (bytes, before_bytes) = bridge(document, binary, policy, attempt)?;
-    Ok(Encoded {
-        bytes,
+    Ok(Source {
+        document,
+        binary,
         vertices,
         primitives,
         rounding,
         quantization,
-        before_bytes,
     })
+}
+
+/// The feature's own metadata schema used by full-detail fitting.
+fn feature_schemas(feature: &Feature) -> BTreeMap<String, String> {
+    feature
+        .properties
+        .iter()
+        .filter_map(|(name, value)| {
+            let kind = if value.is_boolean() {
+                "boolean"
+            } else if value.is_i64() || value.is_u64() {
+                "integer"
+            } else if value.is_number() {
+                "real"
+            } else if value.is_string() {
+                "string"
+            } else {
+                return None;
+            };
+            Some((name.clone(), kind.to_string()))
+        })
+        .collect()
 }
 
 /// Test the exact full-detail encodings before admitting a source fragment.
@@ -665,74 +732,50 @@ pub(super) fn fits_feature(
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
     let (lo, hi) = bounds(feature.rendered_points())?;
     let center = mul(add(lo, hi), 0.5);
-    let schemas: BTreeMap<_, _> = feature
-        .properties
-        .iter()
-        .filter_map(|(name, value)| {
-            let kind = if value.is_boolean() {
-                "boolean"
-            } else if value.is_i64() || value.is_u64() {
-                "integer"
-            } else if value.is_number() {
-                "real"
-            } else if value.is_string() {
-                "string"
-            } else {
-                return None;
-            };
-            Some((name.clone(), kind.to_string()))
-        })
-        .collect();
-    let mut boundary = feature.clone();
-    if feature.surface_fragment {
-        boundary.geometry = Geometry::MultiLineString(
-            feature
-                .triangle_boundaries
-                .iter()
-                .flatten()
-                .cloned()
-                .collect(),
-        );
-    }
-    let groups = if feature.surface_fragment {
-        vec![(feature, true), (&boundary, false)]
+    let schemas = feature_schemas(feature);
+    // A fragment's fill and its source boundary share the tile's one GLB.
+    let boundary = fill_boundary(feature);
+    let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
+    let source = emit_source(
+        &items,
+        center,
+        repair,
+        &schemas,
+        options,
+        &mut Vec::new(),
+        attempt,
+    )?;
+    let vertices = source.vertices;
+    let bytes = if policy.compress {
+        // The compressed length is only known by encoding.
+        bridge(source.document, source.binary, policy, attempt)?
+            .0
+            .len()
     } else {
-        vec![(feature, false)]
+        bridge_len(source.document, source.binary, policy, attempt)?
     };
-    let mut vertices = 0usize;
-    let mut bytes = 0usize;
-    let mut contents = 0usize;
-    for (part, fill) in groups {
-        if part.geometry.size() == 0 {
-            continue;
-        }
-        let encoded = emit(
-            &[part],
-            center,
-            repair,
-            &schemas,
-            fill,
-            options,
-            &mut Vec::new(),
-            policy,
-            attempt,
-        )?;
-        vertices += encoded.vertices;
-        let content = if fill {
-            wrap_fill(encoded.bytes, policy, attempt)?
-        } else {
-            encoded.bytes
-        };
-        bytes = bytes.checked_add(content.len()).ok_or_else(|| {
-            codec_failure(
-                CodecError::Format(resource("vector fitting size overflow")),
-                attempt,
-            )
-        })?;
-        contents += 1;
-    }
-    let reserve = if options.explicit { 0 } else { contents * 128 };
+    let reserve = if options.explicit { 0 } else { 128 };
     Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
+}
+
+/// The source-boundary line feature drawn with a fragmented polygon fill, if
+/// the fragment owns any original boundary segment.
+fn fill_boundary(feature: &Feature) -> Option<Feature> {
+    if !feature.surface_fragment {
+        return None;
+    }
+    let boundaries: Vec<_> = feature
+        .triangle_boundaries
+        .iter()
+        .flatten()
+        .cloned()
+        .collect();
+    if boundaries.is_empty() {
+        return None;
+    }
+    let mut boundary = feature.clone();
+    boundary.geometry = Geometry::MultiLineString(boundaries);
+    Some(boundary)
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -860,6 +903,8 @@ pub(super) fn encode(
                 &locked,
                 &mut result.reports,
                 options.parent_repair,
+                center,
+                repair,
             )
             .map_err(FeatureFailure::into_error)?;
             error = error.max(e);
@@ -879,95 +924,54 @@ pub(super) fn encode(
         }
         items.push(feature);
     }
-    let mut fills = Vec::new();
-    let mut vectors = Vec::new();
-    for feature in items {
-        if feature.surface_fragment {
-            let boundaries: Vec<_> = feature
-                .triangle_boundaries
-                .iter()
-                .flatten()
-                .cloned()
-                .collect();
-            if !boundaries.is_empty() {
-                let mut boundary = feature.clone();
-                boundary.geometry = Geometry::MultiLineString(boundaries);
-                vectors.push(boundary);
-            }
-            fills.push(feature);
+    // Fragmented fills, their source boundaries and every other feature
+    // share one glTF vector content: each fill triangle is an EXT_mesh_polygon
+    // polygon, so Cesium's vector decoder accepts the whole tile.
+    let boundaries: Vec<_> = items.iter().filter_map(fill_boundary).collect();
+    let features: Vec<&Feature> = items.iter().chain(&boundaries).collect();
+    let mut reports = Vec::new();
+    let aggregate_schemas = BTreeMap::new();
+    let encoded = emit(
+        &features,
+        center,
+        repair,
+        if aggregation.is_some() {
+            &aggregate_schemas
         } else {
-            vectors.push(feature);
-        }
+            schemas
+        },
+        options,
+        &mut reports,
+        policy,
+        attempt,
+    )?;
+    drop(features);
+    drop(boundaries);
+    if level == 0 {
+        result.reports.extend(reports);
     }
-    let mut contents = Vec::new();
-    let mut vertex_count = 0;
-    let mut primitives = 0;
-    let mut byte_count = 0;
-    let mut before_bytes = 0;
-    let mut rounding: f64 = 0.;
-    let mut quantization: f64 = 0.;
-    for (features, fill) in [(&fills, true), (&vectors, false)] {
-        if features.is_empty() {
-            continue;
-        }
-        let mut reports = Vec::new();
-        let aggregate_schemas = BTreeMap::new();
-        let encoded = emit(
-            &features.iter().collect::<Vec<_>>(),
-            center,
-            repair,
-            if aggregation.is_some() {
-                &aggregate_schemas
-            } else {
-                schemas
-            },
-            fill,
-            options,
-            &mut reports,
-            policy,
-            attempt,
-        )?;
-        if level == 0 {
-            result.reports.extend(reports);
-        }
-        primitives += encoded.primitives;
-        vertex_count += encoded.vertices;
-        before_bytes += encoded.before_bytes;
-        rounding = rounding.max(encoded.rounding);
-        quantization = quantization.max(encoded.quantization);
-        let mut bytes = encoded.bytes;
-        let suffix = if fill { "b3dm" } else { "glb" };
-        if fill {
-            before_bytes = before_bytes.checked_add(48).ok_or_else(|| {
-                codec_failure(
-                    CodecError::Format(resource("vector raw content size overflow")),
-                    attempt,
-                )
-            })?;
-            bytes = wrap_fill(bytes, policy, attempt)?;
-        }
-        let uri = format!("t/{}.{}", hash(&bytes), suffix);
-        byte_count += bytes.len();
-        let mut publication = tempfile::NamedTempFile::new_in(output.join("t"))?;
-        publication.write_all(&bytes)?;
-        match publication.persist_noclobber(output.join(&uri)) {
-            Ok(_) => {}
-            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error.error.into()),
-        }
-        let mut content = json!({"uri":uri});
-        if !fill {
-            content["extensions"] = json!({"3DTILES_content_gltf_vector":{"vector":true}});
-        }
-        contents.push(content);
+    let primitives = encoded.primitives;
+    let vertex_count = encoded.vertices;
+    let before_bytes = encoded.before_bytes;
+    let rounding = encoded.rounding;
+    let quantization = encoded.quantization;
+    let bytes = encoded.bytes;
+    let uri = format!("t/{}.glb", hash(&bytes));
+    let byte_count = bytes.len();
+    let mut publication = tempfile::NamedTempFile::new_in(output.join("t"))?;
+    publication.write_all(&bytes)?;
+    match publication.persist_noclobber(output.join(&uri)) {
+        Ok(_) => {}
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.error.into()),
     }
-    // Implicit scene-root placement adds JSON to each content. Reserve its
+    drop(bytes);
+    let content = json!({"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}});
+    // Implicit scene-root placement adds JSON to the content. Reserve its
     // maximum framing increase before accepting a content candidate.
-    let byte_limit = options.max_bytes.saturating_sub(if options.explicit {
-        0
-    } else {
-        contents.len() * 128
-    });
+    let byte_limit = options
+        .max_bytes
+        .saturating_sub(if options.explicit { 0 } else { 128 });
     if vertex_count > options.max_vertices || byte_count > byte_limit {
         result.reason = Some(if vertex_count > options.max_vertices {
             "vertices"
@@ -976,7 +980,7 @@ pub(super) fn encode(
         });
         return Ok(result);
     }
-    let mut node = json!({"extras":{"featureFragments":fills.len()+vectors.iter().filter(|f|!f.surface_fragment).count(),"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
+    let mut node = json!({"extras":{"featureFragments":items.len(),"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
         "geometryErrorMetres":error,"positionRoundingMetres":rounding,"quantizationErrorMetres":quantization,"uncompressedBytes":before_bytes,"toleranceMetres":tolerance},
         "geometricError":if level>0 || options.quantize {error+rounding+quantization}else{0.}});
     if let Some(summary) = aggregation {
@@ -987,11 +991,7 @@ pub(super) fn encode(
         report["toleranceMetres"] = json!(tolerance);
         result.reports.push(report);
     }
-    if contents.len() == 1 {
-        node["content"] = contents.remove(0);
-    } else {
-        node["contents"] = json!(contents);
-    }
+    node["content"] = content;
     result.node = Some(node);
     Ok(result)
 }
@@ -1176,7 +1176,6 @@ mod tests {
                         [0.; 3],
                         false,
                         &BTreeMap::new(),
-                        false,
                         &options,
                         &mut Vec::new(),
                         ProducerPolicy::new(meshopt).unwrap(),
@@ -1367,7 +1366,6 @@ mod tests {
                     [0.; 3],
                     false,
                     &BTreeMap::new(),
-                    false,
                     &options,
                     &mut Vec::new(),
                     ProducerPolicy::new(meshopt).unwrap(),
@@ -1428,7 +1426,6 @@ mod tests {
                 [0.; 3],
                 false,
                 &BTreeMap::new(),
-                false,
                 &options,
                 &mut Vec::new(),
                 ProducerPolicy::new(meshopt).unwrap(),
@@ -1500,7 +1497,6 @@ mod tests {
                     [0.; 3],
                     false,
                     &BTreeMap::new(),
-                    false,
                     &base,
                     &mut Vec::new(),
                     ProducerPolicy::new(false).unwrap(),
@@ -1544,56 +1540,549 @@ mod tests {
         }
     }
 
-    #[test]
-    fn genuine_fill_inner_selected_framing_survives_exact_wrapper() {
-        let mut feature = point_feature();
-        feature.geometry = Geometry::Polygon(vec![vec![
+    fn fitting_fixtures() -> Vec<Feature> {
+        let mut line = point_feature();
+        line.geometry = Geometry::MultiLineString(vec![
+            vec![[0., 0., 0.], [3., 1., 0.], [5., -2., 1.]],
+            vec![[1., 1., 1.], [2., 2., 2.]],
+        ]);
+        let mut polygon = point_feature();
+        polygon.geometry = Geometry::Polygon(vec![
+            vec![
+                [0., 0., 0.],
+                [10., 0., 0.],
+                [10., 10., 0.],
+                [0., 10., 0.],
+                [0., 0., 0.],
+            ],
+            vec![
+                [2., 2., 0.],
+                [2., 4., 0.],
+                [4., 4., 0.],
+                [4., 2., 0.],
+                [2., 2., 0.],
+            ],
+        ]);
+        let mut wide = polygon.clone();
+        for index in 0..40 {
+            wide.properties
+                .insert(format!("p{index}"), json!(format!("v{index}")));
+        }
+        let mut surface = polygon.clone();
+        surface.geometry = Geometry::Polygon(vec![vec![
             [0., 0., 0.],
-            [2., 0., 0.],
-            [0., 2., 0.],
+            [10., 0., 0.],
+            [0., 10., 0.],
             [0., 0., 0.],
         ]]);
-        for meshopt in [false, true] {
+        surface.surface_fragment = true;
+        surface.triangle_boundaries = vec![vec![vec![
+            [0., 0., 0.],
+            [10., 0., 0.],
+            [0., 10., 0.],
+            [0., 0., 0.],
+        ]]];
+        vec![point_feature(), line, polygon, wide, surface]
+    }
+
+    /// One feature's fitting source; a fragment fill carries its boundary
+    /// lines in the same GLB, as `fits_feature` and `encode` produce.
+    fn fitting_source(feature: &Feature, options: &VectorOptions) -> Source {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let schemas = BTreeMap::from([
+            ("flag".to_string(), "boolean".to_string()),
+            ("signed".to_string(), "integer".to_string()),
+            ("text".to_string(), "string".to_string()),
+        ]);
+        let boundary = fill_boundary(feature);
+        let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
+        emit_source(
+            &items,
+            [1., 2., 0.],
+            false,
+            &schemas,
+            options,
+            &mut Vec::new(),
+            &attempt,
+        )
+        .unwrap()
+    }
+
+    fn written_len(source: Source, policy: ProducerPolicy) -> Result<usize, Error> {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let (bytes, _) = bridge(source.document, source.binary, policy, &attempt)?;
+        Ok(bytes.len())
+    }
+
+    fn counted_len(source: Source, policy: ProducerPolicy) -> Result<usize, Error> {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        bridge_len(source.document, source.binary, policy, &attempt)
+    }
+
+    #[test]
+    fn counted_fitting_length_equals_written_and_admitted_content() {
+        let policy = ProducerPolicy::new(false).unwrap();
+        for quantize in [false, true] {
             let options = VectorOptions {
+                quantize,
+                ..Default::default()
+            };
+            for feature in fitting_fixtures() {
+                if feature.surface_fragment {
+                    // The fragment's fill polygon and its boundary lines.
+                    assert_eq!(fitting_source(&feature, &options).primitives, 2);
+                }
+                let written = written_len(fitting_source(&feature, &options), policy).unwrap();
+                let counted = counted_len(fitting_source(&feature, &options), policy).unwrap();
+                assert_eq!(
+                    counted, written,
+                    "quantize {quantize} fragment {}",
+                    feature.surface_fragment
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn counted_fitting_refuses_exactly_where_writing_and_admission_refuse() {
+        // The writer additionally serializes the bytes and runs json::admit.
+        // At and around each JSON threshold that admission enforces (bytes,
+        // value nodes, depth), the counted path must decide identically.
+        fn nodes(value: &Value) -> usize {
+            1 + match value {
+                Value::Array(values) => values.iter().map(nodes).sum(),
+                Value::Object(values) => values.values().map(nodes).sum(),
+                _ => 0,
+            }
+        }
+        fn depth(value: &Value) -> u64 {
+            match value {
+                Value::Array(values) => 1 + values.iter().map(depth).max().unwrap_or(0),
+                Value::Object(values) => 1 + values.values().map(depth).max().unwrap_or(0),
+                _ => 0,
+            }
+        }
+        let options = VectorOptions::default();
+        let feature = fitting_fixtures()[3].clone();
+        let probe = fitting_source(&feature, &options);
+        let (n, d) = (nodes(&probe.document), depth(&probe.document));
+        let total = written_len(probe, ProducerPolicy::new(false).unwrap()).unwrap();
+        let mut decided = [0usize; 2];
+        let mut check = |limits: codec::CompressionLimits| {
+            let policy = ProducerPolicy {
+                limits: limits.validate().unwrap(),
+                compress: false,
+            };
+            let written = written_len(fitting_source(&feature, &options), policy);
+            let counted = counted_len(fitting_source(&feature, &options), policy);
+            match (&written, &counted) {
+                (Ok(a), Ok(b)) => {
+                    assert_eq!(a, b);
+                    decided[0] += 1;
+                }
+                (Err(Error::Job(a)), Err(Error::Job(b))) => {
+                    assert_eq!(a.error.kind(), b.error.kind());
+                    assert_eq!(a.error.to_string(), b.error.to_string());
+                    decided[1] += 1;
+                }
+                _ => panic!("written {written:?} and counted {counted:?} disagree"),
+            }
+        };
+        let base = codec::CompressionLimits::default();
+        for json_bytes in total.saturating_sub(64)..=total {
+            check(codec::CompressionLimits { json_bytes, ..base });
+        }
+        for json_value_nodes in n - 2..=n + 1 {
+            check(codec::CompressionLimits {
+                json_value_nodes,
+                ..base
+            });
+        }
+        for json_depth in d - 1..=d + 1 {
+            check(codec::CompressionLimits { json_depth, ..base });
+        }
+        for source_bytes in total - 1..=total {
+            check(codec::CompressionLimits {
+                source_bytes,
+                ..base
+            });
+        }
+        assert!(decided[0] > 0 && decided[1] > 0, "{decided:?}");
+    }
+
+    /// The pre-counting fitting oracle: encode the trial content in full
+    /// (bridge writer, JSON admission, meshopt when requested) and return
+    /// (vertices, content bytes). A fragment's fill and boundary share one GLB.
+    fn trial_encode(
+        feature: &Feature,
+        options: &VectorOptions,
+        policy: ProducerPolicy,
+    ) -> (usize, usize) {
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let (lo, hi) = bounds(feature.rendered_points()).unwrap();
+        let center = mul(add(lo, hi), 0.5);
+        let schemas = feature_schemas(feature);
+        let boundary = fill_boundary(feature);
+        let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
+        let encoded = emit(
+            &items,
+            center,
+            false,
+            &schemas,
+            options,
+            &mut Vec::new(),
+            policy,
+            &attempt,
+        )
+        .unwrap();
+        (encoded.vertices, encoded.bytes.len())
+    }
+
+    #[test]
+    fn feature_at_exact_size_limit_fits_with_and_without_trial_encode() {
+        // Uncompressed fitting counts bytes (no trial GLB, no admission);
+        // meshopt fitting still encodes the trial content. Against the full
+        // trial-encode oracle, both accept a feature exactly at the byte and
+        // vertex limits and reject it one below, with and without implicit
+        // reservations, including a fill whose boundary shares its GLB.
+        let fixtures = fitting_fixtures();
+        for meshopt in [false, true] {
+            for explicit in [false, true] {
+                let policy = ProducerPolicy::new(meshopt).unwrap();
+                let base = VectorOptions {
+                    meshopt,
+                    explicit,
+                    ..Default::default()
+                };
+                for feature in &fixtures {
+                    let (vertices, bytes) = trial_encode(feature, &base, policy);
+                    let limit = bytes + if explicit { 0 } else { 128 };
+                    let fits = |max_bytes: usize, max_vertices: usize| {
+                        let options = VectorOptions {
+                            max_bytes,
+                            max_vertices,
+                            ..base.clone()
+                        };
+                        let run = crate::RunControl::default();
+                        let attempt = run.begin().unwrap();
+                        fits_feature(feature, false, &options, policy, &attempt).unwrap()
+                    };
+                    let case = format!(
+                        "meshopt {meshopt} explicit {explicit} {:?}",
+                        feature.geometry
+                    );
+                    assert!(fits(limit, vertices), "{case}");
+                    assert!(!fits(limit - 1, vertices), "{case}");
+                    assert!(!fits(limit, vertices - 1), "{case}");
+                }
+            }
+        }
+    }
+
+    /// Unsigned scalar values of one accessor from `read_views` output.
+    fn scalars(document: &Value, views: &[Vec<u8>], accessor: &Value) -> (u64, Vec<u32>) {
+        let accessor = &document["accessors"][accessor.as_u64().unwrap() as usize];
+        let view = &views[accessor["bufferView"].as_u64().unwrap() as usize];
+        let count = accessor["count"].as_u64().unwrap() as usize;
+        let component = accessor["componentType"].as_u64().unwrap();
+        let values = (0..count)
+            .map(|i| match component {
+                5123 => u16::from_le_bytes(view[i * 2..i * 2 + 2].try_into().unwrap()) as u32,
+                5125 => u32::from_le_bytes(view[i * 4..i * 4 + 4].try_into().unwrap()),
+                other => panic!("unexpected index component {other}"),
+            })
+            .collect();
+        (component, values)
+    }
+
+    /// A fragmented fill through the actual final producer: one GLB with the
+    /// vector content marker, each fill triangle an EXT_mesh_polygon polygon
+    /// with its own counterclockwise 3-index loop, 16-bit loops, the boundary
+    /// lines in the same GLB, and Cesium's loop-remap invariant.
+    #[test]
+    fn fragmented_fill_is_one_vector_glb_with_a_polygon_per_triangle() {
+        let mut fill = point_feature();
+        // Four triangles of a 2x2 square at constant height (best-fit plane).
+        let square = |x: f64, z: f64| {
+            vec![
+                vec![
+                    [x, 0., z],
+                    [x + 1., 0., z],
+                    [x + 1., 0., z + 1.],
+                    [x, 0., z],
+                ],
+                vec![
+                    [x, 0., z],
+                    [x + 1., 0., z + 1.],
+                    [x, 0., z + 1.],
+                    [x, 0., z],
+                ],
+            ]
+        };
+        fill.geometry = Geometry::MultiPolygon(
+            [square(0., 0.), square(1., 0.)]
+                .into_iter()
+                .flatten()
+                .map(|ring| vec![ring])
+                .collect(),
+        );
+        fill.surface_fragment = true;
+        fill.triangle_boundaries = vec![
+            vec![vec![[0., 0., 0.], [1., 0., 0.]]],
+            vec![vec![[0., 0., 1.], [0., 0., 0.]]],
+            vec![vec![[1., 0., 0.], [2., 0., 0.]]],
+            vec![],
+        ];
+        for (quantize, meshopt) in [(false, false), (true, false), (true, true)] {
+            let options = VectorOptions {
+                quantize,
                 meshopt,
                 ..VectorOptions::default()
             };
-            let policy = ProducerPolicy::new(meshopt).unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let spool = root.path().join("features.sqlite");
+            let db = rusqlite::Connection::open(&spool).unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute(
+                "INSERT INTO features VALUES(1,'',?1)",
+                [serde_json::to_string(&fill).unwrap()],
+            )
+            .unwrap();
+            drop(db);
+            std::fs::create_dir(root.path().join("t")).unwrap();
+            let schemas = BTreeMap::new();
             let run = crate::RunControl::default();
             let attempt = run.begin().unwrap();
-            let encoded = emit(
-                &[&feature],
-                [0.; 3],
-                false,
-                &BTreeMap::new(),
-                true,
-                &options,
-                &mut Vec::new(),
-                policy,
-                &attempt,
-            )
-            .unwrap();
-            read_views(&encoded.bytes);
-            let expected = encoded.bytes.clone();
-            inspect_payload(
-                crate::content_integrity::payload::PayloadKind::Glb,
-                &expected,
-            )
-            .unwrap();
-            let wrapper = wrap_fill(encoded.bytes, policy, &attempt).unwrap();
-            inspect_payload(
-                crate::content_integrity::payload::PayloadKind::B3dm,
-                &wrapper,
-            )
-            .unwrap();
-            assert_eq!(&wrapper[..4], b"b3dm");
+            let encoder = Encoder {
+                spool: &spool,
+                max_features: 4,
+                repair: false,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+                policy: ProducerPolicy::new(meshopt).unwrap(),
+                attempt: &attempt,
+            };
+            let node = encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap();
+            assert!(node.get("contents").is_none());
+            let content = &node["content"];
             assert_eq!(
-                u32::from_le_bytes(wrapper[8..12].try_into().unwrap()) as usize,
-                wrapper.len()
+                content["extensions"],
+                json!({"3DTILES_content_gltf_vector":{"vector":true}})
             );
-            assert_eq!(&wrapper[28..48], b"{\"BATCH_LENGTH\":0}  ");
-            assert_eq!(&wrapper[48..], expected);
-            assert_eq!(wrapper.len() % 8, 0);
+            let uri = content["uri"].as_str().unwrap();
+            assert!(uri.starts_with("t/") && uri.ends_with(".glb"), "{uri}");
+            let names: Vec<_> = std::fs::read_dir(root.path().join("t"))
+                .unwrap()
+                .map(|e| e.unwrap().file_name().into_string().unwrap())
+                .collect();
+            assert_eq!(names, [uri.strip_prefix("t/").unwrap()]);
+            let bytes = std::fs::read(root.path().join(uri)).unwrap();
+            inspect_payload(crate::content_integrity::payload::PayloadKind::Glb, &bytes).unwrap();
+            if !meshopt {
+                let (document, views) = read_views(&bytes);
+                assert!(document.get("materials").is_none());
+                let primitives = document["meshes"][0]["primitives"].as_array().unwrap();
+                let modes: Vec<_> = primitives.iter().map(|p| p["mode"].clone()).collect();
+                assert_eq!(
+                    modes,
+                    [json!(3), json!(4)],
+                    "boundary lines share the fill GLB"
+                );
+                let fill = &primitives[1];
+                let polygon = &fill["extensions"]["EXT_mesh_polygon"];
+                assert_eq!(polygon["count"], 4);
+                let (_, indices) = scalars(&document, &views, &fill["indices"]);
+                let (loop_type, loops) = scalars(&document, &views, &polygon["loopIndices"]);
+                let (_, offsets) = scalars(&document, &views, &polygon["indicesOffsets"]);
+                let (_, loop_offsets) = scalars(&document, &views, &polygon["loopIndicesOffsets"]);
+                assert_eq!(loop_type, 5123, "16-bit loops when vertices fit");
+                assert_eq!(offsets, [0, 3, 6, 9]);
+                assert_eq!(loop_offsets, [0, 4, 8, 12]);
+                let vertices = document["accessors"]
+                    [fill["attributes"]["POSITION"].as_u64().unwrap() as usize]["count"]
+                    .as_u64()
+                    .unwrap() as usize;
+                // CesiumJS 1.146.0 remaps triangle vertices through a table
+                // sized by the loop list: every vertex must index inside it.
+                assert!(indices.iter().all(|i| (*i as usize) < loops.len()));
+                assert!(vertices <= loops.len());
+                let rings: Vec<_> = loops.split(|i| *i == 0xFFFF).collect();
+                assert_eq!(rings.len(), 4);
+                let position = document["accessors"]
+                    [fill["attributes"]["POSITION"].as_u64().unwrap() as usize]["bufferView"]
+                    .as_u64()
+                    .unwrap() as usize;
+                let point = |i: u32| -> [f64; 3] {
+                    let view = &views[position];
+                    if quantize {
+                        std::array::from_fn(|k| {
+                            u16::from_le_bytes(
+                                view[i as usize * 8 + k * 2..i as usize * 8 + k * 2 + 2]
+                                    .try_into()
+                                    .unwrap(),
+                            ) as f64
+                        })
+                    } else {
+                        std::array::from_fn(|k| {
+                            f32::from_le_bytes(
+                                view[i as usize * 12 + k * 4..i as usize * 12 + k * 4 + 4]
+                                    .try_into()
+                                    .unwrap(),
+                            ) as f64
+                        })
+                    }
+                };
+                for (n, ring) in rings.iter().enumerate() {
+                    let triangle = &indices[n * 3..n * 3 + 3];
+                    let mut a = ring.to_vec();
+                    let mut b = triangle.to_vec();
+                    a.sort();
+                    b.sort();
+                    assert_eq!(a, b, "polygon {n} loop is its own triangle");
+                    // Counterclockwise seen from glTF +Y (local up).
+                    let area: f64 = (0..3)
+                        .map(|k| {
+                            let (p, q) = (point(ring[k]), point(ring[(k + 1) % 3]));
+                            p[2] * q[0] - p[0] * q[2]
+                        })
+                        .sum();
+                    assert!(area > 0., "polygon {n} exterior is counterclockwise");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cesium_loop_remap_check_refuses_uncovered_vertices() {
+        assert!(cesium_loop_remap_fits(3, &[0, 1, 2], &[0, 1, 2]).is_ok());
+        let two = [0, 1, 2, u32::MAX, 3, 4, 5];
+        assert!(cesium_loop_remap_fits(6, &[0, 1, 2, 3, 4, 5], &two).is_ok());
+        assert!(cesium_loop_remap_fits(4, &[0, 1, 2], &[0, 1, 2]).is_err());
+        // A triangle corner at or beyond the loop count is refused even when
+        // the vertex count alone would pass.
+        assert!(cesium_loop_remap_fits(3, &[0, 1, 3], &[0, 1, 2]).is_err());
+    }
+
+    #[test]
+    fn polygon_accessors_use_16_bits_only_below_the_restart_value() {
+        for (values, component) in [
+            (vec![0, 65534, u32::MAX], 5123),
+            (vec![u32::MAX], 5123),
+            (vec![0, 65535], 5125),
+            (vec![70000, u32::MAX], 5125),
+        ] {
+            let mut glb = MetadataGlb::new("test");
+            let accessor = polygon_accessor(&mut glb, &values);
+            let (document, binary) = glb.into_parts();
+            let accessor = &document["accessors"][accessor];
+            assert_eq!(accessor["componentType"], component, "{values:?}");
+            assert_eq!(accessor["count"], values.len());
+            let view = &document["bufferViews"][accessor["bufferView"].as_u64().unwrap() as usize];
+            let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+            let decoded: Vec<u32> = (0..values.len())
+                .map(|i| match component {
+                    5123 => match u16::from_le_bytes(
+                        binary[offset + 2 * i..offset + 2 * i + 2]
+                            .try_into()
+                            .unwrap(),
+                    ) {
+                        u16::MAX => u32::MAX,
+                        v => v as u32,
+                    },
+                    _ => u32::from_le_bytes(
+                        binary[offset + 4 * i..offset + 4 * i + 4]
+                            .try_into()
+                            .unwrap(),
+                    ),
+                })
+                .collect();
+            assert_eq!(decoded, values);
+        }
+    }
+
+    /// A tile mixing a fragmented fill and an ordinary polygon with a hole:
+    /// one triangle primitive whose polygons keep separate offsets, loops
+    /// that cover their own triangles, and Cesium's remap invariant.
+    #[test]
+    fn merged_fill_and_holed_polygon_share_one_polygon_primitive() {
+        let mut fill = point_feature();
+        fill.geometry = Geometry::MultiPolygon(vec![
+            vec![vec![[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 0.]]],
+            vec![vec![[0., 0., 0.], [1., 0., 1.], [0., 0., 1.], [0., 0., 0.]]],
+        ]);
+        fill.surface_fragment = true;
+        let mut holed = point_feature();
+        holed.properties.insert("_source_id".into(), json!("h"));
+        holed.geometry = Geometry::Polygon(vec![
+            vec![
+                [10., 0., 0.],
+                [14., 0., 0.],
+                [14., 0., 4.],
+                [10., 0., 4.],
+                [10., 0., 0.],
+            ],
+            vec![
+                [11., 0., 1.],
+                [11., 0., 2.],
+                [12., 0., 2.],
+                [12., 0., 1.],
+                [11., 0., 1.],
+            ],
+        ]);
+        let options = VectorOptions::default();
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let encoded = emit(
+            &[&fill, &holed],
+            [0.; 3],
+            false,
+            &BTreeMap::new(),
+            &options,
+            &mut Vec::new(),
+            ProducerPolicy::new(false).unwrap(),
+            &attempt,
+        )
+        .unwrap();
+        let (document, views) = read_views(&encoded.bytes);
+        let primitives = document["meshes"][0]["primitives"].as_array().unwrap();
+        assert_eq!(primitives.len(), 1);
+        let primitive = &primitives[0];
+        let polygon = &primitive["extensions"]["EXT_mesh_polygon"];
+        assert_eq!(polygon["count"], 3);
+        let (_, indices) = scalars(&document, &views, &primitive["indices"]);
+        let (_, offsets) = scalars(&document, &views, &polygon["indicesOffsets"]);
+        let (_, loops) = scalars(&document, &views, &polygon["loopIndices"]);
+        let (_, loop_offsets) = scalars(&document, &views, &polygon["loopIndicesOffsets"]);
+        assert_eq!(offsets[..2], [0, 3]);
+        assert_eq!(loop_offsets[..2], [0, 4]);
+        assert!(indices.iter().all(|i| (*i as usize) < loops.len()));
+        let ends =
+            |list: &[u32], n: usize, all: usize| list.get(n + 1).map_or(all, |v| *v as usize);
+        for n in 0..3 {
+            let triangles = &indices[offsets[n] as usize..ends(&offsets, n, indices.len())];
+            let edges: BTreeSet<_> = triangles
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+                .collect();
+            let own = &loops[loop_offsets[n] as usize..ends(&loop_offsets, n, loops.len())];
+            let rings: Vec<_> = own
+                .split(|i| *i == 0xFFFF)
+                .filter(|r| !r.is_empty())
+                .collect();
+            assert_eq!(rings.len(), if n == 2 { 2 } else { 1 }, "polygon {n}");
+            for ring in rings {
+                for k in 0..ring.len() {
+                    let edge = (ring[k], ring[(k + 1) % ring.len()]);
+                    assert!(edges.contains(&edge), "polygon {n} loop edge {edge:?}");
+                }
+            }
         }
     }
 
@@ -1937,6 +2426,109 @@ mod tests {
             let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
             assert!(candidate.node.is_none());
             assert_eq!(candidate.reason, Some(expected));
+        }
+    }
+
+    /// A parent simplification that the tile encoder would refuse keeps the
+    /// source polygon instead of failing the build at level > 0. Removing the
+    /// raised exterior vertex flattens the best-fit plane, and in that plane the
+    /// raised hole crosses the exterior: valid before simplification, refused
+    /// by `polygon_for` (topology, or loop coverage after repair) after it.
+    #[test]
+    fn parent_simplification_the_encoder_refuses_keeps_the_source_polygon() {
+        let exterior = vec![
+            [0., 0., 0.],
+            [50., 6., 0.],
+            [100., 0., 0.],
+            [100., 0., 100.],
+            [0., 0., 100.],
+            [0., 0., 0.],
+        ];
+        let hole = vec![
+            [40., 30., 90.],
+            [40., 30., 100.3],
+            [60., 30., 100.3],
+            [60., 30., 90.],
+            [40., 30., 90.],
+        ];
+        let flattened: Vec<_> = exterior.iter().copied().filter(|p| p[1] == 0.).collect();
+        let mut source = point_feature();
+        source.geometry = Geometry::Polygon(vec![exterior.clone(), hole.clone()]);
+        for repair in [false, true] {
+            geometry::polygon_for(
+                &source,
+                &[exterior.clone(), hole.clone()],
+                0,
+                [0.; 3],
+                repair,
+            )
+            .unwrap();
+            let refused = geometry::polygon_for(
+                &source,
+                &[flattened.clone(), hole.clone()],
+                0,
+                [0.; 3],
+                repair,
+            );
+            assert!(
+                matches!(refused, Err(FeatureFailure::Rejected(_))),
+                "repair {repair}: the flattened candidate must be refused"
+            );
+            let root = tempfile::tempdir().unwrap();
+            std::fs::create_dir(root.path().join("t")).unwrap();
+            let spool = root.path().join("spool.sqlite");
+            let db = rusqlite::Connection::open(&spool).unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            let feature = json!({"properties":{"_source_id":"raised"},"geometry":{"type":"Polygon","coordinates":[exterior, hole]}});
+            db.execute(
+                "INSERT INTO features VALUES(1,'',?1)",
+                [feature.to_string()],
+            )
+            .unwrap();
+            // Lock every vertex except the raised one, which RDP then removes.
+            for p in exterior.iter().chain(&hole) {
+                db.execute(
+                    "INSERT INTO vertices VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![p[0], p[1], p[2], i32::from(p[1] != 6.)],
+                )
+                .unwrap();
+            }
+            drop(db);
+            let options = VectorOptions {
+                lod: crate::vector::VectorLodOptions {
+                    tolerance_metres: 80.,
+                    levels: 3,
+                },
+                max_bytes: 1 << 20,
+                ..Default::default()
+            };
+            let schemas = BTreeMap::new();
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let encoder = Encoder {
+                spool: &spool,
+                max_features: 1,
+                repair,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+                policy: ProducerPolicy::new(false).unwrap(),
+                attempt: &attempt,
+            };
+            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
+            let node = candidate.node.expect("the parent keeps the source polygon");
+            assert_eq!(
+                node["extras"]["geometryErrorMetres"],
+                json!(0.),
+                "repair {repair}"
+            );
+            assert_eq!(node["extras"]["vertices"], json!(9), "repair {repair}");
+            assert!(
+                candidate.reports.iter().any(|report| report["reason"]
+                    == "simplified polygon would not encode; source polygon retained"),
+                "repair {repair}: {:?}",
+                candidate.reports
+            );
         }
     }
 }

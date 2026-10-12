@@ -79,20 +79,23 @@ class VectorBatchingTests(unittest.TestCase):
             self.assertIn(accessor['componentType'],(5121,5123,5125))
             if field!='loopIndices':self.assertEqual(accessor['count'],ext['count'])
         self.assertEqual(len(offsets),3);self.assertEqual(len(starts),3)
-        self.assertEqual(np.count_nonzero(loops==0xffffffff),3) # one hole plus two polygon separators
-        self.assertNotEqual(int(loops[-1]),0xffffffff)
+        # Small primitives use 16-bit loops, whose restart value is 0xffff.
+        self.assertEqual(doc['accessors'][ext['loopIndices']]['componentType'],5123)
+        restart=0xffff
+        self.assertEqual(np.count_nonzero(loops==restart),3) # one hole plus two polygon separators
+        self.assertNotEqual(int(loops[-1]),restart)
         areas=[]
         for fid,tri,loop in zip([0,1,1],np.split(indices,offsets[1:]),np.split(loops,starts[1:])):
             # Ring closure is implicit, and every boundary vertex must be
             # referenced by that polygon's triangles (draft restrictions).
-            for ring in np.split(loop,np.flatnonzero(loop==0xffffffff)):
-                ring=ring[ring!=0xffffffff]
+            for ring in np.split(loop,np.flatnonzero(loop==restart)):
+                ring=ring[ring!=restart]
                 if not len(ring):continue # separator before the next polygon
                 self.assertEqual(len(ring),len(np.unique(ring)))
                 self.assertGreaterEqual(len(ring),3)
                 self.assertTrue(set(ring).issubset(set(tri)))
             self.assertTrue(np.all(ids[tri]==fid))
-            self.assertTrue(np.all(ids[loop[loop!=0xffffffff]]==fid))
+            self.assertTrue(np.all(ids[loop[loop!=restart]]==fid))
             xyz=pos[tri.reshape(-1,3)]
             areas.append(np.linalg.norm(np.cross(xyz[:,1]-xyz[:,0],xyz[:,2]-xyz[:,0]),axis=1).sum()/2)
         np.testing.assert_allclose(areas,[96,100,100])

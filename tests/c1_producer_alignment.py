@@ -13,23 +13,24 @@ def main():
  controls=[]
  with zipfile.ZipFile(target) as z:
   for name in z.namelist():
-   if not name.endswith('.b3dm'):continue
-   raw=z.read(name);magic,version,total,*lengths=struct.unpack_from('<4s6I',raw);assert magic==b'b3dm' and version==1 and total==len(raw) and total%8==0,name
-   start=28+sum(lengths);assert start%8==0,name
-   gm,gv,gl=struct.unpack_from('<4sII',raw,start);assert gm==b'glTF' and gv==2 and gl%4==0 and start+gl<=total,name
-   assert raw[start+gl:]==bytes(total-start-gl),name
-   pos=start+12;document=None;bin_length=None
-   while pos<start+gl:
-    n,kind=struct.unpack_from('<I4s',raw,pos);assert n%4==0 and pos+8+n<=start+gl,name
+   assert not name.endswith('.b3dm'),name
+   if not name.endswith('.glb'):continue
+   raw=z.read(name);total=len(raw);gm,gv,gl=struct.unpack_from('<4sII',raw);assert gm==b'glTF' and gv==2 and gl==total and total%8==0,name
+   pos=12;document=None;bin_length=None
+   while pos<gl:
+    n,kind=struct.unpack_from('<I4s',raw,pos);assert n%4==0 and pos+8+n<=gl,name
     data=raw[pos+8:pos+8+n]
     if kind==b'JSON':document=json.loads(data)
     if kind==b'BIN\0':
      bin_length=n;declared=document['buffers'][0]['byteLength'];assert 0<=n-declared<=3 and data[declared:]==bytes(n-declared),name
     pos+=8+n
-   assert pos==start+gl and bin_length is not None,name
-   controls.append(dict(member=name,b3dmBytes=total,glbBytes=gl,binBytes=bin_length,declaredBufferBytes=declared))
- assert controls,'Actual producer emitted no b3dm controls'
+   assert pos==gl and bin_length is not None,name
+   # A fragmented fill is one EXT_mesh_polygon polygon per triangle.
+   fill=any(p.get('extensions',{}).get('EXT_mesh_polygon',{}).get('count',0)*3==document['accessors'][p['indices']]['count']
+            for p in document['meshes'][0]['primitives'] if p.get('mode',4)==4)
+   if fill:controls.append(dict(member=name,glbBytes=gl,binBytes=bin_length,declaredBufferBytes=declared))
+ assert controls,'Actual producer emitted no glTF fill controls'
  assert hashlib.sha256(source.read_bytes()).hexdigest()==before
  evidence=dict(binarySha256=hashlib.sha256(a.binary.read_bytes()).hexdigest(),sourceSha256=before,sourceFacts=dict(ringVertices=50,planarAreaSquareMetres=area,sourceCrs='local'),archiveSha256=hashlib.sha256(target.read_bytes()).hexdigest(),command=command,counts=report['counts'],controls=controls,sourceReadOnly=True)
- a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(evidence,indent=2)+'\n');print(json.dumps({'ok':True,'b3dmControls':len(controls)}))
+ a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(evidence,indent=2)+'\n');print(json.dumps({'ok':True,'fillControls':len(controls)}))
 if __name__=='__main__':main()
