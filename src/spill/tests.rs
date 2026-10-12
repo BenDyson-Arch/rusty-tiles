@@ -236,6 +236,17 @@ fn invalid_configuration_is_typed() {
         bound <= (0.31 * (1u64 << 30) as f64) as u64,
         "design M_sort ≈ 0.31 GiB"
     );
+    let huge = SortConfig {
+        run_bytes: usize::MAX,
+        fan_in: usize::MAX,
+        buffer_bytes: usize::MAX,
+        jobs: usize::MAX,
+    };
+    assert_eq!(
+        huge.memory_bound::<Wide>(),
+        u64::MAX,
+        "saturates, never wraps"
+    );
 }
 
 #[derive(Clone, Debug, Default)]

@@ -71,7 +71,8 @@ impl SortConfig {
     ///   elements per sorting thread, which exceeds `n / 2` for small chunks, so the margin is
     ///   `jobs × 8 MB`, plus the merge heap (`F` entries).
     ///
-    /// The run and merge phases do not overlap, so the sum is conservative.
+    /// The run and merge phases do not overlap, so the sum is conservative. Saturates at
+    /// `u64::MAX` rather than wrapping.
     pub(crate) fn memory_bound<T: Record>(&self) -> u64 {
         const SORT_MIN_SCRATCH: u64 = 8_000_000;
         let (run, buffer, fan_in, jobs) = (
@@ -80,8 +81,11 @@ impl SortConfig {
             self.fan_in as u64,
             self.jobs as u64,
         );
-        let heap = fan_in * (size_of::<T>() as u64 + 16);
-        run + run.div_ceil(2) + (fan_in + 1) * buffer + jobs * SORT_MIN_SCRATCH + heap
+        let heap = fan_in.saturating_mul(size_of::<T>() as u64 + 16);
+        run.saturating_add(run.div_ceil(2))
+            .saturating_add(fan_in.saturating_add(1).saturating_mul(buffer))
+            .saturating_add(jobs.saturating_mul(SORT_MIN_SCRATCH))
+            .saturating_add(heap)
     }
 
     /// Scratch bytes one sort of `records` can hold at once: two generations of runs, because
@@ -380,7 +384,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             } else {
                 self.run_records
             };
-            self.buffer.reserve_exact(target - capacity);
+            self.buffer.reserve_exact(target.saturating_sub(capacity));
         }
         self.buffer.push(record);
         self.stats.records += 1;
