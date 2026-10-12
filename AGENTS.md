@@ -55,8 +55,11 @@ evidence (raw runs, review transcripts, candidate and precode corpora,
 preparation output) goes to `~/.cache/rusty-tiles-evidence/` and is referenced
 from a tracked README by SHA-256 and the last commit that held it.
 `scripts/check_tree_budget.py` runs in CI and fails when any tracked file
-exceeds 1 MB or the tree or `bench/` exceeds its total budget; raise a budget
-only with a stated reason. The guard sees only the final tree, so a PR that adds
+exceeds 1 MB or the tree, `bench/` or `vendor/` exceeds its total budget; raise a
+budget only with a stated reason. `vendor/` holds only third-party source vendored
+for a shipped feature, one pinned version per component, replaced rather than
+accumulated, with its own budget and an exact-path list of upstream files allowed
+over 1 MB. The guard sees only the final tree, so a PR that adds
 and later removes bulk files must be squash-merged, or the guard must be run on
 every commit in the PR range.
 
