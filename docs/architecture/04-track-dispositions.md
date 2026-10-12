@@ -8,21 +8,29 @@ The user accepted a correction after PR #171: **0.4 ships Tiles 1.1/glTF 2.0;
 not a 0.4 gate. The snapshot below remains historical recovery evidence, not
 an instruction to restore the superseded new-format shipping target.
 
-Finish the retained meshopt correctness and bounded terrain corrections. Resume
+The retained meshopt correction (#176) and bounded terrain correction (#184)
+are merged. Resume
 the shared tile/output work against a real 1.1 producer and current viewer;
 reuse existing types and validated writers where their evidence applies.
 Terrain LOD continues as implicit-forest output because implicit tiling stays in
-0.4, and C2 slice 3 continues because 0.4 needs implicit validation. Legacy mesh
+0.4. C2 slice 3 (#179) is merged within its bounded implicit-validation scope. Legacy mesh
 parent/atlas performance stays deferred, as in the ledger below; the superseded
 mesh paths are not migrated to the shared serializer.
-Reassess C2s3's known references-pair failure against the 1.1 path actually
-retained for 0.4; its reusable correctness obligations cannot be deferred merely
-because a 2.0 writer is planned. New 3TZ work is justified only by a concrete
+New 3TZ work is justified only by a concrete
 0.4 streaming/resource requirement and stays at the packaging boundary.
-The encoder and glTF-only fill work remain in 0.4; replacing wrappers still
-requires working rendering and picking. PR #168 remains closed as superseded;
+The encoder remains in 0.4; GLB fills (#75, #185) are merged with their
+bounded rendering and picking evidence. PR #168 remains closed as superseded;
 useful decisions and code remain preserved. No feature was accepted by this
 correction, and no interrupted work was deleted.
+
+H6 retires all vector/point explicit production modes before M1; prerequisite
+fills #185, outline #186 and point bounds #183 are merged. The first shared
+serializer caller is vector's default implicit forest, including its explicit
+skeleton/external-document roles. H7 retires all b3dm/i3dm/pnts/cmpt validation
+through its remaining contract, oracle and audit gates; third-party explicit
+reading stays retained. H14 maintains the [public-surface inventory](public-surface-inventory.md#acceptance-and-removal-sequence)
+without claiming implementation acceptance for these future retirements.
+Claude owns H6, H7 and H11 (C2 8-corner fast path); H14 is docs-only.
 
 ## Historical recovery snapshot
 
