@@ -92,6 +92,11 @@ jobs:
         run: |
           cargo package --locked --no-verify
           python3 scripts/third_party_notices.py check --max-bytes 10000000 target/package/rusty-tiles-*.crate
+      - name: Test performance-lane controls
+        run: |
+          node --version
+          python3 -I bench/perf_lane/test_report.py
+          python3 -I bench/perf_lane/test_cesium.py
       - name: Test native build
         shell: bash
         run: |
