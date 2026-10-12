@@ -246,16 +246,19 @@ def render(meta, columns, previous, explanations):
                else 'advisory' if not f['gated'] else 'not gated')
         ref = {'release': f'vs {tag}', 'milestone': 'vs milestone', 'cesium': 'head'}[f['ref']]
         out.append(f"- {f['case']} {ref}: {f['text']} — {verdict}")
-    notes = [f"- {case} on {label}: {m.get('na') or m.get('failed')}" for col, label in (('release', tag), ('head', 'head'))
-             for case, m in (columns.get(col) or {}).items() if m and ('na' in m or 'failed' in m)]
-    if notes: out += ['', '## Not run or failed', '', *notes]
+    grouped = {}  # (column, reason): [cases]
+    for col, label in (('release', tag), ('head', 'head')):
+        for case, m in (columns.get(col) or {}).items():
+            if m and ('na' in m or 'failed' in m): grouped.setdefault((label, m.get('na') or m.get('failed')), []).append(case)
+    if grouped:
+        out += ['', '## Not run or failed', '', *(f"- {label}: {reason} ({', '.join(cases)})"
+                                                  for (label, reason), cases in grouped.items())]
     out += ['', '## Cases', '']
     for case in columns['head']:
         out += case_table(case, columns, flagged, tag) + ['']
     if meta.get('label'): rows = [r for r in rows if f"`{meta['head']['commit'][:7]}`" not in r] + [milestone_row(meta, columns['head'])]
-    out += ['## Milestones', '', 'Head totals over the cases it ran: wall time, largest peak RSS, output size, Cesium '
-            'cases passing and time to tiles-loaded.', '',
-            '| date | commit | label | Σ wall s | max RSS MiB | Σ output MiB | Cesium ok | Σ load s |',
+    out += ['## Milestones', '',
+            '| date | commit | label | head Σ wall s | max RSS MiB | Σ output MiB | Cesium ok | Σ s to loaded |',
             '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |', *rows, '']
     block = encode_block(meta, columns['head']) if meta.get('label') else (
         [BLOCK_START, 'milestone ' + json.dumps(info), *(f'case {k} ' + json.dumps(v, sort_keys=True)

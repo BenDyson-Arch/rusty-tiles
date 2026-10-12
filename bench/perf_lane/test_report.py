@@ -182,7 +182,7 @@ class Rendering(unittest.TestCase):
         self.assertIn('| vector | v0.3.0 | last milestone | head | Δ v0.3.0 | Δ milestone |', text)
         self.assertIn('| wall s | 0.500 | 1.000 | 1.100 | **+120.0%** | +10.0% |', text)
         self.assertIn('| wall s | n/a | 1.000 | 1.000 |  | +0.0% |', text)
-        self.assertIn('- mesh-local on v0.3.0: no mesh-local-to-3tz command', text)
+        self.assertIn('- v0.3.0: no mesh-local-to-3tz command (mesh-local)', text)
         self.assertIn('- vector vs v0.3.0: wall s 0.500 -> 1.100 (+120.0%) — not gated', text)
         self.assertNotIn(report.BLOCK_START, text)  # no milestone yet and none recorded
 
