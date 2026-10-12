@@ -2,7 +2,8 @@
 
 Run: python3 -I bench/perf_lane/test_cesium.py
 """
-import json, pathlib, shutil, subprocess, sys, tempfile, unittest
+import contextlib, io, json, pathlib, shutil, subprocess, sys, tempfile, unittest
+from unittest import mock
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -46,7 +47,81 @@ class FinishRule(unittest.TestCase):
         self.assertEqual(finish(0, [(False, 0), (True, 16)]), [None, dict(at=16, frame=2)])
 
 
+def settle(frames, *, timeout=False):
+    """Run the actual settle closure with deterministic render events and a controllable timer."""
+    source = (HERE / 'cesium.cjs').read_text()
+    closure = source.split('  const settle =', 1)[1].split('  const seconds =', 1)[0]
+    script = f'''
+const {{finishTracker}} = require({json.dumps(str(HERE / 'cesium.cjs'))});
+const spec = {{settleMs: 250, stepMs: 1000}}, failures = [];
+let now = 0, ready = false, inflight = 0, active = 0;
+let listener, timer, requests = 0, removed = 0, cleared = 0;
+const performance = {{now: () => now}};
+const setTimeout = (callback, ms) => {{
+  if (ms !== spec.stepMs) throw Error('wrong timeout');
+  timer = callback; return 1;
+}};
+const clearTimeout = id => {{
+  if (id !== 1) throw Error('wrong timer');
+  cleared++; timer = null;
+}};
+const scene = {{postRender: {{addEventListener: callback => {{
+  listener = callback;
+  return () => {{removed++; listener = null;}};
+}}}}, requestRender: () => requests++}};
+const idle = () => inflight === 0 && active === 0;
+const settle = {closure}
+(async () => {{
+  const pending = settle(() => ready);
+  for (const frame of {json.dumps(frames)}) {{
+    [now, ready, inflight, active] = frame;
+    if (frame[4]) failures.push('render failure');
+    if (!listener) throw Error('listener removed prematurely');
+    listener();
+  }}
+  if ({json.dumps(timeout)}) timer();
+  const result = await pending;
+  console.log(JSON.stringify({{result, requests, removed, cleared, listening: !!listener}}));
+}})();
+'''
+    return json.loads(subprocess.run(['node', '-e', script], capture_output=True, text=True, check=True,
+                                     timeout=5).stdout)
+
+
+@unittest.skipUnless(shutil.which('node'), 'node is required for the cesium.cjs settle closure')
+class Settle(unittest.TestCase):
+    def test_requests_must_stay_idle_for_the_whole_window(self):
+        result = settle([[0, True, 0, 0], [100, True, 1, 0], [150, True, 0, 0],
+                         [300, True, 0, 1], [350, True, 0, 0], [599, True, 0, 0], [600, True, 0, 0]])
+        self.assertEqual(result, dict(result=dict(loaded=True, at=350, frames=5, confirmedAt=600),
+                                      requests=7, removed=1, cleared=1, listening=False))
+
+    def test_failure_overrides_completion_and_cleans_up(self):
+        result = settle([[0, True, 0, 0], [250, True, 0, 0, True]])
+        self.assertEqual(result, dict(result=dict(loaded=False), requests=2, removed=1, cleared=1, listening=False))
+
+    def test_timeout_removes_listener_without_reporting_loaded(self):
+        result = settle([[0, False, 0, 0], [100, False, 0, 0]], timeout=True)
+        self.assertEqual(result, dict(result=dict(loaded=False), requests=3, removed=1, cleared=0, listening=False))
+
+
 class Renderer(unittest.TestCase):
+    def test_preflight_timeout_fails_cleanly_and_releases_lock(self):
+        args = type('Args', (), dict(launch=True, software_gl=False, angle='gl', chromium='chrome'))
+        cesium_lock = cesium.browser_lock
+        with tempfile.TemporaryDirectory() as tmp:
+            lock = pathlib.Path(tmp) / 'lock'
+            with mock.patch.object(cesium, 'browser_lock', side_effect=lambda: cesium_lock(lock)), \
+                    mock.patch.object(cesium.subprocess, 'run', side_effect=subprocess.TimeoutExpired('node', 30)), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as raised:
+                    cesium.preflight(args, {})
+            self.assertEqual(raised.exception.code, cesium.ENVIRONMENT_EXIT)
+            self.assertEqual(stderr.getvalue(), f'cesium: browser preflight timed out after {cesium.STARTUP_SECONDS:g} s\n')
+            # A second independently opened descriptor must be able to acquire the released lock.
+            with open(lock, 'a') as handle:
+                cesium.fcntl.flock(handle, cesium.fcntl.LOCK_EX | cesium.fcntl.LOCK_NB)
+
     def test_renderer_class(self):
         self.assertEqual(cesium.renderer_class(NVIDIA), 'gpu')
         self.assertEqual(cesium.renderer_class('ANGLE (AMD, AMD Radeon RX 7900 XTX (radeonsi, navi31, LLVM 19.1.7), OpenGL 4.6)'),
