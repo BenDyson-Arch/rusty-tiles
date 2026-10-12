@@ -137,6 +137,9 @@ cover many tiny files, including the negative control that exposed the old
 logical-only preflight. Other platforms require their actual unit query and
 applicable platform checks; unmeasured filesystem allocation behavior remains
 a proof limit.
+Stage rechecks subtract owned logical bytes from the full allowance. This is a
+conservative remaining-capacity check and may refuse near the capacity boundary;
+it does not promise success at exactly the initial allowance.
 
 Use a sound tile lower bound before capture and the actual geometry tree count
 after construction to refuse at the retained 178,956,970-member 3TZ ceiling,

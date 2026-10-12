@@ -119,7 +119,7 @@ def main():
                "config": {key: value for key, value in env.items() if key.startswith("H1_")},
                "measurement": "st_blocks*512 with SIGSTOP/waitpid confirmed producer stop; one stable live allocation snapshot",
                "snapshot": snapshot, "scratch_report": report["scratch"],
-               "logical_peak_bytes": report["scratch_peak_bytes"],
+               "logical_peak_bytes": report["scratch_logical_peak_bytes"],
                "insufficient_allowance_sensitive_control": sensitivity,
                "source_replay": audited, "cleanup_entries": 0}
     (args.work / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
