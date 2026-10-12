@@ -20,7 +20,7 @@ fn invariant(message: &'static str) -> JobError {
 }
 fn overflow() -> JobError {
     JobError::new(
-        JobErrorKind::Unsupported,
+        JobErrorKind::ResourceLimit,
         "large-mesh capture count or byte sum overflow",
     )
 }
@@ -329,5 +329,46 @@ mod tests {
             .iter()
             .flatten()
             .all(|v| *v != 0. || v.to_bits() == 0)));
+
+        // Exercise the orchestration boundary too: once the tree's triangle sequence exists,
+        // capture has completed and callbacks may remove all input files.
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let mut bytes: Vec<_> = [[0f32, 0., 0.], [1., 0., 0.], [0., 1., 0.]]
+            .iter()
+            .flatten()
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        bytes.extend([2u16, 0, 1].iter().flat_map(|v| v.to_le_bytes()));
+        fs::write(dir.path().join("data.bin"), bytes).unwrap();
+        let parent = dir.path().join("tree-scratch");
+        fs::create_dir(&parent).unwrap();
+        let mut config =
+            super::super::config::TreeConfig::new(super::super::config::Profile::Balanced);
+        config.jobs = super::super::config::Jobs::Fixed(std::num::NonZeroUsize::new(1).unwrap());
+        config.scratch_dir = Some(parent.clone());
+        config.sort = sort;
+        config.sort.run_bytes = 256;
+        let mut removed = false;
+        let output = super::super::build(&input, &config, &mut || {
+            let tree_started = fs::read_dir(&parent).unwrap().flatten().any(|entry| {
+                fs::read_dir(entry.path()).unwrap().flatten().any(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("triangles-")
+                })
+            });
+            if tree_started && !removed {
+                fs::remove_file(&input).unwrap();
+                fs::remove_file(dir.path().join("data.bin")).unwrap();
+                removed = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(removed, "source removal control must reach the tree stage");
+        assert_eq!(output.report.triangles, 2);
+        output.close().unwrap();
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
     }
 }

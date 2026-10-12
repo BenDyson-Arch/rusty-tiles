@@ -154,6 +154,9 @@ fn invalid(message: impl Into<String>) -> JobError {
 fn unsupported(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::Unsupported, message)
 }
+fn exhausted(message: impl Into<String>) -> JobError {
+    JobError::new(JobErrorKind::ResourceLimit, message)
+}
 fn object<'a>(v: &'a Value, allowed: &[&str]) -> Result<&'a Map<String, Value>> {
     let o = v
         .as_object()
@@ -665,7 +668,7 @@ fn accessor_layouts(
         let count = field(value, "count")?;
         total = total
             .checked_add(count)
-            .ok_or_else(|| unsupported("accessor count overflow"))?;
+            .ok_or_else(|| exhausted("accessor count overflow"))?;
         if limits.accessor_elements.is_some_and(|max| total > max) {
             return Err(unsupported(format!(
                 "{} accessor count ceiling exceeded",
@@ -1233,7 +1236,7 @@ fn primitives(
             }
             total = total
                 .checked_add(primitive.count / 3)
-                .ok_or_else(|| unsupported("declared triangle count overflow"))?;
+                .ok_or_else(|| exhausted("declared triangle count overflow"))?;
             if limits.triangles.is_some_and(|max| total > max) {
                 return Err(unsupported("declared triangle ceiling exceeded"));
             }
@@ -1431,7 +1434,7 @@ impl Document {
             }
             total_declared = total_declared
                 .checked_add(declared)
-                .ok_or_else(|| unsupported("declared buffer byte sum overflow"))?;
+                .ok_or_else(|| exhausted("declared buffer byte sum overflow"))?;
             if let Some(max) = limits.declared_buffer_bytes {
                 if total_declared > max {
                     return Err(unsupported(format!(
@@ -1694,7 +1697,7 @@ fn scene_plan(
             for p in &meshes[mesh] {
                 triangle_count = triangle_count
                     .checked_add(p.count / 3)
-                    .ok_or_else(|| unsupported("expanded triangle count overflow"))?;
+                    .ok_or_else(|| exhausted("expanded triangle count overflow"))?;
             }
             if limits.triangles.is_some_and(|max| triangle_count > max) {
                 return Err(unsupported(
@@ -1851,6 +1854,28 @@ pub(crate) fn decode(
 mod metadata_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn large_declared_buffer_sum_exhaustion_is_resource_limit() {
+        let bytes = serde_json::to_vec(&json!({
+            "asset":{"version":"2.0"},
+            "buffers":[
+                {"uri":"first.bin","byteLength":usize::MAX},
+                {"uri":"second.bin","byteLength":1}
+            ]
+        }))
+        .unwrap();
+        let error = Document::parse_parts(&bytes, false, None, &Limits::LARGE, || Ok(()))
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert_eq!(error.message(), "declared buffer byte sum overflow");
+        // The finite profile still refuses at its declared-byte ceiling before accounting
+        // exhaustion, preserving its existing Unsupported admission semantics.
+        let finite = Document::parse(&bytes, || Ok(())).err().unwrap();
+        assert_eq!(finite.kind(), JobErrorKind::Unsupported);
+        assert!(finite.message().contains("declared buffers exceed"));
+    }
 
     #[test]
     fn reflected_authored_keys_follow_the_decoded_corner_order() {

@@ -1004,6 +1004,9 @@ fn sequence_accounts_unfinished_bytes_and_replays_short_writes() {
 #[test]
 fn failed_partial_writes_contribute_to_peak_before_cleanup() {
     let faults = Faults {
+        // The fault is checked before each write, so force a short first write to reach
+        // the failure while write_all still has bytes of this record left to emit.
+        max_write: Some(3),
         write_error_at: Some((3, std::io::ErrorKind::StorageFull)),
         ..Default::default()
     };
@@ -1012,17 +1015,21 @@ fn failed_partial_writes_contribute_to_peak_before_cleanup() {
         a: 1,
         b: 2,
     };
-    let (_parent, scratch) = new_scratch(FaultIo::new(faults.clone()));
+    let sequence_io = FaultIo::new(faults.clone());
+    let (_parent, scratch) = new_scratch(sequence_io.clone());
     let mut writer = SequenceWriter::new(&scratch, "partial-sequence", 1).unwrap();
     assert!(writer.push(&record).is_err());
+    assert_eq!(sequence_io.counters.written.load(Ordering::Relaxed), 3);
     assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
     drop(writer);
     assert_eq!(scratch.live_bytes(), 0);
 
-    let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+    let sorter_io = FaultIo::new(faults);
+    let (_parent, scratch) = new_scratch(sorter_io.clone());
     let mut sorter = ExternalSorter::new(&scratch, config::<Wide>(1, 2, 1, 1)).unwrap();
     sorter.push(record).unwrap();
     assert!(sorter.push(record).is_err());
+    assert_eq!(sorter_io.counters.written.load(Ordering::Relaxed), 3);
     assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
     assert_eq!(scratch.live_bytes(), 0);
 }

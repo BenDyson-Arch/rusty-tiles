@@ -297,14 +297,56 @@ fn cgroup_headroom() -> Option<u64> {
         .lines()
         .find_map(|line| line.strip_prefix("0::"))?
         .trim();
-    let dir = std::path::Path::new("/sys/fs/cgroup").join(path.trim_start_matches('/'));
-    let max = std::fs::read_to_string(dir.join("memory.max")).ok()?;
-    let max = max.trim().parse::<u64>().ok()?;
-    let current = std::fs::read_to_string(dir.join("memory.current"))
-        .ok()
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .unwrap_or(0);
-    Some(max.saturating_sub(current))
+    let root = std::path::Path::new("/sys/fs/cgroup");
+    inherited_headroom(root, &root.join(path.trim_start_matches('/')))
+}
+
+#[cfg(target_os = "linux")]
+fn inherited_headroom(root: &std::path::Path, leaf: &std::path::Path) -> Option<u64> {
+    let mut result = None;
+    let mut directory = leaf;
+    loop {
+        if !directory.starts_with(root) {
+            return None;
+        }
+        if let Some(max) = std::fs::read_to_string(directory.join("memory.max"))
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok())
+        {
+            // Missing current usage cannot be treated as zero usage.
+            let current = std::fs::read_to_string(directory.join("memory.current"))
+                .ok()?
+                .trim()
+                .parse::<u64>()
+                .ok()?;
+            let headroom = max.saturating_sub(current);
+            result = Some(result.map_or(headroom, |prior: u64| prior.min(headroom)));
+        }
+        if directory == root {
+            return result;
+        }
+        directory = directory.parent()?;
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    #[test]
+    fn inherited_cgroup_limits_cap_an_unlimited_child() {
+        let root = tempfile::tempdir().unwrap();
+        let leaf = root.path().join("child");
+        std::fs::create_dir(&leaf).unwrap();
+        std::fs::write(root.path().join("memory.max"), "1000").unwrap();
+        std::fs::write(root.path().join("memory.current"), "750").unwrap();
+        std::fs::write(leaf.join("memory.max"), "max").unwrap();
+        assert_eq!(inherited_headroom(root.path(), &leaf), Some(250));
+        std::fs::write(leaf.join("memory.max"), "100").unwrap();
+        std::fs::write(leaf.join("memory.current"), "40").unwrap();
+        assert_eq!(inherited_headroom(root.path(), &leaf), Some(60));
+        std::fs::remove_file(leaf.join("memory.current")).unwrap();
+        assert_eq!(inherited_headroom(root.path(), &leaf), None);
+    }
 }
 
 /// Upper bound on the tile count from counts alone. With `X = ⌊N/(L+1)⌋ + ⌊ΣB/(B_tile+1)⌋`,

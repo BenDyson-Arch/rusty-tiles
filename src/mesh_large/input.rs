@@ -263,7 +263,9 @@ impl StreamSource {
             {
                 external_bytes = external_bytes
                     .checked_add(bound.metadata.len())
-                    .ok_or_else(|| unsupported("mesh source byte sum overflow"))?;
+                    .ok_or_else(|| {
+                        JobError::new(JobErrorKind::ResourceLimit, "mesh source byte sum overflow")
+                    })?;
             }
             bound.check_handle(&file)?;
             drop(file);

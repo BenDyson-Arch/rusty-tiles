@@ -430,8 +430,10 @@ def run_corpus(binary, directory, label):
     scratch = [directory / "scratch-a", directory / "scratch-b"]
     for parent in scratch:
         parent.mkdir(exist_ok=True)
-    configurations = [(1, 1024, 2, 17, 0), (2, 2048, 3, 31, 0),
-                      (1, 8192, 8, 257, 1), (2, 256, 2, 17, 1)]
+    configurations = [(1, 1024, 2, 17, 0, 5, 280), (2, 2048, 3, 31, 0, 5, 280),
+                      (1, 8192, 8, 257, 1, 5, 280), (2, 256, 2, 17, 1, 5, 280),
+                      (1, 1024, 2, 17, 0, 5, 1_000_000),
+                      (1, 1024, 2, 17, 0, 1_000, 112)]
     receipts = {"label": label, "binary": str(Path(binary).resolve()), "binary_sha256": digest(binary),
                 "oracle_sha256": digest(__file__), "runs": []}
     cpus = sorted(os.sched_getaffinity(0))[:2] if hasattr(os, "sched_getaffinity") else []
@@ -439,29 +441,72 @@ def run_corpus(binary, directory, label):
     if cpus:
         prefix += ["taskset", "-c", ",".join(map(str, cpus))]
     for case in cases:
-        previous = None
-        for variant, (jobs, run_bytes, fan_in, buffer_bytes, scratch_index) in enumerate(configurations):
+        previous = {}
+        for variant, (jobs, run_bytes, fan_in, buffer_bytes, scratch_index, leaf_triangles, tile_bytes) in enumerate(configurations):
             output = directory / f"{case['name']}-{variant}"
             env = dict(os.environ, H1_INPUT=case["input"], H1_OUTPUT=str(output),
                        H1_SCRATCH=str(scratch[scratch_index]), H1_JOBS=str(jobs),
                        H1_RUN_BYTES=str(run_bytes), H1_FAN_IN=str(fan_in),
                        H1_BUFFER_BYTES=str(buffer_bytes), H1_PROFILE="quality",
-                       H1_LEAF_TRIANGLES="5", H1_TILE_BYTES="280")
+                       H1_LEAF_TRIANGLES=str(leaf_triangles), H1_TILE_BYTES=str(tile_bytes))
             result = subprocess.run(prefix + [str(binary), "--exact", "mesh_large::tests::external_driver",
                                               "--ignored", "--nocapture"], env=env, capture_output=True, timeout=90)
             output.mkdir(exist_ok=True)
             (output / "driver.log").write_bytes(result.stdout + result.stderr)
             assert result.returncode == 0, f"driver failed for {case['name']} variant {variant}: {result.stdout.decode()} {result.stderr.decode()}"
-            summary = verify_fixture(case["truth"], output, 5, 280)
+            summary = verify_fixture(case["truth"], output, leaf_triangles, tile_bytes)
             hashes = {name: digest(output / name) for name in ("triangles.bin", "nodes.bin", "vertex_depth.bin", "info.json")}
-            if previous:
-                assert hashes == previous, f"configuration-dependent dump for {case['name']}"
-            previous = hashes
+            budget = (leaf_triangles, tile_bytes)
+            if budget in previous:
+                assert hashes == previous[budget], f"configuration-dependent dump for {case['name']}"
+            previous[budget] = hashes
             receipts["runs"].append({"case": case["name"], "variant": variant, "config": {key: value for key, value in env.items() if key.startswith("H1_")},
                                       "summary": summary, "hashes": hashes})
         print(f"accepted {case['name']}: {summary}", flush=True)
     (directory / "receipt.json").write_text(json.dumps(receipts, indent=2) + "\n")
     return len(receipts["runs"])
+
+
+def run_refusals(binary, directory, label):
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    single, _ = write_fixture(directory, "single", [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    coincident, _ = write_fixture(directory, "coincident", [[0, 0, 0], [1, 0, 0], [0, 1, 0]], indices=[0, 1, 2] * 137)
+    missing, _ = write_fixture(directory, "missing-resource", [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    (missing.parent / "payload.bin").unlink()
+    invalid, _ = write_fixture(directory, "bad-extrema", [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    doc = json.loads(invalid.read_text())
+    doc["accessors"][0]["max"][0] = 2
+    invalid.write_text(json.dumps(doc, separators=(",", ":")) + "\n")
+    cases = [("single-byte-refusal", single, {"H1_TILE_BYTES": "55"}, "Unsupported", "single triangle"),
+             ("height-refusal", coincident, {"H1_HEIGHT_CAP": "22"}, "Unsupported", "hierarchy height 24 > 22"),
+             ("lower-member-refusal", coincident, {"H1_MEMBER_CEILING": "33"}, "Unsupported", "3TZ member ceiling"),
+             ("exact-member-refusal", coincident, {"H1_MEMBER_CEILING": "58"}, "Unsupported", "3TZ member ceiling"),
+             ("zero-budget", single, {"H1_LEAF_TRIANGLES": "0"}, "InvalidRequest", "budgets must be positive"),
+             ("invalid-fan-in", single, {"H1_FAN_IN": "1"}, "InvalidRequest", "fan-in"),
+             ("missing-resource", missing, {}, "Io", "No such file"),
+             ("bad-extrema", invalid, {}, "InvalidInput", "max")]
+    scratch = directory / "scratch"
+    scratch.mkdir(exist_ok=True)
+    receipts = {"label": label, "binary_sha256": digest(binary), "oracle_sha256": digest(__file__), "runs": []}
+    for name, source, overrides, kind, message in cases:
+        output = directory / name
+        env = dict(os.environ, H1_INPUT=str(source), H1_OUTPUT=str(output), H1_SCRATCH=str(scratch),
+                   H1_JOBS="1", H1_RUN_BYTES="1024", H1_FAN_IN="2", H1_BUFFER_BYTES="17",
+                   H1_PROFILE="quality", H1_LEAF_TRIANGLES="5", H1_TILE_BYTES="280")
+        env.update(overrides)
+        result = subprocess.run(["nice", "-n", "10", str(binary), "--exact", "mesh_large::tests::external_driver",
+                                 "--ignored", "--nocapture"], env=env, capture_output=True, timeout=90)
+        assert result.returncode != 0, f"negative control accepted: {name}"
+        error = json.loads((output / "error.json").read_text())
+        assert error["kind"] == kind and message.lower() in error["message"].lower(), f"wrong refusal {name}: {error}"
+        assert error["secondary"] == [] and error["retained_paths"] == [], f"refusal did not clean up: {name}"
+        assert list(scratch.iterdir()) == [], f"refusal left private scratch: {name}"
+        assert not (output / "triangles.bin").exists(), f"refused input exposed diagnostic geometry: {name}"
+        (output / "driver.log").write_bytes(result.stdout + result.stderr)
+        receipts["runs"].append({"name": name, "error": error, "overrides": overrides})
+    (directory / "receipt.json").write_text(json.dumps(receipts, indent=2) + "\n")
+    return len(cases)
 
 
 def streamed_records(path, format_string):
@@ -507,6 +552,7 @@ def verify_scale(truth, directory, leaf_triangles, tile_bytes):
     next_node = next(node_stream, None)
     stack = []
     vertices = {}
+    last_geometry_pair = None
     summary = {"triangles": 0, "nodes": 0, "leaves": 0, "internal": 0, "height": 0, "degenerate_cells": 0}
     per_depth = {}
     expected_stream = iter(expected_grid_stream(count))
@@ -523,6 +569,7 @@ def verify_scale(truth, directory, leaf_triangles, tile_bytes):
             n = next_node
             depth = n[0] + n[2]
             assert 0 <= depth < 32 and n[7] < n[8] <= count, "invalid scale node interval/depth"
+            assert record[0] >> (3 * (KEY_DEPTH - n[0])) == n[1], "scale cell identity differs from first source key"
             assert n[9] == 56 * (n[8] - n[7]), "scale node geometry bytes mismatch"
             if stack:
                 parent = stack[-1]
@@ -550,14 +597,23 @@ def verify_scale(truth, directory, leaf_triangles, tile_bytes):
                           "seen_children": 0, "last_slot": -1, "next_child_rank": n[7]})
             next_node = next(node_stream, None)
         assert stack and stack[-1]["wire"][5] == 1, "scale triangle has no containing leaf"
-        leaf_depth = stack[-1]["wire"][0] + stack[-1]["wire"][2]
-        for point in triangle["positions"]:
-            key = bits(point)
-            vertices[key] = min(vertices.get(key, leaf_depth), leaf_depth)
-            for frame in stack:
+        leaf = stack[-1]["wire"]
+        leaf_depth = leaf[0] + leaf[2]
+        cell_prefix = record[0] >> (3 * (KEY_DEPTH - leaf[0]))
+        assert leaf[1] <= cell_prefix <= (leaf[1] if leaf[2] else (leaf[1] >> 3) * 8 + leaf[4]), "scale leaf crosses its cell/packed octants"
+        # Repeated source ordinals of one template triangle have the same
+        # geometry. Audit each row's exact payload above, but update geometric
+        # unions/minima once per (template, leaf), independently of repetition N.
+        pair = (triangle["source"][3], stack[-1]["wire"][:4])
+        if pair != last_geometry_pair:
+            for point in triangle["positions"]:
+                key = bits(point)
+                vertices[key] = min(vertices.get(key, leaf_depth), leaf_depth)
+                frame = stack[-1]
                 for a in range(3):
                     frame["min"][a] = min(frame["min"][a], point[a])
                     frame["max"][a] = max(frame["max"][a], point[a])
+            last_geometry_pair = pair
         while stack and stack[-1]["wire"][8] == rank + 1:
             frame = stack.pop()
             n = frame["wire"]
@@ -565,6 +621,11 @@ def verify_scale(truth, directory, leaf_triangles, tile_bytes):
             assert frame["seen_children"] == n[6], "scale declared child count mismatch"
             if n[5] == 0:
                 assert frame["next_child_rank"] == n[8], "scale children do not cover internal node"
+            if stack:
+                parent = stack[-1]
+                for a in range(3):
+                    parent["min"][a] = min(parent["min"][a], frame["min"][a])
+                    parent["max"][a] = max(parent["max"][a], frame["max"][a])
             d = n[0] + n[2]
             extent = max(frame["max"][a] - frame["min"][a] for a in range(3))
             per_depth.setdefault(d, {"min": [math.inf] * 3, "max": [-math.inf] * 3, "maximum_extent": 0})
@@ -694,6 +755,10 @@ def main():
     run.add_argument("binary", type=Path)
     run.add_argument("directory", type=Path)
     run.add_argument("--label", required=True)
+    refusal = sub.add_parser("run-refusals")
+    refusal.add_argument("binary", type=Path)
+    refusal.add_argument("directory", type=Path)
+    refusal.add_argument("--label", required=True)
     args = parser.parse_args()
     if args.command == "self-test":
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(ReferenceControls))
@@ -715,6 +780,8 @@ def main():
         print(generate_dense(args.directory, args.nodes))
     if args.command == "run-corpus":
         print(f"{run_corpus(args.binary, args.directory, args.label)} independently checked executions")
+    if args.command == "run-refusals":
+        print(f"{run_refusals(args.binary, args.directory, args.label)} independently checked refusals")
 
 
 if __name__ == "__main__":
