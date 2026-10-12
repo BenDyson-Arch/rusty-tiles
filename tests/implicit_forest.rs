@@ -118,7 +118,7 @@ fn payload(id: usize, slot: usize, suffix: &str) -> Vec<u8> {
     let bytes = glb(&document, &(id as u64).to_le_bytes());
     match suffix {
         "glb" => bytes,
-        "b3dm" => b3dm(&bytes),
+        "plain" => bytes,
         "gltf" => serde_json::to_vec(&json!({"asset":{"version":"2.0"},"scenes":[{"nodes":[0]}],
             "nodes":[{"name":format!("n{id}")}]}))
         .unwrap(),
@@ -167,7 +167,9 @@ fn build(dir: &Path, spec: &Spec) -> Built {
             .iter()
             .enumerate()
             .map(|(slot, suffix)| {
-                let uri = format!("src/{id}-{slot}.{suffix}");
+                // A "plain" slot is a GLB without the vector content header.
+                let extension = if *suffix == "plain" { "glb" } else { suffix };
+                let uri = format!("src/{id}-{slot}.{extension}");
                 let bytes = payload(id, slot, suffix);
                 std::fs::write(dir.join(&uri), &bytes).unwrap();
                 raw.insert(uri.clone(), bytes);
@@ -546,7 +548,7 @@ fn data_error(result: Result<ForestOutput, Error>) -> String {
 fn skeleton_leaves_and_roots_with_slot_lists_rows_and_rebased_payloads() {
     let dir = tempfile::tempdir().unwrap();
     // Preorder ids: 0 root; 1 A (h=4); 2 leaf; 3 R1 (h=3, translated chain); 7 R2 (h=2, a glb
-    // slot and a b3dm slot); 11 leaf; 12 R3 (h=1, no content).
+    // slot and a plain glb slot); 11 leaf; 12 R3 (h=1, no content).
     let r1 = tile(
         &["glb"],
         vec![tile(&["glb"], vec![chain(2).at(2).moved([0.25, -4., 0.])]).moved([8., 2., 1.])],
@@ -554,7 +556,7 @@ fn skeleton_leaves_and_roots_with_slot_lists_rows_and_rebased_payloads() {
     let r2 = tile(
         &["glb"],
         vec![
-            tile(&["glb", "b3dm"], vec![leaf().at(1)])
+            tile(&["glb", "plain"], vec![leaf().at(1)])
                 .at(0)
                 .moved([-16., 0.5, 0.]),
             leaf().at(3),
@@ -621,7 +623,7 @@ fn skeleton_leaves_and_roots_with_slot_lists_rows_and_rebased_payloads() {
         r2_uris,
         [
             "implicit-content/r7-{level}-{x}-{y}-0.glb",
-            "implicit-content/r7-{level}-{x}-{y}-1.b3dm"
+            "implicit-content/r7-{level}-{x}-{y}-1.glb"
         ]
     );
     let r3 = find_root(&audit, 12);
@@ -756,14 +758,14 @@ fn inexact_translation_sums_widen_rows_and_ancestors_outward() {
 fn thirty_two_levels_link_two_documents_deep_and_thirty_three_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     // A comb: a 32-level chain whose tiles each also carry a two-tile implicit root with a glb
-    // (extension header) and a b3dm slot, so the deepest member is
+    // (extension header) and a plain glb slot, so the deepest member is
     // `contents[i].extensions.3DTILES_content_gltf_vector.vector` at skeleton level 11.
     let mut spec = leaf();
     for level in (0..31).rev() {
         let side = if level == 30 {
-            tile(&["glb", "b3dm"], Vec::new())
+            tile(&["glb", "plain"], Vec::new())
         } else {
-            tile(&["glb", "b3dm"], vec![tile(&["glb", "b3dm"], Vec::new())])
+            tile(&["glb", "plain"], vec![tile(&["glb", "plain"], Vec::new())])
         };
         spec = tile(&["glb"], vec![spec.at(0), side.at(1)]);
     }
@@ -1091,8 +1093,12 @@ fn malformed_hierarchies_are_typed_errors() {
             Box::new(|m| m["root"]["children"][0]["geometricError"] = json!(-1)),
         ),
         (
-            "must be glb, gltf or b3dm",
+            "must be glb or gltf",
             Box::new(|m| m["root"]["children"][0]["content"]["uri"] = json!("src/1-0.pnts")),
+        ),
+        (
+            "must be glb or gltf",
+            Box::new(|m| m["root"]["children"][0]["content"]["uri"] = json!("src/1-0.b3dm")),
         ),
         (
             "header differs",
@@ -1151,7 +1157,7 @@ fn writing_is_a_function_of_h() {
         &["glb"],
         vec![
             chain(6).at(1),
-            tile(&["glb", "b3dm"], vec![leaf().moved([3., 0., 0.])]).at(2),
+            tile(&["glb", "plain"], vec![leaf().moved([3., 0., 0.])]).at(2),
         ],
     );
     let mut outputs = Vec::new();
@@ -1185,14 +1191,7 @@ fn decode(payload: &Payload) -> Vec<u8> {
 
 /// (JSON chunk text without padding, JSON chunk length, bytes after the JSON chunk).
 fn glb_parts(bytes: &[u8]) -> (Vec<u8>, usize, Vec<u8>) {
-    let offset = if bytes.starts_with(b"b3dm") {
-        28 + (3..7)
-            .map(|i| u32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap()) as usize)
-            .sum::<usize>()
-    } else {
-        0
-    };
-    let glb = &bytes[offset..];
+    let glb = bytes;
     let length = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
     let json = &glb[20..20 + length];
     let end = json.iter().rposition(|&b| b != b' ').unwrap() + 1;
@@ -1302,15 +1301,12 @@ fn frozen_production_payloads_restore_byte_exactly() {
 }
 
 #[test]
-fn rebase_covers_b3dm_alignment_matrix_roots_and_zero_translation() {
+fn rebase_refuses_b3dm_and_covers_alignment_matrix_roots_and_zero_translation() {
     let raw = decode(&DEFAULT);
-    // b3dm-wrapped GLB: the b3dm byteLength follows, 8-byte alignment is kept.
+    // Vector fills are glTF-only: a legacy b3dm-wrapped GLB is not rebased.
     let wrapped = b3dm(&raw);
-    let (published, _) = assert_exact(&wrapped, DEFAULT.delta);
-    assert_eq!(
-        u32::from_le_bytes(published[8..12].try_into().unwrap()) as usize,
-        published.len()
-    );
+    assert!(rebase_error(rebase_payload(&wrapped, DEFAULT.delta)).contains("not a GLB"));
+    let (published, _) = assert_exact(&raw, DEFAULT.delta);
     assert_eq!(published.len() % 8, 0);
     // A JSON chunk aligned to 8 (vector's raw chunks are aligned to 4).
     let doc = json!({"asset":{"version":"2.0"},"scenes":[{"nodes":[1]}],"nodes":[{"name":"child"},{"children":[0],"translation":[1.,2.,3.]}]});
@@ -1375,7 +1371,7 @@ fn unsupported_payloads_and_malformed_records_are_typed_errors() {
         &[],
     );
     assert!(rebase_error(rebase_payload(&both, delta)).contains("both matrix and TRS"));
-    assert!(rebase_error(rebase_payload(b"{\"asset\":{}}", delta)).contains("neither GLB nor b3dm"));
+    assert!(rebase_error(rebase_payload(b"{\"asset\":{}}", delta)).contains("not a GLB"));
     assert!(rebase_error(rebase_payload(&raw, [f64::NAN, 0., 0.])).contains("not finite"));
     let mut truncated = raw.clone();
     truncated.truncate(100);

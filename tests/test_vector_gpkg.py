@@ -198,29 +198,32 @@ class GeoPackageTests(unittest.TestCase):
                 for content in node.get('contents',[node.get('content')]):
                     file=out/content['uri'];doc,positions,ids=read(file)
                     self.assertTrue(all(i=='9' for i in ids));vertex_count+=sum(map(len,positions));byte_count+=file.stat().st_size
-                    if 'extensions' not in content:
-                        for _,_,tri in parts(file):
-                            area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
-                    else:
-                        # Every outline edge belongs to an original outer/hole edge.
-                        source_edges=[(np.array(a),np.array(b)) for ring in rings for a,b in zip(ring[:-1],ring[1:])]
-                        translation=np.zeros(3)
-                        # This small fixture has root origin (0,0,0); recover each
-                        # leaf's absolute translation through the hierarchy below.
-                        def locate(current,delta):
-                            delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
-                            if current is node:return delta
-                            for c in current.get('children',[]):
-                                result=locate(c,delta)
-                                if result is not None:return result
-                        translation=locate(root,np.zeros(3))
-                        for _,_,line in parts(file):
-                            xyz=line[:,[0,2,1]]*[1,-1,1]+translation
-                            def on_edge(a,b):
-                                ab=b-a;t=(xyz-a)@ab/max(np.dot(ab,ab),1e-30)
-                                return ((t>=-1e-7)&(t<=1+1e-7)).all() and np.linalg.norm(xyz-a-t[:,None]*ab,axis=1).max()<1e-6
-                            self.assertTrue(any(on_edge(a,b) for a,b in source_edges))
-                            outline_length+=np.linalg.norm(np.diff(xyz,axis=0),axis=1).sum()
+                    # Fill triangles (one polygon each) and boundary lines share one GLB.
+                    self.assertEqual(content['extensions'],{'3DTILES_content_gltf_vector':{'vector':True}})
+                    for mode,_,tri in parts(file):
+                        if mode!=4:continue
+                        self.assertEqual(len(tri),3)
+                        area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
+                    # Every outline edge belongs to an original outer/hole edge.
+                    source_edges=[(np.array(a),np.array(b)) for ring in rings for a,b in zip(ring[:-1],ring[1:])]
+                    translation=np.zeros(3)
+                    # This small fixture has root origin (0,0,0); recover each
+                    # leaf's absolute translation through the hierarchy below.
+                    def locate(current,delta):
+                        delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
+                        if current is node:return delta
+                        for c in current.get('children',[]):
+                            result=locate(c,delta)
+                            if result is not None:return result
+                    translation=locate(root,np.zeros(3))
+                    for mode,_,line in parts(file):
+                        if mode!=3:continue
+                        xyz=line[:,[0,2,1]]*[1,-1,1]+translation
+                        def on_edge(a,b):
+                            ab=b-a;t=(xyz-a)@ab/max(np.dot(ab,ab),1e-30)
+                            return ((t>=-1e-7)&(t<=1+1e-7)).all() and np.linalg.norm(xyz-a-t[:,None]*ab,axis=1).max()<1e-6
+                        self.assertTrue(any(on_edge(a,b) for a,b in source_edges))
+                        outline_length+=np.linalg.norm(np.diff(xyz,axis=0),axis=1).sum()
                 self.assertLessEqual(vertex_count,8);self.assertLessEqual(byte_count,8192)
             self.assertAlmostEqual(area,84,places=5)
             self.assertAlmostEqual(outline_length,56,places=5)

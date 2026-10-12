@@ -144,8 +144,9 @@ report. No Python compression entry point is added.
 
 The producer resolves raw or compressed encoding once and shares it between
 fitting and final emission. Its `uncompressedTileBytes` metric now counts the
-actual selected-framing raw bridge after requested quantization, including the
-fill wrapper. `uncompressedTileBytesScope` states that boundary explicitly.
+actual selected-framing raw bridge after requested quantization. Fills are
+glTF vector content in the same GLB since #75, so there is no fill wrapper to
+count. `uncompressedTileBytesScope` states that boundary explicitly.
 Prequantization geometry size is no longer used as this byte metric. The actual
 paired producer output/report checks above cover its finite observed cases;
 optimal fitting and broader resource guarantees remain separate obligations.

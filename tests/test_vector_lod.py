@@ -71,7 +71,9 @@ def parts(path):
         indices=decode(prim['indices']);mode=prim['mode'];polygon=prim.get('extensions',{}).get('EXT_mesh_polygon')
         if polygon:
             loops=decode(polygon['loopIndices']);starts=decode(polygon['loopIndicesOffsets'])
-            groups=[np.unique(loop[loop!=0xffffffff]) for loop in np.split(loops,starts[1:])]
+            # Loop indices may be 8-, 16- or 32-bit; each has its own restart value.
+            restart={5121:0xff,5123:0xffff,5125:0xffffffff}[doc['accessors'][polygon['loopIndices']]['componentType']]
+            groups=[np.unique(loop[loop!=restart]) for loop in np.split(loops,starts[1:])]
         elif mode==3:
             groups=[group[group!=0xffffffff] for group in np.split(indices,np.flatnonzero(indices==0xffffffff))]
         elif mode==4:groups=indices.reshape(-1,3)

@@ -152,8 +152,8 @@ fn content_suffix(uri: &str) -> Result<String, Error> {
         .extension()
         .and_then(|s| s.to_str())
         .map(str::to_ascii_lowercase)
-        .filter(|s| matches!(s.as_str(), "glb" | "gltf" | "b3dm"))
-        .ok_or_else(|| data(format!("content {uri:?} must be glb, gltf or b3dm")))?;
+        .filter(|s| matches!(s.as_str(), "glb" | "gltf"))
+        .ok_or_else(|| data(format!("content {uri:?} must be glb or gltf")))?;
     let relative = Path::new(uri)
         .components()
         .all(|c| matches!(c, Component::Normal(_)));
@@ -1125,16 +1125,12 @@ impl ImplicitRoot<'_> {
 
 // ---- Reversible payload rebase (design §4.7) ----
 
-/// A GLB, possibly inside a b3dm, split around its JSON chunk.
+/// A GLB split around its JSON chunk.
 struct Container<'a> {
-    /// The b3dm header and tables; empty for a GLB.
-    prefix: &'a [u8],
     /// The JSON chunk data, including padding.
     json: &'a [u8],
     /// Every GLB byte after the JSON chunk (BIN and other chunks).
     rest: &'a [u8],
-    /// Bytes after the GLB inside a b3dm.
-    trailing: &'a [u8],
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> Option<usize> {
@@ -1142,28 +1138,15 @@ fn u32_at(bytes: &[u8], offset: usize) -> Option<usize> {
     Some(u32::from_le_bytes(word.try_into().ok()?) as usize)
 }
 
-fn container(bytes: &[u8]) -> Result<Container<'_>, String> {
-    let offset = if bytes.starts_with(b"b3dm") {
-        if u32_at(bytes, 4) != Some(1) || u32_at(bytes, 8) != Some(bytes.len()) {
-            return Err("b3dm header is invalid or its byteLength differs from the payload".into());
-        }
-        (3..7)
-            .try_fold(28usize, |offset, i| {
-                offset.checked_add(u32_at(bytes, i * 4)?)
-            })
-            .filter(|&offset| offset <= bytes.len())
-            .ok_or("b3dm tables exceed the payload")?
-    } else if bytes.starts_with(b"glTF") {
-        0
-    } else {
-        return Err("payload is neither GLB nor b3dm".into());
-    };
-    let glb = &bytes[offset..];
-    if glb.len() < 20 || !glb.starts_with(b"glTF") || u32_at(glb, 4) != Some(2) {
+fn container(glb: &[u8]) -> Result<Container<'_>, String> {
+    if !glb.starts_with(b"glTF") {
+        return Err("payload is not a GLB".into());
+    }
+    if glb.len() < 20 || u32_at(glb, 4) != Some(2) {
         return Err("GLB header is not glTF 2.0 with a JSON chunk".into());
     }
     let length = u32_at(glb, 8).expect("GLB header");
-    if length > glb.len() || (offset == 0 && length != glb.len()) {
+    if length != glb.len() {
         return Err("GLB length differs from the payload".into());
     }
     let json_length = u32_at(glb, 12).expect("GLB header");
@@ -1175,10 +1158,8 @@ fn container(bytes: &[u8]) -> Result<Container<'_>, String> {
         .filter(|&end| end <= length)
         .ok_or("GLB JSON chunk exceeds the GLB")?;
     Ok(Container {
-        prefix: &bytes[..offset],
         json: &glb[20..json_end],
         rest: &glb[json_end..length],
-        trailing: &glb[length..],
     })
 }
 
@@ -1186,12 +1167,9 @@ impl Container<'_> {
     fn with_json(&self, json: &[u8]) -> Result<Vec<u8>, String> {
         let too_large = || "payload exceeds the format's 4 GiB limit".to_owned();
         let glb_length = 20 + json.len() + self.rest.len();
-        let total = self.prefix.len() + glb_length + self.trailing.len();
         let glb_word = u32::try_from(glb_length).map_err(|_| too_large())?;
         let json_word = u32::try_from(json.len()).map_err(|_| too_large())?;
-        let total_word = u32::try_from(total).map_err(|_| too_large())?;
-        let mut out = Vec::with_capacity(total);
-        out.extend_from_slice(self.prefix);
+        let mut out = Vec::with_capacity(glb_length);
         out.extend_from_slice(b"glTF");
         out.extend_from_slice(&2u32.to_le_bytes());
         out.extend_from_slice(&glb_word.to_le_bytes());
@@ -1199,10 +1177,6 @@ impl Container<'_> {
         out.extend_from_slice(b"JSON");
         out.extend_from_slice(json);
         out.extend_from_slice(self.rest);
-        out.extend_from_slice(self.trailing);
-        if !self.prefix.is_empty() {
-            out[8..12].copy_from_slice(&total_word.to_le_bytes());
-        }
         Ok(out)
     }
 
@@ -1308,11 +1282,11 @@ fn is_zero(delta: [f64; 3]) -> bool {
     delta.iter().all(|&v| v == 0.)
 }
 
-/// Bake the z-up translation `delta` into a GLB or b3dm payload's scene root as
+/// Bake the z-up translation `delta` into a GLB payload's scene root as
 /// `(δ0, δ2, −δ1)`, changing only the root node object's text in the JSON chunk.
 ///
 /// A zero `delta` is a byte copy (any suffix, including `.gltf`). Otherwise the payload must
-/// be a GLB or a b3dm-wrapped GLB with exactly one scene root node, which may carry a
+/// be a GLB with exactly one scene root node, which may carry a
 /// translation or an affine `matrix`; anything else is a typed error. The JSON chunk is
 /// padded with spaces to a length congruent to the raw length modulo 8, so the chunk and the
 /// payload keep their alignment. Every other byte is unchanged.

@@ -145,7 +145,7 @@ Raw GDAL and GEOS warnings in native builds are quiet by default. Set `RUSTY_TIL
 
 ## Tile budgets
 
-Every tile is checked against its actual encoded vertices and bytes. The check sums all contents in the tile, including any `b3dm` wrapper.
+Every tile is checked against its actual encoded vertices and bytes. Each tile has one glTF content.
 
 | Budget | Default |
 | --- | --- |
@@ -164,15 +164,20 @@ Large features are split to fit:
 - Multi-geometries split into smaller parts.
 - Polygons split their triangulated fill. Original Z and holes are kept.
 
-A split polygon has two kinds of content. Fills are standard unlit, double-sided glTF triangles inside a `b3dm` wrapper. Source boundaries are separate vector line content. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Both contents carry feature metadata, so fills and outlines are pickable. The `b3dm` wrapper is a compatibility workaround for Cesium's decoder selection, not a private extension.
+A split polygon's fill and its source boundary share one glTF vector content. Each fill triangle is its own `EXT_mesh_polygon` polygon, with a three-vertex exterior loop. Source boundaries are vector lines in the same GLB. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Fill triangles and boundaries both carry feature metadata, so they are pickable.
 
 Buffered grid clipping and coverage-wide edge reconciliation are not implemented.
 
-### Plain fill GLB limitation
+### Fills are glTF only
 
-The wrapper remains necessary in CesiumJS 1.146.0. The issue [#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75) browser regression removes only the wrapper and changes its URI suffix to `.glb`. Cesium selects its vector decoder from the tileset-wide `3DTILES_content_gltf_vector` declaration, including for ordinary triangle fills. That decoder expects polygon loop data and fails with `Cannot read properties of undefined (reading 'loopIndices')`. The corresponding wrapped fills load, pick and style. This also affects fragmented Sudan and Antarctica source rings and compressed fills.
+Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`. That decoder needs polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Each fill triangle is now one `EXT_mesh_polygon` polygon. It is stored in the same GLB as the polygon's boundary lines and the tile's other features. Archives contain only glTF content.
 
-Plain fill output is deferred until a runtime passes this test. There is no plain-fill CLI or Python option, and these archives do not claim compatibility with the proposed 3D Tiles 2.0 removal of `b3dm`. See [the recorded results](../bench/vector_fill_glb_results.json) and [CONTRIBUTING.md](../CONTRIBUTING.md#plain-fill-glb-regression) for reproduction.
+- **Winding.** Rings follow the pinned draft: exteriors are counterclockwise and holes clockwise, seen from local up. Triangles face up: away from the earth's centre for geographic polygons, and towards local up (+Y) on the best-fit plane otherwise. A vertical polygon has no up side, so it gets a fixed horizontal side. Every loop is wound so that its polygon's triangles lie on its left. This holds for thin geographic triangles, whose lon/lat orientation can disagree with their 3D shape, and for rings that span a hemisphere.
+- **Index size.** Loop indices and polygon offsets are 16-bit when every value is below 65535, and 32-bit otherwise.
+- **Loop coverage.** CesiumJS 1.146.0 sizes a per-vertex lookup by the length of the loop list. A triangle corner numbered past that length loses its triangle. A polygon with a vertex outside its loops is refused when its feature is read. The encoder refuses any primitive that would break the rule.
+- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Sharing one GLB with the boundary lines saves more than this, so fragmented archives are smaller than before.
+
+`--reuse-tileset` refuses an earlier archive that contains `b3dm` fills, with the message "previous archive has legacy b3dm polygon fills". Convert once without `--reuse-tileset` to make a new baseline.
 
 ### Memory and scratch disk
 
@@ -277,7 +282,7 @@ Archives written before the bounded implicit forest layout are not reuse baselin
 
 ### How reuse works
 
-- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb` or `.b3dm`). Implicit tiles publish one member per content under `implicit-content/`: a copy whose glTF scene root carries the tile's translation, or a byte copy when that translation is zero. A raw payload used only by implicit tiles is not also kept under `t/`. A raw payload shared by several tiles can therefore appear more than once: in place for explicit tiles and as one copy per implicit tile.
+- Each payload is named by the SHA-256 of its raw bytes. Explicit tiles publish raw payloads in place (`t/<sha256>.glb`). Implicit tiles publish one member per content under `implicit-content/`: a copy whose glTF scene root carries the tile's translation, or a byte copy when that translation is zero. A raw payload used only by implicit tiles is not also kept under `t/`. A raw payload shared by several tiles can therefore appear more than once: in place for explicit tiles and as one copy per implicit tile.
 - Changed geometry, properties, inserts, deletes and shared-vertex locks invalidate the affected subtrees.
 - `vector-build.json` stores partition decisions and the original local frame. Deleting the first feature does not move unchanged content.
 - `vector-build.json` holds one `payloads` entry per distinct raw payload that any implicit tile publishes, keyed by its SHA-256: the first such `implicit-content/` member in tile preorder, its translation, and the exact raw root-node text and JSON length (empty text and length 0 for a byte copy). Raw payloads that an explicit tile also publishes in place have an entry too. Reuse restores each raw payload exactly from its entry, otherwise from `t/<sha256>`, then lays out the new archive.
@@ -312,7 +317,7 @@ The encoder follows these draft revisions, audited against CesiumJS 1.146.0 on 2
 
 Feature metadata uses `EXT_mesh_features` and `EXT_structural_metadata`. Cesium added experimental support for these vector extensions in [PR 13478](https://github.com/CesiumGS/cesium/pull/13478).
 
-CesiumJS 1.146.0 selects its vector GLB decoder from the tileset-wide declaration. Fragmented triangle fills therefore retain b3dm wrappers; a plain fill GLB in the same vector tileset fails to load. This runtime limitation is included in the audit.
+CesiumJS 1.146.0 selects its vector GLB decoder from the tileset-wide declaration, so every GLB in a vector tileset must be vector content. Fragmented fills are therefore `EXT_mesh_polygon` polygons, one per triangle; see [Fills are glTF only](#fills-are-gltf-only).
 
 ## Style and pick features
 

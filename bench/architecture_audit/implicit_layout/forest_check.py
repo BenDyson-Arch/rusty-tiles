@@ -25,7 +25,7 @@ MAX_LEVELS = 32
 SIDECARS = ('conversion.json', 'geometry-reports.jsonl')
 VECTOR_BUILD = 'vector-build.json'
 INDEX = '@3dtilesIndex1@'
-SUFFIXES = ('glb', 'gltf', 'b3dm')
+SUFFIXES = ('glb', 'gltf')   # b3dm retired with glTF-only vector fills (#75)
 MAX_SUBTREE_BITS = 1 << 22  # guard for malformed subtreeLevels; a valid root has at most 8^4 tiles
 
 # (id, required, design source, description)
@@ -48,11 +48,11 @@ RULES = [
      'vector-build.json is bound by asset.extras.vectorBuildStateSha256'),
     ('P9.levelBound', True, 'P9, PD-5', 'L = h(root) + 1 <= 32'),
     ('P10.slots', True, 'P10, R-4', 'content layer count == template count; zero content means no content/contents and no contentAvailability; '
-     'templates implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{glb|gltf|b3dm} in strictly sorted (slot, suffix) order, each with available content'),
+     'templates implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{glb|gltf} in strictly sorted (slot, suffix) order, each with available content'),
     ('P11.noImplicitChildIndex', True, 'P11, R-8', 'no implicitChildIndex in any tile extras or row extras'),
     ('P12.schema', True, 'P12, F-1', 'tileset.json carries the rustyTilesImplicit schema iff an implicit root exists; every document holding one carries the same schema'),
     ('PD11.noRetainedSources', True, 'PD-11, §4.1', 'no rustyTilesSourceContents anywhere; no unreferenced t/ member; implicit tiles never reference t/ members'),
-    ('payloads.wellFormed', True, '§4.1, glTF 2.0, b3dm', 'implicit payloads are well-formed GLB (or b3dm-wrapped GLB); .gltf only at an implicit root'),
+    ('payloads.wellFormed', True, '§4.1, glTF 2.0', 'implicit payloads are well-formed GLB (b3dm is refused); .gltf only at an implicit root'),
     ('vectorBuild.reuseMap', True, '§4.7 (PV)', 'when vector-build.json exists: its payloads map restores every entry byte-exactly to its sha256 key from a published implicit-content member'),
     ('A4.tree', True, 'P5, A-4', 'expanding every document and root yields exactly the tiles and parent/child relation of H'),
     ('A4.roles', True, '§4.1 classification on H', 'each tile has the role S = 4 assigns it in H'),
@@ -235,22 +235,9 @@ def glb_split(data):
     return data[20:20 + jl], rest
 
 
-def b3dm_split(data):
-    if len(data) < 28 or data[:4] != b'b3dm':
-        raise FormatError('not a b3dm (magic)')
-    version, length, ftj, ftb, btj, btb = struct.unpack_from('<6I', data, 4)
-    if version != 1 or length != len(data):
-        raise FormatError('b3dm version or length')
-    start = 28 + ftj + ftb + btj + btb
-    if start > len(data):
-        raise FormatError('b3dm tables overrun')
-    return data[4:8] + data[12:start], data[start:]   # header without byteLength + tables, embedded GLB
-
-
 def payload_glb(data, suffix):
-    if suffix == 'b3dm':
-        tables, glb = b3dm_split(data)
-        return tables, glb
+    if suffix == 'b3dm' or data[:4] == b'b3dm':
+        raise FormatError('b3dm payloads are not admitted (vector fills are glTF only)')
     return None, data
 
 
@@ -632,7 +619,7 @@ class Forest:
                 self.r.bad('P1.noJsonTemplate', f'{doc}: implicit root r{r.n}: JSON content template {uri!r}')
             mt = re.fullmatch(r'implicit-content/r(0|[1-9][0-9]*)-\{level\}-\{x\}-\{y\}' + zpart + r'-(0|[1-9][0-9]*)\.([a-z0-9]+)', uri or '')
             if not mt or mt.group(3) not in SUFFIXES:
-                self.r.bad('P10.slots', f'{doc}: implicit root r{r.n}: template {uri!r} is not implicit-content/r{{n}}-...-{{slot}}.{{glb|gltf|b3dm}}')
+                self.r.bad('P10.slots', f'{doc}: implicit root r{r.n}: template {uri!r} is not implicit-content/r{{n}}-...-{{slot}}.{{glb|gltf}}')
                 r.templates.append((uri, None, None, c))
                 continue
             if r.n is not None and int(mt.group(1)) != r.n:
@@ -993,8 +980,7 @@ def restore_payload(published, record):
     """The design's restore: put the recorded raw root node text back, pad the JSON chunk to the recorded length."""
     if record.get('rootNode') == '' and record.get('jsonLength') == 0:
         return published   # ruling: a zero-delta payload is a byte copy; its record is the empty sentinel
-    suffix_b3dm = published[:4] == b'b3dm'
-    tables, glb = (b3dm_split(published) if suffix_b3dm else (None, published))
+    _, glb = payload_glb(published, 'glb')
     js, rest = glb_split(glb)
     text = js.rstrip(b' ')
     doc = json.loads(text)
@@ -1009,10 +995,6 @@ def restore_payload(published, record):
         raise FormatError('recorded jsonLength shorter than the restored JSON')
     raw_js += b' ' * (length - len(raw_js))
     out = b'glTF' + struct.pack('<II', 2, 20 + len(raw_js) + len(rest)) + struct.pack('<I4s', len(raw_js), b'JSON') + raw_js + rest
-    if suffix_b3dm:
-        header_rest = published[12:28]
-        body = published[28:28 + sum(struct.unpack_from('<4I', published, 12))]
-        out = b'b3dm' + struct.pack('<II', 1, 28 + len(body) + len(out)) + header_rest + body + out
     return out
 
 
@@ -1111,10 +1093,8 @@ def compare_payload(raw, pub, delta, suffix):
         return ['delta is zero but the payload is not a byte copy']
     problems = []
     try:
-        rt, rglb = payload_glb(raw, suffix)
-        pt, pglb = payload_glb(pub, suffix)
-        if rt != pt:
-            problems.append('b3dm header/tables differ')
+        _, rglb = payload_glb(raw, suffix)
+        _, pglb = payload_glb(pub, suffix)
         rjs, rrest = glb_split(rglb)
         pjs, prest = glb_split(pglb)
     except (FormatError, struct.error) as e:

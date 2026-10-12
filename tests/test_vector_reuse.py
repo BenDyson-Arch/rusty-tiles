@@ -159,7 +159,8 @@ class ReuseTests(unittest.TestCase):
             args.output=str(b);args.reuse_tileset=str(previous)
             vector.run(args)
             self.assertEqual(payloads(a),payloads(b));self.assert_same_details(a,b)
-            self.assertTrue(any(name.endswith('.b3dm') for name in payloads(b)))
+            # Fragmented fills are glTF vector content, never b3dm.
+            self.assertFalse(any(name.endswith('.b3dm') for name in payloads(b)))
             self.assertEqual(report(b)['reuse']['rebuiltContents'],0)
 
     def test_delete_all_publishes_empty_tileset(self):
