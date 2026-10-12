@@ -26,20 +26,15 @@ pub(crate) struct PayloadInspection {
     pub not_inspected: BTreeSet<String>,
     /// C2 format-owned exclusion facts of this payload.
     pub exclusions: scene::ContentExclusions,
-    // The three C2-WB facts below are read by the work formula in
-    // `validate.rs`; drop this allowance when that consumer lands.
     /// `J(u)`: Σ `value_nodes()` over every JSON document admitted here: the
     /// glTF JSON or GLB JSON chunk (a b3dm's embedded GLB included) and the
     /// b3dm feature-table and batch-table JSON.
-    #[allow(dead_code)]
     pub json_nodes: u64,
     /// `Res(u)`: external resources resolved through the resolver, one per
     /// buffer or image with a non-`data:` `uri`.
-    #[allow(dead_code)]
     pub external_resources: u64,
     /// `Prim(u)`: Σ over the selected scene's instances (selected nodes with a
     /// mesh) of that mesh's primitive count; 0 without a selected scene.
-    #[allow(dead_code)]
     pub instance_primitives: u64,
 }
 fn invalid(s: impl Into<String>) -> FormatError {
