@@ -1,0 +1,826 @@
+[
+ {
+  "name": "wb:extTS-L16",
+  "units": 78082345,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/extTS-L16.3tz",
+  "aSha256": "5ab2fdfcfa72b396b07cc532cfe9b46867659255842eb8649de995ea2697e8a0",
+  "bSha256": "1830d6bfafbeff3962d9a39ee290d906d7198129bfd3eab3edf04819484b8149",
+  "matrix": "two spheres + step per level, 16 levels (extTS-L16)"
+ },
+ {
+  "name": "wb:extTS-L32",
+  "units": 155842473,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/extTS-L32.3tz",
+  "aSha256": "179faa11d282bdb9653be8728a6074614df0024e4b9f754ccea949a30fe04d60",
+  "bSha256": "34154fcca56a94eeccadbad815863352c78ef72fae0e612b9e1afd437d75098a",
+  "matrix": "two spheres + step per level, 32 levels (extTS-L32)"
+ },
+ {
+  "name": "wb:sphere-chain-L16",
+  "units": 27862345,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/sphere-chain-L16.3tz",
+  "aSha256": "fbfeae4eef5c6c4995e40edded8b6cd1f67a773575bb19b2c669d7e4b5db7f5a",
+  "bSha256": "e064a9777e99621c983b9a5b1d775aa67dec96ddbae190ce66913f546fa6fec8",
+  "matrix": "sphere chain, 16 levels"
+ },
+ {
+  "name": "wb:box-step-L16",
+  "units": 17822345,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/box-step-L16.3tz",
+  "aSha256": "0ae1b0a1c5419a2d46464c7c2eff73ef539df17c2eb0ff7da147d17ff00f1a21",
+  "bSha256": "3850ae00173c38fc72d031b16f9941e14d9f1316016e6ffeeffc20704cbe316e",
+  "matrix": "box + step, 16 levels"
+ },
+ {
+  "name": "wb:box-chain-L16",
+  "units": 8822345,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/box-chain-L16.3tz",
+  "aSha256": "d6d4f5c23340c1deb4e07682cf69338383ef2b191fae79ee9a85fe8425750890",
+  "bSha256": "0fdc1e63b38e677efa4f20cb2c838494c07d7f5b792ede715fdcde378efc0993",
+  "matrix": "box chain, 16 levels"
+ },
+ {
+  "name": "wb:own-content-sphere-1M",
+  "units": 259002229,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/own-content-sphere-1M.3tz",
+  "aSha256": "f1df24bb7846c08c4f0964c174f0d7b450798343e05754059a1878366bbfa805",
+  "bSha256": "9559852861c2e4ffa921f4a03628a20a66727a94656f4d78b120a9885411e254",
+  "matrix": "own + content sphere, 1M vertices"
+ },
+ {
+  "name": "wb:one-box-1M",
+  "units": 66002229,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/one-box-1M.3tz",
+  "aSha256": "f47ec3dfe6ac4afa3c5c1fff0515a5835712d1ad8726fe73dea37f45ade58444",
+  "bSha256": "76195232ec550a5c878bd3bfa24e2f5ebed746b850e75449477444ccbc667650",
+  "matrix": "one box, 1M vertices"
+ },
+ {
+  "name": "wb:large-span-box-8-limbs",
+  "units": 14402229,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/large-span-box-8-limbs.3tz",
+  "aSha256": "fdab874f395b9a3a18490b928477f288e806d4188914ad2c49fa9f7ec5beec7f",
+  "bSha256": "8e8fd1e67df2ec116a1f45e03bc137fb21980b592575ee00c26bad0962563bb5",
+  "matrix": "large spans (box 8 limbs)"
+ },
+ {
+  "name": "wb:large-span-sphere-16-limbs",
+  "units": 52802229,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/large-span-sphere-16-limbs.3tz",
+  "aSha256": "de5522f2d6741f34b85f58fab96dee821af17401916190090c41dc98548a4703",
+  "bSha256": "4256099508cc83a712ee72d53b7a6e335170748a7c85c532cc20f9db58a9ec32",
+  "matrix": "large spans (sphere 16 limbs)"
+ },
+ {
+  "name": "wb:nodes-translation",
+  "units": 164297100,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/nodes-translation.3tz",
+  "aSha256": "54bb70c452b16f5b3162f4d69cd0915bb1ec1537275ff1fb28e23917987ce779",
+  "bSha256": "993d27a99fecd85b9cec1c52b7af5f367c31ebbb322aa11518ab6d96027cde10",
+  "matrix": "translation-only / rotated nodes"
+ },
+ {
+  "name": "wb:nodes-rotated",
+  "units": 299925900,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/nodes-rotated.3tz",
+  "aSha256": "b95a255de9652bdf81a33fb46ee079f9c9f256d559cdb11302bb98eb5d22f30b",
+  "bSha256": "ca884ea6747d05ed38a4e83ebcec68808f1dd347c422c1397658f5bc69661d4b",
+  "matrix": "translation-only / rotated nodes"
+ },
+ {
+  "name": "wb:tiny-refs-L4",
+  "units": 236200000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/tiny-refs-L4.3tz",
+  "aSha256": "32afeddd9adcb094193ad8d4262b46333369eef4653ef0e06a7728cfd0c16fe8",
+  "bSha256": "32dcf0213651c042c607da1ab25b9cc78e50049e2a5499199a33b295d187eb66",
+  "matrix": "100,000 tiny references, depth 1"
+ },
+ {
+  "name": "wb:tiny-refs-L103",
+  "units": 562900000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/tiny-refs-L103.3tz",
+  "aSha256": "e8ce913e47b08eb36701ac16786e321f376fbaf188e52fd544c77af8a8f64bc6",
+  "bSha256": "0aee9932e0ee747efc7afb1f4251ff7c02cad01798ceaae0321c877b75e410f9",
+  "matrix": "100,000 tiny references, depth 100"
+ },
+ {
+  "name": "wb:refs-to-mid-payload",
+  "units": 3097680000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/refs-to-mid-payload.3tz",
+  "aSha256": "c921030cc1b13adb86cc4f1375258bfbbf7d26b1d36e94dedb7e49f8ce5564c5",
+  "bSha256": "a466dc526575715de265d5686b80eaf6e39e97c40984e82c087168472f3ea6aa",
+  "matrix": "20,000 references to a W3 payload (own mid-size payload)"
+ },
+ {
+  "name": "wb:unselected-nodes",
+  "units": 22847240,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/unselected-nodes.3tz",
+  "aSha256": "722feacc9938acdadb7e13bf7d131a6f0f18a9fed82c396cc468a6abb754dab5",
+  "bSha256": "5e9f8f5ac2aa4d6a56d86cb03222cb45958d56fe67df5b658ce9cd84fc11752a",
+  "matrix": "unselected {} nodes, 60,000 x 20 references"
+ },
+ {
+  "name": "wb:skipped-nodes",
+  "units": 25025720,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/skipped-nodes.3tz",
+  "aSha256": "76f6732cedbd4e6201876a8dd85ffe316317c4600befe977152056729b33c5ad",
+  "bSha256": "d887090f88a43f562133cb9a6c32e300a2de8a06dd9a6a7fe1b6b3172c5ab7d1",
+  "matrix": "selected skipped nodes, 30,000 x 20"
+ },
+ {
+  "name": "wb:extbuf-2000",
+  "units": 10063560,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/extbuf-2000.3tz",
+  "aSha256": "12d41c34475896c0d974c021f9fb266db6c90fc9eb3733c966cd63f0a4ade02e",
+  "bSha256": "54e37e24a787720f89b80127091375f25d10ed29a6def5244b87e647ac0c1a21",
+  "matrix": "external buffers, 2,000 / 20,000 x 20"
+ },
+ {
+  "name": "wb:extbuf-20000",
+  "units": 100623560,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/extbuf-20000.3tz",
+  "aSha256": "ac7208c1928a31b3c2d180997904fc4df19c6e558ea7650fe4d4491a61b6b3ad",
+  "bSha256": "03434c2a57a3de20a4b5a5a27a90f080b5e5f4b8262ce22f71ffd9ed343624a8",
+  "matrix": "external buffers, 2,000 / 20,000 x 20"
+ },
+ {
+  "name": "wb:shared-accessor-16000x40",
+  "units": 4857579,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/shared-accessor-16000x40.3tz",
+  "aSha256": "c7b6cf7a53e3a3edf804c2e8ff14cbcba2c7e97fa0512b697239f08dc1bd9420",
+  "bSha256": "c7d7ace545929d9b03ec83192f4d066f2a0335b23ca36545305bedc9d2374139",
+  "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances"
+ },
+ {
+  "name": "wb:shared-accessor-16000x200",
+  "units": 17687759,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/shared-accessor-16000x200.3tz",
+  "aSha256": "26405830879013a5dfb8ec6202064a2601ca39bc9098125811149fbf5be71ebc",
+  "bSha256": "bf3fc154ec15a48ec098a5324e7aceebbf1b0ace00d17a81c21d1be777eed9f5",
+  "matrix": "primitives sharing one accessor, 16,000 x 40 / x 200 instances"
+ },
+ {
+  "name": "wb:json-flat-numbers-glb",
+  "units": 108119500,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-flat-numbers-glb.3tz",
+  "aSha256": "cd447053fd7d9bef4f9c54f664bb43c60fb79a7d7c53387ecdc62a6370207585",
+  "bSha256": "e109371c9b54cdd234c2c66537ee6e5e1b93f093c4bb1bd41d194ae24ab38506",
+  "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string"
+ },
+ {
+  "name": "wb:json-flat-numbers-b3dm",
+  "units": 108124300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-flat-numbers-b3dm.3tz",
+  "aSha256": "66d7aea695d19ceb29ebfd9c74b042b0c6b345acd26144b61c8cc0ecff5bae29",
+  "bSha256": "17c8cb0565fed2c5882ca5017e7c2293ca42dc19f7c438e0f9eb682c77b6916a",
+  "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string"
+ },
+ {
+  "name": "wb:json-flat-string-glb",
+  "units": 52548300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-flat-string-glb.3tz",
+  "aSha256": "0e404b3117c4578db2283554085e06dada8725a033b57292a5b5bba261e3b9e2",
+  "bSha256": "ebcb86344ad3dc05b883f4a0fd60619de3e5b1e87c84a9a686364730ff1451c4",
+  "matrix": "JSON: flat dense numbers GLB / b3dm, 1 MiB flat string"
+ },
+ {
+  "name": "wb:json-gltf-1MiB-refs",
+  "units": 1051015000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-gltf-1MiB-refs.3tz",
+  "aSha256": "bac8e7028d0feced60837b3e3084d469792784db6288a70f1e1d4dda9ff0ff07",
+  "bSha256": "f58fd9528bb775c0405360fdf0f3430754329e1f2b734521a2d1fc3374382778",
+  "matrix": "1 MiB JSON payload x 1,000 references"
+ },
+ {
+  "name": "wb:json-deep-string-glb-60",
+  "units": 52602300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-string-glb-60.3tz",
+  "aSha256": "677f38b98a100d2e68b573eea5af1155d5518cae1ff293a8a7ec3f1456b880ff",
+  "bSha256": "f071fcaafd0cdca7b292c35e07815cdb033e716df28f0a48ec722faf001ce040",
+  "matrix": "deep string (GLB extras), depth 60"
+ },
+ {
+  "name": "wb:json-deep-string-b3dm-60",
+  "units": 52607100,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-string-b3dm-60.3tz",
+  "aSha256": "a97b50c032e9b2b703e13e09b6dbf3ffa03d9049efe675085eef299944b2741c",
+  "bSha256": "ef83f1061f0c14829d039b3dcf63d70f9c16cec6f8301357ced47740857aba43",
+  "matrix": "deep string (b3dm batch table), depth 60"
+ },
+ {
+  "name": "wb:json-deep-numbers-glb-1",
+  "units": 108120300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-glb-1.3tz",
+  "aSha256": "eef5d5d1b46923223052f24b955839389d9e2cb557d71b046c0666066bdf34cc",
+  "bSha256": "b6e8197a8ad44adbc0889878d888472d8bb34bfcf0f6f5806512bf46095e1855",
+  "matrix": "deep numbers (GLB extras), depth 1"
+ },
+ {
+  "name": "wb:json-deep-numbers-glb-30",
+  "units": 108146500,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-glb-30.3tz",
+  "aSha256": "0ebb0a29fbd1fb85d8b3a2fe1daad8165b708115ab3e97162490599a79ea484f",
+  "bSha256": "384356460131ed26bca2a977622ab89437b07d68286e0a7bbaaafbf53d9cb2ae",
+  "matrix": "deep numbers (GLB extras), depth 30"
+ },
+ {
+  "name": "wb:json-deep-numbers-glb-62",
+  "units": 108175300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-glb-62.3tz",
+  "aSha256": "c14849f577c1708ee0d03e41902e86b404a242cd01889aaf158fb4965ba5483c",
+  "bSha256": "fc049647ee39117b80fe82894ee3707c42c45949d88ff159798cb4557a8206a4",
+  "matrix": "deep numbers (GLB extras), depth 62"
+ },
+ {
+  "name": "wb:json-deep-numbers-b3dm-1",
+  "units": 108125500,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-b3dm-1.3tz",
+  "aSha256": "c2b95978e7e8f233bb9a014bee0f5d567ad4e9562799acce555b22748cb295b8",
+  "bSha256": "ed6b9a5ecfa992e5cc2a397347027134a91d7e2b4b25ba93b7626d70d437daca",
+  "matrix": "deep numbers (b3dm batch table), depth 1"
+ },
+ {
+  "name": "wb:json-deep-numbers-b3dm-30",
+  "units": 108151500,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-b3dm-30.3tz",
+  "aSha256": "3b921404fa02dad5f1141c087783558f55ae6bbb071a3a8f159dd4cd2453c67c",
+  "bSha256": "e6dcbe4274e5919ca0074b0fdb8804c093f55a87a7c722e6acddc549ea4c348c",
+  "matrix": "deep numbers (b3dm batch table), depth 30"
+ },
+ {
+  "name": "wb:json-deep-numbers-b3dm-60",
+  "units": 108178300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-b3dm-60.3tz",
+  "aSha256": "ef88812dc529d041bd5b25ac3c8cfce500a4b6fbc40db09e10b932551bc021d3",
+  "bSha256": "5c68b6d4bb49cc13b1d67a89f868ae24a8acbe17add70654988abb0972f2a20a",
+  "matrix": "deep numbers (b3dm batch table), depth 60"
+ },
+ {
+  "name": "wb:json-deep-numbers-b3dm-62",
+  "units": 108180300,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/json-deep-numbers-b3dm-62.3tz",
+  "aSha256": "8bcf3bc9b4db31520b7d0956f63feb1ae75da7967fad5c8f43dfccbe64535326",
+  "bSha256": "c72b926b809e49d254243bede020b21e0914b54ecd45b6807e9515126eece5da",
+  "matrix": "deep numbers (b3dm batch table), depth 62"
+ },
+ {
+  "name": "wb:quad",
+  "units": 18151888,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/quad.3tz",
+  "aSha256": "30d7783c2f4d56670088f6385ff06859c7607f291bd390c47f131db5a4063ef4",
+  "bSha256": "a968723a72868aedb4e901773a5239c7a258fd04c05e1bc32e98403950afd672",
+  "matrix": "one accessor per primitive, 6,000 x 20 (quad)"
+ },
+ {
+  "name": "wb:quadB",
+  "units": 31490820,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/quadB.3tz",
+  "aSha256": "43dbd5bbbb5e3cd5ae61335c5bcb517fa83310b8e876268653787eeee5ec472c",
+  "bSha256": "850bd77188bf93ca0e8d5c742a8154f54c5faaa5e47c29860f3d9827e69e61b4",
+  "matrix": "5,000 accessors x 16,000 primitives x 40 (quadB)"
+ },
+ {
+  "name": "wb:e2e",
+  "units": 354517700,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/e2e.3tz",
+  "aSha256": "7cd044b86ed73d1f500682c506a970b9a4581f72480b4bc7ba6776aad00acc81",
+  "bSha256": "6085bc3eba89345587ff7b70ea78301fafc89062efa808abde30556af1853f66",
+  "matrix": "end-to-end, 5,000 x 15,500 x 500 (one reference; the many-accessor case)"
+ },
+ {
+  "name": "wb:viewless-SCALAR",
+  "units": 80049480,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/viewless-SCALAR.3tz",
+  "aSha256": "13beecdc8ef8f0ac4daa281bc2a96fedf04a8f848a59d39bc9bcae01b0f0887f",
+  "bSha256": "171b6245b431224d3c18b80a3b1227bf10055c685f31b029aae4ef3a104c18f0",
+  "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)"
+ },
+ {
+  "name": "wb:viewless-MAT4",
+  "units": 80047000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/viewless-MAT4.3tz",
+  "aSha256": "172b5abe28379f6472c39db5d2659e5ff3d82efdce0f766acddb3cf51d29e37c",
+  "bSha256": "39c9128e680619665d902159e9da2d966e91b542bd0615489d65a3f6b40e8e35",
+  "matrix": "viewless accessors, unused 4M-component accessor x 20, SCALAR / MAT4 (5.1)"
+ },
+ {
+  "name": "wb:long-decimals",
+  "units": 130909840,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/long-decimals.3tz",
+  "aSha256": "8d863214ef0d4e73f0460efbe04543ca236e970ebaf03c6ea0ad9aca9ef0f64d",
+  "bSha256": "d4320fe4b485d05fe4b5d23d2f22f65d34a8a78b9fcfce2d44f52ea3b2683807",
+  "matrix": "long-significand decimals in node matrix/TRS and accessor min/max (5.1)"
+ },
+ {
+  "name": "wb:meshopt-attributes-raw",
+  "units": 612761908,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/meshopt-attributes-raw.3tz",
+  "aSha256": "a029d8495a4b554320b1059991ed3cc7dad524dad7b62e022612dc0d5d638aa6",
+  "bSha256": "8d1ca6ed4178b00960f78ca03df873c112a09a9e819e1b03bbd78ae4ea8ac6dc",
+  "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-raw"
+ },
+ {
+  "name": "wb:meshopt-attributes-bits",
+  "units": 572989556,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/meshopt-attributes-bits.3tz",
+  "aSha256": "7bdb1a7ead48ce78d9f544352fc237dc02a1be90bbecea1e090bc9d6bdb8b23d",
+  "bSha256": "3ff7b507f73d76d262bc63ff67543651ceb0d1c3566e57b22ddea2d11c7c5aeb",
+  "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): attributes-bits"
+ },
+ {
+  "name": "wb:meshopt-triangles",
+  "units": 152889636,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/meshopt-triangles.3tz",
+  "aSha256": "45694989f0dfe10d407b74f16476c0d97c8bb4b80c1867819770ce192a826872",
+  "bSha256": "9a2de1a91709c3c96aee8f252a46a99406d1b16abd94004c07a51ab1be7af3d4",
+  "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): triangles"
+ },
+ {
+  "name": "wb:meshopt-indices",
+  "units": 144889508,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/meshopt-indices.3tz",
+  "aSha256": "f3c0ddc71394af7cac776516371d58a976239b2fd8e6e0d5d87ce33fb978a6b3",
+  "bSha256": "1ac4bd2c3d5733d973f058867da1c9653d4b8139eb78d4ee18aec3e20920dc1c",
+  "matrix": "meshopt NONE filter, worst mode per decoded byte (5.1): indices"
+ },
+ {
+  "name": "producer:W1-explicit",
+  "units": 17492428,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W1-explicit.3tz",
+  "aSha256": "828e1010b881074ab3916577fef0c35d93d24b54da7764896ac0986388ee4b38",
+  "bSha256": "a9d729c50e9355168b93e44d0d6367389f43c30b8d79de272d4859865feef03b",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W2-explicit",
+  "units": 139785937,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W2-explicit.3tz",
+  "aSha256": "20f20d5f1aaa9fe402320fc8a9edcb4e9d259f8767ecbbac9eeefe1508f7b5e5",
+  "bSha256": "63c25c3ac3aa66f47607259ca60462a56d49469f07ff80090421c84e01d32a81",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W3-pc-deep-explicit",
+  "units": 38782952,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W3-pc-deep-explicit.3tz",
+  "aSha256": "c985e3b5b9eef063fea4b2f9012ab4b06e8adef8bc099826ac44614db84d59a1",
+  "bSha256": "b0c89eedc63028a0c62e8d7c8ead6859471a504f3597137c78a2d45a5595b751",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W5-vec-perf-explicit",
+  "units": 207610517,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W5-vec-perf-explicit.3tz",
+  "aSha256": "307ca4b2c2439dd60b3f2506669343dc0946f40d2870c986212da98367f73f11",
+  "bSha256": "4457cb05f755ef804982902f9f65201eab7f1bba8d33c09cfd901f99a16fda50",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W5-vec-perf-quantize-explicit",
+  "units": 204006173,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W5-vec-perf-quantize-explicit.3tz",
+  "aSha256": "64f6741dd98c4dd21100fb4f1b22653649f95cbfb00db1269275232357a1dfc0",
+  "bSha256": "3080d4661b8590e1595be3d085507b74c1602cb1931d81e37e841465e1446ac7",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W5-vec-perf-meshopt-explicit",
+  "units": 214224609,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W5-vec-perf-meshopt-explicit.3tz",
+  "aSha256": "dbbe891ac474ea1fa8ec7fa250a49a997e651f167f0be74e861d6aa7beec8947",
+  "bSha256": "2fb0288f75872fd452c0621d7559fb0d47e89d548c067eb65e423b2d70ee097e",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W6d-explicit",
+  "units": 1910238,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W6d-explicit.3tz",
+  "aSha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+  "bSha256": "ebd828e99a0984e608a514b66cea3168ea30a70b3a847165626f7ec2ec0c531c",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:W6d-nomeshopt-explicit",
+  "units": 1497470,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/W6d-nomeshopt-explicit.3tz",
+  "aSha256": "5d9bdd7c0e7707fd30c1ea79e27ee163d92d2940119cfeb61600822fc92c3de3",
+  "bSha256": "4b84e9f92a8c8b8f1401e34deda38018440e31b2750ffb9514499ede12a1cdaa",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "producer:mf2-lod3-explicit",
+  "units": 438590913,
+  "a": "/home/bend/.cache/forest-acc/work/head-b51f83d/mf2-lod3-explicit.3tz",
+  "aSha256": "4881a0eed2d1aabbed48bf97efd99d52ac3c80d2e5bc231bbb4c18f526f9240b",
+  "bSha256": "47f350a66c80f27596fc9c4badae8a3302fc2a3b2343d94d679c1150ace8307c",
+  "matrix": "producer twin (b51f83d)"
+ },
+ {
+  "name": "probe:box-L16",
+  "units": 42802473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-L16.3tz",
+  "aSha256": "ccaf1c369cc02d03b8abe56ce36f2a401f08f6bff85e86a3720000b1ab4f7bb7",
+  "bSha256": "83cfb5b33ab66d29c6300302dbad596c2879ac963235a63cb9a2ac85d1660ded",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sph-L16",
+  "units": 54002473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sph-L16.3tz",
+  "aSha256": "3138236185e10e246735baf084abecb618af49e5eb96ed1cb16773c26b34adbc",
+  "bSha256": "f83251577a7ef9b0086ce439814fe59b54f7ec0cce3ff3ed758353cd81784e39",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxT-L16",
+  "units": 87802473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxT-L16.3tz",
+  "aSha256": "e83c64fb4a6a725dec4acbe4f43abe89a7775a2501edb872e4f5a64ef77908b4",
+  "bSha256": "1ffab423a5d3f00859b62f2cd6c979e77b4a7ff37ace22b0d03a160d2dca15b4",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sphT-L16",
+  "units": 99002473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sphT-L16.3tz",
+  "aSha256": "40b740fee9d9453d109ef31459ab2e3462069191c5ee797d74e5d456397ca58d",
+  "bSha256": "eb5ea98da4c8aceece49d088350c66454e3dde4facb1647583fa0facb95721bf",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:ext-L16",
+  "units": 80302473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/ext-L16.3tz",
+  "aSha256": "30a4bd16c32155744351aa011e29a599d34b06f87983780b6864a11bfad23a54",
+  "bSha256": "6fc6c2b7b8b96ec83e97c0ea7b73912db5a6d894912ef789da149197ac5efc98",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extT-L16",
+  "units": 125302473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extT-L16.3tz",
+  "aSha256": "d03e853947223fed22b6ceb727777296c421fbd834f40631665d2fa2eed0f81f",
+  "bSha256": "1b089830d7e9f27125bfe58abe19ac294673db753aedaa6768fa54faf9c468fe",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extS-L16",
+  "units": 102002473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extS-L16.3tz",
+  "aSha256": "389974cd222e4f6c142f5791cfcec830e4f1977b3b655812a2230d7e2f4e2cdf",
+  "bSha256": "a36afba39dffc0191eb7720f52ad48faeaf2f5a005f062972e7919bc2005d8a0",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extTS-L16",
+  "units": 147002473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extTS-L16.3tz",
+  "aSha256": "eb5e5c0189a3d1711e77fc396ee633d7ffc90c66ab1ea66c7e2fd28b1ced2b34",
+  "bSha256": "a2c31558b8d1f637b6a0e85bc5ab47fb4b4db76802b83ef778d977dfd688b642",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:box-L4",
+  "units": 51202377,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-L4.3tz",
+  "aSha256": "73ef120c81e2860212b7cc4ac46dc145b2508fb26d16e9627c0530fd10845e45",
+  "bSha256": "731e346a20c17a3d6d61b0a866cb0f938aae99ee747c5db1fa7741e81e77eb4a",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extTS-L32",
+  "units": 148702597,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extTS-L32.3tz",
+  "aSha256": "5d6d98df1d4658d6ea7bbd80a9e106da5e046c1ff449c76afb3e6f76f6a64690",
+  "bSha256": "0ffb2fa8c4b052ae1995821a2a69e4fcce5502498300ab2f99e7fa114c7793b7",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:soloB",
+  "units": 78002353,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/soloB.3tz",
+  "aSha256": "d9fbb60909697c3b62d7571d5affdc0d361e33c66bceb96eb5fcefdc1b01a50f",
+  "bSha256": "2dea1220a915637dd4196fa61ff791200f06859a5e39f47024253f6deab621b8",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:soloS",
+  "units": 92002353,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/soloS.3tz",
+  "aSha256": "e3485405e633d917f185ba95ce03c26c541adc8997d203a228fb22f889501d6e",
+  "bSha256": "76c338643ea4f31f010ccd00dcb798d24f11cf33cde258e180738c74520d4a4d",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:solo1B",
+  "units": 53002353,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/solo1B.3tz",
+  "aSha256": "e2ec304f7782411b1ff6584225c3fdbb8c08f11a6c33b7719c152ea7d290b13a",
+  "bSha256": "e82f7a95d5ccb0918977159385e08faf49f79408ec2211adb3089515764184a4",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:box-f32-L16",
+  "units": 44102301,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-f32-L16.3tz",
+  "aSha256": "36e0c29e3614ebc7c2dbc29a27ab3bf1a13277dd23afe1d35df1b2bb8ddecda8",
+  "bSha256": "9a772dae6c0957859c9e597fb442e7d803dc66970831d8f741ea54fb659c79b0",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxT-f32-L16",
+  "units": 89102301,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxT-f32-L16.3tz",
+  "aSha256": "589904e3f0f327a4fc4b7b442535f6b21b52cdfcfe6c68ef242a46e86f9dc59a",
+  "bSha256": "e4461f7c66610fa5bdcaa24f220ccede192f02319df72054714576fd62d8e77e",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extTS-f32-L8",
+  "units": 187902237,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extTS-f32-L8.3tz",
+  "aSha256": "afaab4e495d9aea18664ab2cc80c02877e402b357ca39b1a8522ca50d89a621d",
+  "bSha256": "7b80941ffff02febf644adea70584cca215a83c60aec974aafb3baf233c2f4b7",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:box-E120-L8",
+  "units": 22802409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-E120-L8.3tz",
+  "aSha256": "9f3c810b58d501320717423643b6e394e44a6be9bb0050b57197b589ccfed81b",
+  "bSha256": "d377d4ce3c4f5e29e0f15ac7c3edfffdaf858ef7d311a7ffefe77e6762c14d1c",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:box-E300-L8",
+  "units": 23302409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-E300-L8.3tz",
+  "aSha256": "13d5a4bf25c62111f0e9749483b750fccb43f1b094488ec896df9d209fc886ca",
+  "bSha256": "f0a5ab5a250d28f2bf598a41f9d4700558c5f5dee21741ea0b4a7ccba7d9ba7c",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:box-E500-L8",
+  "units": 58402409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/box-E500-L8.3tz",
+  "aSha256": "5058407c5d66a609d7a4d2e36f010e6601cfe3742735783a4d08e4f65bf6772b",
+  "bSha256": "9ecd5e48d4d40270506ba486c666eceb4098eb3f0a4ea24141ff88debc59483b",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxT-E300-L8",
+  "units": 44302409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxT-E300-L8.3tz",
+  "aSha256": "5cd23128e422960c508f5352b8c66a9998d6ac6f61dbedb5cc3844a09cabaef8",
+  "bSha256": "45636b9a9d0edc93b5a1c8877b83568706b0a44a5944a999e2dcf11bf33b67b3",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxT-E500-L8",
+  "units": 103202409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxT-E500-L8.3tz",
+  "aSha256": "797257434ec0ae2fc25182054d50053256d0ee218aeba5a00f60e0ec8be51517",
+  "bSha256": "a7b698882515d1b388814a1b2a41cac2fa08e962e2ba7d294bc35a47655c716b",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sph-E300-L8",
+  "units": 90802409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sph-E300-L8.3tz",
+  "aSha256": "77fdda480449180144f25714fbc1cb22225ebde3a9072c5950b82740083d54c6",
+  "bSha256": "a12d45762eba30b3a7823396885aaed7f866e182e015d04c44e9d7a83752cd48",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sph-E500-L8",
+  "units": 92482405,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sph-E500-L8.3tz",
+  "aSha256": "520d363e8fd3a85685a562466a31a048108010ee545755b172bd305a8a823fd4",
+  "bSha256": "9d683e215af1d55dd0f23c97615fc77c79c7a6c2fab609e0492e5531bc717523",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sphT-E500-L8",
+  "units": 164162405,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sphT-E500-L8.3tz",
+  "aSha256": "df929c941283d7d0c1e8b6e41a8b6aa2026b69c8687c21229a99e4f3cbc53ab2",
+  "bSha256": "afbd45680cb18a3a1fbb1e398299ae555020e59f4b567980bb71d41895ca74dc",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extTS-E500-L8",
+  "units": 117922405,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extTS-E500-L8.3tz",
+  "aSha256": "9132135895bef717834642077e0acf889dbd61964e4d87c7305c2dec673fa703",
+  "bSha256": "c7da53500fab1ea6c0ce8d123c7440723fbf5ed46b5ab2543df1d9ca570e5c31",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxS-scale500-L8",
+  "units": 253712405,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxS-scale500-L8.3tz",
+  "aSha256": "8faaf63542ffb4a264f9e0825313f63c5c734f16651c6343fa393937970622b0",
+  "bSha256": "9c144b609f3b5877d9bd1b1d95769b782360b6214606c096ba722c2ea5b8b7f0",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:boxS-scale1000-L4",
+  "units": 289142373,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxS-scale1000-L4.3tz",
+  "aSha256": "3f8702bed34672f40dca19ab0f4933a716d83af807042ecc9d4a68db0761ad34",
+  "bSha256": "63229a78c31ef5cd538651923a4b69add7a87f7d33ad3a01e2586f0879b768bc",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:sphS-scale1000-L2",
+  "units": 399902357,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/sphS-scale1000-L2.3tz",
+  "aSha256": "37c77b2ac06058947150374da4189c63a9d4629fbf4c01bc69683be5e78106d7",
+  "bSha256": "05bf264f70cf0a4d808cc65289ebd64ee7cee9fc1840dda09de125b787b9a8cf",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:extS-scale1000-L4",
+  "units": 216592373,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extS-scale1000-L4.3tz",
+  "aSha256": "b21a858a082851b073eedcef4d2f501060686e9fd941879e13a38301a5834edf",
+  "bSha256": "5443c18f18c5a52f03ac0fa7d08f24c528d7e5eb79dd7cca4c164d86fc8ebb6c",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-tiny-d1",
+  "units": 232600000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-tiny-d1.3tz",
+  "aSha256": "d04b1a461f9901d42f40e1be4e5a03a57aa8066174467340f9106a0e0693c6ba",
+  "bSha256": "b19110fcf720dc0a2aa189a14c3a0312a6a492d9c57ed42995b9342182e9c443",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-tiny-d100",
+  "units": 559300000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-tiny-d100.3tz",
+  "aSha256": "39b8552bae9932823c33b7d74f6ad3c1a6074d75cb8c4c2677e8d383190f7608",
+  "bSha256": "45b8b209e14ebce70df1df28c1c59de193c0cfc686ef86123337024b51e9d769",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-json64k",
+  "units": 271656000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-json64k.3tz",
+  "aSha256": "09e6e4c0f96753b3903bcb73fe562e6fa55c14f1398a93064f6babdf77bea585",
+  "bSha256": "a99b03181371de707acbbfc0ceba9f327b226c4c57eb7bfeda791de7a6b5c7b8",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-json1m",
+  "units": 1050954000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-json1m.3tz",
+  "aSha256": "5c0d68b6d1b31bd8e79ba70cc23148df4386a3297020d0b62939fc7201686dd3",
+  "bSha256": "e8447e882a91b0b04195125d36eba5813fe85f2c09b644aa5b970a353a64cd6f",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-bin256k",
+  "units": 1057896000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-bin256k.3tz",
+  "aSha256": "ad815edfe2318525e424fea34bad9b6bbae5ead9d7a89a64b0098fff6d75392f",
+  "bSha256": "515139771f4d0358a8d52f58814b1c71fe4aae696107ee6213c0c809eee41746",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-bin1m",
+  "units": 1050906000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-bin1m.3tz",
+  "aSha256": "e92543ec7620771eaf163664f10006529bf857cfd22d512ba10a6d5b1ea8b0dd",
+  "bSha256": "14663ba186d13e712f78e574dc4714f5d3b718bf96ed03eaab32772fda1e9b44",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-tiny-d6",
+  "units": 249100000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-tiny-d6.3tz",
+  "aSha256": "d7d34577dd23039a76a3d8b541dee41f32dfbb74cccb19d2e7045c64db84f1e6",
+  "bSha256": "5ddbe192de9edcc390057fe786f1897a366f0ed585e2e18c675bd896045b95e9",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-w6d",
+  "units": 446100000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-w6d.3tz",
+  "aSha256": "81a358e3089f46fa282f2e4258c674a6aec1444e6b919c7dc52c922b58565e1d",
+  "bSha256": "0fe6e418d81ecc8b9f27f84cd5b5e0f90e162357fc35f364c47633f81bd44c80",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-w6dn",
+  "units": 391940000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-w6dn.3tz",
+  "aSha256": "41ed4b68147bcc632e18ec3e1094aba2dc29701089f63f1877d9e787ec9d808c",
+  "bSha256": "28a374b8bc7ddba2ee6b4336ce88897e65bea8d5f3f1320438cec875c8cb2bd0",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-w3",
+  "units": 331980000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-w3.3tz",
+  "aSha256": "86f463cc1d436a4d8dfa4e4fb1a7a9d3367dd2f4e77fb982569ac4671a001415",
+  "bSha256": "06d69e69b6386d0ec772b0f115f31de83a73ad88cecb5dc87d426e108d57c907",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:refs-w5",
+  "units": 709434000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-w5.3tz",
+  "aSha256": "e6b768085cbe4a9472ac1f544af2baa7cb6f225c1e1aa98f5a7bf8d223bce05c",
+  "bSha256": "77cda0a41534c534e01354692edf88a8fdaca2a03d1dfccf89a1bf9a65dcff2e",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:nodes-flat",
+  "units": 72411870,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/nodes-flat.3tz",
+  "aSha256": "8bca7f68ffacfc8b9bfc61d8d020c6c98de5de49124fd9ec4cae01ef184004b6",
+  "bSha256": "e74b25313d4efa16fd2de9a3d6d19888f61528dd1103d879e81efd81cc53e752",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:nodes-deep",
+  "units": 14775187,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/nodes-deep.3tz",
+  "aSha256": "43cdfca9bdf9335ca642069d6d3e35c69e6eb6296d7e22dd0cc121a1aa14a4d5",
+  "bSha256": "7a929a36855d7eaedf015b6e17b79cc7725b5da6f8a431d83f8b8e452283bda6",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "probe:nodes-flat-T",
+  "units": 86423740,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/nodes-flat-T.3tz",
+  "aSha256": "1635fea039ae6afc0cd32e8956cea16991a03169d3e6a6d581c16a2a26b02eea",
+  "bSha256": "9b7f2f0ad1abd5c4cb660dc19537521d33d1f2b288b9dd8b797234dd5038159a",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "R:images-by-uri-20000",
+  "units": 102224020,
+  "a": "/home/bend/.cache/c2wb-int/extra/images-20000.3tz",
+  "aSha256": "dbbdba9fa62e0951bd8505130acffa0490f379844a47456b49e0a3961aad0478",
+  "bSha256": "2a173ca6ad4add10fd7669be8693586f70a765b3916de7901a5ab93746ffbd3e",
+  "matrix": "images by URI (R, OD-WB-7)"
+ },
+ {
+  "name": "final:e2e",
+  "units": 354517700,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/e2e.3tz",
+  "aSha256": "7cd044b86ed73d1f500682c506a970b9a4581f72480b4bc7ba6776aad00acc81",
+  "bSha256": "6085bc3eba89345587ff7b70ea78301fafc89062efa808abde30556af1853f66",
+  "matrix": "end-to-end, 5,000 x 15,500 x 500 (one reference; the many-accessor case)"
+ },
+ {
+  "name": "final:tiny-refs-L103",
+  "units": 562900000,
+  "a": "bench/architecture_audit/c2_decoded_containment/wb/large/tiny-refs-L103.3tz",
+  "aSha256": "e8ce913e47b08eb36701ac16786e321f376fbaf188e52fd544c77af8a8f64bc6",
+  "bSha256": "0aee9932e0ee747efc7afb1f4251ff7c02cad01798ceaae0321c877b75e410f9",
+  "matrix": "100,000 tiny references, depth 100"
+ },
+ {
+  "name": "final:refs-tiny-d100",
+  "units": 559300000,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/refs-tiny-d100.3tz",
+  "aSha256": "39b8552bae9932823c33b7d74f6ad3c1a6074d75cb8c4c2677e8d383190f7608",
+  "bSha256": "45b8b209e14ebce70df1df28c1c59de193c0cfc686ef86123337024b51e9d769",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "final:extS-L16",
+  "units": 102002473,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/extS-L16.3tz",
+  "aSha256": "389974cd222e4f6c142f5791cfcec830e4f1977b3b655812a2230d7e2f4e2cdf",
+  "bSha256": "a36afba39dffc0191eb7720f52ad48faeaf2f5a005f062972e7919bc2005d8a0",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "final:boxT-E300-L8",
+  "units": 44302409,
+  "a": "/home/bend/.cache/c2wb-int/probe-work/boxT-E300-L8.3tz",
+  "aSha256": "5cd23128e422960c508f5352b8c66a9998d6ac6f61dbedb5cc3844a09cabaef8",
+  "bSha256": "45636b9a9d0edc93b5a1c8877b83568706b0a44a5944a999e2dcf11bf33b67b3",
+  "matrix": "R probe matrix (C2-WB v2 calibration)"
+ },
+ {
+  "name": "final:precheck-refs1047040-d1",
+  "units": 536870912,
+  "a": "/home/bend/.cache/c2wb-int/extra/precheck-refs1047040-d1.3tz",
+  "aSha256": "3e80807b2c2d7c1848062bd5643da2110f1e720562beb6f6057a1f2470696ae0",
+  "bSha256": "9c8309d659e0fd93d84706e3c16a1a5b0119999f9ab495da6dd9e7e639b03e59",
+  "matrix": null
+ },
+ {
+  "name": "final:precheck-refs1047040-d100",
+  "units": 536870912,
+  "a": "/home/bend/.cache/c2wb-int/extra/precheck-refs1047040-d100.3tz",
+  "aSha256": "17650a5fbafb31bc253b2416565e78e4c019e704aad9bbebe057100410dd194a",
+  "bSha256": "af9b86df47dcf5c77b7b8311e3666ad8a0681a11096b51e07af6d50b9176c8e2",
+  "matrix": null
+ }
+]

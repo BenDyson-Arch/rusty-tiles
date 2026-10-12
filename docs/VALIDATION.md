@@ -81,15 +81,17 @@ example `implicitTiling`, `regionVolume`, `rtcCenter`, `numericSpan` or `workLim
 escape fails as InvalidInput, and the message names the member, tile depth, volume, node,
 mesh, primitive and vertex. C2 runs only after C1 succeeds. Its own caps
 (`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
-`containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^28 units, 2 GiB,
-2 GiB and 64) yield `notInspected`, never ResourceLimit. The work units do not yet bound time uniformly: on typical producer
-archives C2 costs about 10–20 ns per unit in release builds (a few seconds at the default cap),
-but cheap-unit shapes measured at about 193–776 ns per unit (narrow spans, tile transforms and
-sphere volumes per level), so an adversarial archive within the default cap can take on the
-order of 1–3.5 minutes. A per-reference cost (about 10–50 µs) is also not charged. A corrected
-unit formula is planned; until it lands, treat `containmentWorkUnits` as a work cap, not a time
-bound. Debug builds are slower, and the separately capped re-reads and re-decoding (2 GiB each)
-are not included. Archives over the cap are reported as `workLimit`. The
+`containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^29 units, 2 GiB,
+2 GiB and 64) yield `notInspected`, never ResourceLimit. Units are charged per operation
+(per volume test and transform step at each level, per node, index, element, re-read and
+re-decoded byte, JSON value node, external resource, instance primitive and reference); the
+formula is in the C2 contract's work bound (C2-WB amendment). The default cap is set from a
+measured class matrix, not a proof: on the measurement host (Intel i7-12700KF, Linux, release
+build) every class in the C2-WB matrix cost at most 14.65 ns per unit on an E-core and 8.10 ns
+on a P-core (median of 7 clean A/B runs per class), so the precheck and streaming of one
+validation stay within about 7.9 s on an E-core (about 4.4 s on a P-core) at the default cap.
+Classes outside that matrix, other hosts, debug builds and C1's own inspection time are not
+covered. Archives over the cap are reported as `workLimit`. The
 frozen reasons are `implicitTiling`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. Neither report success nor a matching

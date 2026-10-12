@@ -80,7 +80,7 @@ The oracle's defaults mirror `ValidationLimits`:
 | Limit | Default |
 | --- | --- |
 | `containmentSpanBits` | 4096 |
-| `containmentWorkUnits` | 2^28 = 268,435,456 (coordinator decision for PR #157, from measured per-unit cost; was 2^32) |
+| `containmentWorkUnits` | 2^29 = 536,870,912 (C2-WB WB-6, from the measured class matrix; 2^28 from PR #157 until C2-WB, 2^32 before that) |
 | `containmentBytesRead` | 2 GiB |
 | `containmentDecodedBytes` | 2 GiB |
 | `containmentNodeDepth` | 64 |
@@ -639,7 +639,8 @@ including the meshopt INDICES/bits streams and the 800-character decimals.
 - Production verdicts for `witnesses/report.json`, `controls/manifest.json`
   and `corpus/manifest.json`, once M and F land. Each Outside row needs a
   recorded disposition. The corpus has none.
-- R's measurement of the cap values (C2-WB WB-6). The work controls and the
+- Done (2026-10-12): R's measurement of the cap value (C2-WB WB-6): 2^29, from
+  `τ_E = 14.65` ns/unit (`acceptance/README.md`, "C2-WB gate"). The work controls and the
   `wb/` at-cap pairs are pinned to the oracle's computed totals, so they must be
   regenerated if a formula reconciliation changes `E`, `B`, `Dec`, `J`, `Res`
   or `Prim`.

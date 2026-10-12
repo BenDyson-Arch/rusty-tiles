@@ -1,0 +1,2810 @@
+{
+ "tauP": [
+  8.102,
+  "probe:boxT-E300-L8"
+ ],
+ "tauE": [
+  14.65,
+  "probe:boxT-E300-L8"
+ ],
+ "undecided": [
+  "producer:mf2-lod3-explicit@P",
+  "producer:mf2-lod3-explicit@E"
+ ],
+ "rows": [
+  {
+   "name": "wb:extTS-L16",
+   "units": 78082345,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 2.011,
+   "nsMinP": 2.002,
+   "streamP": 0.15703,
+   "medianBP": 0.0277,
+   "maxForeignP": 0.0003,
+   "maxNeighbourP": 0.0023,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 30,
+   "cpusE": [
+    17,
+    18,
+    19
+   ],
+   "nsE": 3.562,
+   "nsMinE": 3.5,
+   "streamE": 0.27814,
+   "medianBE": 0.04394,
+   "maxForeignE": 0.0039,
+   "maxNeighbourE": 0.0954,
+   "EoverP": 1.77
+  },
+  {
+   "name": "wb:extTS-L32",
+   "units": 155842473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 10,
+   "cpusP": [
+    15
+   ],
+   "nsP": 1.993,
+   "nsMinP": 1.982,
+   "streamP": 0.3106,
+   "medianBP": 0.02786,
+   "maxForeignP": 0.0009,
+   "maxNeighbourP": 0.0456,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    19
+   ],
+   "nsE": 3.545,
+   "nsMinE": 3.443,
+   "streamE": 0.55252,
+   "medianBE": 0.04382,
+   "maxForeignE": 0.0015,
+   "maxNeighbourE": 0.0809,
+   "EoverP": 1.78
+  },
+  {
+   "name": "wb:sphere-chain-L16",
+   "units": 27862345,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 2.158,
+   "nsMinP": 2.097,
+   "streamP": 0.06013,
+   "medianBP": 0.02911,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0132,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 15,
+   "cpusE": [
+    19
+   ],
+   "nsE": 3.966,
+   "nsMinE": 3.79,
+   "streamE": 0.1105,
+   "medianBE": 0.04598,
+   "maxForeignE": 0.0005,
+   "maxNeighbourE": 0.0983,
+   "EoverP": 1.84
+  },
+  {
+   "name": "wb:box-step-L16",
+   "units": 17822345,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 4.494,
+   "nsMinP": 4.464,
+   "streamP": 0.08009,
+   "medianBP": 0.02934,
+   "maxForeignP": 0.0412,
+   "maxNeighbourP": 0.0031,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 15,
+   "cpusE": [
+    17,
+    18
+   ],
+   "nsE": 7.953,
+   "nsMinE": 7.786,
+   "streamE": 0.14174,
+   "medianBE": 0.04655,
+   "maxForeignE": 0.0332,
+   "maxNeighbourE": 0.0887,
+   "EoverP": 1.77
+  },
+  {
+   "name": "wb:box-chain-L16",
+   "units": 8822345,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 4.465,
+   "nsMinP": 4.401,
+   "streamP": 0.03939,
+   "medianBP": 0.0291,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0985,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 15,
+   "cpusE": [
+    17,
+    18
+   ],
+   "nsE": 8.176,
+   "nsMinE": 7.83,
+   "streamE": 0.07213,
+   "medianBE": 0.04667,
+   "maxForeignE": 0.0015,
+   "maxNeighbourE": 0.0795,
+   "EoverP": 1.83
+  },
+  {
+   "name": "wb:own-content-sphere-1M",
+   "units": 259002229,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 2.004,
+   "nsMinP": 1.983,
+   "streamP": 0.5191,
+   "medianBP": 0.04336,
+   "maxForeignP": 0.001,
+   "maxNeighbourP": 0.0015,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 26,
+   "cpusE": [
+    17,
+    18,
+    19
+   ],
+   "nsE": 3.474,
+   "nsMinE": 3.413,
+   "streamE": 0.89985,
+   "medianBE": 0.07044,
+   "maxForeignE": 0.0225,
+   "maxNeighbourE": 0.0976,
+   "EoverP": 1.73
+  },
+  {
+   "name": "wb:one-box-1M",
+   "units": 66002229,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 3.881,
+   "nsMinP": 3.841,
+   "streamP": 0.25618,
+   "medianBP": 0.04387,
+   "maxForeignP": 0.0009,
+   "maxNeighbourP": 0.0024,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 12,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.036,
+   "nsMinE": 6.891,
+   "streamE": 0.46439,
+   "medianBE": 0.07001,
+   "maxForeignE": 0.0034,
+   "maxNeighbourE": 0.0992,
+   "EoverP": 1.81
+  },
+  {
+   "name": "wb:large-span-box-8-limbs",
+   "units": 14402229,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 2.054,
+   "nsMinP": 2.02,
+   "streamP": 0.02958,
+   "medianBP": 0.02876,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0255,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    19
+   ],
+   "nsE": 3.719,
+   "nsMinE": 3.622,
+   "streamE": 0.05356,
+   "medianBE": 0.04698,
+   "maxForeignE": 0.0021,
+   "maxNeighbourE": 0.0809,
+   "EoverP": 1.81
+  },
+  {
+   "name": "wb:large-span-sphere-16-limbs",
+   "units": 52802229,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.885,
+   "nsMinP": 0.878,
+   "streamP": 0.04673,
+   "medianBP": 0.02921,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0025,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 16,
+   "cpusE": [
+    17,
+    19
+   ],
+   "nsE": 1.52,
+   "nsMinE": 1.47,
+   "streamE": 0.08025,
+   "medianBE": 0.0466,
+   "maxForeignE": 0.0034,
+   "maxNeighbourE": 0.0827,
+   "EoverP": 1.72
+  },
+  {
+   "name": "wb:nodes-translation",
+   "units": 164297100,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 10,
+   "cpusP": [
+    14,
+    15
+   ],
+   "nsP": 4.625,
+   "nsMinP": 4.598,
+   "streamP": 0.75982,
+   "medianBP": 0.04917,
+   "maxForeignP": 0.0269,
+   "maxNeighbourP": 0.0747,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.679,
+   "nsMinE": 7.617,
+   "streamE": 1.26167,
+   "medianBE": 0.07985,
+   "maxForeignE": 0.0025,
+   "maxNeighbourE": 0.0949,
+   "EoverP": 1.66
+  },
+  {
+   "name": "wb:nodes-rotated",
+   "units": 299925900,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 3.866,
+   "nsMinP": 3.851,
+   "streamP": 1.15943,
+   "medianBP": 0.06188,
+   "maxForeignP": 0.022,
+   "maxNeighbourP": 0.013,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 22,
+   "cpusE": [
+    18,
+    19
+   ],
+   "nsE": 6.419,
+   "nsMinE": 6.308,
+   "streamE": 1.92517,
+   "medianBE": 0.09606,
+   "maxForeignE": 0.0056,
+   "maxNeighbourE": 0.0974,
+   "EoverP": 1.66
+  },
+  {
+   "name": "wb:tiny-refs-L4",
+   "units": 236200000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.152,
+   "nsMinP": 4.094,
+   "streamP": 0.98082,
+   "medianBP": 0.31941,
+   "maxForeignP": 0.0015,
+   "maxNeighbourP": 0.0027,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    16,
+    19
+   ],
+   "nsE": 7.118,
+   "nsMinE": 6.991,
+   "streamE": 1.68136,
+   "medianBE": 0.51931,
+   "maxForeignE": 0.0059,
+   "maxNeighbourE": 0.0964,
+   "EoverP": 1.71
+  },
+  {
+   "name": "wb:tiny-refs-L103",
+   "units": 562900000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 5.248,
+   "nsMinP": 5.222,
+   "streamP": 2.95385,
+   "medianBP": 0.32452,
+   "maxForeignP": 0.0014,
+   "maxNeighbourP": 0.0013,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 17,
+   "cpusE": [
+    17,
+    19
+   ],
+   "nsE": 9.019,
+   "nsMinE": 8.865,
+   "streamE": 5.07663,
+   "medianBE": 0.52228,
+   "maxForeignE": 0.0444,
+   "maxNeighbourE": 0.0994,
+   "EoverP": 1.72
+  },
+  {
+   "name": "wb:refs-to-mid-payload",
+   "units": 3097680000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.716,
+   "nsMinP": 4.699,
+   "streamP": 14.60741,
+   "medianBP": 0.0913,
+   "maxForeignP": 0.0013,
+   "maxNeighbourP": 0.0632,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 18,
+   "cpusE": [
+    17,
+    18,
+    19
+   ],
+   "nsE": 8.378,
+   "nsMinE": 8.313,
+   "streamE": 25.95203,
+   "medianBE": 0.14183,
+   "maxForeignE": 0.0485,
+   "maxNeighbourE": 0.0917,
+   "EoverP": 1.78
+  },
+  {
+   "name": "wb:unselected-nodes",
+   "units": 22847240,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 5.971,
+   "nsMinP": 5.903,
+   "streamP": 0.13642,
+   "medianBP": 0.03725,
+   "maxForeignP": 0.0004,
+   "maxNeighbourP": 0.0019,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    17
+   ],
+   "nsE": 8.781,
+   "nsMinE": 8.398,
+   "streamE": 0.20062,
+   "medianBE": 0.05853,
+   "maxForeignE": 0.0112,
+   "maxNeighbourE": 0.0804,
+   "EoverP": 1.47
+  },
+  {
+   "name": "wb:skipped-nodes",
+   "units": 25025720,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 4.54,
+   "nsMinP": 4.461,
+   "streamP": 0.11362,
+   "medianBP": 0.03548,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0011,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 7.558,
+   "nsMinE": 7.452,
+   "streamE": 0.18915,
+   "medianBE": 0.05483,
+   "maxForeignE": 0.0025,
+   "maxNeighbourE": 0.0981,
+   "EoverP": 1.66
+  },
+  {
+   "name": "wb:extbuf-2000",
+   "units": 10063560,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 3.672,
+   "nsMinP": 3.645,
+   "streamP": 0.03695,
+   "medianBP": 0.03516,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0047,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    17
+   ],
+   "nsE": 6.388,
+   "nsMinE": 6.308,
+   "streamE": 0.06429,
+   "medianBE": 0.05659,
+   "maxForeignE": 0.0087,
+   "maxNeighbourE": 0.0656,
+   "EoverP": 1.74
+  },
+  {
+   "name": "wb:extbuf-20000",
+   "units": 100623560,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.016,
+   "nsMinP": 3.985,
+   "streamP": 0.40409,
+   "medianBP": 0.10941,
+   "maxForeignP": 0.0013,
+   "maxNeighbourP": 0.005,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    17
+   ],
+   "nsE": 7.065,
+   "nsMinE": 6.821,
+   "streamE": 0.7109,
+   "medianBE": 0.19633,
+   "maxForeignE": 0.0028,
+   "maxNeighbourE": 0.097,
+   "EoverP": 1.76
+  },
+  {
+   "name": "wb:shared-accessor-16000x40",
+   "units": 4857579,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 2.468,
+   "nsMinP": 2.367,
+   "streamP": 0.01199,
+   "medianBP": 0.0401,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0049,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 3.93,
+   "nsMinE": 3.668,
+   "streamE": 0.01909,
+   "medianBE": 0.06308,
+   "maxForeignE": 0.0012,
+   "maxNeighbourE": 0.0735,
+   "EoverP": 1.59
+  },
+  {
+   "name": "wb:shared-accessor-16000x200",
+   "units": 17687759,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.929,
+   "nsMinP": 0.9,
+   "streamP": 0.01644,
+   "medianBP": 0.04202,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0261,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    16
+   ],
+   "nsE": 1.561,
+   "nsMinE": 1.421,
+   "streamE": 0.02761,
+   "medianBE": 0.0669,
+   "maxForeignE": 0.0032,
+   "maxNeighbourE": 0.098,
+   "EoverP": 1.68
+  },
+  {
+   "name": "wb:json-flat-numbers-glb",
+   "units": 108119500,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 13,
+   "cpusP": [
+    4,
+    5,
+    7
+   ],
+   "nsP": 1.379,
+   "nsMinP": 1.235,
+   "streamP": 0.14911,
+   "medianBP": 0.03149,
+   "maxForeignP": 0.0438,
+   "maxNeighbourP": 0.0975,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.305,
+   "nsMinE": 2.109,
+   "streamE": 0.24921,
+   "medianBE": 0.04828,
+   "maxForeignE": 0.0033,
+   "maxNeighbourE": 0.0826,
+   "EoverP": 1.67
+  },
+  {
+   "name": "wb:json-flat-numbers-b3dm",
+   "units": 108124300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    7
+   ],
+   "nsP": 1.229,
+   "nsMinP": 1.12,
+   "streamP": 0.13292,
+   "medianBP": 0.03123,
+   "maxForeignP": 0.0305,
+   "maxNeighbourP": 0.0758,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 2.095,
+   "nsMinE": 1.922,
+   "streamE": 0.22657,
+   "medianBE": 0.04756,
+   "maxForeignE": 0.0041,
+   "maxNeighbourE": 0.0983,
+   "EoverP": 1.7
+  },
+  {
+   "name": "wb:json-flat-string-glb",
+   "units": 52548300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.753,
+   "nsMinP": 0.751,
+   "streamP": 0.03958,
+   "medianBP": 0.0294,
+   "maxForeignP": 0.0382,
+   "maxNeighbourP": 0.0037,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    17
+   ],
+   "nsE": 1.374,
+   "nsMinE": 1.325,
+   "streamE": 0.07218,
+   "medianBE": 0.04672,
+   "maxForeignE": 0.0014,
+   "maxNeighbourE": 0.0738,
+   "EoverP": 1.82
+  },
+  {
+   "name": "wb:json-gltf-1MiB-refs",
+   "units": 1051015000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.761,
+   "nsMinP": 0.753,
+   "streamP": 0.80025,
+   "medianBP": 0.0331,
+   "maxForeignP": 0.0317,
+   "maxNeighbourP": 0.0613,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    17
+   ],
+   "nsE": 1.381,
+   "nsMinE": 1.371,
+   "streamE": 1.45134,
+   "medianBE": 0.05023,
+   "maxForeignE": 0.0027,
+   "maxNeighbourE": 0.0562,
+   "EoverP": 1.81
+  },
+  {
+   "name": "wb:json-deep-string-glb-60",
+   "units": 52602300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.759,
+   "nsMinP": 0.752,
+   "streamP": 0.03991,
+   "medianBP": 0.02953,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0066,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    17
+   ],
+   "nsE": 1.341,
+   "nsMinE": 1.307,
+   "streamE": 0.07053,
+   "medianBE": 0.04478,
+   "maxForeignE": 0.0013,
+   "maxNeighbourE": 0.037,
+   "EoverP": 1.77
+  },
+  {
+   "name": "wb:json-deep-string-b3dm-60",
+   "units": 52607100,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.679,
+   "nsMinP": 0.643,
+   "streamP": 0.03571,
+   "medianBP": 0.02961,
+   "maxForeignP": 0.0068,
+   "maxNeighbourP": 0.0942,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 11,
+   "cpusE": [
+    17
+   ],
+   "nsE": 1.173,
+   "nsMinE": 1.145,
+   "streamE": 0.06169,
+   "medianBE": 0.04448,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0883,
+   "EoverP": 1.73
+  },
+  {
+   "name": "wb:json-deep-numbers-glb-1",
+   "units": 108120300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 9,
+   "cpusP": [
+    15
+   ],
+   "nsP": 1.427,
+   "nsMinP": 1.381,
+   "streamP": 0.15426,
+   "medianBP": 0.03183,
+   "maxForeignP": 0.0225,
+   "maxNeighbourP": 0.057,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 2.294,
+   "nsMinE": 2.134,
+   "streamE": 0.24798,
+   "medianBE": 0.04793,
+   "maxForeignE": 0.0029,
+   "maxNeighbourE": 0.0617,
+   "EoverP": 1.61
+  },
+  {
+   "name": "wb:json-deep-numbers-glb-30",
+   "units": 108146500,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 9,
+   "cpusP": [
+    13
+   ],
+   "nsP": 1.487,
+   "nsMinP": 1.324,
+   "streamP": 0.16084,
+   "medianBP": 0.03222,
+   "maxForeignP": 0.0052,
+   "maxNeighbourP": 0.0948,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 12,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.277,
+   "nsMinE": 2.135,
+   "streamE": 0.24629,
+   "medianBE": 0.04863,
+   "maxForeignE": 0.0032,
+   "maxNeighbourE": 0.0918,
+   "EoverP": 1.53
+  },
+  {
+   "name": "wb:json-deep-numbers-glb-62",
+   "units": 108175300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    3
+   ],
+   "nsP": 1.406,
+   "nsMinP": 1.251,
+   "streamP": 0.15206,
+   "medianBP": 0.03184,
+   "maxForeignP": 0.0019,
+   "maxNeighbourP": 0.0298,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.327,
+   "nsMinE": 2.279,
+   "streamE": 0.25168,
+   "medianBE": 0.04822,
+   "maxForeignE": 0.0443,
+   "maxNeighbourE": 0.0737,
+   "EoverP": 1.66
+  },
+  {
+   "name": "wb:json-deep-numbers-b3dm-1",
+   "units": 108125500,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 1.345,
+   "nsMinP": 1.279,
+   "streamP": 0.14542,
+   "medianBP": 0.03174,
+   "maxForeignP": 0.0024,
+   "maxNeighbourP": 0.0353,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.036,
+   "nsMinE": 1.855,
+   "streamE": 0.22011,
+   "medianBE": 0.04885,
+   "maxForeignE": 0.0037,
+   "maxNeighbourE": 0.0692,
+   "EoverP": 1.51
+  },
+  {
+   "name": "wb:json-deep-numbers-b3dm-30",
+   "units": 108151500,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 1.281,
+   "nsMinP": 1.161,
+   "streamP": 0.13857,
+   "medianBP": 0.03135,
+   "maxForeignP": 0.0013,
+   "maxNeighbourP": 0.019,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.065,
+   "nsMinE": 1.891,
+   "streamE": 0.2233,
+   "medianBE": 0.04894,
+   "maxForeignE": 0.0033,
+   "maxNeighbourE": 0.0995,
+   "EoverP": 1.61
+  },
+  {
+   "name": "wb:json-deep-numbers-b3dm-60",
+   "units": 108178300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 1.262,
+   "nsMinP": 1.089,
+   "streamP": 0.1365,
+   "medianBP": 0.03117,
+   "maxForeignP": 0.0019,
+   "maxNeighbourP": 0.0125,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.039,
+   "nsMinE": 1.924,
+   "streamE": 0.22056,
+   "medianBE": 0.04742,
+   "maxForeignE": 0.003,
+   "maxNeighbourE": 0.0789,
+   "EoverP": 1.62
+  },
+  {
+   "name": "wb:json-deep-numbers-b3dm-62",
+   "units": 108180300,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 10,
+   "cpusP": [
+    13
+   ],
+   "nsP": 1.232,
+   "nsMinP": 1.2,
+   "streamP": 0.13327,
+   "medianBP": 0.03099,
+   "maxForeignP": 0.0345,
+   "maxNeighbourP": 0.0999,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.086,
+   "nsMinE": 2.04,
+   "streamE": 0.22564,
+   "medianBE": 0.04764,
+   "maxForeignE": 0.0116,
+   "maxNeighbourE": 0.0763,
+   "EoverP": 1.69
+  },
+  {
+   "name": "wb:quad",
+   "units": 18151888,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.919,
+   "nsMinP": 4.809,
+   "streamP": 0.08929,
+   "medianBP": 0.04862,
+   "maxForeignP": 0.0002,
+   "maxNeighbourP": 0.001,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 8.54,
+   "nsMinE": 8.283,
+   "streamE": 0.15501,
+   "medianBE": 0.07844,
+   "maxForeignE": 0.0015,
+   "maxNeighbourE": 0.0692,
+   "EoverP": 1.74
+  },
+  {
+   "name": "wb:quadB",
+   "units": 31490820,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.596,
+   "nsMinP": 4.561,
+   "streamP": 0.14473,
+   "medianBP": 0.05707,
+   "maxForeignP": 0.001,
+   "maxNeighbourP": 0.0009,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 8.037,
+   "nsMinE": 7.756,
+   "streamE": 0.25309,
+   "medianBE": 0.09327,
+   "maxForeignE": 0.0085,
+   "maxNeighbourE": 0.0636,
+   "EoverP": 1.75
+  },
+  {
+   "name": "wb:e2e",
+   "units": 354517700,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 4.463,
+   "nsMinP": 4.403,
+   "streamP": 1.58233,
+   "medianBP": 0.11854,
+   "maxForeignP": 0.003,
+   "maxNeighbourP": 0.0578,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.738,
+   "nsMinE": 7.557,
+   "streamE": 2.74316,
+   "medianBE": 0.18435,
+   "maxForeignE": 0.003,
+   "maxNeighbourE": 0.0912,
+   "EoverP": 1.73
+  },
+  {
+   "name": "wb:viewless-SCALAR",
+   "units": 80049480,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 3.62,
+   "nsMinP": 3.604,
+   "streamP": 0.28977,
+   "medianBP": 0.04228,
+   "maxForeignP": 0.0038,
+   "maxNeighbourP": 0.012,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 5.332,
+   "nsMinE": 5.297,
+   "streamE": 0.42686,
+   "medianBE": 0.06308,
+   "maxForeignE": 0.006,
+   "maxNeighbourE": 0.0785,
+   "EoverP": 1.47
+  },
+  {
+   "name": "wb:viewless-MAT4",
+   "units": 80047000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 9,
+   "cpusP": [
+    15
+   ],
+   "nsP": 1.987,
+   "nsMinP": 1.932,
+   "streamP": 0.15907,
+   "medianBP": 0.03622,
+   "maxForeignP": 0.0151,
+   "maxNeighbourP": 0.0588,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 3.423,
+   "nsMinE": 3.345,
+   "streamE": 0.27397,
+   "medianBE": 0.05545,
+   "maxForeignE": 0.0016,
+   "maxNeighbourE": 0.0555,
+   "EoverP": 1.72
+  },
+  {
+   "name": "wb:long-decimals",
+   "units": 130909840,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 11,
+   "cpusP": [
+    3,
+    13
+   ],
+   "nsP": 5.233,
+   "nsMinP": 5.108,
+   "streamP": 0.68509,
+   "medianBP": 0.06367,
+   "maxForeignP": 0.0021,
+   "maxNeighbourP": 0.0622,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 11,
+   "cpusE": [
+    18
+   ],
+   "nsE": 11.018,
+   "nsMinE": 10.869,
+   "streamE": 1.44243,
+   "medianBE": 0.11656,
+   "maxForeignE": 0.0024,
+   "maxNeighbourE": 0.0952,
+   "EoverP": 2.11
+  },
+  {
+   "name": "wb:meshopt-attributes-raw",
+   "units": 612761908,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 11,
+   "cpusP": [
+    5,
+    15
+   ],
+   "nsP": 4.064,
+   "nsMinP": 4.028,
+   "streamP": 2.49024,
+   "medianBP": 0.0543,
+   "maxForeignP": 0.0396,
+   "maxNeighbourP": 0.0977,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.077,
+   "nsMinE": 7.023,
+   "streamE": 4.33641,
+   "medianBE": 0.08381,
+   "maxForeignE": 0.0047,
+   "maxNeighbourE": 0.0984,
+   "EoverP": 1.74
+  },
+  {
+   "name": "wb:meshopt-attributes-bits",
+   "units": 572989556,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.346,
+   "nsMinP": 4.308,
+   "streamP": 2.49038,
+   "medianBP": 0.04792,
+   "maxForeignP": 0.0033,
+   "maxNeighbourP": 0.0348,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.587,
+   "nsMinE": 7.462,
+   "streamE": 4.34739,
+   "medianBE": 0.07772,
+   "maxForeignE": 0.0019,
+   "maxNeighbourE": 0.0835,
+   "EoverP": 1.75
+  },
+  {
+   "name": "wb:meshopt-triangles",
+   "units": 152889636,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 10,
+   "cpusP": [
+    15
+   ],
+   "nsP": 2.467,
+   "nsMinP": 2.432,
+   "streamP": 0.37716,
+   "medianBP": 0.05766,
+   "maxForeignP": 0.0025,
+   "maxNeighbourP": 0.0886,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 4.274,
+   "nsMinE": 4.169,
+   "streamE": 0.65344,
+   "medianBE": 0.08901,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.0711,
+   "EoverP": 1.73
+  },
+  {
+   "name": "wb:meshopt-indices",
+   "units": 144889508,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 2.553,
+   "nsMinP": 2.539,
+   "streamP": 0.36988,
+   "medianBP": 0.05452,
+   "maxForeignP": 0.0336,
+   "maxNeighbourP": 0.0262,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 4.406,
+   "nsMinE": 4.348,
+   "streamE": 0.63841,
+   "medianBE": 0.0833,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.0918,
+   "EoverP": 1.73
+  },
+  {
+   "name": "producer:W1-explicit",
+   "units": 17492428,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.577,
+   "nsMinP": 4.536,
+   "streamP": 0.08006,
+   "medianBP": 0.03607,
+   "maxForeignP": 0.0051,
+   "maxNeighbourP": 0.0981,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.656,
+   "nsMinE": 7.539,
+   "streamE": 0.13392,
+   "medianBE": 0.05758,
+   "maxForeignE": 0.0239,
+   "maxNeighbourE": 0.0886,
+   "EoverP": 1.67
+  },
+  {
+   "name": "producer:W2-explicit",
+   "units": 139785937,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 5.063,
+   "nsMinP": 5.058,
+   "streamP": 0.70779,
+   "medianBP": 0.06924,
+   "maxForeignP": 0.001,
+   "maxNeighbourP": 0.0147,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 8.675,
+   "nsMinE": 8.552,
+   "streamE": 1.21262,
+   "medianBE": 0.10821,
+   "maxForeignE": 0.0221,
+   "maxNeighbourE": 0.088,
+   "EoverP": 1.71
+  },
+  {
+   "name": "producer:W3-pc-deep-explicit",
+   "units": 38782952,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 5.299,
+   "nsMinP": 5.226,
+   "streamP": 0.20551,
+   "medianBP": 0.12677,
+   "maxForeignP": 0.0169,
+   "maxNeighbourP": 0.0859,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 8.923,
+   "nsMinE": 8.694,
+   "streamE": 0.34607,
+   "medianBE": 0.20754,
+   "maxForeignE": 0.003,
+   "maxNeighbourE": 0.0884,
+   "EoverP": 1.68
+  },
+  {
+   "name": "producer:W5-vec-perf-explicit",
+   "units": 207610517,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 5.419,
+   "nsMinP": 5.344,
+   "streamP": 1.12512,
+   "medianBP": 0.08814,
+   "maxForeignP": 0.0446,
+   "maxNeighbourP": 0.0704,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 9.096,
+   "nsMinE": 9.012,
+   "streamE": 1.88835,
+   "medianBE": 0.13761,
+   "maxForeignE": 0.0171,
+   "maxNeighbourE": 0.0634,
+   "EoverP": 1.68
+  },
+  {
+   "name": "producer:W5-vec-perf-quantize-explicit",
+   "units": 204006173,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    6
+   ],
+   "nsP": 5.937,
+   "nsMinP": 5.869,
+   "streamP": 1.21109,
+   "medianBP": 0.09042,
+   "maxForeignP": 0.0241,
+   "maxNeighbourP": 0.0734,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 10.122,
+   "nsMinE": 9.977,
+   "streamE": 2.06486,
+   "medianBE": 0.14278,
+   "maxForeignE": 0.0035,
+   "maxNeighbourE": 0.0683,
+   "EoverP": 1.7
+  },
+  {
+   "name": "producer:W5-vec-perf-meshopt-explicit",
+   "units": 214224609,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 9,
+   "cpusP": [
+    15
+   ],
+   "nsP": 5.345,
+   "nsMinP": 5.304,
+   "streamP": 1.1451,
+   "medianBP": 0.10579,
+   "maxForeignP": 0.0026,
+   "maxNeighbourP": 0.0559,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 9.16,
+   "nsMinE": 9.067,
+   "streamE": 1.96222,
+   "medianBE": 0.17181,
+   "maxForeignE": 0.0121,
+   "maxNeighbourE": 0.0674,
+   "EoverP": 1.71
+  },
+  {
+   "name": "producer:W6d-explicit",
+   "units": 1910238,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    7
+   ],
+   "nsP": 5.13,
+   "nsMinP": 4.926,
+   "streamP": 0.0098,
+   "medianBP": 0.03997,
+   "maxForeignP": 0.04,
+   "maxNeighbourP": 0.0209,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.763,
+   "nsMinE": 6.978,
+   "streamE": 0.01483,
+   "medianBE": 0.06438,
+   "maxForeignE": 0.0272,
+   "maxNeighbourE": 0.0818,
+   "EoverP": 1.51
+  },
+  {
+   "name": "producer:W6d-nomeshopt-explicit",
+   "units": 1497470,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 4.868,
+   "nsMinP": 4.708,
+   "streamP": 0.00729,
+   "medianBP": 0.03724,
+   "maxForeignP": 0.0433,
+   "maxNeighbourP": 0.0162,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    17
+   ],
+   "nsE": 7.693,
+   "nsMinE": 7.292,
+   "streamE": 0.01152,
+   "medianBE": 0.05761,
+   "maxForeignE": 0.0304,
+   "maxNeighbourE": 0.0507,
+   "EoverP": 1.58
+  },
+  {
+   "name": "producer:mf2-lod3-explicit",
+   "units": 438590913,
+   "statusP": "unexpectedOutcome",
+   "cleanPairsP": 0,
+   "attemptsP": 1,
+   "cpusP": [
+    5
+   ],
+   "statusE": "unexpectedOutcome",
+   "cleanPairsE": 0,
+   "attemptsE": 1,
+   "cpusE": [
+    17
+   ]
+  },
+  {
+   "name": "probe:box-L16",
+   "units": 42802473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 7.468,
+   "nsMinP": 7.362,
+   "streamP": 0.31964,
+   "medianBP": 0.03017,
+   "maxForeignP": 0.0049,
+   "maxNeighbourP": 0.0545,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 13.389,
+   "nsMinE": 13.2,
+   "streamE": 0.57309,
+   "medianBE": 0.04714,
+   "maxForeignE": 0.0031,
+   "maxNeighbourE": 0.0614,
+   "EoverP": 1.79
+  },
+  {
+   "name": "probe:sph-L16",
+   "units": 54002473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 7.954,
+   "nsMinP": 7.879,
+   "streamP": 0.42953,
+   "medianBP": 0.03077,
+   "maxForeignP": 0.0298,
+   "maxNeighbourP": 0.0977,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 14.311,
+   "nsMinE": 14.191,
+   "streamE": 0.77283,
+   "medianBE": 0.04706,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0809,
+   "EoverP": 1.8
+  },
+  {
+   "name": "probe:boxT-L16",
+   "units": 87802473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 7.572,
+   "nsMinP": 7.531,
+   "streamP": 0.66482,
+   "medianBP": 0.03029,
+   "maxForeignP": 0.0208,
+   "maxNeighbourP": 0.0457,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 13.625,
+   "nsMinE": 13.358,
+   "streamE": 1.19628,
+   "medianBE": 0.04625,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0465,
+   "EoverP": 1.8
+  },
+  {
+   "name": "probe:sphT-L16",
+   "units": 99002473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 7.799,
+   "nsMinP": 7.782,
+   "streamP": 0.77212,
+   "medianBP": 0.0309,
+   "maxForeignP": 0.0041,
+   "maxNeighbourP": 0.0717,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    17
+   ],
+   "nsE": 13.902,
+   "nsMinE": 13.708,
+   "streamE": 1.37638,
+   "medianBE": 0.04666,
+   "maxForeignE": 0.0019,
+   "maxNeighbourE": 0.0926,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:ext-L16",
+   "units": 80302473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 7.381,
+   "nsMinP": 7.363,
+   "streamP": 0.59272,
+   "medianBP": 0.02849,
+   "maxForeignP": 0.0018,
+   "maxNeighbourP": 0.0021,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 12.874,
+   "nsMinE": 12.685,
+   "streamE": 1.03383,
+   "medianBE": 0.04408,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0535,
+   "EoverP": 1.74
+  },
+  {
+   "name": "probe:extT-L16",
+   "units": 125302473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    5
+   ],
+   "nsP": 7.497,
+   "nsMinP": 7.48,
+   "streamP": 0.93934,
+   "medianBP": 0.02859,
+   "maxForeignP": 0.0015,
+   "maxNeighbourP": 0.0099,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 13.173,
+   "nsMinE": 13.115,
+   "streamE": 1.65058,
+   "medianBE": 0.0447,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0349,
+   "EoverP": 1.76
+  },
+  {
+   "name": "probe:extS-L16",
+   "units": 102002473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 7.961,
+   "nsMinP": 7.935,
+   "streamP": 0.81202,
+   "medianBP": 0.02867,
+   "maxForeignP": 0.0402,
+   "maxNeighbourP": 0.0045,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 14.343,
+   "nsMinE": 14.263,
+   "streamE": 1.46306,
+   "medianBE": 0.04423,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.089,
+   "EoverP": 1.8
+  },
+  {
+   "name": "probe:extTS-L16",
+   "units": 147002473,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    7
+   ],
+   "nsP": 7.97,
+   "nsMinP": 7.911,
+   "streamP": 1.1716,
+   "medianBP": 0.0292,
+   "maxForeignP": 0.0417,
+   "maxNeighbourP": 0.0656,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 14.043,
+   "nsMinE": 13.886,
+   "streamE": 2.06441,
+   "medianBE": 0.04416,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0556,
+   "EoverP": 1.76
+  },
+  {
+   "name": "probe:box-L4",
+   "units": 51202377,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 7.393,
+   "nsMinP": 7.351,
+   "streamP": 0.37853,
+   "medianBP": 0.03275,
+   "maxForeignP": 0.0308,
+   "maxNeighbourP": 0.0016,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    19
+   ],
+   "nsE": 12.651,
+   "nsMinE": 12.469,
+   "streamE": 0.64776,
+   "medianBE": 0.05064,
+   "maxForeignE": 0.0019,
+   "maxNeighbourE": 0.0482,
+   "EoverP": 1.71
+  },
+  {
+   "name": "probe:extTS-L32",
+   "units": 148702597,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 7.97,
+   "nsMinP": 7.923,
+   "streamP": 1.18523,
+   "medianBP": 0.02867,
+   "maxForeignP": 0.0018,
+   "maxNeighbourP": 0.0558,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 13.994,
+   "nsMinE": 13.829,
+   "streamE": 2.08093,
+   "medianBE": 0.04347,
+   "maxForeignE": 0.0021,
+   "maxNeighbourE": 0.0412,
+   "EoverP": 1.76
+  },
+  {
+   "name": "probe:soloB",
+   "units": 78002353,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    15
+   ],
+   "nsP": 6.88,
+   "nsMinP": 6.823,
+   "streamP": 0.53668,
+   "medianBP": 0.03905,
+   "maxForeignP": 0.0016,
+   "maxNeighbourP": 0.035,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 12.023,
+   "nsMinE": 11.968,
+   "streamE": 0.93784,
+   "medianBE": 0.06343,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0598,
+   "EoverP": 1.75
+  },
+  {
+   "name": "probe:soloS",
+   "units": 92002353,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 7.393,
+   "nsMinP": 7.384,
+   "streamP": 0.68013,
+   "medianBP": 0.03926,
+   "maxForeignP": 0.0021,
+   "maxNeighbourP": 0.0221,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 12.779,
+   "nsMinE": 12.647,
+   "streamE": 1.17566,
+   "medianBE": 0.0627,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0989,
+   "EoverP": 1.73
+  },
+  {
+   "name": "probe:solo1B",
+   "units": 53002353,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 6.368,
+   "nsMinP": 6.336,
+   "streamP": 0.33754,
+   "medianBP": 0.03914,
+   "maxForeignP": 0.0386,
+   "maxNeighbourP": 0.0172,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 11.054,
+   "nsMinE": 10.959,
+   "streamE": 0.58591,
+   "medianBE": 0.06331,
+   "maxForeignE": 0.0016,
+   "maxNeighbourE": 0.0656,
+   "EoverP": 1.74
+  },
+  {
+   "name": "probe:box-f32-L16",
+   "units": 44102301,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 7.211,
+   "nsMinP": 7.186,
+   "streamP": 0.31802,
+   "medianBP": 0.03089,
+   "maxForeignP": 0.0053,
+   "maxNeighbourP": 0.0247,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 12.828,
+   "nsMinE": 12.507,
+   "streamE": 0.56576,
+   "medianBE": 0.04683,
+   "maxForeignE": 0.0017,
+   "maxNeighbourE": 0.0606,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:boxT-f32-L16",
+   "units": 89102301,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 7.485,
+   "nsMinP": 7.357,
+   "streamP": 0.66691,
+   "medianBP": 0.03067,
+   "maxForeignP": 0.0016,
+   "maxNeighbourP": 0.0319,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 13.137,
+   "nsMinE": 13.031,
+   "streamE": 1.17053,
+   "medianBE": 0.04698,
+   "maxForeignE": 0.0019,
+   "maxNeighbourE": 0.0729,
+   "EoverP": 1.76
+  },
+  {
+   "name": "probe:extTS-f32-L8",
+   "units": 187902237,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 3.042,
+   "nsMinP": 3.032,
+   "streamP": 0.57167,
+   "medianBP": 0.02953,
+   "maxForeignP": 0.0428,
+   "maxNeighbourP": 0.0165,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 5.371,
+   "nsMinE": 5.294,
+   "streamE": 1.00916,
+   "medianBE": 0.04604,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.0521,
+   "EoverP": 1.77
+  },
+  {
+   "name": "probe:box-E120-L8",
+   "units": 22802409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    7
+   ],
+   "nsP": 7.37,
+   "nsMinP": 7.301,
+   "streamP": 0.16805,
+   "medianBP": 0.02949,
+   "maxForeignP": 0.0372,
+   "maxNeighbourP": 0.0064,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 13.342,
+   "nsMinE": 13.091,
+   "streamE": 0.30423,
+   "medianBE": 0.04718,
+   "maxForeignE": 0.0021,
+   "maxNeighbourE": 0.098,
+   "EoverP": 1.81
+  },
+  {
+   "name": "probe:box-E300-L8",
+   "units": 23302409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 9,
+   "cpusP": [
+    13
+   ],
+   "nsP": 7.697,
+   "nsMinP": 7.69,
+   "streamP": 0.17936,
+   "medianBP": 0.02927,
+   "maxForeignP": 0.0011,
+   "maxNeighbourP": 0.0692,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    18
+   ],
+   "nsE": 13.967,
+   "nsMinE": 13.654,
+   "streamE": 0.32546,
+   "medianBE": 0.04678,
+   "maxForeignE": 0.0019,
+   "maxNeighbourE": 0.0539,
+   "EoverP": 1.81
+  },
+  {
+   "name": "probe:box-E500-L8",
+   "units": 58402409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 3.296,
+   "nsMinP": 3.284,
+   "streamP": 0.19251,
+   "medianBP": 0.02963,
+   "maxForeignP": 0.0008,
+   "maxNeighbourP": 0.0036,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 5.875,
+   "nsMinE": 5.758,
+   "streamE": 0.3431,
+   "medianBE": 0.04701,
+   "maxForeignE": 0.0016,
+   "maxNeighbourE": 0.0404,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:boxT-E300-L8",
+   "units": 44302409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    7
+   ],
+   "nsP": 8.102,
+   "nsMinP": 8.089,
+   "streamP": 0.35896,
+   "medianBP": 0.02928,
+   "maxForeignP": 0.0043,
+   "maxNeighbourP": 0.0468,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 14.65,
+   "nsMinE": 14.263,
+   "streamE": 0.64905,
+   "medianBE": 0.04524,
+   "maxForeignE": 0.0017,
+   "maxNeighbourE": 0.0631,
+   "EoverP": 1.81
+  },
+  {
+   "name": "probe:boxT-E500-L8",
+   "units": 103202409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    15
+   ],
+   "nsP": 3.719,
+   "nsMinP": 3.703,
+   "streamP": 0.38385,
+   "medianBP": 0.02975,
+   "maxForeignP": 0.0021,
+   "maxNeighbourP": 0.0185,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 13,
+   "cpusE": [
+    18
+   ],
+   "nsE": 6.534,
+   "nsMinE": 6.508,
+   "streamE": 0.67433,
+   "medianBE": 0.04509,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0783,
+   "EoverP": 1.76
+  },
+  {
+   "name": "probe:sph-E300-L8",
+   "units": 90802409,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 3.586,
+   "nsMinP": 3.579,
+   "streamP": 0.32566,
+   "medianBP": 0.02935,
+   "maxForeignP": 0.0027,
+   "maxNeighbourP": 0.0743,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 6.445,
+   "nsMinE": 6.357,
+   "streamE": 0.58518,
+   "medianBE": 0.04486,
+   "maxForeignE": 0.0025,
+   "maxNeighbourE": 0.0989,
+   "EoverP": 1.8
+  },
+  {
+   "name": "probe:sph-E500-L8",
+   "units": 92482405,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 1.913,
+   "nsMinP": 1.892,
+   "streamP": 0.17692,
+   "medianBP": 0.02851,
+   "maxForeignP": 0.0006,
+   "maxNeighbourP": 0.0168,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 3.397,
+   "nsMinE": 3.372,
+   "streamE": 0.31418,
+   "medianBE": 0.04401,
+   "maxForeignE": 0.0015,
+   "maxNeighbourE": 0.096,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:sphT-E500-L8",
+   "units": 164162405,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 1.542,
+   "nsMinP": 1.531,
+   "streamP": 0.25308,
+   "medianBP": 0.02853,
+   "maxForeignP": 0.0009,
+   "maxNeighbourP": 0.0012,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 2.78,
+   "nsMinE": 2.743,
+   "streamE": 0.45644,
+   "medianBE": 0.04373,
+   "maxForeignE": 0.0016,
+   "maxNeighbourE": 0.0847,
+   "EoverP": 1.8
+  },
+  {
+   "name": "probe:extTS-E500-L8",
+   "units": 117922405,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 1.718,
+   "nsMinP": 1.702,
+   "streamP": 0.20256,
+   "medianBP": 0.02793,
+   "maxForeignP": 0.0469,
+   "maxNeighbourP": 0.0329,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 3.061,
+   "nsMinE": 3.025,
+   "streamE": 0.36093,
+   "medianBE": 0.04306,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0274,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:boxS-scale500-L8",
+   "units": 253712405,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.295,
+   "nsMinP": 0.288,
+   "streamP": 0.07497,
+   "medianBP": 0.02857,
+   "maxForeignP": 0.04,
+   "maxNeighbourP": 0.0714,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 11,
+   "cpusE": [
+    17,
+    18
+   ],
+   "nsE": 0.525,
+   "nsMinE": 0.524,
+   "streamE": 0.1333,
+   "medianBE": 0.04318,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.047,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:boxS-scale1000-L4",
+   "units": 289142373,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.238,
+   "nsMinP": 0.237,
+   "streamP": 0.06877,
+   "medianBP": 0.02813,
+   "maxForeignP": 0.0429,
+   "maxNeighbourP": 0.007,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    17
+   ],
+   "nsE": 0.444,
+   "nsMinE": 0.434,
+   "streamE": 0.1283,
+   "medianBE": 0.04415,
+   "maxForeignE": 0.0012,
+   "maxNeighbourE": 0.0916,
+   "EoverP": 1.87
+  },
+  {
+   "name": "probe:sphS-scale1000-L2",
+   "units": 399902357,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.157,
+   "nsMinP": 0.156,
+   "streamP": 0.06266,
+   "medianBP": 0.02813,
+   "maxForeignP": 0.0174,
+   "maxNeighbourP": 0.037,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 10,
+   "cpusE": [
+    17
+   ],
+   "nsE": 0.28,
+   "nsMinE": 0.271,
+   "streamE": 0.112,
+   "medianBE": 0.0451,
+   "maxForeignE": 0.0014,
+   "maxNeighbourE": 0.098,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:extS-scale1000-L4",
+   "units": 216592373,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 0.224,
+   "nsMinP": 0.222,
+   "streamP": 0.04856,
+   "medianBP": 0.02757,
+   "maxForeignP": 0.0467,
+   "maxNeighbourP": 0.0055,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 0.417,
+   "nsMinE": 0.397,
+   "streamE": 0.09037,
+   "medianBE": 0.04425,
+   "maxForeignE": 0.0012,
+   "maxNeighbourE": 0.0774,
+   "EoverP": 1.86
+  },
+  {
+   "name": "probe:refs-tiny-d1",
+   "units": 232600000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 4.122,
+   "nsMinP": 4.041,
+   "streamP": 0.9588,
+   "medianBP": 0.12953,
+   "maxForeignP": 0.0385,
+   "maxNeighbourP": 0.0165,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.114,
+   "nsMinE": 7.018,
+   "streamE": 1.65473,
+   "medianBE": 0.21779,
+   "maxForeignE": 0.0032,
+   "maxNeighbourE": 0.0767,
+   "EoverP": 1.73
+  },
+  {
+   "name": "probe:refs-tiny-d100",
+   "units": 559300000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 5.264,
+   "nsMinP": 5.232,
+   "streamP": 2.94406,
+   "medianBP": 0.13116,
+   "maxForeignP": 0.0391,
+   "maxNeighbourP": 0.0447,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 8.882,
+   "nsMinE": 8.764,
+   "streamE": 4.96776,
+   "medianBE": 0.21218,
+   "maxForeignE": 0.0035,
+   "maxNeighbourE": 0.0659,
+   "EoverP": 1.69
+  },
+  {
+   "name": "probe:refs-json64k",
+   "units": 271656000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.904,
+   "nsMinP": 0.864,
+   "streamP": 0.24565,
+   "medianBP": 0.03106,
+   "maxForeignP": 0.0009,
+   "maxNeighbourP": 0.0091,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 1.549,
+   "nsMinE": 1.511,
+   "streamE": 0.42074,
+   "medianBE": 0.04738,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.0582,
+   "EoverP": 1.71
+  },
+  {
+   "name": "probe:refs-json1m",
+   "units": 1050954000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.792,
+   "nsMinP": 0.78,
+   "streamP": 0.83214,
+   "medianBP": 0.03014,
+   "maxForeignP": 0.0026,
+   "maxNeighbourP": 0.0248,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 1.359,
+   "nsMinE": 1.298,
+   "streamE": 1.42813,
+   "medianBE": 0.04609,
+   "maxForeignE": 0.0025,
+   "maxNeighbourE": 0.0653,
+   "EoverP": 1.72
+  },
+  {
+   "name": "probe:refs-bin256k",
+   "units": 1057896000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.085,
+   "nsMinP": 0.084,
+   "streamP": 0.08946,
+   "medianBP": 0.03113,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0035,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 0.163,
+   "nsMinE": 0.163,
+   "streamE": 0.17287,
+   "medianBE": 0.04818,
+   "maxForeignE": 0.0018,
+   "maxNeighbourE": 0.0549,
+   "EoverP": 1.92
+  },
+  {
+   "name": "probe:refs-bin1m",
+   "units": 1050906000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 0.075,
+   "nsMinP": 0.073,
+   "streamP": 0.07869,
+   "medianBP": 0.02903,
+   "maxForeignP": 0.0,
+   "maxNeighbourP": 0.0651,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    18
+   ],
+   "nsE": 0.16,
+   "nsMinE": 0.157,
+   "streamE": 0.1683,
+   "medianBE": 0.04452,
+   "maxForeignE": 0.0024,
+   "maxNeighbourE": 0.0674,
+   "EoverP": 2.13
+  },
+  {
+   "name": "probe:refs-tiny-d6",
+   "units": 249100000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.217,
+   "nsMinP": 4.184,
+   "streamP": 1.05036,
+   "medianBP": 0.12866,
+   "maxForeignP": 0.003,
+   "maxNeighbourP": 0.0064,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.186,
+   "nsMinE": 7.075,
+   "streamE": 1.79012,
+   "medianBE": 0.21013,
+   "maxForeignE": 0.0037,
+   "maxNeighbourE": 0.057,
+   "EoverP": 1.7
+  },
+  {
+   "name": "probe:refs-w6d",
+   "units": 446100000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    15
+   ],
+   "nsP": 3.394,
+   "nsMinP": 3.375,
+   "streamP": 1.51395,
+   "medianBP": 0.05005,
+   "maxForeignP": 0.0027,
+   "maxNeighbourP": 0.061,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 12,
+   "cpusE": [
+    18
+   ],
+   "nsE": 5.902,
+   "nsMinE": 5.788,
+   "streamE": 2.63287,
+   "medianBE": 0.07711,
+   "maxForeignE": 0.0024,
+   "maxNeighbourE": 0.0546,
+   "EoverP": 1.74
+  },
+  {
+   "name": "probe:refs-w6dn",
+   "units": 391940000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 8,
+   "cpusP": [
+    13
+   ],
+   "nsP": 3.343,
+   "nsMinP": 3.294,
+   "streamP": 1.31022,
+   "medianBP": 0.04963,
+   "maxForeignP": 0.0223,
+   "maxNeighbourP": 0.0785,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 9,
+   "cpusE": [
+    18
+   ],
+   "nsE": 5.626,
+   "nsMinE": 5.599,
+   "streamE": 2.20513,
+   "medianBE": 0.07672,
+   "maxForeignE": 0.0021,
+   "maxNeighbourE": 0.0683,
+   "EoverP": 1.68
+  },
+  {
+   "name": "probe:refs-w3",
+   "units": 331980000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 4.018,
+   "nsMinP": 3.972,
+   "streamP": 1.33397,
+   "medianBP": 0.04919,
+   "maxForeignP": 0.0023,
+   "maxNeighbourP": 0.0281,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.164,
+   "nsMinE": 7.081,
+   "streamE": 2.37842,
+   "medianBE": 0.0807,
+   "maxForeignE": 0.0022,
+   "maxNeighbourE": 0.0827,
+   "EoverP": 1.78
+  },
+  {
+   "name": "probe:refs-w5",
+   "units": 709434000,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    15
+   ],
+   "nsP": 4.263,
+   "nsMinP": 4.236,
+   "streamP": 3.024,
+   "medianBP": 0.02942,
+   "maxForeignP": 0.0017,
+   "maxNeighbourP": 0.0317,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 8,
+   "cpusE": [
+    19
+   ],
+   "nsE": 7.439,
+   "nsMinE": 7.281,
+   "streamE": 5.27754,
+   "medianBE": 0.04559,
+   "maxForeignE": 0.002,
+   "maxNeighbourE": 0.0666,
+   "EoverP": 1.75
+  },
+  {
+   "name": "probe:nodes-flat",
+   "units": 72411870,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 3.594,
+   "nsMinP": 3.589,
+   "streamP": 0.26023,
+   "medianBP": 0.0436,
+   "maxForeignP": 0.0045,
+   "maxNeighbourP": 0.0253,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 6.032,
+   "nsMinE": 5.868,
+   "streamE": 0.43681,
+   "medianBE": 0.06886,
+   "maxForeignE": 0.0022,
+   "maxNeighbourE": 0.061,
+   "EoverP": 1.68
+  },
+  {
+   "name": "probe:nodes-deep",
+   "units": 14775187,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 0.873,
+   "nsMinP": 0.855,
+   "streamP": 0.0129,
+   "medianBP": 0.03592,
+   "maxForeignP": 0.0091,
+   "maxNeighbourP": 0.0456,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    19
+   ],
+   "nsE": 1.47,
+   "nsMinE": 1.442,
+   "streamE": 0.02172,
+   "medianBE": 0.05777,
+   "maxForeignE": 0.0008,
+   "maxNeighbourE": 0.073,
+   "EoverP": 1.68
+  },
+  {
+   "name": "probe:nodes-flat-T",
+   "units": 86423740,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    13
+   ],
+   "nsP": 4.456,
+   "nsMinP": 4.444,
+   "streamP": 0.38509,
+   "medianBP": 0.03791,
+   "maxForeignP": 0.0041,
+   "maxNeighbourP": 0.0054,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 12,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.197,
+   "nsMinE": 7.075,
+   "streamE": 0.62202,
+   "medianBE": 0.05855,
+   "maxForeignE": 0.0022,
+   "maxNeighbourE": 0.0951,
+   "EoverP": 1.62
+  },
+  {
+   "name": "R:images-by-uri-20000",
+   "units": 102224020,
+   "statusP": "decided",
+   "cleanPairsP": 7,
+   "attemptsP": 7,
+   "cpusP": [
+    7
+   ],
+   "nsP": 4.171,
+   "nsMinP": 4.162,
+   "streamP": 0.42639,
+   "medianBP": 0.11159,
+   "maxForeignP": 0.0488,
+   "maxNeighbourP": 0.0511,
+   "statusE": "decided",
+   "cleanPairsE": 7,
+   "attemptsE": 7,
+   "cpusE": [
+    18
+   ],
+   "nsE": 7.064,
+   "nsMinE": 6.847,
+   "streamE": 0.7221,
+   "medianBE": 0.19487,
+   "maxForeignE": 0.0025,
+   "maxNeighbourE": 0.0684,
+   "EoverP": 1.69
+  }
+ ],
+ "EoverP": {
+  "min": 1.47,
+  "median": 1.74,
+  "max": 2.13
+ }
+}
