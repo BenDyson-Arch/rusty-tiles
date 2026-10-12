@@ -677,8 +677,9 @@ the manifest by sha256 only (`file: "evidence:…"`).
 
 **Limits.** O passes the #160 defaults to O-implicit (`hierarchy_visits` 2^18, `references` 2^20,
 `member_bytes` and `document_decoded_bytes` 128 MiB, `document_items` 2^17), and the slice-3 default cap
-`containmentWorkUnits` = 2^29 explicitly: `c2o/check.py`'s `DEFAULT_LIMITS` (O-WB's file, not edited here)
-still says 2^28. I1 controls (S3-18, S3-19) run at their manifest limits over O-implicit's own defaults, as the
+`containmentWorkUnits` = 2^29 explicitly. `c2o/check.py`'s `DEFAULT_LIMITS` (O-WB's file) said 2^28 when
+this section was written; R set it to 2^29 at integration (see below), so the bare explicit oracle and
+O-implicit now agree. I1 controls (S3-18, S3-19) run at their manifest limits over O-implicit's own defaults, as the
 I1 parity test does.
 
 ### Results
@@ -937,6 +938,46 @@ re-run is about the producer output that the corpus and the forest-derived contr
 | `r2/perf/process.json` (perf lane, develop vs head) | `60b9f471e882f5725122f4993feb4e33a2c5556710b8710de178953129d94696` |
 | `r2/perf/forest.json` (forest, develop vs head) | `921e0d03f8b880bce41e31d86fb2017c8a4d63e448d92495adb58ad64a1c517a` |
 | `r2/native-geospatial-tests.log`, `r2/ci/steps.txt` | `75b7c2be…`, `86dd723f…` |
+
+### Slice-3 acceptance, §9.F adapters and final-audit record (R, 2026-10-13)
+
+**Report parity (contract §9.F).** At head `448fdfc98ae816938d13f6368d20cf18a9f64b9f`, `rusty-tiles validate --json`
+(release CLI, sha256 `e217d5584c7a319c0a3901202e66cc2cf6a98503df2cf61eaf17196a6623a81f`) and
+`rusty_tiles.validate` from an installed wheel were run on **194 archives**: the 36 forest-2d85208
+archives, the 16 `slice3/` controls and the 142 `witnesses/fixtures/*.3tz` explicit C2 controls. The CLI JSON
+object and the Python dict were compared key by key, and error cases by code (`invalid_input` / `DataError`,
+`resource_limit` / `ResourceLimitError`, `unsupported` / `UnsupportedError`) and message. **0 differences**; the
+contract allows none. 71 archives report (35 forest, 8 slice-3, 28 witnesses) and 123 refuse, 114 of them with the
+same Outside message in both adapters. Archives with their sha256 (full list of 194 in `f1/archives.sha256`):
+
+| Archive | Kind | sha256 |
+| --- | --- | --- |
+| `forest-2d85208/W1.3tz` (F-W1) | Contained report | `ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900` |
+| `forest-2d85208/W5-vec-perf.3tz` (F-W5) | Contained report | `b67c411cddac63738896fc1049c593630e33078789f6724399c614dd9d10868a` |
+| `forest-2d85208/W5-vec-perf-quantize.3tz` (F-W5) | Contained report | `057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b` |
+| `forest-2d85208/mf2-lod3.3tz` (F-MF2) | Contained report | `2c526cbcb6171fe107b8f409db31139d74f922dd92d412a88e1d7745f9dede87` |
+| `forest-2d85208/W6.3tz` (F-W6) | Contained report | `751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd` |
+| `forest-2d85208/W6d.3tz` (F-W6d) | Contained report | `9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0` |
+| `forest-2d85208/mf2-lod3-explicit.3tz` (twin) | `resource_limit` ("JSON exceeds value-node limit"), same in both | `91ba9ce90fb3cb8c884559af9d331a7a7403c766b4d4fb958d782300d226f17b` |
+| `slice3/S3-1.W6.3tz` | Outside(own), same message | `a9a4812ce850f51f…` (full in `f1/archives.sha256`) |
+
+**Installed wheel.** `maturin 1.15.0 build --release --locked` at the head produced
+`rusty_tiles-0.4.0-cp310-abi3-linux_x86_64.whl`, sha256 `9b9e5ece4f7b4683bcf683bb6648324392d4a2f679cc19cb9e4e04d2b3c8ae04`.
+It was installed into a fresh venv, and the parity run above used `python -I` there. `scripts/test_python_wheel.py`
+(clean venv, empty PATH) passed: 45 tests, OK. The wheel therefore includes #176's meshopt header check, which
+the earlier `final/wheels` build did not.
+
+| Evidence (`/home/bend/.cache/c2s3-evidence/f1/`) | sha256 |
+| --- | --- |
+| `compare.json` (per-archive CLI and Python result, differences) | `b05c0132ea95bed5a348bb966e14fce3fb03e72f6ba3258b258c500f44e6b7a5` |
+| `archives.sha256` (194 archives) | `0d2eefe00dcd9a0a185bcd5bc2ee1ace24b2decb9916053cc081ffd29740e2d3` |
+| `wheel-test.log` | `97b0904a93431af64eedc1eedae17084c438d4ab72e21d10d52c637f8c867ac9` |
+| `maturin.log` | `6943e0a695b9a44047fb1ee62465c31440e6bed30234ada3b40d058aa36522a3` |
+
+**Known limits.** A 44.6 KB payload-free implicit archive (one QUADTREE subtree, 262,139 available tiles, no
+content) peaks at 157 MiB RSS under `validate` at head versus 62 MiB on develop, because slice 3 registers one
+376-byte `TileFact` per visited implicit tile. This is bounded by `hierarchy_visits`, fallible and allowed by
+§5.4. Registering implicit tile facts lazily or compactly is a follow-up.
 
 ## What remains
 
