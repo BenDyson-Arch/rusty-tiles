@@ -139,6 +139,10 @@ impl Scratch {
         &*self.io
     }
 
+    pub(super) fn io_handle(&self) -> Arc<dyn SpillIo> {
+        self.io.clone()
+    }
+
     pub(super) fn new_file(&self, stem: &str) -> SpillFile {
         let id = self.next_file.fetch_add(1, Ordering::Relaxed);
         SpillFile {

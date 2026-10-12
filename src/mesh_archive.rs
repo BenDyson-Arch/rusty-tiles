@@ -14,12 +14,12 @@ use std::{
 };
 
 mod approximation;
-mod binding;
+pub(crate) mod binding;
 mod encode;
 mod model;
 mod partition;
 mod placement;
-mod source;
+pub(crate) mod source;
 
 pub use model::{
     model_to_archive, model_to_manifest, ModelManifestRequest, ModelManifestResult, ModelReport,

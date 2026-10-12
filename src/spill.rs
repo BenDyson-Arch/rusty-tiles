@@ -9,11 +9,14 @@
 #![allow(dead_code)] // ML2 item 1 lands before its producers (ML2 items B and C).
 
 mod scratch;
+mod sequence;
 mod sort;
 mod volume;
 
 #[allow(unused_imports)]
 pub(crate) use scratch::{FileIo, Scratch, SpillIo};
+#[allow(unused_imports)]
+pub(crate) use sequence::{Sequence, SequenceReader, SequenceWriter};
 #[allow(unused_imports)]
 pub(crate) use sort::{ExternalSorter, SortConfig, SortStats, SortedStream};
 #[allow(unused_imports)]

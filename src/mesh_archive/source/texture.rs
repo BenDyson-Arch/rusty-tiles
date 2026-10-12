@@ -7,7 +7,6 @@ use image::{ColorType, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Lim
 use serde_json::Value;
 use std::io::Cursor;
 
-const MAX_IMAGES: usize = 32;
 const MAX_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 4 * 1024 * 1024;
 const MAX_TOTAL_PIXELS: u64 = 16 * 1024 * 1024;
@@ -106,6 +105,7 @@ fn labels_removed(values: &[Value]) -> Vec<Value> {
 pub(super) fn metadata(
     doc: &Value,
     resources: &mut Vec<ResourceRequest>,
+    max_images: usize,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(Vec<ImageSource>, Vec<Value>, Vec<Value>)> {
     let source_images = list(doc, "images")?;
@@ -113,9 +113,11 @@ pub(super) fn metadata(
     let samplers = list(doc, "samplers")?;
     if [source_images.len(), textures.len(), samplers.len()]
         .into_iter()
-        .any(|n| n > MAX_IMAGES)
+        .any(|n| n > max_images)
     {
-        return Err(unsupported("image/texture/sampler count exceeds 32"));
+        return Err(unsupported(format!(
+            "image/texture/sampler count exceeds {max_images}"
+        )));
     }
     for sampler in samplers {
         check()?;
