@@ -737,6 +737,19 @@ fn inexact_translation_sums_widen_rows_and_ancestors_outward() {
         assert!(half[0] > expected[0], "tile {index}");
         assert_eq!(half[1..], expected[1..], "tile {index}");
     }
+    // Only the payload rebase is inexact: δ = 0 + 0.1 is exact, but tile 1's raw scene
+    // root translation 0.5 + 0.1 rounds, so the implicit root still grows on x.
+    let dir = tempfile::tempdir().unwrap();
+    let spec = tile(&["glb"], vec![leaf().moved([0.1, 0., 0.])]);
+    let h = build(dir.path(), &spec);
+    let mut manifest = h.manifest.clone();
+    let output = write(dir.path(), &mut manifest, SubdivisionScheme::Octree).unwrap();
+    assert_eq!(roles(&output)[0], TileRole::ImplicitRoot);
+    let b = manifest["root"]["boundingVolume"]["box"]
+        .as_array()
+        .unwrap();
+    assert_eq!(b[3].as_f64(), Some(2f64.next_up()));
+    assert_eq!((b[7].as_f64(), b[11].as_f64()), (Some(3.), Some(1.)));
 }
 
 #[test]
