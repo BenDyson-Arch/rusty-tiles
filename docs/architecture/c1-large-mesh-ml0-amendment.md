@@ -16,7 +16,7 @@ item below, this note governs that item; the C1 text governs everything else.
 
 | Item | Identity |
 | --- | --- |
-| Base | `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b` (C2-WB merged, PR #164) |
+| Base | `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26` (C2-WB merged in PR #164; bulk evidence moved out in PR #165) |
 | Design | large-mesh design v5 `design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`, `open-decisions.md` `523ed2cd…eea` |
 | Review | v5 precode delta review `review.md` `698b3b61…c4ef` (ML0 may start) |
 | C1 contract | `c1-payload-integrity-contract.md` `3cb5ad34…3e1e3`; `VALIDATION.md` `9d7b1b36…577e` |

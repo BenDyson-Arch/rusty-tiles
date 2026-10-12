@@ -6,10 +6,10 @@ design author's v5.1 fixes for those blockers of the v5 precode delta review and
 re-checked against v5.1 before this note is frozen. Nothing here records acceptance.
 
 This note amends [p-impl-layout-contract.md](p-impl-layout-contract.md) (frozen v3 plus the
-delta-review amendments; sha256 `80acd233…0151`), which stays byte-identical. Where they disagree
+delta-review amendments; sha256 `1f356799…d28a`), which stays byte-identical. Where they disagree
 on an item below, this note governs. ML3 part A (`implicit/tileset.rs`) implements it.
 
-**Base:** `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b`. **Design:** large-mesh v5
+**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. **Design:** large-mesh v5
 §9.1, §2.4, §2.6 (`design.md` `70a1eeec…afd1`); review `698b3b61…c4ef` (B2, B3, B4, E1).
 
 ## Unchanged

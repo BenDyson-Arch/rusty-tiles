@@ -6,7 +6,7 @@ replaces or retires it, and which user decision governs. Questions the decisions
 are listed for the user at the end. Nothing is removed by this document; removals happen in ML10,
 after ML9 accepts (the legacy command stays advertised until then).
 
-**Base:** `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b`. Sources read: `src/main.rs`
+**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. Sources read: `src/main.rs`
 (`MeshArgs` `:467-551`, `LocalMeshArgs` `:553-568`, `RigidPlacementArgs` to `:581`), `bindings/python/src/lib.rs`
 (`mesh_local_to_3tz` `:283-296`, `mesh_to_3tz` `:526-575`), `src/tile.rs` (`MeshTo3tzOptions`
 `:33-84`, `TextureFormat` `:124-129`, `DEFAULT_*` `:25-30`), `src/mesh_archive.rs`

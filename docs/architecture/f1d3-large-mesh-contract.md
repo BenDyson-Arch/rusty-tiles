@@ -18,7 +18,7 @@ and the retirement of legacy options are in [the dispositions record](f1d3-surfa
 
 | Item | Identity |
 | --- | --- |
-| Base | `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b` |
+| Base | `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26` |
 | Design (basis) | v5: `design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`, `open-decisions.md` `523ed2cd…eea`, `CHANGELOG.md` `5ed54eca…3f10` (preserved in `v5/`) |
 | Review | v5 delta review `698b3b61…c4ef`: GO-with-changes; ML0 may start; umbrella freeze waits for B1–B4 |
 | P0 evidence | design §12.1; `evidence/p0/src/main.rs` `a068cd11…`; bulk in `~/.cache/rusty-tiles-evidence/mlarge-p0-20261012/` |

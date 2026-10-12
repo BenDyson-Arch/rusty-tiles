@@ -6,12 +6,12 @@ and this note, hashed mutant controls and a fresh nonauthor precode review befor
 here records acceptance.
 
 This note amends [i1-implicit-read-contract.md](i1-implicit-read-contract.md) (v3.1 with the v3.2
-rulings and integration amendments; sha256 `8cc96bed…6790`), which stays byte-identical. Where
+rulings and integration amendments; sha256 `bd931869…9ee2`), which stays byte-identical. Where
 they disagree on an item below, this note governs that item. It is the I1 half of the cap work in
 [the C1 amendment](c1-large-mesh-ml0-amendment.md) (A-C1-4), and it composes with C2 slice 3
 (frozen v3.1, `contract-draft.md` `8bc53429…31d6`), which uses I1's walk unchanged.
 
-**Base:** `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b`. **Design:** large-mesh v5
+**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`. **Design:** large-mesh v5
 (`design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`); review `698b3b61…c4ef`.
 
 ## What the forest output needs from I1

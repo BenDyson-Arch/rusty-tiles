@@ -6,11 +6,11 @@ an independent oracle author (O), hashed mutant controls and a fresh nonauthor p
 Nothing here records acceptance.
 
 This note amends [c2-decoded-containment-contract.md](c2-decoded-containment-contract.md) (v3.3,
-the post-freeze amendments and the C2-WB amendment; sha256 `da71cb32…61de`) **as further amended
+the post-freeze amendments and the C2-WB amendment; sha256 `a0a43e4f…575c`) **as further amended
 by C2 slice 3** (frozen v3.1, `/tmp/rusty-tiles-c2s3-contract-20261012/contract-draft.md`
 `8bc53429…31d6`, branch `feat/c2-implicit-containment` at `ac1bf94`). Neither text is edited.
 
-**Base:** `origin/develop` `e29cd19d2f236dc688e91a80a45170d4a573e20b`, which contains the C2-WB
+**Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`, which contains the C2-WB
 merge (PR #164) and its WB-6 calibration. **Design:** large-mesh v5 (`design.md` `70a1eeec…afd1`,
 §10.4, decision E44; ruling 4); review `698b3b61…c4ef`.
 
