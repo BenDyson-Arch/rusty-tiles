@@ -507,13 +507,16 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
             let within = |nodes: &[usize], a: usize, b: usize| {
                 nodes.partition_point(|&n| n < a)..nodes.partition_point(|&n| n <= b)
             };
-            let fx = &fine.xs[within(&fine.xs, xa, xb)];
-            let fy = &fine.ys[within(&fine.ys, ya, yb)];
+            let (rx, ry) = (within(&fine.xs, xa, xb), within(&fine.ys, ya, yb));
+            let (fx, fy) = (&fine.xs[rx.clone()], &fine.ys[ry.clone()]);
+            // Child lattice nodes are its stored vertices: no search needed.
+            for (j, &y) in fy.iter().enumerate() {
+                for (i, &x) in fx.iter().enumerate() {
+                    let here = sheet.cell(c, r, x as f64, y as f64);
+                    worst = worst.max(distance(fine.vertex(rx.start + i, ry.start + j), here));
+                }
+            }
             points.clear();
-            points.extend(
-                fy.iter()
-                    .flat_map(|&y| fx.iter().map(move |&x| (x as f64, y as f64))),
-            );
             if xb - xa < patch.stride || yb - ya < patch.stride {
                 let (w, h) = ((xb - xa) as f64, (yb - ya) as f64);
                 // This tile's diagonal runs from (xb, ya) to (xa, yb).
@@ -751,32 +754,73 @@ fn power_of_two(value: f64) -> f64 {
     }
     step
 }
-/// Per level, the finest power-of-two grid, one step for every axis, on which
-/// every tile of the level, surface and skirt, spans at most `steps` steps. Coarse levels
-/// always quantize: their grid error is part of their measured error. The
-/// leaves are the reference surface, so they fall back to Float32 when their
-/// grid could move a vertex more than [`POSITION_LIMIT`].
+/// Per level and glTF axis: the largest span and magnitude of a tile.
 #[cfg(feature = "native-geospatial")]
-fn storage_for(plan: &PreparedPlan, depth: u32, steps: f64) -> Vec<Storage> {
-    let levels = depth as usize + 1;
-    let mut extent = vec![[0f64; 3]; levels];
-    let mut magnitude = vec![[0f64; 3]; levels];
-    for patch in &plan.patches {
-        let [low, high] = stored_range(patch.bounds);
-        let level = patch.level as usize;
-        for axis in 0..3 {
-            extent[level][axis] = extent[level][axis].max(high[axis] - low[axis]);
-            magnitude[level][axis] = magnitude[level][axis]
-                .max(low[axis].abs())
-                .max(high[axis].abs());
+type Extents = (Vec<[f64; 3]>, Vec<[f64; 3]>);
+/// The [`Extents`] of every level's unrounded surfaces. A coarse tile's nodes
+/// are nodes of the leaves below it, so the union of their ranges bounds its
+/// own: only leaves are sampled.
+#[cfg(feature = "native-geospatial")]
+fn surface_extents(pyramid: &Pyramid) -> Result<Extents, JobError> {
+    let (depth, cells) = (pyramid.depth, pyramid.cells);
+    let (width, height) = (pyramid.raster.width, pyramid.raster.height);
+    let empty = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    let mut ranges: Vec<Vec<[[f64; 3]; 2]>> = (0..=depth)
+        .map(|level| {
+            let span = pyramid.span(level);
+            vec![empty; width.div_ceil(span) * height.div_ceil(span)]
+        })
+        .collect();
+    for row in 0..height.div_ceil(cells) {
+        for column in 0..width.div_ceil(cells) {
+            let patch = pyramid.patch(depth, column, row);
+            let range = stored_range(pyramid.grid(&patch, Storage::Exact)?.bounds);
+            for (level, tiles) in ranges.iter_mut().enumerate() {
+                let shift = depth as usize - level;
+                let columns = width.div_ceil(pyramid.span(level as u32));
+                let tile = &mut tiles[(row >> shift) * columns + (column >> shift)];
+                for axis in 0..3 {
+                    tile[0][axis] = tile[0][axis].min(range[0][axis]);
+                    tile[1][axis] = tile[1][axis].max(range[1][axis]);
+                }
+            }
         }
     }
-    (0..levels)
+    let mut extent = vec![[0f64; 3]; ranges.len()];
+    let mut magnitude = vec![[0f64; 3]; ranges.len()];
+    for (level, tiles) in ranges.iter().enumerate() {
+        for [low, high] in tiles.iter().filter(|t| t[0][0] <= t[1][0]) {
+            for axis in 0..3 {
+                extent[level][axis] = extent[level][axis].max(high[axis] - low[axis]);
+                magnitude[level][axis] = magnitude[level][axis]
+                    .max(low[axis].abs())
+                    .max(high[axis].abs());
+            }
+        }
+    }
+    Ok((extent, magnitude))
+}
+/// Leaves are the reference surface: they keep Float32 when a quantized grid
+/// could move a vertex more than [`POSITION_LIMIT`].
+#[cfg(feature = "native-geospatial")]
+fn leaf_storage(storage: Storage) -> Storage {
+    if storage.margin(0.) / 2. > POSITION_LIMIT {
+        Storage::Float
+    } else {
+        storage
+    }
+}
+/// Per level, the finest power-of-two grid, one step for every axis, on which
+/// each tile's surface spans at most `steps` steps. One step for all three
+/// axes keeps vertical precision equal to horizontal, and the height stream as
+/// compressible as the others. Coarse levels always quantize: their grid
+/// error is part of their measured error.
+#[cfg(feature = "native-geospatial")]
+fn storage_for((extent, magnitude): &Extents, steps: f64) -> Vec<Storage> {
+    let depth = extent.len() - 1;
+    (0..=depth)
         .map(|level| {
-            // Rounding each end can add one step; leave headroom for the
-            // estimate's skirts deepening by their grid margin. One step for
-            // all three axes: vertical precision matches horizontal, which
-            // keeps the height stream as compressible as the others.
+            // Rounding each end can add one step; leave headroom for skirts.
             let step = (0..3)
                 .map(|axis| {
                     (extent[level][axis] * (1. + 1. / 1024.) / (steps - 1.))
@@ -784,8 +828,8 @@ fn storage_for(plan: &PreparedPlan, depth: u32, steps: f64) -> Vec<Storage> {
                 })
                 .fold(2f64.powi(-40), f64::max);
             let storage = Storage::Quantized([power_of_two(step); 3]);
-            if level == depth as usize && storage.margin(0.) / 2. > POSITION_LIMIT {
-                Storage::Float
+            if level == depth {
+                leaf_storage(storage)
             } else {
                 storage
             }
@@ -795,7 +839,7 @@ fn storage_for(plan: &PreparedPlan, depth: u32, steps: f64) -> Vec<Storage> {
 /// A coarser grid for each level where some tile spans more than `steps`
 /// steps, or `None` when every tile fits.
 #[cfg(feature = "native-geospatial")]
-fn refit(plan: &PreparedPlan, steps: f64) -> Option<Vec<Storage>> {
+fn refit(plan: &PreparedPlan, depth: u32, steps: f64) -> Option<Vec<Storage>> {
     let mut storage = plan.storage.clone();
     for patch in &plan.patches {
         let Storage::Quantized(step) = &mut storage[patch.level as usize] else {
@@ -809,6 +853,9 @@ fn refit(plan: &PreparedPlan, steps: f64) -> Option<Vec<Storage>> {
                 *step = [coarser; 3];
             }
         }
+    }
+    if let Some(leaves) = storage.get_mut(depth as usize) {
+        *leaves = leaf_storage(*leaves);
     }
     (storage != plan.storage).then_some(storage)
 }
@@ -831,15 +878,13 @@ fn plan(pyramid: &Pyramid) -> Result<PreparedPlan, JobError> {
             "terrain plan exceeds 10000 leaves or 1 GiB conservative output budget",
         ));
     }
-    // Unrounded positions size each level's grid; the stored plan is then
-    // measured on decoded positions and coarsened until every tile fits.
-    let exact = vec![Storage::Exact; pyramid.depth as usize + 1];
-    let estimate = plan_with(pyramid, exact, tiles)?;
-    let mut storage = storage_for(&estimate, pyramid.depth, pyramid.quantization_steps);
-    drop(estimate);
+    // Unrounded leaf surfaces size each level's grid; the stored plan is then
+    // measured on decoded positions, skirts included, and coarsened until
+    // every tile fits.
+    let mut storage = storage_for(&surface_extents(pyramid)?, pyramid.quantization_steps);
     for _ in 0..64 {
         let plan = plan_with(pyramid, storage, tiles)?;
-        match refit(&plan, pyramid.quantization_steps) {
+        match refit(&plan, pyramid.depth, pyramid.quantization_steps) {
             Some(coarser) => storage = coarser,
             None => {
                 if plan.position_error > POSITION_LIMIT {
