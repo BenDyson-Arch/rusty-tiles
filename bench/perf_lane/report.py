@@ -448,17 +448,24 @@ def collect(args, explanations):
     quiet = dict(pair=None, steps=[])
     idle = lambda step: wait_for_idle(quiet, step, pairs, args.min_idle, args.idle_interval, args.idle_give_up)
     best = None
+    (work / 'inputs').mkdir(parents=True)  # one corpus, shared by every attempt
     for attempt in range(1, args.attempts + 1):  # rerun while other work contended the pinned CPUs
         cpus = idle(f'process attempt {attempt}')
-        out = evidence / f'process-attempt{attempt}.json'
-        process = run([*py, HERE / 'process.py', '--base', base, '--head', head, '--work', work / 'process', '--out', out,
+        out, attempt_work = evidence / f'process-attempt{attempt}.json', work / f'process-attempt{attempt}'
+        attempt_work.mkdir(); (attempt_work / 'inputs').symlink_to(work / 'inputs')
+        process = run([*py, HERE / 'process.py', '--base', base, '--head', head, '--work', attempt_work, '--out', out,
                        '--repeat', args.repeat, '--cpus', cpus, *(x for e in args.explain for x in ('--explain', e))])
         if process.returncode not in (0, 1) or not out.exists(): raise SystemExit('report: process.py failed')
         noisy = contended(json.loads(out.read_text()))
         print(f'report: attempt {attempt}: {len(noisy)} contended case sides {noisy}', file=sys.stderr, flush=True)
-        if best is None or len(noisy) < best[1]: best = (out, len(noisy), quiet['steps'][-1])
+        if best is None or len(noisy) < best[1]:
+            if best: shutil.rmtree(best[3], ignore_errors=True)
+            best = (out, len(noisy), quiet['steps'][-1], attempt_work)
+        else:
+            shutil.rmtree(attempt_work, ignore_errors=True)
         if not noisy: break
     shutil.copy2(best[0], evidence / 'process.json')
+    kept = best[3]  # Cesium and the copied logs use the outputs of the attempt whose numbers are reported
     pinned = dict(process=best[2])
     result = json.loads((evidence / 'process.json').read_text())
     hole = ','.join(map(str, result['environment']['rasterHoleDegrees']))
@@ -468,7 +475,7 @@ def collect(args, explanations):
             data = case['sides'][side]
             if case['case'].startswith('validate:') or not data.get('ok'): continue
             name = pathlib.PurePath(case['argv'][case['argv'].index('-o') + 1]).name
-            targets.append(f"{case['case']}={work / 'process' / side / name}")
+            targets.append(f"{case['case']}={kept / side / name}")
         if not targets: continue
         cpus = idle(f'cesium {side}')
         pinned[f'cesium-{side}'] = quiet['steps'][-1]
@@ -478,7 +485,7 @@ def collect(args, explanations):
             raise SystemExit(f'report: cesium.py failed for {side}')
         shutil.copytree(work / f'cesium-{side}' / 'screenshots', evidence / f'screenshots-{side}')
         logs = evidence / f'logs-{side}'; logs.mkdir()
-        for log in (work / 'process' / side).glob('*.log'): shutil.copy2(log, logs / log.name.replace(':', '_'))
+        for log in (kept / side).glob('*.log'): shutil.copy2(log, logs / log.name.replace(':', '_'))
     meta = dict(date=date, label=args.milestone_label, corpus=corpus_digest(result['environment']['inputs']),
                 head=dict(commit=commit, sha256=sha256(head), path=str(head)),
                 release=dict(tag=tag, commit=build['commit'], sha256=build['sha256'], build=build['build'], path=str(base)),
