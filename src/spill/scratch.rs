@@ -117,6 +117,11 @@ impl Scratch {
         self.volume.available_bytes
     }
 
+    /// Filesystem fragment/cluster size observed by the preflight.
+    pub(crate) fn allocation_unit_bytes(&self) -> u64 {
+        self.volume.allocation_unit_bytes
+    }
+
     /// Bytes currently held by live spill files.
     pub(crate) fn live_bytes(&self) -> u64 {
         self.accounting.live.load(Ordering::Relaxed)

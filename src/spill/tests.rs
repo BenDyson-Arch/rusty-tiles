@@ -723,6 +723,7 @@ fn fixed(available: u64) -> impl FnOnce(&Path) -> Result<Volume, SpillError> {
         Ok(Volume {
             available_bytes: available,
             memory_backed: false,
+            allocation_unit_bytes: 4096,
         })
     }
 }
@@ -1032,4 +1033,63 @@ fn failed_partial_writes_contribute_to_peak_before_cleanup() {
     assert_eq!(sorter_io.counters.written.load(Ordering::Relaxed), 3);
     assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
     assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn allocation_unit_is_preserved_by_preflight_and_scratch() {
+    let parent = tempfile::tempdir().unwrap();
+    let scratch = Scratch::create_with(Some(parent.path()), 65536, Arc::new(FileIo), |_| {
+        Ok(Volume {
+            available_bytes: 65536,
+            memory_backed: true,
+            allocation_unit_bytes: 65536,
+        })
+    })
+    .unwrap();
+    assert_eq!(scratch.allocation_unit_bytes(), 65536);
+    assert!(scratch.memory_backed());
+    scratch.close().unwrap();
+    assert_eq!(entries(parent.path()), 0);
+}
+
+#[test]
+fn zero_allocation_unit_is_a_typed_fault_before_scratch_creation() {
+    let parent = tempfile::tempdir().unwrap();
+    let error = Scratch::create_with(Some(parent.path()), 0, Arc::new(FileIo), |_| {
+        Ok(Volume {
+            available_bytes: u64::MAX,
+            memory_backed: false,
+            allocation_unit_bytes: 0,
+        })
+    })
+    .err()
+    .expect("invalid filesystem geometry must be refused");
+    assert_eq!(io_kind(&error), io::ErrorKind::InvalidData);
+    assert_eq!(entries(parent.path()), 0);
+    let job = JobError::from(error);
+    assert_eq!(job.kind(), JobErrorKind::Io);
+    assert_eq!(job.path(), Some(parent.path()));
+}
+
+#[test]
+fn real_volume_reports_nonzero_allocation_unit() {
+    let parent = tempfile::tempdir().unwrap();
+    let volume = inspect_volume(parent.path()).unwrap();
+    assert!(volume.allocation_unit_bytes > 0);
+    let scratch = Scratch::create(Some(parent.path()), 0).unwrap();
+    assert_eq!(
+        scratch.allocation_unit_bytes(),
+        volume.allocation_unit_bytes
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn relative_windows_path_uses_the_actual_working_directory_volume() {
+    let relative = inspect_volume(Path::new(".")).unwrap();
+    let absolute = inspect_volume(&std::env::current_dir().unwrap()).unwrap();
+    assert_eq!(
+        relative.allocation_unit_bytes,
+        absolute.allocation_unit_bytes
+    );
 }

@@ -29,7 +29,7 @@ pub(crate) struct CaptureReport {
     pub jobs: JobsPlan,
     pub memory: MemoryBound,
     pub scratch: ScratchNeed,
-    pub scratch_peak_bytes: u64,
+    pub scratch_logical_peak_bytes: u64,
     pub scratch_memory_backed: bool,
 }
 
@@ -89,11 +89,29 @@ pub(crate) fn build(
     )
     .map_err(failure)?;
     let scan = capture::scan(&source, config.sort.buffer_bytes, check).map_err(failure)?;
-    let need = config::scratch_need_parts(scan.triangles, scan.geometry_bytes, config)
-        .ok_or_else(|| failure(exhausted("H1 scratch bound exceeds u64")))?;
+    let parent = config
+        .scratch_dir
+        .clone()
+        .unwrap_or_else(Scratch::default_parent);
+    let volume = crate::spill::inspect_volume(&parent).map_err(|error| failure(error.into()))?;
+    let need = config::scratch_need_parts(
+        scan.triangles,
+        scan.geometry_bytes,
+        config,
+        volume.allocation_unit_bytes,
+    )
+    .ok_or_else(|| failure(exhausted("H1 scratch bound exceeds u64")))?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), need.need_bytes)
         .map_err(|error| failure(error.into()))?;
     let result = (|| {
+        let need = config::scratch_need_parts(
+            scan.triangles,
+            scan.geometry_bytes,
+            config,
+            scratch.allocation_unit_bytes(),
+        )
+        .ok_or_else(|| exhausted("H1 scratch bound exceeds u64"))?;
+        config::preflight_remaining(&scratch, need.need_bytes)?;
         let one = MemoryBound::new(config, source.json_bytes, 1);
         let memory_scratch = if scratch.memory_backed() {
             need.need_bytes
@@ -124,7 +142,7 @@ pub(crate) fn build(
         let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, check)?;
         member_gate(tree.stats.nodes, config.member_ceiling)?;
         check()?;
-        if scratch.peak_bytes() > need.need_bytes {
+        if scratch.peak_bytes() > need.logical_need_bytes {
             return Err(exhausted(
                 "H1 scratch accounting exceeded its declared bound",
             ));
@@ -141,7 +159,7 @@ pub(crate) fn build(
             jobs,
             memory,
             scratch: need,
-            scratch_peak_bytes: scratch.peak_bytes(),
+            scratch_logical_peak_bytes: scratch.peak_bytes(),
             scratch_memory_backed: scratch.memory_backed(),
         };
         Ok((tree, report))

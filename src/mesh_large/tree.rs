@@ -534,10 +534,13 @@ pub(crate) fn build(
     }
     let nodes = ordered_nodes.finish()?;
     check()?;
-    let need =
-        super::config::scratch_need(stats.triangles, root.bytes, config).ok_or_else(|| {
-            JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64")
-        })?;
+    let need = super::config::scratch_need(
+        stats.triangles,
+        root.bytes,
+        config,
+        scratch.allocation_unit_bytes(),
+    )
+    .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64"))?;
     super::config::preflight_remaining(scratch, need)?;
     let weld_depths = vertex_depths(scratch, &triangles, &nodes, config, jobs, check)?;
     stats.welded_vertices = weld_depths.len();

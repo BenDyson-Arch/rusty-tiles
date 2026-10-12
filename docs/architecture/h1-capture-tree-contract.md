@@ -124,6 +124,19 @@ internals imply at most 256X+1 nodes, since fan-out is at most eight. Use
 256X+16 conservatively and check all byte multiplications. Scratch preflight
 includes both generations of every corner/position/triangle/weld sort and
 four node/span inventories, avoiding assumptions about iterator drop timing.
+These are logical record bytes. Physical free-space preflight adds filesystem
+allocation rounding using the actual fragment/cluster unit, a 64 KiB metadata
+reserve per live file, 1 MiB for directory metadata and an additional logical
+generation allowance for extent overhead. Live files are bounded by 256F+32
+and by a conservative count-derived initial-run bound; use the smaller bound.
+Report logical peak separately from this full allowance. These metadata
+reserves are explicit conservative policy, requiring measured filesystem
+acceptance, not a universal theorem about filesystem metadata, compression,
+quotas or concurrent writes. A stopped-process Linux allocation witness must
+cover many tiny files, including the negative control that exposed the old
+logical-only preflight. Other platforms require their actual unit query and
+applicable platform checks; unmeasured filesystem allocation behavior remains
+a proof limit.
 
 Use a sound tile lower bound before capture and the actual geometry tree count
 after construction to refuse at the retained 178,956,970-member 3TZ ceiling,

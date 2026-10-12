@@ -370,11 +370,21 @@ pub(crate) struct ScratchNeed {
     pub triangle_sort_bytes: u64,
     pub tree_output_bytes: u64,
     pub weld_sort_bytes: u64,
+    pub logical_need_bytes: u64,
+    pub allocation_unit_bytes: u64,
+    pub max_live_files: u64,
+    /// Policy reserve for allocation rounding, metadata and filesystem extent overhead.
+    pub allocation_reserve_bytes: u64,
     pub need_bytes: u64,
 }
 
-pub(crate) fn scratch_need(triangles: u64, total_bytes: u64, config: &TreeConfig) -> Option<u64> {
-    scratch_need_parts(triangles, total_bytes, config).map(|need| need.need_bytes)
+pub(crate) fn scratch_need(
+    triangles: u64,
+    total_bytes: u64,
+    config: &TreeConfig,
+    unit: u64,
+) -> Option<u64> {
+    scratch_need_parts(triangles, total_bytes, config, unit).map(|need| need.need_bytes)
 }
 
 /// Recheck remaining capacity at a pass boundary; current owned files already consumed their
@@ -404,7 +414,11 @@ pub(crate) fn scratch_need_parts(
     triangles: u64,
     total_bytes: u64,
     config: &TreeConfig,
+    allocation_unit_bytes: u64,
 ) -> Option<ScratchNeed> {
+    if allocation_unit_bytes == 0 {
+        return None;
+    }
     let corners = triangles.checked_mul(3)?;
     let a = corners.checked_mul(CornerRef::SIZE as u64)?;
     let p = corners.checked_mul(CornerPosition::SIZE as u64)?;
@@ -419,18 +433,55 @@ pub(crate) fn scratch_need_parts(
         .checked_mul(22)?
         .checked_mul(2)?
         .checked_add(corners.checked_mul(13)?)?;
-    let need = a
+    let logical = a
         .checked_mul(2)?
         .checked_add(p.checked_mul(2)?)?
         .checked_add(t.checked_mul(2)?)?
         .checked_add(tree)?
         .checked_add(weld)?;
+    // Two inventories (<128F each), active merge outputs and a few sequences. A count-derived
+    // initial-run bound reduces the reserve for small inputs. The largest resident record
+    // gives the smallest run capacity and thus a safe bound for every current record type.
+    let record_bytes = [
+        std::mem::size_of::<TriangleRecord>(),
+        std::mem::size_of::<NodeRecord>(),
+        std::mem::size_of::<CornerRef>(),
+        std::mem::size_of::<CornerPosition>(),
+        std::mem::size_of::<Span>(),
+    ]
+    .into_iter()
+    .max()?;
+    let capacity = ((config.sort.run_bytes / 2) / record_bytes).max(1) as u64;
+    let initial_records = triangles.checked_mul(10)?.checked_add(nodes)?;
+    let counted_files = initial_records
+        .div_ceil(capacity)
+        .checked_add(5)?
+        .checked_mul(2)?
+        .checked_add(32)?;
+    let inventory_files = (config.sort.fan_in as u64)
+        .checked_mul(256)?
+        .checked_add(32)?;
+    let max_live_files = inventory_files.min(counted_files);
+    // Record bytes are not physical allocation. Reserve one rounding unit plus 64KiB per
+    // live file, 1MiB directory metadata and another logical generation for extent overhead.
+    // These conservative reserves need measured filesystem acceptance; they are not a
+    // theorem about arbitrary filesystems, quotas or concurrent writers.
+    let reserve = allocation_unit_bytes
+        .checked_add(64 << 10)?
+        .checked_mul(max_live_files)?
+        .checked_add(1 << 20)?
+        .checked_add(logical)?;
+    let need = logical.checked_add(reserve)?;
     Some(ScratchNeed {
         corner_sort_bytes: a.checked_mul(2)?,
         position_sort_bytes: p.checked_mul(2)?,
         triangle_sort_bytes: t.checked_mul(2)?,
         tree_output_bytes: t.checked_add(tree)?,
         weld_sort_bytes: weld,
+        logical_need_bytes: logical,
+        allocation_unit_bytes,
+        max_live_files,
+        allocation_reserve_bytes: reserve,
         need_bytes: need,
     })
 }
