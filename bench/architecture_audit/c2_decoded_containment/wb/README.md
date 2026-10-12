@@ -46,7 +46,7 @@ From `bench/architecture_audit/c2_decoded_containment/`:
 
 ```sh
 python3 -I wb/generate.py            # CI fixtures + at-cap pairs + worked-example identity; exit 0 when all agree
-python3 -I wb/generate.py --large    # also the matrix-size fixtures into wb/large/ (6 min 22 s wall, 264 s CPU here; 99 MB)
+python3 -I wb/generate.py --large    # also the matrix-size fixtures into wb/large/ (5-6 min wall, about 260 s CPU here; 99 MB)
 python3 -I wb/mutants.py             # C2-WB formula mutants against the CI at-cap pairs
 python3 -I oracle/c2_oracle.py wb/large/e2e.3tz --precheck-only --no-detail \
         --limit containmentWorkUnits=4611686018427387904   # units of one large fixture
@@ -55,8 +55,8 @@ python3 -I oracle/c2_oracle.py wb/large/e2e.3tz --precheck-only --no-detail \
 - **Determinism.** Fixtures are stored ZIPs with fixed timestamps and seeded content,
   so they are byte-reproducible. `manifest.json` pins every file's sha256, the large
   ones included.
-- **Partial runs.** Without `--large`, the generator keeps the large rows of the
-  existing manifest unchanged and marks them `notRebuilt`.
+- **Partial runs.** Without `--large`, the generator keeps the matrix-size rows of
+  the existing manifest unchanged, so a CI replay leaves `manifest.json` byte-identical.
 - **How large fixtures run.** They use the oracle's `--precheck-only` mode: units and
   facts only, no streaming. Their verdict is Contained by construction: every vertex
   lies inside every volume, as the oracle's full run shows for the CI twin. A Contained

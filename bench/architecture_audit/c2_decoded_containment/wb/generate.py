@@ -926,8 +926,7 @@ def run(fx, path, large, verify_caps=True):
     report = Oracle(path, limits, precheck_only=large, detail=detail).run()
     seconds = time.process_time() - t0
     row = {"id": fx.id, "matrix": fx.matrix, "size": fx.size, "title": fx.title, "file": rel, "sha256": digest,
-           "bytes": os.path.getsize(path), "references": sum(c for c, *_ in fx.refs), "notes": fx.notes,
-           "oracleSeconds": round(seconds, 1)}
+           "bytes": os.path.getsize(path), "references": sum(c for c, *_ in fx.refs), "notes": fx.notes}
     problems = []
     outcome = {k: report.get(k) for k in ("outcome", "reasons", "facts", "why") if report.get(k) is not None}
     row["oracle"] = outcome
@@ -983,6 +982,7 @@ def run(fx, path, large, verify_caps=True):
         row["capPair"] = pair
     row["agree"] = not problems
     row["problems"] = problems
+    row["_seconds"] = seconds
     return row
 
 
@@ -1014,10 +1014,10 @@ def main():
     fdir, ldir = os.path.join(HERE, "fixtures"), os.path.join(HERE, "large")
     os.makedirs(fdir, exist_ok=True)
     manifest_path = os.path.join(HERE, "manifest.json")
-    previous = {}
+    previous = []
     if os.path.exists(manifest_path):
         with open(manifest_path) as fh:
-            previous = {r["id"] + "@" + r["size"]: r for r in json.load(fh)["fixtures"] if "size" in r}
+            previous = [r for r in json.load(fh)["fixtures"] if r.get("size") == "large"]
     if not args.only:
         for name in os.listdir(fdir):
             os.remove(os.path.join(fdir, name))
@@ -1032,15 +1032,16 @@ def main():
             continue
         path = os.path.join(ldir if large else fdir, fx.id + ".3tz")
         row = run(fx, path, large)
+        seconds = row.pop("_seconds", 0.0)
         rows.append(row)
         print("%-6s %-44s %-5s units %15s  oracle %6.1fs" % (fx.size, fx.id, "ok" if row["agree"] else "FAIL",
-                                                             row.get("units", "-"), row["oracleSeconds"]), flush=True)
+                                                             row.get("units", "-"), seconds), flush=True)
         for p in row["problems"]:
             print("       ", p)
     if args.only:
         return 0 if all(r["agree"] for r in rows) else 1
     if not args.large:
-        rows += [dict(r, notRebuilt=True) for k, r in sorted(previous.items()) if k.endswith("@large")]
+        rows += previous  # matrix-size rows are kept as recorded by the last --large run
     identity = worked_example_identity()
     print("worked-example identity:", "ok" if identity["agree"] else "FAIL", identity["units"])
     summary = {"fixtures": len(rows), "agree": len([r for r in rows if r["agree"]]),

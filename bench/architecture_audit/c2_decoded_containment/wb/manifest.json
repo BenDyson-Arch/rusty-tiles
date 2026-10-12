@@ -31,7 +31,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 252189,
    "payloadFacts": {
     "w.glb": {
@@ -127,7 +126,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 501149,
    "payloadFacts": {
     "w.glb": {
@@ -239,7 +237,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 91485,
    "payloadFacts": {
     "w.glb": {
@@ -335,7 +332,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 59357,
    "payloadFacts": {
     "w.glb": {
@@ -431,7 +427,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 30557,
    "payloadFacts": {
     "w.glb": {
@@ -527,7 +522,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 261221,
    "payloadFacts": {
     "w.glb": {
@@ -608,7 +602,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 68221,
    "payloadFacts": {
     "w.glb": {
@@ -689,7 +682,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 11429,
    "payloadFacts": {
     "w.glb": {
@@ -770,7 +762,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 36005,
    "payloadFacts": {
     "w.glb": {
@@ -851,7 +842,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 58774,
    "payloadFacts": {
     "n.glb": {
@@ -939,7 +929,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 103934,
    "payloadFacts": {
     "n.glb": {
@@ -1025,7 +1014,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 23620,
    "payloadFacts": {
     "t.glb": {
@@ -1109,7 +1097,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 56290,
    "payloadFacts": {
     "t.glb": {
@@ -1292,7 +1279,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 3097680,
    "payloadFacts": {
     "m.glb": {
@@ -1378,7 +1364,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 27524,
    "payloadFacts": {
     "u.glb": {
@@ -1462,7 +1447,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 28564,
    "payloadFacts": {
     "s.glb": {
@@ -1546,7 +1530,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 14516,
    "payloadFacts": {
     "g.gltf": {
@@ -1630,7 +1613,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 104356,
    "payloadFacts": {
     "g.gltf": {
@@ -1714,7 +1696,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 22495,
    "payloadFacts": {
     "p.glb": {
@@ -1798,7 +1779,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 38299,
    "payloadFacts": {
     "p.glb": {
@@ -1882,7 +1862,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 119950,
    "payloadFacts": {
     "j.glb": {
@@ -1966,7 +1945,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 120430,
    "payloadFacts": {
     "j.b3dm": {
@@ -2050,7 +2028,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 63150,
    "payloadFacts": {
     "j.glb": {
@@ -2134,7 +2111,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 126790,
    "payloadFacts": {
     "j.gltf": {
@@ -2220,7 +2196,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 68550,
    "payloadFacts": {
     "d.glb": {
@@ -2306,7 +2281,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 69030,
    "payloadFacts": {
     "d.b3dm": {
@@ -2392,7 +2366,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 120030,
    "payloadFacts": {
     "d.glb": {
@@ -2478,7 +2451,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 122650,
    "payloadFacts": {
     "d.glb": {
@@ -2564,7 +2536,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 125530,
    "payloadFacts": {
     "d.glb": {
@@ -2650,7 +2621,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 120550,
    "payloadFacts": {
     "d.b3dm": {
@@ -2736,7 +2706,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 123150,
    "payloadFacts": {
     "d.b3dm": {
@@ -2822,7 +2791,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 125830,
    "payloadFacts": {
     "d.b3dm": {
@@ -2908,7 +2876,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 126030,
    "payloadFacts": {
     "d.b3dm": {
@@ -2992,7 +2959,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 42842,
    "payloadFacts": {
     "q.glb": {
@@ -3076,7 +3042,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 62746,
    "payloadFacts": {
     "q.glb": {
@@ -3160,7 +3125,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 69220,
    "payloadFacts": {
     "q.glb": {
@@ -3244,7 +3208,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 12956,
    "payloadFacts": {
     "v.glb": {
@@ -3328,7 +3291,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 12948,
    "payloadFacts": {
     "v.glb": {
@@ -3414,7 +3376,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 104636,
    "payloadFacts": {
     "l.glb": {
@@ -3500,7 +3461,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 97922,
    "payloadFacts": {
     "o.glb": {
@@ -3584,7 +3544,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 91882,
    "payloadFacts": {
     "o.glb": {
@@ -3668,7 +3627,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 112330,
    "payloadFacts": {
     "o.glb": {
@@ -3752,7 +3710,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 111098,
    "payloadFacts": {
     "o.glb": {
@@ -3836,7 +3793,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2593,
    "payloadFacts": {
     "w.glb": {
@@ -3917,7 +3873,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2693,
    "payloadFacts": {
     "w.glb": {
@@ -3998,7 +3953,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2721,
    "payloadFacts": {
     "w.glb": {
@@ -4079,7 +4033,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2701,
    "payloadFacts": {
     "w.glb": {
@@ -4161,7 +4114,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2821,
    "payloadFacts": {
     "w.glb": {
@@ -4243,7 +4195,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2849,
    "payloadFacts": {
     "w.glb": {
@@ -4325,7 +4276,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2940,
    "payloadFacts": {
     "w.glb": {
@@ -4408,7 +4358,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2713,
    "payloadFacts": {
     "w.glb": {
@@ -4489,7 +4438,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2701,
    "payloadFacts": {
     "w.glb": {
@@ -4570,7 +4518,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 2784,
    "payloadFacts": {
     "w.gltf": {
@@ -4651,7 +4598,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 5294,
    "payloadFacts": {
     "w.glb": {
@@ -4734,7 +4680,6 @@
      "rotatedBox"
     ]
    },
-   "oracleSeconds": 0.0,
    "problems": [],
    "references": 0,
    "sha256": "0bab4ed9496d5543a936fe5827b97eb589b373926355be840b38ceb1a851bda7",
@@ -4763,7 +4708,6 @@
      "workLimit"
     ]
    },
-   "oracleSeconds": 0.0,
    "problems": [],
    "references": 0,
    "sha256": "f945bb5db3d53760393c6dbebd1f45200098b848b26ddb43c8150f082c67f792",
@@ -4792,7 +4736,6 @@
      "regionVolume"
     ]
    },
-   "oracleSeconds": 0.0,
    "problems": [],
    "references": 0,
    "sha256": "217b49811987ddd708c69b144701ffdd173cce5f1216e6150bc1ffa3c96f2bd3",
@@ -4821,7 +4764,6 @@
      "rotatedBox"
     ]
    },
-   "oracleSeconds": 0.0,
    "problems": [],
    "references": 0,
    "sha256": "b1bcbdeaa53e4cda70177def458bc203266d3403679bbdd32090a2d1f2069336",
@@ -4861,7 +4803,6 @@
    "oracle": {
     "outcome": "Contained"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 5578,
    "payloadFacts": {
     "g.gltf": {
@@ -4929,7 +4870,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 78082345,
    "payloadFacts": {
     "w.glb": {
@@ -5009,7 +4949,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 155842473,
    "payloadFacts": {
     "w.glb": {
@@ -5105,7 +5044,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 27862345,
    "payloadFacts": {
     "w.glb": {
@@ -5185,7 +5123,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 17822345,
    "payloadFacts": {
     "w.glb": {
@@ -5265,7 +5202,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 8822345,
    "payloadFacts": {
     "w.glb": {
@@ -5345,7 +5281,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 259002229,
    "payloadFacts": {
     "w.glb": {
@@ -5410,7 +5345,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 66002229,
    "payloadFacts": {
     "w.glb": {
@@ -5475,7 +5409,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 14402229,
    "payloadFacts": {
     "w.glb": {
@@ -5540,7 +5473,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 52802229,
    "payloadFacts": {
     "w.glb": {
@@ -5605,7 +5537,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 3.8,
    "oracleUnits": 164297100,
    "payloadFacts": {
     "n.glb": {
@@ -5677,7 +5608,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 5.6,
    "oracleUnits": 299925900,
    "payloadFacts": {
     "n.glb": {
@@ -5748,7 +5678,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 9.2,
    "oracleUnits": 236200000,
    "payloadFacts": {
     "t.glb": {
@@ -5816,7 +5745,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 59.1,
    "oracleUnits": 562900000,
    "payloadFacts": {
     "t.glb": {
@@ -5983,7 +5911,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 1.6,
    "oracleUnits": 3097680000,
    "payloadFacts": {
     "m.glb": {
@@ -6053,7 +5980,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 22847240,
    "payloadFacts": {
     "u.glb": {
@@ -6121,7 +6047,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 25025720,
    "payloadFacts": {
     "s.glb": {
@@ -6189,7 +6114,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 10063560,
    "payloadFacts": {
     "g.gltf": {
@@ -6257,7 +6181,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.3,
    "oracleUnits": 100623560,
    "payloadFacts": {
     "g.gltf": {
@@ -6325,7 +6248,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.6,
    "oracleUnits": 4857579,
    "payloadFacts": {
     "p.glb": {
@@ -6393,7 +6315,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 3.1,
    "oracleUnits": 17687759,
    "payloadFacts": {
     "p.glb": {
@@ -6461,7 +6382,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108119500,
    "payloadFacts": {
     "j.glb": {
@@ -6529,7 +6449,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108124300,
    "payloadFacts": {
     "j.b3dm": {
@@ -6597,7 +6516,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 52548300,
    "payloadFacts": {
     "j.glb": {
@@ -6665,7 +6583,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 1051015000,
    "payloadFacts": {
     "j.gltf": {
@@ -6735,7 +6652,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 52602300,
    "payloadFacts": {
     "d.glb": {
@@ -6805,7 +6721,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 52607100,
    "payloadFacts": {
     "d.b3dm": {
@@ -6875,7 +6790,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108120300,
    "payloadFacts": {
     "d.glb": {
@@ -6945,7 +6859,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108146500,
    "payloadFacts": {
     "d.glb": {
@@ -7015,7 +6928,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108175300,
    "payloadFacts": {
     "d.glb": {
@@ -7085,7 +6997,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108125500,
    "payloadFacts": {
     "d.b3dm": {
@@ -7155,7 +7066,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108151500,
    "payloadFacts": {
     "d.b3dm": {
@@ -7225,7 +7135,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108178300,
    "payloadFacts": {
     "d.b3dm": {
@@ -7295,7 +7204,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 108180300,
    "payloadFacts": {
     "d.b3dm": {
@@ -7363,7 +7271,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 1.2,
    "oracleUnits": 18151888,
    "payloadFacts": {
     "q.glb": {
@@ -7431,7 +7338,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 2.4,
    "oracleUnits": 31490820,
    "payloadFacts": {
     "q.glb": {
@@ -7499,7 +7405,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 28.8,
    "oracleUnits": 354517700,
    "payloadFacts": {
     "q.glb": {
@@ -7567,7 +7472,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 80049480,
    "payloadFacts": {
     "v.glb": {
@@ -7635,7 +7539,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.0,
    "oracleUnits": 80047000,
    "payloadFacts": {
     "v.glb": {
@@ -7705,7 +7608,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 0.1,
    "oracleUnits": 130909840,
    "payloadFacts": {
     "l.glb": {
@@ -7775,7 +7677,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 2.0,
    "oracleUnits": 612761908,
    "payloadFacts": {
     "o.glb": {
@@ -7843,7 +7744,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 2.2,
    "oracleUnits": 572989556,
    "payloadFacts": {
     "o.glb": {
@@ -7911,7 +7811,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 3.2,
    "oracleUnits": 152889636,
    "payloadFacts": {
     "o.glb": {
@@ -7979,7 +7878,6 @@
    "oracle": {
     "outcome": "PrecheckPassed"
    },
-   "oracleSeconds": 1.6,
    "oracleUnits": 144889508,
    "payloadFacts": {
     "o.glb": {
