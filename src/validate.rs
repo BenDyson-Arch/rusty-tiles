@@ -3521,7 +3521,10 @@ mod containment_controls {
         sub: Vec<u8>,
         payloads: &[(usize, Vec<u8>)],
     ) -> Vec<(&'static str, Vec<u8>)> {
-        let mut files = vec![("tileset.json", implicit_doc(root)), ("s/0/0/0.subtree", sub)];
+        let mut files = vec![
+            ("tileset.json", implicit_doc(root)),
+            ("s/0/0/0.subtree", sub),
+        ];
         files.extend(payloads.iter().map(|(i, p)| (NAMES[*i], p.clone())));
         files
     }
@@ -3548,7 +3551,10 @@ mod containment_controls {
                 .checks
                 .contains(&"implicitAddressingAndAvailability".to_owned()));
             assert!(contained(&report), "{report:?}");
-            assert!(!report.not_inspected.iter().any(|c| c.contains("implicitTiling")));
+            assert!(!report
+                .not_inspected
+                .iter()
+                .any(|c| c.contains("implicitTiling")));
         }
         // An implicit content's payload reasons come from its per-URI facts.
         let subtree = Sub::new(constant(1), constant(0))
@@ -3606,10 +3612,7 @@ mod containment_controls {
             (wide, 8., [wide, wide], "ancestor:2"),
             (8., wide, [wide, wide], "ancestor:3"),
         ] {
-            assert_eq!(
-                outside(run(&level_one(p_hx, r_hx, rows))),
-                message(volume)
-            );
+            assert_eq!(outside(run(&level_one(p_hx, r_hx, rows))), message(volume));
         }
         assert!(contained(
             &run(&level_one(wide, wide, [wide, wide])).unwrap()
@@ -3698,8 +3701,12 @@ mod containment_controls {
         let all = [0, 1, 2, 3, 4];
         let origin = point_at(0.);
         assert!(contained(
-            &run(&implicit_files(r(), subtree(&all, &[0], None), &[(0, origin.clone())]))
-                .unwrap()
+            &run(&implicit_files(
+                r(),
+                subtree(&all, &[0], None),
+                &[(0, origin.clone())]
+            ))
+            .unwrap()
         ));
         assert_eq!(
             not_inspected(run(&implicit_files(
@@ -3734,7 +3741,10 @@ mod containment_controls {
             let mut files = implicit_files(
                 root,
                 subtree(&[0, 1], contents, None),
-                &contents.iter().map(|&i| (i, origin.clone())).collect::<Vec<_>>(),
+                &contents
+                    .iter()
+                    .map(|&i| (i, origin.clone()))
+                    .collect::<Vec<_>>(),
             );
             files.push(("a.glb", origin.clone()));
             files
@@ -4461,7 +4471,9 @@ mod containment_controls {
             ));
         }
         // A region tile's bit reaches its descendants' chains.
-        let region = c.tile(fact(Some(VolumeFacts::Region), Some(root), 0)).unwrap();
+        let region = c
+            .tile(fact(Some(VolumeFacts::Region), Some(root), 0))
+            .unwrap();
         let leaf = c.tile(fact(Some(plain), Some(region), 0)).unwrap();
         assert_eq!(c.tiles[leaf].chain, Reason::RegionVolume.bit());
         assert_eq!(c.tiles[root].chain, 0);
