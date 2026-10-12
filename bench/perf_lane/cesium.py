@@ -174,6 +174,9 @@ def main():
     parser.add_argument('--cpus', default='0,1', help='CPU affinity (AGENTS.md: two CPUs)')
     parser.add_argument('--corner-views', action='store_true', help='add raster cameras on each bounds corner, '
                         'four finest-zoom tiles across, after the overview')
+    parser.add_argument('--maximum-sse', type=float, default=16, help='3D Tiles maximumScreenSpaceError (default 16). '
+                        'Any other value is a report-only probe, such as 1 for near-full refinement: baseline '
+                        'comparisons are recorded as advisory and do not fail the run')
     for key, value in DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=pathlib.Path, default=value)
     args = parser.parse_args()
     os.sched_setaffinity(0, {int(c) for c in args.cpus.split(',')}); os.setpriority(os.PRIO_PROCESS, 0, 10)
@@ -194,6 +197,7 @@ def main():
         for name, kind, identity, directory in plans:
             spec = dict(kind=kind, url=f'/data/{name}/' + ('' if kind == 'raster' else 'tileset.json'),
                         stepMs=int(args.timeout * 1000))
+            if kind == 'tileset': spec['maximumScreenSpaceError'] = args.maximum_sse
             if kind == 'raster' and args.inset:
                 spec['insetDegrees'] = inset_degrees(args.inset, json.loads((directory / 'tilejson.json').read_text())['maxzoom'])
             if kind == 'raster' and args.hole:
@@ -232,7 +236,9 @@ def main():
             if spec.get('insetDegrees'): case['warnings'] = [f"raster rectangle inset {spec['insetDegrees']} degrees: not the exact bounds"]
             shots = [shot] + [shot.with_name(f"{name}-{view['name']}.png") for view in case.get('views', [])]
             case['captureSha256'] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in shots if p.exists()}
-            case['problems'] = problems(case, baseline.get(name))
+            case['problems'] = problems(case, baseline.get(name) if args.maximum_sse == 16 else None)
+            if args.maximum_sse != 16:
+                case['advisory'] = [p for p in problems(case, baseline.get(name)) if p not in case['problems']]
             results.append(case)
             print(json.dumps(dict(name=name, loaded=case.get('loaded'), seconds=case.get('secondsToLoaded'),
                                   requests=case['requests']['requests'], bytes=case['requests']['requestBytes'],
@@ -246,6 +252,7 @@ def main():
                                    playwright=json.loads((args.node_modules / 'playwright/package.json').read_text())['version'],
                                    chromium=str(args.chromium), viewport=[1024, 768], cpuAffinity=sorted(os.sched_getaffinity(0)),
                                    baseline=str(args.baseline) if args.baseline else None, rasterInset=args.inset,
+                                   maximumScreenSpaceError=args.maximum_sse,
                                    stepTimeoutSeconds=args.timeout,
                                    scriptSha256={name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
                                                  for name in ('cesium.py', 'cesium.cjs')}),

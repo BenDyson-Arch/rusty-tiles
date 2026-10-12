@@ -85,7 +85,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   }
   if (config.terrain) {
     const report = await json(new URL('./conversion.json', new URL(config.terrain, location.href)));
-    if (report.profile !== 't1-terrain-mesh-3dtiles-1.1' || !Array.isArray(report.bounds)
+    if (report.profile !== 't1-terrain-lod-mesh-3dtiles-1.1' || !Array.isArray(report.bounds)
         || report.bounds.length !== 4 || !report.bounds.every(Number.isFinite)
         || report.bounds[0] >= report.bounds[2] || report.bounds[1] >= report.bounds[3]) {
       throw new Error('Terrain requires a valid T1 source footprint report');

@@ -61,7 +61,7 @@ fn terrain_typed_capability_and_cli_parity() {
     #[cfg(feature = "native-geospatial")]
     {
         let result = result.unwrap();
-        assert_eq!(result.report.tiles, 1);
+        assert_eq!((result.report.tiles, result.report.levels), (1, 1));
         let report: Value =
             serde_json::from_slice(&std::fs::read(output.join("conversion.json")).unwrap())
                 .unwrap();
@@ -69,8 +69,10 @@ fn terrain_typed_capability_and_cli_parity() {
         let manifest: Value =
             serde_json::from_slice(&std::fs::read(output.join("tileset.json")).unwrap()).unwrap();
         assert_eq!(manifest["asset"]["version"], "1.1");
-        assert!(manifest["root"].get("content").is_none());
-        assert_eq!(manifest["root"]["children"].as_array().unwrap().len(), 1);
+        // A single leaf is the root: full detail, error zero, one implicit level.
+        assert_eq!(manifest["root"]["geometricError"], 0.);
+        assert_eq!(manifest["root"]["implicitTiling"]["availableLevels"], 1);
+        assert!(manifest["root"].get("children").is_none());
         assert!(!output.join("layer.json").exists());
         let process = cli(&input, &root.path().join("cli"), &[]);
         assert!(
@@ -181,10 +183,11 @@ fn multipatch_geometry_and_height_domain_refusal() {
     std::fs::write(&input, include_bytes!("fixtures/t1-multipatch-plane.tif")).unwrap();
     let output = root.path().join("tiles");
     let result = terrain_to_directory(request(&input, &output), &RunControl::default()).unwrap();
-    assert_eq!(result.report.tiles, 6);
+    assert_eq!(result.report.tiles, 9);
+    assert_eq!(result.report.tiles_per_level, [1, 2, 6]);
     let manifest: Value =
         serde_json::from_slice(&std::fs::read(output.join("tileset.json")).unwrap()).unwrap();
-    assert_eq!(manifest["root"]["children"].as_array().unwrap().len(), 6);
+    assert_eq!(manifest["root"]["implicitTiling"]["subtreeLevels"], 3);
     let extreme = root.path().join("extreme.tif");
     std::fs::write(&extreme, include_bytes!("fixtures/t1-extreme-height.tif")).unwrap();
     let error = terrain_to_directory(
@@ -290,13 +293,31 @@ fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
         let manifest: Value = serde_json::from_slice(&files["tileset.json"]).unwrap();
         let report: Value = serde_json::from_slice(&files["conversion.json"]).unwrap();
         assert_eq!(report, serde_json::to_value(&result.report).unwrap());
-        let mut expected = vec!["conversion.json".to_owned(), "tileset.json".to_owned()];
+        // Every tile has content; a forest of at most four levels is one subtree.
+        let tiling = &manifest["root"]["implicitTiling"];
+        assert_eq!(
+            tiling["subtrees"]["uri"],
+            "subtrees/r0-{level}-{x}-{y}.subtree"
+        );
+        let mut expected = vec![
+            "conversion.json".to_owned(),
+            "subtrees/r0-0-0-0.subtree".to_owned(),
+            "tileset.json".to_owned(),
+        ];
+        assert_eq!(
+            manifest["root"]["content"]["uri"],
+            "implicit-content/r0-{level}-{x}-{y}-0.glb"
+        );
+        let payloads = files
+            .keys()
+            .filter(|name| name.starts_with("implicit-content/r0-") && name.ends_with("-0.glb"))
+            .count() as u64;
+        assert_eq!(payloads, result.report.tiles);
         expected.extend(
-            manifest["root"]["children"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|tile| tile["content"]["uri"].as_str().unwrap().to_owned()),
+            files
+                .keys()
+                .filter(|name| name.starts_with("implicit-content/"))
+                .cloned(),
         );
         expected.sort();
         assert_eq!(files.keys().cloned().collect::<Vec<_>>(), expected);
@@ -353,7 +374,7 @@ fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
             a.0.report.cells_per_leaf,
             a.0.report.height_offset_metres
         ),
-        (6, 16, 10.)
+        (9, 16, 10.)
     );
     assert_eq!(
         (
@@ -369,7 +390,8 @@ fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
     );
     let first_a = verify(&a.0);
     let first_b = verify(&b.0);
-    assert_ne!(first_a["tiles/0/0.glb"], first_b["tiles/0/0.glb"]);
+    let top = "implicit-content/r0-0-0-0-0.glb";
+    assert_ne!(first_a[top], first_b[top]);
 
     // A used control cannot claim another job, and fresh CreateNew cannot alter publication.
     let error = terrain_to_directory(configured(&input_a, &output_a, 250., 64), &a.1).unwrap_err();
@@ -402,4 +424,117 @@ fn concurrent_jobs_and_repeated_publication_keep_independent_state() {
     assert_eq!(std::fs::read(input_a).unwrap(), bytes_a.as_slice());
     assert_eq!(std::fs::read(input_b).unwrap(), bytes_b.as_slice());
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 4);
+}
+
+#[cfg(feature = "native-geospatial")]
+fn validate(output: &Path) -> Value {
+    let archive = output.with_extension("3tz");
+    let packed = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .args(["--json", "convert", "-i"])
+        .arg(output)
+        .arg("-o")
+        .arg(&archive)
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(
+        packed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&packed.stdout)
+    );
+    let checked = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .args(["--json", "validate"])
+        .arg(&archive)
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stdout)
+    );
+    serde_json::from_slice(&checked.stdout).unwrap()
+}
+
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn packed_lod_forest_passes_validation_and_keeps_flat_leaf_surfaces() {
+    use sha2::{Digest, Sha256};
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("multipatch.tif");
+    std::fs::write(&input, include_bytes!("fixtures/t1-multipatch-plane.tif")).unwrap();
+    let output = root.path().join("tiles");
+    let process = cli(&input, &output, &[]);
+    assert!(
+        process.status.success(),
+        "{}",
+        String::from_utf8_lossy(&process.stderr)
+    );
+    let report = validate(&output);
+    let checks = report["checks"].as_array().unwrap();
+    for check in [
+        "implicitAddressingAndAvailability",
+        "hierarchyBounds",
+        "geometricErrorOrder",
+    ] {
+        assert!(checks.contains(&check.into()), "{report}");
+    }
+    // Position and index bytes of each leaf surface primitive are those of the
+    // flat T1 leaves (develop e29cd19, tiles/{row}/{column}.glb, same request).
+    for (row, column, sha256) in [
+        (
+            0,
+            0,
+            "1c92900b64e48e216e611039136a88d1d12bc1889d39a662447fbdf0aeed3998",
+        ),
+        (
+            0,
+            1,
+            "e02e903671861fb5cd5f9da67f080bde1aca11f9657234fcc94a556b135f133b",
+        ),
+        (
+            0,
+            2,
+            "da22b51e99317ea9e9f43a34ae9833f9b2dc83263b6243ccc8a6300e33e635d4",
+        ),
+        (
+            1,
+            0,
+            "790cd41fc394d0926af4e2c0c44d5d0ff70d32672aca2bf06962cdafb335e53c",
+        ),
+        (
+            1,
+            1,
+            "1658eea9cb5683f27f78359139532dc88c86273e0bf21b6674b9da11bade4016",
+        ),
+        (
+            1,
+            2,
+            "3395eb2bb4cf3626d86544b24a85e26a9758fca92167030bacb41ab8cd0caa9c",
+        ),
+    ] {
+        let glb = std::fs::read(output.join(format!("implicit-content/r0-2-{column}-{row}-0.glb")))
+            .unwrap();
+        let length = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+        let document: Value = serde_json::from_slice(&glb[20..20 + length]).unwrap();
+        let binary = &glb[28 + length..];
+        let primitive = &document["meshes"][0]["primitives"][0];
+        assert_eq!(
+            (
+                primitive["attributes"]["POSITION"].as_u64(),
+                primitive["indices"].as_u64()
+            ),
+            (Some(0), Some(1))
+        );
+        let mut digest = Sha256::new();
+        for view in &document["bufferViews"].as_array().unwrap()[..2] {
+            let start = view["byteOffset"].as_u64().unwrap() as usize;
+            digest.update(&binary[start..start + view["byteLength"].as_u64().unwrap() as usize]);
+        }
+        assert_eq!(
+            format!("{:x}", digest.finalize()),
+            sha256,
+            "leaf {row}/{column}"
+        );
+    }
 }
