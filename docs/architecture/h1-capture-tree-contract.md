@@ -16,8 +16,13 @@ profile, including its local coordinate range. Bake selected-scene positions
 once using its node matrices and reflected corner order; canonicalize signed
 zero. Preserve authored primitive and vertex references for later attributes.
 Validate every declared accessor and authored primitive, including unselected
-meshes. Image references are admitted; image payload capture and encoding are
-outside H1. Stable input files are a precondition; change detection does not
+meshes. Attribute payloads are validated, but the H1 spill stores positions and
+source/vertex references, not NORMAL/TANGENT/UV/COLOR bytes. Full attribute
+capture is a downstream obligation: extend the capture pass before ending
+source stability when the tiler begins consuming those attributes. References
+alone cannot recover attributes after source removal. Image references are
+admitted; image payload capture and encoding are outside H1.
+Stable input files are a precondition; change detection does not
 promise an atomic multi-file snapshot or a hostile-filesystem sandbox.
 
 `gltf_source` owns pure document/layout/transform rules and local input binding.

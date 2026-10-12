@@ -503,7 +503,7 @@ def run_refusals(binary, directory, label):
              ("zero-budget", single, {"H1_LEAF_TRIANGLES": "0"}, "InvalidRequest", "budgets must be positive"),
              ("invalid-fan-in", single, {"H1_FAN_IN": "1"}, "InvalidRequest", "fan-in"),
              ("missing-resource", missing, {}, "Io", "No such file"),
-             ("bad-extrema", invalid, {}, "InvalidInput", "max")]
+             ("bad-extrema", invalid, {}, "InvalidInput", "extrema")]
     scratch = directory / "scratch"
     scratch.mkdir(exist_ok=True)
     receipts = {"label": label, "binary_sha256": digest(binary), "oracle_sha256": digest(__file__), "runs": []}
