@@ -172,8 +172,9 @@ impl SpillFile {
 
     /// Records the completed size for scratch accounting.
     pub(super) fn completed(&mut self, bytes: u64) {
+        debug_assert!(bytes >= self.bytes);
+        self.accounting.add(bytes - self.bytes);
         self.bytes = bytes;
-        self.accounting.add(bytes);
     }
 }
 

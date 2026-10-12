@@ -934,3 +934,95 @@ fn spill_memory_is_flat_in_input_size() {
         large.1 - large.0
     );
 }
+
+#[test]
+fn online_compaction_bounds_inventory_and_keeps_equal_key_input_order() {
+    let input = keyed_input(2048, 7, 91);
+    let mut expected = input.clone();
+    expected.sort();
+    for fan_in in [2, 3] {
+        let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+        let mut sorter = ExternalSorter::new(&scratch, config::<Keyed>(1, fan_in, 1, 31)).unwrap();
+        let mut largest = 0;
+        for record in &input {
+            sorter.push(*record).unwrap();
+            largest = largest.max(sorter.inventory_len());
+            assert!(
+                sorter.inventory_len() < 128 * fan_in,
+                "descriptor bound independent of count"
+            );
+        }
+        assert!(
+            largest < input.len() / 2,
+            "control exercises live compaction"
+        );
+        let output = sorter
+            .finish()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(pairs(&output), pairs(&expected));
+        assert_eq!(scratch.live_bytes(), 0);
+        assert!(
+            scratch.peak_bytes() <= SortConfig::scratch_need::<Keyed>(input.len() as u64).unwrap()
+        );
+    }
+}
+
+#[test]
+fn sequence_accounts_unfinished_bytes_and_replays_short_writes() {
+    let (_parent, scratch) = new_scratch(FaultIo::new(Faults {
+        max_write: Some(3),
+        ..Default::default()
+    }));
+    let input = keyed_input(20, 4, 77);
+    let mut writer = SequenceWriter::new(&scratch, "accounted-sequence", 7).unwrap();
+    for (i, record) in input.iter().enumerate() {
+        writer.push(record).unwrap();
+        assert_eq!(
+            scratch.live_bytes(),
+            (i as u64 + 1) * Keyed::SIZE as u64,
+            "unfinished output contributes to peak"
+        );
+    }
+    let sequence = writer.finish().unwrap();
+    assert_eq!(scratch.live_bytes(), 20 * Keyed::SIZE as u64);
+    assert_eq!(
+        pairs(
+            &sequence
+                .reader()
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        ),
+        pairs(&input)
+    );
+    drop(sequence);
+    assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn failed_partial_writes_contribute_to_peak_before_cleanup() {
+    let faults = Faults {
+        write_error_at: Some((3, std::io::ErrorKind::StorageFull)),
+        ..Default::default()
+    };
+    let record = Wide {
+        morton: 0,
+        a: 1,
+        b: 2,
+    };
+    let (_parent, scratch) = new_scratch(FaultIo::new(faults.clone()));
+    let mut writer = SequenceWriter::new(&scratch, "partial-sequence", 1).unwrap();
+    assert!(writer.push(&record).is_err());
+    assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
+    drop(writer);
+    assert_eq!(scratch.live_bytes(), 0);
+
+    let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+    let mut sorter = ExternalSorter::new(&scratch, config::<Wide>(1, 2, 1, 1)).unwrap();
+    sorter.push(record).unwrap();
+    assert!(sorter.push(record).is_err());
+    assert_eq!(scratch.peak_bytes(), Wide::SIZE as u64);
+    assert_eq!(scratch.live_bytes(), 0);
+}

@@ -152,27 +152,27 @@ impl Reader<'_> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CornerRef {
     /// Ordinal of the instanced primitive in scene traversal order.
-    pub primitive: u32,
-    pub vertex: u32,
-    pub triangle: u32,
+    pub primitive: u64,
+    pub vertex: u64,
+    pub triangle: u64,
     pub corner: u8,
 }
 
 impl Record for CornerRef {
-    const SIZE: usize = 13;
+    const SIZE: usize = 25;
     fn encode(&self, out: &mut [u8]) {
         let mut w = Writer(out, 0);
-        w.u32(self.primitive);
-        w.u32(self.vertex);
-        w.u32(self.triangle);
+        w.u64(self.primitive);
+        w.u64(self.vertex);
+        w.u64(self.triangle);
         w.u8(self.corner);
     }
     fn decode(bytes: &[u8]) -> Self {
         let mut r = Reader(bytes, 0);
         Self {
-            primitive: r.u32(),
-            vertex: r.u32(),
-            triangle: r.u32(),
+            primitive: r.u64(),
+            vertex: r.u64(),
+            triangle: r.u64(),
             corner: r.u8(),
         }
     }
@@ -181,15 +181,15 @@ impl Record for CornerRef {
 /// Pass 2: a corner with its baked position, sorted back by (primitive, triangle, corner).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CornerPosition {
-    pub primitive: u32,
-    pub triangle: u32,
+    pub primitive: u64,
+    pub triangle: u64,
     pub corner: u8,
-    pub vertex: u32,
+    pub vertex: u64,
     pub position: [f32; 3],
 }
 
 impl CornerPosition {
-    fn key(&self) -> (u32, u32, u8) {
+    fn key(&self) -> (u64, u64, u8) {
         (self.primitive, self.triangle, self.corner)
     }
 }
@@ -211,22 +211,22 @@ impl Ord for CornerPosition {
 }
 
 impl Record for CornerPosition {
-    const SIZE: usize = 25;
+    const SIZE: usize = 37;
     fn encode(&self, out: &mut [u8]) {
         let mut w = Writer(out, 0);
-        w.u32(self.primitive);
-        w.u32(self.triangle);
+        w.u64(self.primitive);
+        w.u64(self.triangle);
         w.u8(self.corner);
-        w.u32(self.vertex);
+        w.u64(self.vertex);
         w.f32s(&self.position);
     }
     fn decode(bytes: &[u8]) -> Self {
         let mut r = Reader(bytes, 0);
         Self {
-            primitive: r.u32(),
-            triangle: r.u32(),
+            primitive: r.u64(),
+            triangle: r.u64(),
             corner: r.u8(),
-            vertex: r.u32(),
+            vertex: r.u64(),
             position: r.vec3(),
         }
     }
@@ -239,7 +239,7 @@ pub(crate) struct Provenance {
     pub node: u32,
     pub mesh: u32,
     pub primitive: u32,
-    pub triangle: u32,
+    pub triangle: u64,
 }
 
 /// Passes 3–5a: a self-contained triangle. Sorted by (Morton key, provenance); the rank of a
@@ -249,7 +249,7 @@ pub(crate) struct TriangleRecord {
     pub key: u64,
     pub source: Provenance,
     /// Authored POSITION accessor indices, in the reflected corner order of `positions`.
-    pub vertices: [u32; 3],
+    pub vertices: [u64; 3],
     /// Positions after the node bake, in local metres; −0 is stored as +0, so f32-bit equality
     /// (the weld key) is value equality.
     pub positions: [[f32; 3]; 3],
@@ -288,20 +288,16 @@ impl Ord for TriangleRecord {
 }
 
 impl Record for TriangleRecord {
-    const SIZE: usize = 77;
+    const SIZE: usize = 93;
     fn encode(&self, out: &mut [u8]) {
         let mut w = Writer(out, 0);
         w.u64(self.key);
-        for v in [
-            self.source.node,
-            self.source.mesh,
-            self.source.primitive,
-            self.source.triangle,
-        ] {
+        for v in [self.source.node, self.source.mesh, self.source.primitive] {
             w.u32(v);
         }
+        w.u64(self.source.triangle);
         for v in self.vertices {
-            w.u32(v);
+            w.u64(v);
         }
         for p in &self.positions {
             w.f32s(p);
@@ -317,9 +313,9 @@ impl Record for TriangleRecord {
                 node: r.u32(),
                 mesh: r.u32(),
                 primitive: r.u32(),
-                triangle: r.u32(),
+                triangle: r.u64(),
             },
-            vertices: [r.u32(), r.u32(), r.u32()],
+            vertices: [r.u64(), r.u64(), r.u64()],
             positions: [r.vec3(), r.vec3(), r.vec3()],
             bytes: r.u32(),
             degenerate: r.u8() != 0,
@@ -387,7 +383,12 @@ impl NodeRecord {
     /// Identity of the parent tile, or `None` for the root.
     pub(crate) fn parent(&self) -> Option<(u8, u64, u8, u64)> {
         if self.path_len > 0 {
-            return Some((self.cell_depth, self.cell, self.path_len - 1, self.path >> 3));
+            return Some((
+                self.cell_depth,
+                self.cell,
+                self.path_len - 1,
+                self.path >> 3,
+            ));
         }
         (self.cell_depth > 0).then(|| (self.cell_depth - 1, self.cell >> 3, 0, 0))
     }
@@ -523,5 +524,44 @@ impl Record for Span {
                 max: r.vec3(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod width_tests {
+    use super::*;
+
+    #[test]
+    fn streamed_identity_wire_keeps_ordinals_above_u32() {
+        let ordinal = u64::from(u32::MAX) + 17;
+        let corner = CornerRef {
+            primitive: ordinal + 1,
+            vertex: ordinal + 2,
+            triangle: ordinal + 3,
+            corner: 2,
+        };
+        let mut bytes = [0; CornerRef::SIZE];
+        corner.encode(&mut bytes);
+        assert_eq!(CornerRef::decode(&bytes), corner);
+        let triangle = TriangleRecord {
+            key: 99,
+            source: Provenance {
+                node: 1,
+                mesh: 2,
+                primitive: 3,
+                triangle: ordinal,
+            },
+            vertices: [ordinal + 1, ordinal + 2, ordinal + 3],
+            positions: [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            bytes: 56,
+            degenerate: false,
+        };
+        let mut bytes = [0; TriangleRecord::SIZE];
+        triangle.encode(&mut bytes);
+        let decoded = TriangleRecord::decode(&bytes);
+        assert_eq!(decoded.source, triangle.source);
+        assert_eq!(decoded.vertices, triangle.vertices);
+        assert_eq!(decoded.positions, triangle.positions);
+        assert_eq!(decoded.bytes, 56);
     }
 }

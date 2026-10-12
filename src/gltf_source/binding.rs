@@ -32,7 +32,7 @@ pub(crate) fn changed(path: &Path) -> JobError {
     ))
 }
 
-pub(super) struct Snapshot {
+pub(crate) struct Snapshot {
     pub output: PathBuf,
     pub document: source::Document,
     root: Arc<Vec<u8>>,
@@ -44,7 +44,7 @@ pub(super) struct Snapshot {
 }
 /// Every admitted URI spelling retains its resolved member association, even
 /// when multiple names share one immutable captured file.
-pub(super) struct CapturedMember {
+pub(crate) struct CapturedMember {
     pub relative: PathBuf,
     pub bytes: Arc<Vec<u8>>,
 }
@@ -169,7 +169,7 @@ pub(crate) fn relative_uri(uri: &str) -> Result<PathBuf> {
 
 /// Encode one source filename for a sibling manifest, using the same portable
 /// decoded path admission as captured resource references.
-pub(super) fn filename_uri(input: &Path) -> Result<String> {
+pub(crate) fn filename_uri(input: &Path) -> Result<String> {
     let name = input
         .file_name()
         .and_then(|name| name.to_str())
@@ -189,6 +189,10 @@ pub(super) fn filename_uri(input: &Path) -> Result<String> {
 
 pub(crate) fn open_file(path: &Path) -> Result<File> {
     open_file_with(path, false)
+}
+/// Reopening an admitted source classifies disappearance/rebinding as capture change.
+pub(crate) fn reopen_file(path: &Path) -> Result<File> {
+    open_file_with(path, true)
 }
 fn open_file_with(path: &Path, recheck: bool) -> Result<File> {
     let mut options = OpenOptions::new();
@@ -256,7 +260,11 @@ pub(crate) fn canonical_path(path: &Path, recheck: bool) -> Result<PathBuf> {
     })
 }
 
-pub(crate) fn dependency_path(base: &Path, relative: &Path, recheck: bool) -> Result<(PathBuf, Metadata)> {
+pub(crate) fn dependency_path(
+    base: &Path,
+    relative: &Path,
+    recheck: bool,
+) -> Result<(PathBuf, Metadata)> {
     let mut path = base.to_owned();
     let count = relative.components().count();
     let mut leaf = None;
@@ -527,7 +535,7 @@ fn verify_path(path: &BoundPath, base: &Path, capture: &Captured) -> Result<()> 
     Ok(())
 }
 
-pub(super) fn load(
+pub(crate) fn load(
     input: &Path,
     output: &Path,
     mut check: impl FnMut() -> Result<()>,

@@ -20,9 +20,16 @@ pub(crate) struct SequenceWriter<T: Record> {
 }
 
 impl<T: Record> SequenceWriter<T> {
-    pub(crate) fn new(scratch: &Scratch, stem: &str, buffer_bytes: usize) -> Result<Self, SpillError> {
+    pub(crate) fn new(
+        scratch: &Scratch,
+        stem: &str,
+        buffer_bytes: usize,
+    ) -> Result<Self, SpillError> {
         if buffer_bytes == 0 {
             return Err(SpillError::InvalidConfig("stream buffer must be nonzero"));
+        }
+        if T::SIZE == 0 {
+            return Err(SpillError::InvalidConfig("record size must be nonzero"));
         }
         let file = scratch.new_file(stem);
         let io = scratch.io_handle();
@@ -41,11 +48,18 @@ impl<T: Record> SequenceWriter<T> {
     }
 
     pub(crate) fn push(&mut self, record: &T) -> Result<(), SpillError> {
+        let records = self.records.checked_add(1).ok_or(SpillError::Overflow)?;
+        let bytes = records
+            .checked_mul(T::SIZE as u64)
+            .ok_or(SpillError::Overflow)?;
         record.encode(&mut self.encoded);
+        // Include the attempted record before writing: a failed write may have emitted a
+        // strict prefix. Counting its full size remains conservative on that failure path.
+        self.file.completed(bytes);
         self.writer
             .write_all(&self.encoded)
             .map_err(|e| SpillError::io("write spill sequence", self.file.path(), e))?;
-        self.records += 1;
+        self.records = records;
         Ok(())
     }
 

@@ -14,12 +14,12 @@ use std::{
 };
 
 mod approximation;
-pub(crate) mod binding;
+pub(crate) use crate::gltf_source::binding;
 mod encode;
 mod model;
 mod partition;
 mod placement;
-pub(crate) mod source;
+pub(crate) use crate::gltf_source::source;
 
 pub use model::{
     model_to_archive, model_to_manifest, ModelManifestRequest, ModelManifestResult, ModelReport,

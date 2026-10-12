@@ -7,11 +7,11 @@ mod json;
 mod material;
 mod original_bounds;
 mod texture;
-pub(super) use material::Material;
+pub(crate) use material::Material;
 
-pub(super) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
-pub(super) const MAX_TRIANGLES: usize = 100_000;
-pub(super) const MAX_LEAVES: usize = 4096;
+pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
+pub(crate) const MAX_TRIANGLES: usize = 100_000;
+pub(crate) const MAX_LEAVES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
 /// Local-metre source and transformed position domain shared by both admission profiles.
 const MAX_LOCAL_COORDINATE: f64 = 1_000_000.;
@@ -92,7 +92,7 @@ const IDENTITY: Matrix = [
 ];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct SourceIdentity {
+pub(crate) struct SourceIdentity {
     pub node_index: u32,
     pub mesh_index: u32,
     pub primitive_index: u32,
@@ -105,7 +105,7 @@ impl SourceIdentity {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct Triangle {
+pub(crate) struct Triangle {
     pub source: SourceIdentity,
     /// Authored POSITION accessor keys, in the same reflected corner order.
     pub vertex_indices: [u32; 3],
@@ -117,7 +117,7 @@ pub(super) struct Triangle {
     pub material: Option<usize>,
 }
 
-pub(super) struct Image {
+pub(crate) struct Image {
     pub bytes: Vec<u8>,
     pub mime_type: &'static str,
     pub extension: &'static str,
@@ -126,12 +126,12 @@ pub(super) struct Image {
 }
 
 /// Tile-basis intervals enclosing unchanged authored source-node transforms.
-pub(super) struct OriginalBounds {
+pub(crate) struct OriginalBounds {
     pub min: [f64; 3],
     pub max: [f64; 3],
 }
 
-pub(super) fn original_bounds(
+pub(crate) fn original_bounds(
     document: &Document,
     supplied_buffers: &[&[u8]],
     check: impl FnMut() -> Result<()>,
@@ -139,7 +139,7 @@ pub(super) fn original_bounds(
     original_bounds::evaluate(document, supplied_buffers, check)
 }
 
-pub(super) struct Geometry {
+pub(crate) struct Geometry {
     pub node_names: Vec<Option<String>>,
     pub triangles: Vec<Triangle>,
     pub materials: Vec<Material>,
@@ -417,9 +417,7 @@ pub(crate) fn bake_position(world: &[[f64; 4]; 4], position: [f64; 3]) -> Result
     for (r, out) in baked.iter_mut().enumerate() {
         let x = world[r][3] + (0..3).map(|c| world[r][c] * position[c]).sum::<f64>();
         if !x.is_finite() || x.abs() > MAX_LOCAL_COORDINATE {
-            return Err(unsupported(
-                "transformed position outside local F1a domain",
-            ));
+            return Err(unsupported("transformed position outside local F1a domain"));
         }
         *out = x as f32;
     }
@@ -520,6 +518,7 @@ pub(crate) struct AccessorView<'a> {
     pub count: usize,
     pub component: usize,
     pub width: usize,
+    pub normalized: bool,
     pub min: Option<&'a [f64]>,
     pub max: Option<&'a [f64]>,
 }
@@ -547,6 +546,23 @@ pub(crate) struct ScenePrimitive<'a> {
     pub has_color: bool,
 }
 
+/// Borrowed metadata needed to check an authored primitive through bounded readers.
+pub(crate) struct PayloadPrimitive<'a> {
+    pub position: AccessorView<'a>,
+    pub indices: Option<AccessorView<'a>>,
+    pub tangent: Option<AccessorView<'a>>,
+    pub count: usize,
+    primitive: &'a Primitive,
+    accessors: &'a [AccessorLayout],
+}
+impl<'a> PayloadPrimitive<'a> {
+    pub(crate) fn attributes(&self) -> impl Iterator<Item = (VertexRole, AccessorView<'a>)> + '_ {
+        self.primitive
+            .attributes()
+            .map(|(role, i)| (role, self.accessors[i].view(i)))
+    }
+}
+
 struct AccessorLayout {
     buffer: usize,
     start: usize,
@@ -571,6 +587,7 @@ impl AccessorLayout {
             count: self.count,
             component: self.component,
             width: self.width,
+            normalized: self.normalized,
             min: self.min.as_deref(),
             max: self.max.as_deref(),
         }
@@ -985,7 +1002,7 @@ fn transform(node: &Value) -> Result<Matrix> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum VertexRole {
+pub(crate) enum VertexRole {
     Position,
     Normal,
     Tangent,
@@ -993,6 +1010,31 @@ enum VertexRole {
     Color,
 }
 impl VertexRole {
+    /// Payload semantics independent of whether accessor bytes were captured or streamed.
+    pub(crate) fn check_payload(self, values: &[f64]) -> Result<()> {
+        match self {
+            Self::Position => check_source_position([values[0], values[1], values[2]])?,
+            Self::Normal | Self::Tangent => {
+                if (length([values[0], values[1], values[2]]) - 1.).abs() > 1e-4 {
+                    return Err(invalid("source NORMAL/TANGENT XYZ must be unit length"));
+                }
+                if self == Self::Tangent && ![-1., 1.].contains(&values[3]) {
+                    return Err(invalid("source TANGENT W must be exactly -1 or +1"));
+                }
+            }
+            Self::Texcoord(_) => {
+                if values.iter().any(|v| v.abs() > 1_000_000.) {
+                    return Err(unsupported("TEXCOORD outside supported finite magnitude"));
+                }
+            }
+            Self::Color => {
+                if values.iter().any(|v| !(0.0..=1.0).contains(v)) {
+                    return Err(unsupported("COLOR_0 outside bounded [0,1] profile"));
+                }
+            }
+        }
+        Ok(())
+    }
     fn validate(self, accessor: &AccessorLayout) -> Result<()> {
         let float = accessor.component == 5126 && !accessor.normalized;
         let normalized = [5121, 5123].contains(&accessor.component) && accessor.normalized;
@@ -1057,10 +1099,7 @@ fn primitives(
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<Vec<Vec<Primitive>>> {
     if list(doc, "meshes")?.len() > limits.meshes {
-        return Err(unsupported(format!(
-            "mesh count exceeds {}",
-            limits.meshes
-        )));
+        return Err(unsupported(format!("mesh count exceeds {}", limits.meshes)));
     }
     let get = |i: usize| {
         data.get(i)
@@ -1088,7 +1127,7 @@ fn primitives(
         Ok(&doc["bufferViews"][index])
     };
     let mut meshes = Vec::new();
-    let mut total = 0;
+    let mut total = 0usize;
     let mut primitive_count = 0;
     let mut used_indices = vec![false; data.len()];
     for mesh in list(doc, "meshes")? {
@@ -1192,7 +1231,9 @@ fn primitives(
             if !primitive.count.is_multiple_of(3) {
                 return Err(invalid("TRIANGLES count must be divisible by three"));
             }
-            total += primitive.count / 3;
+            total = total
+                .checked_add(primitive.count / 3)
+                .ok_or_else(|| unsupported("declared triangle count overflow"))?;
             if limits.triangles.is_some_and(|max| total > max) {
                 return Err(unsupported("declared triangle ceiling exceeded"));
             }
@@ -1260,27 +1301,9 @@ fn validate_primitive_payload(
                 if i.is_multiple_of(1024) {
                     check()?;
                 }
-                match role {
-                    VertexRole::Position => check_source_position(a.vec3(i))?,
-                    VertexRole::Normal | VertexRole::Tangent => {
-                        if (length(a.vec3(i)) - 1.).abs() > 1e-4 {
-                            return Err(invalid("source NORMAL/TANGENT XYZ must be unit length"));
-                        }
-                        if role == VertexRole::Tangent && ![-1., 1.].contains(&a.scalar(i, 3)) {
-                            return Err(invalid("source TANGENT W must be exactly -1 or +1"));
-                        }
-                    }
-                    VertexRole::Texcoord(_) => {
-                        if (0..2).any(|c| a.value(i, c).abs() > 1_000_000.) {
-                            return Err(unsupported("TEXCOORD outside supported finite magnitude"));
-                        }
-                    }
-                    VertexRole::Color => {
-                        if (0..a.width).any(|c| !(0.0..=1.0).contains(&a.value(i, c))) {
-                            return Err(unsupported("COLOR_0 outside bounded [0,1] profile"));
-                        }
-                    }
-                }
+                let values: [f64; 4] =
+                    std::array::from_fn(|c| if c < a.width { a.value(i, c) } else { 0. });
+                role.check_payload(&values[..a.width])?;
             }
         }
         if let Some(index_accessor) = p.indices.filter(|i| indices.insert((*i, pos.count))) {
@@ -1490,11 +1513,20 @@ impl Document {
     pub(crate) fn triangle_count(&self) -> usize {
         self.triangle_count
     }
-    pub(crate) fn node_count(&self) -> usize {
-        self.value
-            .get("nodes")
-            .and_then(Value::as_array)
-            .map_or(0, Vec::len)
+    /// Every declared accessor, including those in unselected meshes.
+    pub(crate) fn accessor_views(&self) -> impl Iterator<Item = AccessorView<'_>> {
+        self.accessors.iter().enumerate().map(|(i, a)| a.view(i))
+    }
+    /// Every authored primitive is validated before any selected-scene capture is accepted.
+    pub(crate) fn payload_primitives(&self) -> impl Iterator<Item = PayloadPrimitive<'_>> {
+        self.meshes.iter().flatten().map(|p| PayloadPrimitive {
+            position: self.accessors[p.position].view(p.position),
+            indices: p.indices.map(|i| self.accessors[i].view(i)),
+            tangent: p.tangent.map(|i| self.accessors[i].view(i)),
+            count: p.count,
+            primitive: p,
+            accessors: &self.accessors,
+        })
     }
     /// Every instanced primitive in scene traversal order, then primitive order.
     pub(crate) fn scene_primitives(&self) -> impl Iterator<Item = ScenePrimitive<'_>> + '_ {
@@ -1687,7 +1719,7 @@ fn scene_plan(
     Ok((instances, triangle_count))
 }
 
-pub(super) fn decode(
+pub(crate) fn decode(
     document: &Document,
     supplied_buffers: &[&[u8]],
     image_resources: &[Option<&[u8]>],

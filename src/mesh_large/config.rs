@@ -64,6 +64,28 @@ pub(crate) struct TreeConfig {
 }
 
 impl TreeConfig {
+    pub(crate) fn validate(&self) -> Result<(), crate::JobError> {
+        let invalid = |message| crate::JobError::new(crate::JobErrorKind::InvalidRequest, message);
+        if self.leaf_triangles == 0 || self.tile_bytes == 0 {
+            return Err(invalid(
+                "tree triangle and geometry-byte budgets must be positive",
+            ));
+        }
+        if self.height_cap == 0 || self.height_cap > HEIGHT_CAP {
+            return Err(invalid("tree height cap must be between 1 and 32"));
+        }
+        if self.sort.fan_in < 2 || self.sort.buffer_bytes == 0 {
+            return Err(invalid(
+                "sort fan-in must be at least two and buffers must be positive",
+            ));
+        }
+        if self.sort.run_bytes / 2 < std::mem::size_of::<TriangleRecord>() {
+            return Err(invalid(
+                "shared sort run budget must hold two triangle records",
+            ));
+        }
+        Ok(())
+    }
     pub(crate) fn new(profile: Profile) -> Self {
         Self {
             profile,
@@ -125,13 +147,17 @@ pub(crate) struct MemoryBound {
     pub run_budget_bytes: u64,
     pub fan_in: u64,
     pub stream_buffer_bytes: u64,
-    /// `8 × J_actual`: the parsed JSON plan.
+    /// Conservative JSON parse/typed-plan allowance, including allocation amplification.
     pub document_bytes: u64,
+    /// Runtime, allocator and source descriptor/metadata reserve.
+    pub runtime_bytes: u64,
+    /// Bounded run descriptors and their scratch paths, for two sorters.
+    pub descriptor_bytes: u64,
     /// Two live sorters at `R / 2` each, excluding their per-job terms.
     pub sort_bytes: u64,
     /// Accessor readers and sequence writers, `4 × b`, plus the O(depth) cell stack.
     pub stream_bytes: u64,
-    /// Per-job term: each live sorter's per-thread sort scratch.
+    /// Per-job term: each live sorter's sort scratch plus worker stack reserve.
     pub per_job_bytes: u64,
     pub jobs: u64,
     /// `document + sort + stream + jobs × per_job`.
@@ -141,32 +167,55 @@ pub(crate) struct MemoryBound {
 /// Stable-sort scratch allowance per sorting thread, as in `SortConfig::memory_bound`.
 const SORT_THREAD_BYTES: u64 = 8_000_000;
 /// The cell stack: 22 open cells with at most 8 child summaries each, rounded up.
-const TREE_STACK_BYTES: u64 = 64 << 10;
+const TREE_STACK_BYTES: u64 = 256 << 10;
 
 impl MemoryBound {
     pub(crate) fn new(config: &TreeConfig, json_bytes: u64, jobs: usize) -> Self {
         let sorter = config.sorter(jobs);
-        let per_job = 2 * SORT_THREAD_BYTES;
+        let per_job = 2 * (SORT_THREAD_BYTES + (8 << 20));
         // `memory_bound` already holds `jobs × 8 MB`; it is moved to the per-job term.
-        let sort = 2 * (sorter.memory_bound::<TriangleRecord>() - jobs as u64 * SORT_THREAD_BYTES);
+        let sort = sorter
+            .memory_bound::<TriangleRecord>()
+            .saturating_sub((jobs as u64).saturating_mul(SORT_THREAD_BYTES))
+            .saturating_mul(2);
         let b = config.sort.buffer_bytes as u64;
-        let stream = 4 * b + TREE_STACK_BYTES;
-        let document = 8 * json_bytes;
+        let stream = b.saturating_mul(8).saturating_add(TREE_STACK_BYTES);
+        let document = json_bytes.saturating_mul(128);
+        let runtime = 64 << 20;
+        let path_bytes = config.scratch_dir.as_ref().map_or_else(
+            || crate::spill::Scratch::default_parent().as_os_str().len(),
+            |path| path.as_os_str().len(),
+        ) as u64;
+        let descriptors = (config.sort.fan_in as u64)
+            .saturating_mul(256)
+            .saturating_mul(path_bytes.saturating_mul(4).saturating_add(1024));
+        let bound = document
+            .saturating_add(runtime)
+            .saturating_add(descriptors)
+            .saturating_add(sort)
+            .saturating_add(stream)
+            .saturating_add((jobs as u64).saturating_mul(per_job));
         Self {
             run_budget_bytes: config.sort.run_bytes as u64,
             fan_in: config.sort.fan_in as u64,
             stream_buffer_bytes: b,
             document_bytes: document,
+            runtime_bytes: runtime,
+            descriptor_bytes: descriptors,
             sort_bytes: sort,
             stream_bytes: stream,
             per_job_bytes: per_job,
             jobs: jobs as u64,
-            bound_bytes: document + sort + stream + jobs as u64 * per_job,
+            bound_bytes: bound,
         }
     }
 
     pub(crate) fn base_bytes(&self) -> u64 {
-        self.document_bytes + self.sort_bytes + self.stream_bytes
+        self.document_bytes
+            .saturating_add(self.runtime_bytes)
+            .saturating_add(self.descriptor_bytes)
+            .saturating_add(self.sort_bytes)
+            .saturating_add(self.stream_bytes)
     }
 }
 
@@ -264,8 +313,9 @@ fn cgroup_headroom() -> Option<u64> {
 /// are at most `3X + 4` runs, and at most `n/7 + 11` synthetic nodes above `n` runs per cell.
 /// `256X + 16` covers the sum.
 pub(crate) fn node_bound(triangles: u64, total_bytes: u64, config: &TreeConfig) -> u64 {
-    let over = triangles / (config.leaf_triangles + 1) + total_bytes / (config.tile_bytes + 1);
-    over.saturating_mul(256).saturating_add(16)
+    let over = u128::from(triangles) / (u128::from(config.leaf_triangles) + 1)
+        + u128::from(total_bytes) / (u128::from(config.tile_bytes) + 1);
+    (over * 256 + 16).min(u128::from(u64::MAX)) as u64
 }
 
 /// Stage-1 scratch need (design §2.7): the largest set of spill files live at once over the
@@ -277,6 +327,7 @@ pub(crate) struct ScratchNeed {
     pub position_sort_bytes: u64,
     pub triangle_sort_bytes: u64,
     pub tree_output_bytes: u64,
+    pub weld_sort_bytes: u64,
     pub need_bytes: u64,
 }
 
@@ -294,25 +345,34 @@ pub(crate) fn scratch_need_parts(
     let p = corners.checked_mul(CornerPosition::SIZE as u64)?;
     let t = triangles.checked_mul(TriangleRecord::SIZE as u64)?;
     let nodes = node_bound(triangles, total_bytes, config);
-    let tree = nodes.checked_mul((NodeRecord::SIZE + Span::SIZE) as u64)?;
-    let phases = [
-        a.checked_mul(2)?,
-        a.checked_add(p)?,
-        p.checked_mul(2)?,
-        p.checked_add(t)?,
-        t.checked_mul(2)?,
-        t.checked_mul(2)?.checked_add(tree)?,
-    ];
+    // Cover all generations concurrently, rather than relying on iterator drop timing.
+    // Four node/span inventories cover postorder, preorder sort generations and run spans.
+    let tree = nodes
+        .checked_mul((NodeRecord::SIZE + Span::SIZE) as u64)?
+        .checked_mul(4)?;
+    let weld = corners
+        .checked_mul(22)?
+        .checked_mul(2)?
+        .checked_add(corners.checked_mul(13)?)?;
+    let need = a
+        .checked_mul(2)?
+        .checked_add(p.checked_mul(2)?)?
+        .checked_add(t.checked_mul(2)?)?
+        .checked_add(tree)?
+        .checked_add(weld)?;
     Some(ScratchNeed {
         corner_sort_bytes: a.checked_mul(2)?,
         position_sort_bytes: p.checked_mul(2)?,
         triangle_sort_bytes: t.checked_mul(2)?,
         tree_output_bytes: t.checked_add(tree)?,
-        need_bytes: phases.into_iter().max()?,
+        weld_sort_bytes: weld,
+        need_bytes: need,
     })
 }
 
 /// Stage-1 sound lower bound on tiles: `⌈N/L⌉` leaves, plus the root when it must be internal.
 pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {
-    triangles.div_ceil(leaf_triangles) + u64::from(triangles > leaf_triangles)
+    triangles
+        .div_ceil(leaf_triangles)
+        .saturating_add(u64::from(triangles > leaf_triangles))
 }
