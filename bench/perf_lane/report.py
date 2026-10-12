@@ -26,10 +26,18 @@ METRICS = {
     'load': ('Cesium load (console errors)', None, None, False),
     'errors': ('console errors', None, None, False),
     'tiles': ('tile requests', 'requests', 2, False),  # advisory, as cesium.py --baseline
-    'secs': ('s to tiles-loaded', 'secondsToLoaded', 1.0, False),
+    'first': ('s to first tile', 'secondsToFirstTile', 0.25, False),
+    'secs': ('s to loaded', 'secondsToLoaded', 0.25, False),
+    'rtiles': ('tile requests, SSE 0', 'refined.requests', 2, False),  # fully refined pass (tilesets)
+    'rsecs': ('s to loaded, SSE 0', 'refined.secondsToLoaded', 0.25, False),
 }
-ROWS = ['wall', 'rss', 'bytes', 'load', 'tiles', 'secs']  # 'load' shows the console error count too
+ROWS = ['wall', 'rss', 'bytes', 'load', 'tiles', 'first', 'secs', 'rtiles', 'rsecs']  # 'load' shows console errors too
 PROCESS_METRICS = {'wall', 'rss', 'bytes', 'vwall'}
+TIMING_METRICS = {'first', 'secs', 'rsecs'}  # compared only between runs with the same renderer class
+# Runs recorded before the lane captured the WebGL renderer forced --use-angle=swiftshader.
+LEGACY_RENDERER = dict(renderer='SwiftShader (not recorded; the lane forced --use-angle=swiftshader)',
+                       rendererClass='software')
+LEGACY_ROW_RENDERER = 'SwiftShader, superseded'
 BLOCK_START, BLOCK_END = '<!-- perf-lane milestone data (read by report.py; do not edit)', '-->'
 BLOCK_PREFIX = '<!-- perf-lane milestone data'
 
@@ -61,10 +69,15 @@ def side_metrics(process, cesium, side):
         elif check.get('samples'): m['vfailed'] = True
         load = loads.get(name)
         if load:
-            r = load['requests']
-            m.update(load=bool(load.get('loaded')), errors=len(load.get('console', {}).get('errors', [])),
-                     tiles=sum(r[k]['requests'] for k in ('content', 'subtree', 'imagery')),
+            refined = load.get('refined')
+            tiles = lambda r: sum(r[k]['requests'] for k in ('content', 'subtree', 'imagery'))
+            errors = lambda c: len(c.get('console', {}).get('errors', []))
+            m.update(load=bool(load.get('loaded')) and (refined is None or bool(refined.get('loaded'))),
+                     errors=errors(load) + (errors(refined) if refined else 0), tiles=tiles(load['requests']),
                      secs=load.get('secondsToLoaded'), problems=list(load.get('problems', [])))
+            if load.get('secondsToFirstTile') is not None: m['first'] = load['secondsToFirstTile']
+            if refined:
+                m.update(rtiles=tiles(refined['requests']), rsecs=refined.get('secondsToLoaded'))
         out[name] = m
     return out
 
@@ -137,9 +150,9 @@ def all_flags(columns, explanations):
 
 def fmt(metric, value):
     if value is None: return '—'
-    if metric in ('bytes', 'errors', 'tiles'): return f'{int(value):,}'
+    if metric in ('bytes', 'errors', 'tiles', 'rtiles'): return f'{int(value):,}'
     if metric == 'rss': return f'{value:.1f}'
-    if metric == 'secs': return f'{value:.2f}'
+    if metric in TIMING_METRICS: return f'{value:.2f}'
     return f'{value:.3f}'
 
 
@@ -147,6 +160,7 @@ def cell(metric, m):
     if m is None: return '—'
     if 'na' in m: return 'n/a'
     if 'failed' in m: return 'failed'
+    if metric in TIMING_METRICS and m.get('superseded'): return f"{m['superseded']}, superseded"
     if metric == 'load':
         return '—' if m.get('load') is None else f"{'ok' if m['load'] else 'FAIL'} ({fmt('errors', m.get('errors'))})"
     return fmt(metric, m.get(metric))
@@ -169,7 +183,7 @@ def case_table(case, columns, flagged, tag='release'):
     r, m, h = release.get(case) if columns.get('release') else None, milestone.get(case), head.get(case)
     lines = [f'| {case} | {tag} | last milestone | head | Δ {tag} | Δ milestone |', '| --- | ---: | ---: | ---: | ---: | ---: |']
     for metric in ROWS:
-        if metric in ('load', 'tiles', 'secs') and not any(x and metric in x for x in (r, m, h)): continue
+        if metric not in PROCESS_METRICS and not any(x and metric in x for x in (r, m, h)): continue
         lines.append(f"| {METRICS[metric][0]} | {cell(metric, r)} | {cell(metric, m)} | {cell(metric, h)} | "
                      f"{delta(metric, r, h, (case, metric, 'release') in flagged)} | "
                      f"{delta(metric, m, h, (case, metric, 'milestone') in flagged)} |")
@@ -189,15 +203,48 @@ def headline(head):
                 loads=len(loads), secs=sum(m.get('secs') or 0 for m in loads))
 
 
+def renderer_of(meta):
+    """The run's renderer record; runs from before renderer capture were SwiftShader."""
+    return meta.get('renderer') or LEGACY_RENDERER
+
+
+def short_renderer(record):
+    """Milestones-table label: 'GPU: <device>' from an ANGLE string, or 'software (...)'."""
+    text = record.get('renderer') or ''
+    found = re.match(r'ANGLE \(([^,]+), ([^,/()]+)', text)
+    name = found.group(2).strip() if found else text[:48]
+    if record.get('rendererClass') == 'gpu': return f'GPU: {name}'
+    known = next((n for n in ('SwiftShader', 'llvmpipe', 'lavapipe', 'softpipe') if n.lower() in text.lower()), name)
+    return f'software ({known})'
+
+
+def row_class(row):
+    """Renderer class of a Milestones row; rows from before the renderer column ran on SwiftShader."""
+    cells = [cell.strip() for cell in row.strip('|').split('|')]
+    return 'gpu' if len(cells) > 8 and cells[8].startswith('GPU') else 'software'
+
+
+def mask_timings(milestone, info, meta):
+    """The milestone column for display and flags: Cesium timings from another renderer class are
+    replaced by a 'superseded' marker and never compared (requests, bytes and load results still are)."""
+    old = (info or {}).get('rendererClass', 'software')
+    if not milestone or old == renderer_of(meta)['rendererClass']: return milestone, None
+    masked = {case: {k: v for k, v in m.items() if k not in TIMING_METRICS} | ({'superseded': old} if usable(m) else {})
+              for case, m in milestone.items()}
+    return masked, old
+
+
 def milestone_row(meta, head):
     h = headline(head)
     return (f"| {meta['date']} | `{meta['head']['commit'][:7]}` | {meta['label']} | {h['wall']:.2f} | {h['rss']:.1f} | "
-            f"{h['mib']:.1f} | {h['ok']}/{h['loads']} | {h['secs']:.1f} |")
+            f"{h['mib']:.1f} | {h['ok']}/{h['loads']} | {h['secs']:.1f} | {short_renderer(renderer_of(meta))} |")
 
 
 def encode_block(meta, head):
-    keep = ('wall', 'rss', 'bytes', 'vwall', 'load', 'errors', 'tiles', 'secs', 'na', 'failed')
-    lines = [BLOCK_START, 'milestone ' + json.dumps(dict(commit=meta['head']['commit'], label=meta['label'], date=meta['date']))]
+    keep = ('wall', 'rss', 'bytes', 'vwall', 'load', 'errors', 'tiles', 'first', 'secs', 'rtiles', 'rsecs', 'na', 'failed')
+    record = renderer_of(meta)
+    lines = [BLOCK_START, 'milestone ' + json.dumps(dict(commit=meta['head']['commit'], label=meta['label'], date=meta['date'],
+                                                         renderer=record['renderer'], rendererClass=record['rendererClass']))]
     for case, m in head.items():
         lines.append(f'case {case} ' + json.dumps({k: round(v, 4) if isinstance(v, float) else v
                                                    for k, v in m.items() if k in keep}, sort_keys=True))
@@ -241,6 +288,7 @@ def parse_previous(text):
         if cells[0].lower() == 'date' or all(set(cell) <= set('-: ') for cell in cells): continue
         if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', cells[0]) or len(cells) < 3:
             raise fail(f'line {number}: unrecognised Milestones row {line[:60]!r}')
+        if len(cells) == 8: cells.append(LEGACY_ROW_RENDERER)  # recorded before the renderer column
         rows.append('| ' + ' | '.join(cells) + ' |')
     if not rows: raise fail("'## Milestones' has no rows")
     if not any(row.split('|')[2].strip().strip('`') == info['commit'][:7] for row in rows):
@@ -251,9 +299,13 @@ def parse_previous(text):
 def render(meta, columns, previous, explanations):
     """Markdown REPORT.md text. previous = parse_previous() of the committed report."""
     info, _, rows = previous
+    stored_milestone = columns.get('milestone')
+    masked, superseded = mask_timings(stored_milestone, info, meta)
+    columns = dict(columns, milestone=masked)
     flags, failures = all_flags(columns, explanations)
     flagged = {(f['case'], f['metric'], f['ref']) for f in flags}
     env, ces = meta['environment'], meta.get('cesium') or {}
+    record = renderer_of(meta)
     release = meta.get('release')
     tag = release['tag'] if release else 'release'
     out = ['# Performance lane report', '',
@@ -272,8 +324,9 @@ def render(meta, columns, previous, explanations):
            *([f"- Per-core idle over 5 s before each step (need ≥{meta.get('minIdle', 0.9):.0%}): " + '; '.join(
                f"{step} CPUs {','.join(map(str, v['cpus']))} " + '/'.join(f'{x:.0%}' for x in v['idle'].values())
                for step, v in meta['pinned'].items()) + '.'] if meta.get('pinned') else []),
-           f"- Cesium {ces.get('cesium', '—')}, Playwright {ces.get('playwright', '—')}, Chromium "
-           f"{chromium(ces.get('chromium'))} (SwiftShader, 1024×768).",
+           *browser_lines(meta, ces, record),
+           *([f'- Last milestone Cesium timings were measured with {superseded} rendering: shown as superseded and '
+              f"not compared with this {record['rendererClass']} run."] if superseded else []),
            f"- Corpus sha256 `{meta['corpus'][:16]}` (pinned `corpus.py` inputs and the T1 fixture).",
            f"- Gate: >{RATIO:g}× worse than the last milestone and over the floor (0.1 s, 16 MiB, 0 B), unless "
            '`--explain`ed; any Cesium load failure, console error or failed request. Cesium time and tile '
@@ -295,14 +348,71 @@ def render(meta, columns, previous, explanations):
     out += ['', '## Cases', '']
     for case in columns['head']:
         out += case_table(case, columns, flagged, tag) + ['']
-    if meta.get('label'): rows = [r for r in rows if f"`{meta['head']['commit'][:7]}`" not in r] + [milestone_row(meta, columns['head'])]
+    out += request_cap_section(meta)
+    if meta.get('label'):
+        # Rerunning a commit replaces its row for the same renderer class; rows of the other class are kept.
+        commit = f"`{meta['head']['commit'][:7]}`"
+        rows = [r for r in rows if commit not in r or row_class(r) != record['rendererClass']] + [milestone_row(meta, columns['head'])]
+    if record['rendererClass'] == 'gpu':  # software rows are kept for the trend, marked superseded
+        rows = [r if row_class(r) == 'gpu' or 'superseded' in r.split('|')[-2] else r[:-2].rstrip() + ', superseded |'
+                for r in rows]
     out += ['## Milestones', '',
-            '| date | commit | label | head Σ wall s | max RSS MiB | Σ output MiB | Cesium ok | Σ s to loaded |',
-            '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |', *rows, '']
+            'Σ s to loaded is the default-camera Cesium time; compare it only between rows with the same renderer.', '',
+            '| date | commit | label | head Σ wall s | max RSS MiB | Σ output MiB | Cesium ok | Σ s to loaded | renderer |',
+            '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |', *rows, '']
     block = encode_block(meta, columns['head']) if meta.get('label') else (
         [BLOCK_START, 'milestone ' + json.dumps(info), *(f'case {k} ' + json.dumps(v, sort_keys=True)
-                                                         for k, v in columns['milestone'].items()), BLOCK_END] if info else [])
+                                                         for k, v in stored_milestone.items()), BLOCK_END] if info else [])
     return '\n'.join(out + block) + '\n', failures
+
+
+def browser_lines(meta, ces, record):
+    """Header lines: browser, renderer, finish rule and request scheduling."""
+    browser = meta.get('browser') or {}
+    if browser.get('mode') == 'cdp':
+        where = (f"Chrome {browser.get('browserVersion', '—')} attached over CDP (`{browser.get('cdpUrl')}`), a fresh "
+                 'context per run with the cache disabled, tab brought to the front'
+                 + ('' if browser.get('tabVisible', True) else ' (NOT visible throughout)'))
+    elif browser.get('mode') == 'launch':
+        where = (f"private headless Chromium {browser.get('browserVersion') or chromium(ces.get('chromium'))} "
+                 f"(`--use-angle={browser.get('gl')}`)")
+    else:
+        where = f"headless Chromium {chromium(ces.get('chromium'))} (`--use-angle=swiftshader`)"
+    size = browser.get('viewport') or [1024, 768]
+    lines = [f"- Browser: {where}; viewport {size[0]}×{size[1]}"
+             + (f", window {browser['window'][0]}×{browser['window'][1]}" if browser.get('window') else '') + '.',
+             f"- WebGL renderer: `{record['renderer']}` ({'GPU' if record['rendererClass'] == 'gpu' else record['rendererClass']}"
+             + ('' if record['rendererClass'] == 'gpu' else '; never compared with GPU runs') + ').',
+             f"- Cesium {ces.get('cesium', '—')}, Playwright {ces.get('playwright', '—')}. "
+             + (f"Finish rule: {ces['finishRule']}." if ces.get('finishRule') else
+                'Finish rule: tilesLoaded for five consecutive frames (before the GPU lane).')
+             + (f" Fully refined pass: maximumScreenSpaceError {ces['refinedMaximumScreenSpaceError']:g} (SSE 0 rows)."
+                if ces.get('refinedMaximumScreenSpaceError') is not None else '')]
+    scheduler = ces.get('requestScheduler')
+    if scheduler:
+        lines.append(f"- Request scheduling is a viewer setting, not a property of the output: Cesium defaults "
+                     f"(throttleRequests {str(scheduler.get('throttleRequests')).lower()}, maximumRequestsPerServer "
+                     f"{scheduler.get('maximumRequestsPerServer')}, maximumRequests {scheduler.get('maximumRequests')}) "
+                     'for every number except the request cap diagnostic.')
+    return lines
+
+
+def request_cap_section(meta):
+    """Optional diagnostic: each tileset pass with RequestScheduler.throttleRequests=false (not gated)."""
+    found = meta.get('requestCap') or {}
+    if not found: return []
+    out = ['## Request cap diagnostic', '',
+           "Head outputs loaded again with `RequestScheduler.throttleRequests = false`: the per-frame request cap's "
+           'effect. A viewer setting, recorded only; not gated.', '',
+           '| case | pass | throttled s | unthrottled s | Δ | throttled frames | unthrottled frames |',
+           '| --- | --- | ---: | ---: | ---: | ---: | ---: |']
+    for case, passes in found.items():
+        for name, p in passes.items():
+            t, u = p['throttled'], p['unthrottled']
+            out.append(f"| {case} | {name} | {fmt('secs', t.get('secondsToLoaded'))} | {fmt('secs', u.get('secondsToLoaded'))} | "
+                       f"{pct(t.get('secondsToLoaded'), u.get('secondsToLoaded'))} | {t.get('framesToLoaded') or '—'} | "
+                       f"{u.get('framesToLoaded') or '—'} |")
+    return out + ['']
 
 
 # ---------- running ----------
@@ -447,8 +557,37 @@ def corpus_digest(environment_inputs):
     return hashlib.sha256(''.join(f'{k}:{v}\n' for k, v in sorted(environment_inputs.items())).encode()).hexdigest()
 
 
+def browser_args(args):
+    """cesium.py flags selecting the browser (CDP by default) and the optional request-cap diagnostic."""
+    return [*(['--cdp-url', args.cdp_url] if args.cdp_url else []), *(['--launch'] if args.launch else []),
+            *(['--software-gl'] if args.software_gl else []), *(['--request-diagnostic'] if args.request_diagnostic else [])]
+
+
+def browser_record(environment):
+    """meta.json 'browser' and 'renderer' from a cesium.py report environment (or the preflight facts)."""
+    browser = environment.get('browser') or {}
+    return (dict(mode=browser.get('mode'), cdpUrl=browser.get('cdpUrl'), gl=browser.get('gl'),
+                 browserVersion=environment.get('browserVersion'), viewport=environment.get('viewport'),
+                 window=environment.get('window'), devicePixelRatio=environment.get('devicePixelRatio'),
+                 tabVisible=environment.get('tabVisible', environment.get('visibility') == 'visible'),
+                 cacheDisabled=environment.get('cacheDisabled')),
+            dict(renderer=environment.get('renderer'), vendor=environment.get('vendor'),
+                 rendererClass=environment.get('rendererClass')))
+
+
+def check_browser(args):
+    """Preflight before the long processing step: the browser is reachable and renders on the GPU (or on
+    software with --software-gl). cesium.py prints the reason and exits 3 otherwise."""
+    checked = run([sys.executable, '-I', HERE / 'cesium.py', '--check-renderer', *browser_args(args)],
+                  capture_output=True, text=True)
+    sys.stderr.write(checked.stderr)
+    if checked.returncode != 0: raise SystemExit('report: browser preflight failed (see above); nothing was run')
+    return json.loads(checked.stdout)
+
+
 def collect(args, explanations):
     """Run the lane and return the evidence directory."""
+    facts = check_browser(args)
     wrap = shlex.split(args.cargo_wrap)
     tag = args.baseline_tag or latest_tag()
     target = args.cargo_target_dir or (args.work / f'target-{tag}')
@@ -504,13 +643,17 @@ def collect(args, explanations):
         cpus = idle(f'cesium {side}')
         pinned[f'cesium-{side}'] = quiet['steps'][-1]
         check = run([*py, HERE / 'cesium.py', '--work', work / f'cesium-{side}', '--out', evidence / f'cesium-{side}.json',
-                     '--hole', hole, '--cpus', cpus, *targets])
+                     '--hole', hole, '--cpus', cpus, *browser_args(args), *targets])
         if check.returncode not in (0, 1) or not (evidence / f'cesium-{side}.json').exists():
             raise SystemExit(f'report: cesium.py failed for {side}')
         shutil.copytree(work / f'cesium-{side}' / 'screenshots', evidence / f'screenshots-{side}')
         logs = evidence / f'logs-{side}'; logs.mkdir()
         for log in (kept / side).glob('*.log'): shutil.copy2(log, logs / log.name.replace(':', '_'))
+    head_env = json.loads((evidence / 'cesium-head.json').read_text())['environment'] \
+        if (evidence / 'cesium-head.json').exists() else dict(facts, browser=facts['browser'])
+    browser, renderer = browser_record(head_env)
     meta = dict(date=date, label=args.milestone_label, corpus=corpus_digest(result['environment']['inputs']),
+                browser=browser, renderer=renderer,
                 head=dict(commit=commit, sha256=sha256(head), path=str(head)),
                 release=dict(tag=tag, commit=build['commit'], sha256=build['sha256'], build=build['build'], path=str(base)),
                 explanations=args.explain, pinned=pinned, idleChecks=quiet['steps'], minIdle=args.min_idle)
@@ -538,6 +681,10 @@ def load_raw(directory):
     meta['contended'] = contended(process)
     meta.setdefault('corpus', corpus_digest(process['environment']['inputs']))
     meta['cesium'] = (read('cesium-head.json') or {}).get('environment')
+    if 'renderer' not in meta and meta['cesium'] and meta['cesium'].get('renderer'):
+        meta['browser'], meta['renderer'] = browser_record(meta['cesium'])
+    meta['requestCap'] = {c['name']: c['requestCapDiagnostic'] for c in (read('cesium-head.json') or {}).get('cases', [])
+                          if c.get('requestCapDiagnostic')}
     if 'bundle' not in meta:
         path = next((directory / name for name in BUNDLES if (directory / name).exists()), None) or bundle(directory)
         meta['bundle'] = dict(path=str(path).replace(str(pathlib.Path.home()), '~'), sha256=sha256(path))
@@ -556,12 +703,14 @@ def report_history(path):
         yield shown.stdout if shown.returncode == 0 else ''  # '' where the file was deleted
 
 
-def previous_report(versions, head_commit):
+def previous_report(versions, head_commit, renderer_class='software'):
     """The newest report version whose milestone is not the head being rendered, so that re-rendering a
-    recorded milestone (--from-raw) compares it with the milestone before it, not with itself."""
+    recorded milestone (--from-raw) compares it with the milestone before it, not with itself. A milestone
+    of the same commit under another renderer class (a GPU re-render of a SwiftShader milestone) is kept."""
     for text in versions:
         info = parse_previous(text)[0]
-        if not info or info['commit'] != head_commit: return text
+        if not info or info['commit'] != head_commit or info.get('rendererClass', 'software') != renderer_class:
+            return text
     return ''
 
 
@@ -591,6 +740,13 @@ def main():
     parser.add_argument('--idle-give-up', type=float, default=4 * 3600)
     parser.add_argument('--attempts', type=int, default=4, help='process.py runs while best samples are contended')
     parser.add_argument('--keep-work', action='store_true', help='keep the outputs under --work')
+    parser.add_argument('--cdp-url', help='DevTools endpoint of the GPU Chromium (cesium.py default: '
+                        'RUSTY_TILES_PERF_CDP or http://localhost:9222)')
+    parser.add_argument('--launch', action='store_true', help='cesium.py starts a private headless Chromium on the GPU')
+    parser.add_argument('--software-gl', action='store_true', help='SwiftShader; results are labelled software and '
+                        'never compared with GPU runs')
+    parser.add_argument('--request-diagnostic', action='store_true', help="also record the per-frame request cap's "
+                        'effect (RequestScheduler.throttleRequests=false; not gated)')
     args = parser.parse_args()
     explanations = [item.split('=', 1) for item in args.explain]
     if any(len(pair) != 2 or not pair[1] for pair in explanations): parser.error('--explain needs CASE.METRIC=REASON')
@@ -600,7 +756,8 @@ def main():
     explanations = merge_explanations(meta.get('explanations', []), args.explain)
     if args.milestone_label: meta['label'] = args.milestone_label
     previous = parse_previous(args.previous.read_text() if args.previous
-                              else previous_report(report_history(args.report), meta['head']['commit']))
+                              else previous_report(report_history(args.report), meta['head']['commit'],
+                                                  renderer_of(meta)['rendererClass']))
     columns['milestone'] = previous[1] or None
     text, failures = render(meta, columns, previous, explanations)
     args.report.write_text(text)
