@@ -88,6 +88,11 @@ jobs:
           python3 -m unittest discover -s bench/architecture_audit/foundation -p test_monitor.py -v
       - name: Check formatting
         run: cargo fmt --all --check
+      - name: Test performance-lane controls
+        run: |
+          node --version
+          python3 -I bench/perf_lane/test_report.py
+          python3 -I bench/perf_lane/test_cesium.py
       - name: Test native build
         shell: bash
         run: |
