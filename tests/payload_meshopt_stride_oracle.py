@@ -29,6 +29,10 @@ def main():
          '83ca40eb831ad802e1ce1fbbfb1b4ede45905761c305dd91821c8b58bd08d345', 6),
         ('parent1', controls / 'stride_parent_control/2026-10-10',
          '9a049a589538aef1e0d5d566460b4200966063f6eda7b7007f08f3b0fdd063f0', 1),
+        # Additive meshopt stream-header lane (2026-10-12, C1 rule H-1): one allowed header
+        # per mode from the pinned EXT text, the other codec version and an unknown one.
+        ('header9', controls / 'meshopt_header_amendment/2026-10-12',
+         '2f6e19333e9966df112bbbfa94c30550b327b60d55e7d937155acb6c046f7adf', 9),
     ]
     for _, lane, manifest_hash, _ in lanes:
         assert sha(lane / 'fixtures/manifest.json') == manifest_hash
@@ -66,7 +70,7 @@ def main():
         receipt['runnerExitCode'] = status
         phases[label] = receipt
         evidence = {'coordinatorRunnerSha256': sha(Path(__file__)), 'phases': phases,
-                    'scope': 'Actual independently authored six stride controls plus separate parent-gate control.'}
+                    'scope': 'Actual independently authored six stride controls, separate parent-gate control and nine meshopt header controls.'}
         args.output.write_text(json.dumps(evidence, indent=2) + '\n')
         assert status == 0 and receipt['passes'] == count and receipt['failures'] == 0, args.output
 
