@@ -23,7 +23,6 @@ fn feature(mut geometry: Geometry, geographic: bool) -> Feature {
         geometry,
         intrinsic,
         surface_fragment: false,
-        triangle_boundaries: vec![],
         fragment_path: String::new(),
     }
 }

@@ -164,18 +164,20 @@ Large features are split to fit:
 - Multi-geometries split into smaller parts.
 - Polygons split their triangulated fill. Original Z and holes are kept.
 
-A split polygon's fill and its source boundary share one glTF vector content. Each fill triangle is its own `EXT_mesh_polygon` polygon, with a three-vertex exterior loop. Source boundaries are vector lines in the same GLB. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Fill triangles and boundaries both carry feature metadata, so they are pickable.
+A split polygon's fill is glTF vector content: each fill triangle is its own `EXT_mesh_polygon` polygon, with a three-vertex exterior loop. Its source boundary is a separate line feature of closed rings. The line splitter cuts an oversized ring into contiguous runs, and each tile chains a feature's runs into maximal strips that end only where the ring leaves the tile; a ring wholly inside one tile is a single closed strip. The fill and the boundary are separate spool rows, so they can land in different tiles. Each original boundary segment appears exactly once, and internal triangle edges are not drawn. Fill triangles and boundaries both carry feature metadata, so they are pickable. Polygons that are not split get no separate outline: their `EXT_mesh_polygon` loops are the source boundary.
+
+With `--quantize`, a tile that contains line strips pads its shared position range so that CesiumJS 1.146's synthetic strip-end neighbour (2c−n, stored as u16) cannot wrap into a long spike. This costs precision, not bytes: the quantization step on such tiles can be up to three times coarser.
 
 Buffered grid clipping and coverage-wide edge reconciliation are not implemented.
 
 ### Fills are glTF only
 
-Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`. That decoder needs polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Each fill triangle is now one `EXT_mesh_polygon` polygon. It is stored in the same GLB as the polygon's boundary lines and the tile's other features. Archives contain only glTF content.
+Fragmented fills used to be plain triangle GLBs inside a `b3dm` wrapper. CesiumJS 1.146.0 uses its vector decoder for every GLB in a tileset that declares `3DTILES_content_gltf_vector`. That decoder needs polygon loops, so unwrapped triangle fills failed to load ([#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)). Each fill triangle is now one `EXT_mesh_polygon` polygon. It is stored in the same GLB as the tile's other features, which may include the polygon's boundary lines. Archives contain only glTF content.
 
 - **Winding.** Rings follow the pinned draft: exteriors are counterclockwise and holes clockwise, seen from local up. Triangles face up: away from the earth's centre for geographic polygons, and towards local up (+Y) on the best-fit plane otherwise. A vertical polygon has no up side, so it gets a fixed horizontal side. Every loop is wound so that its polygon's triangles lie on its left. This holds for thin geographic triangles, whose lon/lat orientation can disagree with their 3D shape, and for rings that span a hemisphere.
 - **Index size.** Loop indices and polygon offsets are 16-bit when every value is below 65535, and 32-bit otherwise.
 - **Loop coverage.** CesiumJS 1.146.0 sizes a per-vertex lookup by the length of the loop list. A triangle corner numbered past that length loses its triangle. A polygon with a vertex outside its loops is refused when its feature is read. The encoder refuses any primitive that would break the rule.
-- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Sharing one GLB with the boundary lines saves more than this, so fragmented archives are smaller than before.
+- **Cost.** Each fill triangle carries its own loop and two polygon offsets. With 16-bit indices that is 12 bytes per triangle before compression. Dropping the `b3dm` wrapper and drawing boundaries as ring runs saves more than this, so fragmented archives are smaller than before.
 
 `--reuse-tileset` refuses an earlier archive that contains `b3dm` fills, with the message "previous archive has legacy b3dm polygon fills". Convert once without `--reuse-tileset` to make a new baseline.
 

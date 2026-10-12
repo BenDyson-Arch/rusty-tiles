@@ -386,6 +386,20 @@ pub(super) struct Candidate {
 fn view(glb: &mut MetadataGlb, bytes: &[u8]) -> usize {
     glb.view(if bytes.is_empty() { &[0] } else { bytes })
 }
+/// Per-axis maximum |c - n| over line-strip ends c and their one neighbour n.
+fn strip_end_reach(indices: &[u32], points: &[Point], mut reach: Point) -> Point {
+    for strip in indices.split(|i| *i == u32::MAX).filter(|s| s.len() >= 2) {
+        for (c, n) in [
+            (strip[0], strip[1]),
+            (strip[strip.len() - 1], strip[strip.len() - 2]),
+        ] {
+            for i in 0..3 {
+                reach[i] = reach[i].max((points[c as usize][i] - points[n as usize][i]).abs());
+            }
+        }
+    }
+    reach
+}
 fn u32_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
     let bytes: Vec<_> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
     let v = view(glb, &bytes);
@@ -590,6 +604,7 @@ fn emit_source(
         glb::add_extension(&mut glb.document, "KHR_mesh_primitive_restart", true)?;
     }
     let mut position_accessors = Vec::new();
+    let mut line_end_reach = [0f64; 3];
     for (mode, batch) in &batches {
         let mut ext = json!({"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(items.len(), 0, Some(0))});
         if *mode == 4 {
@@ -612,6 +627,9 @@ fn emit_source(
             .collect();
         let position_view = view(&mut glb, &bytes);
         let (lo, hi) = bounds(values.iter())?;
+        if *mode == 3 {
+            line_end_reach = strip_end_reach(&batch.indices, &values, line_end_reach);
+        }
         let position=glb.accessor(json!({"bufferView":position_view,"componentType":5126,"count":values.len(),"type":"VEC3","min":lo,"max":hi}));
         position_accessors.push((position, position_view, values));
         let mut ids = Vec::new();
@@ -638,6 +656,30 @@ fn emit_source(
     let mut quantization: f64 = 0.;
     if options.quantize {
         let (lo, hi) = bounds(position_accessors.iter().flat_map(|(_, _, p)| p.iter()))?;
+        // Workaround for a CesiumJS bug (seen in 1.146,
+        // renderBufferPolylineCollection.js): a line strip's missing end
+        // neighbour is synthesised as 2c-n and stored in prev/next buffers of
+        // the position component type, so with u16 positions an end within
+        // one end segment of the range edge wraps (e.g. -65535 -> 1) into a
+        // sheared cap or long spike. Pad by that reach plus two quanta
+        // (rounding of c and n) so 2c-n stays in [0, 65535]:
+        // pad >= reach + 2 (extent + 2 pad) / 65535.
+        let pad: Point = std::array::from_fn(|i| {
+            if line_end_reach[i] > 0. {
+                (line_end_reach[i] + 2. * (hi[i] - lo[i]) / 65535.) / (1. - 4. / 65535.)
+            } else {
+                0.
+            }
+        });
+        // Outward to float32 so the node translation stays exact and short.
+        let lo = std::array::from_fn(|i| match pad[i] > 0. {
+            true => ((lo[i] - pad[i]) as f32).next_down() as f64,
+            false => lo[i],
+        });
+        let hi = std::array::from_fn(|i| match pad[i] > 0. {
+            true => ((hi[i] + pad[i]) as f32).next_up() as f64,
+            false => hi[i],
+        });
         let extent = sub(hi, lo);
         let scale = extent.map(|v| if v > 0. { v } else { 1. });
         for (accessor, view, points) in &position_accessors {
@@ -730,14 +772,13 @@ pub(super) fn fits_feature(
     attempt
         .check()
         .map_err(|cause| codec_failure(CodecError::Checkpoint(cause), attempt))?;
-    let (lo, hi) = bounds(feature.rendered_points())?;
+    let (lo, hi) = bounds(feature.geometry.points())?;
     let center = mul(add(lo, hi), 0.5);
     let schemas = feature_schemas(feature);
-    // A fragment's fill and its source boundary share the tile's one GLB.
-    let boundary = fill_boundary(feature);
-    let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
+    // A fill fragment and its polygon's outline are separate spool rows,
+    // each fitted alone; a tile encodes them together in one GLB.
     let source = emit_source(
-        &items,
+        &[feature],
         center,
         repair,
         &schemas,
@@ -756,26 +797,6 @@ pub(super) fn fits_feature(
     };
     let reserve = if options.explicit { 0 } else { 128 };
     Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
-}
-
-/// The source-boundary line feature drawn with a fragmented polygon fill, if
-/// the fragment owns any original boundary segment.
-fn fill_boundary(feature: &Feature) -> Option<Feature> {
-    if !feature.surface_fragment {
-        return None;
-    }
-    let boundaries: Vec<_> = feature
-        .triangle_boundaries
-        .iter()
-        .flatten()
-        .cloned()
-        .collect();
-    if boundaries.is_empty() {
-        return None;
-    }
-    let mut boundary = feature.clone();
-    boundary.geometry = Geometry::MultiLineString(boundaries);
-    Some(boundary)
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -924,11 +945,15 @@ pub(super) fn encode(
         }
         items.push(feature);
     }
-    // Fragmented fills, their source boundaries and every other feature
+    // Fragmented fills, their polygons' outlines and every other feature
     // share one glTF vector content: each fill triangle is an EXT_mesh_polygon
-    // polygon, so Cesium's vector decoder accepts the whole tile.
-    let boundaries: Vec<_> = items.iter().filter_map(fill_boundary).collect();
-    let features: Vec<&Feature> = items.iter().chain(&boundaries).collect();
+    // polygon, so Cesium's vector decoder accepts the whole tile. The outline
+    // pieces of one source feature in this tile are chained into maximal ring
+    // runs, so a strip ends only where its ring leaves the tile.
+    let (pieces, others): (Vec<&Feature>, Vec<&Feature>) =
+        items.iter().partition(|f| outline::is_outline(f));
+    let outlines = outline::fragment_outlines(pieces);
+    let features: Vec<&Feature> = others.into_iter().chain(&outlines).collect();
     let mut reports = Vec::new();
     let aggregate_schemas = BTreeMap::new();
     let encoded = emit(
@@ -946,7 +971,7 @@ pub(super) fn encode(
         attempt,
     )?;
     drop(features);
-    drop(boundaries);
+    drop(outlines);
     if level == 0 {
         result.reports.extend(reports);
     }
@@ -1012,7 +1037,6 @@ mod tests {
             ]),
             geometry: Geometry::Point([0., 0., 0.]),
             surface_fragment: false,
-            triangle_boundaries: Vec::new(),
             fragment_path: String::new(),
         }
     }
@@ -1404,6 +1428,112 @@ mod tests {
         }
     }
 
+    /// CesiumJS mirrors a strip end over its neighbour (2c-n) in the u16
+    /// position type; every quantized end must keep that inside [0, 65535].
+    /// Unpadded per-tile bboxes put ends on the range edge and wrap.
+    #[test]
+    fn quantized_line_strip_ends_mirror_inside_u16_range() {
+        let ring: Vec<Point> = (0..7)
+            .map(|i| {
+                let a = i as f64 / 7. * std::f64::consts::TAU;
+                [100. * a.cos(), 60. * a.sin(), 3. * (i % 2) as f64]
+            })
+            .collect();
+        let mut piece = point_feature();
+        piece.geometry =
+            Geometry::MultiLineString(outline::source_rings(&ring, &[0, 1, 2, 3, 4, 5, 6]));
+        piece.surface_fragment = true;
+        let mut open = point_feature();
+        open.properties.insert("_source_id".into(), json!("l1"));
+        open.geometry = Geometry::MultiLineString(vec![
+            vec![[-150., -90., 0.], [40., 10., 0.], [-20., 80., 5.]],
+            vec![[150., 90., -5.], [149., -90., 0.]],
+        ]);
+        // Without padding the first end is the x and y minimum (0 in u16)
+        // with a neighbour above it, so 2c-n would be negative and wrap.
+        let all: Vec<Point> = [&piece.geometry, &open.geometry]
+            .iter()
+            .flat_map(|g| g.points())
+            .copied()
+            .collect();
+        assert!(all.iter().all(|p| p[0] >= -150. && p[1] >= -90.));
+        let outlines = outline::fragment_outlines([&piece]);
+        // As in `encode`: other features first, then the joined outlines.
+        let items: Vec<&Feature> = std::iter::once(&open).chain(&outlines).collect();
+        for meshopt in [false, true] {
+            let options = VectorOptions {
+                meshopt,
+                quantize: true,
+                ..VectorOptions::default()
+            };
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let encoded = emit(
+                &items,
+                [0.; 3],
+                false,
+                &BTreeMap::new(),
+                &options,
+                &mut Vec::new(),
+                ProducerPolicy::new(meshopt).unwrap(),
+                &attempt,
+            )
+            .unwrap();
+            let (document, views) = read_views(&encoded.bytes);
+            let primitive = &document["meshes"][0]["primitives"][0];
+            assert_eq!(primitive["mode"], 3);
+            let accessor = |i: &Value| &document["accessors"][i.as_u64().unwrap() as usize];
+            let position = accessor(&primitive["attributes"]["POSITION"]);
+            assert_eq!(position["componentType"], 5123);
+            let data = &views[position["bufferView"].as_u64().unwrap() as usize];
+            let q = |v: u32, axis: usize| {
+                let at = v as usize * 8 + axis * 2;
+                i64::from(u16::from_le_bytes([data[at], data[at + 1]]))
+            };
+            let index = &views[accessor(&primitive["indices"])["bufferView"]
+                .as_u64()
+                .unwrap() as usize];
+            let indices: Vec<u32> = index
+                .chunks(4)
+                .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+                .collect();
+            let strips: Vec<_> = indices.split(|i| *i == u32::MAX).collect();
+            // The outline ring (seam vertex added) is one closed strip; the
+            // open lines keep theirs.
+            assert_eq!(
+                strips.iter().map(|s| s.len()).collect::<Vec<_>>(),
+                [3, 2, 9]
+            );
+            let closed = strips[2];
+            assert!((0..3).all(|axis| q(closed[0], axis) == q(closed[8], axis)));
+            for strip in &strips {
+                let ends = [
+                    (strip[0], strip[1]),
+                    (strip[strip.len() - 1], strip[strip.len() - 2]),
+                ];
+                for (c, n) in ends {
+                    for axis in 0..3 {
+                        let mirrored = 2 * q(c, axis) - q(n, axis);
+                        assert!((0..=65535).contains(&mirrored), "axis {axis}: {mirrored}");
+                    }
+                }
+            }
+            // Decoded positions still match within the reported error.
+            let translation = &document["nodes"][0]["translation"];
+            let scale = &document["nodes"][0]["scale"];
+            let decoded = |v: u32| -> Point {
+                std::array::from_fn(|a| {
+                    translation[a].as_f64().unwrap()
+                        + q(v, a) as f64 / 65535. * scale[a].as_f64().unwrap()
+                })
+            };
+            for (k, p) in [&open.geometry].iter().flat_map(|g| g.points()).enumerate() {
+                let v = strips[k / 3][k % 3];
+                assert!(norm(sub(decoded(v), *p)) <= encoded.quantization, "{k}");
+            }
+        }
+    }
+
     #[test]
     fn nullable_metadata_ids_and_node_association_survive_compression() {
         let first = point_feature();
@@ -1576,18 +1706,19 @@ mod tests {
             [0., 0., 0.],
         ]]);
         surface.surface_fragment = true;
-        surface.triangle_boundaries = vec![vec![vec![
-            [0., 0., 0.],
-            [10., 0., 0.],
-            [0., 10., 0.],
-            [0., 0., 0.],
-        ]]];
-        vec![point_feature(), line, polygon, wide, surface]
+        // A partitioned polygon's outline piece: its closed source ring.
+        let mut outline = surface.clone();
+        outline.geometry = Geometry::MultiLineString(outline::source_rings(
+            &[[0., 0., 0.], [10., 0., 0.], [0., 10., 0.]],
+            &[0, 1, 2],
+        ));
+        vec![point_feature(), line, polygon, wide, surface, outline]
     }
 
-    /// One feature's fitting source; a fragment fill carries its boundary
-    /// lines in the same GLB, as `fits_feature` and `encode` produce.
-    fn fitting_source(feature: &Feature, options: &VectorOptions) -> Source {
+    /// The fitting source of features sharing one GLB: one spool row, as
+    /// `fits_feature` measures it, or a tile's fill and outline, as `encode`
+    /// writes them.
+    fn fitting_source(items: &[&Feature], options: &VectorOptions) -> Source {
         let run = crate::RunControl::default();
         let attempt = run.begin().unwrap();
         let schemas = BTreeMap::from([
@@ -1595,10 +1726,8 @@ mod tests {
             ("signed".to_string(), "integer".to_string()),
             ("text".to_string(), "string".to_string()),
         ]);
-        let boundary = fill_boundary(feature);
-        let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
         emit_source(
-            &items,
+            items,
             [1., 2., 0.],
             false,
             &schemas,
@@ -1630,17 +1759,21 @@ mod tests {
                 quantize,
                 ..Default::default()
             };
-            for feature in fitting_fixtures() {
-                if feature.surface_fragment {
-                    // The fragment's fill polygon and its boundary lines.
-                    assert_eq!(fitting_source(&feature, &options).primitives, 2);
-                }
-                let written = written_len(fitting_source(&feature, &options), policy).unwrap();
-                let counted = counted_len(fitting_source(&feature, &options), policy).unwrap();
+            let fixtures = fitting_fixtures();
+            let mut sources: Vec<Vec<&Feature>> = fixtures.iter().map(|f| vec![f]).collect();
+            // A tile's fill fragment and its polygon's outline share one GLB
+            // (with quantization, in one frame padded for the line ends).
+            let tile = vec![&fixtures[4], &fixtures[5]];
+            assert_eq!(fitting_source(&tile, &options).primitives, 2);
+            sources.push(tile);
+            for items in sources {
+                let written = written_len(fitting_source(&items, &options), policy).unwrap();
+                let counted = counted_len(fitting_source(&items, &options), policy).unwrap();
                 assert_eq!(
-                    counted, written,
-                    "quantize {quantize} fragment {}",
-                    feature.surface_fragment
+                    counted,
+                    written,
+                    "quantize {quantize} items {}",
+                    items.len()
                 );
             }
         }
@@ -1667,7 +1800,7 @@ mod tests {
         }
         let options = VectorOptions::default();
         let feature = fitting_fixtures()[3].clone();
-        let probe = fitting_source(&feature, &options);
+        let probe = fitting_source(&[&feature], &options);
         let (n, d) = (nodes(&probe.document), depth(&probe.document));
         let total = written_len(probe, ProducerPolicy::new(false).unwrap()).unwrap();
         let mut decided = [0usize; 2];
@@ -1676,8 +1809,8 @@ mod tests {
                 limits: limits.validate().unwrap(),
                 compress: false,
             };
-            let written = written_len(fitting_source(&feature, &options), policy);
-            let counted = counted_len(fitting_source(&feature, &options), policy);
+            let written = written_len(fitting_source(&[&feature], &options), policy);
+            let counted = counted_len(fitting_source(&[&feature], &options), policy);
             match (&written, &counted) {
                 (Ok(a), Ok(b)) => {
                     assert_eq!(a, b);
@@ -1715,7 +1848,7 @@ mod tests {
 
     /// The pre-counting fitting oracle: encode the trial content in full
     /// (bridge writer, JSON admission, meshopt when requested) and return
-    /// (vertices, content bytes). A fragment's fill and boundary share one GLB.
+    /// (vertices, content bytes).
     fn trial_encode(
         feature: &Feature,
         options: &VectorOptions,
@@ -1723,13 +1856,11 @@ mod tests {
     ) -> (usize, usize) {
         let run = crate::RunControl::default();
         let attempt = run.begin().unwrap();
-        let (lo, hi) = bounds(feature.rendered_points()).unwrap();
+        let (lo, hi) = bounds(feature.geometry.points()).unwrap();
         let center = mul(add(lo, hi), 0.5);
         let schemas = feature_schemas(feature);
-        let boundary = fill_boundary(feature);
-        let items: Vec<&Feature> = std::iter::once(feature).chain(&boundary).collect();
         let encoded = emit(
-            &items,
+            &[feature],
             center,
             false,
             &schemas,
@@ -1748,7 +1879,7 @@ mod tests {
         // meshopt fitting still encodes the trial content. Against the full
         // trial-encode oracle, both accept a feature exactly at the byte and
         // vertex limits and reject it one below, with and without implicit
-        // reservations, including a fill whose boundary shares its GLB.
+        // reservations, including a fill fragment and an outline piece.
         let fixtures = fitting_fixtures();
         for meshopt in [false, true] {
             for explicit in [false, true] {
@@ -1801,8 +1932,9 @@ mod tests {
 
     /// A fragmented fill through the actual final producer: one GLB with the
     /// vector content marker, each fill triangle an EXT_mesh_polygon polygon
-    /// with its own counterclockwise 3-index loop, 16-bit loops, the boundary
-    /// lines in the same GLB, and Cesium's loop-remap invariant.
+    /// with its own counterclockwise 3-index loop, 16-bit loops, the outline
+    /// in the same GLB (its two pieces joined into one closed strip), and
+    /// Cesium's loop-remap invariant.
     #[test]
     fn fragmented_fill_is_one_vector_glb_with_a_polygon_per_triangle() {
         let mut fill = point_feature();
@@ -1831,12 +1963,18 @@ mod tests {
                 .collect(),
         );
         fill.surface_fragment = true;
-        fill.triangle_boundaries = vec![
-            vec![vec![[0., 0., 0.], [1., 0., 0.]]],
-            vec![vec![[0., 0., 1.], [0., 0., 0.]]],
-            vec![vec![[1., 0., 0.], [2., 0., 0.]]],
-            vec![],
-        ];
+        // The polygon's outline, cut by the line splitter into two pieces.
+        let ring = outline::source_rings(
+            &[[0., 0., 0.], [2., 0., 0.], [2., 0., 1.], [0., 0., 1.]],
+            &[0, 1, 2, 3],
+        )
+        .remove(0);
+        assert_eq!(ring.len(), 6);
+        let pieces = [&ring[..=3], &ring[3..]].map(|run| {
+            let mut piece = fill.clone();
+            piece.geometry = Geometry::LineString(run.to_vec());
+            piece
+        });
         for (quantize, meshopt) in [(false, false), (true, false), (true, true)] {
             let options = VectorOptions {
                 quantize,
@@ -1847,11 +1985,13 @@ mod tests {
             let spool = root.path().join("features.sqlite");
             let db = rusqlite::Connection::open(&spool).unwrap();
             db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
-            db.execute(
-                "INSERT INTO features VALUES(1,'',?1)",
-                [serde_json::to_string(&fill).unwrap()],
-            )
-            .unwrap();
+            for (id, feature) in std::iter::once(&fill).chain(&pieces).enumerate() {
+                db.execute(
+                    "INSERT INTO features VALUES(?1,'',?2)",
+                    rusqlite::params![id as i64 + 1, serde_json::to_string(feature).unwrap()],
+                )
+                .unwrap();
+            }
             drop(db);
             std::fs::create_dir(root.path().join("t")).unwrap();
             let schemas = BTreeMap::new();
@@ -1891,8 +2031,19 @@ mod tests {
                 assert_eq!(
                     modes,
                     [json!(3), json!(4)],
-                    "boundary lines share the fill GLB"
+                    "the outline shares the fill GLB"
                 );
+                let line = &primitives[0];
+                let (_, line_indices) = scalars(&document, &views, &line["indices"]);
+                assert_eq!(line_indices.len(), 6, "one closed strip, no restart");
+                assert!(!line_indices.contains(&u32::MAX));
+                let line_view = &views[document["accessors"]
+                    [line["attributes"]["POSITION"].as_u64().unwrap() as usize]["bufferView"]
+                    .as_u64()
+                    .unwrap() as usize];
+                let stride = if quantize { 8 } else { 12 };
+                let vertex = |i: u32| &line_view[i as usize * stride..][..stride];
+                assert_eq!(vertex(line_indices[0]), vertex(line_indices[5]), "closed");
                 let fill = &primitives[1];
                 let polygon = &fill["extensions"]["EXT_mesh_polygon"];
                 assert_eq!(polygon["count"], 4);
@@ -2328,7 +2479,6 @@ mod tests {
             ]),
             geometry: Geometry::Point([0.; 3]),
             surface_fragment: false,
-            triangle_boundaries: Vec::new(),
             fragment_path: String::new(),
         };
         for schemas in [
