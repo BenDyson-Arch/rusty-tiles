@@ -840,7 +840,8 @@ C2-off = after on the `gltfUpAxis = "Z"` twin.
 
    All are within C2-WB's τ_P = 8.10 / τ_E = 14.65 and its producer-twin range (P 4.58–5.94, E 7.66–10.12).
 4. **Absolute ceiling:** mf2-lod3 best wall 3.444 s ≤ 4.5 s, peak RSS 104.8 MiB ≤ 116.9 MiB. The M hoist
-   (OD-8(c)) is not required.
+   (OD-8(c)) is not required. Re-checked with the native release binary of the final merge `806954b`
+   (sha256 `dbd7a9bb…`): 3.261 s, 107.4 MiB (W5 1.123 s).
 5. **Lane:** without C2 the validate cases do not move; with C2 the six implicit archives above 0.1 s growth
    (W2, W3, W5 ×3, mf2-lod3) exceed 1.25× on wall only, the case §10 item 5 covers with the recorded
    `--explain` (items 1–4 pass). No RSS flag (largest growth +2.3 MiB).
