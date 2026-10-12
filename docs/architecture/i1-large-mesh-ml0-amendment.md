@@ -149,7 +149,7 @@ today's caps and through the independent streaming reader at scale (slices ML3, 
    slice 3's `derivedImplicitVolume` never applies to producer output.
 2. Rows are FLOAT64 boxes with signed-permutation half-axes (axis-aligned), so `rotatedBox` never
    applies. I1 admits any half-axes; the producer must not use them.
-3. A packed leaf (design §2.4, blocked on B2) occupies one slot, its first octant, and its row
+3. A packed leaf (design v6.1 §2.4, E48) occupies one slot, its first octant, and its row
    box may exceed that octant's derived cell. I1 uses the row, never the cell, so this is admitted.
    `hierarchyBounds` compares the row with its parent's row (I1 §4, RC-9), so the producer must
    keep every row inside its parent's row (P6 and the C2 obligations in
