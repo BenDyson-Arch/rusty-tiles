@@ -15,8 +15,9 @@
 
 use super::{invalid, Coordinates, SubdivisionScheme, Subtree, TileMetadata};
 use crate::tileset_node::{
-    self, sum_error, sum_up, ContentTemplate, GeometricError, ImplicitTiling, MemberName,
-    ObjectRole, TileBox, TileRecord, TileTree, TilesetDocument, TilesetExtension, UriTemplate,
+    self, sum_error, sum_up, ContentRef, ContentTemplate, GeometricError, ImplicitTiling,
+    MemberName, ObjectRole, TileBox, TileRecord, TileTree, TilesetDocument, TilesetExtension,
+    UriTemplate,
 };
 use crate::Error;
 use serde::{Deserialize, Serialize};
@@ -144,6 +145,9 @@ struct Content {
     header: Map<String, Value>,
     /// Declares `3DTILES_content_gltf_vector` (typed records; the header carries it).
     vector: bool,
+    /// The typed record's declaration, checked against the staged payload when the forest
+    /// reads it (length and sha256). `None` for the JSON entry.
+    declared: Option<ContentRef>,
 }
 
 fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
@@ -234,6 +238,7 @@ fn parse_tile(value: &Value, id: usize, root: bool) -> Result<Node, Error> {
             suffix,
             header,
             vector: false,
+            declared: None,
         });
     }
     let mut tile: Map<String, Value> = object
@@ -331,7 +336,6 @@ fn collect(
 }
 
 /// Collect typed H in preorder. A child's slot is its index among its parent's children.
-#[cfg_attr(not(test), allow(dead_code))] // Vector adopts typed records in M1's second half.
 fn collect_records<'a, X: Serialize>(
     tree: &'a TileTree<X>,
     scheme: SubdivisionScheme,
@@ -359,6 +363,7 @@ fn collect_records<'a, X: Serialize>(
                 suffix: content.kind().suffix().to_owned(),
                 header: content.header(),
                 vector: content.vector(),
+                declared: Some(content.clone()),
             })
             .collect();
         let mut node = Node {
@@ -601,7 +606,6 @@ fn link_tile(node: &Node, name: &str) -> Map<String, Value> {
 struct Template {
     uri: String,
     header: Map<String, Value>,
-    #[cfg_attr(not(test), allow(dead_code))]
     vector: bool,
 }
 
@@ -739,13 +743,11 @@ impl Emit for Loose<'_> {
 }
 
 /// Typed H in preorder and its `tileset.json` members.
-#[cfg_attr(not(test), allow(dead_code))] // Vector adopts typed records in M1's second half.
 struct Records<'a, X> {
     records: Vec<&'a TileRecord<X>>,
     document: &'a TilesetDocument,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 impl<X: Serialize> Records<'_, X> {
     fn bounds(&self, id: usize, lanes: &[f64; 12]) -> Result<TileBox, Error> {
         self.records[id].bounds().with_half_lanes(lanes)
@@ -1039,7 +1041,6 @@ pub fn write_forest(
 /// The layout, payloads, subtrees and documents are those [`write_forest`] writes for the
 /// same hierarchy serialized by `tileset_node`; every JSON object is emitted from the
 /// records. Returns `tileset.json` (with `schema`), which the producer serializes.
-#[cfg_attr(not(test), allow(dead_code))] // Vector adopts typed records in M1's second half.
 pub(crate) fn write_forest_records<X: Serialize>(
     tree: &TileTree<X>,
     document: &TilesetDocument,
@@ -1107,7 +1108,10 @@ fn forest(
             TileRole::Skeleton | TileRole::ExplicitLeaf => {
                 let mut contents = Vec::with_capacity(node.contents.len());
                 for content in &node.contents {
-                    let bytes = std::fs::metadata(directory.join(&content.uri))?.len();
+                    let bytes = match &content.declared {
+                        Some(declared) => declared.verify_staged(directory)?,
+                        None => std::fs::metadata(directory.join(&content.uri))?.len(),
+                    };
                     if explicit_sources.insert(content.uri.clone()) {
                         members.push(content.uri.clone());
                     }
@@ -1363,8 +1367,15 @@ impl ImplicitRoot<'_> {
                     .iter()
                     .position(|(i, s)| *i == index && *s == content.suffix)
                     .expect("slot list covers every content");
-                let raw = std::fs::read(self.directory.join(&content.uri))?;
-                let (bytes, record) = rebase_payload(&raw, delta)?;
+                let raw = match &content.declared {
+                    Some(declared) => declared.read_staged(self.directory)?,
+                    None => std::fs::read(self.directory.join(&content.uri))?,
+                };
+                let raw_sha256: [u8; 32] = Sha256::digest(&raw).into();
+                if let Some(declared) = &content.declared {
+                    declared.check_staged(raw.len() as u64, &raw_sha256)?;
+                }
+                let (bytes, record) = rebase_hashed(&raw, raw_sha256, delta)?;
                 for (lane, error) in own.iter_mut().zip(rebase_error(&record)?) {
                     *lane = lane.max(error);
                 }
@@ -1637,8 +1648,16 @@ fn is_zero(delta: [f64; 3]) -> bool {
 /// padded with spaces to a length congruent to the raw length modulo 8, so the chunk and the
 /// payload keep their alignment. Every other byte is unchanged.
 pub fn rebase_payload(raw: &[u8], delta: [f64; 3]) -> Result<(Vec<u8>, RebaseRecord), Error> {
+    rebase_hashed(raw, Sha256::digest(raw).into(), delta)
+}
+
+/// [`rebase_payload`] for a payload whose sha256 is already known.
+fn rebase_hashed(
+    raw: &[u8],
+    raw_sha256: [u8; 32],
+    delta: [f64; 3],
+) -> Result<(Vec<u8>, RebaseRecord), Error> {
     let fail = |message: String| Error::Data(format!("payload rebase: {message}"));
-    let raw_sha256: [u8; 32] = Sha256::digest(raw).into();
     if delta.iter().any(|v| !v.is_finite()) {
         return Err(fail("translation is not finite".into()));
     }
@@ -3222,6 +3241,72 @@ mod records_tests {
                 chain.path("1"),
             ])
             .path("")
+    }
+
+    /// C6: each content record's length and sha256 are checked against its staged payload
+    /// when the forest reads it, for implicit (A: every tile) and explicit-leaf (B: the
+    /// point leaf) contents alike. A missing, lengthened or altered payload is a typed
+    /// failure before `tileset.json` exists.
+    #[test]
+    fn staged_payloads_must_match_their_content_records() {
+        use crate::tileset_node::StagedContentError;
+        for spec in [fixture_a(), fixture_b()] {
+            let (tree, document) = typed(Some(&spec), true);
+            let (_, raw) = legacy(Some(&spec), true);
+            for member in raw.keys() {
+                let cases: [(&str, fn(&Path)); 3] = [
+                    ("missing", |path| std::fs::remove_file(path).unwrap()),
+                    ("length", |path| {
+                        let mut bytes = std::fs::read(path).unwrap();
+                        bytes.push(0);
+                        std::fs::write(path, bytes).unwrap();
+                    }),
+                    ("digest", |path| {
+                        let mut bytes = std::fs::read(path).unwrap();
+                        *bytes.last_mut().unwrap() ^= 1;
+                        std::fs::write(path, bytes).unwrap();
+                    }),
+                ];
+                for (label, tamper) in cases {
+                    let dir = stage(&raw);
+                    tamper(&dir.path().join(member));
+                    let error = write_forest_records(
+                        &tree,
+                        &document,
+                        dir.path(),
+                        SubdivisionScheme::Quadtree,
+                        &mut || Ok(()),
+                    )
+                    .unwrap_err();
+                    let bytes = raw[member].len() as u64;
+                    let expected = match label {
+                        "missing" => StagedContentError::Missing {
+                            member: member.clone(),
+                        },
+                        "length" => StagedContentError::Length {
+                            member: member.clone(),
+                            declared: bytes,
+                            staged: bytes + 1,
+                        },
+                        _ => {
+                            let mut altered = raw[member].clone();
+                            *altered.last_mut().unwrap() ^= 1;
+                            StagedContentError::Digest {
+                                member: member.clone(),
+                                declared: Sha256::digest(&raw[member]).into(),
+                                staged: Sha256::digest(&altered).into(),
+                            }
+                        }
+                    };
+                    assert_eq!(
+                        error.to_string(),
+                        Error::from(expected).to_string(),
+                        "{label} {member}"
+                    );
+                    assert!(!dir.path().join("tileset.json").exists());
+                }
+            }
+        }
     }
 
     #[test]

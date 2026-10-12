@@ -6,9 +6,6 @@
 //! one emitter of tileset and tile JSON for callers migrated onto typed records
 //! (vector first). Records are validated at construction, so every emitter is a
 //! pure function of validated values; generated JSON is never read back.
-// The typed records reach the vector producer once explicit output is retired (M1 slice 1,
-// second half); until then only the implicit layout and the tests use them.
-#![allow(dead_code)]
 use crate::{implicit::SubdivisionScheme, vec3::Vec3, Error};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -186,6 +183,8 @@ impl GeometricError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Refine {
     Replace,
+    // Point clouds refine by ADD; they write through the JSON shim until they migrate.
+    #[cfg_attr(not(test), allow(dead_code))]
     Add,
 }
 
@@ -226,7 +225,8 @@ impl TileBox {
         })
     }
 
-    /// A box with a measured centre.
+    /// A box with a measured centre (the large-mesh tiler's boxes; no caller yet).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn offset(center: Vec3, half: Vec3) -> Result<Self, Error> {
         Ok(Self {
             center: Some(finite3(center, "box centre")?),
@@ -234,6 +234,7 @@ impl TileBox {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn half(&self) -> Vec3 {
         self.half
     }
@@ -492,6 +493,9 @@ pub(crate) enum SourceIdentity {
     Features { count: u32, digest: [u8; 32] },
     /// Aggregates that carry no source identity.
     Aggregate,
+    /// `count` source features in a payload reused from a previous build. Its content
+    /// address pins the identities, which the previous build state does not record.
+    Reused { count: u32 },
 }
 
 /// A tile content: a content-addressed payload member and how it is declared.
@@ -544,7 +548,10 @@ impl ContentRef {
                 uri.as_str()
             )));
         }
-        if matches!(sources, SourceIdentity::Features { count: 0, .. }) {
+        if matches!(
+            sources,
+            SourceIdentity::Features { count: 0, .. } | SourceIdentity::Reused { count: 0 }
+        ) {
             return Err(invalid(format!(
                 "content {:?} declares no source features",
                 uri.as_str()
@@ -564,10 +571,7 @@ impl ContentRef {
         &self.uri
     }
 
-    pub(crate) fn sha256(&self) -> &[u8; 32] {
-        &self.sha256
-    }
-
+    #[cfg(test)]
     pub(crate) fn byte_length(&self) -> u64 {
         self.byte_length
     }
@@ -589,10 +593,111 @@ impl ContentRef {
         content_header(self.vector)
     }
 
+    /// Read this content's staged payload under `directory`. A missing member is a
+    /// [`StagedContentError::Missing`].
+    pub(crate) fn read_staged(&self, directory: &std::path::Path) -> Result<Vec<u8>, Error> {
+        match std::fs::read(directory.join(self.uri.as_str())) {
+            Ok(bytes) => Ok(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Err(StagedContentError::Missing {
+                    member: self.uri.as_str().to_owned(),
+                }
+                .into())
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Check a staged payload of `length` bytes and digest `sha256` against the declared
+    /// length and digest, before the payload is published.
+    pub(crate) fn check_staged(
+        &self,
+        length: u64,
+        sha256: &[u8; 32],
+    ) -> Result<(), StagedContentError> {
+        let member = || self.uri.as_str().to_owned();
+        if length != self.byte_length {
+            return Err(StagedContentError::Length {
+                member: member(),
+                declared: self.byte_length,
+                staged: length,
+            });
+        }
+        if *sha256 != self.sha256 {
+            return Err(StagedContentError::Digest {
+                member: member(),
+                declared: self.sha256,
+                staged: *sha256,
+            });
+        }
+        Ok(())
+    }
+
+    /// Read, hash and check this content's staged payload; returns its length.
+    pub(crate) fn verify_staged(&self, directory: &std::path::Path) -> Result<u64, Error> {
+        use sha2::Digest;
+        let bytes = self.read_staged(directory)?;
+        let length = bytes.len() as u64;
+        self.check_staged(length, &sha2::Sha256::digest(&bytes).into())?;
+        Ok(length)
+    }
+
     fn to_value(&self) -> Value {
         let mut object = self.header();
         object.insert("uri".into(), Value::from(self.uri.as_str()));
         Value::Object(object)
+    }
+}
+
+/// A staged payload that does not match its [`ContentRef`] at publication. Converted to
+/// [`Error::Data`]; nothing is published.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum StagedContentError {
+    /// The member is not in the staging directory.
+    Missing { member: String },
+    /// The staged payload's byte length differs from the declared length.
+    Length {
+        member: String,
+        declared: u64,
+        staged: u64,
+    },
+    /// The staged payload's sha256 differs from the declared digest.
+    Digest {
+        member: String,
+        declared: [u8; 32],
+        staged: [u8; 32],
+    },
+}
+
+impl std::fmt::Display for StagedContentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Missing { member } => write!(f, "staged content {member:?} is missing"),
+            Self::Length {
+                member,
+                declared,
+                staged,
+            } => write!(
+                f,
+                "staged content {member:?} has {staged} bytes; its record declares {declared}"
+            ),
+            Self::Digest {
+                member,
+                declared,
+                staged,
+            } => write!(
+                f,
+                "staged content {member:?} has sha256 {}; its record declares {}",
+                hex(staged),
+                hex(declared)
+            ),
+        }
+    }
+}
+
+impl From<StagedContentError> for Error {
+    fn from(error: StagedContentError) -> Self {
+        Error::Data(format!("tileset record: {error}; nothing was published"))
     }
 }
 
@@ -883,6 +988,7 @@ impl<X: Serialize> TileTree<X> {
         &self.children
     }
 
+    #[cfg(test)]
     pub(crate) fn children_mut(&mut self) -> &mut [TileTree<X>] {
         &mut self.children
     }
@@ -1004,6 +1110,7 @@ impl TilesetDocument {
         Ok(self)
     }
 
+    #[cfg(test)]
     pub(crate) fn geometric_error(&self) -> GeometricError {
         self.geometric_error
     }
