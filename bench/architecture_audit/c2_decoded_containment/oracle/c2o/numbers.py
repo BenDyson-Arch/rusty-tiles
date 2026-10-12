@@ -112,6 +112,22 @@ def load_json(data):
     )
 
 
+def value_nodes(obj):
+    """JSON value nodes of a parsed document (C2-WB `J`): the root plus every
+    scalar and container value; object member names are not value nodes
+    (C1 contract, "JSON value nodes"). Iterative, so depth is not a limit."""
+    count = 0
+    stack = [obj]
+    while stack:
+        value = stack.pop()
+        count += 1
+        if isinstance(value, dict):
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+    return count
+
+
 def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 

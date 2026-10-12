@@ -14,6 +14,17 @@ from .numbers import exact, is_index, is_number
 
 QUAT_WINDOW = Fraction(1, 2 ** 18)
 
+# C2-WB 3.2 (frozen text): a skipped node visit is 1 unit, any other visit
+# max(NODE_FLOOR, 128 * ceil(s_step / 64)^2).
+NODE_SKIPPED = 1
+NODE_WEIGHT = 128
+NODE_FLOOR = 256
+
+
+def node_visit_units(s_step):
+    """Units of one non-skipped node visit with step span `s_step` (C2-WB 3.2)."""
+    return max(NODE_FLOOR, NODE_WEIGHT * (-(-s_step // 64)) ** 2)
+
 
 class NodeInvalid(Exception):
     def __init__(self, why, **facts):
@@ -202,7 +213,8 @@ class Walk:
 
     Composites (exact and pair) are computed for every selected node so that
     Nodes(u) can charge every non-skipped node; sInst only covers instance paths
-    (accepted reading v3.2 (9))."""
+    (accepted reading v3.2 (9)). Node units follow C2-WB 3.2: 1 per skipped
+    visit, otherwise max(256, 128 * ceil(s_step/64)^2)."""
 
     def __init__(self, doc, scene_index):
         nodes = doc.get("nodes", [])
@@ -210,6 +222,8 @@ class Walk:
         self.node_units = 0
         self.max_depth = 0
         self.node_visits = 0
+        self.skipped_visits = 0
+        self.step_spans = {}  # s_step -> number of non-skipped visits with that span
         state = {}  # node -> (G_exact, G_pairs, max s_step along path)
         for n, depth, path in selected_nodes(doc, scene_index):
             node = nodes[n]
@@ -220,7 +234,8 @@ class Walk:
             else:
                 G, Gp, s_path = mat_identity(), S.identity_g(), 0
             if is_skipped(node):
-                self.node_units += 1
+                self.node_units += NODE_SKIPPED
+                self.skipped_visits += 1
             else:
                 tr = S.Tracker()
                 kind, data = node_pairs(node)
@@ -231,7 +246,8 @@ class Walk:
                 Gp = S.compose(Gp, L, tr)
                 G = mat_mul(G, node_matrix(node))
                 s_path = max(s_path, tr.max)
-                self.node_units += 128 * (-(-tr.max // 64)) ** 2
+                self.node_units += node_visit_units(tr.max)
+                self.step_spans[tr.max] = self.step_spans.get(tr.max, 0) + 1
             state[n] = (G, Gp, s_path)
             if "mesh" in node:
                 self.instances.append(Instance(n, node["mesh"], depth, path, G, Gp, s_path))

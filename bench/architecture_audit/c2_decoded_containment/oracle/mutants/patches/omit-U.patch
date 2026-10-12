@@ -7,5 +7,5 @@
 -U = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
 +U = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
  
- 
- def ceil_div(a, b):
+ # C2-WB 3.1 (frozen text), re-implemented from the contract only.
+ FLOOR_BASE = 20     # level 0, once per level-0 visit

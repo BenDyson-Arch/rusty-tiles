@@ -1,6 +1,6 @@
 --- a/oracle/c2o/tileset.py
 +++ b/oracle/c2o/tileset.py
-@@ -247,7 +247,7 @@
+@@ -256,7 +256,7 @@
                      level.volumes.append(LevelVolume("externalContent", distance, vol, cwhere))
                  level.volumes.append(LevelVolume("ancestor", distance, frame.volume, frame.where))
                  child = path[len(path) - distance]

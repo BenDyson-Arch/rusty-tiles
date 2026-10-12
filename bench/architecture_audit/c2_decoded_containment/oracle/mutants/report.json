@@ -22,7 +22,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/omit-U.patch",
-   "patchSha256": "2ab960fe315b482762d3e0d53032ae7fb193fcc2b63f9c852ce9b4a047aea399"
+   "patchSha256": "7fc1af45394f4cd9f854fd8d556cb0d3d73d6a481d8fa6720028304b0fd9f66d"
   },
   {
    "flipped": 131,
@@ -45,10 +45,10 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/double-U.patch",
-   "patchSha256": "2e61da94c3da4f7c48f7de3c7b105586a9cafa3c7d4eb81f094395ba77a95471"
+   "patchSha256": "ee4f64da5fe6d683839406767d57f0b9d1d6a1a158a35624932f1d8562a96841"
   },
   {
-   "flipped": 18,
+   "flipped": 19,
    "flippedExamples": [
     "W01-noRTC-variant",
     "W11-external-tileset-root-in-chain",
@@ -68,7 +68,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/reverse-tile-order.patch",
-   "patchSha256": "5d8ced11480cd092758e27ecd94dfd534e25aa90c691609d0f50d0865b665827"
+   "patchSha256": "7d92f24a61f9390ad18eaea993834f99fc5cc679414593d96226cbffff062424"
   },
   {
    "flipped": 2,
@@ -81,7 +81,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/test-undrawn-vertices.patch",
-   "patchSha256": "a382105f7a378646cb87e40d632d75a699362ac32e8efa7bd2c25a0eb1ab20fa"
+   "patchSha256": "b05dee3da213fe4a33ee8b92e9632024e71d864a2ebb619cbda69f0244f45498"
   },
   {
    "flipped": 4,
@@ -96,7 +96,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/rounded-normalized-quotient.patch",
-   "patchSha256": "e46be4b1a1d1b591782f46ea7312302aed75667df7221098f9626adc5f562262"
+   "patchSha256": "b6705890c50acb9675a8595f35473c420d6d21842729d312ff5273158f2685d8"
   },
   {
    "flipped": 177,
@@ -145,7 +145,7 @@
    "patchSha256": "2cf81ab1104cccb311bb45285a75dd30495649a9dbbf6bc8507647216d747162"
   },
   {
-   "flipped": 25,
+   "flipped": 26,
    "flippedExamples": [
     "W01-noRTC-variant~ulp-L1-ancestor-r0",
     "W01-noRTC-variant~ulp-L1-ancestor-r1",
@@ -165,7 +165,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/skip-ancestors.patch",
-   "patchSha256": "6d3100646278d41b8e86dc2948dfe806383b671db5f1f6e4225a3199e25f33fb"
+   "patchSha256": "ff9ab9fc18d689e7b82bd2c2bec54b267f318d32f2f7435e723c2dec7261db3e"
   },
   {
    "flipped": 4,
@@ -180,7 +180,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/skip-external-root-transform.patch",
-   "patchSha256": "ba4d84c14a604982e61c6914f0aa569acc3da6691edd9547919d0a2aa002c1fc"
+   "patchSha256": "e42daf0d92bb866e0bebb55a18b01cf58ac80b54bc4c5271bdf83abae57e67a2"
   },
   {
    "flipped": 1,
@@ -192,7 +192,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/reuse-URI-cache-for-verdicts.patch",
-   "patchSha256": "43a444ede62bc698618dbd86f7c0d5aedc808ad33317656e058058adaa5a3d0a"
+   "patchSha256": "401d8def8bb09d874fe33e0627a4c8a04dbd130e3e585a6d802963a30bfa8239"
   },
   {
    "flipped": 1,
@@ -204,7 +204,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/default-to-scene-0.patch",
-   "patchSha256": "09d73a0b0f7803f994c0ab33d2d3f4c393abc3166d408ca25f4a1713e300964e"
+   "patchSha256": "47de85b96e7995813269ff039c73c3454f151588ea51447048659b63726c44af"
   },
   {
    "flipped": 1,
@@ -239,7 +239,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/raw-quaternion-polynomial.patch",
-   "patchSha256": "3d836edfa6a3f438a4af2389111084db301d6993732f9fc3dcf6ffcf91c3d92f"
+   "patchSha256": "65a4a8818f513a616ace2b44d03e615f794a88a9c45b135ffb02cbc9e8f22389"
   }
  ]
 }

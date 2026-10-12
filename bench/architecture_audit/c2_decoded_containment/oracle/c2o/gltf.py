@@ -14,7 +14,7 @@ from fractions import Fraction
 from urllib.parse import unquote
 
 from . import meshopt
-from .numbers import F32_SCALE, OracleUndecided, f32_scaled, is_index, load_json
+from .numbers import F32_SCALE, OracleUndecided, f32_scaled, is_index, load_json, value_nodes
 
 COMPONENTS = {
     5120: ("b", 1, "i8"),
@@ -83,8 +83,22 @@ def split_glb(data, where):
     return chunks[0][1], binary
 
 
+def _table_json(raw, what, where):
+    try:
+        table = load_json(bytes(raw).rstrip(b" "))
+    except (ValueError, UnicodeDecodeError) as err:
+        raise PayloadError("b3dm %s JSON unreadable in %s: %s" % (what, where, err))
+    if not isinstance(table, dict):
+        raise PayloadError("b3dm %s JSON is not an object in %s" % (what, where))
+    return table
+
+
 def split_b3dm(data, where):
-    """Return (feature-table JSON dict, glb bytes)."""
+    """Return (feature-table JSON dict, glb bytes, J of both tables).
+
+    The third value is the C2-WB `J` share of the b3dm tables: the value nodes
+    of the feature-table JSON and of the batch-table JSON, each counted when
+    its JSON length is nonzero (C2-WB 3.1)."""
     if len(data) < 28:
         raise PayloadError("b3dm shorter than its header: %s" % where)
     magic, version, length, ftj, ftb, btj, btb = struct.unpack_from("<4s6I", data, 0)
@@ -94,14 +108,14 @@ def split_b3dm(data, where):
     if start > len(data):
         raise PayloadError("b3dm table lengths overrun in %s" % where)
     table = {}
+    nodes = 0
     if ftj:
-        try:
-            table = load_json(bytes(data[28:28 + ftj]).rstrip(b" "))
-        except (ValueError, UnicodeDecodeError) as err:
-            raise PayloadError("b3dm feature table JSON unreadable in %s: %s" % (where, err))
-        if not isinstance(table, dict):
-            raise PayloadError("b3dm feature table JSON is not an object in %s" % where)
-    return table, data[start:]
+        table = _table_json(data[28:28 + ftj], "feature table", where)
+        nodes += value_nodes(table)
+    if btj:
+        bt_start = 28 + ftj + ftb
+        nodes += value_nodes(_table_json(data[bt_start:bt_start + btj], "batch table", where))
+    return table, data[start:], nodes
 
 
 class Payload:
@@ -117,11 +131,13 @@ class Payload:
         self.rtc_center = False
         self.binary = None
         self.kind = None
+        self.json_nodes = 0  # J(u): value nodes of every admitted JSON document (C2-WB 3.1)
+        self.external_resources = 0  # Res(u): buffers and images with a non-data `uri`
         head = bytes(data[:4])
         try:
             if head == b"b3dm":
                 self.kind = "b3dm"
-                table, glb = split_b3dm(data, member)
+                table, glb, self.json_nodes = split_b3dm(data, member)
                 if len(glb) >= 12:
                     # The embedded GLB may be followed by the b3dm's 8-byte padding.
                     declared = struct.unpack_from("<I", glb, 8)[0]
@@ -143,6 +159,7 @@ class Payload:
             raise PayloadError("payload JSON unreadable in %s: %s" % (member, err))
         if not isinstance(self.doc, dict):
             raise PayloadError("glTF JSON is not an object in %s" % member)
+        self.json_nodes += value_nodes(self.doc)
         self._buffers = {}
         self._views = {}
         self._resolved = set()
@@ -176,12 +193,14 @@ class Payload:
                 data = _data_uri(uri)
             else:
                 data = self._read_resource(uri)
+                self.external_resources += 1
             self.decoded_bytes += len(data)
             self._buffers[i] = data
         for image in self.doc.get("images", []) or []:
             if isinstance(image, dict) and isinstance(image.get("uri"), str) \
                     and not image["uri"].startswith("data:"):
                 self._read_resource(image["uri"])
+                self.external_resources += 1
         # Dec(u) also counts every meshopt-decoded view (model; see README).
         for vi, view in enumerate(self.doc.get("bufferViews", []) or []):
             if isinstance(view, dict) and "EXT_meshopt_compression" in (view.get("extensions") or {}):
