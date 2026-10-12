@@ -26,7 +26,10 @@ bounded decoding with the NONE filter; unavailable filters are unsupported. Each
 compressed stream must start with the header byte the extension requires for its
 mode (`0xa0` ATTRIBUTES, `0xe1` TRIANGLES, `0xd1` INDICES); other codec versions,
 such as vertex v1 (`0xa1`) or index and sequence v0 (`0xe0`, `0xd0`), are invalid
-even though the linked decoder can read them.
+even though the linked decoder can read them. The header is checked after the
+filter, mode, stride and count checks: a stream with an unsupported filter is
+reported unsupported whatever its header, because C1 refuses filtered streams
+before reading their bytes.
 All buffer consumers, including compressed streams, are restricted to declared
 buffer lengths. Required meshopt may use URI-less fallback placeholders, including
 an unused placeholder or GLB buffer zero without a BIN chunk. The optional fallback
