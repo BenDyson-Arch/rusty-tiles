@@ -58,10 +58,14 @@ direction. Issue membership is not proof of completion.
 
 Define the smallest owned tile records needed by an actual current producer:
 hierarchy, finite bounds, transforms, geometric errors, content references and
-source identity. Establish a shared generated explicit-node/document serializer
-at the existing `src/tileset_node.rs` boundary, consumed by the real writers in
-`src/mesh_archive/encode.rs` and `src/mesh_archive/model.rs`. Retain only writer
-behavior independently established for this supported domain. Keep
+source identity. Shape them by what the large-mesh tiler of milestone 3 will
+need, so that the tiler becomes their long-term consumer. Establish a shared
+generated explicit-node/document serializer at the existing `src/tileset_node.rs`
+boundary, consumed first by a retained producer: the vector point/line writer
+in `src/vector/pipeline/store.rs`. No work goes into migrating writers that are
+being retired, including the legacy mesh writers in `src/mesh_archive/` and
+`src/tile.rs`. Retain only writer behavior independently established for this
+supported domain. Keep
 format meaning separate from paths, staging and publication; do not round-trip
 generated hierarchy state through loosely interpreted JSON. Imported documents
 keep a distinct reader and validation boundary, including a deliberate
@@ -108,9 +112,19 @@ contract; no new delivery naming or speculative 0.5.0 abstraction is required.
 Build the large-mesh pipeline on the shared contract in bounded dependency order:
 in-process texture codec gate; streamed capture/sort and tree construction;
 streamed hierarchy/delivery output; full-detail leaves; certified geometry LOD;
-proxy texture re-parameterisation and baking; validator scale support. These are
-successive slices inside this milestone, not parallel workstreams. Emit current
-Tiles 1.1/glTF 2.0 using its accepted subtree, metadata and delivery encoding.
+proxy texture re-parameterisation and baking; validator scale support. These
+tiler slices are successive and dependency-ordered among themselves. The tiler
+becomes the long-term caller of the shared serializer; mesh-specific fixtures,
+including a small static local mesh with WGS84 anchor/orientation/offset
+controls, enter here. Emit current Tiles 1.1/glTF 2.0 using its accepted
+subtree, metadata and delivery encoding.
+
+Milestones 2 and 3 are not strictly sequential. Producer migration, glTF-only
+vector fills (#75) with their viewer gate, C2 slice 3 and validator work, and
+performance fixes on retained paths may run concurrently with the tiler slices
+when their file ownership is disjoint. The ML1 encoder work
+([#163](https://github.com/BenDyson-Arch/rusty-tiles/pull/163)) may be prepared
+alongside the earlier tiler slices. Only milestone 4 waits for both milestones.
 
 Preserve the following agreed large-mesh requirements:
 
@@ -194,32 +208,42 @@ the final acceptance evidence; document consolidation alone does not close
 Finish final-source independent acceptance of the existing C1 meshopt correction
 at `538c0bde4623e8ad9561e444a19769274805eaa9`, using its nine retained independent
 controls and applicable checks. Then implement the bounded shared explicit
-Tiles 1.1 serializer below; the next concrete caller is one retained implicit
-producer. Preserve and diagnose C2's `BQ.references-pair` failure at its owning
-reference-budget boundary: the charged total must admit and one fewer reference
-must refuse. This is an unresolved resource-accounting gate, not an established
-geometry defect or a blanket prerequisite to the explicit serializer. Reuse C2
-logic only where its required domain has independent acceptance; do not require
-completion of every old C2 integration before the new bounded slice.
+Tiles 1.1 serializer below with the retained vector point/line writer as its
+first caller; the next concrete caller is one retained implicit producer. Do not
+migrate the retiring mesh writers; the large-mesh tiler becomes the serializer's
+long-term caller in milestone 3. Preserve and diagnose C2's
+`BQ.references-pair` failure at its owning reference-budget boundary: the
+charged total must admit and one fewer reference must refuse. This is an
+unresolved resource-accounting gate, not an established geometry defect or a
+blanket prerequisite to the explicit serializer. Reuse C2 logic only where its
+required domain has independent acceptance; do not require completion of every
+old C2 integration before the new bounded slice.
 
 The first new implementation slice is **owned tile records to the current
 writer**, within milestone 1:
 
 **Inputs:** an exact converter source revision and retained-writer audit; the
 current Tiles 1.1/glTF 2.0 specification and validator references; a pinned
-supported viewer; one small static local mesh with two independently known
-source identities; a known WGS84 anchor with asymmetric orientation/offset
-controls; and a tiny generated hierarchy with known finite bounds and errors.
-Keep fixtures small enough to inspect independently.
+supported viewer; one tiny point/line vector source with two independently
+known source identities (`_source_id`); a known WGS84 anchor with asymmetric
+east/north/up offset controls for its local frame; and a tiny generated
+hierarchy with known finite bounds and errors. Keep fixtures small enough to
+inspect independently; mesh fixtures belong to milestone 3.
 
 **Change:** establish a small generated explicit Tiles 1.1 node/document
 serializer at `src/tileset_node.rs`, whose current helpers interpret JSON. Have
-`src/mesh_archive/encode.rs::tileset` and the single-node
-`src/mesh_archive/model.rs::manifest` consume it. Introduce only the owned
-hierarchy, bounds, placement, content references and identity these two callers
-need;
-reuse the established `Bounds`, `ResolvedPlacement` and `RootContent` contracts
-where their evidence supports retention. Resolve values at their owning
+the explicit point/line output of the vector writer in
+`src/vector/pipeline/store.rs` consume it. This producer already uses
+`src/tileset_node.rs`, writes point/line content as plain GLB rather than the
+b3dm-wrapped polygon fills, carries a stable per-feature source identity that
+Cesium can pick, and places a local frame at a WGS84 anchor; the point cloud
+writer's feature IDs are per-tile indices, and `src/tile.rs` is a retiring mesh
+writer. Introduce only the owned hierarchy, bounds, placement, content
+references and source identity this caller needs, in a shape the large-mesh
+tiler can later consume. The `Bounds`, `ResolvedPlacement` and `RootContent`
+contracts in `src/mesh_archive/` are design input for the tiler's needs; move a
+type into the shared contract only where its evidence supports retention, and
+leave their retiring writers unmigrated. Resolve values at their owning
 boundaries, and audit serialization and metadata attachment for this domain.
 Avoid a broad abstraction for future formats and avoid requiring full explicit
 and implicit production emitters in
@@ -235,8 +259,9 @@ its resources if used in this route. Production acceptance is limited to this
 declared input domain.
 
 **Gates:** independently inspect emitted hierarchy, addressing, metadata and
-resources; decode coordinates and verify known transformed points and final
-bounds; pick both source identities; force hierarchy traversal and refinement;
+resources, confirming that every content is plain GLB; decode coordinates and
+verify known transformed points and final bounds; pick both `_source_id`
+values; force hierarchy traversal and refinement;
 and include wrong-identity, wrong-frame and missing-resource controls that
 demonstrably fail. Exercise failed conversion without publishing an invalid
 dataset. Record consumer failures and proof limits. One root load or matching

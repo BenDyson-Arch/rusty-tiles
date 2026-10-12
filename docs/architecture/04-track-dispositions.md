@@ -11,6 +11,9 @@ an instruction to restore the superseded new-format shipping target.
 Finish the retained meshopt correctness and bounded terrain corrections. Resume
 the shared tile/output work against a real 1.1 producer and current viewer;
 reuse existing types and validated writers where their evidence applies.
+Terrain LOD continues as implicit-forest output because implicit tiling stays in
+0.4, and C2 slice 3 continues because 0.4 needs implicit validation. Legacy mesh
+parent/atlas performance is dropped; the retiring mesh writers are not migrated.
 Reassess C2s3's known references-pair failure against the 1.1 path actually
 retained for 0.4; its reusable correctness obligations cannot be deferred merely
 because a 2.0 writer is planned. New 3TZ work is justified only by a concrete
