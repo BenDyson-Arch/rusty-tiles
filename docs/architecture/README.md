@@ -1,5 +1,18 @@
 # Architecture foundations for 0.4.0
 
+## Current implementation direction — 2026-10-12
+
+The [0.4 Tiles 2.0 roadmap](04-tiles2-roadmap.md) governs new work and sequencing.
+It targets the 3D Tiles 2.0 / glTF 2.1 draft, retains implicit tiling, and requires
+a pinned specification and working consumer demonstration before committing to
+the new delivery representation. The [interrupted-track ledger](04-track-dispositions.md)
+records what continues, what is superseded, and how unfinished source can be recovered.
+
+This direction supersedes the earlier separation of 1.1 work into 0.4 and core
+Tiles 2.0 work into a ratification-gated 0.5, and the unmerged ML0 implementation
+sequence. Existing foundation evidence remains limited to its recorded domain.
+The release gate below remains open; this planning change accepts no new output.
+
 Status: ongoing architecture gate; F0 is accepted and merged in PR #116. Tracking issue: [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).
 Baseline: `8dfd74bd87dd23c86278e98d736c3f5912c246cf` on `develop`.
 
@@ -60,12 +73,15 @@ and failure outcomes carry their meaning. It does not mean banning every `if`
 or replacing branch statements with opaque policy tables. Real platform and
 geometry alternatives remain explicit in their owning module.
 
-The [post-F0 audit and ordered scopes](next-foundation-scopes.md) govern the next
-work. They separate a bounded first mesh milestone, directory publication, vector
-transactions and remaining subsystem proof obligations. Earlier API sketches
-remain proposals wherever the concrete scope has not adopted them.
+The [post-F0 audit and ordered scopes](next-foundation-scopes.md) retain the
+historical subsystem obligations and evidence. Their sequencing is superseded by
+the [current roadmap](04-tiles2-roadmap.md). Earlier API sketches remain proposals
+wherever the concrete scope has not adopted them.
 
 ## Audit documents
+
+- [0.4 Tiles 2.0 implementation roadmap](04-tiles2-roadmap.md)
+- [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)
