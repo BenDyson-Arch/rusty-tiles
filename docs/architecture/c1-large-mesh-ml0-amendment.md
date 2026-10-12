@@ -17,11 +17,14 @@ item below, this note governs that item; the C1 text governs everything else.
 | Item | Identity |
 | --- | --- |
 | Base | `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26` (C2-WB merged in PR #164; bulk evidence moved out in PR #165) |
-| Design | large-mesh design v5 `design.md` `70a1eeec…afd1`, `slices.md` `b0ddfd0c…aa7`, `open-decisions.md` `523ed2cd…eea` |
-| Review | v5 precode delta review `review.md` `698b3b61…c4ef` (ML0 may start) |
+| Design | large-mesh design **v6.1** `design.md` `0bf9fd19…441b`, `slices.md` `705bb8f7…f225`, `open-decisions.md` `bbe4f928…ccd1` |
+| Reviews | v5 delta `698b3b61…c4ef` (ML0 may start); v6 delta `3f2c0583…ae6d` |
 | C1 contract | `c1-payload-integrity-contract.md` `3cb5ad34…3e1e3`; `VALIDATION.md` `9d7b1b36…577e` |
 | EXT_meshopt_compression | pinned `5ccac1cb…` text, retained at `bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/EXT_meshopt_compression.md` (`602608cb…55b0`) |
-| KHR_texture_basisu, KTX 2.0, PNG | **Not yet pinned.** The design's copy of the KHR README (`6f6d0767…83a6`) was fetched from `main`, which C1's provenance rule does not accept. O-C1-1 below |
+| KHR_texture_basisu | KhronosGroup/glTF commit `1bde276f7a173876e24c0f403a14dd827dc7912b` (2023-08-28): `README.md` sha256 `6f6d0767b95a8ac4f197c9394a28e8d4c71a2ff3ced2c4fd9357ed1c869b83a6` (12,510 B; last changed in `70b5e410…`, the same revision as C1's `KHR_mesh_quantization` pin), `schema/texture.KHR_texture_basisu.schema.json` sha256 `cc1d31267bb69991807ff5e73a9a3e6029ad3b3b4a76dd2d48f44061abe1c013` (604 B) |
+| KTX 2.0 | KhronosGroup/KTX-Specification tag **v2.0.4**, commit `30cb4530a1120ddaf883fd98787edbee0e53270b` (2025-02-20): `ktxspec.adoc` sha256 `900cfd73fa8db623807f1c43dfe7631a89e02d48b153eef26eb9008fcc361ebb` (106,109 B) |
+| PNG | W3C **PNG Third Edition**, Recommendation dated 2025-06-24, `https://www.w3.org/TR/2025/REC-png-3-20250624/`, sha256 `a3ac82bb9eb8664b93961a2a9ff6def3d70e3a9f63d92721143c1f391d04edec` (656,574 B) |
+| Pin record | Raw bytes and `MANIFEST.md` (sha256 `ed9f5268…d23b`) in `~/.cache/rusty-tiles-evidence/ml0-spec-pins-20261012/`, fetched by the ML0 author on 2026-10-12. The independent primary-controls owner re-fetches and verifies them as part of the full treatment |
 
 ## Items and implementing slices
 
@@ -29,7 +32,7 @@ item below, this note governs that item; the C1 text governs everything else.
 | --- | --- | --- | --- |
 | A-C1-1 | Admit `KHR_texture_basisu`; inspect KTX2 containers to a stated depth | ML1 item 4 | Yes (Unsupported → success or InvalidInput) |
 | A-C1-2 | PNG framing; declared image type agrees with the bytes | ML1 item 4 (optional, O-C1-3) | Yes (success → InvalidInput) |
-| A-C1-3 | `EXT_meshopt_compression` stream header bytes | ML1 item 5 | Yes (success → InvalidInput) |
+| A-C1-3 | `EXT_meshopt_compression` stream header bytes: **a recorded C1 defect** | Separate small fix PR, scheduled by the coordinator (not this PR, not ML1) | Yes (success → InvalidInput) |
 | A-C1-4 | Volume caps opt-in; non-circular amplification budgets; item caps kept | ML7b (after ML7a) | Only for archives that are ResourceLimit today |
 | A-C1-5 | Report message caps | ML7a | No; report and message text only |
 
@@ -61,33 +64,34 @@ refuses any required extension outside four names, so every such archive is Unsu
 
 ### Rules
 
-All failures are **InvalidInput** unless marked. Numeric fields are little-endian. "[pin]" marks
-a rule whose source line O must find in the pinned KTX 2.0 text before freeze; if O cannot,
-the rule is dropped, not weakened.
+All failures are **InvalidInput** unless marked. Numeric fields are little-endian. Sources are
+the pinned texts above: "KHR" is the KHR_texture_basisu README, "schema" its texture schema,
+"KTX §x" a section of `ktxspec.adoc` v2.0.4.
 
 | Rule | Requirement | Source |
 | --- | --- | --- |
 | B-1 | `KHR_texture_basisu` is admitted in `extensionsRequired`. It is no longer listed in `notInspected` when used | this amendment |
-| B-2 | A Basis object has `source`, a JSON integer (C1's exact integer rule) indexing `images` | KHR schema [pin] |
+| B-2 | If a Basis object has `source`, it is a JSON integer (C1's exact integer rule) indexing `images`. `source` is optional in the schema; a Basis object without it names no KTX2 image | schema (`source` is not in `required`) |
 | I-1 | A KTX2 image with a `data:` URI is **Unsupported** (existing rule, unchanged) | C1 |
 | I-2 | If a KTX2 image has `mimeType`, it is exactly `image/ktx2` | KHR README |
 | I-3 | A KTX2 image stored in a bufferView has `mimeType` | glTF 2.0.1 `image.mimeType` |
 | C-1 | Bytes 0..12 equal `AB 4B 54 58 20 32 30 BB 0D 0A 1A 0A` | KTX 2.0 |
 | C-2 | Length ≥ 80 + 24·n, with n = max(1, `levelCount`) | KTX 2.0 |
-| C-3 | `vkFormat` = 0 and `typeSize` = 1 | KHR (Basis formats only); KTX 2.0 [pin] |
-| C-4 | 2D: `pixelWidth` > 0, `pixelHeight` > 0, `pixelDepth` = 0, `layerCount` = 0, `faceCount` = 1 | KHR "2D type", KTX 2.0 §4.1 [pin] |
+| C-3 | `vkFormat` = 0 and `typeSize` = 1 | KHR (ETC1S/BasisLZ or UASTC only); KTX §typeSize, §Use of `VK_FORMAT_UNDEFINED`, §BasisLZ |
+| C-4 | 2D: `pixelWidth` > 0, `pixelHeight` > 0, `pixelDepth` = 0, `layerCount` = 0, `faceCount` = 1 | KHR "2D type"; KTX §Texture Type table (row 2D) |
 | C-5 | `pixelWidth` and `pixelHeight` are multiples of 4 | KHR |
-| C-6 | `levelCount` ≤ 1 + ⌊log2(max(pixelWidth, pixelHeight))⌋ | KTX 2.0 [pin] |
+| C-6 | `levelCount` ≤ 1 + ⌊log2(max(pixelWidth, pixelHeight))⌋. `levelCount` = 0 is **Unsupported** (KTX allows it except for block-compressed formats; whether that covers UASTC under `VK_FORMAT_UNDEFINED` is not settled by the text, so C1 does not decide it) | KTX §levelCount |
 | C-7 | `supercompressionScheme` is 1 for ETC1S and 0 or 2 for UASTC (checked with D-3) | KHR |
 | C-8 | Every range lies inside the bytes, with checked u64 arithmetic: the header plus level index `[0, 80+24n)`; the DFD (nonempty); the KVD and SGD when their length is nonzero; every level (`byteLength` > 0). The ranges are pairwise disjoint | KTX 2.0 |
-| C-9 | `sgdByteLength` > 0 for scheme 1, and `sgdByteOffset` = `sgdByteLength` = 0 otherwise | KTX 2.0 [pin] |
-| C-10 | `uncompressedByteLength`: equals `byteLength` for scheme 0, is 0 for scheme 1, and is > 0 for scheme 2 | KTX 2.0 [pin] |
+| C-9 | For schemes 0 and 2 (no global data), `sgdByteLength` = 0; whenever `sgdByteLength` = 0, `sgdByteOffset` = 0 | KTX §sgdByteOffset, §sgdByteLength |
+| C-10 | `uncompressedByteLength` equals `byteLength` for scheme 0 and is 0 for scheme 1 | KTX §levels[p].uncompressedByteLength, §BasisLZ |
 | D-1 | The DFD's first u32 (`dfdTotalSize`) equals `dfdByteLength` | KTX 2.0 |
 | D-2 | The first descriptor block is the Khronos basic block: vendorId 0, descriptorType 0, versionNumber 2, `descriptorBlockSize` = 24 + 16k with k ≥ 1. Any later blocks frame exactly to `dfdTotalSize` (each block size ≥ 8); their contents are opaque | Khronos Data Format 1.3 |
 | D-3 | `colorModel` is 163 (ETC1S, with scheme 1) or 166 (UASTC, with scheme 0 or 2) | KHR |
 | D-4 | The multiset of sample channel ids (low 4 bits of `channelType`) is one of: ETC1S {0}, {3}, {0, 15}, {3, 4}; UASTC {0}, {3}, {4}, {6} | KHR, `khr_df.h` |
 | D-5 | A Red or Red-Green layout (ETC1S {3} or {3, 4}; UASTC {4} or {6}) has `transferFunction` ≠ 2 (sRGB) | KHR |
-| K-1 | The KVD is a sequence of entries, each a u32 `keyAndValueByteLength` ≥ 2, that many bytes holding a NUL-terminated key, then zero padding to a 4-byte boundary. The sequence consumes exactly `kvdByteLength` | KTX 2.0 [pin padding of the last entry] |
+| K-1 | The KVD is a sequence of n entries, each a u32 `keyAndValueByteLength` ≥ 2, that many bytes holding a NUL-terminated key, then 0–3 zero padding bytes to a 4-byte boundary (also after the last entry), with `Σ ⌈len_i/4⌉·4 + 4n = kvdByteLength` | KTX §Key/Value Data, §keyAndValueByteLength, §valuePadding |
+| K-3 | Keys are sorted by Unicode code point and no key appears twice | KTX §Key/Value Data |
 | K-2 | Key `KTXswizzle`, if present, has value bytes `72 67 62 61 00` ("rgba"); key `KTXorientation`, if present, has value bytes `72 64 00` ("rd") | KHR |
 | U-1 | Usage is not conflicting | KHR (colour and non-colour rules cannot both hold) |
 | U-2 | Colour usage: `colorPrimaries` = 1 (BT709) and `transferFunction` = 2 (sRGB) | KHR |
@@ -97,7 +101,7 @@ the rule is dropped, not weakened.
 **Not checked (stated in VALIDATION.md):** BasisLZ and Zstandard payload decoding or transcoding
 (`image decoding` stays in `notInspected`); mip-pyramid completeness (a SHOULD); whether a
 texture's layout matches its *type by usage* (for example a standalone occlusion map encoded RGB,
-O-C1-2); KVD key order and uniqueness; DFD sample bit offsets, bounds, `texelBlockDimension` and
+O-C1-2); BasisLZ global data and Zstandard frame contents; DFD sample bit offsets, bounds, `texelBlockDimension` and
 `bytesPlane`; the fallback core image of an optional Basis object; KTX2 images that no Basis
 object names.
 
@@ -145,12 +149,14 @@ encodes for realism only.
   width 6; levelCount one over C-6; scheme 3; ETC1S with scheme 0; UASTC with scheme 1;
   `dfdTotalSize` off by 4; vendorId 1; versionNumber 1; block size not 24+16k; `colorModel` 160;
   ETC1S layout {15}; UASTC layout {5}; ETC1S {3} with sRGB; a level ending one byte past the end;
-  a level overlapping the DFD; nonzero SGD on UASTC; zero SGD on ETC1S; a KVD entry overrunning
+  a level overlapping the DFD; nonzero SGD on UASTC; a KVD entry overrunning
   `kvdByteLength` by one; `KTXswizzle` "bgra"; `KTXorientation` "ru"; colour usage with LINEAR;
   colour usage with UNSPECIFIED primaries; non-colour usage with sRGB; non-colour usage with
   BT709; premultiplied flag on a used texture; conflicting usage; `mimeType` `image/png` on a
-  KTX2 image; a bufferView KTX2 image without `mimeType`; `source` out of range; `source` absent;
-  `source` = 1.5.
+  KTX2 image; a bufferView KTX2 image without `mimeType`; `source` out of range;
+  `source` = 1.5; KVD keys out of code-point order; a duplicated key; `levelCount` = 0
+  (Unsupported, not InvalidInput). A Basis object **without** `source` is a positive (it names
+  no KTX2 image).
 - **AC-1.3 Boundaries.** At-limit positive and one-over negative for: levelCount at the C-6
   maximum; width 4 against 2; a KVD that fills `kvdByteLength` exactly; a level ending exactly at
   the end of the bytes.
@@ -192,7 +198,11 @@ decode), not a C1 claim.
   legacy `--textureFormat webp` archives, which put WebP in core `texture.source`
   (`glb_write.rs:388-404`), are unaffected.
 
-**PNG rules** (InvalidInput unless marked): P-1 chunks frame exactly: u32 big-endian length
+**PNG rules** (InvalidInput unless marked; sources are PNG Third Edition §5.2 signature
+`#5PNG-file-signature`, §5.3 chunk layout `#5Chunk-layout`, §5.4 naming `#5Chunk-naming-conventions`,
+§5.5 CRC `#5CRC-algorithm`, §5.6 ordering `#5ChunkOrdering`, §11.2 critical chunks `#11IHDR`,
+`#11PLTE`, `#11IDAT`, `#11IEND` and Table 11.1 `#table111`; P-5's "no bytes after IEND" is this
+profile's reading that an image resource is exactly one datastream): P-1 chunks frame exactly: u32 big-endian length
 ≤ 2^31−1, a 4-byte type of ASCII letters, data, CRC-32 over type and data, and the CRC matches.
 P-2 the first chunk is `IHDR` with length 13: width and height in [1, 2^31−1]; (colour type, bit
 depth) in {(0: 1,2,4,8,16), (2: 8,16), (3: 1,2,4,8), (4: 8,16), (6: 8,16)}; compression 0; filter
@@ -222,7 +232,11 @@ admitted; PLTE rule skipped.
 
 ---
 
-## A-C1-3. `EXT_meshopt_compression` stream headers
+## A-C1-3. `EXT_meshopt_compression` stream headers (recorded defect)
+
+**Status (coordinator ruling).** This is a defect in today's C1, recorded here and fixed by a
+separate small PR that the coordinator schedules. This PR does not change code. The rule and
+acceptance below are the specification that fix implements.
 
 **Why.** The pinned EXT text requires the first byte of an ATTRIBUTES stream to be `0xa0`
 (`EXT_meshopt_compression.md:198`), of a TRIANGLES stream `0xe1` (`:281`) and of an INDICES
@@ -246,9 +260,8 @@ from a pinned independent meshoptimizer encoder at vertex v1, index v0 and seque
 decodable by the linked decoder: InvalidInput with the H-1 message (a stream that fails decoding
 anyway does not test H-1). AC-3.3: their v0/v1 twins: success. Mutant: H-1 removed (flips AC-3.2).
 
-**Producer constraint (not a C1 change).** Filters other than NONE stay Unsupported. If any
-large-mesh profile uses OCTAHEDRAL, QUATERNION or EXPONENTIAL filters, a further C1 amendment is
-needed first (O-C1-5).
+**Producer constraint (not a C1 change; settled).** Filters other than NONE stay Unsupported.
+Design v6.1 uses no meshopt filter, so every large-mesh profile writes the NONE filter only.
 
 ---
 
@@ -316,14 +329,16 @@ B = 2^31 + 4·S
   non-integer N is a usage error (exit 2 under CLI argument rules).
 - A given cap applies with today's meaning and message. For `visits`, `references` and `reads`
   it applies **in addition to** the budget.
-- Python and Rust expose the same keys (surface in `f1d3-surface-dispositions.md`).
+- Python `validate(path, max_volume={...})` takes the same keys (coordinator ruling O-U4, for
+  CLI/Python parity); Rust takes them on the validation request. Surface in
+  `f1d3-surface-dispositions.md`.
 
-### Serialization (O-C1-4)
+### Serialization (decided by the coordinator, O-C1-4)
 
-Proposed: `limits` keeps all fifteen names. A volume field without a cap serializes as JSON
-`null`; budget fields serialize the absolute cap if given, otherwise `null`. This changes the JSON
-type of eight fields (number → null) and the Rust field types (`u64` → `Option<u64>`), a public
-API break like C2's O-b. The alternative (u64::MAX) loses precision in JavaScript readers.
+`limits` keeps all fifteen names. A volume field without a cap serializes as JSON **`null`**;
+budget fields serialize the absolute cap if one was given, otherwise `null`. VALIDATION.md
+documents this. It changes the JSON type of eight fields (number → null) and the Rust field types
+(`u64` → `Option<u64>`), a public API break like C2's O-b, listed in the migration notes.
 
 ### Exit-status changes
 
@@ -331,7 +346,7 @@ API break like C2's O-b. The alternative (u64::MAX) loses precision in JavaScrip
 | --- | --- | --- |
 | X4-1 | ResourceLimit (volume cap) → any other verdict | Archives over 1 GiB, 524,288 entries, 32 MiB central directory or 16M payload elements, with no `--max-volume` |
 | X4-2 | ResourceLimit (visits, references, reads at today's value) → any other verdict | Archives within the budget but over today's cap |
-| X4-3 | Report | `limits` serialization (O-C1-4) |
+| X4-3 | Report | `limits` serialization: `null` for uncapped fields |
 
 ### Acceptance criteria
 
@@ -383,21 +398,16 @@ the marker sorted into the list.
 
 ---
 
-## Open questions (C1 owner unless marked)
+## Open questions and settled items
 
-- **O-C1-1 (primary texts).** The independent primary-controls owner must pin and fetch
-  `KHR_texture_basisu` (README and texture schema) at a Khronos glTF revision, the KTX 2.0
-  specification at a revision, and the PNG specification edition, with line references for every
-  [pin] rule. The design's `main` copy cannot serve.
-- **O-C1-2 (type by usage).** Should C1 also require the layout to match the KHR texture *type*
+- **Settled (coordinator, 2026-10-12):** primary texts pinned (identities table; the
+  primary-controls owner re-verifies them); `null` serialization (A-C1-4); Python `max_volume`;
+  no meshopt filters in any profile; A-C1-3 is a recorded defect with its own fix PR.
+- **O-C1-2 (C1 owner).** Should C1 also require the layout to match the KHR texture *type*
   implied by usage (for example a standalone `occlusionTexture` must be Red)? Draft: no; the
   allowed-layout and transfer rules are enforced, type matching is listed as not checked.
-- **O-C1-3 (scope).** Adopt A-C1-2 (PNG framing and declared-type agreement) now, or defer it?
+- **O-C1-3 (C1 owner).** Adopt A-C1-2 (PNG framing and declared-type agreement) now, or defer it?
   It is not needed for admission; its benefit is catching corrupt `lossless` pages.
-- **O-C1-4 (coordinator + C1 owner).** `limits` serialization for uncapped fields: `null`
-  (proposed) or another form. Either is a public report and Rust API change.
-- **O-C1-5 (design author).** Does any profile need meshopt filters (normals, tangents, UVs)? If
-  so, a filter-admission amendment is needed before ML4.
 - **Producer obligation recorded for ML4 and ML6 (no C1 change).** Per payload, the sum of
   declared view bytes plus meshopt-decoded bytes must stay ≤ `documentDecodedBytes` (128 MiB).
   `B_tile` = 96 MiB bounds the stored member, not the decoded sum.

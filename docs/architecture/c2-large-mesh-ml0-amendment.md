@@ -1,4 +1,4 @@
-# C2 decoded containment: large-mesh tiler amendment (ML0, A-C2-1 and A-C2-2)
+# C2 decoded containment: large-mesh tiler amendment (ML0, A-C2-1 to A-C2-4)
 
 Status: **DRAFT for the full (C2-style) treatment.** Written by the ML0 author; not frozen. The
 slices require this text to be agreed with the C2-WB and C2 slice-3 owners. Before code it needs
@@ -11,8 +11,10 @@ by C2 slice 3** (frozen v3.1, `/tmp/rusty-tiles-c2s3-contract-20261012/contract-
 `8bc53429…31d6`, branch `feat/c2-implicit-containment` at `ac1bf94`). Neither text is edited.
 
 **Base:** `origin/develop` `1b1ff9d99fe5e66b844d2c0453abdbe6ed20dd26`, which contains the C2-WB
-merge (PR #164) and its WB-6 calibration. **Design:** large-mesh v5 (`design.md` `70a1eeec…afd1`,
-§10.4, decision E44; ruling 4); review `698b3b61…c4ef`.
+merge (PR #164) and its WB-6 calibration. **Design:** large-mesh v6.1 (`design.md` `0bf9fd19…441b`,
+§3.1, §3.4, §3.5, §10.4, decision E44; ruling 4; U1, U4 (c)); reviews `698b3b61…c4ef` (v5) and
+`3f2c0583…ae6d` (v6). **Umbrella:** [f1d3-large-mesh-contract.md](f1d3-large-mesh-contract.md)
+§4, §6.4–§6.7.
 
 ## Composition with C2-WB and slice 3
 
@@ -127,50 +129,127 @@ bytes on an E-core. The per-archive bound now grows with `S` instead of staying 
 
 ---
 
-## A-C2-2. KTX2 textures and the shared quantization lattice: no rule change
+## A-C2-2. KTX2 textures: no rule change
 
-**Findings.**
+`KHR_texture_basisu` is already on the C2 glTF allowlist (texture sources only). Textures have no
+effect on drawn POSITION or node transforms. Its C1 admission (A-C1-1) is what turns large-mesh
+archives from Unsupported into C2 candidates.
 
-- **KTX2 textures.** `KHR_texture_basisu` is already on the C2 glTF allowlist (texture sources
-  only). Textures have no effect on drawn POSITION or node transforms. Its C1 admission
-  (A-C1-1) is what turns large-mesh archives from Unsupported into C2 candidates. No C2 change.
-- **Quantized geometry on the shared per-depth lattice.** C2 decodes `KHR_mesh_quantization`
-  integer POSITION words exactly, with normalized words as `a/k` and node T/S as exact rationals
-  (frame chain steps 1–2). Lattice positions `translation + scale·u` with a power-of-two `scale`
-  are dyadic, so every span stays small (slice 3 §5.1 observed ≤ 290 bits against 4,096). No C2
-  change.
-
-**Producer obligations (for ML4, ML5 and ML6 tests; checked by C2 itself on producer output).**
-Without these, a correct C2 would report Outside or an exclusion on large-mesh output.
-
-1. **Boxes from exact decoded positions.** Each tile's row box (and the root JSON box) contains
-   the exact decoded value of every drawn vertex, after node transforms and `U`. The box is
-   stored as center `c` and half-axes `h` in f64, and C2 evaluates `c ± h` exactly. Naive
-   `c = (min+max)/2`, `h = (max−min)/2` in f64 can round so that `c + h < max`, which is a proven
-   Outside. The producer chooses `c`, `h` and verifies `c − h ≤ min` and `c + h ≥ max` in exact
-   (or directed-rounding) arithmetic.
-2. **Ancestors contain descendants.** C2 tests every ancestor (interpretation I1), so each
-   tile's box contains the union of its own decoded content and every descendant's box.
-3. **Boxes after the final geometry.** Computed after quantization, the mixed-depth snap and U1
-   vanishing (design B1's required text: offset, u16 range and box after the snap).
-4. **No rebase drift.** The P amendment pins δ ≡ 0 for the mesh producer (no child transforms),
-   so payloads are byte copies. If δ were nonzero, the rebased translation and the row `B(t)+δ(t)`
-   would be rounded separately in f64, and a vertex on the box face could escape by one ulp.
-5. **Axis-aligned rows and rows everywhere** (A-I1-3), so neither `rotatedBox` nor
-   `derivedImplicitVolume` applies.
-6. **Allowlisted extensions only:** `KHR_mesh_quantization`, `EXT_meshopt_compression` (NONE
-   filter), `KHR_texture_basisu`, `EXT_mesh_features`, `EXT_structural_metadata`,
-   `KHR_materials_unlit`. Anything else (for example `KHR_texture_transform`) excludes the whole
-   archive with `gltfExtension`.
-7. **Scene records:** one selected scene, no skins, morph targets or animations; node rotations
-   absent or within `quaternionWindow`.
-
-**Acceptance (producer slices, light process).** `validate` reports `decodedContentContainment`
-on every large-mesh perf-lane archive within caps (ML5, ML6; at scale after ML7c in ML9). Two
-regression fixtures: a vertex exactly on a box face at the maximum coordinate, and a box whose
-naive f64 center and half-axes would exclude its maximum vertex. Both must be Contained.
+**Acceptance.** AC-C2.8: an in-domain explicit archive whose payloads use required
+`KHR_texture_basisu` reports `decodedContentContainment`; the same archive with one drawn vertex
+moved outside its tile box reports the Outside message naming that vertex.
 
 ---
+
+## A-C2-3. The snapped per-depth quantization grid
+
+**What the producer publishes** (umbrella §4, §6.4; design v6.1 §3.1, §3.4). Fast and balanced
+store POSITION as unnormalized `KHR_mesh_quantization` u16 codes `u`, with node `scale` = `s_d`
+(a power of two, one per depth, monotone, nested) and node `translation` = an integer multiple of
+`s_d`. Every vertex v with `ℓ(v) ≤ d` is stored at `q(v, s_ℓ(v))`, a point of a coarser lattice
+that is exact on `s_d`. The lattice origin is in the root tile's transform; translation-only,
+lattice-aligned transforms appear only on explicit tiles and implicit roots; implicit tiles below
+an implicit root have none (δ ≡ 0). Quality and lossless store f32 relative to the tile frame's
+origin.
+
+**C2 rule change: none.** C2's frame chain already decodes these values exactly: integer codes
+stay integers, node T and S are exact dyadic rationals (frame chain steps 1–2), tile transforms
+are exact steps, and nothing is inverted. Spans stay small: dyadic values of a few limbs, far
+below 4,096 bits (slice 3 §5.1 observed ≤ 290 bits on forest output). The snap is just where the
+producer chose to put a vertex; C2 tests where it actually is.
+
+**What C2 then proves, and what it does not.**
+- C2 proves that every drawn, **snapped** vertex lies in its own tile's row box, the root's box,
+  and every ancestor's box (I1 of slice 1, I4 of slice 3), exactly.
+- C2 does **not** prove that a shared vertex decodes identically in two tiles (seam
+  watertightness), nor anything about GPU f32 dequantization (excluded by the claim). Those are
+  the output auditor's checks (umbrella §14).
+
+**Producer obligations** (checked by C2 on producer output; ML4, ML5 and ML6 tests):
+1. **Boxes after the snap.** A snapped vertex can move up to `s_ℓ(v)/2` per axis from its source
+   position, outside the tile's source box. Each tile's box is computed from its snapped, decoded
+   positions (design v6.1: box, offset and range after the snap).
+2. **Exact box arithmetic.** Rows store a center `c` and half-axes `h` in f64, and C2 evaluates
+   `c ± h` exactly. Naive `c = (min+max)/2`, `h = (max−min)/2` can round so that `c + h < max`.
+   The producer chooses `c`, `h` and verifies `c − h ≤ min` and `c + h ≥ max` exactly (or with
+   directed rounding).
+3. **Ancestors contain descendants.** A leaf's snapped vertex can lie outside its parent proxy's
+   own content box. Each tile's box is the hull of its own decoded content and every
+   descendant's box, so every ancestor test (slice 1 I1) holds.
+4. **Row = root box at level 0**, bitwise (P3), so slice 3's I4 tests two identical volumes.
+5. **Axis-aligned rows on every implicit tile** (A-I1-3), so neither `rotatedBox` nor
+   `derivedImplicitVolume` applies.
+
+**Acceptance (O builds the fixtures from this text and the C2 contract; production must agree).**
+- **AC-C2.9 Snapped vertex inside a post-snap box.** A two-depth forest fixture: a leaf at depth
+  2 with `s_2` = 2^-4 and a vertex `v` with `ℓ(v)` = 1, `s_1` = 2^-3, stored at
+  `q(v, s_1)`, which lies `s_1/2` outside the leaf's source box on +x. With the box computed after
+  the snap: `decodedContentContainment`. With the box from source positions (the bug the
+  obligation prevents): InvalidInput, `volume=own`, naming that vertex.
+- **AC-C2.10 Ancestor hull.** The same snapped vertex inside the leaf's box but outside its parent
+  proxy's own-content box: with the hull rule, Contained; without it, Outside with
+  `volume=ancestor:1`.
+- **AC-C2.11 Lattice-aligned implicit-root transform.** A forest whose implicit root carries a
+  translation of `k·s_0` and whose payload offsets are relative to it: Contained, with O's span
+  totals equal to production's. Moving one code by one unit past the row's face: Outside.
+- **AC-C2.12 Exact box rounding.** A tile whose maximum decoded coordinate is `m` and whose naive
+  f64 center and half-axis give `c + h < m`: the naive row is Outside; the producer-style row
+  (verified exactly) is Contained.
+- **AC-C2.13 f32 path.** A quality-style fixture (FLOAT positions relative to a lattice-aligned
+  frame origin): Contained; one position moved by one f32 ulp past the face: Outside.
+- **Mutants (producer-side test helpers, each must flip its control):** box before snap; no
+  ancestor hull; naive center and half-axis; offset taken relative to `O` instead of the implicit
+  root's translation.
+
+---
+
+## A-C2-4. Published vanished and filled sets, and filled holes
+
+**What the producer publishes** (umbrella §6.5–§6.7; U1, U4 (c)). A proxy may omit vanished
+regions and islands, and may contain fan triangles over the kept vertices of a small hole's
+chain. Each proxy lists these in an `EXT_structural_metadata` property table
+`rustyLodChanges` inside its own GLB (kind, primitive, key). Leaves have no table.
+
+**C2 rule change: none.** The rules below are consequences of the existing contract, stated so
+that the oracle checks them on this output.
+1. **Fill triangles are drawn and are tested.** A fan has no new vertex: its vertices are the
+   chain's kept vertices, which are vertices of the proxy anyway, quantized and snapped like any
+   other. C2 marks every vertex the fan's indices reference and tests it (stream algorithm step 3),
+   and boxes are convex, so the fan's interior is contained whenever its vertices are.
+2. **Vanished geometry is not drawn** and is not tested in the proxy. It is still drawn and
+   tested in the descendants that keep it, and the proxy's box must still contain those
+   descendants' boxes (A-C2-3 obligation 3). Removing geometry never makes C2 fail.
+3. **The published table is not geometry.** `EXT_structural_metadata` is on the glTF allowlist;
+   the property table's views are C1-admitted buffer views with no POSITION role, and C2 reads
+   nothing from them. So publishing V and F neither excludes the archive nor changes any vertex
+   set.
+4. **The publication form is part of the domain.** Publishing the sets as tile or content
+   `metadata` in tileset JSON would set `tileMetadata` (slice 1; slice 3 I6) and exclude the whole
+   archive. Publishing them as a separate archive member that nothing references would be C1
+   InvalidInput (unreferenced entry). Publishing them through a new glTF extension would set
+   `gltfExtension`. The umbrella's form (§6.7) avoids all three.
+5. **C2 does not verify the sets.** Whether each missing boundary is accounted for by a
+   `FILLED_HOLE` or `VANISHED_*` row is the output auditor's check (umbrella §14), not a validator
+   rule. A future validator check of the sets would need its own contract.
+
+**Acceptance (O builds the fixtures; production must agree).**
+- **AC-C2.14 Fill contained.** A proxy with a filled hole (a 6-vertex rim, fan from the
+  minimum-key vertex), with `rustyLodChanges` holding one `FILLED_HOLE` row: Contained, and C2's
+  `Idx` and `T` facts count the fan's index occurrences and its (already present) vertices once.
+- **AC-C2.15 Fill escape is caught.** The same proxy with one rim vertex's code moved outside the
+  box (the fan then reaches it): Outside naming that vertex. A fan with an apex that is **not** a
+  rim vertex and lies outside the box (a producer bug the fan rule forbids): Outside.
+- **AC-C2.16 Vanished island.** A proxy that omits an island which its child keeps, with a
+  `VANISHED_ISLAND` row: Contained when the proxy's box is the hull; Outside at `ancestor:1` for the
+  child's island vertex when the proxy's box covers only its own content.
+- **AC-C2.17 Publication form.** The AC-C2.14 archive gives the same C2 outcome and the same
+  `notInspected` with and without the property table. The same sets written as tile `metadata`
+  instead: `decodedContentBounds.tileMetadata`. Written as an unreferenced member: C1
+  InvalidInput, "unreferenced archive entries".
+- **AC-C2.18 Empty table.** A proxy with no record has no table, and a proxy whose table has zero
+  rows is not produced (a producer test; C2's outcome is the same either way).
+- **Mutants (producer-side):** fan apex chosen off the rim; box computed before vanished
+  descendants are hulled; sets written as tile `metadata`.
 
 ## Open questions
 
