@@ -163,10 +163,11 @@ class Bundle(unittest.TestCase):
             (directory / 'meta.json').write_text('{}'); (directory / 'REPORT.md').write_text('not bundled')
             (directory / 'logs').mkdir(); (directory / 'logs' / 'a.log').write_text('log')
             # This interpreter's choice, the pre-3.14 path with the zstd CLI (if installed), and without it (gzip).
-            for stdlib, which in ((None, report.shutil.which), (False, report.shutil.which), (False, lambda _: None)):
+            real = report.shutil.which
+            for stdlib, which in ((None, real), (False, real), (False, lambda _: None)):
                 with mock.patch.object(report.shutil, 'which', which):
                     path = report.bundle(directory, stdlib_zstd=stdlib)
-                    if which is not report.shutil.which: self.assertEqual(path.name, 'raw.tar.gz')
+                    if which is not real: self.assertEqual(path.name, 'raw.tar.gz')
                     self.assertIn(path.name, report.BUNDLES)
                     self.assertFalse((directory / 'raw.tar').exists())
                     if path.suffix == '.gz' or 'zst' in tarfile.TarFile.OPEN_METH:
