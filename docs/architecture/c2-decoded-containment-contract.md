@@ -942,8 +942,14 @@ domain); a template header with `metadata` sets `tileMetadata`. `src/validate/co
 **Exit-status changes versus the C2-WB merge.** X3-1: success with `notInspected(implicitTiling)` becomes
 success with `decodedContentContainment` for default point, vector and `mesh-to-3tz` output (all 17
 forest witnesses, subject to the 2^29 cap; none is `workLimit`). X3-2: implicit archives with a proven
-escape become InvalidInput (no producer output; the 32 pre-amendment I1 fixtures, whose payloads skipped
-the y-up rotation, are kept as S3-19 C2 controls and left the I1 manifest under I1 oracle amendment 6).
+escape become InvalidInput (the 32 pre-amendment I1 fixtures, whose payloads skipped the y-up rotation,
+are kept as S3-19 C2 controls and left the I1 manifest under I1 oracle amendment 6). The contract's
+producer prediction for X3-2, "none", was falsified at integration: `point-cloud` on a degenerate thin
+cloud (`tests/native_validate.rs`, `point_archive_and_feature_attributes_use_valid_core_types`) wrote a
+row whose lower x face lies half an ulp (2^-52) inside its extreme drawn vertex, because tile bounds were
+not rounded outward. Production and O-implicit-C2 both report Outside(own, depth 2, vertex 0). The fix
+belongs to the point producer (outward-rounded tile bounds), which merges before slice 3; that test is
+unchanged.
 X3-3: rowless subtrees on a reference chain report `derivedImplicitVolume`. X3-4: header `metadata`,
 rotated rows, `workLimit` and payload reasons replace `implicitTiling`. X3-6: the report enum change.
 

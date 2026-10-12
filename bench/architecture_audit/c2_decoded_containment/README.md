@@ -762,6 +762,14 @@ and the 5 limit pairs identical to O's b51f83d reading; 80 controls (only forest
 | 9.D pairs from O's totals | 5/5: F-MF2 `containmentWorkUnits` 447,748,743 / −1 `workLimit`, `containmentSpanBits` 290 / 289 `numericSpan`, `containmentBytesRead` 59,996,880 / −1 `workLimit`, F-W6d `containmentDecodedBytes` 57,736 / −1, repeated-URI 20,562 / 20,561 |
 | I1 parity / W corpus | 181/181 / 41/41 |
 
+**X3-2 counterexample (producer).** The native test `point_archive_and_feature_attributes_use_valid_core_types`
+(thin LAS: 60 points, x 0–10, y 0–1e-6, scale 1e-7; `point-cloud --sourceCrs local --maxPoints 10`) now
+fails `validate`: tile 2/1/1/3's row (c_x = −1.5254237000000002, h_x = 0.932203412055969) has its exact
+lower x face 2^-52 above the drawn x = −2.4576271120559694 of vertex 0. O-implicit-C2 reports the same
+Outside (own, depth 2, member `implicit-content/r0-2-1-1-3-0.glb`, vertex 0), so C2 is right and the
+contract's "producer prediction: none" for X3-2 is falsified on degenerate input. Coordinator decision: the
+point producer rounds tile bounds outward in a separate slice that merges first; the test is unchanged.
+
 Not checked in production: the precheck-only arm's stop point (the oracle records reference 12,526 of
 12,527; production exposes no stop index).
 
