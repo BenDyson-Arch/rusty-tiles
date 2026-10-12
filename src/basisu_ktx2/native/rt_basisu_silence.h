@@ -12,9 +12,12 @@
  * bounded per-thread diagnostic buffer; writes to any other FILE pass through
  * unchanged.
  *
- * The real stdio headers are included first so that their declarations are
- * not rewritten. The macros are function-like, so `using ::printf;` and
- * attribute uses such as format(printf, 1, 2) are unaffected.
+ * The libc headers that declare these functions (including MSVC's stdlib.h,
+ * which declares perror) are included first so that their declarations are
+ * not rewritten. The macros are object-like, not function-like, because the
+ * vendored code places preprocessor directives inside printf arguments, which
+ * MSVC's traditional preprocessor rejects inside a macro invocation. The
+ * vendored sources use these names only as calls.
  */
 #ifndef RT_BASISU_SILENCE_H
 #define RT_BASISU_SILENCE_H
@@ -29,10 +32,14 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
 
 #ifdef __cplusplus
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
+#include <cwchar>
 extern "C" {
 #endif
 
@@ -49,7 +56,8 @@ void rt_basisu_perror(const char *text);
 
 #ifdef __cplusplus
 }
-/* Vendored code also spells these std::printf(...). */
+/* Vendored code also spells these std::printf(...), and <cstdio> has
+ * `using ::printf;` forms. */
 namespace std {
 using ::rt_basisu_fprintf;
 using ::rt_basisu_fputc;
@@ -76,16 +84,16 @@ using ::rt_basisu_vprintf;
 #undef fwrite
 #undef perror
 
-#define printf(...) rt_basisu_printf(__VA_ARGS__)
-#define fprintf(...) rt_basisu_fprintf(__VA_ARGS__)
-#define vprintf(...) rt_basisu_vprintf(__VA_ARGS__)
-#define vfprintf(...) rt_basisu_vfprintf(__VA_ARGS__)
-#define puts(...) rt_basisu_puts(__VA_ARGS__)
-#define fputs(...) rt_basisu_fputs(__VA_ARGS__)
-#define putchar(...) rt_basisu_putchar(__VA_ARGS__)
-#define putc(...) rt_basisu_fputc(__VA_ARGS__)
-#define fputc(...) rt_basisu_fputc(__VA_ARGS__)
-#define fwrite(...) rt_basisu_fwrite(__VA_ARGS__)
-#define perror(...) rt_basisu_perror(__VA_ARGS__)
+#define printf rt_basisu_printf
+#define fprintf rt_basisu_fprintf
+#define vprintf rt_basisu_vprintf
+#define vfprintf rt_basisu_vfprintf
+#define puts rt_basisu_puts
+#define fputs rt_basisu_fputs
+#define putchar rt_basisu_putchar
+#define putc rt_basisu_fputc
+#define fputc rt_basisu_fputc
+#define fwrite rt_basisu_fwrite
+#define perror rt_basisu_perror
 
 #endif /* RT_BASISU_SILENCE_H */
