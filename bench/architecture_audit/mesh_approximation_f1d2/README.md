@@ -1,5 +1,13 @@
 # F1d2 bounded adaptive complete-surface evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 124 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/mesh_approximation_f1d2 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/mesh_approximation_f1d2.tar.zst`, SHA-256
+> `88aafbfe57987fbd48d2ca62936ea55e369d920aad4cfa85518baacca328bf68`.
+> Paths below that no longer exist refer to that snapshot.
+
 This evidence supports the [settled contract](../../../docs/architecture/f1d2-certificate-contract.md)
 and [implementation](../../../docs/architecture/f1d2-implementation.md) for one
 adaptive root certificate over unchanged full-detail leaves. Frozen production

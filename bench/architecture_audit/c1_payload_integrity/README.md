@@ -1,5 +1,14 @@
 # C1 payload-integrity preparation
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 365 of 858 files remain:
+> this README, what CI or tests read, and the C2-WB (#164) additions. The full
+> directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/c1_payload_integrity | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/c1_payload_integrity.tar.zst`, SHA-256
+> `4d8c33c6b30414e7d4a1bc2d69c9ed9cb78aad8c4b9b75652e7fefda55d35f26`.
+> Paths below that no longer exist refer to that snapshot.
+
 These are contract preparation records, not implementation acceptance.
 Initial inventory baseline: `c8cbfb187de863ae21fe904275794894aa0a8381` (historical).
 Actual accepted/rebased baseline: `0eebdeebf013591460e6ac77485ad91b7401aada`,

@@ -1,1 +1,0 @@
-{"input": "pc-deep.3tz", "inputSha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab", "S": 4, "tiles": 2233, "levels": 5, "today": {"documents": 208, "subtrees": 208, "subtreeBytes": 446880, "documentBytes": 172361}, "forest": {"explicit": 1, "implicitRoots": 8, "tileset.json": 4042, "subtrees": 8, "subtreeBytes": 252504, "content": 2233}}

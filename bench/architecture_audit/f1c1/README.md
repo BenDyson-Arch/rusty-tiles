@@ -1,5 +1,13 @@
 # F1c1 explicit placement foundation
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 2 of 75 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/f1c1 | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/f1c1.tar.zst`, SHA-256
+> `0030ec025a50b9c3aa0513135799ec01ec2a29e1be4576f95f58ffe81c4a9b07`.
+> Paths below that no longer exist refer to that snapshot.
+
 Implementation candidate for [#142](https://github.com/BenDyson-Arch/rusty-tiles/issues/142), following merged F1b3 #141. The [contract](../../../docs/architecture/f1c1-contract.md) defines placement before source I/O: a raw Local/Wgs84 choice resolves once to a finite rigid f64 root transform and actual normalized parameters. PreparedMesh owns resolved state, and one pure manifest writer consumes it. Leaf geometry and companions stay local; no ECEF f32 bake, compatibility branch or CRS fallback is introduced.
 
 Three Sol 6.1 agents audited [spatial meaning](audits/spatial.md), [ownership](audits/ownership.md) and [acceptance](audits/acceptance.md) before implementation. The separate nonauthor [review](review_probes/review.json) inspects the final candidate and its evidence. Repository AGENTS.md and the architecture gate require this sequence for future foundation slices; green historical tests alone are insufficient.

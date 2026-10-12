@@ -1,1 +1,0 @@
-{"input": "vec-perf.3tz", "inputSha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148", "S": 4, "tiles": 547, "levels": 12, "today": {"documents": 85, "subtrees": 85, "subtreeBytes": 287424, "documentBytes": 141973}, "forest": {"explicit": 48, "implicitRoots": 45, "tileset.json": 78333, "subtrees": 45, "subtreeBytes": 210280, "content": 544}}

@@ -1,5 +1,13 @@
 # R2 preparation evidence
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 1383 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/raster_source | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/raster_source.tar.zst`, SHA-256
+> `888c2b657d2566d67b6c7903a565b56dbc8dc679efdce8a1b9d1e43f1261d821`.
+> Paths below that no longer exist refer to that snapshot.
+
 The [authoring contract](../../../docs/architecture/r2-raster-contract.md)
 defines the replacement source/COG/display/grid/tile consumer. R2 production
 acceptance is unfinished.

@@ -1,5 +1,9 @@
 # C2-WB cap amendment of the C1 payload-control expectations (2026-10-12)
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../../../README.md)).
+
 C2-WB (the C2 work-bound correction) raises the default `containmentWorkUnits` from 2^28
 to 2^29 (evidence: `bench/architecture_audit/c2_decoded_containment/acceptance/README.md`,
 "C2-WB gate"). Every admitted C1 control compares its whole report, including `limits`, so

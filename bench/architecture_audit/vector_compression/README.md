@@ -1,5 +1,13 @@
 # Vector compression preparation
 
+> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 3563 files remain:
+> this README plus what CI or tests read. The full directory last existed at
+> `e29cd19d2f236dc688e91a80a45170d4a573e20b`
+> (`git archive e29cd19d2f23 bench/architecture_audit/vector_compression | tar -x`). Local archive:
+> `~/.cache/rusty-tiles-evidence/architecture_audit/vector_compression.tar.zst`, SHA-256
+> `8615aae0a6993ce13c07d170d5dc7fd95e25119adcfcb40ba27c06cf3835c072`.
+> Paths below that no longer exist refer to that snapshot.
+
 These are immutable audit, draft-contract, independent precode-review and proof
 preparation epochs. No production implementation or whole-slice acceptance is
 established. See [current checkpoint](../../../docs/architecture/vector-compression-foundation.md).

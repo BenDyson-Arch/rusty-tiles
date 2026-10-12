@@ -1,5 +1,9 @@
 # D1 completed-directory publication
 
+> Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
+> moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
+> note ([index](../../bench/architecture_audit/README.md)).
+
 D1 extends the accepted F0 Attempt to a completed directory with CreateNew only.
 One attempt owns event admission, first failure, cancellation and the install
 permission decision. The producer owns its formats, all member writers and
