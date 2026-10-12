@@ -100,7 +100,8 @@ The constants are provisional until ML9 freezes them. Profiles are the only tuni
   v6.1's "the node TRS carries the lattice origin" (§7) and "a forest wider than `2^24·s_d` uses
   the per-forest rebase" (§3.4): P's δ is a per-tile sum of child translations below an implicit
   root, not a per-forest shift, so the shift must be a tile transform above the payload.
-- **Payloads.** GLB with `KHR_mesh_quantization` (fast, balanced), `EXT_meshopt_compression`
+- **Payloads.** glTF 2.0 only (USER decision 2026-10-12: b3dm, i3dm, pnts and cmpt are legacy and
+  Unsupported by `validate`, C1 amendment A-C1-6). GLB with `KHR_mesh_quantization` (fast, balanced), `EXT_meshopt_compression`
   (NONE filter; vertex codec v0, index and sequence codec v1, A-C1-3), `KHR_texture_basisu`
   required on fast, balanced and quality textures, `EXT_mesh_features` and
   `EXT_structural_metadata` for identity and for the published sets (§6.7). Nothing outside the

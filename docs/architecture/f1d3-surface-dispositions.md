@@ -87,7 +87,17 @@ from coarse levels, never from leaves, and the vanished geometry is inside the p
 may vanish and small holes may be filled (U4), and each coarse tile lists what it removed or
 filled (umbrella §6.7).
 
-## 5. Output and compatibility changes
+## 5. Tile content formats: glTF only (USER decision 2026-10-12, decided)
+
+| Surface | Disposition |
+| --- | --- |
+| Supported tile content | **glTF 2.0 only:** GLB, plus archive-local `.gltf` |
+| b3dm, i3dm, pnts, cmpt | **Dropped as legacy.** `validate` reports such content as Unsupported (C1 amendment A-C1-6). This is a breaking change and the CHANGELOG notes it |
+| b3dm table and `RTC_CENTER` paths | Removed from the C1 profile; no ML amendment and no ML slice relies on them |
+| Vector fill output (today written as b3dm, `vector/pipeline/encoding.rs:939`) | Moves to plain glTF. A spike first settles how fills ship as plain glTF in Cesium |
+| Implementation | A **separate glTF-only slice**, after that spike. Not part of ML0 or any ML slice |
+
+## 6. Output and compatibility changes
 
 - Textures are always re-encoded (KTX2, or PNG in `lossless`). F1b1's source-faithful forwarding
   does not apply to this command.

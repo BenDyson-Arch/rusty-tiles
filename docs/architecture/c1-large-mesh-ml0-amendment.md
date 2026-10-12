@@ -35,6 +35,11 @@ item below, this note governs that item; the C1 text governs everything else.
 | A-C1-3 | `EXT_meshopt_compression` stream header bytes: **a recorded C1 defect** | Separate small fix PR, scheduled by the coordinator (not this PR, not ML1) | Yes (success → InvalidInput) |
 | A-C1-4 | Volume caps opt-in; non-circular amplification budgets; item caps kept | ML7b (after ML7a) | Only for archives that are ResourceLimit today |
 | A-C1-5 | Report message caps | ML7a | No; report and message text only |
+| A-C1-6 | **glTF-only tile content** (USER decision 2026-10-12): b3dm joins i3dm, pnts and cmpt as Unsupported legacy content | Separate glTF-only slice, after the vector-fill spike | Yes (b3dm success or InvalidInput → Unsupported); breaking, CHANGELOG-noted |
+
+**Scope.** A-C1-1 to A-C1-5 rely only on the GLB and archive-local glTF paths. None of them uses
+the b3dm framing, feature or batch table, `BATCH_LENGTH` or `RTC_CENTER` paths, and no ML slice
+depends on b3dm.
 
 ## Unchanged
 
@@ -397,6 +402,37 @@ corpus archive with fewer than 64 names and 17 entries. Mutants: fixed entries d
 the marker sorted into the list.
 
 ---
+
+## A-C1-6. glTF-only tile content (USER decision, 2026-10-12)
+
+**Decision.** glTF 2.0 is the only supported tile content: GLB, plus archive-local `.gltf`. The
+3D Tiles 1.0 tile formats b3dm, i3dm, pnts and cmpt are dropped as legacy. A separate glTF-only
+slice implements it, after a spike settles how vector fills ship as plain glTF in Cesium. This
+PR changes no code.
+
+**Rule.** The payload kind is decided from the member name, as today (`validate.rs:504-513`):
+`.glb` is GLB and `.gltf` is archive-local glTF. Every other content suffix, now including
+`.b3dm`, is **Unsupported**, before any of its bytes are parsed, with one fixed message naming
+the suffix as legacy 3D Tiles 1.0 content (i3dm, pnts and cmpt are already Unsupported today, as
+"payload format outside GLB/local glTF 2.0"). C1's b3dm paths leave the profile: the 28-byte
+framing, feature-table and batch-table JSON admission, `BATCH_LENGTH`, the `RTC_CENTER` key
+detection and the `b3dm feature and batch table semantics` exclusion.
+
+**Exit-status and report changes (complete).**
+
+| # | Change | Archives |
+| --- | --- | --- |
+| X6-1 | success or InvalidInput (exit 0 or 3) → **Unsupported** (exit 2) | Every archive with b3dm content, including today's vector output with fills (`vector/pipeline/encoding.rs:939` writes fills as b3dm) and third-party 1.0 archives |
+| X6-2 | Report | `b3dm feature and batch table semantics` never appears in `notInspected`; C2's `rtcCenter` exclusion becomes unreachable (A-C2 scope note) |
+| X6-3 | CHANGELOG | "Breaking: `validate` reports b3dm, i3dm, pnts and cmpt content as Unsupported; only glTF 2.0 tile content is supported." |
+
+**Acceptance (O, from this text).** AC-6.1: a minimal valid modern b3dm wrapping a valid GLB is
+Unsupported with the legacy message; so is a malformed b3dm (the bytes are not parsed, so
+malformation cannot win). AC-6.2: `.i3dm`, `.pnts` and `.cmpt` members are Unsupported. AC-6.3:
+an upper-case `.B3DM` suffix is Unsupported (the name is lower-cased, as today). AC-6.4: every
+GLB and `.gltf` corpus archive keeps its verdict and report. AC-6.5: the C1 fixtures and context
+controls that hold b3dm are re-pinned to Unsupported, listed with their hashes. Mutant: b3dm still
+routed to the old framing path (flips AC-6.1).
 
 ## Open questions and settled items
 

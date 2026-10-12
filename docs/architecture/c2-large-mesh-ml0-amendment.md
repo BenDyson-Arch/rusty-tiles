@@ -31,6 +31,14 @@ merge (PR #164) and its WB-6 calibration. **Design:** large-mesh v6.1 (`design.m
   `workLimit` to streaming is an expected change: the perf-lane gate accepts it only through its
   `--explain` option, naming the case and this amendment (coordinator ruling O-C2-3).
 
+## Scope: glTF-only content
+
+Under the USER decision of 2026-10-12 (C1 amendment A-C1-6) b3dm content becomes Unsupported in a
+separate glTF-only slice. A-C2-1 to A-C2-4 use only GLB and archive-local glTF payloads and do not
+rely on the b3dm table or `RTC_CENTER` paths. Once that slice lands, the `rtcCenter` exclusion
+cannot fire; the frozen 15-name enum is left as it is, and any change to it is that slice's C2
+delta.
+
 ## Unchanged
 
 The claim (slice 1 and slice 3); the domain predicate and the 15-name reason enum (with slice 3's

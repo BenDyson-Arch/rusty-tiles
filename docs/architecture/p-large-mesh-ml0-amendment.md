@@ -26,7 +26,8 @@ vector and legacy-mesh output stay byte-identical** (P-A3).
 
 Add to §4.3 "Producers": **`mesh-local-to-3tz` (F1d3), OCTREE**, with:
 
-- one content slot (`.glb`) on every tile, leaves and proxies alike;
+- one content slot (`.glb`) on every tile, leaves and proxies alike. No P-A item uses P §4.3's
+  b3dm suffix; the glTF-only slice (C1 amendment A-C1-6) removes b3dm from P's domain;
 - at most 8 children with distinct slots: the child's octant, or P-A5;
 - **frames (coordinator ruling on O-D1/O-P-1: accepted).** The root tile's `transform` carries
   the F1c1 placement composed with a translation by the global lattice origin `O`.

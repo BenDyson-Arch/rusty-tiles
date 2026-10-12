@@ -69,7 +69,7 @@ remain proposals wherever the concrete scope has not adopted them.
 
 - [F1d3 large-mesh tiler umbrella contract (ML0, ready to freeze on design v6.1)](f1d3-large-mesh-contract.md)
 - [F1d3 public surface inventory and dispositions (ML0 draft)](f1d3-surface-dispositions.md)
-- [C1 large-mesh amendment A-C1-1 to A-C1-5 (ML0 draft)](c1-large-mesh-ml0-amendment.md)
+- [C1 large-mesh amendment A-C1-1 to A-C1-6 (ML0 draft)](c1-large-mesh-ml0-amendment.md)
 - [I1 large-mesh amendment A-I1-1 to A-I1-3 (ML0 draft)](i1-large-mesh-ml0-amendment.md)
 - [C2 large-mesh amendment A-C2-1 to A-C2-4 (ML0 draft)](c2-large-mesh-ml0-amendment.md)
 - [P large-mesh amendment P-A1 to P-A7 (ML0 draft)](p-large-mesh-ml0-amendment.md)
