@@ -1,7 +1,8 @@
 # Validator caps for 100,000-tile default vector output (2026-10-11)
 
-> **Bulk evidence moved out of the tree (2026-10-12).** 1 of 23 files remain:
-> this README plus what CI or tests read. The full directory last existed at
+> **Bulk evidence moved out of the tree (2026-10-12).** 9 of 23 files remain:
+> this README and the reusable measurement scripts. The full directory last
+> existed at
 > `e29cd19d2f236dc688e91a80a45170d4a573e20b`
 > (`git archive e29cd19d2f23 bench/architecture_audit/validator_caps | tar -x`). Local archive:
 > `~/.cache/rusty-tiles-evidence/architecture_audit/validator_caps.tar.zst`, SHA-256

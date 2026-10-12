@@ -13,8 +13,8 @@ import sys
 
 FILE_LIMIT = 1_000_000
 # About 1.25x the tracked sizes after evidence moved out (2026-10-12, on develop
-# e29cd19): whole tree 16,677,651 bytes, bench/ 8,857,553 bytes.
-BUDGETS = {"": 20_800_000, "bench/": 11_100_000}
+# e29cd19, live validator tooling kept): tree 17,243,688 bytes, bench/ 9,423,400.
+BUDGETS = {"": 21_600_000, "bench/": 11_800_000}
 GITLINK = "160000"
 
 

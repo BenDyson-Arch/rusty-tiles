@@ -1,0 +1,13 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index b10acb5..30182f4 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -703,6 +703,8 @@ pub(crate) fn walk(
+     // U(x, y, z) = (x, −z, y), applied exactly once.
+     arena.d.neg(p2);
+     let mut p = [p0, p2, p1];
++    arena.d.neg(p[2]);
++    p = [p[0], p[2], p[1]];
+     for (l, level) in levels.iter().enumerate() {
+         if let Some(t) = level.to_parent.filter(|_| l > 0) {
+             for (r, &nr) in next.iter().enumerate() {

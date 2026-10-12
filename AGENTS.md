@@ -48,14 +48,17 @@ a fresh separate nonauthor review; one coordinator owns shared Cargo builds.
 ## Evidence and tree size
 
 Commit only what CI or tests execute or read, plus small fixtures (aim for about
-100 KB each; 1 MB hard limit) and hash manifests. Bulk evidence (raw runs, review
-transcripts, candidate and precode corpora, preparation output) goes to
-`~/.cache/rusty-tiles-evidence/` and is referenced from a tracked README by
-SHA-256 and the last commit that held it. `scripts/check_tree_budget.py` runs in
-CI and fails when any tracked file exceeds 1 MB or the tree or `bench/` exceeds
-its total budget; raise a budget only with a stated reason. The guard sees only
-the final tree, so a PR that adds and later removes bulk files must be
-squash-merged, or the guard must be run on every commit in the PR range.
+100 KB each; 1 MB hard limit) and hash manifests. Also keep the independent
+oracles, witness generators, self-tests and mutant sets of active validator
+families, even when CI does not run them; later slices extend them. Bulk
+evidence (raw runs, review transcripts, candidate and precode corpora,
+preparation output) goes to `~/.cache/rusty-tiles-evidence/` and is referenced
+from a tracked README by SHA-256 and the last commit that held it.
+`scripts/check_tree_budget.py` runs in CI and fails when any tracked file
+exceeds 1 MB or the tree or `bench/` exceeds its total budget; raise a budget
+only with a stated reason. The guard sees only the final tree, so a PR that adds
+and later removes bulk files must be squash-merged, or the guard must be run on
+every commit in the PR range.
 
 ## CPU load
 

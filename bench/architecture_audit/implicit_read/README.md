@@ -1,7 +1,8 @@
 # I1 implicit read evidence
 
-> **Bulk evidence moved out of the tree (2026-10-12).** 173 of 461 files remain
-> (what CI or tests read); this README is new. The full directory last existed at
+> **Bulk evidence moved out of the tree (2026-10-12).** 227 of 461 files remain
+> (what CI or tests read, plus the oracle, witnesses, self-test and mutant set);
+> this README is new. The full directory last existed at
 > `e29cd19d2f236dc688e91a80a45170d4a573e20b`
 > (`git archive e29cd19d2f23 bench/architecture_audit/implicit_read | tar -x`). Local archive:
 > `~/.cache/rusty-tiles-evidence/architecture_audit/implicit_read.tar.zst`, SHA-256
@@ -22,6 +23,7 @@ Conclusions recorded in the removed `acceptance/README.md`:
   0 oracle-side differences, 0 production disagreements, 0 skipped** (release build,
   large controls generated).
 
+Kept as live tooling: `oracle/` with its self-test, `witnesses/`, `acceptance/scripts/`,
+the production-mutant set (patches, `mutants.json`, scripts) and `corpus/run.py`.
 Removed from the tree: `preparation/` (contract drafts v1-v3, precode reviews, primary
-fetches), `acceptance/` receipts and production-mutant runs, large generated controls
-and witness outputs.
+fetches), `acceptance/` receipts and mutant reports, and generated `corpus/facts/`.
