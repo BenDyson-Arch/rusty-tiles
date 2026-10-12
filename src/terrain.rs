@@ -475,14 +475,16 @@ fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
 /// The largest distance between a child-level surface point and the point with
 /// the same lattice parameters on this tile's surface. Both surfaces are affine
 /// on every piece of the overlay of their triangulations, so the maximum is at
-/// overlay vertices: the child vertices, plus, in clipped cells (whose diagonal
-/// is not a union of child diagonals), crossings of this tile's diagonal with
-/// child edges. Every cell lies in one child because child boundaries are
-/// multiples of this tile's stride.
+/// overlay vertices. Every cell lies in one child because child boundaries are
+/// multiples of this tile's stride, and holds at most 2x2 child cells. In a
+/// full-stride cell this tile's diagonal is a union of child diagonals, so the
+/// overlay vertices are the child vertices. In a clipped cell the diagonal also
+/// crosses the interior child grid lines. It meets no child diagonal elsewhere:
+/// the child cells at its ends share its endpoints, and the other two child
+/// diagonals lie strictly on one side of it.
 #[cfg(feature = "native-geospatial")]
 fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: usize) -> f64 {
     let half = cells * patch.stride / 2;
-    let cross = |a: (f64, f64), b: (f64, f64)| a.0 * b.1 - a.1 * b.0;
     let mut worst: f64 = 0.;
     let mut points = Vec::with_capacity(16);
     for r in 0..sheet.ys.len() - 1 {
@@ -511,22 +513,6 @@ fn deviation(patch: &Patch, sheet: &Sheet, children: &[(usize, Sheet)], cells: u
                 let on = |t: f64| (start.0 + t * direction.0, start.1 + t * direction.1);
                 points.extend(fx[1..fx.len() - 1].iter().map(|&x| on((xb - x) as f64 / w)));
                 points.extend(fy[1..fy.len() - 1].iter().map(|&y| on((y - ya) as f64 / h)));
-                for j in 0..fy.len() - 1 {
-                    for i in 0..fx.len() - 1 {
-                        let origin = (fx[i + 1] as f64, fy[j] as f64);
-                        let other = (fx[i] as f64 - origin.0, fy[j + 1] as f64 - origin.1);
-                        let denominator = cross(direction, other);
-                        if denominator == 0. {
-                            continue;
-                        }
-                        let offset = (origin.0 - start.0, origin.1 - start.1);
-                        let t = cross(offset, other) / denominator;
-                        let s = cross(offset, direction) / denominator;
-                        if (0. ..=1.).contains(&t) && (0. ..=1.).contains(&s) {
-                            points.push(on(t));
-                        }
-                    }
-                }
             }
             for &(x, y) in &points {
                 worst = worst.max(distance(fine.at(x, y), sheet.cell(c, r, x, y)));
@@ -1197,6 +1183,16 @@ mod tests {
             300. + 40. * (c as f64 / 5.).sin() * (r as f64 / 7.).cos() + 0.5 * c as f64
         })
     }
+    /// The relief with a NoData block, filled 100 m below it: a fill cliff.
+    fn holed(width: usize, height: usize) -> raster::PreparedRaster {
+        raster::test_raster_with(width, height, 1e-3, |c, r| {
+            if (20..30).contains(&c) && (10..18).contains(&r) {
+                f64::NAN
+            } else {
+                300. + 40. * (c as f64 / 5.).sin() * (r as f64 / 7.).cos() + 0.5 * c as f64
+            }
+        })
+    }
     fn sheet(pyramid: &Pyramid, patch: &Patch) -> Sheet {
         Sheet {
             xs: patch.columns(),
@@ -1595,12 +1591,14 @@ mod tests {
             None
         );
     }
-    /// A coarse tile over `[0, width] x [0, height]` with stride 2 and its four
-    /// stride-1 children, all stored as `(x, height, -y)` so distances are vertical.
+    /// A coarse tile over `[0, width] x [0, height]` with `stride` and its four
+    /// children at half the stride, all stored as `(x, height, -y)` so distances
+    /// are vertical.
     fn synthetic(
         width: usize,
         height: usize,
         cells: usize,
+        stride: usize,
         coarse: impl Fn(usize, usize) -> f64,
         fine: impl Fn(&Sheet, usize, usize) -> f64,
     ) -> (Patch, Sheet, Vec<(usize, Sheet)>) {
@@ -1617,7 +1615,7 @@ mod tests {
             level: 0,
             column: 0,
             row: 0,
-            stride: 2,
+            stride,
             x: 0,
             y: 0,
             x1: width,
@@ -1631,11 +1629,13 @@ mod tests {
             hierarchy: [[0.; 3]; 2],
         };
         let sheet = store(patch.columns(), patch.rows(), &coarse);
+        let span = cells * stride / 2;
         let children = (0..4)
-            .map(|slot| {
-                let (x, y) = ((slot & 1) * cells, (slot >> 1) * cells);
-                let xs = lattice(x, (x + cells).min(width), 1);
-                let ys = lattice(y, (y + cells).min(height), 1);
+            .map(|slot| (slot, (slot & 1) * span, (slot >> 1) * span))
+            .filter(|&(_, x, y)| x < width && y < height)
+            .map(|(slot, x, y)| {
+                let xs = lattice(x, (x + span).min(width), stride / 2);
+                let ys = lattice(y, (y + span).min(height), stride / 2);
                 (slot, store(xs, ys, &|x, y| fine(&sheet, x, y)))
             })
             .collect();
@@ -1658,11 +1658,11 @@ mod tests {
     #[test]
     fn deviation_is_exact_on_planes_and_includes_clipped_diagonal_crossings() {
         let plane = |x: usize, y: usize| 2. * x as f64 + 3. * y as f64 + 5.;
-        let (patch, sheet, children) = synthetic(8, 8, 4, plane, |_, x, y| plane(x, y));
+        let (patch, sheet, children) = synthetic(8, 8, 4, 2, plane, |_, x, y| plane(x, y));
         assert_eq!(deviation(&patch, &sheet, &children, 4), 0.);
         // Full-stride cells: the bound is the vertex maximum and equals the dense maximum.
         let wavy = |x: usize, y: usize| ((x * 7 + y * 13) % 5) as f64;
-        let (patch, sheet, children) = synthetic(8, 8, 4, wavy, |_, x, y| wavy(x, y));
+        let (patch, sheet, children) = synthetic(8, 8, 4, 2, wavy, |_, x, y| wavy(x, y));
         let d = deviation(&patch, &sheet, &children, 4);
         assert!(d > 1.);
         assert!((d - dense(&sheet, &children, 4)).abs() <= 1e-9);
@@ -1673,7 +1673,7 @@ mod tests {
             (2, 0) | (3, 2) => 10.,
             _ => 0.,
         };
-        let (patch, sheet, children) = synthetic(3, 4, 2, saddle, |coarse, x, y| {
+        let (patch, sheet, children) = synthetic(3, 4, 2, 2, saddle, |coarse, x, y| {
             coarse.at(x as f64, y as f64)[2]
         });
         let vertices = children
@@ -1689,16 +1689,149 @@ mod tests {
         let d = deviation(&patch, &sheet, &children, 2);
         assert!((d - 5.).abs() <= 1e-9, "{d}");
         assert!((d - dense(&sheet, &children, 2)).abs() <= 1e-9);
+        // The transposed saddle in [0, 2] x [2, 3]: only the crossing with the
+        // child column x = 1, at y = 2.5, sees it.
+        let saddle = |x: usize, y: usize| match (x, y) {
+            (0, 2) | (2, 3) => 10.,
+            _ => 0.,
+        };
+        let (patch, sheet, children) = synthetic(4, 3, 2, 2, saddle, |coarse, x, y| {
+            coarse.at(x as f64, y as f64)[2]
+        });
+        let d = deviation(&patch, &sheet, &children, 2);
+        assert!((d - 5.).abs() <= 1e-9, "{d}");
+        assert!((d - dense(&sheet, &children, 2)).abs() <= 1e-9);
+    }
+    /// An exact overlay reference, independent of `deviation`'s case analysis:
+    /// child vertices plus every crossing of a coarse diagonal with any child
+    /// edge, sides and diagonals alike. Returns the maximum distance, the vertex
+    /// maximum and the number of crossings strictly inside a child diagonal.
+    fn overlay(sheet: &Sheet, children: &[(usize, Sheet)], span: usize) -> (f64, f64, usize) {
+        let cross = |a: (f64, f64), b: (f64, f64)| a.0 * b.1 - a.1 * b.0;
+        let (mut worst, mut vertices, mut inside) = (0f64, 0f64, 0);
+        for r in 0..sheet.ys.len() - 1 {
+            for c in 0..sheet.xs.len() - 1 {
+                let (xa, xb, ya, yb) = (sheet.xs[c], sheet.xs[c + 1], sheet.ys[r], sheet.ys[r + 1]);
+                let slot = usize::from(xa >= span) | usize::from(ya >= span) << 1;
+                let fine = &children.iter().find(|(s, _)| *s == slot).unwrap().1;
+                let fx: Vec<_> = fine
+                    .xs
+                    .iter()
+                    .copied()
+                    .filter(|x| (xa..=xb).contains(x))
+                    .collect();
+                let fy: Vec<_> = fine
+                    .ys
+                    .iter()
+                    .copied()
+                    .filter(|y| (ya..=yb).contains(y))
+                    .collect();
+                let mut points = vec![];
+                for &y in &fy {
+                    for &x in &fx {
+                        let p = (x as f64, y as f64);
+                        vertices =
+                            vertices.max(distance(fine.at(p.0, p.1), sheet.cell(c, r, p.0, p.1)));
+                        points.push(p);
+                    }
+                }
+                let start = (xb as f64, ya as f64);
+                let direction = (xa as f64 - start.0, yb as f64 - start.1);
+                for j in 0..fy.len() - 1 {
+                    for i in 0..fx.len() - 1 {
+                        let (x0, x1, y0, y1) = (
+                            fx[i] as f64,
+                            fx[i + 1] as f64,
+                            fy[j] as f64,
+                            fy[j + 1] as f64,
+                        );
+                        let edges = [
+                            ((x0, y0), (x1, y0), false),
+                            ((x0, y1), (x1, y1), false),
+                            ((x0, y0), (x0, y1), false),
+                            ((x1, y0), (x1, y1), false),
+                            ((x1, y0), (x0, y1), true),
+                        ];
+                        for (a, b, diagonal) in edges {
+                            let other = (b.0 - a.0, b.1 - a.1);
+                            let denominator = cross(direction, other);
+                            if denominator == 0. {
+                                continue;
+                            }
+                            let offset = (a.0 - start.0, a.1 - start.1);
+                            let (t, u) = (
+                                cross(offset, other) / denominator,
+                                cross(offset, direction) / denominator,
+                            );
+                            if (0. ..=1.).contains(&t) && (0. ..=1.).contains(&u) {
+                                inside += usize::from(diagonal && u > 1e-12 && u < 1. - 1e-12);
+                                points.push((start.0 + t * direction.0, start.1 + t * direction.1));
+                            }
+                        }
+                    }
+                }
+                for (x, y) in points {
+                    worst = worst.max(distance(fine.at(x, y), sheet.cell(c, r, x, y)));
+                }
+            }
+        }
+        (worst, vertices, inside)
+    }
+    #[test]
+    fn clipped_cells_match_an_exact_overlay_reference() {
+        // Pseudo-random coarse heights, shared by both levels at common nodes, over every
+        // clipped end width and height for child strides 1, 2 and 4.
+        let height = |x: usize, y: usize| {
+            let h = (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                ^ (y as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+            (h.wrapping_mul(0x1656_67B1_9E37_79F9) >> 40) as f64 / 65536.
+        };
+        let mut sensitive = 0;
+        for stride in [2, 4, 8] {
+            // Children split the coarse tile at `span`; widths clip its last cell by 1..=stride.
+            let span = stride;
+            for width in span + 1..=2 * span {
+                for depth in span + 1..=2 * span {
+                    // Child-only nodes sit near the coarse surface, so crossings in
+                    // clipped saddle cells, not vertices, set most maxima.
+                    let (patch, sheet, children) =
+                        synthetic(width, depth, 2, stride, height, |coarse, x, y| {
+                            let node = |n: usize, end: usize| n.is_multiple_of(stride) || n == end;
+                            let base = coarse.at(x as f64, y as f64)[2];
+                            if node(x, width) && node(y, depth) {
+                                base
+                            } else {
+                                base + 0.05 * height(y, x)
+                            }
+                        });
+                    let d = deviation(&patch, &sheet, &children, 2);
+                    let (reference, vertices, inside) = overlay(&sheet, &children, span);
+                    // The clipping argument: no child diagonal is crossed in its interior.
+                    assert_eq!(inside, 0, "{stride} {width} {depth}");
+                    assert!(
+                        (d - reference).abs() <= 1e-9,
+                        "{stride} {width} {depth}: {d} {reference}"
+                    );
+                    sensitive += usize::from(reference > vertices + 1e-6);
+                }
+            }
+        }
+        // Crossings, not vertices, set the maximum in many of these cells.
+        assert!(sensitive > 20, "{sensitive}");
     }
     #[test]
     fn certified_errors_bound_dense_leaf_distance_and_are_monotone() {
         let control = RunControl::default();
         let attempt = control.begin().unwrap();
-        // Even dimensions keep every cell full-stride; odd ones clip end strips.
-        for (width, height, full_stride) in [(64, 48, true), (67, 45, false)] {
-            let r = bump(width, height);
+        // Even dimensions keep every cell full-stride; odd ones clip end strips;
+        // NoData filled at 200 m adds a cliff.
+        for (r, full_stride, fill) in [
+            (bump(64, 48), true, 0.),
+            (bump(67, 45), false, 0.),
+            (holed(67, 45), false, 200.),
+        ] {
             let frame = Frame::new(r.bounds);
-            let pyramid = Pyramid::new(&r, 16, &frame, 0., 0., &attempt);
+            let pyramid = Pyramid::new(&r, 16, &frame, 0., fill, &attempt);
             let plan = plan(&pyramid).unwrap();
             let sheets: Vec<_> = plan.patches.iter().map(|p| sheet(&pyramid, p)).collect();
             let leaves: Vec<_> = (0..plan.patches.len())
@@ -1757,87 +1890,88 @@ mod tests {
     fn skirts_cover_every_mixed_level_seam_and_face_outward() {
         let control = RunControl::default();
         let attempt = control.begin().unwrap();
-        let r = bump(67, 45);
-        let frame = Frame::new(r.bounds);
-        let pyramid = Pyramid::new(&r, 16, &frame, 0., 0., &attempt);
-        let plan = plan(&pyramid).unwrap();
-        let root = plan.root().error;
-        let sheets: Vec<_> = plan.patches.iter().map(|p| sheet(&pyramid, p)).collect();
-        for patch in &plan.patches {
-            assert!(patch.skirt_depth >= patch.error + root && patch.skirt_depth >= 1.);
-            let (skirt, _, _) = pyramid.skirt(patch, patch.skirt_depth).unwrap();
-            let surface = pyramid.grid(patch).unwrap().positions;
-            let edges = patch.interior.iter().filter(|i| **i).count();
-            assert_eq!(skirt.indices.is_empty(), edges == 0);
-            let centre: [f64; 3] =
-                std::array::from_fn(|i| (patch.surface[0][i] + patch.surface[1][i]) / 2.);
-            for pair in skirt.positions.chunks(2) {
-                assert!(
-                    surface.contains(&pair[0]),
-                    "skirt tops are surface vertices"
-                );
-                let drop = distance(decoded(pair[0]), decoded(pair[1]));
-                assert!((drop - patch.skirt_depth).abs() <= 0.1, "{drop}");
-            }
-            for t in skirt.indices.chunks(3) {
-                let [a, b, c] = [0, 1, 2].map(|k| decoded(skirt.positions[t[k] as usize]));
-                let (u, v) = (
-                    [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
-                    [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
-                );
-                let normal = [
-                    u[1] * v[2] - u[2] * v[1],
-                    u[2] * v[0] - u[0] * v[2],
-                    u[0] * v[1] - u[1] * v[0],
-                ];
-                let outward: [f64; 2] =
-                    std::array::from_fn(|i| (a[i] + b[i] + c[i]) / 3. - centre[i]);
-                assert!(normal[0] * outward[0] + normal[1] * outward[1] > 0.);
-            }
-        }
-        // Every pair of tiles that a REPLACE cut can place side by side (any
-        // levels, disjoint footprints sharing an edge segment): the gap along
-        // the shared edge is covered by the skirt hanging from either side.
-        let mut worst: f64 = 0.;
-        let mut pairs = 0;
-        for (i, a) in plan.patches.iter().enumerate() {
-            for (j, b) in plan.patches.iter().enumerate() {
-                let overlap = |a0: usize, a1: usize, b0: usize, b1: usize| {
-                    (a0.max(b0) < a1.min(b1)).then(|| (a0.max(b0), a1.min(b1)))
-                };
-                let segment = if a.x1 == b.x {
-                    overlap(a.y, a.y1, b.y, b.y1).map(|(y0, y1)| {
-                        assert!(a.interior[1] && b.interior[0]);
-                        ((a.x1, y0), (a.x1, y1))
-                    })
-                } else if a.y1 == b.y {
-                    overlap(a.x, a.x1, b.x, b.x1).map(|(x0, x1)| {
-                        assert!(a.interior[3] && b.interior[2]);
-                        ((x0, a.y1), (x1, a.y1))
-                    })
-                } else {
-                    None
-                };
-                let Some(((x0, y0), (x1, y1))) = segment else {
-                    continue;
-                };
-                pairs += 1;
-                let steps = 4 * (x1 - x0 + y1 - y0);
-                for k in 0..=steps {
-                    let t = k as f64 / steps as f64;
-                    let (x, y) = (
-                        x0 as f64 + t * (x1 - x0) as f64,
-                        y0 as f64 + t * (y1 - y0) as f64,
+        for (r, fill) in [(bump(67, 45), 0.), (holed(67, 45), 200.)] {
+            let frame = Frame::new(r.bounds);
+            let pyramid = Pyramid::new(&r, 16, &frame, 0., fill, &attempt);
+            let plan = plan(&pyramid).unwrap();
+            let root = plan.root().error;
+            let sheets: Vec<_> = plan.patches.iter().map(|p| sheet(&pyramid, p)).collect();
+            for patch in &plan.patches {
+                assert!(patch.skirt_depth >= patch.error + root && patch.skirt_depth >= 1.);
+                let (skirt, _, _) = pyramid.skirt(patch, patch.skirt_depth).unwrap();
+                let surface = pyramid.grid(patch).unwrap().positions;
+                let edges = patch.interior.iter().filter(|i| **i).count();
+                assert_eq!(skirt.indices.is_empty(), edges == 0);
+                let centre: [f64; 3] =
+                    std::array::from_fn(|i| (patch.surface[0][i] + patch.surface[1][i]) / 2.);
+                for pair in skirt.positions.chunks(2) {
+                    assert!(
+                        surface.contains(&pair[0]),
+                        "skirt tops are surface vertices"
                     );
-                    let gap = distance(sheets[i].at(x, y), sheets[j].at(x, y));
-                    worst = worst.max(gap);
-                    // Both edges lie within their errors of the leaf edge.
-                    assert!(gap <= a.error + b.error + 1e-9, "{gap}");
-                    assert!(gap <= a.skirt_depth.min(b.skirt_depth), "{gap}");
+                    let drop = distance(decoded(pair[0]), decoded(pair[1]));
+                    assert!((drop - patch.skirt_depth).abs() <= 0.1, "{drop}");
+                }
+                for t in skirt.indices.chunks(3) {
+                    let [a, b, c] = [0, 1, 2].map(|k| decoded(skirt.positions[t[k] as usize]));
+                    let (u, v) = (
+                        [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                        [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+                    );
+                    let normal = [
+                        u[1] * v[2] - u[2] * v[1],
+                        u[2] * v[0] - u[0] * v[2],
+                        u[0] * v[1] - u[1] * v[0],
+                    ];
+                    let outward: [f64; 2] =
+                        std::array::from_fn(|i| (a[i] + b[i] + c[i]) / 3. - centre[i]);
+                    assert!(normal[0] * outward[0] + normal[1] * outward[1] > 0.);
                 }
             }
+            // Every pair of tiles that a REPLACE cut can place side by side (any
+            // levels, disjoint footprints sharing an edge segment): the gap along
+            // the shared edge is covered by the skirt hanging from either side.
+            let mut worst: f64 = 0.;
+            let mut pairs = 0;
+            for (i, a) in plan.patches.iter().enumerate() {
+                for (j, b) in plan.patches.iter().enumerate() {
+                    let overlap = |a0: usize, a1: usize, b0: usize, b1: usize| {
+                        (a0.max(b0) < a1.min(b1)).then(|| (a0.max(b0), a1.min(b1)))
+                    };
+                    let segment = if a.x1 == b.x {
+                        overlap(a.y, a.y1, b.y, b.y1).map(|(y0, y1)| {
+                            assert!(a.interior[1] && b.interior[0]);
+                            ((a.x1, y0), (a.x1, y1))
+                        })
+                    } else if a.y1 == b.y {
+                        overlap(a.x, a.x1, b.x, b.x1).map(|(x0, x1)| {
+                            assert!(a.interior[3] && b.interior[2]);
+                            ((x0, a.y1), (x1, a.y1))
+                        })
+                    } else {
+                        None
+                    };
+                    let Some(((x0, y0), (x1, y1))) = segment else {
+                        continue;
+                    };
+                    pairs += 1;
+                    let steps = 4 * (x1 - x0 + y1 - y0);
+                    for k in 0..=steps {
+                        let t = k as f64 / steps as f64;
+                        let (x, y) = (
+                            x0 as f64 + t * (x1 - x0) as f64,
+                            y0 as f64 + t * (y1 - y0) as f64,
+                        );
+                        let gap = distance(sheets[i].at(x, y), sheets[j].at(x, y));
+                        worst = worst.max(gap);
+                        // Both edges lie within their errors of the leaf edge.
+                        assert!(gap <= a.error + b.error + 1e-9, "{gap}");
+                        assert!(gap <= a.skirt_depth.min(b.skirt_depth), "{gap}");
+                    }
+                }
+            }
+            assert!(pairs > 20 && worst > 0.1, "{pairs} {worst}");
         }
-        assert!(pairs > 20 && worst > 0.1, "{pairs} {worst}");
     }
     #[test]
     fn every_box_contains_its_own_and_all_descendant_surface_and_skirt_vertices() {
