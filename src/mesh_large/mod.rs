@@ -2,6 +2,7 @@
 //! No tile output, rendering, texture capture or certificate is promised by this module.
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
+mod attributes;
 mod capture;
 mod config;
 mod input;
