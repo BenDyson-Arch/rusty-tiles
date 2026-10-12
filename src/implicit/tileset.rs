@@ -14,6 +14,7 @@
 //! [`restore_payload`] inverts byte for byte.
 
 use super::{invalid, Coordinates, SubdivisionScheme, Subtree, TileMetadata};
+use crate::tileset_node::{sum_error, sum_up};
 use crate::Error;
 use serde::Deserialize;
 use serde_json::{json, value::RawValue, Map, Value};
@@ -637,6 +638,49 @@ fn assemble(
     tile
 }
 
+/// Grow an axis-aligned box's half lengths outward by `by` (z-up), keeping each lane's sign.
+/// Returns whether any lane changed. Rotated boxes are left as they are: C2 evaluates
+/// implicit rows only when they are axis aligned.
+fn widen(bounding_box: &mut [f64; 12], by: [f64; 3]) -> bool {
+    if by == [0.; 3] || [4, 5, 6, 8, 9, 10].iter().any(|&k| bounding_box[k] != 0.) {
+        return false;
+    }
+    let before = *bounding_box;
+    for (i, step) in by.into_iter().enumerate() {
+        let lane = &mut bounding_box[3 + 4 * i];
+        *lane = sum_up(lane.abs(), step).copysign(*lane);
+    }
+    before != *bounding_box
+}
+
+/// Write the half lanes of `after` that differ from `before` into a `boundingVolume`.
+fn set_halves(volume: &mut Value, before: &[f64; 12], after: &[f64; 12]) {
+    for k in [3, 7, 11] {
+        if before[k] != after[k] {
+            volume["box"][k] = json!(after[k]);
+        }
+    }
+}
+
+/// Per z-up axis, the magnitude of the error in a rebased payload's scene-root translation:
+/// the raw root translation (or matrix column) plus `(δ0, δ2, −δ1)`, which
+/// [`translate_node`] rounds once in f64.
+fn rebase_error(record: &RebaseRecord) -> Result<[f64; 3], Error> {
+    if record.raw_root_node.is_empty() {
+        return Ok([0.; 3]);
+    }
+    let node: Value = serde_json::from_str(&record.raw_root_node)?;
+    let raw = match node.get("matrix") {
+        Some(matrix) => numbers::<16>(matrix).map(|m| [m[12], m[13], m[14]]),
+        None => node.get("translation").map_or(Some([0.; 3]), numbers::<3>),
+    }
+    .ok_or_else(|| data("rebased scene root has no finite translation"))?;
+    let d = record.delta;
+    let step = [d[0], d[2], -d[1]];
+    let e: [f64; 3] = std::array::from_fn(|i| sum_error(raw[i], step[i]).abs());
+    Ok([e[0], e[2], e[1]])
+}
+
 /// Exact P8 check on a finished document.
 fn check_document(name: &str, document: &Value) -> Result<Vec<u8>, Error> {
     let measured = cost(document)?;
@@ -664,7 +708,7 @@ pub fn write_forest(
     checkpoint: &mut impl FnMut() -> Result<(), Error>,
 ) -> Result<ForestOutput, Error> {
     checkpoint()?;
-    let nodes = collect(&manifest["root"], scheme, checkpoint)?;
+    let mut nodes = collect(&manifest["root"], scheme, checkpoint)?;
     let roles = roles(&nodes);
     for (id, node) in nodes.iter().enumerate() {
         if roles[id] == TileRole::ImplicitRoot {
@@ -681,6 +725,8 @@ pub fn write_forest(
     let mut implicit_sources = BTreeSet::new();
     let mut explicit_sources = BTreeSet::new();
     let mut implicit_roots = 0;
+    // Drift of implicit content from its exact place, carried up to explicit ancestors.
+    let mut drift = vec![[0f64; 3]; nodes.len()];
     for (id, node) in nodes.iter().enumerate() {
         match roles[id] {
             TileRole::Skeleton | TileRole::ExplicitLeaf => {
@@ -718,7 +764,7 @@ pub fn write_forest(
                     directory,
                     template,
                 };
-                let (object, subtree) = root.write(
+                let (object, subtree, reach) = root.write(
                     &nodes,
                     &mut tiles,
                     &mut members,
@@ -727,8 +773,29 @@ pub fn write_forest(
                 )?;
                 written.insert(subtree);
                 objects[id] = Some(object);
+                let mut ancestor = node.parent;
+                while let Some(a) = ancestor {
+                    for (lane, step) in drift[a].iter_mut().zip(reach) {
+                        *lane = lane.max(step);
+                    }
+                    ancestor = nodes[a].parent;
+                }
             }
             TileRole::Implicit => {}
+        }
+    }
+    // Explicit ancestors of an implicit root contain its content at its exact place; widen
+    // them by the drift so they also contain it where it is published.
+    for (id, by) in drift.into_iter().enumerate() {
+        let before = nodes[id].bounding_box;
+        let mut after = before;
+        if widen(&mut after, by) {
+            let node = &mut nodes[id];
+            node.bounding_box = after;
+            set_halves(&mut node.tile["boundingVolume"], &before, &after);
+            if let Some(object) = objects[id].as_mut() {
+                set_halves(&mut object["boundingVolume"], &before, &after);
+            }
         }
     }
     written.extend(members.iter().cloned());
@@ -832,6 +899,10 @@ pub fn write_forest(
     })
 }
 
+/// An implicit root as written: its explicit tile object, its subtree member name and its
+/// drift bound (z-up), by which its explicit ancestors grow.
+type WrittenRoot = (Map<String, Value>, String, [f64; 3]);
+
 struct ImplicitRoot<'a> {
     id: usize,
     scheme: SubdivisionScheme,
@@ -841,7 +912,15 @@ struct ImplicitRoot<'a> {
 
 impl ImplicitRoot<'_> {
     /// Write one implicit root's payloads and its single subtree. Returns the explicit root
-    /// tile object and the subtree member name.
+    /// tile object, the subtree member name and the root's drift bound (see below), by which
+    /// its explicit ancestors must grow.
+    ///
+    /// Implicit tile `t` is published at `δ(t) = δ(parent) + translation(t)`, rounded per
+    /// edge, so its row centre `B(t) + δ(t)` and its payload's rebased scene root (each
+    /// rounded once more) drift from the producer's exact placement by a few ulps. Every
+    /// row grows by an outward-rounded bound on the drift of its own and its descendants'
+    /// content relative to it, so a vertex the producer's hierarchy contains exactly stays
+    /// inside every volume C2 tests. Exact sums give a zero bound and unchanged rows.
     fn write(
         &self,
         nodes: &[Node],
@@ -849,7 +928,7 @@ impl ImplicitRoot<'_> {
         members: &mut Vec<String>,
         sources: &mut BTreeSet<String>,
         checkpoint: &mut impl FnMut() -> Result<(), Error>,
-    ) -> Result<(Map<String, Value>, String), Error> {
+    ) -> Result<WrittenRoot, Error> {
         let (id, scheme, template) = (self.id, self.scheme, self.template);
         let root = &nodes[id];
         let range = id..root.end;
@@ -885,7 +964,12 @@ impl ImplicitRoot<'_> {
             },
         );
         deltas.insert(id, [0.; 3]);
-        for t in range {
+        // |error| of each edge's δ sum, and per tile the drift bound G: first the largest
+        // payload rebase error, then max(own, |edge(c)| + G(c)) over the children.
+        let mut edges: BTreeMap<usize, [f64; 3]> = BTreeMap::new();
+        let mut drift: BTreeMap<usize, [f64; 3]> = BTreeMap::new();
+        let mut layers = Vec::with_capacity(range.len());
+        for t in range.clone() {
             checkpoint()?;
             let node = &nodes[t];
             let c = coordinates[&t];
@@ -894,7 +978,12 @@ impl ImplicitRoot<'_> {
                 coordinates.insert(next, child(c, nodes[next].slot, scheme)?);
                 let step = nodes[next].translation;
                 deltas.insert(next, std::array::from_fn(|i| delta[i] + step[i]));
+                edges.insert(
+                    next,
+                    std::array::from_fn(|i| sum_error(delta[i], step[i]).abs()),
+                );
             }
+            let mut own = [0f64; 3];
             let mut flags = vec![false; slot_list.len()];
             let mut written = Vec::with_capacity(node.contents.len());
             let mut total = 0u64;
@@ -905,6 +994,9 @@ impl ImplicitRoot<'_> {
                     .expect("slot list covers every content");
                 let raw = std::fs::read(self.directory.join(&content.uri))?;
                 let (bytes, record) = rebase_payload(&raw, delta)?;
+                for (lane, error) in own.iter_mut().zip(rebase_error(&record)?) {
+                    *lane = lane.max(error);
+                }
                 let name = format!(
                     "implicit-content/r{id}-{}-{slot}.{}",
                     key(c, scheme),
@@ -929,22 +1021,8 @@ impl ImplicitRoot<'_> {
             if extras.get("encodedBytes").is_some() {
                 extras["encodedBytes"] = json!(total);
             }
-            // P3: the level-0 row is the root's box; below it, B(t) + δ(t) in f64.
-            let mut bounding_box = node.bounding_box;
-            if t != id {
-                for (lane, step) in bounding_box.iter_mut().zip(delta) {
-                    *lane += step;
-                }
-            }
-            subtree.set_tile(c, &flags)?;
-            subtree.set_metadata(
-                c,
-                TileMetadata {
-                    bounding_box,
-                    geometric_error: node.error,
-                    extras: extras.clone(),
-                },
-            )?;
+            drift.insert(t, own);
+            layers.push((c, flags));
             tiles[t] = Some(WrittenTile {
                 role: if t == id {
                     TileRole::ImplicitRoot
@@ -954,6 +1032,43 @@ impl ImplicitRoot<'_> {
                 extras,
                 contents: written,
             });
+        }
+        // Reverse preorder visits every child before its parent.
+        for t in range.clone().rev() {
+            let mut bound = drift[&t];
+            for &next in &nodes[t].children {
+                let (edge, below) = (edges[&next], drift[&next]);
+                for i in 0..3 {
+                    bound[i] = bound[i].max(sum_up(edge[i], below[i]));
+                }
+            }
+            drift.insert(t, bound);
+        }
+        for (t, (c, flags)) in range.zip(layers) {
+            checkpoint()?;
+            let node = &nodes[t];
+            // P3: the level-0 row is the root's box; below it, B(t) + δ(t) in f64. Each
+            // grows by its drift bound plus the rounding error of its own centre.
+            let mut bounding_box = node.bounding_box;
+            let mut by = drift[&t];
+            if t != id {
+                let delta = deltas[&t];
+                for i in 0..3 {
+                    let error = sum_error(bounding_box[i], delta[i]).abs();
+                    bounding_box[i] += delta[i];
+                    by[i] = sum_up(by[i], error);
+                }
+            }
+            widen(&mut bounding_box, by);
+            subtree.set_tile(c, &flags)?;
+            subtree.set_metadata(
+                c,
+                TileMetadata {
+                    bounding_box,
+                    geometric_error: node.error,
+                    extras: tiles[t].as_ref().expect("written above").extras.clone(),
+                },
+            )?;
         }
         let origin = Coordinates {
             level: 0,
@@ -966,6 +1081,16 @@ impl ImplicitRoot<'_> {
         members.push(name.clone());
         let mut object = Map::new();
         object.insert("boundingVolume".into(), root.tile["boundingVolume"].clone());
+        // V_R is the level-0 row, widened alike.
+        let reach = drift[&id];
+        let mut bounding_box = root.bounding_box;
+        if widen(&mut bounding_box, reach) {
+            set_halves(
+                &mut object["boundingVolume"],
+                &root.bounding_box,
+                &bounding_box,
+            );
+        }
         object.insert("geometricError".into(), root.tile["geometricError"].clone());
         object.insert("refine".into(), json!(root.refine));
         if let Some(transform) = root.tile.get("transform") {
@@ -994,7 +1119,7 @@ impl ImplicitRoot<'_> {
                 "subtrees": {"uri": format!("subtrees/r{id}-{template}.subtree")},
             }),
         );
-        Ok((object, name))
+        Ok((object, name, reach))
     }
 }
 

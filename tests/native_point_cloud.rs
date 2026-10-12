@@ -589,6 +589,234 @@ fn large_tiles_use_exact_float_feature_ids_instead_of_wrapping_u16() {
     assert_eq!(glb.column("source_index").len(), 65_537 * 8);
 }
 
+/// The exact sign of `Σ terms` over the reals (Shewchuk's grow-expansion with zero
+/// elimination; the largest component carries the sign).
+fn exact_sign(terms: &[f64]) -> std::cmp::Ordering {
+    let mut expansion: Vec<f64> = Vec::new();
+    for &term in terms {
+        let mut q = term;
+        let mut grown = Vec::with_capacity(expansion.len() + 1);
+        for &e in &expansion {
+            let s = q + e;
+            let b = s - q;
+            let error = (q - (s - b)) + (e - b);
+            if error != 0. {
+                grown.push(error);
+            }
+            q = s;
+        }
+        if q != 0. {
+            grown.push(q);
+        }
+        expansion = grown;
+    }
+    expansion
+        .last()
+        .map_or(std::cmp::Ordering::Equal, |v| v.total_cmp(&0.))
+}
+
+/// Whether `|Σ offset| <= Σ half` holds exactly.
+fn within(half: &[f64], offset: &[f64]) -> bool {
+    [1., -1.].iter().all(|sign| {
+        let mut terms = half.to_vec();
+        terms.extend(offset.iter().map(|v| sign * v));
+        exact_sign(&terms) != std::cmp::Ordering::Less
+    })
+}
+
+/// One tile on the path from the root: its box centre and half lengths (axis aligned) and
+/// its translation to its parent's frame.
+struct Level {
+    centre: [f64; 3],
+    half: [f64; 3],
+    translation: [f64; 3],
+}
+
+impl Level {
+    fn of(tile: &Value) -> Self {
+        let b: Vec<f64> = tile["boundingVolume"]["box"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert!(
+            [4, 5, 6, 8, 9, 10].iter().all(|&k| b[k] == 0.),
+            "rotated box"
+        );
+        let translation = tile["transform"].as_array().map_or([0.; 3], |t| {
+            std::array::from_fn(|i| t[12 + i].as_f64().unwrap())
+        });
+        Self {
+            centre: [b[0], b[1], b[2]],
+            half: [b[3].abs(), b[7].abs(), b[11].abs()],
+            translation,
+        }
+    }
+}
+
+/// C2 decoded-content containment for axis-aligned point archives, in exact arithmetic:
+/// every written position, placed by its GLB scene-root translation and the tile
+/// transforms, lies in its own tile's box and in every ancestor's. With `nested`, every
+/// child box also lies exactly inside its parent's box. Returns the vertices checked.
+fn contained(
+    zip: &mut zip::ZipArchive<std::fs::File>,
+    tile: &Value,
+    path: &mut Vec<Level>,
+    nested: bool,
+) -> usize {
+    let level = Level::of(tile);
+    if let Some(parent) = path.last().filter(|_| nested) {
+        for i in 0..3 {
+            // |translation + centre - parent centre| + half <= parent half.
+            let offset = [level.translation[i], level.centre[i], -parent.centre[i]];
+            assert!(
+                within(&[parent.half[i], -level.half[i]], &offset),
+                "child box escapes its parent on axis {i} at depth {}",
+                path.len()
+            );
+        }
+    }
+    path.push(level);
+    let mut checked = 0;
+    if let Some(uri) = tile["content"]["uri"].as_str() {
+        let glb = Glb::read(zip, uri);
+        let root: [f64; 3] = glb.doc["nodes"][0]
+            .get("translation")
+            .map(|v| serde_json::from_value(v.clone()).unwrap())
+            .unwrap_or([0.; 3]);
+        // glTF (x, y, z) is z-up (x, -z, y).
+        let root = [root[0], -root[2], root[1]];
+        let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
+            ["POSITION"]
+            .as_u64()
+            .unwrap() as usize];
+        let bytes = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
+        for (vertex, p) in bytes.as_chunks::<12>().0.iter().enumerate() {
+            let p: [f64; 3] = std::array::from_fn(|i| {
+                f64::from(f32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().unwrap()))
+            });
+            let p = [p[0], -p[2], p[1]];
+            for i in 0..3 {
+                // In the frame of path[k]: p + root + the translations of the tiles below k.
+                let mut offset = vec![p[i], root[i]];
+                for k in (0..path.len()).rev() {
+                    let mut terms = offset.clone();
+                    terms.push(-path[k].centre[i]);
+                    assert!(
+                        within(&[path[k].half[i]], &terms),
+                        "{uri}: vertex {vertex} axis {i} outside the volume at depth {k} of {}",
+                        path.len() - 1
+                    );
+                    offset.push(path[k].translation[i]);
+                }
+            }
+            checked += 1;
+        }
+    }
+    for child in tile["children"].as_array().into_iter().flatten() {
+        checked += contained(zip, child, path, nested);
+    }
+    path.pop();
+    checked
+}
+
+/// Deterministic xorshift64* in [0, 1).
+fn uniform(state: &mut u64) -> f64 {
+    *state ^= *state >> 12;
+    *state ^= *state << 25;
+    *state ^= *state >> 27;
+    (state.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Point bounds are rounded outward wherever f64 rounding could put a box inside what it
+/// must contain: a tile's half extent covers its written f32 positions (a thin cloud's tile
+/// 2/1/1/3 sat 2^-52 inside its vertex 0), a parent encloses each child's box exactly, and
+/// implicit rows grow by the drift of their accumulated f64 translations. Fixed clouds,
+/// sequential and random, are converted implicit and explicit and checked as C2
+/// decodedContentContainment checks them (exact arithmetic, every ancestor).
+#[test]
+fn point_bounds_contain_decoded_content_exactly_across_fixed_clouds() {
+    let work = tempfile::tempdir().unwrap();
+    // (points, x, y, z extents, LAS scale, sequential)
+    let clouds: &[(u32, f64, f64, f64, f64, bool)] = &[
+        (60, 10., 1e-6, 0., 1e-7, true),
+        (200, 10., 1e-6, 1e-6, 1e-7, true),
+        (300, 3., 3., 0., 1e-7, true),
+        (500, 1000., 1e-3, 1e-3, 1e-6, true),
+        (800, 7.3, 1e-5, 2e-5, 1e-7, true),
+        (1000, 123.4, 0.5, 1e-6, 1e-6, true),
+        (400, 1e-3, 1e-3, 1e-3, 1e-7, false),
+        (700, 50., 50., 50., 1e-7, false),
+        (600, 10., 1e-6, 0., 1e-7, false),
+        (900, 31.7, 2.9, 0.4, 1e-6, false),
+        // Sequential clouds whose implicit rows need the δ drift widening.
+        (100, 7.3, 0., 0., 1e-6, true),
+        (257, 7.3, 0., 0., 1e-3, true),
+        (400, 10., 0., 0., 1e-6, true),
+        (400, 31.7, 0., 0., 1e-7, true),
+        (640, 100., 0., 0., 1e-3, true),
+        (1000, 123.4, 0., 0., 1e-7, true),
+    ];
+    let mut vertices = 0;
+    for (index, &(count, sx, sy, sz, scale, sequential)) in clouds.iter().enumerate() {
+        let input = work.path().join(format!("cloud-{index}.las"));
+        let mut builder = las::Builder::from((1, 2));
+        builder.point_format = las::point::Format::new(3).unwrap();
+        let transform = las::Transform { scale, offset: 0.0 };
+        builder.transforms = las::Vector {
+            x: transform,
+            y: transform,
+            z: transform,
+        };
+        let mut writer = las::Writer::from_path(&input, builder.into_header().unwrap()).unwrap();
+        let mut state = 0x9e37_79b9_7f4a_7c15 ^ index as u64;
+        for i in 0..count {
+            let t = f64::from(i) / f64::from(count - 1);
+            let (x, y) = if sequential {
+                (t * sx, t * sy)
+            } else {
+                (uniform(&mut state) * sx, uniform(&mut state) * sy)
+            };
+            writer
+                .write_point(las::Point {
+                    x,
+                    y,
+                    z: uniform(&mut state) * sz,
+                    gps_time: Some(0.0),
+                    color: Some(las::Color::default()),
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        writer.close().unwrap();
+        for max_points in ["3", "10", "37"] {
+            for explicit in [false, true] {
+                let output = work
+                    .path()
+                    .join(format!("cloud-{index}-{max_points}-{explicit}.3tz"));
+                let options = ["--sourceCrs", "local", "--maxPoints", max_points];
+                let result = call_mode(&input, &output, &options, explicit);
+                assert!(
+                    result.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+                let manifest = document(&mut zip, "tileset.json");
+                let expanded = rusty_tiles::implicit::expand_tileset(&manifest, |uri| {
+                    let mut bytes = Vec::new();
+                    zip.by_name(uri).unwrap().read_to_end(&mut bytes).unwrap();
+                    Ok(bytes)
+                })
+                .unwrap();
+                vertices += contained(&mut zip, &expanded["root"], &mut Vec::new(), explicit);
+            }
+        }
+    }
+    assert!(vertices > 10_000, "{vertices}");
+}
+
 #[test]
 fn empty_and_truncated_sources_fail_as_data_and_clean_staging() {
     let work = tempfile::tempdir().unwrap();

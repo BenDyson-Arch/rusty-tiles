@@ -125,7 +125,7 @@ impl<O: ProducerIo> Tree<'_, O> {
         let index = self.tiles;
         self.tiles += 1;
         let uri = format!("t/{index}.glb");
-        let rounding = emit(
+        let (rounding, reach) = emit(
             &rows,
             center,
             self.layout,
@@ -137,7 +137,10 @@ impl<O: ProducerIo> Tree<'_, O> {
         self.members.push(uri.clone());
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
-        let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6));
+        // The padded estimate can sit an ulp inside the f32 positions actually written;
+        // `reach` is their exact extent about the tile origin, so the own box always
+        // contains every decoded vertex (C2 decodedContentContainment, exact arithmetic).
+        let mut half = std::array::from_fn(|i| (extent[i] / 2. + rounding).max(1e-6).max(reach[i]));
         let mut node = json!({"boundingVolume":{"box":box_json(0., half)},
             "transform":translation(sub(center, parent_center)),
             "geometricError":error + if leaf {0.} else {rounding},
@@ -285,7 +288,7 @@ fn emit(
     path: &Path,
     attempt: &Attempt,
     operations: &mut impl ProducerIo,
-) -> Result<f64, Error> {
+) -> Result<(f64, [f64; 3]), Error> {
     let count = rows.len() / layout.record_len;
     if count > 16_777_217 {
         return Err(Error::Data("too many exact feature IDs in one tile".into()));
@@ -429,7 +432,14 @@ fn emit(
     }
     checkpoint(attempt)?;
     operations.member(path, &glb.finish()?)?;
-    Ok(rounding)
+    Ok((rounding, glb_reach(lo, hi)))
+}
+
+/// The largest absolute f32 position per z-up box axis, widened exactly. glTF stores
+/// `(x, z, -y)`, so box axis 1 reads glTF axis 2 and box axis 2 reads glTF axis 1.
+fn glb_reach(lo: [f32; 3], hi: [f32; 3]) -> [f64; 3] {
+    let reach = |i: usize| f64::from(lo[i].abs().max(hi[i].abs()));
+    [reach(0), reach(2), reach(1)]
 }
 
 /// Tileset-level error; NaN (reported by the caller as a nonfinite extent)
