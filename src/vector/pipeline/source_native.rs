@@ -446,7 +446,6 @@ impl Reader {
                             geometry,
                             intrinsic,
                             surface_fragment: false,
-                            triangle_boundaries: Vec::new(),
                             fragment_path: String::new(),
                         })
                     })();
