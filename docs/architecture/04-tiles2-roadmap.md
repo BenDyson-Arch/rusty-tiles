@@ -62,10 +62,13 @@ source identity. Shape them by what the large-mesh tiler of milestone 3 will
 need, so that the tiler becomes their long-term consumer. Establish a shared
 generated explicit-node/document serializer at the existing `src/tileset_node.rs`
 boundary, consumed first by a retained producer: the vector point/line writer
-in `src/vector/pipeline/store.rs`. No work goes into migrating writers that are
-being retired, including the legacy mesh writers in `src/mesh_archive/` and
-`src/tile.rs`. Retain only writer behavior independently established for this
-supported domain. Keep
+in `src/vector/pipeline/store.rs`. No work goes into migrating the legacy mesh
+paths that the large-mesh tiler supersedes (user decision: retired once the
+tiler lands): `mesh-to-3tz` in `src/tile.rs` and the mesh archive tileset in
+`src/mesh_archive/encode.rs`. This roadmap does not change the disposition of
+the W1 API in `src/mesh_archive/model.rs` recorded in the
+[public surface inventory](public-surface-inventory.md). Retain only writer
+behavior independently established for this supported domain. Keep
 format meaning separate from paths, staging and publication; do not round-trip
 generated hierarchy state through loosely interpreted JSON. Imported documents
 keep a distinct reader and validation boundary, including a deliberate
@@ -210,7 +213,7 @@ at `538c0bde4623e8ad9561e444a19769274805eaa9`, using its nine retained independe
 controls and applicable checks. Then implement the bounded shared explicit
 Tiles 1.1 serializer below with the retained vector point/line writer as its
 first caller; the next concrete caller is one retained implicit producer. Do not
-migrate the retiring mesh writers; the large-mesh tiler becomes the serializer's
+migrate the superseded mesh paths; the large-mesh tiler becomes the serializer's
 long-term caller in milestone 3. Preserve and diagnose C2's
 `BQ.references-pair` failure at its owning reference-budget boundary: the
 charged total must admit and one fewer reference must refuse. This is an
@@ -236,14 +239,16 @@ the explicit point/line output of the vector writer in
 `src/vector/pipeline/store.rs` consume it. This producer already uses
 `src/tileset_node.rs`, writes point/line content as plain GLB rather than the
 b3dm-wrapped polygon fills, carries a stable per-feature source identity that
-Cesium can pick, and places a local frame at a WGS84 anchor; the point cloud
-writer's feature IDs are per-tile indices, and `src/tile.rs` is a retiring mesh
-writer. Introduce only the owned hierarchy, bounds, placement, content
+Cesium can pick, and places a local frame at a WGS84 anchor. That identity holds
+with point aggregation off, its default; opt-in aggregated point parents omit
+`_source_id`, so the fixture runs without aggregation. The point cloud writer's
+feature IDs are per-tile indices, and `src/tile.rs` is the superseded legacy
+`mesh-to-3tz` path. Introduce only the owned hierarchy, bounds, placement, content
 references and source identity this caller needs, in a shape the large-mesh
 tiler can later consume. The `Bounds`, `ResolvedPlacement` and `RootContent`
 contracts in `src/mesh_archive/` are design input for the tiler's needs; move a
-type into the shared contract only where its evidence supports retention, and
-leave their retiring writers unmigrated. Resolve values at their owning
+type into the shared contract only where its evidence supports retention,
+without migrating the superseded mesh paths. Resolve values at their owning
 boundaries, and audit serialization and metadata attachment for this domain.
 Avoid a broad abstraction for future formats and avoid requiring full explicit
 and implicit production emitters in
