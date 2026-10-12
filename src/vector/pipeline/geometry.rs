@@ -653,16 +653,26 @@ fn retain_intrinsic(
         .collect()
 }
 
+/// Simplify one feature for a parent tile whose content is centred on `center`
+/// and encoded with `repair`. Each simplified polygon is triangulated exactly
+/// as the tile encoder will (`polygon_for` in that frame, including its loop
+/// coverage check); a candidate it refuses keeps its source polygon, so a
+/// parent never fails at encoding time on a polygon simplification made.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn simplify(
     feature: &Feature,
     tolerance: f64,
     locked: &BTreeSet<PointKey>,
     reports: &mut Vec<Value>,
     parent_repair: bool,
+    center: Point,
+    repair: bool,
 ) -> Result<(Feature, f64), FeatureFailure> {
     let mut result = feature.clone();
     let mut error: f64 = 0.;
     let mut fallback = false;
+    // Simplified polygons: (index, source rings, source chart rings, error).
+    let mut changed = Vec::new();
     match &mut result.geometry {
         Geometry::Point(_) | Geometry::MultiPoint(_) => {}
         Geometry::LineString(p) => {
@@ -702,8 +712,15 @@ pub(super) fn simplify(
                     }
                 }
                 if reason != Some("simplification would change intrinsic source topology") {
+                    if candidate != *rings {
+                        let source = result
+                            .intrinsic
+                            .as_ref()
+                            .and_then(|intrinsic| intrinsic.rings(index))
+                            .map(<[Vec<Point>]>::to_vec);
+                        changed.push((index, rings.clone(), source, e));
+                    }
                     *rings = candidate;
-                    error = error.max(e);
                     if let Some(source_candidate) = source_candidate {
                         let intrinsic = result.intrinsic.as_mut().unwrap();
                         match &mut intrinsic.geometry {
@@ -717,6 +734,38 @@ pub(super) fn simplify(
                     fallback |= reason != "nonplanar polygon retained";
                     reports.push(json!({"sourceId":feature.source_id(),"reason":reason}));
                 }
+            }
+        }
+    }
+    for (index, source, chart, e) in changed {
+        let rings = match &result.geometry {
+            Geometry::Polygon(rings) => rings,
+            Geometry::MultiPolygon(polygons) => &polygons[index],
+            _ => return Err(data("simplified polygon correspondence was lost")),
+        };
+        let local: Vec<Vec<_>> = rings
+            .iter()
+            .map(|r| r.iter().map(|p| sub(*p, center)).collect())
+            .collect();
+        match polygon_for(&result, &local, index, center, repair) {
+            Ok(_) => error = error.max(e),
+            Err(FeatureFailure::Fatal(cause)) => return Err(FeatureFailure::Fatal(cause)),
+            Err(refusal) => {
+                match &mut result.geometry {
+                    Geometry::Polygon(rings) => *rings = source,
+                    Geometry::MultiPolygon(polygons) => polygons[index] = source,
+                    _ => unreachable!(),
+                }
+                if let (Some(intrinsic), Some(chart)) = (result.intrinsic.as_mut(), chart) {
+                    match &mut intrinsic.geometry {
+                        Geometry::Polygon(rings) => *rings = chart,
+                        Geometry::MultiPolygon(polygons) => polygons[index] = chart,
+                        _ => return Err(data("intrinsic polygon correspondence was lost")),
+                    }
+                }
+                fallback = true;
+                reports.push(json!({"sourceId":feature.source_id(),
+                    "reason":"simplified polygon would not encode; source polygon retained","refusal":refusal.to_string()}));
             }
         }
     }
@@ -1220,11 +1269,21 @@ mod tests {
         ring.push(ring[0]);
         let feature: Feature=serde_json::from_value(json!({"properties":{"_source_id":"1","_source_layer":"bow","name":"source"},"geometry":{"type":"Polygon","coordinates":[ring]}})).unwrap();
         let locked = BTreeSet::from([key(ring[20])]);
-        let (baseline, error) = simplify(&feature, 3., &locked, &mut Vec::new(), false).unwrap();
+        let (baseline, error) = simplify(
+            &feature,
+            3.,
+            &locked,
+            &mut Vec::new(),
+            false,
+            [0.; 3],
+            false,
+        )
+        .unwrap();
         assert_eq!(baseline.geometry, feature.geometry);
         assert_eq!(error, 0.);
         let mut reports = Vec::new();
-        let (coarse, error) = simplify(&feature, 3., &locked, &mut reports, true).unwrap();
+        let (coarse, error) =
+            simplify(&feature, 3., &locked, &mut reports, true, [0.; 3], false).unwrap();
         let Geometry::MultiLineString(lines) = coarse.geometry else {
             panic!("expected parent outline")
         };
@@ -1234,7 +1293,16 @@ mod tests {
         assert!(error <= 3.);
         assert_eq!(coarse.properties, feature.properties);
         assert_eq!(reports.last().unwrap()["substitution"], "parentOutline");
-        let (near, error) = simplify(&feature, 0.1, &locked, &mut Vec::new(), true).unwrap();
+        let (near, error) = simplify(
+            &feature,
+            0.1,
+            &locked,
+            &mut Vec::new(),
+            true,
+            [0.; 3],
+            false,
+        )
+        .unwrap();
         assert_eq!(near.geometry, feature.geometry);
         assert_eq!(error, 0.);
         let mut holes = feature.clone();
@@ -1249,8 +1317,16 @@ mod tests {
             ring
         });
         holes.geometry = Geometry::Polygon(circles.to_vec());
-        let (coarse, error) =
-            simplify(&holes, 6., &BTreeSet::new(), &mut Vec::new(), true).unwrap();
+        let (coarse, error) = simplify(
+            &holes,
+            6.,
+            &BTreeSet::new(),
+            &mut Vec::new(),
+            true,
+            [0.; 3],
+            false,
+        )
+        .unwrap();
         let Geometry::MultiLineString(lines) = coarse.geometry else {
             panic!("expected bounded hole outlines")
         };

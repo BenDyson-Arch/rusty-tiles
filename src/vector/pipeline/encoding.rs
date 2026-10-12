@@ -412,7 +412,8 @@ fn polygon_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
 /// loopIndices count but indexes it by triangle vertex number, so a triangle
 /// corner numbered at or beyond that count silently loses its triangle.
 /// `polygon_for` refuses a polygon with a vertex outside its loops when the
-/// feature is admitted (and again for simplified parents), and each polygon or
+/// feature is admitted, and `simplify` re-runs it in the parent tile's frame,
+/// keeping the source polygon when it refuses a simplified one. Each polygon or
 /// fill triangle owns its vertices, so the loop list (with restarts) is never
 /// shorter than the vertex list here. This is the final guard before publication.
 fn cesium_loop_remap_fits(vertices: usize, indices: &[u32], loops: &[u32]) -> FeatureResult<()> {
@@ -902,6 +903,8 @@ pub(super) fn encode(
                 &locked,
                 &mut result.reports,
                 options.parent_repair,
+                center,
+                repair,
             )
             .map_err(FeatureFailure::into_error)?;
             error = error.max(e);
@@ -1628,6 +1631,10 @@ mod tests {
                 ..Default::default()
             };
             for feature in fitting_fixtures() {
+                if feature.surface_fragment {
+                    // The fragment's fill polygon and its boundary lines.
+                    assert_eq!(fitting_source(&feature, &options).primitives, 2);
+                }
                 let written = written_len(fitting_source(&feature, &options), policy).unwrap();
                 let counted = counted_len(fitting_source(&feature, &options), policy).unwrap();
                 assert_eq!(
@@ -2419,6 +2426,109 @@ mod tests {
             let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
             assert!(candidate.node.is_none());
             assert_eq!(candidate.reason, Some(expected));
+        }
+    }
+
+    /// A parent simplification that the tile encoder would refuse keeps the
+    /// source polygon instead of failing the build at level > 0. Removing the
+    /// raised exterior vertex flattens the best-fit plane, and in that plane the
+    /// raised hole crosses the exterior: valid before simplification, refused
+    /// by `polygon_for` (topology, or loop coverage after repair) after it.
+    #[test]
+    fn parent_simplification_the_encoder_refuses_keeps_the_source_polygon() {
+        let exterior = vec![
+            [0., 0., 0.],
+            [50., 6., 0.],
+            [100., 0., 0.],
+            [100., 0., 100.],
+            [0., 0., 100.],
+            [0., 0., 0.],
+        ];
+        let hole = vec![
+            [40., 30., 90.],
+            [40., 30., 100.3],
+            [60., 30., 100.3],
+            [60., 30., 90.],
+            [40., 30., 90.],
+        ];
+        let flattened: Vec<_> = exterior.iter().copied().filter(|p| p[1] == 0.).collect();
+        let mut source = point_feature();
+        source.geometry = Geometry::Polygon(vec![exterior.clone(), hole.clone()]);
+        for repair in [false, true] {
+            geometry::polygon_for(
+                &source,
+                &[exterior.clone(), hole.clone()],
+                0,
+                [0.; 3],
+                repair,
+            )
+            .unwrap();
+            let refused = geometry::polygon_for(
+                &source,
+                &[flattened.clone(), hole.clone()],
+                0,
+                [0.; 3],
+                repair,
+            );
+            assert!(
+                matches!(refused, Err(FeatureFailure::Rejected(_))),
+                "repair {repair}: the flattened candidate must be refused"
+            );
+            let root = tempfile::tempdir().unwrap();
+            std::fs::create_dir(root.path().join("t")).unwrap();
+            let spool = root.path().join("spool.sqlite");
+            let db = rusqlite::Connection::open(&spool).unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            let feature = json!({"properties":{"_source_id":"raised"},"geometry":{"type":"Polygon","coordinates":[exterior, hole]}});
+            db.execute(
+                "INSERT INTO features VALUES(1,'',?1)",
+                [feature.to_string()],
+            )
+            .unwrap();
+            // Lock every vertex except the raised one, which RDP then removes.
+            for p in exterior.iter().chain(&hole) {
+                db.execute(
+                    "INSERT INTO vertices VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![p[0], p[1], p[2], i32::from(p[1] != 6.)],
+                )
+                .unwrap();
+            }
+            drop(db);
+            let options = VectorOptions {
+                lod: crate::vector::VectorLodOptions {
+                    tolerance_metres: 80.,
+                    levels: 3,
+                },
+                max_bytes: 1 << 20,
+                ..Default::default()
+            };
+            let schemas = BTreeMap::new();
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let encoder = Encoder {
+                spool: &spool,
+                max_features: 1,
+                repair,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+                policy: ProducerPolicy::new(false).unwrap(),
+                attempt: &attempt,
+            };
+            let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
+            let node = candidate.node.expect("the parent keeps the source polygon");
+            assert_eq!(
+                node["extras"]["geometryErrorMetres"],
+                json!(0.),
+                "repair {repair}"
+            );
+            assert_eq!(node["extras"]["vertices"], json!(9), "repair {repair}");
+            assert!(
+                candidate.reports.iter().any(|report| report["reason"]
+                    == "simplified polygon would not encode; source polygon retained"),
+                "repair {repair}: {:?}",
+                candidate.reports
+            );
         }
     }
 }

@@ -147,6 +147,67 @@ fn original_sudan_and_antarctica_fill_without_repair_or_source_vertex_changes() 
         assert_eq!(radial_hits(&antarctica, lon, lat), 1, "{lon},{lat}");
     }
 }
+/// `orient_loops` decides each loop from directed triangle edges, so it holds
+/// for a ring spanning a hemisphere, which no single plane sees from one side:
+/// Antarctica's main ring covers every longitude. Every ring wound the wrong
+/// way is turned back, and every loop edge that is a triangle edge runs with
+/// its part's (outward-facing) triangles, never against them. (Sudan's one thin sliver triangle, whose outward 3D facing
+/// disagrees with its chart orientation, is the documented local exception.)
+#[test]
+fn hemisphere_spanning_rings_wind_with_their_triangles() {
+    let countries = countries();
+    let antarctica = meshes(&countries[1]);
+    let span = antarctica
+        .iter()
+        .map(|m| {
+            let lon = m.source_positions.as_ref().unwrap().iter().map(|p| p[0]);
+            lon.clone().fold(f64::MIN, f64::max) - lon.fold(f64::MAX, f64::min)
+        })
+        .fold(0., f64::max);
+    assert!(span > 359., "longitude span {span}");
+    for m in &antarctica {
+        // Wound the wrong way, every ring is turned back by its triangle edges.
+        let mut flipped = m.loops.clone();
+        for ring in flipped.split_mut(|i| *i == u32::MAX) {
+            ring.reverse();
+        }
+        assert_ne!(flipped, m.loops);
+        orient_loops(
+            &m.indices,
+            &mut flipped,
+            &m.triangle_offsets,
+            &m.loop_offsets,
+        );
+        assert_eq!(flipped, m.loops);
+        let range = |offsets: &[u32], part: usize, len: usize| {
+            offsets[part] as usize..offsets.get(part + 1).map_or(len, |o| *o as usize)
+        };
+        for part in 0..m.loop_offsets.len() {
+            let edges: BTreeSet<(u32, u32)> = m.indices
+                [range(&m.triangle_offsets, part, m.indices.len())]
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+            .collect();
+            for ring in m.loops[range(&m.loop_offsets, part, m.loops.len())]
+                .split(|i| *i == u32::MAX)
+                .filter(|ring| !ring.is_empty())
+            {
+                let next = |i: usize| ring[(i + 1) % ring.len()];
+                let along = (0..ring.len())
+                    .filter(|i| edges.contains(&(ring[*i], next(*i))))
+                    .count();
+                let against = (0..ring.len())
+                    .filter(|i| edges.contains(&(next(*i), ring[*i])))
+                    .count();
+                assert_eq!(against, 0, "a loop edge runs against its triangles");
+                // Collapsed pole/seam triangles drop at most their own edges.
+                assert!(along + 2 >= ring.len(), "{along} of {}", ring.len());
+            }
+        }
+    }
+}
 #[test]
 fn varying_height_geographic_walls_keep_the_three_dimensional_policy() {
     let wall = feature(
@@ -245,7 +306,16 @@ fn small_constant_height_polygons_still_simplify_with_source_correspondence() {
         .collect();
     ring.push(ring[0]);
     let f = feature(Geometry::Polygon(vec![ring]), true);
-    let (coarse, error) = simplify(&f, 0.05, &BTreeSet::new(), &mut vec![], false).unwrap();
+    let (coarse, error) = simplify(
+        &f,
+        0.05,
+        &BTreeSet::new(),
+        &mut vec![],
+        false,
+        [0.; 3],
+        false,
+    )
+    .unwrap();
     assert!(coarse.geometry.size() < f.geometry.size() / 4);
     assert!(error <= 0.05);
     assert_eq!(
