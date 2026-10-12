@@ -116,6 +116,109 @@ fn hex(bytes: &[u8]) -> String {
         .collect()
 }
 
+// Codec fixtures supply their own byte-domain box pyramid. This helper is
+// deliberately not a color/normal/alpha semantic mip implementation; H8 owns it.
+fn fixture_mips(rgba: &[u8], width: u32, height: u32, params: Params) -> Vec<Vec<u8>> {
+    let mut levels = vec![rgba.to_vec()];
+    let (mut w, mut h) = (width, height);
+    if params.mipmaps && w > 0 && h > 0 && rgba.len() as u64 == u64::from(w) * u64::from(h) * 4 {
+        while w > 1 || h > 1 {
+            let (nw, nh) = ((w >> 1).max(1), (h >> 1).max(1));
+            let prev = levels.last().unwrap();
+            let mut next = vec![0; (nw * nh * 4) as usize];
+            for y in 0..nh {
+                for x in 0..nw {
+                    for channel in 0..4 {
+                        let mut sum = 0u32;
+                        for dy in 0..2 {
+                            for dx in 0..2 {
+                                let sx = (2 * x + dx).min(w - 1);
+                                let sy = (2 * y + dy).min(h - 1);
+                                sum += u32::from(prev[((sy * w + sx) * 4 + channel) as usize]);
+                            }
+                        }
+                        next[((y * nw + x) * 4 + channel) as usize] = ((sum + 2) / 4) as u8;
+                    }
+                }
+            }
+            levels.push(next);
+            w = nw;
+            h = nh;
+        }
+    }
+    levels
+}
+
+fn fixture_levels<'a>(images: &'a [Vec<u8>], width: u32, height: u32) -> Vec<MipLevel<'a>> {
+    images
+        .iter()
+        .enumerate()
+        .map(|(i, rgba)| MipLevel {
+            rgba,
+            width: (width >> i).max(1),
+            height: (height >> i).max(1),
+        })
+        .collect()
+}
+
+fn encode_fixture(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    // Validate the original request first, preserving invalid-input controls.
+    check_request(rgba, width, height, mode, params)?;
+    let images = fixture_mips(rgba, width, height, params);
+    encode_ktx2_mips(
+        &fixture_levels(&images, width, height),
+        mode,
+        Params {
+            mipmaps: false,
+            ..params
+        },
+    )
+}
+
+fn encode_fixture_unverified(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    check_request(rgba, width, height, mode, params)?;
+    let images = fixture_mips(rgba, width, height, params);
+    let levels = fixture_levels(&images, width, height);
+    let params = Params {
+        mipmaps: false,
+        ..params
+    };
+    check_mips(&levels, mode, params)?;
+    encode_mips_unverified(&levels, mode, params)
+}
+
+fn verify_fixture(
+    ktx2: &[u8],
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Verified, JobError> {
+    let images = fixture_mips(rgba, width, height, params);
+    verify_ktx2_mips(
+        ktx2,
+        &fixture_levels(&images, width, height),
+        mode,
+        Params {
+            mipmaps: false,
+            ..params
+        },
+    )
+}
+
 const COLOUR: Params = Params {
     effort: 0,
     transfer: Transfer::Srgb,
@@ -148,8 +251,8 @@ fn encode_is_byte_deterministic_and_reports_digests() {
     let (width, height) = (192, 128);
     let image = photo(width, height, 1, true);
     for (name, mode, params) in CASES {
-        let first = encode_ktx2(&image, width, height, mode, params).unwrap();
-        let second = encode_ktx2(&image, width, height, mode, params).unwrap();
+        let first = encode_fixture(&image, width, height, mode, params).unwrap();
+        let second = encode_fixture(&image, width, height, mode, params).unwrap();
         assert!(first == second, "{name}: repeated encodes differ");
         // Logged so CI runs on every target can be compared.
         println!("basisu-ktx2-digest {name} {} {}", first.len(), hex(&first));
@@ -162,7 +265,7 @@ fn concurrent_encodes_match_sequential_bytes() {
     let image = photo(width, height, 3, false);
     let sequential: Vec<Vec<u8>> = CASES
         .iter()
-        .map(|&(_, mode, params)| encode_ktx2(&image, width, height, mode, params).unwrap())
+        .map(|&(_, mode, params)| encode_fixture(&image, width, height, mode, params).unwrap())
         .collect();
     let concurrent: Vec<Vec<Vec<u8>>> = std::thread::scope(|scope| {
         let workers: Vec<_> = (0..4)
@@ -174,7 +277,7 @@ fn concurrent_encodes_match_sequential_bytes() {
                     for step in 0..CASES.len() {
                         let index = (step + worker) % CASES.len();
                         let (_, mode, params) = CASES[index];
-                        out[index] = encode_ktx2(image, width, height, mode, params).unwrap();
+                        out[index] = encode_fixture(image, width, height, mode, params).unwrap();
                     }
                     out
                 })
@@ -203,8 +306,8 @@ fn round_trips_meet_psnr_thresholds() {
         (Mode::Uastc { zstd: true }, COLOUR, 40.5),
         (Mode::Uastc { zstd: false }, DATA, 40.5),
     ] {
-        let encoded = encode_ktx2(&image, width, height, mode, params).unwrap();
-        let verified = verify_ktx2(&encoded, &image, width, height, mode, params).unwrap();
+        let encoded = encode_fixture(&image, width, height, mode, params).unwrap();
+        let verified = verify_fixture(&encoded, &image, width, height, mode, params).unwrap();
         assert_eq!(verified.levels, 9);
         let decoded = decode_level_rgba(&encoded, 0, width, height).unwrap();
         let psnr = psnr_db(&image, &decoded);
@@ -229,7 +332,7 @@ fn edge_shapes_encode_and_verify() {
         (64, 64, noise(64, 64, 12, true)),
     ] {
         for (name, mode, params) in CASES {
-            encode_ktx2(&image, width, height, mode, params)
+            encode_fixture(&image, width, height, mode, params)
                 .unwrap_or_else(|error| panic!("{name} {width}x{height}: {error}"));
         }
     }
@@ -252,9 +355,9 @@ fn verification_rejects_corrupted_output() {
     let (width, height) = (128, 96);
     let image = photo(width, height, 4, false);
     for (name, mode, params) in CASES {
-        let good = encode_ktx2(&image, width, height, mode, params).unwrap();
+        let good = encode_fixture(&image, width, height, mode, params).unwrap();
         let verify =
-            |bytes: &[u8], input: &[u8]| verify_ktx2(bytes, input, width, height, mode, params);
+            |bytes: &[u8], input: &[u8]| verify_fixture(bytes, input, width, height, mode, params);
         // Control: the untouched output verifies.
         verify(&good, &image).unwrap();
 
@@ -346,7 +449,7 @@ fn requests_outside_the_domain_are_refused() {
         ),
     ];
     for (rgba, width, height, mode, params, kind) in cases {
-        let error = encode_ktx2(rgba, width, height, mode, params).unwrap_err();
+        let error = encode_fixture(rgba, width, height, mode, params).unwrap_err();
         assert_eq!(
             error.kind(),
             kind,
@@ -404,13 +507,13 @@ fn silence_child() {
     }
     let image = photo(64, 48, 6, true);
     for (_, mode, params) in CASES {
-        let good = encode_ktx2(&image, 64, 48, mode, params).unwrap();
+        let good = encode_fixture(&image, 64, 48, mode, params).unwrap();
         let mut corrupted = good.clone();
         for byte in &mut corrupted[level0_range(&good)] {
             *byte ^= 0x5A;
         }
-        assert!(verify_ktx2(&corrupted, &image, 64, 48, mode, params).is_err());
-        assert!(verify_ktx2(&good[..100], &image, 64, 48, mode, params).is_err());
+        assert!(verify_fixture(&corrupted, &image, 64, 48, mode, params).is_err());
+        assert!(verify_fixture(&good[..100], &image, 64, 48, mode, params).is_err());
     }
     assert!(decode_level_rgba(b"not a ktx2 file", 0, 1, 1).is_err());
 
@@ -494,7 +597,8 @@ fn measure_floors() {
                     transfer,
                     mipmaps: true,
                 };
-                let encoded = encode_unverified(image, *width, *height, mode, params).unwrap();
+                let encoded =
+                    encode_fixture_unverified(image, *width, *height, mode, params).unwrap();
                 let decoded = decode_level_rgba(&encoded, 0, *width, *height).unwrap();
                 let per_byte = |error: u64| error as f64 / image.len() as f64;
                 let correlation = |d: Detail| {
@@ -660,7 +764,7 @@ fn hostile_child() {
     ];
     for (rgba, width, height, kind) in refused {
         for (mode, params) in all_modes {
-            let error = encode_ktx2(rgba, width, height, mode, params).unwrap_err();
+            let error = encode_fixture(rgba, width, height, mode, params).unwrap_err();
             assert_eq!(error.kind(), kind, "{width}x{height} {mode:?}: {error}");
         }
     }
@@ -729,12 +833,12 @@ fn hostile_child() {
     // Degenerate and extreme content inside the domain encodes and verifies.
     for (name, width, height, image) in extreme_images() {
         for (mode, params) in all_modes {
-            encode_ktx2(&image, width, height, mode, params)
+            encode_fixture(&image, width, height, mode, params)
                 .unwrap_or_else(|error| panic!("{name} {mode:?} {params:?}: {error}"));
         }
         for effort in [5, MAX_EFFORT] {
             if u64::from(width) * u64::from(height) <= 4096 {
-                encode_ktx2(&image, width, height, etc1s, Params { effort, ..COLOUR })
+                encode_fixture(&image, width, height, etc1s, Params { effort, ..COLOUR })
                     .unwrap_or_else(|error| panic!("{name} effort {effort}: {error}"));
             }
         }
@@ -765,7 +869,7 @@ fn hostile_child() {
     let image = photo(64, 48, 25, true);
     let mut rng = Rng(26);
     for (mode, params) in all_modes {
-        let good = encode_ktx2(&image, 64, 48, mode, params).unwrap();
+        let good = encode_fixture(&image, 64, 48, mode, params).unwrap();
         let _ = decode_level_rgba(&[], 0, 1, 1);
         let _ = decode_level_rgba(&good[..12], 0, 64, 48);
         let _ = decode_level_rgba(&good, 99, 1, 1);
@@ -792,7 +896,7 @@ fn hostile_child() {
                 bad[at] ^= 1 << (rng.next() % 8);
             }
             let _ = decode_level_rgba(&bad, 0, 64, 48);
-            let _ = verify_ktx2(&bad, &image, 64, 48, mode, params);
+            let _ = verify_fixture(&bad, &image, 64, 48, mode, params);
         }
     }
     println!("hostile-child-done");
@@ -816,7 +920,7 @@ fn etc1s_detail_floor_rejects_a_wrong_decode_the_error_floor_accepts() {
         let other = noise(width, height, seed + 100, false);
         for quality in [1, 40, 90] {
             let mode = Mode::Etc1s { quality };
-            let encoded = encode_ktx2(&image, width, height, mode, COLOUR).unwrap();
+            let encoded = encode_fixture(&image, width, height, mode, COLOUR).unwrap();
             let decoded = decode_level_rgba(&encoded, 0, width, height).unwrap();
             let allowed = ETC1S_FLOOR.ratio * block_mean_sse(&other, width, height)
                 + ETC1S_FLOOR.slack_per_byte * other.len() as u64;
@@ -824,7 +928,7 @@ fn etc1s_detail_floor_rejects_a_wrong_decode_the_error_floor_accepts() {
                 sse(&other, &decoded) <= allowed,
                 "control: the error floor alone accepts the wrong input"
             );
-            let error = verify_ktx2(&encoded, &other, width, height, mode, COLOUR).unwrap_err();
+            let error = verify_fixture(&encoded, &other, width, height, mode, COLOUR).unwrap_err();
             assert_eq!(error.kind(), JobErrorKind::InvalidState);
             assert!(error.to_string().contains("detail"), "{error}");
         }
@@ -837,7 +941,7 @@ fn detail_floor_skips_detail_a_codec_cannot_carry() {
     // give, is not held to it; low-amplitude noise is under the variance gate.
     for image in [chroma_noise(64, 64, 33), low_noise(64, 64, 34, 3)] {
         for quality in [1, 40] {
-            encode_ktx2(&image, 64, 64, Mode::Etc1s { quality }, COLOUR).unwrap();
+            encode_fixture(&image, 64, 64, Mode::Etc1s { quality }, COLOUR).unwrap();
         }
     }
 }
@@ -1125,7 +1229,7 @@ fn profile_class_floors_hold_with_an_independent_decoder() {
             Class::Normal => (&normal, &[0, 1, 2]),
         };
         let (mode, params) = profile_mode(floor.profile, floor.class);
-        let encoded = encode_ktx2(image, size, size, mode, params).unwrap();
+        let encoded = encode_fixture(image, size, size, mode, params).unwrap();
         let decoded = independent_decode(&encoded, size, size);
         let (psnr, max_error) = channel_error(image, &decoded, channels);
         let (mut mean, mut p99) = (0.0, 0.0);
@@ -1165,11 +1269,435 @@ fn profile_class_floors_hold_with_an_independent_decoder() {
     // Sensitivity control: the same metric on a decode of the wrong image
     // misses even the loosest floor.
     let (mode, params) = profile_mode("quality", Class::Colour);
-    let encoded = encode_ktx2(&colour, size, size, mode, params).unwrap();
+    let encoded = encode_fixture(&colour, size, size, mode, params).unwrap();
     let decoded = independent_decode(&encoded, size, size);
     let (psnr, max_error) = channel_error(&other_image(&colour, size), &decoded, &[0, 1, 2]);
     assert!(
         psnr < 22.0 && max_error > 112,
         "control: {psnr:.2} dB, max error {max_error}"
     );
+}
+
+#[test]
+fn caller_mips_survive_encode_and_every_level_is_verified() {
+    let params = Params {
+        mipmaps: false,
+        ..DATA
+    };
+    let width = 8u32;
+    let height = 4u32;
+    // Each sentinel is unrelated to any filter of its parent. Independent
+    // decoding must recover it, including tiny terminal levels.
+    let colors = [
+        [240, 16, 32, 255],
+        [16, 224, 48, 160],
+        [32, 48, 240, 96],
+        [208, 192, 16, 32],
+    ];
+    let images: Vec<Vec<u8>> = colors
+        .iter()
+        .enumerate()
+        .map(|(i, color)| color.repeat(((width >> i).max(1) * (height >> i).max(1)) as usize))
+        .collect();
+    let levels = fixture_levels(&images, width, height);
+    for mode in [Mode::Etc1s { quality: 90 }, Mode::Uastc { zstd: true }] {
+        let encoded = encode_ktx2_mips(&levels, mode, params).unwrap();
+        let independent = basisu::Transcoder::new(&encoded).unwrap();
+        for (index, mip) in levels.iter().enumerate() {
+            let decoded = independent
+                .transcode(
+                    index as u32,
+                    basisu::TargetFormat::Rgba32,
+                    basisu::DecodeFlags::NONE,
+                )
+                .unwrap();
+            assert_eq!(decoded.len(), mip.rgba.len());
+            assert!(
+                decoded
+                    .iter()
+                    .zip(mip.rgba)
+                    .all(|(a, b)| a.abs_diff(*b) <= 8),
+                "supplied sentinel at mip {index} was replaced"
+            );
+        }
+        let mut wrong_images = images.clone();
+        // Base remains exact; every non-base level separately must fail.
+        for index in 1..levels.len() {
+            wrong_images[index].fill(0);
+            let wrong = fixture_levels(&wrong_images, width, height);
+            let error = verify_ktx2_mips(&encoded, &wrong, mode, params).unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::InvalidState);
+            assert!(error.to_string().contains(&format!("mip {index}")));
+            wrong_images[index] = images[index].clone();
+        }
+    }
+}
+
+#[test]
+fn supplied_chain_validation_and_legacy_generation_refusal() {
+    let mode = Mode::Uastc { zstd: false };
+    let params = Params {
+        mipmaps: false,
+        ..DATA
+    };
+    let base = vec![128; 4 * 4 * 4];
+    let half = vec![128; 2 * 2 * 4];
+    let last = vec![128; 4];
+    let full = [
+        MipLevel {
+            rgba: &base,
+            width: 4,
+            height: 4,
+        },
+        MipLevel {
+            rgba: &half,
+            width: 2,
+            height: 2,
+        },
+        MipLevel {
+            rgba: &last,
+            width: 1,
+            height: 1,
+        },
+    ];
+    assert!(encode_ktx2_mips(&full, mode, params).is_ok());
+    assert!(encode_ktx2_mips(&full[..1], mode, params).is_ok());
+    for chain in [&full[..0], &full[..2]] {
+        assert_eq!(
+            encode_ktx2_mips(chain, mode, params).unwrap_err().kind(),
+            JobErrorKind::InvalidInput
+        );
+    }
+    let mut bad = full;
+    bad[1].width = 1;
+    assert_eq!(
+        encode_ktx2_mips(&bad, mode, params).unwrap_err().kind(),
+        JobErrorKind::InvalidInput
+    );
+    bad = full;
+    bad[2].rgba = &last[..3];
+    assert_eq!(
+        encode_ktx2_mips(&bad, mode, params).unwrap_err().kind(),
+        JobErrorKind::InvalidInput
+    );
+    assert_eq!(
+        super::encode_ktx2(&base, 4, 4, mode, DATA)
+            .unwrap_err()
+            .kind(),
+        JobErrorKind::InvalidRequest
+    );
+    assert!(super::encode_ktx2(&base, 4, 4, mode, params).is_ok());
+    assert_eq!(
+        raw_encode(
+            &base,
+            4,
+            4,
+            ffi::FORMAT_UASTC_LDR_4X4,
+            100,
+            0,
+            ffi::FLAG_MIPMAPS
+        ),
+        ffi::STATUS_INVALID_ARGUMENT
+    );
+}
+
+#[test]
+fn explicit_pyramids_accept_rectangular_odd_and_one_dimensional_images() {
+    let params = Params {
+        mipmaps: false,
+        ..DATA
+    };
+    for (width, height) in [(7, 3), (1, 8), (8, 1), (1, 1)] {
+        let images: Vec<Vec<u8>> = (0..expected_levels(width, height, true))
+            .map(|level| {
+                [64u8, 128, 192, 255]
+                    .repeat(((width >> level).max(1) * (height >> level).max(1)) as usize)
+            })
+            .collect();
+        let levels = fixture_levels(&images, width, height);
+        let encoded = encode_ktx2_mips(&levels, Mode::Uastc { zstd: true }, params).unwrap();
+        assert_eq!(
+            verify_ktx2_mips(&encoded, &levels, Mode::Uastc { zstd: true }, params)
+                .unwrap()
+                .levels,
+            levels.len() as u32
+        );
+    }
+}
+
+#[test]
+fn native_mip_descriptors_are_validated_before_pixel_reads() {
+    let pixel = [0u8; 4];
+    let valid = ffi::MipLevel {
+        rgba: pixel.as_ptr(),
+        length: 4,
+        width: 1,
+        height: 1,
+    };
+    let mut out = std::ptr::null_mut();
+    let mut length = 0usize;
+    // Every refused descriptor is a valid allocation. Its pixels may be null
+    // because rejection must precede library entry or any pixel read.
+    let refused = [
+        ffi::MipLevel {
+            rgba: std::ptr::null(),
+            length: 4,
+            width: 1,
+            height: 1,
+        },
+        ffi::MipLevel {
+            rgba: pixel.as_ptr(),
+            length: 3,
+            width: 1,
+            height: 1,
+        },
+        ffi::MipLevel {
+            rgba: pixel.as_ptr(),
+            length: 4,
+            width: 0,
+            height: 1,
+        },
+        ffi::MipLevel {
+            rgba: pixel.as_ptr(),
+            length: 4,
+            width: MAX_EDGE + 1,
+            height: 1,
+        },
+    ];
+    for descriptor in refused {
+        // SAFETY: descriptor and outputs are valid; invalid lengths/dimensions
+        // are checked before its pixel pointer is dereferenced.
+        let status = unsafe {
+            ffi::rt_basisu_encode_mips(
+                &descriptor,
+                1,
+                ffi::FORMAT_UASTC_LDR_4X4,
+                100,
+                0,
+                0,
+                &mut out,
+                &mut length,
+            )
+        };
+        assert_eq!(status, ffi::STATUS_INVALID_ARGUMENT);
+        assert!(out.is_null());
+        assert_eq!(length, 0);
+    }
+    for count in [0, 16] {
+        // SAFETY: count is refused before descriptor array traversal.
+        let status = unsafe {
+            ffi::rt_basisu_encode_mips(
+                &valid,
+                count,
+                ffi::FORMAT_UASTC_LDR_4X4,
+                100,
+                0,
+                0,
+                &mut out,
+                &mut length,
+            )
+        };
+        assert_eq!(status, ffi::STATUS_INVALID_ARGUMENT);
+    }
+    let malformed = [
+        ffi::MipLevel {
+            rgba: pixel.as_ptr(),
+            length: 4,
+            width: 1,
+            height: 1,
+        },
+        valid,
+    ];
+    // SAFETY: both descriptors exist; overlong 1x1 chain rejects before reads.
+    let status = unsafe {
+        ffi::rt_basisu_encode_mips(
+            malformed.as_ptr(),
+            2,
+            ffi::FORMAT_UASTC_LDR_4X4,
+            100,
+            0,
+            0,
+            &mut out,
+            &mut length,
+        )
+    };
+    assert_eq!(status, ffi::STATUS_INVALID_ARGUMENT);
+}
+
+/// Bounded evidence probe; bypasses only production verification, not request
+/// validation. Caller inputs and every decode are checked independently. No
+/// floor changes are inferred from this test's success: its output is evidence.
+#[test]
+#[ignore = "measurement: every supplied mip and ETC1S shared-palette small-mip error"]
+fn measure_caller_mip_floors() {
+    let fixtures = [
+        ("photo", 256, 256, photo(256, 256, 41, false), Class::Colour),
+        (
+            "photo-alpha",
+            128,
+            96,
+            photo(128, 96, 2, true),
+            Class::Colour,
+        ),
+        ("photo-odd", 37, 19, photo(37, 19, 5, false), Class::Colour),
+        ("checker", 64, 64, checker(64, 64), Class::Colour),
+        ("noise", 64, 64, noise(64, 64, 31, false), Class::Colour),
+        (
+            "noise-alpha",
+            64,
+            64,
+            noise(64, 64, 12, true),
+            Class::Colour,
+        ),
+        ("noise-low", 64, 64, low_noise(64, 64, 14, 3), Class::Colour),
+        (
+            "chroma-noise",
+            64,
+            64,
+            chroma_noise(64, 64, 33),
+            Class::Colour,
+        ),
+        ("occlusion", 256, 256, occlusion(256), Class::DataR),
+        ("orm", 256, 256, orm(256), Class::DataRgb),
+        ("normal", 256, 256, normal_map(256).0, Class::Normal),
+    ];
+    for (name, width, height, image, class) in fixtures {
+        // Profile configs plus q1 exposes the existing supported codec domain.
+        let mut configurations: Vec<(&str, Mode, Params)> = ["fast", "balanced", "quality"]
+            .iter()
+            .map(|&profile| {
+                let (mode, params) = profile_mode(profile, class);
+                (profile, mode, params)
+            })
+            .collect();
+        if class == Class::Colour {
+            configurations.push(("domain-q1", Mode::Etc1s { quality: 1 }, COLOUR));
+        }
+        let images = fixture_mips(&image, width, height, COLOUR);
+        let levels = fixture_levels(&images, width, height);
+        for (profile, mode, params) in configurations {
+            let params = Params {
+                mipmaps: false,
+                ..params
+            };
+            check_mips(&levels, mode, params).unwrap();
+            let encoded = encode_mips_unverified(&levels, mode, params).unwrap();
+            let parsed = container::parse(&encoded).unwrap();
+            assert_eq!(parsed.level_count as usize, levels.len());
+            let transcoder = basisu::Transcoder::new(&encoded).unwrap();
+            assert_eq!(transcoder.level_count() as usize, levels.len());
+            let (floor, detail_floor) = match mode {
+                Mode::Etc1s { .. } => (ETC1S_FLOOR, ETC1S_DETAIL),
+                Mode::Uastc { .. } => (UASTC_FLOOR, UASTC_DETAIL),
+            };
+            for (index, mip) in levels.iter().enumerate() {
+                let decoded = transcoder
+                    .transcode(
+                        index as u32,
+                        basisu::TargetFormat::Rgba32,
+                        basisu::DecodeFlags::NONE,
+                    )
+                    .unwrap();
+                assert_eq!(
+                    decoded,
+                    decode_level_rgba(&encoded, index as u32, mip.width, mip.height).unwrap()
+                );
+                assert_eq!(decoded.len(), mip.rgba.len());
+                let error = sse(mip.rgba, &decoded);
+                let mean_error = block_mean_sse(mip.rgba, mip.width, mip.height);
+                let allowed =
+                    floor.ratio * mean_error + floor.slack_per_byte * mip.rgba.len() as u64;
+                let own = detail(mip.rgba, &decoded, mip.width, mip.height);
+                let complement: Vec<u8> = mip.rgba.iter().map(|x| 255 - x).collect();
+                let wrong_error = sse(&complement, &decoded);
+                let wrong_mean = block_mean_sse(&complement, mip.width, mip.height);
+                let wrong_allowed =
+                    floor.ratio * wrong_mean + floor.slack_per_byte * complement.len() as u64;
+                let wrong_detail = detail(&complement, &decoded, mip.width, mip.height);
+                let correlation = |d: Detail| {
+                    d.covariance as f64 / ((d.input as f64) * (d.decoded as f64)).sqrt()
+                };
+                let channels: &[usize] = if class == Class::DataR {
+                    &[0]
+                } else {
+                    &[0, 1, 2]
+                };
+                let (psnr, max_error) = channel_error(mip.rgba, &decoded, channels);
+                let (alpha_psnr, alpha_max) = channel_error(mip.rgba, &decoded, &[3]);
+                let channel_mses: Vec<f64> = (0..4)
+                    .map(|channel| {
+                        mip.rgba
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .zip(decoded.as_chunks::<4>().0.iter())
+                            .map(|(a, b)| f64::from(a[channel].abs_diff(b[channel])).powi(2))
+                            .sum::<f64>()
+                            / (mip.width * mip.height) as f64
+                    })
+                    .collect();
+                let (mut normal_length_mean, mut normal_length_max, mut normal_input_length_mean) =
+                    (0.0f64, 0.0f64, 0.0f64);
+                let (mut angle_mean, mut angle_p99, mut angle_max) = (0.0, 0.0, 0.0);
+                if class == Class::Normal {
+                    let mut angles = Vec::new();
+                    for (input, output) in mip
+                        .rgba
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .zip(decoded.as_chunks::<4>().0.iter())
+                    {
+                        let length = |bytes: &[u8]| {
+                            (0..3)
+                                .map(|channel| (f64::from(bytes[channel]) / 127.5 - 1.0).powi(2))
+                                .sum::<f64>()
+                                .sqrt()
+                        };
+                        let il = length(input);
+                        let ol = length(output);
+                        normal_input_length_mean += (il - 1.0).abs();
+                        normal_length_mean += (ol - 1.0).abs();
+                        normal_length_max = normal_length_max.max((ol - 1.0).abs());
+                        let a = unpack_normal(input);
+                        let b = unpack_normal(output);
+                        angles.push(
+                            (a[0] * b[0] + a[1] * b[1] + a[2] * b[2])
+                                .clamp(-1.0, 1.0)
+                                .acos()
+                                .to_degrees(),
+                        );
+                    }
+                    let count = angles.len() as f64;
+                    normal_input_length_mean /= count;
+                    normal_length_mean /= count;
+                    angles.sort_by(f64::total_cmp);
+                    angle_mean = angles.iter().sum::<f64>() / count;
+                    angle_p99 = angles[angles.len() * 99 / 100];
+                    angle_max = *angles.last().unwrap();
+                }
+                // Independently encode the same tiny input base-only. A large
+                // chain-versus-alone difference identifies shared-codebook
+                // coupling rather than dimension or descriptor corruption.
+                let mut alone_error = None;
+                if matches!(mode, Mode::Etc1s { .. }) && mip.width.max(mip.height) <= 8 {
+                    let standalone = encode_mips_unverified(&[*mip], mode, params).unwrap();
+                    let own_transcoder = basisu::Transcoder::new(&standalone).unwrap();
+                    let alone = own_transcoder
+                        .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+                        .unwrap();
+                    alone_error = Some(sse(mip.rgba, &alone));
+                }
+                let texels = u64::from(mip.width) * u64::from(mip.height);
+                let detail_applies = texels >= detail_floor.min_texels
+                    && own.input_variance_at_least(detail_floor.min_variance);
+                let own_detail_pass =
+                    own.correlation_at_least(detail_floor.numerator, detail_floor.denominator);
+                let wrong_detail_pass = wrong_detail
+                    .correlation_at_least(detail_floor.numerator, detail_floor.denominator);
+                println!("caller-mip-measure fixture={name} profile={profile} class={class:?} mode={mode:?} transfer={:?} mip={index} width={} height={} bytes={} chain_bytes={} sse={error} block_sse={mean_error} allowed={allowed} corr={:.6} variance={:.6} detail_applies={detail_applies} detail_pass={own_detail_pass} wrong_sse={wrong_error} wrong_allowed={wrong_allowed} wrong_corr={:.6} wrong_detail_pass={wrong_detail_pass} psnr={psnr:.6} max_error={max_error} channel_mse={channel_mses:?} alpha_psnr={alpha_psnr:.6} alpha_max={alpha_max} normal_input_length_mean={normal_input_length_mean:.6} normal_length_mean={normal_length_mean:.6} normal_length_max={normal_length_max:.6} angle_mean={angle_mean:.6} angle_p99={angle_p99:.6} angle_max={angle_max:.6} standalone_sse={alone_error:?}",
+                    params.transfer,mip.width,mip.height,mip.rgba.len(),encoded.len(),correlation(own),own.input as f64/own.scale as f64,correlation(wrong_detail));
+            }
+        }
+    }
 }
