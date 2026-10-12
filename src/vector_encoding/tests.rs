@@ -41,6 +41,10 @@ fn physical_records_preserve_nonzero_padding_and_second_pass_identity() {
     assert_eq!(e["byteStride"], 8);
     let start = 28 + j + e["byteOffset"].as_u64().unwrap() as usize;
     let n = e["byteLength"].as_u64().unwrap() as usize;
+    assert_eq!(
+        out.bytes[start], 0xa0,
+        "EXT_meshopt_compression ATTRIBUTES header"
+    );
     let decoded =
         meshopt::encoding::decode_vertex_buffer::<[u8; 8]>(&out.bytes[start..start + n], 2)
             .unwrap();
