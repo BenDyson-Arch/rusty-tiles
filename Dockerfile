@@ -54,5 +54,10 @@ ENV PROJ_DATA=/usr/local/share/proj PROJ_NETWORK=OFF
 
 FROM native-runtime AS runtime
 COPY --from=build /out-bin/rusty-tiles /usr/local/bin/rusty-tiles
+# Licence and upstream notices of vendored code (scripts/third_party_notices.py).
+COPY LICENSE /usr/share/doc/rusty-tiles/
+COPY vendor/basis_universal/LICENSE vendor/basis_universal/NOTICE /usr/share/doc/rusty-tiles/third_party/basis_universal/
+COPY vendor/basis_universal/LICENSES/ /usr/share/doc/rusty-tiles/third_party/basis_universal/LICENSES/
+COPY vendor/basis_universal/zstd/LICENSE /usr/share/doc/rusty-tiles/third_party/basis_universal/zstd/
 RUN rusty-tiles doctor --json
 ENTRYPOINT ["rusty-tiles"]

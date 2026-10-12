@@ -9,6 +9,14 @@ description = "Self-contained mesh, vector, grid-free point cloud and 3D Tiles c
 readme = "bindings/python/README.md"
 requires-python = ">=3.10"
 license = "MIT"
+# Upstream notices of vendored code (scripts/third_party_notices.py checks them).
+license-files = [
+    "LICENSE",
+    "vendor/basis_universal/LICENSE",
+    "vendor/basis_universal/NOTICE",
+    "vendor/basis_universal/LICENSES/*.txt",
+    "vendor/basis_universal/zstd/LICENSE",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: Implementation :: CPython",
