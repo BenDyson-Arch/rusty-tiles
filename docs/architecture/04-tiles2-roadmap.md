@@ -45,8 +45,9 @@ The new-format migrations in [#84](https://github.com/BenDyson-Arch/rusty-tiles/
 (coordinates), and [#87](https://github.com/BenDyson-Arch/rusty-tiles/issues/87)
 (vectors/layers) belong to 0.5.0. Foundation work and current-content conformance
 needed to ship 0.4.0 remain in 0.4.0. [#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)
-(glTF-only vector fills and legacy content removal) remains in 0.4.0 with a
-successful viewer gate. The new-format/AEC work in
+glTF-only vector fills passed their viewer gate and merged in #185; the
+remaining legacy-content removal stays in 0.4.0 through H6 (explicit output)
+and H7 (validator reports b3dm/i3dm/pnts/cmpt as Unsupported). The new-format/AEC work in
 [#89](https://github.com/BenDyson-Arch/rusty-tiles/issues/89) is later work;
 necessary glTF 2.0 conformance does not wait for it.
 [#83](https://github.com/BenDyson-Arch/rusty-tiles/issues/83) tracks the consolidated
