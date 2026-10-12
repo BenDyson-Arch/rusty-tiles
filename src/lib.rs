@@ -33,6 +33,7 @@ mod point_sampling;
 mod raster_directory;
 pub mod report;
 mod runtime;
+mod spill;
 pub mod terrain;
 pub mod texture;
 pub mod tile;

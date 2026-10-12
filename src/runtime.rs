@@ -60,6 +60,21 @@ impl JobError {
         }))
     }
 
+    /// Retain a typed non-I/O cause together with the path it concerns.
+    pub(crate) fn with_cause_at(
+        kind: JobErrorKind,
+        message: impl Into<String>,
+        path: &Path,
+        cause: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(ErrorDetail {
+            kind,
+            message: message.into(),
+            path: Some(path.to_owned()),
+            source: Some(Arc::new(cause)),
+        }))
+    }
+
     pub fn io(operation: &str, path: &Path, error: io::Error) -> Self {
         Self(Arc::new(ErrorDetail {
             kind: JobErrorKind::Io,
