@@ -1840,11 +1840,11 @@ mod differential {
         tally.report("adversarial");
     }
 
-    /// §9.A2 two-defect inputs, at every depth 0-64.
+    /// §9.A2 two-defect inputs, at every depth 0-65 (65 is one past `json_depth`).
     #[test]
     fn two_defect_documents_keep_the_legacy_order() {
         let mut tally = Tally::default();
-        for d in 0..=64usize {
+        for d in 0..=65usize {
             // (a) An early duplicate key plus more root siblings than value_nodes
             // allows: the root's children are charged before any descent.
             let dup = wrap(d, r#"{"a":1,"a":2}"#);
