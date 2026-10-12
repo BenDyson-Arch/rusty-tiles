@@ -101,9 +101,12 @@ def preflight(args, environment):
     """Renderer and tab facts from a throwaway context; stops unless they match the requested mode."""
     spec = browser_spec(args)
     if spec['mode'] == 'cdp': cdp_version(spec['cdpUrl'])
-    with browser_lock():
-        child = subprocess.run(['node', str(HERE / 'cesium.cjs'), '--renderer', json.dumps(spec)], env=environment,
-                               capture_output=True, text=True, timeout=STARTUP_SECONDS)
+    try:
+        with browser_lock():
+            child = subprocess.run(['node', str(HERE / 'cesium.cjs'), '--renderer', json.dumps(spec)], env=environment,
+                                   capture_output=True, text=True, timeout=STARTUP_SECONDS)
+    except subprocess.TimeoutExpired:
+        die(f'browser preflight timed out after {STARTUP_SECONDS:g} s')
     if child.returncode != 0: die(f'browser preflight failed: {(child.stderr or child.stdout).strip()[-2000:]}')
     facts = json.loads(child.stdout)
     facts.update(rendererClass=renderer_class(facts.get('renderer')), browser=spec)
