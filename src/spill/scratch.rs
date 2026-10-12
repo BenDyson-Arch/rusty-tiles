@@ -174,8 +174,11 @@ impl SpillFile {
 }
 
 impl Drop for SpillFile {
+    /// Live bytes drop only when the file is gone; a failed removal stays accounted.
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        self.accounting.remove(self.bytes);
+        match fs::remove_file(&self.path) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {}
+            _ => self.accounting.remove(self.bytes),
+        }
     }
 }

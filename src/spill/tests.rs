@@ -578,6 +578,22 @@ fn write_faults_are_typed_and_clean_up() {
             },
             io::ErrorKind::Other,
         ),
+        // Second merge pass: creates 0-19 are runs and 20-26 the first pass; writes past
+        // 32,000 + 32,000 bytes belong to the second pass.
+        (
+            Faults {
+                create_error_at: Some(27),
+                ..Faults::default()
+            },
+            io::ErrorKind::Other,
+        ),
+        (
+            Faults {
+                write_error_at: Some((66_000, io::ErrorKind::StorageFull)),
+                ..Faults::default()
+            },
+            io::ErrorKind::StorageFull,
+        ),
     ];
     for (faults, kind) in cases {
         let (_parent, scratch) = new_scratch(FaultIo::new(faults.clone()));
@@ -616,7 +632,15 @@ fn read_faults_and_corrupt_runs_are_typed_and_clean_up() {
                 read_error_at: Some(100),
                 ..Faults::default()
             },
-            "intermediate",
+            "first pass",
+        ),
+        (
+            Faults {
+                // The second pass reads bytes 32,000 to 60,800.
+                read_error_at: Some(40_000),
+                ..Faults::default()
+            },
+            "second pass",
         ),
         (
             Faults {
@@ -674,6 +698,24 @@ fn drops_remove_scratch_files_and_directory() {
     drop(scratch);
     assert!(!dir.exists(), "drop removes the scratch directory");
     assert_eq!(entries(parent.path()), 0);
+}
+
+#[test]
+fn failed_removal_stays_accounted() {
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let mut file = scratch.new_file("blocked");
+    // remove_file refuses a directory on every platform.
+    std::fs::create_dir(file.path()).unwrap();
+    file.completed(100);
+    let blocked = file.path().to_owned();
+    drop(file);
+    assert_eq!(scratch.live_bytes(), 100, "still on disk, still counted");
+    std::fs::remove_dir(blocked).unwrap();
+
+    let mut file = scratch.new_file("gone");
+    file.completed(50);
+    drop(file); // never created: NotFound counts as removed
+    assert_eq!(scratch.live_bytes(), 100);
 }
 
 fn fixed(available: u64) -> impl FnOnce(&Path) -> Result<Volume, SpillError> {
