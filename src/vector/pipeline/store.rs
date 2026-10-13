@@ -1,8 +1,13 @@
 //! Disk-backed feature/lock indexing, deterministic spatial partitions and LOD.
 use super::*;
 use crate::runtime::{Attempt, RunEvent};
+use crate::tileset_node::{
+    top_level_error, GeometricError, NodePlacement, Refine, TileBox, TileRecord, TileTree,
+    TilesetDocument, TilesetExtension,
+};
 use encoding::Candidate;
 use rayon::prelude::*;
+use records::{VectorRecord, VectorTileExtras, VectorTree};
 use reuse::{Cut, Reuse};
 use rusqlite::{params, Connection};
 use source::Reader;
@@ -109,10 +114,13 @@ pub(super) struct Counters {
     pub skipped_features: usize,
     pub features_without_geometry: usize,
 }
+/// A built subtree of H, with the z-up centre of its original points, the largest content
+/// padding within it and the source fragments its full-detail leaves hold.
 pub(super) struct Node {
-    pub value: Value,
+    pub tree: VectorTree,
     pub center: Point,
     pub padding: f64,
+    pub fragments: usize,
 }
 struct Reports {
     file: Box<dyn Write>,
@@ -490,7 +498,7 @@ impl Build<'_> {
     fn consume(
         &mut self,
         candidate: Candidate,
-    ) -> Result<(Option<Value>, Option<&'static str>), Error> {
+    ) -> Result<(Option<VectorRecord>, Option<&'static str>), Error> {
         if candidate.node.is_some() {
             for report in candidate.reports {
                 self.reports.write(report)?;
@@ -498,49 +506,40 @@ impl Build<'_> {
         }
         Ok((candidate.node, candidate.reason))
     }
+    /// Place `children` under `record`, whose own content covers `stats` around `center`:
+    /// each child at its translation from this tile's centre, the box padded and grown to
+    /// enclose every child box, and the error the largest of its own and its children's.
     fn attach(
         &mut self,
-        mut value: Value,
+        mut record: VectorRecord,
         stats: &Stats,
         center: Point,
         mut children: Vec<Node>,
     ) -> Result<Node, Error> {
         let zcenter = zup(center);
         let dimensions = sub(stats.hi, stats.lo);
-        let mut half = [
+        let half = [
             dimensions[0] * 0.5,
             dimensions[2] * 0.5,
             dimensions[1] * 0.5,
         ]
         .map(|v| v.max(0.001));
-        let mut padding = value["extras"]["positionRoundingMetres"]
-            .as_f64()
-            .unwrap_or(0.)
-            + value["extras"]["quantizationErrorMetres"]
-                .as_f64()
-                .unwrap_or(0.);
+        let mut padding = record.extras().map_or(0., VectorTileExtras::padding);
         for child in &children {
             padding = padding.max(child.padding);
         }
-        half = half.map(|v| v + padding);
-        let mut deltas = Vec::with_capacity(children.len());
+        let mut bounds = TileBox::centred(half.map(|v| v + padding))?;
+        let mut error = record.geometric_error();
         for child in &mut children {
             let delta = sub(child.center, zcenter);
-            child.value["transform"] = crate::tileset_node::translation(delta);
-            deltas.push(delta);
+            let child = child.tree.record_mut();
+            child.set_placement(NodePlacement::translation(delta)?);
+            bounds.grow_to_enclose(delta, child.bounds())?;
+            error = error.max(child.geometric_error());
         }
-        let error = crate::tileset_node::enclose_children(
-            &mut half,
-            value["geometricError"].as_f64().unwrap_or(0.),
-            deltas.into_iter().zip(children.iter().map(|n| &n.value)),
-        )?;
-        value["boundingVolume"] = json!({"box":crate::tileset_node::box_json(0, half)});
-        value["refine"] = json!("REPLACE");
-        value["geometricError"] = json!(error);
-        if !children.is_empty() {
-            // Move, rather than re-serialise, each finished subtree into its parent.
-            value["children"] = Value::Array(children.into_iter().map(|n| n.value).collect());
-        }
+        record.set_bounds(bounds);
+        record.set_refine(Refine::Replace);
+        record.set_geometric_error(error);
         self.counters.tiles += 1;
         emit(
             self.attempt,
@@ -555,20 +554,27 @@ impl Build<'_> {
                 "hierarchy exceeds maxTiles; raise budgets or maxTiles explicitly",
             ));
         }
-        if !reuse::contents(&value).is_empty() {
-            self.counters.maximum_tile_vertices = self
-                .counters
-                .maximum_tile_vertices
-                .max(value["extras"]["vertices"].as_u64().unwrap_or(0) as usize);
+        if let (false, Some(statistics)) = (
+            record.contents().is_empty(),
+            record.extras().and_then(VectorTileExtras::statistics),
+        ) {
+            self.counters.maximum_tile_vertices =
+                self.counters.maximum_tile_vertices.max(statistics.vertices);
             self.counters.maximum_tile_bytes = self
                 .counters
                 .maximum_tile_bytes
-                .max(value["extras"]["encodedBytes"].as_u64().unwrap_or(0) as usize);
+                .max(statistics.encoded_bytes);
         }
+        let fragments = if children.is_empty() {
+            records::own_fragments(&record)?
+        } else {
+            children.iter().map(|n| n.fragments).sum()
+        };
         Ok(Node {
-            value,
+            tree: TileTree::new(record, children.into_iter().map(|n| n.tree).collect()),
             center: zcenter,
             padding,
+            fragments,
         })
     }
     fn build(&mut self, prefix: &str, depth: usize) -> Result<Node, Error> {
@@ -587,8 +593,9 @@ impl Build<'_> {
             return Ok(node);
         }
         let mut node = self.build_uncached(prefix, depth)?;
-        let count = self.stats(prefix)?.count;
-        self.reuse.remember(prefix, signature, &mut node, count);
+        // The subtree's own leaf total, not the spool rows under `prefix`: rows inside a
+        // restored descendant keep their unsplit form.
+        self.reuse.remember(prefix, signature, &mut node)?;
         Ok(node)
     }
     fn build_uncached(&mut self, prefix: &str, depth: usize) -> Result<Node, Error> {
@@ -609,11 +616,19 @@ impl Build<'_> {
             if let Some(leaf) = leaf {
                 self.counters.leaf_tiles += 1;
                 let mut node = self.attach(leaf, &stats, center, Vec::new())?;
+                let vertices = |record: &VectorRecord| {
+                    record
+                        .extras()
+                        .and_then(VectorTileExtras::statistics)
+                        .map(|statistics| statistics.vertices)
+                        .expect("a content candidate records its statistics")
+                };
                 for candidate in candidates {
-                    if candidate.node.as_ref().is_some_and(|coarse| {
-                        coarse["extras"]["vertices"].as_u64().unwrap()
-                            >= node.value["extras"]["vertices"].as_u64().unwrap()
-                    }) {
+                    if candidate
+                        .node
+                        .as_ref()
+                        .is_some_and(|coarse| vertices(coarse) >= vertices(node.tree.record()))
+                    {
                         continue;
                     }
                     let (coarse, _) = self.consume(candidate)?;
@@ -753,7 +768,20 @@ impl Build<'_> {
             .pop()
             .unwrap();
         let (coarse, reason) = self.consume(candidate)?;
-        let coarse=coarse.unwrap_or_else(||{self.counters.routing_tiles+=1;json!({"geometricError":norm(sub(stats.hi,stats.lo)),"extras":{"routing":true,"routingReason":reason}})});
+        let coarse = match coarse {
+            Some(coarse) => coarse,
+            None => {
+                self.counters.routing_tiles += 1;
+                TileRecord::new(
+                    NodePlacement::INHERIT,
+                    TileBox::centred([0.; 3])?,
+                    GeometricError::new(norm(sub(stats.hi, stats.lo)))?,
+                    Refine::Replace,
+                    Vec::new(),
+                    Some(VectorTileExtras::routing(reason)),
+                )?
+            }
+        };
         self.attach(coarse, &stats, center, children)
     }
 }
@@ -920,16 +948,26 @@ pub(super) fn convert(
         build.build("", 0)?
     } else {
         let mut node = Node {
-            value: json!({"boundingVolume":{"box":[0,0,0,0.001,0,0,0,0.001,0,0,0,0.001]},"geometricError":0,"refine":"REPLACE"}),
+            tree: TileTree::new(TileRecord::empty_root(None)?, Vec::new()),
             center: [0.; 3],
             padding: 0.,
+            fragments: 0,
         };
         build.counters.tiles = 1;
         build
             .reuse
-            .remember("", build.reuse.signature(&db, "")?, &mut node, 0);
+            .remember("", build.reuse.signature(&db, "")?, &mut node)?;
         node
     };
+    // Identity accounting: every source fragment is in exactly one full-detail leaf.
+    let held = records::leaf_fragments(&root.tree)?;
+    if held != build.counters.fragments {
+        return Err(data(format!(
+            "vector hierarchy accounting: full-detail leaves hold {held} source fragments; \
+             the build has {}",
+            build.counters.fragments
+        )));
+    }
     let encoding_seconds = (encoding_started.elapsed().as_secs_f64()
         - (build.partition_seconds - before_partition))
         .max(0.);
@@ -940,62 +978,48 @@ pub(super) fn convert(
     let anchor = (0..3).fold(frame.anchor, |p, i| {
         add(p, mul(frame.axes[i], root.center[i]))
     });
-    let mut root = root.value;
-    root["transform"] = json!([
-        frame.axes[0][0],
-        frame.axes[0][1],
-        frame.axes[0][2],
-        0,
-        frame.axes[1][0],
-        frame.axes[1][1],
-        frame.axes[1][2],
-        0,
-        frame.axes[2][0],
-        frame.axes[2][1],
-        frame.axes[2][2],
-        0,
-        anchor[0],
-        anchor[1],
-        anchor[2],
-        1
-    ]);
-    let diagonal = norm(crate::tileset_node::box_half(
-        &root["boundingVolume"]["box"],
-    )?) * 2.;
-    let root_error = root["geometricError"]
-        .as_f64()
-        .ok_or_else(|| data("invalid root geometric error"))?;
+    // The local frame's rigid ENU→ECEF placement, at the root's centre.
+    let mut tree = root.tree;
+    tree.record_mut()
+        .set_placement(NodePlacement::rigid(frame.axes, anchor)?);
+    let diagonal = tree.record().bounds().diagonal();
+    let root_error = tree.record().geometric_error().metres();
     // Leave an SSE interval in which the root itself can render (margin 2).
     // Cesium skips the whole tileset below its top-level error, so equality
     // with the root error made large-tolerance/coincident aggregate roots unreachable.
-    let top_error = crate::tileset_node::top_level_error(diagonal, root_error, 2.);
+    let top_error = top_level_error(diagonal, root_error, 2.);
     if !top_error.is_finite() {
         return Err(data("vector LOD error overflows; reduce lodTolerance"));
     }
-    let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
+    let document = TilesetDocument::root(
+        GeometricError::new(top_error)?,
+        [TilesetExtension::ContentGltfVector],
+    );
     // The forest holds each payload once; reuse recovers rebased payloads from the
     // published members through `vector-build.json` (no retained raw sources).
-    let forest = if options.explicit {
-        None
-    } else {
-        let explicit_root = manifest["root"].clone();
-        let written = crate::implicit::write_forest(
-            &mut manifest,
-            output,
-            crate::implicit::SubdivisionScheme::Quadtree,
-            &mut || {
-                attempt
-                    .check()
-                    .map_err(|error| Error::Job(attempt.fail(error)))
-            },
-        )?;
-        Some((explicit_root, written))
-    };
-    let reuse_report = build.reuse.publish(
-        &mut manifest,
-        frame,
-        forest.as_ref().map(|(root, written)| (root, written)),
+    // The producer's hierarchy H is the forest's input and is kept in the build
+    // state as `explicitRoot`. Every content is checked against its staged payload.
+    let (mut manifest, written) = crate::implicit::write_forest_records(
+        &tree,
+        &document,
+        output,
+        crate::implicit::SubdivisionScheme::Quadtree,
+        &mut || {
+            attempt
+                .check()
+                .map_err(|error| Error::Job(attempt.fail(error)))
+        },
     )?;
+    let (build_state, reuse_report) = build.reuse.publish(&manifest, frame, &tree, &written)?;
+    // Re-emit the head with the build state digest, which covers the written forest.
+    let root = match manifest.as_object_mut().and_then(|m| m.remove("root")) {
+        Some(Value::Object(root)) => root,
+        _ => return Err(data("the implicit forest wrote no root tile")),
+    };
+    let manifest = document
+        .with_schema(true)
+        .with_build_state(build_state)?
+        .to_value(root);
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
     build.reports.finish()?;
     let shared: usize = db
@@ -1005,26 +1029,12 @@ pub(super) fn convert(
         .map_err(sql)?;
     // Tile statistics: one extras record per tile of the hierarchy, in preorder.
     // Implicit tiles carry the written (rebased) encodedBytes (design §4.5).
-    fn nodes<'a>(node: &'a Value, out: &mut Vec<&'a Value>) {
-        out.push(&node["extras"]);
-        if let Some(children) = node["children"].as_array() {
-            for child in children {
-                nodes(child, out);
-            }
-        }
-    }
-    let mut list = Vec::new();
-    match &forest {
-        Some((_, written)) => list.extend(written.tiles.iter().map(|tile| &tile.extras)),
-        None => nodes(&manifest["root"], &mut list),
-    }
-    if !options.explicit {
-        build.counters.maximum_tile_bytes = list
-            .iter()
-            .map(|extras| extras["encodedBytes"].as_u64().unwrap_or(0) as usize)
-            .max()
-            .unwrap_or(0);
-    }
+    let list: Vec<&Value> = written.tiles.iter().map(|tile| &tile.extras).collect();
+    build.counters.maximum_tile_bytes = list
+        .iter()
+        .map(|extras| extras["encodedBytes"].as_u64().unwrap_or(0) as usize)
+        .max()
+        .unwrap_or(0);
     let sum = |key: &str| {
         list.iter()
             .map(|extras| extras[key].as_u64().unwrap_or(0))
@@ -1053,9 +1063,7 @@ pub(super) fn convert(
     if options.reproducible {
         report.as_object_mut().unwrap().remove("performance");
     }
-    if !options.explicit {
-        report["tiling"] = json!("implicit");
-    }
+    report["tiling"] = json!("implicit");
     let report = crate::output::write_report(output, report, true)?;
     // Close resources explicitly before inventory admission. Earlier failures
     // leave scratch beneath the facade-owned workspace for required cleanup.
@@ -1340,7 +1348,6 @@ mod countries_fragment_tests {
             max_vertices: 16,
             max_bytes: 100_000,
             skip_invalid: true,
-            explicit: true,
             ..VectorOptions::default()
         };
         let mut counters = Counters::default();
@@ -1500,7 +1507,6 @@ mod countries_fragment_tests {
         let options = VectorOptions {
             max_vertices: 2,
             max_bytes: 1_000_000,
-            explicit: true,
             ..VectorOptions::default()
         };
         let rejected = make(

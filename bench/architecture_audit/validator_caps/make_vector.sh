@@ -19,7 +19,8 @@ declare -A spec=(
   [points-90k-mf2-t130k]="points 90000 --maxTiles 130000"
 )
 names=("$@")
-[ ${#names[@]} -gt 0 ] || names=(mixed-s7.8-mf2 points-78k-mf2 points-81k-mf2 points-78k-mf2-explicit points-165k-mf2-t300k points-90k-mf2-t130k)
+# points-78k-mf2-explicit needs a binary from before H6 (vector --explicit removed); name it explicitly.
+[ ${#names[@]} -gt 0 ] || names=(mixed-s7.8-mf2 points-78k-mf2 points-81k-mf2 points-165k-mf2-t300k points-90k-mf2-t130k)
 for name in "${names[@]}"; do
   read -r kind size extra <<< "${spec[$name]}"
   source="$name.geojson"

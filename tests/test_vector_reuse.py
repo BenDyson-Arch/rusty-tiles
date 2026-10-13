@@ -18,6 +18,11 @@ from cli_bin import requires_bin
 
 
 def archive(directory,path):
+    """The archive `native_run` published for `directory` (its hierarchy view is not
+    one); other directories, such as frozen Python oracle output, are zipped as-is."""
+    from vector_test_support import published
+    if published(directory).is_file():
+        pathlib.Path(path).write_bytes(published(directory).read_bytes());return
     with zipfile.ZipFile(path,'w') as z:
         for f in pathlib.Path(directory).rglob('*'):
             if f.is_file():z.write(f,f.relative_to(directory).as_posix())
@@ -142,7 +147,7 @@ class ReuseTests(unittest.TestCase):
                 changed=False
                 for name in src.namelist():
                     data=src.read(name)
-                    if name.startswith('t/') and not changed:data=data[:-1]+bytes([data[-1]^1]);changed=True
+                    if name.endswith('.glb') and not changed:data=data[:-1]+bytes([data[-1]^1]);changed=True
                     dst.writestr(name,data)
             with self.assertRaisesRegex(ValueError,'checksum failed'):
                 vector.run(self.args(p,pathlib.Path(tmp)/'bad-content',bad))
@@ -206,7 +211,7 @@ class ForestReuseTests(unittest.TestCase):
     def args(self,p,out,previous=None):
         # Two LOD levels keep partition splits inside implicit roots, so payloads
         # are published with nonzero rebases as well as byte copies.
-        args=ReuseTests().args(p,out,previous);args.explicit=False;args.reproducible=True;args.lod_levels=2;return args
+        args=ReuseTests().args(p,out,previous);args.hierarchy_view=False;args.reproducible=True;args.lod_levels=2;return args
 
     def test_unchanged_forest_reuse_republishes_identical_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:

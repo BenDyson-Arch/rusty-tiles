@@ -221,6 +221,42 @@ fn decoded_containment_composes_each_placements_transform() {
     );
 }
 
+/// The same document is placed at depth 1, then at depth 3 below a chain, and
+/// escapes only under the second. The failure reports the second placement's
+/// depth, not the first's (a replay that kept the first absolute depth would
+/// report depth 2).
+#[test]
+fn decoded_containment_reports_each_placements_depth() {
+    let mut ext_root = tile(10., 0.);
+    ext_root["content"] = json!({"uri":"a.glb"});
+    let tree = |x: f64| {
+        let mut first = tile(10., 0.);
+        first["content"] = json!({"uri":"ext.json"});
+        let mut deep = translated(tile(10., 0.), x);
+        deep["content"] = json!({"uri":"ext.json"});
+        let mut mid = tile(10., 0.);
+        mid["children"] = json!([deep]);
+        let mut chain = tile(10., 0.);
+        chain["children"] = json!([mid]);
+        let mut root = tile(10., 0.);
+        root["children"] = json!([first, chain]);
+        files(&[
+            ("tileset.json", doc(root, 0.)),
+            ("ext.json", doc(ext_root.clone(), 0.)),
+            ("a.glb", points(&[[10., 0., 0.]])),
+        ])
+    };
+    let valid = run(&tree(0.), ValidationLimits::default());
+    assert!(valid.result.contains("decodedContentContainment"));
+    assert_eq!(valid.prepared, 2);
+    let failed = run(&tree(1e-5), ValidationLimits::default());
+    assert!(
+        error(&failed).contains("content=a.glb depth=4 "),
+        "{}",
+        failed.result
+    );
+}
+
 /// The same document is contained under its first placement and escapes the
 /// referencing content's `boundingVolume` under the second (I2).
 #[test]

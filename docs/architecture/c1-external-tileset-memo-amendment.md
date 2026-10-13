@@ -97,7 +97,11 @@ the reference traversal's order:
    root's own `transform` ("child bounds escape parent at depth `d`"; a mixed
    region/Cartesian pair stays Unsupported);
 3. the root's `geometricErrorOrder` against `min(referencing tile error, document
-   geometricError)` ("geometricError increases at depth `d`");
+   geometricError)` ("geometricError increases at depth `d`"). The `document
+   geometricError` term is redundant at a memoized placement: the first placement
+   already enforced `root error <= document geometricError`, and the tolerance is
+   monotone in the bound. Only the referencing tile's error is
+   placement-dependent. Dropping the term is an equivalent mutant;
 4. C2: every tile fact and every payload reference of the expansion is registered
    again, in the reference traversal's order. Each tile gets its new arena parent
    and depth. The root gets the placement's referencing tile and external-content
@@ -109,6 +113,15 @@ the reference traversal's order:
    completed first expansion would have reached a document that reaches it, and
    that document would then have found the cycle.
 
+   This proof assumes that member contents do not change during one validation, so
+   that the documents a document names are the same at every placement; the
+   archive identity check and the phase-2 re-read enforce this only at the end. It
+   also assumes that an expansion is placement-independent (URIs resolve against
+   the document's own name, and every child and content is visited
+   unconditionally) and that implicit subtrees cannot name tileset documents. A
+   later change that makes traversal placement-dependent, such as conditional
+   children, invalidates the proof and makes the test load-bearing.
+
 **EM-6. Precedence and fallback.** A placement uses its summary only if, before it,
 `task_visits + visits`, `reference_visits + references` and
 `bytes_read + bytes` are each within their limits and the depth bounds of EM-5.1
@@ -117,7 +130,10 @@ except at EM-5.2 or EM-5.3, since every other check is placement-independent
 (EM-4), and memoized C2 registration has no verdict. Otherwise the placement is
 traversed in full, with its nested placements again memoized under the same rule.
 This reaches the reference traversal's failure point with the same counters, so
-the first failure and its message are the reference traversal's.
+the first failure and its message are the reference traversal's. A full re-walk
+after a cap miss always ends in failure: the caps that refused the summary are the
+same caps the full traversal then exceeds. So the fallback cannot reintroduce
+amplification.
 
 **EM-7. Bounded, non-circular work.**
 
@@ -149,7 +165,8 @@ counts and the `limits` object are unchanged. `docs/VALIDATION.md` states that
 
 ## Controls (author)
 
-These are the in-crate tests in `src/validate.rs` (`external_memo`):
+These are the in-crate tests in `src/validate/memo_controls.rs` (module
+`validate::memo_controls`):
 
 - **Differential.** Generated DAG archives are validated with and without the memo
   and must give the same result. They vary shared documents, transforms, content
@@ -163,13 +180,15 @@ These are the in-crate tests in `src/validate.rs` (`external_memo`):
   - root geometric error;
   - C2 ancestor escape through the referencing tile's `transform`;
   - C2 external-content escape;
+  - the reported depth, with the same document placed at depths 1 and 3;
   - depth limit;
   - each counter limit.
 - **Engagement.** On a shared DAG, each distinct document is parsed once.
 - **Mutants.** Each must fail at least one control: a replay that reuses the first
   placement's C2 link; a skipped root containment check; a skipped root
   geometric-error check; a missing, short or unsubtracted charge; a skipped depth
-  bound; replay without references; a nested placement missing from its enclosing
+  bound; replay without references; replayed tiles keeping the first placement's
+  absolute depth; a nested placement missing from its enclosing
   summary; the memo disabled.
   - Removing the active-path test of EM-5.5 is equivalent by that proof. The test is
     kept as a defensive guard.

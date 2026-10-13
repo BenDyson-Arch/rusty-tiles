@@ -47,6 +47,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Produce full-detail leaf GLBs and a debug manifest (no tileset hierarchy yet)
+    #[command(hide = true, name = "mesh-leaf-payloads")]
+    MeshLeafPayloads {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(long, default_value = "balanced", value_parser = ["fast", "balanced", "quality", "lossless"])]
+        profile: String,
+        #[arg(long, default_value = "2")]
+        jobs: std::num::NonZeroUsize,
+        #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+        scratch_dir: Option<PathBuf>,
+    },
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
@@ -90,6 +104,7 @@ enum Command {
 impl Command {
     fn name(&self) -> &'static str {
         match self {
+            Self::MeshLeafPayloads { .. } => "mesh-leaf-payloads",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -299,9 +314,6 @@ struct RasterArgs {
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Keep the legacy explicit tileset hierarchy.
-    #[arg(long)]
-    explicit: bool,
     /// Expose classification, intensity and return number as vertex property attributes
     #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
     metadata_attributes: bool,
@@ -315,11 +327,11 @@ struct PointCloudArgs {
         allow_hyphen_values = true
     )]
     height_offset: Option<f64>,
-    /// Maximum points per tile
+    /// Maximum points per tile, at most 8192
     #[arg(
         long = "maxPoints",
         visible_alias = "max-points",
-        default_value_t = 50000
+        default_value_t = rusty_tiles::point_cloud::MAX_POINTS_PER_TILE
     )]
     max_points: usize,
     /// Points read per source chunk
@@ -335,9 +347,6 @@ struct PointCloudArgs {
 struct VectorArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Keep the legacy explicit tileset hierarchy.
-    #[arg(long)]
-    explicit: bool,
     /// Omit volatile performance diagnostics for byte-identical archives
     #[arg(long)]
     reproducible: bool,
@@ -1054,6 +1063,32 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
+        Command::MeshLeafPayloads {
+            input,
+            output,
+            profile,
+            jobs,
+            scratch_dir,
+        } => {
+            use rusty_tiles::{LeafOutputRequest, LeafProfile};
+            let profile = match profile.as_str() {
+                "fast" => LeafProfile::Fast,
+                "balanced" => LeafProfile::Balanced,
+                "quality" => LeafProfile::Quality,
+                _ => LeafProfile::Lossless,
+            };
+            let mut request = LeafOutputRequest::new(input, output, profile).with_jobs(jobs);
+            if let Some(path) = scratch_dir {
+                request = request.with_scratch_dir(path);
+            }
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let result = rusty_tiles::mesh_to_leaf_payloads(request, &RunControl::new(observer))?;
+            Outcome::Report(
+                json!({"ok":true,"output":result.output,"summary":result.report,
+                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
+            )
+        }
         Command::Validate { input } => {
             let report = rusty_tiles::validate::inspect(
                 rusty_tiles::validate::ValidationRequest::new(&input),
@@ -1165,7 +1200,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 }
             };
             let options = PointCloudOptions {
-                explicit: a.explicit,
                 metadata_attributes: a.metadata_attributes,
                 max_points: a.max_points,
                 chunk_points: a.chunk_points,
@@ -1266,7 +1300,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 OutputPolicy::CreateNew
             };
             let options = vector::VectorOptions {
-                explicit: a.explicit,
                 reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,

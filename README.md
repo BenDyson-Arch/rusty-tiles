@@ -42,7 +42,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 
 Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
 
-`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling by default. Add `--explicit` for applications that inspect the explicit `children` hierarchy. Vector archives from earlier encoder versions need a fresh conversion after the 0.4 geometry fixes, including in explicit mode.
+`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud and vector output was removed in 0.4.0; only the legacy `mesh-to-3tz` keeps `--explicit`. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
 
 ## Install
 

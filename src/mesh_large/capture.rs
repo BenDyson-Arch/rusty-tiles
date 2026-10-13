@@ -33,7 +33,7 @@ pub(crate) struct SourceScan {
     pub geometry_bytes: u64,
 }
 
-fn triangle_bytes(p: &ScenePrimitive<'_>) -> u32 {
+pub(super) fn triangle_bytes(p: &ScenePrimitive<'_>) -> u32 {
     let vertex_bytes = 12
         + 12 * u32::from(p.has_normal)
         + 16 * u32::from(p.has_tangent)
@@ -41,7 +41,7 @@ fn triangle_bytes(p: &ScenePrimitive<'_>) -> u32 {
         + 16 * u32::from(p.has_color);
     20 + 3 * vertex_bytes
 }
-fn vertices(
+pub(super) fn vertices(
     p: &ScenePrimitive<'_>,
     indices: &mut Option<ElementReader<'_>>,
     triangle: usize,
@@ -67,7 +67,7 @@ fn vertices(
     }
     Ok(vertices)
 }
-fn bake(
+pub(super) fn bake(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
     vertex: u64,

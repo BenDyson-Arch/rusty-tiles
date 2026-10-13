@@ -61,7 +61,7 @@ results with required reports and cleanup diagnostics, as described below.
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `explicit=False`, `metadata_attributes=False`, `callback=None` |
+| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
@@ -80,7 +80,9 @@ compound/vertical/geocentric input and manual cartographic placement/rotation.
 Omitting axes/height preserves legacy adapter behaviour. Mesh textures use
 lossless PNG by default; `jpeg` and `webp` use bundled Rust encoders. UASTC
 is outside this wheel's API because it requires an external encoder.
-`explicit=True` selects the legacy hierarchy instead of implicit tiling.
+For `mesh_to_3tz`, `explicit=True` selects the legacy hierarchy instead of
+implicit tiling. `point_cloud_to_3tz` and `vector_to_3tz` write implicit tiling
+only; their `explicit` keyword was removed in 0.4.0 and now raises `TypeError`.
 `node_features=True` preserves mesh nodes as pickable features with `name` and
 `node_index` properties, including for small models and across parent LODs.
 `metadata_attributes=True` adds point property attributes named
@@ -235,7 +237,7 @@ Vector keyword defaults are `force=False`, `source_crs=None`, `height_offset=Non
 `ambiguous_outlines=False`, `skip_invalid=False`, `max_features=64`,
 `max_vertices=65536`, `max_bytes=4194304`, `max_tiles=100000`,
 `max_source_vertices=1000000`, `lod_tolerance=0.1`, `lod_levels=3`, `jobs=None`
-(available cores), `explicit=False`, `reproducible=False`, `quantize=False`,
+(available cores), `reproducible=False`, `quantize=False`,
 `meshopt=False`, `parent_repair=False`, `aggregate_points=False`,
 `max_parent_features=4096`, `reuse_tileset=None`, and `callback=None`.
 Layer and field selections are lists of strings. `where_clause` is a read-only
@@ -357,8 +359,8 @@ updating the manifest and rerunning all four platform jobs.
 
 `convert_to_implicit` was removed in 0.4.0. To obtain implicit tiling for an
 explicit point-cloud or vector archive, re-run `point_cloud_to_3tz` or
-`vector_to_3tz` from the original source without `explicit=True`; implicit
-tiling is their default.
+`vector_to_3tz` from the original source; implicit tiling is their only
+output.
 
 `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` exposes
 the bounded raster directory request/error boundary. The standard wheel has no GDAL raster capability
