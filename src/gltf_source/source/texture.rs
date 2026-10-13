@@ -11,6 +11,33 @@ const MAX_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 4 * 1024 * 1024;
 const MAX_TOTAL_PIXELS: u64 = 16 * 1024 * 1024;
 
+/// Per-image decoder admission: edge, texel and decoder-allocation ceilings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DecodeAdmission {
+    pub max_edge: u32,
+    pub max_pixels: u64,
+    pub max_alloc: u64,
+}
+impl DecodeAdmission {
+    /// The retained finite-source consumer: 4096 edge, 4 Mi texels.
+    pub(crate) const FINITE: Self = Self {
+        max_edge: MAX_DIMENSION,
+        max_pixels: MAX_IMAGE_PIXELS,
+        max_alloc: 128 * 1024 * 1024,
+    };
+    /// Streamed large meshes: the 16384 maximum texture edge that WebGL2/WebGPU
+    /// devices and the KTX2 encoder accept, so any source a GPU could sample
+    /// directly is admitted. The decoder may allocate at most eight bytes per
+    /// admitted texel (component planes plus RGB(A) output). Whether the
+    /// decoded RGBA8 owner fits is a separate, memory-derived refusal of the
+    /// consuming stage, which charges every decode against available memory.
+    pub(crate) const LARGE_MESH: Self = Self {
+        max_edge: 16_384,
+        max_pixels: 16_384 * 16_384,
+        max_alloc: 8 * 16_384 * 16_384,
+    };
+}
+
 // Framing complements the image decoder, which decodes the first PNG frame
 // without necessarily consuming the terminal chunks. This is deliberately not
 // another PNG raster/schema decoder.
@@ -233,6 +260,7 @@ pub(crate) struct ImageInfo {
 fn admitted_decoder<'a>(
     encoded: &'a [u8],
     mime: Option<&str>,
+    admission: DecodeAdmission,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(impl ImageDecoder + 'a, ImageInfo)> {
     let detected =
@@ -260,11 +288,11 @@ fn admitted_decoder<'a>(
         _ => {}
     }
     let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_DIMENSION);
-    limits.max_image_height = Some(MAX_DIMENSION);
+    limits.max_image_width = Some(admission.max_edge);
+    limits.max_image_height = Some(admission.max_edge);
     // This allocation ceiling is a decoder guard. Callers also charge their
     // encoded/RGBA owners; image's internal limits alone do not bound RSS.
-    limits.max_alloc = Some(128 * 1024 * 1024);
+    limits.max_alloc = Some(admission.max_alloc);
     let mut reader = ImageReader::with_format(Cursor::new(encoded), format);
     reader.limits(limits);
     let decoder = reader.into_decoder().map_err(image_error)?;
@@ -281,10 +309,11 @@ fn admitted_decoder<'a>(
     if width == 0 || height == 0 {
         return Err(invalid("image dimensions must be nonzero"));
     }
-    if width > MAX_DIMENSION || height > MAX_DIMENSION || pixels > MAX_IMAGE_PIXELS {
-        return Err(unsupported(
-            "image exceeds 4096 edge or 4 Mi pixel admission ceiling",
-        ));
+    if width > admission.max_edge || height > admission.max_edge || pixels > admission.max_pixels {
+        return Err(unsupported(format!(
+            "image exceeds {} edge or {} pixel admission ceiling",
+            admission.max_edge, admission.max_pixels
+        )));
     }
     Ok((
         decoder,
@@ -299,9 +328,20 @@ fn admitted_decoder<'a>(
 
 /// Decodes one captured image, with per-image guards and no aggregate payload ceiling.
 /// The caller charges encoded bytes, decoder workspace and the owning RGBA8 allocation.
+#[cfg(test)]
 pub(crate) fn decode_image(
     encoded: &[u8],
     mime: Option<&str>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<(ImageInfo, Vec<u8>)> {
+    decode_image_admitted(encoded, mime, DecodeAdmission::FINITE, check)
+}
+
+/// [`decode_image`] under an explicit per-image admission.
+pub(crate) fn decode_image_admitted(
+    encoded: &[u8],
+    mime: Option<&str>,
+    admission: DecodeAdmission,
     check: &mut impl FnMut() -> Result<()>,
 ) -> Result<(ImageInfo, Vec<u8>)> {
     if encoded.len() > MAX_SOURCE_BYTES {
@@ -309,7 +349,7 @@ pub(crate) fn decode_image(
             "image exceeds 32 MiB encoded-byte admission ceiling",
         ));
     }
-    let (decoder, info) = admitted_decoder(encoded, mime, check)?;
+    let (decoder, info) = admitted_decoder(encoded, mime, admission, check)?;
     check()?;
     let rgba = DynamicImage::from_decoder(decoder)
         .map_err(image_error)?
@@ -368,6 +408,7 @@ pub(super) fn decode(
         let (decoder, info) = admitted_decoder(
             encoded,
             source.get("mimeType").and_then(Value::as_str),
+            DecodeAdmission::FINITE,
             check,
         )?;
         let pixels = u64::from(info.width) * u64::from(info.height);

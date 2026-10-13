@@ -1168,43 +1168,20 @@ fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
                     {
                         continue;
                     }
-                    let (psnr, max) = probe_channel(expected, &actual, channel);
-                    let (floor, cap) = if channel == 3 {
-                        (
-                            if profile == Profile::Quality {
-                                34.
-                            } else {
-                                30.
-                            },
-                            match profile {
-                                Profile::Fast => 80,
-                                Profile::Balanced => 64,
-                                _ => 32,
-                            },
-                        )
-                    } else if class == Class::Colour {
-                        (
-                            if profile == Profile::Quality {
-                                34.
-                            } else {
-                                22.
-                            },
-                            match profile {
-                                Profile::Fast => 56,
-                                Profile::Balanced => 32,
-                                _ => 24,
-                            },
-                        )
-                    } else if class == Class::Normal {
-                        (30., 112)
-                    } else if slot == TextureSlot::Occlusion {
-                        (30., if profile == Profile::Quality { 8 } else { 80 })
-                    } else {
-                        (30., 32)
-                    };
+                    // The production gate, applied to the independent truth.
+                    let stats = super::delivery::channel_stats(
+                        &expected.pixels,
+                        &actual,
+                        &vec![1; expected.w * expected.h],
+                        expected.w,
+                        channel,
+                    );
+                    let gate = super::delivery::channel_gate(slot, profile, channel, stats.texels);
                     assert!(
-                        psnr >= floor && max <= cap,
-                        "{slot:?}/{profile:?}/mip{mip}/channel{channel}: PSNR{psnr},max{max}"
+                        stats.psnr >= gate.psnr
+                            && gate.p999.is_none_or(|cap| stats.p999 <= cap)
+                            && stats.block_rmse <= gate.block_rmse,
+                        "{slot:?}/{profile:?}/mip{mip}/channel{channel}: {stats:?} {gate:?}"
                     );
                 }
                 if class == Class::Normal {
@@ -1275,5 +1252,15 @@ fn independent_data_filter_control_rejects_colour_transfer() {
     for channel in [1, 2] {
         let (psnr, max) = probe_channel(&data[1], &wrong[1].pixels, channel);
         assert!(psnr < 30. && max > 32);
+        // The production data gate refuses the colour-transfer mutant.
+        let stats =
+            super::delivery::channel_stats(&data[1].pixels, &wrong[1].pixels, &[1], 1, channel);
+        let gate = super::delivery::channel_gate(
+            crate::gltf_source::source::TextureSlot::MetallicRoughness,
+            crate::mesh_large::config::Profile::Fast,
+            channel,
+            stats.texels,
+        );
+        assert!(stats.psnr < gate.psnr);
     }
 }

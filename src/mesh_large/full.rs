@@ -391,16 +391,44 @@ pub(crate) fn capture(
         image_info
             .try_reserve_exact(images.len())
             .map_err(|_| exhausted("image info allocation failed"))?;
-        for image in &images {
-            let encoded = image.reconstruct(check)?;
-            let mut decode_check = || check();
-            let (info, rgba) =
-                source::decode_image(&encoded, image.identity.mime.as_deref(), &mut decode_check)?;
-            drop(rgba);
-            drop(encoded);
-            image_info.push(info);
+        // Every declared image is decoded once here to admit it; pixels are
+        // dropped and delivery decodes again on demand. Decodes run in
+        // parallel in batches whose transient owners (encoded snapshot,
+        // decoder output and RGBA8, at most 12 bytes per admitted texel)
+        // fit available memory; cancellation is observed between batches.
+        let admission = source::DecodeAdmission::LARGE_MESH;
+        let transient = admission.max_pixels.saturating_mul(12);
+        let batch = config::available_memory()
+            .map_or(1, |available| available / transient.max(1))
+            .clamp(1, workers as u64) as usize;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(batch)
+            .build()
+            .map_err(|_| exhausted("image admission worker pool"))?;
+        for chunk in images.chunks(batch) {
             check()?;
+            let infos: Vec<Result<ImageInfo, JobError>> = pool.install(|| {
+                use rayon::prelude::*;
+                chunk
+                    .par_iter()
+                    .map(|image| {
+                        let encoded = image.reconstruct(&mut || Ok(()))?;
+                        let (info, rgba) = source::decode_image_admitted(
+                            &encoded,
+                            image.identity.mime.as_deref(),
+                            admission,
+                            &mut || Ok(()),
+                        )?;
+                        drop(rgba);
+                        Ok(info)
+                    })
+                    .collect()
+            });
+            for info in infos {
+                image_info.push(info?);
+            }
         }
+        check()?;
         let materials = source.document.materials().to_vec();
         let textures = source.document.textures().to_vec();
         let samplers = source.document.samplers().to_vec();

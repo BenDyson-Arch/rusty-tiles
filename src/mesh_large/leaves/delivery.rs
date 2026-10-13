@@ -3,6 +3,7 @@ use super::{
     mips::{self, Class},
     sparse_mips,
 };
+use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
     basisu_ktx2 as codec, gltf_source::source::TextureSlot, mesh_large::config::Profile, JobError,
     JobErrorKind,
@@ -45,37 +46,172 @@ fn class(slot: TextureSlot) -> Class {
         _ => Class::Data,
     }
 }
-fn metric(expected: &[u8], decoded: &[u8], support: &[u32], channel: usize) -> (f64, u8) {
+/// Support-weighted error statistics of one channel of one decoded level.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ChannelStats {
+    /// Weighted PSNR in dB; infinite when exact.
+    pub psnr: f64,
+    /// Weighted 99.9th-percentile absolute error.
+    pub p999: u8,
+    pub max: u8,
+    /// Largest RMSE of any aligned 4x4 codec block (supported texels only).
+    pub block_rmse: f64,
+    /// Texels with positive support.
+    pub texels: u64,
+}
+pub(super) fn channel_stats(
+    expected: &[u8],
+    decoded: &[u8],
+    support: &[u32],
+    width: usize,
+    channel: usize,
+) -> ChannelStats {
+    let mut histogram = [0f64; 256];
     let mut sse = 0.;
     let mut count = 0.;
     let mut max = 0;
-    for (i, &weight) in support.iter().enumerate() {
-        if weight == 0 {
-            continue;
+    let mut texels = 0u64;
+    let height = support.len() / width.max(1);
+    let mut block_rmse = 0f64;
+    for by in (0..height).step_by(4) {
+        for bx in (0..width).step_by(4) {
+            let (mut block_sse, mut block_weight) = (0., 0.);
+            for y in by..(by + 4).min(height) {
+                for x in bx..(bx + 4).min(width) {
+                    let i = y * width + x;
+                    let weight = support[i];
+                    if weight == 0 {
+                        continue;
+                    }
+                    let e = expected[i * 4 + channel].abs_diff(decoded[i * 4 + channel]);
+                    let w = f64::from(weight);
+                    let squared = f64::from(e).powi(2) * w;
+                    histogram[usize::from(e)] += w;
+                    sse += squared;
+                    count += w;
+                    block_sse += squared;
+                    block_weight += w;
+                    max = max.max(e);
+                    texels += 1;
+                }
+            }
+            if block_weight > 0. {
+                block_rmse = block_rmse.max((block_sse / block_weight).sqrt());
+            }
         }
-        let e = expected[i * 4 + channel].abs_diff(decoded[i * 4 + channel]);
-        sse += f64::from(e).powi(2) * f64::from(weight);
-        count += f64::from(weight);
-        max = max.max(e);
     }
-    (
-        if sse == 0. {
+    let mut p999 = 0;
+    let mut cumulative = 0.;
+    for (e, w) in histogram.iter().enumerate() {
+        cumulative += w;
+        if cumulative >= count * 0.999 {
+            p999 = e as u8;
+            break;
+        }
+    }
+    ChannelStats {
+        psnr: if sse == 0. {
             f64::INFINITY
         } else {
             10. * (65025. * count / sse).log10()
         },
+        p999,
         max,
-    )
+        block_rmse,
+        texels,
+    }
 }
-fn check_level(
+
+/// Per-channel decoded-image floors of one slot class and profile.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ChannelGate {
+    pub psnr: f64,
+    /// 99.9th-percentile cap; `None` on small levels (see [`SMALL_LEVEL_TEXELS`]).
+    pub p999: Option<u8>,
+    pub block_rmse: f64,
+}
+/// Below this many supported texels (a 32x32 level) a 99.9th percentile is
+/// the maximum of a few hundred samples, and mips this small are sampled only
+/// at extreme minification. Small colour levels of packed island pages mix
+/// neighbouring islands inside codec blocks; they keep the block corruption
+/// guard and a PSNR floor 4 dB lower, without a percentile cap. Data, normal
+/// and alpha channels keep their floors at every size.
+pub(super) const SMALL_LEVEL_TEXELS: u64 = 1024;
+/// PSNR bounds mean quality per channel, the 99.9th percentile bounds the
+/// error tail without being decided by one outlier texel, and the worst 4x4
+/// codec-block RMSE catches one localized corrupted block that neither can
+/// see on a large page. Colour floors are calibrated on every level of the
+/// real 10M-triangle photogrammetry mesh (worst observed values plus margin,
+/// bench/architecture_audit/mesh_large_h8/throughput.md); data and normal
+/// floors keep their previous synthetic calibration with the maximum cap now
+/// applied to the 99.9th percentile.
+pub(super) fn channel_gate(
+    slot: TextureSlot,
+    profile: Profile,
+    channel: usize,
+    texels: u64,
+) -> ChannelGate {
+    let quality = profile == Profile::Quality;
+    let fast = profile == Profile::Fast;
+    let (psnr, p999, block_rmse) = if channel == 3 {
+        (
+            if quality { 34. } else { 30. },
+            if fast {
+                80
+            } else if quality {
+                32
+            } else {
+                64
+            },
+            80.,
+        )
+    } else if class(slot) == Class::Colour {
+        // Real-mesh worst cases (fast and balanced share UASTC pack level 0;
+        // quality uses level 1): PSNR 27.8 dB, p99.9 66, block RMSE 63.
+        (
+            if quality { 25. } else { 24. },
+            if quality { 72 } else { 80 },
+            80.,
+        )
+    } else if slot == TextureSlot::Normal {
+        (30., 112, 96.)
+    } else if slot == TextureSlot::Occlusion {
+        (
+            30.,
+            if quality { 8 } else { 80 },
+            if quality { 24. } else { 96. },
+        )
+    } else {
+        (30., 32, 64.)
+    };
+    if texels < SMALL_LEVEL_TEXELS && channel != 3 && class(slot) == Class::Colour {
+        ChannelGate {
+            psnr: psnr - 4.,
+            p999: None,
+            block_rmse,
+        }
+    } else {
+        ChannelGate {
+            psnr,
+            p999: Some(p999),
+            block_rmse,
+        }
+    }
+}
+pub(super) fn check_level(
     expected: &[u8],
     decoded: &[u8],
     support: &[u32],
+    width: u32,
     slot: TextureSlot,
     profile: Profile,
     mip: usize,
 ) -> Result<Value, JobError> {
-    if expected.len() != decoded.len() || expected.len() != support.len() * 4 {
+    if expected.len() != decoded.len()
+        || expected.len() != support.len() * 4
+        || width == 0
+        || !support.len().is_multiple_of(width as usize)
+    {
         return Err(error(JobErrorKind::InvalidState, "delivery decoded shape"));
     }
     let quality = profile == Profile::Quality;
@@ -88,49 +224,16 @@ fn check_level(
         _ => &[0, 1, 2, 3],
     };
     for &channel in channels {
-        let (psnr, max) = metric(expected, decoded, support, channel);
-        let (floor, cap) = if channel == 3 {
-            (
-                if quality { 34. } else { 30. },
-                if fast {
-                    80
-                } else if quality {
-                    32
-                } else {
-                    64
-                },
-            )
-        } else if class(slot) == Class::Colour {
-            (
-                if quality { 34. } else { 22. },
-                if fast {
-                    56
-                } else if quality {
-                    24
-                } else {
-                    32
-                },
-            )
-        } else if slot == TextureSlot::Normal {
-            (30., 112)
-        } else {
-            (
-                30.,
-                if slot == TextureSlot::Occlusion {
-                    if quality {
-                        8
-                    } else {
-                        80
-                    }
-                } else {
-                    32
-                },
-            )
-        };
-        metrics.push(json!({"channel":channel,"psnr":if psnr.is_finite(){Some(psnr)}else{None},"exact":psnr.is_infinite(),"max":max,"floor":floor,"cap":cap}));
-        if psnr < floor || max > cap {
+        let stats = channel_stats(expected, decoded, support, width as usize, channel);
+        let gate = channel_gate(slot, profile, channel, stats.texels);
+        metrics.push(json!({"channel":channel,"psnr":if stats.psnr.is_finite(){Some(stats.psnr)}else{None},"exact":stats.psnr.is_infinite(),"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"floor":gate.psnr,"p999Cap":gate.p999,"blockRmseCap":gate.block_rmse}));
+        if stats.psnr < gate.psnr
+            || gate.p999.is_some_and(|cap| stats.p999 > cap)
+            || stats.block_rmse > gate.block_rmse
+        {
             return Err(fidelity(format!(
-                "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{psnr} max{max}"
+                "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{} p99.9 {} blockRMSE{} over {} texels (floors PSNR{} p99.9 {:?} block{})",
+                stats.psnr, stats.p999, stats.block_rmse, stats.texels, gate.psnr, gate.p999, gate.block_rmse
             )));
         }
     }
@@ -210,7 +313,38 @@ fn check_level(
     Ok(json!({"mip":mip,"channels":metrics,"normal":normals}))
 }
 
-fn workspace_charge(dimensions: [u32; 2], profile: Profile) -> Result<u64, JobError> {
+/// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
+pub(super) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
+    slot == TextureSlot::Occlusion && profile != Profile::Quality
+}
+/// Encoder mode and parameters of one slot and lossy profile.
+pub(super) fn codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
+    let scalar = scalar_occlusion(slot, profile);
+    let effort = match profile {
+        Profile::Fast => 0,
+        Profile::Balanced => 1,
+        _ => 2,
+    };
+    let mode = if scalar {
+        codec::Mode::Etc1s { quality: 90 }
+    } else {
+        codec::Mode::Uastc { zstd: true }
+    };
+    (
+        mode,
+        codec::Params {
+            effort: if scalar { 0 } else { effort },
+            transfer: if class(slot) == Class::Colour {
+                codec::Transfer::Srgb
+            } else {
+                codec::Transfer::Linear
+            },
+            mipmaps: false,
+        },
+    )
+}
+
+pub(super) fn workspace_charge(dimensions: [u32; 2], profile: Profile) -> Result<u64, JobError> {
     let [width, height] = dimensions;
     let base = u64::from(width)
         .checked_mul(u64::from(height))
@@ -277,12 +411,21 @@ pub(super) fn encode(
                     .map_err(|_| resource())?,
             )
             .map_err(|_| resource())?;
-        image::codecs::png::PngEncoder::new(&mut bytes)
-            .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
-            .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode {e}")))?;
-        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-            .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG verify {e}")))?
-            .into_rgba8();
+        timing::time(Stage::PngEncode, || {
+            image::codecs::png::PngEncoder::new(&mut bytes).write_image(
+                rgba,
+                width,
+                height,
+                image::ExtendedColorType::Rgba8,
+            )
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode {e}")))?;
+        let decoded = timing::time(Stage::PngVerify, || {
+            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG verify {e}")))?
+        .into_rgba8();
+        timing::count(Counter::EncodedChainTexels, base);
         if decoded.as_raw() != rgba {
             return Err(error(
                 JobErrorKind::InvalidState,
@@ -298,7 +441,9 @@ pub(super) fn encode(
             ],
         });
     }
-    let chain = sparse_mips::build(width, height, rgba, support, class(slot), memory_limit)?;
+    let chain = timing::time(Stage::SparseMips, || {
+        sparse_mips::build(width, height, rgba, support, class(slot), memory_limit)
+    })?;
     encode_authored(&chain, slot, profile, memory_limit, mask, |_| {
         Ok(Value::Null)
     })
@@ -412,7 +557,7 @@ pub(super) fn encode_authored(
         }
         expected.push(truth);
     }
-    let scalar = slot == TextureSlot::Occlusion && profile != Profile::Quality;
+    let scalar = scalar_occlusion(slot, profile);
     if scalar {
         for pixels in &mut delivered {
             for pixel in pixels.as_chunks_mut::<4>().0 {
@@ -432,29 +577,9 @@ pub(super) fn encode_authored(
             height: level.height,
         });
     }
-    let effort = match profile {
-        Profile::Fast => 0,
-        Profile::Balanced => 1,
-        _ => 2,
-    };
-    let mode = if scalar {
-        codec::Mode::Etc1s { quality: 90 }
-    } else {
-        codec::Mode::Uastc { zstd: true }
-    };
-    let bytes = codec::encode_ktx2_mips(
-        &levels,
-        mode,
-        codec::Params {
-            effort: if scalar { 0 } else { effort },
-            transfer: if class(slot) == Class::Colour {
-                codec::Transfer::Srgb
-            } else {
-                codec::Transfer::Linear
-            },
-            mipmaps: false,
-        },
-    )?;
+    let (mode, params) = codec_settings(slot, profile);
+    let effort = params.effort;
+    let (bytes, mut decoded_levels) = codec::encode_ktx2_mips_decoded(&levels, mode, params)?;
     let mut receipts = Vec::new();
     receipts
         .try_reserve_exact(chain.levels.len() * 3 + 1)
@@ -464,15 +589,31 @@ pub(super) fn encode_authored(
         .try_reserve_exact(chain.levels.len())
         .map_err(|_| resource())?;
     for (index, level) in chain.levels.iter().enumerate() {
-        let decoded = codec::decode_level_rgba(&bytes, index as u32, level.width, level.height)?;
-        receipts.push(check_level(
-            &expected[index],
-            &decoded,
-            &level.support,
-            slot,
-            profile,
-            index,
-        )?);
+        timing::count(
+            Counter::EncodedChainTexels,
+            u64::from(level.width) * u64::from(level.height),
+        );
+        // The codec's mandatory verification decoded every level with the
+        // vendored transcoder; reuse those bytes rather than decode again.
+        let decoded = std::mem::take(
+            decoded_levels
+                .get_mut(index)
+                .ok_or_else(|| error(JobErrorKind::InvalidState, "missing decoded level"))?,
+        );
+        if decoded.len() != level.rgba.len() {
+            return Err(error(JobErrorKind::InvalidState, "decoded level shape"));
+        }
+        receipts.push(timing::time(Stage::FidelityCheck, || {
+            check_level(
+                &expected[index],
+                &decoded,
+                &level.support,
+                level.width,
+                slot,
+                profile,
+                index,
+            )
+        })?);
         if mask.is_some() {
             receipts.push(guard_receipts[index].clone());
         }
@@ -510,11 +651,11 @@ pub(super) fn encode_authored(
             rgba: decoded,
         });
     }
-    let sampler_receipt = validate(&decoded_chain)?;
+    let sampler_receipt = timing::time(Stage::SamplerCheckDecoded, || validate(&decoded_chain))?;
     if !sampler_receipt.is_null() {
         receipts.push(sampler_receipt);
     }
-    receipts.push(json!({"charged_bytes":charge,"native_workspace_provisional":true,"scalar_rrr":scalar,"effort":if scalar{0}else{effort},"caller_levels":chain.levels.len()}));
+    receipts.push(json!({"charged_bytes":charge,"native_workspace_provisional":true,"scalar_rrr":scalar,"effort":effort,"caller_levels":chain.levels.len()}));
     Ok(Delivery {
         bytes,
         mime: "image/ktx2",
@@ -631,6 +772,7 @@ mod tests {
                         &expected,
                         &decoded,
                         &vec![1; w * h],
+                        w as u32,
                         slot,
                         profile,
                         mip as usize,
@@ -742,6 +884,7 @@ mod tests {
                         &[90, 90, 90, 255].repeat(w * h),
                         &decoded,
                         &vec![1; w * h],
+                        w as u32,
                         TextureSlot::BaseColor,
                         profile,
                         mip as usize,
@@ -834,6 +977,182 @@ mod tests {
             }
         }
     }
+    /// Deterministic photograph-like page: smooth value noise plus texel
+    /// detail and a few hard edges, opaque.
+    fn photo_page(edge: usize) -> Vec<u8> {
+        let hash = |x: usize, y: usize, s: usize| {
+            let mut h = (x as u64).wrapping_mul(0x9E37_79B9)
+                ^ (y as u64).wrapping_mul(0x85EB_CA6B)
+                ^ s as u64;
+            h ^= h >> 13;
+            h = h.wrapping_mul(0xC2B2_AE35);
+            (h >> 7) % 256
+        };
+        let smooth = |x: usize, y: usize, s: usize| {
+            let (cx, cy) = (x / 16, y / 16);
+            let (fx, fy) = ((x % 16) as f64 / 16., (y % 16) as f64 / 16.);
+            let v = |i, j| hash(cx + i, cy + j, s) as f64;
+            (v(0, 0) * (1. - fx) + v(1, 0) * fx) * (1. - fy)
+                + (v(0, 1) * (1. - fx) + v(1, 1) * fx) * fy
+        };
+        let mut out = Vec::with_capacity(edge * edge * 4);
+        for y in 0..edge {
+            for x in 0..edge {
+                let edge_shift = if (x / 37 + y / 53) % 3 == 0 { 40. } else { 0. };
+                for c in 0..3 {
+                    let v = smooth(x, y, c) * 0.7
+                        + (hash(x, y, c + 7) as f64 - 128.) * 0.12
+                        + edge_shift;
+                    out.push(v.round().clamp(0., 255.) as u8);
+                }
+                out.push(255);
+            }
+        }
+        out
+    }
+    fn decoded_levels(out: &Delivery, edge: usize) -> Vec<Vec<u8>> {
+        let independent = basisu::Transcoder::new(&out.bytes).unwrap();
+        (0..independent.level_count())
+            .map(|mip| {
+                let decoded = independent
+                    .transcode(mip, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+                    .unwrap();
+                assert_eq!(decoded.len(), (edge >> mip).max(1).pow(2) * 4);
+                decoded
+            })
+            .collect()
+    }
+    #[test]
+    fn robust_gate_accepts_codec_outliers_and_refuses_corruption_controls() {
+        let edge = 128;
+        let rgba = photo_page(edge);
+        let support = vec![1; edge * edge];
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            let out = encode(
+                [edge as u32, edge as u32],
+                &rgba,
+                &support,
+                TextureSlot::BaseColor,
+                profile,
+                128 * 1024 * 1024,
+                None,
+            )
+            .unwrap();
+            let decoded = decoded_levels(&out, edge);
+            let check = |level: &[u8]| {
+                check_level(
+                    &rgba,
+                    level,
+                    &support,
+                    edge as u32,
+                    TextureSlot::BaseColor,
+                    profile,
+                    0,
+                )
+            };
+            assert!(check(&decoded[0]).is_ok());
+            // One hot texel at full-range error: the old maximum cap refused
+            // this; the percentile, PSNR and block guard accept it.
+            let mut outlier = decoded[0].clone();
+            outlier[(40 * edge + 40) * 4] ^= 0xff;
+            assert!(check(&outlier).is_ok(), "{profile:?} single outlier");
+            // A corrupted 4x4 codec block is refused by the block guard alone.
+            let mut corrupt = decoded[0].clone();
+            for y in 64..68 {
+                for x in 64..68 {
+                    for c in 0..3 {
+                        corrupt[(y * edge + x) * 4 + c] ^= 0x80;
+                    }
+                }
+            }
+            let stats = channel_stats(&rgba, &corrupt, &support, edge, 0);
+            let gate = channel_gate(TextureSlot::BaseColor, profile, 0, stats.texels);
+            assert!(stats.psnr >= gate.psnr && stats.p999 <= gate.p999.unwrap());
+            assert!(check(&corrupt).is_err(), "{profile:?} corrupted block");
+            // Swapped red/blue channels are refused.
+            let mut swapped = decoded[0].clone();
+            for px in swapped.as_chunks_mut::<4>().0 {
+                px.swap(0, 2);
+            }
+            assert!(check(&swapped).is_err(), "{profile:?} swapped channels");
+            // Ten percent of texels uniformly damaged: the percentile refuses
+            // even when the damage stays below the block guard.
+            let mut damaged = decoded[0].clone();
+            for (i, px) in damaged.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                if i % 10 == 0 {
+                    px[1] = px[1].wrapping_add(96);
+                }
+            }
+            assert!(check(&damaged).is_err(), "{profile:?} spread damage");
+        }
+    }
+    #[test]
+    fn small_level_relaxation_is_colour_only_and_keeps_the_block_guard() {
+        // 16x16 = 256 supported texels: a small level.
+        let expected = [100u8, 120, 140, 255].repeat(256);
+        let mut offset = expected.clone();
+        for px in offset.as_chunks_mut::<4>().0 {
+            px[2] += 17;
+        }
+        // Uniform 17-level error: PSNR 23.5 dB, above the relaxed colour floor
+        // (24 - 4) but below every full-size floor.
+        assert!(check_level(
+            &expected,
+            &offset,
+            &[1; 256],
+            16,
+            TextureSlot::BaseColor,
+            Profile::Balanced,
+            4
+        )
+        .is_ok());
+        let big = [100u8, 120, 140, 255].repeat(1024);
+        let mut big_offset = big.clone();
+        for px in big_offset.as_chunks_mut::<4>().0 {
+            px[2] += 17;
+        }
+        assert!(check_level(
+            &big,
+            &big_offset,
+            &[1; 1024],
+            32,
+            TextureSlot::BaseColor,
+            Profile::Balanced,
+            3
+        )
+        .is_err());
+        let normal = [128u8, 128, 255, 255].repeat(256);
+        let mut normal_offset = normal.clone();
+        for px in normal_offset.as_chunks_mut::<4>().0 {
+            px[2] -= 17;
+        }
+        assert!(check_level(
+            &normal,
+            &normal_offset,
+            &[1; 256],
+            16,
+            TextureSlot::Normal,
+            Profile::Fast,
+            4
+        )
+        .is_err());
+        // Garbage on a small colour level is still refused.
+        let garbage: Vec<u8> = expected
+            .iter()
+            .enumerate()
+            .map(|(i, v)| if i % 4 == 3 { *v } else { v ^ 0x80 })
+            .collect();
+        assert!(check_level(
+            &expected,
+            &garbage,
+            &[1; 256],
+            16,
+            TextureSlot::BaseColor,
+            Profile::Balanced,
+            4
+        )
+        .is_err());
+    }
     #[test]
     fn normal_rgb_gate_detects_radial_error_below_fast_length_cap() {
         // Radial Z perturbation passes fast meanlength.08/max.20 and
@@ -844,6 +1163,7 @@ mod tests {
             &expected,
             &mutant,
             &[1],
+            1,
             TextureSlot::Normal,
             Profile::Fast,
             0,

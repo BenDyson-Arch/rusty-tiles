@@ -38,13 +38,18 @@ fn resource() -> JobError {
 fn quant(x: f64) -> u8 {
     (x.clamp(0.0, 1.0) * 255.0).round() as u8
 }
-fn decode_colour(x: u8) -> f64 {
+fn decode_colour_exact(x: u8) -> f64 {
     let v = f64::from(x) / 255.0;
     if v <= 0.04045 {
         v / 12.92
     } else {
         ((v + 0.055) / 1.055).powf(2.4)
     }
+}
+/// The same values from a table built with the same expression.
+fn decode_colour(x: u8) -> f64 {
+    static TABLE: std::sync::OnceLock<[f64; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| std::array::from_fn(|i| decode_colour_exact(i as u8)))[usize::from(x)]
 }
 fn encode_colour(v: f64) -> u8 {
     quant(if v <= 0.0031308 {
