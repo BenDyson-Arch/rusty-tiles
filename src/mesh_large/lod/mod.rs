@@ -335,9 +335,12 @@ pub(crate) struct LodReport {
     #[serde(skip)]
     pub seconds: f64,
     #[serde(skip)]
-    pub phase_seconds: [f64; 7],
+    pub phase_seconds: [f64; 10],
     #[serde(skip)]
     pub audit_seconds: f64,
+    /// Tile runs including seam-consensus re-runs.
+    #[serde(skip)]
+    pub tile_runs: u64,
     pub texture: &'static str,
 }
 
@@ -711,7 +714,7 @@ struct Outcome {
     relaxed: bool,
     /// Seconds: load children, islands/seams, simplify, encode+composed, direct,
     /// per-primitive+fills, final encode/records/sidecar.
-    phases: [f64; 7],
+    phases: [f64; 10],
     forced_keys: Vec<Key>,
     failed_keys: Vec<Key>,
     over_budget: bool,
@@ -796,7 +799,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
         *slot += (now - clock).as_secs_f64();
         clock = now;
     };
-    let mut phases = [0f64; 7];
+    let mut phases = [0f64; 10];
     lap(&mut phases[0]);
     let mesh = KeyMesh::build(&key_faces);
     let mut out = Outcome::default();
@@ -972,6 +975,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     {
         return Err(state("proxy bytes decode differently from the encoder's lattice"));
     }
+    lap(&mut phases[7]);
     let s_tris: Vec<Tri> = s_dec.faces.iter().map(|f| tri_of(&f.p)).collect();
     let s_bvh = Bvh::new(&s_tris);
     let t_bvh = Bvh::new(&t_tris);
@@ -987,6 +991,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
         Limits::for_sizes(s_tris.len(), t_tris.len()),
         Some((&s_labels, &t_labels)),
     );
+    lap(&mut phases[8]);
     let skip_removed = ctx.mutation == Mutation::SkipRemoved;
     let t_measured: Vec<Tri> = if skip_removed {
         t_tris
@@ -999,6 +1004,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
         t_tris.clone()
     };
     let t_s = geom::directed(ar, &t_measured, &s_bvh, Limits::for_sizes(t_measured.len(), s_tris.len()));
+    lap(&mut phases[9]);
     let composed_to = up_add(ar, s_t.bound, child_to);
     let composed_from = up_add(ar, child_from, t_s.bound);
     let removed_keys: BTreeSet<Key> = if skip_removed {
@@ -1019,14 +1025,11 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     // Direct terms where they can differ from the composed ones: above leaf-only children
     // T is the decoded source itself (up to the leaves' own snap bound).
     let leaf_parent = job.children.iter().all(|c| matches!(c, Child::Leaf { .. }));
-    let work = if leaf_parent {
-        0
-    } else {
-        256 * (s_tris.len() as u64 + t_tris.len() as u64)
-    };
+    let work = 256 * (s_tris.len() as u64 + t_tris.len() as u64);
     lap(&mut phases[3]);
     let direct = certify::direct(
-        ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, &skip, ctx.check,
+        ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, !leaf_parent, &skip,
+        ctx.check,
     )?;
     let direct_to = direct.proxy_to_source.unwrap_or(f64::INFINITY);
     let direct_from = direct.source_to_proxy;
@@ -1636,7 +1639,8 @@ pub(crate) fn produce(
                        seam_log: &mut crate::spill::SequenceWriter<SeamEdge>,
                        forced_log: &mut crate::spill::SequenceWriter<ForcedKey>,
                        done: &mut BTreeMap<u64, Done>,
-                       failed: &mut BTreeSet<Key>|
+                       failed: &mut BTreeSet<Key>,
+                       runs: &mut u64|
              -> Result<(), JobError> {
                 if window.is_empty() {
                     return Ok(());
@@ -1657,6 +1661,7 @@ pub(crate) fn produce(
                         }
                     }
                     failed.extend(std::mem::take(&mut o.failed_keys));
+                    *runs += 1;
                     done.insert(job.node.first, Done(o));
                 }
                 window.clear();
@@ -1690,7 +1695,7 @@ pub(crate) fn produce(
                     if let Some(job) = current.take() {
                         window.push(job);
                         if window.len() >= window_size {
-                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed)?;
+                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
                         }
                     }
                 }
@@ -1708,7 +1713,7 @@ pub(crate) fn produce(
             if let Some(job) = current.take() {
                 window.push(job);
             }
-            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed)?;
+            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
             // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
             // seam edge without a partner keeps every seam vertex its tile removed. Kept
             // vertices are kept by every tile sharing them (each re-runs), which always

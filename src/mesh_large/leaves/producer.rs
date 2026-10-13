@@ -609,7 +609,7 @@ fn produce(
         &path.join("manifest.json"),
         &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let resources = json!({"lod":{"jobs":lod.jobs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds,"auditSeconds":lod.audit_seconds,"phaseSeconds":{"loadChildren":lod.phase_seconds[0],"islandsSeams":lod.phase_seconds[1],"simplify":lod.phase_seconds[2],"encodeComposed":lod.phase_seconds[3],"direct":lod.phase_seconds[4],"primitivesFills":lod.phase_seconds[5],"finalEncode":lod.phase_seconds[6]}},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
+    let resources = json!({"lod":{"jobs":lod.jobs,"tileRuns":lod.tile_runs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds,"auditSeconds":lod.audit_seconds,"phaseSeconds":{"loadChildren":lod.phase_seconds[0],"islandsSeams":lod.phase_seconds[1],"simplify":lod.phase_seconds[2],"encodeComposed":lod.phase_seconds[3],"direct":lod.phase_seconds[4],"primitivesFills":lod.phase_seconds[5],"finalEncode":lod.phase_seconds[6],"encodeUnfilled":lod.phase_seconds[7],"proxyToChildren":lod.phase_seconds[8],"childrenToProxy":lod.phase_seconds[9]}},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
     write_file(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,

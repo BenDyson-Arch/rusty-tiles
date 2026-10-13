@@ -17,6 +17,8 @@ use crate::{spill::Sequence, JobError};
 pub(crate) const CHUNK: usize = 1 << 16;
 /// Target evaluations per direct query.
 const CAP: u32 = 8;
+/// Source triangles per parallel source -> proxy block.
+const BLOCK: u64 = 1 << 18;
 
 pub(crate) fn source_tri(s: &LodSource) -> Tri {
     s.positions.map(|p| p.map(f64::from))
@@ -48,46 +50,77 @@ pub(crate) fn direct(
     proxy: &[Tri],
     proxy_bvh: &Bvh,
     work: u64,
-    skip: &dyn Fn(&LodSource) -> bool,
-    check: &dyn Fn() -> Result<(), JobError>,
+    attempt: bool,
+    skip: &(dyn Fn(&LodSource) -> bool + Sync),
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<DirectReport, JobError> {
     let mut report = DirectReport::default();
-    // Attempt only ranges the budget can finish (about 8 evaluations per triangle and
-    // direction); otherwise the composed term alone is the certificate.
-    if (end - first).saturating_mul(16) > work {
+    if !attempt {
         report.skipped = true;
         report.source_to_proxy = f64::INFINITY;
         return Ok(report);
     }
-    // Source -> proxy.
-    let mut evals = 0u64;
+    // Source -> proxy: one capped query per source triangle, so the budget always covers
+    // the range (the composed term would otherwise add up level by level).
+    let range = end - first;
+    let work_from = work.max(range.saturating_mul(u64::from(CAP) + 4));
     let anchor = proxy[0][0];
+    // Fixed blocks scanned in parallel; the maximum and the totals do not depend on order.
+    let blocks: Vec<(u64, u64)> = (first..end)
+        .step_by(BLOCK as usize)
+        .map(|b| (b, (b + BLOCK).min(end)))
+        .collect();
+    let per_block = work_from.div_ceil(blocks.len().max(1) as u64);
+    let results: Vec<Result<(f64, u64, bool), JobError>> = {
+        use rayon::prelude::*;
+        blocks
+            .par_iter()
+            .map(|&(b, e)| {
+                let mut evals = 0u64;
+                let mut bound = 0f64;
+                let mut exhausted = false;
+                let mut reader = source.range(b, e, 1 << 18)?;
+                let mut read = 0u64;
+                while let Some(s) = reader.next().transpose()? {
+                    read += 1;
+                    if read.is_multiple_of(1 << 16) {
+                        check()?;
+                    }
+                    if skip(&s) {
+                        continue;
+                    }
+                    let t = source_tri(&s);
+                    let w = match proxy_bvh.best_target(&t, CAP, &mut evals) {
+                        Some((k, _)) => ar.patch(&t, proxy_bvh.tri(k), 0.),
+                        None => f64::INFINITY,
+                    };
+                    bound = bound.max(w);
+                    if evals >= per_block && read < e - b {
+                        // Every unread triangle lies in the node's source box.
+                        exhausted = true;
+                        bound = bound.max(ar.box_point(lo, hi, anchor));
+                        break;
+                    }
+                }
+                Ok((bound, evals, exhausted))
+            })
+            .collect()
+    };
     let mut bound = 0f64;
-    let mut reader = source.range(first, end, 1 << 18)?;
-    let mut read = 0u64;
-    while let Some(s) = reader.next().transpose()? {
-        read += 1;
-        if read.is_multiple_of(1 << 16) {
-            check()?;
-        }
-        if skip(&s) {
-            continue;
-        }
-        let t = source_tri(&s);
-        let w = match proxy_bvh.best_target(&t, CAP, &mut evals) {
-            Some((k, _)) => ar.patch(&t, proxy_bvh.tri(k), 0.),
-            None => f64::INFINITY,
-        };
-        bound = bound.max(w);
-        if evals >= work && read < end - first {
-            report.source_to_proxy_exhausted = true;
-            bound = bound.max(ar.box_point(lo, hi, anchor));
-            break;
-        }
+    let mut evals = 0u64;
+    for r in results {
+        let (b, e, x) = r?;
+        bound = bound.max(b);
+        evals += e;
+        report.source_to_proxy_exhausted |= x;
     }
     report.source_to_proxy = bound;
     report.evals = evals;
-    // Proxy -> source, chunked.
+    // Proxy -> source, chunked: a whole-face witness against small source triangles is
+    // loose, so it is attempted only for ranges of at most four chunks.
+    if range > 4 * CHUNK as u64 {
+        return Ok(report);
+    }
     let mut evals = 0u64;
     let mut faces = vec![f64::INFINITY; proxy.len()];
     let mut reader = source.range(first, end, 1 << 18)?;

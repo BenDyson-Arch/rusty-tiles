@@ -705,15 +705,20 @@ pub(crate) fn directed_labelled(
     };
     // The refinement threshold: nearest distances of the corners of the faces with the
     // largest bounds (refinement only ever matters for those).
+    // Corners alone are a poor estimate (a proxy's corners are snapped source vertices), so
+    // edge midpoints and the centroid are sampled too.
     let mut order: Vec<usize> = (0..x.len()).collect();
-    let top = order.len().min(64);
+    let top = order.len().min(256);
     if top < order.len() {
         order.select_nth_unstable_by(top, |&a, &b| faces[b].total_cmp(&faces[a]));
     }
     let mut lower = 0f64;
     for &f in &order[..top] {
-        for p in &x[f] {
-            lower = lower.max(y.nearest(*p, limits.patch_cap, &mut evals));
+        let [a, b, c] = x[f];
+        let mid = |p: P3, q: P3| -> P3 { std::array::from_fn(|i| 0.5 * (p[i] + q[i])) };
+        let centroid: P3 = std::array::from_fn(|i| (a[i] + b[i] + c[i]) / 3.);
+        for p in [a, b, c, mid(a, b), mid(b, c), mid(c, a), centroid] {
+            lower = lower.max(y.nearest(p, u32::MAX, &mut evals));
         }
     }
     let lower = lower.sqrt();
