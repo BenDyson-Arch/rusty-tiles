@@ -12,8 +12,12 @@
 //!   Supported texels must carry IDs below that value.
 //! - Mips: support-weighted mode of the whole RGBA tuple over each 2x2
 //!   footprint (`sparse_mips`, `Class::Id`), ties to the first row-major
-//!   contributor. A level never holds a value absent from its source region
-//!   and packed sets stay jointly consistent per texel.
+//!   contributor. A level never holds a value absent from its source region,
+//!   and sets packed on one page stay jointly consistent per texel (pages are
+//!   reduced independently, so sets on different pages may not).
+//! - A 4-byte set, or a fourth packed byte, lives in alpha. glTF images are
+//!   not premultiplied, and consumers must read ID texels without
+//!   premultiplying alpha.
 //! - Encoding: PNG for every level in every profile. glTF carries KTX2 only
 //!   through `KHR_texture_basisu`, whose ETC1S and UASTC are lossy block codecs
 //!   that blend neighbouring IDs; uncompressed KTX2 is not a glTF image.
@@ -130,6 +134,7 @@ fn read(pixel: &[u8], channels: &[u8]) -> u32 {
 }
 
 /// Request: `ids` holds `sets.len()` IDs per texel, texel-major, row-major.
+/// Pages are power-of-two, at least 4 texels per edge (as every H8 page).
 /// IDs of zero-support texels are ignored (written as no-feature).
 pub(crate) struct Request<'a> {
     pub width: u32,
@@ -166,10 +171,13 @@ pub(crate) struct TextureRef {
     pub feature_count: u32,
 }
 impl TextureRef {
-    /// `EXT_mesh_features.featureIds[]` entry of a feature ID texture.
-    pub(crate) fn feature_id(&self, tex_coord: usize, label: &str) -> Value {
-        json!({"featureCount":self.feature_count,"nullFeatureId":self.null_feature_id,"label":label,
-            "texture":{"index":self.texture,"texCoord":tex_coord,"channels":self.channels}})
+    /// `EXT_mesh_features.featureIds[]` entry of a feature ID texture; `None`
+    /// when the level holds no feature (the spec requires `featureCount >= 1`).
+    pub(crate) fn feature_id(&self, tex_coord: usize, label: &str) -> Option<Value> {
+        (self.feature_count > 0).then(|| {
+            json!({"featureCount":self.feature_count,"nullFeatureId":self.null_feature_id,"label":label,
+                "texture":{"index":self.texture,"texCoord":tex_coord,"channels":self.channels}})
+        })
     }
     /// `EXT_structural_metadata` property texture property (categorical).
     pub(crate) fn property(&self, tex_coord: usize) -> Value {

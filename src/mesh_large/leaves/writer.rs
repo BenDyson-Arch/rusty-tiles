@@ -270,7 +270,7 @@ fn validate_closure(atlas: &PreparedAtlas) -> Result<bool, JobError> {
             let uv = texture.get("texCoord").cloned().unwrap_or(json!(0));
             index(&uv, primitive.uvs.len(), "prepared ID TEXCOORD missing")?;
             let channels = texture["channels"].as_array();
-            if entry["featureCount"].as_u64().is_none()
+            if entry["featureCount"].as_u64().is_none_or(|n| n == 0)
                 || channels.is_none_or(|c| {
                     c.is_empty()
                         || c.len() > 4
@@ -851,7 +851,7 @@ mod tests {
         input.primitives[0].feature_id_textures = refs
             .iter()
             .enumerate()
-            .map(|(k, r)| r.feature_id(0, &format!("annotation_{k}")))
+            .map(|(k, r)| r.feature_id(0, &format!("annotation_{k}")).unwrap())
             .collect();
         let leaf = encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).unwrap();
         let (doc, _) = parse(&leaf.glb);

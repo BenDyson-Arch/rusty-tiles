@@ -357,7 +357,7 @@ fn any_number_of_feature_id_sets() {
     assert_eq!(atlas.samplers.len(), 2);
     for r in &refs {
         assert_eq!(atlas.textures[r.texture]["sampler"], 1);
-        let entry = r.feature_id(0, "annotation");
+        let entry = r.feature_id(0, "annotation").unwrap();
         assert_eq!(entry["texture"]["channels"], json!(r.channels));
         assert_eq!(entry["nullFeatureId"], json!(r.null_feature_id));
         assert_eq!(r.property(0)["index"], json!(r.texture));
@@ -456,4 +456,28 @@ fn basis_ktx2_is_refused_and_would_change_ids() {
         };
         assert!(check_level(&base, &support, [16, 16], &decoded).is_err());
     }
+}
+
+#[test]
+fn featureless_levels_emit_no_feature_id_entry() {
+    let sets = [IdSet { bytes: 1 }];
+    let out = bake(&Request {
+        width: 4,
+        height: 4,
+        sets: &sets,
+        ids: &[0; 16],
+        support: &[0; 16],
+        memory_limit: MEMORY,
+    })
+    .unwrap();
+    assert!(out.feature_counts[0].iter().all(|&n| n == 0));
+    let mut atlas = PreparedAtlas {
+        primitives: Vec::new(),
+        pages: Vec::new(),
+        textures: Vec::new(),
+        samplers: Vec::new(),
+    };
+    let refs = out.append_level(&mut atlas, 0).unwrap();
+    assert_eq!(refs[0].feature_id(0, "empty"), None);
+    assert_eq!(png(&atlas.pages[0].bytes).rgba, vec![255; 64]);
 }
