@@ -64,16 +64,20 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    set the same way. Keeping a vertex on every sharing tile always agrees, so the
    rounds converge (at most 16; otherwise `InvalidState`, never a hole). Rounds run
    stages 2-6 only; once the depth agrees, one finishing pass certifies, fills,
-   encodes and writes every tile with the final keep set (fills never touch a seam
-   vertex, so the audited seam edges are the published ones).
+   encodes and writes every tile with the final keep set. The finishing pass
+   reuses each tile's cached topology run, bound to a hash of its forced seam set;
+   a missing or mismatched cache is `InvalidState` (a missed re-run), so the
+   audited seam edges are the published ones (fills never touch a seam vertex).
 6. **Simplification.** Half-edge collapse (QEM, strict cost order with key
-   ties) onto existing source vertices to `P = 8192` faces: labels preserved, no
+   ties) onto existing source vertices to `P - P/16` faces (`P = 8192`; the rest
+   is headroom for fills): labels preserved, no
    primitive loses its last face, no vertex is orphaned, link and fold checks,
    border/primitive-seam vertices only along their feature edges, and
    true-boundary decimation never reaches a non-boundary seam vertex. If the
-   strict pass leaves more than `2P`, a relaxed pass also moves topology-locked
-   interior vertices. Above `2P` a tile is reported over budget; above `4P` it is
-   `Unsupported`.
+   strict pass leaves more than `P`, a relaxed pass also moves topology-locked
+   interior vertices (never onto a seam vertex). A tile still above `P` is reported
+   (`splitProvenanceTiles`: its provenance needs several tables, so CesiumJS picks
+   on it are unreliable); above `2P` it is over budget; above `4P` `Unsupported`.
 7. **Encode and certify.** Positions are encoded on the frozen H8 lattice at the
    tile's depth with `l(v)` (the plan is recomputed and must equal H8's; its
    SHA-256 is bound into every row); the GLB is decoded again and certification
@@ -99,7 +103,9 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
 8. **Fills.** Simple closed border loops of `S` with no seam vertex, one label,
    at most 64 vertices, fanned from the least key (orientation against the loop's
    faces, no existing diagonal, no degenerate decoded face) are filled only if
-   `b_A(F) = up(h(F->T_A) + max_c e_A(c)) <= e_open`, the unfilled certificate.
+   `b_A(F) = up(h(F->T_A) + max_c e_A(c)) <= e_open`, the unfilled certificate,
+   and only while the proxy stays within `P` faces. The seam-vertex exclusion is
+   checked again on every accepted loop (`InvalidState` otherwise).
    The final proxy->source term is `max(e^->(S), b_A(F))`; source->proxy is
    unchanged. An accepted fill never raises the error (checked). Rows go to
    `lod_filled` (primitive, loop key, size, bound, reopening children).
@@ -111,18 +117,23 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
 
 ## Published records and provenance
 
-Each proxy GLB has one scene node and mesh per present source primitive (as the
-leaves), split into glTF primitives of at most 8,192 non-indexed triangles. Its
-`EXT_structural_metadata` tables, each at most 8,192 rows (CesiumJS's per-table
-limit):
+Each proxy GLB has one scene node and mesh per distinct flat material, holding
+one glTF primitive of at most 8,192 non-indexed triangles (more only on a tile
+above `P`). CesiumJS counts a model's property-table bytes once per glTF
+primitive, so primitives are merged by material rather than kept per source
+primitive. Its `EXT_structural_metadata` tables, each at most 8,192 rows
+(CesiumJS's per-table limit):
 
 - `source_primitive` (feature-ID set 0, shared): every present primitive, with
   the leaves' columns (node, mesh, primitive, expanded ordinal, material);
-- `proxy_source` (feature-ID set 1, one table per glTF primitive): for each
-  triangle, the source triangle it descends from (node, mesh, primitive,
-  triangle index; the collapse survivor) or `fill = 1`. A later annotate pass can
-  map per-source-triangle metadata onto proxies through this table without
-  re-tiling; picking resolves through it as through a leaf's `source_triangle`;
+- `proxy_source` (feature-ID set 1, one table per proxy within `P` faces): for
+  each triangle, `triangle_index` (the source triangle it descends from within
+  its set-0 primitive, the collapse survivor; UINT32 unless an index needs 64
+  bits) and `fill` (1 for fill faces, whose `triangle_index` is 0). Node, mesh
+  and primitive come from the triangle's set-0 row. A later annotate pass can map
+  per-source-triangle metadata onto proxies through the pair (set-0 row,
+  `triangle_index`) without re-tiling; picking resolves through it as through a
+  leaf's `source_triangle`;
 - `lod_vanished` and `lod_filled` record tables (split at 8,192 rows).
 
 Readers must not assume a fixed number of feature-ID sets: each glTF primitive
@@ -136,8 +147,9 @@ child.
 
 ## Bounds, determinism and memory
 
-All work is per tile and single-threaded inside a tile; tiles of one depth run
-in parallel and every output is keyed (GLBs by name, rows external-sorted), so
+Tiles of one depth run in parallel, and inside a tile only the direct
+source->proxy scan runs in parallel (fixed blocks, nested in the same pool, max
+taken in block order); every output is keyed (GLBs by name, rows external-sorted), so
 output is independent of jobs and scratch location (tests compare archives
 across jobs 1 and 2). Resident state per job is one tile: at most eight
 children plus the proxy, their BVHs, and one 65,536-triangle direct chunk;
@@ -158,13 +170,17 @@ seam edges, removed-vertex logs and rows are spilled. Scratch adds the pre-pass
 
 ## Acceptance
 
-`cargo test --lib mesh_large::lod` (13 tests): exact-rational reference for the
+`cargo test --lib mesh_large::lod` (15 tests): exact-rational reference for the
 interval witness and the inward-rounding control; refinement against dense
 samples; simplifier, seam-removal and fill topology units; terrain (three
 primitives, islands, holes) and synthetic-depth (> 21) runs through H8 and H16
 checked by an independent auditor (own GLB decoder; sampled distances in both
 directions against the fixture's exact source never exceed the published error;
 frontier seams on decoded bytes; accounting, reopening and provenance; validator
-`decodedContentContainment`; identical archives across jobs); the controls
-"removed-region term skipped" and "crack relabelled as hole". The real-mesh
+`decodedContentContainment`; identical archives across jobs; one glTF primitive
+per material and one slim provenance table per proxy; no fill corner on a seam
+vertex); a seam-consensus stress run (forced removals fail on one side, so
+neighbours re-run; audited crack-free and identical across jobs); the controls
+"removed-region term skipped", "crack relabelled as hole" and "fills across
+seams" (refused by the border-hole check). The real-mesh
 consumer proof, performance and memory figures are in the PR and evidence.

@@ -452,6 +452,8 @@ struct Audit {
     fills: usize,
     vanished: usize,
     fill_faces: usize,
+    /// Fill-face corners on a seam vertex of their depth (the border-hole rule forbids).
+    seam_fill_vertices: usize,
     max_depth: u64,
 }
 
@@ -510,6 +512,8 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         present: BTreeSet<(u64, u64, u64)>,
         vanished: Vec<(u64, u64, u64)>,
         fills: Vec<([u64; 3], f64)>,
+        /// Decoded fill faces (proxies).
+        filled: Vec<[[f32; 3]; 3]>,
     }
     let primitives = |g: &Glb| -> BTreeSet<(u64, u64, u64)> {
         let t = &g
@@ -568,6 +572,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             provenance,
             vanished: vec![],
             fills: vec![],
+            filled: vec![],
         });
     }
     let leaf_count = tiles.len();
@@ -601,7 +606,8 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
                 "one glTF primitive per material"
             );
         }
-        for (f, table) in g.features.iter().zip(&g.second_table) {
+        let mut filled = vec![];
+        for ((f, table), face) in g.features.iter().zip(&g.second_table).zip(&g.faces) {
             let (class, t) = &g.tables[*table];
             assert_eq!(class, "proxy_source");
             let row = f[1] as usize;
@@ -614,6 +620,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
                 );
             } else {
                 audit.fill_faces += 1;
+                filled.push(*face);
             }
         }
         let mut vanished = vec![];
@@ -651,6 +658,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             provenance: vec![],
             vanished,
             fills,
+            filled,
         });
     }
     for p in &tiles[leaf_count..] {
@@ -741,6 +749,23 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
                 }
             }
         }
+        // Border-hole rule: no fill at depth d touches a seam vertex, a decoded position
+        // shared by two frontier tiles.
+        let mut owners: BTreeMap<[u32; 3], BTreeSet<usize>> = BTreeMap::new();
+        for (i, t) in tiles.iter().enumerate() {
+            if (i < leaf_count && t.depth <= d) || (i >= leaf_count && t.depth == d) {
+                for p in t.faces.iter().flatten() {
+                    owners.entry(welded(*p)).or_default().insert(i);
+                }
+            }
+        }
+        for t in tiles[leaf_count..].iter().filter(|t| t.depth == d) {
+            for p in t.filled.iter().flatten() {
+                if owners.get(&welded(*p)).is_some_and(|o| o.len() > 1) {
+                    audit.seam_fill_vertices += 1;
+                }
+            }
+        }
         let tol = steps[d as usize] * 1.5 + 1e-9;
         let near = |k: [u32; 3]| {
             let p = k.map(|b| f64::from(f32::from_bits(b)));
@@ -793,6 +818,7 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
         eprintln!("terrain jobs {jobs}: {audit:?}\nlod {lod}");
         assert!(audit.proxies >= 3 && audit.max_depth >= 1, "{audit:?}");
         assert_eq!(audit.cracks, 0, "{audit:?}");
+        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
         assert!(audit.matched_edges > 0);
         assert!(audit.vanished > 0, "islands should vanish at the root");
         assert!(
@@ -839,6 +865,7 @@ fn synthetic_depth_lod_is_certified_and_seamless() {
     eprintln!("cluster: {audit:?}");
     assert!(audit.max_depth > 21, "{audit:?}");
     assert_eq!(audit.cracks, 0);
+    assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
     let leaf_rows = rows(&dir.join("leaves.jsonl"));
     assert!(leaf_rows.iter().any(|r| r["depth"].as_u64().unwrap() > 21));
     archive(&dir, &work.path().join("c.3tz"));
@@ -912,4 +939,66 @@ fn control_crack_relabelled_as_hole_is_caught() {
             assert!(message.contains("not a source hole"), "{message}");
         }
     }
+}
+
+/// Seam consensus under stress: the first tile of each depth cannot remove a third of its
+/// forced seam vertices, so every neighbour that removed them re-runs with them kept. The
+/// published proxies (finishing pass over the audited topology caches) must still be
+/// crack-free on decoded bytes and certified, with identical bytes across worker counts.
+#[test]
+fn seam_consensus_reruns_are_audited() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let mut proxies = Vec::new();
+    for jobs in [1, 2] {
+        let dir = leaves(
+            &input,
+            &work.path().join(format!("leaves{jobs}")),
+            jobs,
+            Mutation::ForcedFailures,
+            1024,
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let lod = &manifest["lod"];
+        let audit = audit(&source, &dir);
+        eprintln!("consensus jobs {jobs}: {audit:?}\nlod {lod}");
+        assert!(lod["seamRounds"].as_u64().unwrap() > 0, "{lod}");
+        assert!(lod["seamKeptExtra"].as_u64().unwrap() > 0, "{lod}");
+        assert_eq!(audit.cracks, 0, "{audit:?}");
+        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
+        assert!(audit.matched_edges > 0);
+        let mut bytes = Vec::new();
+        for r in rows(&dir.join("proxies.jsonl")) {
+            bytes.push(fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap());
+        }
+        proxies.push(bytes);
+    }
+    assert!(proxies[0] == proxies[1], "proxies differ across jobs");
+}
+
+/// Control C4: with the fill eligibility opened to seam (cut) vertices, tiles of the deep
+/// cluster cap their own seam perimeters; the production border-hole check refuses the run.
+/// (Published outputs are also audited: `seam_fill_vertices` counts fill corners on seams.)
+#[test]
+fn control_fill_across_seams_is_caught() {
+    let work = tempfile::tempdir().unwrap();
+    let source = cluster();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let refused = leaves(
+        &input,
+        &work.path().join("leaves"),
+        2,
+        Mutation::FillAcrossSeams,
+        512,
+    )
+    .unwrap_err();
+    assert_eq!(refused.error.kind(), JobErrorKind::InvalidState);
+    assert!(
+        refused.error.message().contains("border-hole rule"),
+        "{}",
+        refused.error.message()
+    );
 }

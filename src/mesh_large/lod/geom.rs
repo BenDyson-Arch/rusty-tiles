@@ -32,6 +32,11 @@ pub(crate) enum Mutation {
     InjectCrack,
     /// The injected crack, with fills and the seam audit relabelling it a hole (control C3).
     CrackAsHole,
+    /// Stress, not a control: forced seam removals fail on one side, so the seam consensus
+    /// must re-run the neighbour tiles (the output must still audit clean).
+    ForcedFailures,
+    /// Fills may close loops through seam vertices (control: must be caught).
+    FillAcrossSeams,
 }
 
 /// The rounding direction of upper bounds; inward only under the C1 mutation.
