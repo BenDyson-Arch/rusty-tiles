@@ -8,6 +8,8 @@ use crate::content_integrity::{
     json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
 };
 mod containment;
+#[cfg(test)]
+mod memo_controls;
 mod types;
 pub use types::{
     PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
@@ -999,6 +1001,89 @@ struct Check<'a> {
     #[cfg(test)]
     implicit_facts: Vec<ImplicitTileFact>,
     c2: Containment,
+    /// EM: one summary per completed, implicit-free external-tileset document.
+    memo: HashMap<String, Rc<Summary>>,
+    /// EM: the expansions being traversed in full, innermost last.
+    recording: Vec<Recorder>,
+    /// First-inspection payload charges (EM-2): never steady charges.
+    once_references: u64,
+    once_bytes: u64,
+    /// The reference traversal switch of the controls (EM terms).
+    #[cfg(test)]
+    memoize: bool,
+    /// Documents prepared (parsed and schema-checked), for the engagement control.
+    #[cfg(test)]
+    prepared: u64,
+}
+/// EM: the memoized expansion of one external-tileset placement.
+struct Summary {
+    /// Steady charges of one placement (EM-2).
+    visits: u64,
+    references: u64,
+    bytes: u64,
+    /// Report counts of one expansion.
+    tiles: usize,
+    contents: usize,
+    links: usize,
+    /// Deepest tileset task and tile of the expansion, below the placement depth.
+    tileset_depth: usize,
+    node_depth: usize,
+    /// The placement-dependent root facts (EM-5.2, EM-5.3).
+    root_bounds: Volume,
+    root_transform: [f64; 16],
+    root_error: f64,
+    document_error: f64,
+    /// The document's own C2 registrations, in traversal order (EM-5.4).
+    events: Vec<Event>,
+}
+/// One C2 registration of a document's expansion. Indices into `locals` are
+/// the document's own tiles in registration order; `first` indices name the
+/// first placement's facts in the C2 arena and reference list.
+enum Event {
+    /// A tile; `parent: None` is the root, linked to the placement.
+    Tile {
+        first: usize,
+        parent: Option<usize>,
+        depth: usize,
+    },
+    Reference {
+        tile: usize,
+        first: usize,
+    },
+    Place(Box<Placement>),
+}
+struct Placement {
+    summary: Rc<Summary>,
+    parent: usize,
+    external: Option<VolumeFacts>,
+    depth: usize,
+}
+/// EM: one placement traversed in full, measured for its summary.
+struct Recorder {
+    depth: usize,
+    link: Link,
+    visits: u64,
+    references: u64,
+    bytes: u64,
+    once_references: u64,
+    once_bytes: u64,
+    tiles: usize,
+    contents: usize,
+    links: usize,
+    tileset_depth: usize,
+    node_depth: usize,
+    document_error: f64,
+    root: Option<(Volume, [f64; 16], f64)>,
+    /// Arena indices of the document's own tiles, ascending.
+    locals: Vec<usize>,
+    events: Vec<Event>,
+    /// An implicit root in the expansion (EM-3), or an unmapped registration.
+    opaque: bool,
+}
+impl Recorder {
+    fn local(&self, tile: Option<usize>) -> Option<usize> {
+        self.locals.binary_search(&tile?).ok()
+    }
 }
 /// The C2 level-chain link of a traversal task: the parent tile in the tile
 /// arena, and for an external-tileset root the referencing content volume.
@@ -1059,7 +1144,15 @@ impl Check<'_> {
         if let Some(report) = self.payloads.get(name) {
             return Ok(report.clone());
         }
+        let references_before = self.resources.reference_visits;
         let bytes_before = self.resources.bytes_read;
+        let report = self.inspect_payload(name, bytes_before)?;
+        // EM-2: a payload's first inspection is charged once per validation.
+        self.once_references += self.resources.reference_visits - references_before;
+        self.once_bytes += self.resources.bytes_read - bytes_before;
+        Ok(report)
+    }
+    fn inspect_payload(&mut self, name: &str, bytes_before: u64) -> Result<PayloadReport, Error> {
         let bytes = read_member(
             self.resources.archive,
             name,
@@ -1234,8 +1327,22 @@ impl Check<'_> {
         }];
         while let Some(task) = pending.pop() {
             if let ValidationTask::Reference { tile, content, uri } = task {
-                self.c2.reference(tile, content, uri)?;
+                self.c2_reference(tile, content, uri)?;
                 continue;
+            }
+            if let ValidationTask::Tileset {
+                name,
+                parent,
+                parent_error,
+                depth,
+                link,
+                ..
+            } = &task
+            {
+                if let Some(summary) = self.summary(name, *depth) {
+                    self.place(&summary, parent.as_ref(), *parent_error, *depth, *link)?;
+                    continue;
+                }
             }
             self.task_visits = self
                 .task_visits
@@ -1263,7 +1370,11 @@ impl Check<'_> {
                     if !self.active.insert(name.clone()) {
                         return Err(invalid("cyclic external tileset reference"));
                     }
+                    self.begin(depth, link)?;
                     let (mut doc, error, schema) = self.prepare_tileset(&name)?;
+                    if let Some(recorder) = self.recording.last_mut() {
+                        recorder.document_error = error;
+                    }
                     pending.push(ValidationTask::ExitTileset(name.clone()));
                     pending.push(ValidationTask::Node(NodeTask {
                         node: doc["root"].take(),
@@ -1282,8 +1393,296 @@ impl Check<'_> {
                 }
                 ValidationTask::ExitTileset(name) => {
                     self.active.remove(&name);
+                    self.finish(name)?;
                 }
                 ValidationTask::Reference { .. } => unreachable!("handled before charging"),
+            }
+        }
+        Ok(())
+    }
+
+    /// EM-6: the document's summary, if this placement may use it: the document
+    /// is not on the active path, and every steady charge and depth bound fits.
+    fn summary(&self, name: &str, depth: usize) -> Option<Rc<Summary>> {
+        #[cfg(test)]
+        if !self.memoize {
+            return None;
+        }
+        if self.active.contains(name) {
+            return None;
+        }
+        let summary = self.memo.get(name)?;
+        let limits = &self.resources.limits;
+        let within =
+            |used: u64, add: u64, cap: u64| used.checked_add(add).is_some_and(|n| n <= cap);
+        let deep = |add: usize, cap: u64| {
+            depth
+                .checked_add(add)
+                .is_some_and(|d| u64::try_from(d).is_ok_and(|d| d <= cap))
+        };
+        (within(self.task_visits, summary.visits, limits.hierarchy_visits)
+            && within(
+                self.resources.reference_visits,
+                summary.references,
+                limits.references,
+            )
+            && within(
+                self.resources.bytes_read,
+                summary.bytes,
+                limits.total_bytes_read,
+            )
+            && deep(summary.tileset_depth, 128)
+            && deep(summary.node_depth, limits.hierarchy_depth))
+        .then(|| summary.clone())
+    }
+    /// EM-5: one memoized placement. Its steady charges fit (EM-6), so only the
+    /// root's parent-dependent checks can fail; then its C2 facts are registered.
+    fn place(
+        &mut self,
+        summary: &Rc<Summary>,
+        parent: Option<&Volume>,
+        parent_error: Option<f64>,
+        depth: usize,
+        link: Link,
+    ) -> Result<(), Error> {
+        self.task_visits += summary.visits;
+        self.resources.reference_visits += summary.references;
+        self.resources.bytes_read += summary.bytes;
+        if let Some(parent) = parent {
+            if !contains(parent, &summary.root_bounds, &summary.root_transform)? {
+                return Err(invalid(format!(
+                    "child bounds escape parent at depth {depth}"
+                )));
+            }
+        }
+        let bound = parent_error.map_or(summary.document_error, |parent| {
+            parent.min(summary.document_error)
+        });
+        if summary.root_error > bound + 1e-8 * (1. + bound) {
+            return Err(invalid(format!(
+                "geometricError increases at depth {depth}"
+            )));
+        }
+        self.tiles += summary.tiles;
+        self.contents += summary.contents;
+        self.links += summary.links;
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.tileset_depth = recorder.tileset_depth.max(depth + summary.tileset_depth);
+            recorder.node_depth = recorder.node_depth.max(depth + summary.node_depth);
+            match recorder.local(link.parent) {
+                Some(parent) => {
+                    let placement = Placement {
+                        summary: summary.clone(),
+                        parent,
+                        external: link.external,
+                        depth: depth - recorder.depth,
+                    };
+                    recorder.events.try_reserve(1).map_err(|_| refused())?;
+                    recorder.events.push(Event::Place(Box::new(placement)));
+                }
+                None => recorder.opaque = true,
+            }
+        }
+        self.replay(summary, link, depth)
+    }
+    /// EM-5.4: register a summary's C2 facts again under this placement's link
+    /// and depth, in the reference traversal's order. Not recorded: an
+    /// enclosing recorder holds the placement itself.
+    fn replay(&mut self, summary: &Rc<Summary>, link: Link, depth: usize) -> Result<(), Error> {
+        struct Frame {
+            summary: Rc<Summary>,
+            next: usize,
+            locals: Vec<usize>,
+            link: Link,
+            depth: usize,
+        }
+        let mut frames = vec![Frame {
+            summary: summary.clone(),
+            next: 0,
+            locals: Vec::new(),
+            link,
+            depth,
+        }];
+        while let Some(frame) = frames.last_mut() {
+            let Some(event) = frame.summary.events.get(frame.next) else {
+                frames.pop();
+                continue;
+            };
+            frame.next += 1;
+            let nested = match event {
+                Event::Tile {
+                    first,
+                    parent,
+                    depth,
+                } => {
+                    let (parent, external) = match parent {
+                        None => (frame.link.parent, frame.link.external),
+                        Some(local) => (Some(frame.locals[*local]), None),
+                    };
+                    let fact = &self.c2.tiles[*first];
+                    let index = self.c2.tile(TileFact {
+                        transform: fact.transform,
+                        volume: fact.volume,
+                        external,
+                        parent,
+                        depth: frame.depth + depth,
+                        chain: 0,
+                    })?;
+                    try_push(&mut frame.locals, index)?;
+                    None
+                }
+                Event::Reference { tile, first } => {
+                    let Reference { uri, content, .. } = self.c2.references[*first];
+                    let content = content.map(|c| self.c2.content_volumes[c]);
+                    self.c2.reference(frame.locals[*tile], content, uri)?;
+                    None
+                }
+                Event::Place(placement) => Some(Frame {
+                    summary: placement.summary.clone(),
+                    next: 0,
+                    locals: Vec::new(),
+                    link: Link {
+                        parent: Some(frame.locals[placement.parent]),
+                        external: placement.external,
+                    },
+                    depth: frame.depth + placement.depth,
+                }),
+            };
+            if let Some(nested) = nested {
+                try_push(&mut frames, nested)?;
+            }
+        }
+        Ok(())
+    }
+    /// EM: start measuring a placement traversed in full. Its `Tileset` visit
+    /// is already charged.
+    fn begin(&mut self, depth: usize, link: Link) -> Result<(), Error> {
+        let recorder = Recorder {
+            depth,
+            link,
+            visits: self.task_visits - 1,
+            references: self.resources.reference_visits,
+            bytes: self.resources.bytes_read,
+            once_references: self.once_references,
+            once_bytes: self.once_bytes,
+            tiles: self.tiles,
+            contents: self.contents,
+            links: self.links,
+            tileset_depth: depth,
+            node_depth: depth,
+            document_error: 0.,
+            root: None,
+            locals: Vec::new(),
+            events: Vec::new(),
+            opaque: false,
+        };
+        try_push(&mut self.recording, recorder)
+    }
+    /// EM: a placement traversed in full has completed: summarize its document
+    /// unless its expansion is opaque (EM-3), and enter it in the enclosing one.
+    fn finish(&mut self, name: String) -> Result<(), Error> {
+        let Some(recorder) = self.recording.pop() else {
+            return Err(Error::InvalidState(
+                "external tileset exit without a recorder".into(),
+            ));
+        };
+        let summary = match recorder.root {
+            Some((root_bounds, root_transform, root_error)) if !recorder.opaque => {
+                let once_references = self.once_references - recorder.once_references;
+                let once_bytes = self.once_bytes - recorder.once_bytes;
+                Some(Rc::new(Summary {
+                    visits: self.task_visits - recorder.visits,
+                    references: self.resources.reference_visits
+                        - recorder.references
+                        - once_references,
+                    bytes: self.resources.bytes_read - recorder.bytes - once_bytes,
+                    tiles: self.tiles - recorder.tiles,
+                    contents: self.contents - recorder.contents,
+                    links: self.links - recorder.links,
+                    tileset_depth: recorder.tileset_depth - recorder.depth,
+                    node_depth: recorder.node_depth - recorder.depth,
+                    root_bounds,
+                    root_transform,
+                    root_error,
+                    document_error: recorder.document_error,
+                    events: recorder.events,
+                }))
+            }
+            _ => None,
+        };
+        if let Some(summary) = &summary {
+            self.memo.try_reserve(1).map_err(|_| refused())?;
+            self.memo.insert(name, summary.clone());
+        }
+        if let Some(outer) = self.recording.last_mut() {
+            outer.tileset_depth = outer.tileset_depth.max(recorder.tileset_depth);
+            outer.node_depth = outer.node_depth.max(recorder.node_depth);
+            match (summary, outer.local(recorder.link.parent)) {
+                (Some(summary), Some(parent)) => {
+                    let placement = Placement {
+                        summary,
+                        parent,
+                        external: recorder.link.external,
+                        depth: recorder.depth - outer.depth,
+                    };
+                    outer.events.try_reserve(1).map_err(|_| refused())?;
+                    outer.events.push(Event::Place(Box::new(placement)));
+                }
+                _ => outer.opaque = true,
+            }
+        }
+        Ok(())
+    }
+    /// A C2 tile registration of the full traversal, recorded for the summary
+    /// of the innermost document being traversed.
+    fn c2_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        let (parent, external, depth) = (fact.parent, fact.external, fact.depth);
+        let index = self.c2.tile(fact)?;
+        if let Some(recorder) = self.recording.last_mut() {
+            // The first registration is the root, linked to the placement;
+            // every other tile's parent is one of the document's own tiles.
+            let parent = if recorder.locals.is_empty() {
+                (parent == recorder.link.parent && external == recorder.link.external)
+                    .then_some(None)
+            } else {
+                recorder
+                    .local(parent)
+                    .filter(|_| external.is_none())
+                    .map(Some)
+            };
+            match parent {
+                Some(parent) => {
+                    recorder.events.try_reserve(1).map_err(|_| refused())?;
+                    recorder.events.push(Event::Tile {
+                        first: index,
+                        parent,
+                        depth: depth - recorder.depth,
+                    });
+                    try_push(&mut recorder.locals, index)?;
+                }
+                None => recorder.opaque = true,
+            }
+        }
+        Ok(index)
+    }
+    /// A C2 reference registration of the full traversal, recorded likewise.
+    fn c2_reference(
+        &mut self,
+        tile: usize,
+        content: Option<VolumeFacts>,
+        uri: usize,
+    ) -> Result<(), Error> {
+        self.c2.reference(tile, content, uri)?;
+        if let Some(recorder) = self.recording.last_mut() {
+            match recorder.local(Some(tile)) {
+                Some(tile) => {
+                    recorder.events.try_reserve(1).map_err(|_| refused())?;
+                    recorder.events.push(Event::Reference {
+                        tile,
+                        first: self.c2.references.len() - 1,
+                    });
+                }
+                None => recorder.opaque = true,
             }
         }
         Ok(())
@@ -1293,6 +1692,10 @@ impl Check<'_> {
         &mut self,
         name: &str,
     ) -> Result<(Value, f64, Option<Rc<ImplicitSchema>>), Error> {
+        #[cfg(test)]
+        {
+            self.prepared += 1;
+        }
         self.resources.reference(name.into())?;
         let mut doc = self.resources.read_json(name)?;
         self.schema
@@ -1331,6 +1734,9 @@ impl Check<'_> {
             None
         };
         if doc["root"].get("implicitTiling").is_some() {
+            if let Some(recorder) = self.recording.last_mut() {
+                recorder.opaque = true;
+            }
             // Raw immutable vector payloads remain reachable through the native
             // reuse state; display content uses implicit URI templates.
             if let Some(sources) = doc["extras"]["rustyTilesSourceContents"].as_array() {
@@ -1420,6 +1826,9 @@ impl Check<'_> {
         if depth as u64 > self.resources.limits.hierarchy_depth {
             return Err(Error::limit("hierarchy exceeds validation depth limit"));
         }
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.node_depth = recorder.node_depth.max(depth);
+        }
         if !node.is_object() {
             return Err(invalid("tile must be an object"));
         }
@@ -1433,6 +1842,12 @@ impl Check<'_> {
         } else {
             None
         };
+        if implicit.is_some() {
+            // EM-3: an implicit root is walked once per validation (OD-7).
+            if let Some(recorder) = self.recording.last_mut() {
+                recorder.opaque = true;
+            }
+        }
         if let Some(refine) = node.get("refine") {
             if !matches!(refine.as_str(), Some("ADD" | "REPLACE")) {
                 return Err(invalid("invalid refine value"));
@@ -1451,7 +1866,7 @@ impl Check<'_> {
         }
         self.extension_object(&node);
         self.extension_object(&node["boundingVolume"]);
-        let tile = self.c2.tile(TileFact {
+        let tile = self.c2_tile(TileFact {
             transform: node.get("transform").map(|_| std::array::from_fn(|i| m[i])),
             volume: Some(volume_facts(&bounds)),
             external: link.external,
@@ -1471,6 +1886,12 @@ impl Check<'_> {
             return Err(invalid(format!(
                 "geometricError increases at depth {depth}"
             )));
+        }
+        if let Some(recorder) = self.recording.last_mut() {
+            // The document's root is its first registered tile (EM-5.2, EM-5.3).
+            if recorder.root.is_none() && recorder.locals.first() == Some(&tile) {
+                recorder.root = Some((bounds.clone(), std::array::from_fn(|i| m[i]), error));
+            }
         }
         self.tiles += 1;
         if let Some(root) = implicit {
@@ -1573,7 +1994,7 @@ impl Check<'_> {
             if external_seen {
                 descendants.push(ValidationTask::Reference { tile, content, uri });
             } else {
-                self.c2.reference(tile, content, uri)?;
+                self.c2_reference(tile, content, uri)?;
             }
             vertices = vertices
                 .checked_add(inspected.vertices)
@@ -1898,6 +2319,11 @@ pub(crate) fn implicit_tile_facts(
     Ok(inspect_facts(request, limits)?.implicit)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Off selects the reference traversal (EM terms) on this thread.
+    static MEMOIZE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
 /// One successful inspection: the report and its test-only facts.
 struct Inspection {
     report: ValidationReport,
@@ -1905,6 +2331,11 @@ struct Inspection {
     uris: Vec<(String, UriFacts)>,
     #[cfg(test)]
     units: u64,
+    #[cfg(test)]
+    prepared: u64,
+    /// `task_visits`, `reference_visits` and `bytes_read` at the end.
+    #[cfg(test)]
+    counters: [u64; 3],
     #[cfg(test)]
     implicit: Vec<ImplicitTileFact>,
 }
@@ -1980,6 +2411,14 @@ fn inspect_facts(
         schemas: HashMap::new(),
         #[cfg(test)]
         implicit_facts: Vec::new(),
+        memo: HashMap::new(),
+        recording: Vec::new(),
+        once_references: 0,
+        once_bytes: 0,
+        #[cfg(test)]
+        memoize: MEMOIZE.with(std::cell::Cell::get),
+        #[cfg(test)]
+        prepared: 0,
         resources: ArchiveResources {
             archive: &mut archive,
             names,
@@ -2132,6 +2571,14 @@ fn inspect_facts(
         uris: std::mem::take(&mut check.c2.uris),
         #[cfg(test)]
         units: check.c2.units,
+        #[cfg(test)]
+        prepared: check.prepared,
+        #[cfg(test)]
+        counters: [
+            check.task_visits,
+            check.resources.reference_visits,
+            check.resources.bytes_read,
+        ],
         #[cfg(test)]
         implicit: check.implicit_facts,
     })
@@ -3053,7 +3500,7 @@ mod containment_controls {
         });
         (doc, bin)
     }
-    fn points(positions: &[[f32; 3]]) -> Vec<u8> {
+    pub(super) fn points(positions: &[[f32; 3]]) -> Vec<u8> {
         let (doc, bin) = points_doc(positions, json!([{"mesh":0}]));
         glb(&doc, &bin)
     }

@@ -144,6 +144,14 @@ document, 128 MiB per member, 1 GiB source archive and total stored member bytes
 payload elements, 128 MiB decoded views per document, 128 levels of hierarchy
 depth, and 2 GiB explicit member-hash and payload/document read work including
 repeated reads and constructor index reads.
+Each placement of a shared external tileset is charged its full visits,
+references and document bytes, as if it were read and walked again. In fact each
+external-tileset document is parsed and checked once. Later placements re-check
+only what depends on the placement: the root's bounds and geometric error against
+the referencing tile, the depth limits, and decoded containment through that
+placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
+physical reads. Verdicts, messages and report counts are the same as a full
+re-walk ([memo amendment](architecture/c1-external-tileset-memo-amendment.md)).
 Implicit availability scans count toward the same 2 GiB `total_bytes_read` work
 counter; an archive whose reads and scans together exceed it is refused with
 "availability scan exceeds total_bytes_read work limit".
