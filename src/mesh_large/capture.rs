@@ -3,6 +3,7 @@
 use super::{
     input::{ElementReader, StreamSource},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
+    source_crs::SourceFrame,
 };
 use crate::{
     gltf_source::source::{self, ScenePrimitive},
@@ -67,30 +68,82 @@ pub(super) fn vertices(
     }
     Ok(vertices)
 }
-pub(super) fn bake(
+/// A referenced source position after its accumulated node transform, in f64.
+pub(super) fn source_position(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
     vertex: u64,
-) -> Result<[f32; 3]> {
+) -> Result<[f64; 3]> {
     let vertex = usize::try_from(vertex).map_err(|_| overflow())?;
     let position = positions.vec3(vertex)?;
     if position.iter().any(|v| !v.is_finite()) {
         return Err(invalid("nonfinite accessor data"));
     }
     source::check_source_position(position)?;
-    let mut baked = source::bake_position(p.world, position)?;
-    for x in &mut baked {
+    Ok(source::world_position(p.world, position)?)
+}
+/// Positive zero for every zero component, so equal positions have equal bits.
+pub(super) fn canonical(mut position: [f32; 3]) -> [f32; 3] {
+    for x in &mut position {
         if *x == 0. {
             *x = 0.;
         }
     }
-    Ok(baked)
+    position
+}
+pub(super) fn bake(
+    p: &ScenePrimitive<'_>,
+    positions: &mut ElementReader<'_>,
+    vertex: u64,
+    frame: &mut SourceFrame,
+) -> Result<[f32; 3]> {
+    Ok(canonical(
+        frame.position(source_position(p, positions, vertex)?)?,
+    ))
+}
+
+/// Bounds `[min, max]` of the used post-node source corners in f64, before any source CRS.
+/// A source CRS chooses its origin from them; empty sources return an inverted box.
+pub(crate) fn source_bounds(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<[[f64; 3]; 2]> {
+    let mut bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    for p in source.document.scene_primitives() {
+        check()?;
+        let mut positions = source.reader(&p.position, buffer_bytes);
+        let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
+        for triangle in 0..p.triangles {
+            if triangle.is_multiple_of(1024) {
+                check()?;
+            }
+            for vertex in vertices(&p, &mut indices, triangle)? {
+                let position = source_position(&p, &mut positions, vertex)?;
+                for axis in 0..3 {
+                    bounds[0][axis] = bounds[0][axis].min(position[axis]);
+                    bounds[1][axis] = bounds[1][axis].max(position[axis]);
+                }
+            }
+        }
+    }
+    Ok(bounds)
 }
 
 /// Read-only preflight scan gives the tight box of used baked corners. It observes payload
 /// bytes, so invalid referenced positions/indices may fail here before scratch creation.
 pub(crate) fn scan(
     source: &StreamSource,
+    buffer_bytes: usize,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<SourceScan> {
+    scan_in(source, &mut SourceFrame::Local, buffer_bytes, check)
+}
+
+/// [`scan`] in a resolved capture frame; the frame must be the one capture uses.
+pub(crate) fn scan_in(
+    source: &StreamSource,
+    frame: &mut SourceFrame,
     buffer_bytes: usize,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SourceScan> {
@@ -115,7 +168,7 @@ pub(crate) fn scan(
                 check()?;
             }
             for vertex in vertices(&p, &mut indices, triangle)? {
-                bounds.include(bake(&p, &mut positions, vertex)?);
+                bounds.include(bake(&p, &mut positions, vertex, frame)?);
             }
         }
     }
@@ -171,15 +224,16 @@ pub(crate) fn capture<'s>(
             if records.is_multiple_of(3072) {
                 check()?;
             }
-            let position =
-                if let Some((vertex, position)) = cached.filter(|(v, _)| *v == corner.vertex) {
-                    let _ = vertex;
-                    position
-                } else {
-                    let position = bake(&p, &mut positions, corner.vertex)?;
-                    cached = Some((corner.vertex, position));
-                    position
-                };
+            let position = if let Some((vertex, position)) =
+                cached.filter(|(v, _)| *v == corner.vertex)
+            {
+                let _ = vertex;
+                position
+            } else {
+                let position = bake(&p, &mut positions, corner.vertex, &mut SourceFrame::Local)?;
+                cached = Some((corner.vertex, position));
+                position
+            };
             positioned.push(CornerPosition {
                 primitive: corner.primitive,
                 triangle: corner.triangle,

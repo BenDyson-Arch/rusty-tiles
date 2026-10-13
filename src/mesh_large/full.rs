@@ -12,6 +12,7 @@ use super::{
         planning::{self, LeafPlan},
     },
     records::TriangleRecord,
+    source_crs::{MeshSourceCrsReport, SourceFrame},
     tree::{self, TreeOutput},
 };
 use crate::{
@@ -68,6 +69,9 @@ pub(crate) struct FullCaptureReport {
     pub scratch_memory_backed: bool,
     /// Local encoding contract version: dataset-wide zero origin/aligned lattice.
     pub lattice_version: u32,
+    /// The resolved source CRS; absent for local sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_crs: Option<MeshSourceCrsReport>,
 }
 
 pub(crate) struct FullCaptured {
@@ -83,6 +87,8 @@ pub(crate) struct FullCaptured {
     pub lattice: LatticePlan,
     pub scan: SourceScan,
     pub report: FullCaptureReport,
+    /// Root placement derived from a source CRS (ENU at its origin to ECEF).
+    pub placement: Option<crate::mesh_archive::ResolvedPlacement>,
     // Last: all owned spill handles are destroyed before the directory.
     pub scratch: Scratch,
 }
@@ -330,7 +336,16 @@ pub(crate) fn capture_admitted(
         config.member_ceiling,
     )
     .map_err(super::failure)?;
-    let scan = capture::scan(&source, config.sort.buffer_bytes, check).map_err(super::failure)?;
+    // One frame, resolved once from the used source bounds, serves scan and capture.
+    let mut frame = match &config.source_crs {
+        None => SourceFrame::Local,
+        Some(spec) => capture::source_bounds(&source, config.sort.buffer_bytes, check)
+            .and_then(|bounds| SourceFrame::resolve(spec, bounds))
+            .map_err(super::failure)?,
+    };
+    let scan = capture::scan_in(&source, &mut frame, config.sort.buffer_bytes, check)
+        .map_err(super::failure)?;
+    let source_crs = frame.placement();
     let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
     let parent = config
         .scratch_dir
@@ -391,8 +406,14 @@ pub(crate) fn capture_admitted(
             ));
         }
         config::preflight_remaining(&scratch, need.need_bytes)?;
-        let mut full_stream =
-            attributes::capture_full(&source, &scratch, config.sorter(workers), &scan, check)?;
+        let mut full_stream = attributes::capture_full_in(
+            &source,
+            &mut frame,
+            &scratch,
+            config.sorter(workers),
+            &scan,
+            check,
+        )?;
         let mut full_writer = SequenceWriter::<FullTriangle>::new(
             &scratch,
             "full-triangles",
@@ -561,6 +582,7 @@ pub(crate) fn capture_admitted(
             scratch: need,
             image_capture,
             lattice_version: 1,
+            source_crs: source_crs.as_ref().map(|(_, report)| report.clone()),
         };
         Ok((
             tree,
@@ -602,6 +624,7 @@ pub(crate) fn capture_admitted(
             lattice,
             scan,
             report,
+            placement: source_crs.map(|(placement, _)| placement),
             scratch,
         }),
         Err(error) => {

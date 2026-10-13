@@ -58,8 +58,8 @@ pub use mesh_archive::{
     ModelWrapRequest, ModelWrapResult,
 };
 pub use mesh_large::{
-    mesh_to_tileset, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport, TilerRequest,
-    TilerResult,
+    mesh_to_tileset, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics, TilerJobs, TilerProfile,
+    TilerReport, TilerRequest, TilerResult,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

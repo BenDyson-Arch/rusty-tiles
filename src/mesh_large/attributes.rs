@@ -2,9 +2,10 @@
 //! caller releases source ownership. At most six accessor windows are live in the join;
 //! callers must additionally charge the typed sorter runs and merge buffers.
 use super::{
-    capture::{bake, triangle_bytes, vertices, SourceScan},
+    capture::{canonical, source_position, triangle_bytes, vertices, SourceScan},
     input::{ElementReader, StreamSource},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
+    source_crs::{Jacobian, SourceFrame},
 };
 use crate::{
     gltf_source::source::ScenePrimitive,
@@ -178,6 +179,7 @@ fn normalize(mapped: [f64; 3], role: &str) -> Result<[f32; 3]> {
 fn read_attributes(
     p: &ScenePrimitive<'_>,
     vertex: u64,
+    jacobian: Option<&Jacobian>,
     normals: &mut Option<ElementReader<'_>>,
     tangents: &mut Option<ElementReader<'_>>,
     uvs: &mut [Option<ElementReader<'_>>; 2],
@@ -187,23 +189,23 @@ fn read_attributes(
     let mut out = CornerAttributes::default();
     if let Some(reader) = normals {
         let n = reader.vec3(vertex)?;
-        out.normal = normalize(
-            std::array::from_fn(|r| (0..3).map(|c| p.normal_matrix[r][c] * n[c]).sum()),
-            "normal",
-        )?;
+        let mut mapped =
+            std::array::from_fn(|r| (0..3).map(|c| p.normal_matrix[r][c] * n[c]).sum());
+        if let Some(jacobian) = jacobian {
+            mapped = jacobian.normal(mapped)?;
+        }
+        out.normal = normalize(mapped, "normal")?;
     }
     if let Some(reader) = tangents {
         let t = reader.values(vertex)?;
-        let xyz = normalize(
-            std::array::from_fn(|r| (0..3).map(|c| p.world[r][c] * t[c]).sum()),
-            "tangent",
-        )?;
-        out.tangent = [
-            xyz[0],
-            xyz[1],
-            xyz[2],
-            (t[3] * p.determinant.signum()) as f32,
-        ];
+        let mut mapped = std::array::from_fn(|r| (0..3).map(|c| p.world[r][c] * t[c]).sum());
+        let mut handedness = p.determinant.signum();
+        if let Some(jacobian) = jacobian {
+            mapped = jacobian.tangent(mapped);
+            handedness *= jacobian.handedness();
+        }
+        let xyz = normalize(mapped, "tangent")?;
+        out.tangent = [xyz[0], xyz[1], xyz[2], (t[3] * handedness) as f32];
     }
     for (reader, uv) in uvs.iter_mut().zip(&mut out.texcoords) {
         if let Some(reader) = reader {
@@ -230,6 +232,17 @@ fn read_attributes(
 /// degenerate. The returned stream reads only scratch; image bytes are not captured here.
 pub(crate) fn capture_full<'s>(
     source: &StreamSource,
+    scratch: &'s Scratch,
+    sort: SortConfig,
+    scan: &SourceScan,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<SortedStream<'s, FullTriangle>> {
+    capture_full_in(source, &mut SourceFrame::Local, scratch, sort, scan, check)
+}
+/// [`capture_full`] in the frame its `scan` used.
+pub(crate) fn capture_full_in<'s>(
+    source: &StreamSource,
+    frame: &mut SourceFrame,
     scratch: &'s Scratch,
     sort: SortConfig,
     scan: &SourceScan,
@@ -280,10 +293,14 @@ pub(crate) fn capture_full<'s>(
                 if let Some((_, value)) = cached.filter(|(v, _)| *v == corner.vertex) {
                     value
                 } else {
-                    let position = bake(&p, &mut positions, corner.vertex)?;
+                    let world = source_position(&p, &mut positions, corner.vertex)?;
+                    let (position, jacobian) =
+                        frame.vertex(world, normals.is_some() || tangents.is_some())?;
+                    let position = canonical(position);
                     let attributes = read_attributes(
                         &p,
                         corner.vertex,
+                        jacobian.as_ref(),
                         &mut normals,
                         &mut tangents,
                         &mut uvs,

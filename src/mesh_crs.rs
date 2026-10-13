@@ -37,14 +37,8 @@ pub(crate) fn bake(
         ));
     }
     let mut operation = Transform::new(definition, height_offset)?;
-    let (geographic, factor) = operation
-        .polygon_units()
+    let (horizontal_step, degrees_per_unit) = horizontal_step(&operation)
         .ok_or_else(|| Error::Data("cannot determine horizontal mesh CRS units".into()))?;
-    let horizontal_step = if geographic {
-        1e-5 / factor
-    } else {
-        1.0 / factor
-    };
     let (min, max) = crate::mesh::position_aabb_yup(scene);
     let centre = std::array::from_fn(|i| (min[i] + max[i]) * 0.5);
     let origin =
@@ -69,20 +63,14 @@ pub(crate) fn bake(
                 for axis in 0..3 {
                     // Differentiate before adding a large offset. The CRS
                     // resolver receives f64 coordinates for both samples.
-                    let step = if (axes == SourceAxes::Xyz && axis == 2)
-                        || (axes == SourceAxes::YUp && axis == 1)
-                    {
-                        0.1
-                    } else {
-                        horizontal_step
-                    };
+                    let step = probe_step(axes, axis, horizontal_step);
                     let (pair, span) = samples(
                         vertex.pos.map(f64::from),
                         axes,
                         offset,
                         axis,
                         step,
-                        geographic.then_some(factor),
+                        degrees_per_unit,
                     )?;
                     probes.extend(pair);
                     deltas.push(span);
@@ -127,6 +115,55 @@ pub(crate) fn bake(
         }
     }
     Ok(origin)
+}
+
+/// Central-difference step along one post-node source axis: 0.1 m vertically,
+/// one horizontal unit (1e-5 degree when geographic) otherwise.
+pub(crate) fn probe_step(axes: SourceAxes, axis: usize, horizontal_step: f64) -> f64 {
+    if (axes == SourceAxes::Xyz && axis == 2) || (axes == SourceAxes::YUp && axis == 1) {
+        0.1
+    } else {
+        horizontal_step
+    }
+}
+
+/// Horizontal probe step in source units for a resolved operation; `None`
+/// when its units cannot be determined. Also returns the geographic degrees
+/// factor used by [`samples`] for longitude wrapping and pole handling.
+pub(crate) fn horizontal_step(operation: &Transform) -> Option<(f64, Option<f64>)> {
+    let (geographic, factor) = operation.polygon_units()?;
+    Some(if geographic {
+        (1e-5 / factor, Some(factor))
+    } else {
+        (1.0 / factor, None)
+    })
+}
+
+/// One vertex's Jacobian columns d(local Y-up ENU)/d(post-node source axis),
+/// with the same probes, domain-edge one-sided rule and frame as the legacy bake.
+/// `base` is the vertex's validated ECEF position. A resolver promotion is the
+/// caller's to detect; this function never mutates the vertex.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn vertex_jacobian(
+    operation: &mut Transform,
+    position: [f64; 3],
+    base: [f64; 3],
+    axes: SourceAxes,
+    offset: crate::georef::SourceOffset,
+    horizontal_step: f64,
+    degrees_per_unit: Option<f64>,
+    frame: &EnuFrame,
+) -> Result<[[f64; 3]; 3], Error> {
+    let mut probes = Vec::with_capacity(6);
+    let mut deltas = Vec::with_capacity(3);
+    for axis in 0..3 {
+        let step = probe_step(axes, axis, horizontal_step);
+        let (pair, span) = samples(position, axes, offset, axis, step, degrees_per_unit)?;
+        probes.extend(pair);
+        deltas.push(span);
+    }
+    let mut columns = derivatives(operation, &probes, &deltas, &[base], &[0], frame)?;
+    Ok(columns.remove(0))
 }
 
 fn derivatives(
@@ -234,11 +271,27 @@ fn one_sided(
     }
 }
 
-fn to_y_up([east, north, up]: [f64; 3]) -> [f64; 3] {
+pub(crate) fn to_y_up([east, north, up]: [f64; 3]) -> [f64; 3] {
     [east, up, -north]
 }
 
 fn normal(columns: [[f64; 3]; 3], normal: [f32; 3]) -> Result<[f32; 3], Error> {
+    let transformed = inverse_transpose(columns, normal.map(f64::from))?;
+    let length = transformed.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if !length.is_finite() || length == 0. {
+        return Err(Error::Data(
+            "mesh CRS normal Jacobian is singular/nonfinite".into(),
+        ));
+    }
+    Ok(transformed.map(|v| (v / length) as f32))
+}
+
+/// `det(J)·J^-T·n` scaled by the determinant's sign, for Jacobian columns `J`.
+/// The result is unnormalized; a singular or nonfinite Jacobian is refused.
+pub(crate) fn inverse_transpose(
+    columns: [[f64; 3]; 3],
+    normal: [f64; 3],
+) -> Result<[f64; 3], Error> {
     let cross = |a: [f64; 3], b: [f64; 3]| {
         [
             a[1] * b[2] - a[2] * b[1],
@@ -252,19 +305,14 @@ fn normal(columns: [[f64; 3]; 3], normal: [f32; 3]) -> Result<[f32; 3], Error> {
         cross(columns[0], columns[1]),
     ];
     let determinant = (0..3).map(|i| columns[0][i] * cofactors[0][i]).sum::<f64>();
-    let transformed: [f64; 3] = std::array::from_fn(|i| {
-        (0..3)
-            .map(|j| cofactors[j][i] * f64::from(normal[j]))
-            .sum::<f64>()
-            * determinant.signum()
-    });
-    let length = transformed.iter().map(|v| v * v).sum::<f64>().sqrt();
-    if !determinant.is_finite() || determinant == 0. || !length.is_finite() || length == 0. {
+    if !determinant.is_finite() || determinant == 0. {
         return Err(Error::Data(
             "mesh CRS normal Jacobian is singular/nonfinite".into(),
         ));
     }
-    Ok(transformed.map(|v| (v / length) as f32))
+    Ok(std::array::from_fn(|i| {
+        (0..3).map(|j| cofactors[j][i] * normal[j]).sum::<f64>() * determinant.signum()
+    }))
 }
 
 #[cfg(test)]

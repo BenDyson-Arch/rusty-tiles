@@ -70,6 +70,8 @@ pub(crate) struct TreeConfig {
     pub(crate) tile_bytes: u64,
     pub(crate) height_cap: u32,
     pub(crate) member_ceiling: u64,
+    /// Declared source CRS applied at capture; `None` is local metres/Y-up.
+    pub source_crs: Option<super::MeshSourceCrs>,
 }
 
 impl TreeConfig {
@@ -105,6 +107,7 @@ impl TreeConfig {
             tile_bytes: TILE_BYTES,
             height_cap: HEIGHT_CAP,
             member_ceiling: MEMBER_CEILING_3TZ,
+            source_crs: None,
         }
     }
 

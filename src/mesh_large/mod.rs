@@ -15,11 +15,13 @@ mod leaves;
 mod lod;
 mod pipeline;
 mod records;
+mod source_crs;
 mod tree;
 pub use pipeline::{
     mesh_to_tileset, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport, TilerRequest,
     TilerResult,
 };
+pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -91,6 +93,12 @@ pub(crate) fn build(
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<CapturedTree, JobFailure> {
     config.validate().map_err(failure)?;
+    if config.source_crs.is_some() {
+        return Err(failure(JobError::new(
+            JobErrorKind::InvalidRequest,
+            "the H1 diagnostic build captures local sources only",
+        )));
+    }
     check().map_err(failure)?;
     let source = StreamSource::open(input, check).map_err(failure)?;
     member_gate(

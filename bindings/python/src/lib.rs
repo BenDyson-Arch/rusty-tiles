@@ -18,9 +18,9 @@ use tiles_core::{
     tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshApproximation,
-    MeshPlacement, MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer,
-    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes, TilerJobs, TilerProfile,
-    TilerRequest,
+    MeshPlacement, MeshRequest, MeshSourceCrs, MeshTo3tzOptions, ModelManifestRequest,
+    ModelWrapRequest, Observer, OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes,
+    TilerJobs, TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -324,10 +324,11 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
     Ok(TilerJobs::Maximum(count))
 }
 
-/// Stream an admitted local metre/Y-up static mesh into one Tiles 1.1 .3tz.
-/// Profiles are provisional; jobs is a resource-capped maximum, and None means auto.
+/// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
+/// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
+/// maximum, and None means auto.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, height_offset=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -339,6 +340,10 @@ fn mesh_to_tileset(
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
     scene_offset: Option<(f64, f64, f64)>,
+    source_crs: Option<&str>,
+    source_axes: Option<&str>,
+    source_offset: Option<Vec<f64>>,
+    height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<TilerResult> {
@@ -346,6 +351,26 @@ fn mesh_to_tileset(
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
+    let source_axes = source_axes
+        .map(|axes| match axes {
+            "xyz" => Ok(SourceAxes::Xyz),
+            "y-up" => Ok(SourceAxes::YUp),
+            _ => Err(tiler_request_error(
+                py,
+                JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "source_axes must be xyz or y-up",
+                ),
+            )),
+        })
+        .transpose()?;
+    let source_crs = MeshSourceCrs::from_parameters(
+        source_crs,
+        source_axes,
+        source_offset.as_deref(),
+        height_offset,
+    )
+    .map_err(|error| tiler_request_error(py, error))?;
     let mut request = TilerRequest::new(input, output)
         .with_profile(profile)
         .with_jobs(jobs)
@@ -355,6 +380,9 @@ fn mesh_to_tileset(
         } else {
             OutputPolicy::CreateNew
         });
+    if let Some(source_crs) = source_crs {
+        request = request.with_source_crs(source_crs);
+    }
     if let Some(path) = scratch_dir {
         request = request.with_scratch_dir(path);
     }

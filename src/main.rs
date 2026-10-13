@@ -15,7 +15,7 @@ use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::{
     doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshApproximation, MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest,
+    MeshApproximation, MeshPlacement, MeshRequest, MeshResult, MeshSourceCrs, ModelManifestRequest,
     ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
     RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest, RasterResult,
     Reporter, RunControl, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
@@ -141,6 +141,53 @@ struct TilerArgs {
     scratch_dir: Option<PathBuf>,
     #[command(flatten)]
     placement: RigidPlacementArgs,
+    #[command(flatten)]
+    source: SourceCrsArgs,
+}
+
+#[derive(Args)]
+struct SourceCrsArgs {
+    /// Source CRS: local (metres, glTF Y up) or a 2D horizontal EPSG/WKT/PROJ definition
+    #[arg(
+        long = "sourceCrs",
+        visible_alias = "source-crs",
+        default_value = "local"
+    )]
+    source_crs: String,
+    /// Source CRS axes after node transforms: xyz (E,N,height) or y-up (E,height,-N)
+    #[arg(long = "sourceAxes", visible_alias = "source-axes", value_enum)]
+    source_axes: Option<SourceAxes>,
+    /// Source CRS shift E N [A], added in f64: E/N in horizontal CRS units, A metres
+    #[arg(
+        long = "sourceOffset",
+        visible_alias = "source-offset",
+        num_args = 2..=3,
+        allow_hyphen_values = true
+    )]
+    source_offset: Vec<f64>,
+    /// Metres added to source height plus A to give ellipsoidal height; required with a source CRS
+    #[arg(
+        long = "heightOffset",
+        visible_alias = "height-offset",
+        allow_hyphen_values = true
+    )]
+    height_offset: Option<f64>,
+}
+impl SourceCrsArgs {
+    fn resolve(self) -> Result<Option<MeshSourceCrs>, Error> {
+        Ok(MeshSourceCrs::from_parameters(
+            Some(&self.source_crs),
+            self.source_axes,
+            (!self.source_offset.is_empty()).then_some(&self.source_offset[..]),
+            self.height_offset,
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
 }
 
 #[derive(Args)]
@@ -1128,6 +1175,9 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                     OutputPolicy::CreateNew
                 })
                 .with_placement(a.placement.resolve()?);
+            if let Some(source_crs) = a.source.resolve()? {
+                request = request.with_source_crs(source_crs);
+            }
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }

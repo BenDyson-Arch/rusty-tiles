@@ -5,6 +5,7 @@ use super::{
     full,
     input::StreamSource,
     leaves::producer,
+    source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
 use crate::{
     mesh_archive::ResolvedPlacement, runtime::Staging, CleanupDiagnostic, JobError, JobErrorKind,
@@ -72,6 +73,7 @@ pub struct TilerRequest {
     jobs: TilerJobs,
     scratch_dir: Option<PathBuf>,
     placement: MeshPlacement,
+    source_crs: Option<MeshSourceCrs>,
     policy: OutputPolicy,
 }
 impl TilerRequest {
@@ -83,6 +85,7 @@ impl TilerRequest {
             jobs: TilerJobs::Auto,
             scratch_dir: None,
             placement: MeshPlacement::Local,
+            source_crs: None,
             policy: OutputPolicy::CreateNew,
         }
     }
@@ -100,6 +103,12 @@ impl TilerRequest {
     }
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
         self.placement = placement;
+        self
+    }
+    /// Map source positions through a declared CRS at capture. Mutually exclusive with a
+    /// rigid placement: the root transform is derived from the source.
+    pub fn with_source_crs(mut self, source_crs: MeshSourceCrs) -> Self {
+        self.source_crs = Some(source_crs);
         self
     }
     pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
@@ -141,6 +150,9 @@ pub struct TilerReport {
     pub source_coordinates: &'static str,
     pub coordinates: &'static str,
     pub root_transform: Option<[f64; 16]>,
+    /// The resolved source CRS; omitted for local sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_crs: Option<MeshSourceCrsReport>,
 }
 impl TilerReport {
     fn new(
@@ -176,13 +188,18 @@ impl TilerReport {
             root_geometric_error: facts.root_geometric_error,
             tileset_geometric_error: facts.tileset_geometric_error,
             placement: facts.placement.clone(),
-            source_coordinates: "local-gltf",
+            source_coordinates: if capture.source_crs.is_some() {
+                "source-crs"
+            } else {
+                "local-gltf"
+            },
             coordinates: if facts.root_transform.is_some() {
                 "wgs84-ecef"
             } else {
                 "local-gltf"
             },
             root_transform: facts.root_transform,
+            source_crs: capture.source_crs.clone(),
         }
     }
 }
@@ -225,6 +242,14 @@ fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), Job
         return Err(invalid("mesh output must have the .3tz extension"));
     }
     let placement = ResolvedPlacement::resolve(&request.placement)?;
+    if let Some(source_crs) = &request.source_crs {
+        if request.placement != MeshPlacement::Local {
+            return Err(invalid(
+                "a source CRS cannot be combined with --anchor, --orientation-xyzw or --scene-offset",
+            ));
+        }
+        source_crs.check()?;
+    }
     match std::fs::symlink_metadata(&request.output) {
         Ok(m) if !m.is_file() => return Err(invalid("mesh output must be a regular file path")),
         Ok(_) => {}
@@ -269,6 +294,7 @@ pub fn mesh_to_tileset(
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
+    config.source_crs = request.source_crs.clone();
     config.scratch_dir = request
         .scratch_dir
         .as_deref()
@@ -341,6 +367,8 @@ pub fn mesh_to_tileset(
         // H17 certified the coarse tiles inside the producer, while the capture was live;
         // delivery publishes them with the leaves.
         let delivery_request = MeshTilesetRequest::new(work.path(), &output);
+        // A source CRS derives the root placement from the captured origin.
+        let placement = captured.placement.clone().unwrap_or(placement);
         let prepared = delivery::prepare_tiler(
             &delivery_request,
             placement,
