@@ -3,11 +3,11 @@
   "files": {
     "fixtures/manifest.json": {
       "bytes": 82908,
-      "sha256": "becc7500d38e941cd02c4a65306b9a6d3767b4252d2a08ec88bf640168f30e16"
+      "sha256": "137a0852713865b0d3214e99dd526e0acf619d4fcb892cf2aa8d2be05fcf0042"
     },
     "generator.py": {
-      "bytes": 23261,
-      "sha256": "71b261ecbd7eaab88f3c6456d39b88567b5236cbfe8bb488583bd0966012dd4e"
+      "bytes": 23286,
+      "sha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f"
     },
     "ktx2_oracle.py": {
       "bytes": 12552,
@@ -56,10 +56,6 @@
     "primary/texture.KHR_texture_basisu.schema.json": {
       "bytes": 604,
       "sha256": "cc1d31267bb69991807ff5e73a9a3e6029ad3b3b4a76dd2d48f44061abe1c013"
-    },
-    "real-output-gate.json": {
-      "bytes": 2640,
-      "sha256": "14fd0c724b5e1b72dfa1c5c65fb3939a9c42c20cf4a80fe9f68248fbc28d355e"
     },
     "runner.py": {
       "bytes": 5216,

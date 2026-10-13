@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "Predictions frozen before target execution; not execution evidence",
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
-  "generatorSha256": "71b261ecbd7eaab88f3c6456d39b88567b5236cbfe8bb488583bd0966012dd4e",
+  "generatorSha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
   "runnerSha256": "35dd09509f09bd5e6d70f482753726a19b972b3572d8eac8346ae3b160e91949",
   "referencePins": {
