@@ -5,7 +5,9 @@ Light process: tests, one nonauthor review, perf/memory evidence, a real-mesh
 consumer proof, exact-head CI. Bulk evidence (binaries, inputs, archives,
 screenshots, logs) stays out of the tree in
 `~/.cache/rusty-tiles-evidence/h16-20261013/`; [acceptance.json](acceptance.json)
-binds it by SHA-256.
+binds it by SHA-256. The real-mesh and synthetic runs used the release binary
+at `3a52ecb`; the binary at `d5502e7`, after the review fixes, reproduces the
+real-mesh and crop archives byte for byte.
 
 ## Tests
 
@@ -33,6 +35,7 @@ unchanged, so source identities are the textured source's.
 | `mesh-large-to-3tz --profile balanced` (H8 then H16) | 193.6 s | 186 MiB | 1,959 leaves, 2,806 tiles, 200 implicit roots, 7 documents, 2,167 members, 1.40 GB |
 | H16 stage (in the run above) | 6.7 s | | |
 | `mesh-leaves-to-3tz` alone on kept leaves | 9.5 s | 20.8 MiB | same bytes |
+| the same at the reviewed head `d5502e7` (payloads hashed when staged) | 10.6 s | 18.1 MiB | same bytes |
 
 The archive passes an independent read (`tools/check_archive.py`): all 1,959
 payloads reachable once, availability closed and equal to the members, no

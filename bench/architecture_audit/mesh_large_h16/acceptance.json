@@ -1,6 +1,6 @@
 {
  "scope": "H16 streamed hierarchy and 3TZ delivery (light process)",
- "head": "744ffff3d385fbb2a9d64d21e5f1c58ba6b66548",
+ "head": "d5502e7",
  "evidence_root": "/home/bend/.cache/rusty-tiles-evidence/h16-20261013",
  "source_input": {
   "path": "~/.cache/rusty-tiles-preview/input/mgal_detail_offset_2048.glb",
@@ -8,6 +8,9 @@
  },
  "evidence": {
   "rusty-tiles-h16-3a52ecb": "d265dafa06785e8250fe6af417f8cddbe4888054f8971663596522b31539c729",
+  "rusty-tiles-h16-d5502e7": "9e2876f1af5824fea559185be4f4c1c243972ee5b4ef8522b389582c3962c586",
+  "det/h16-final.run.json": "32fae91077b9f61be6cc0a5636c18c1c1219c727d6edf8fbf76197aa6b8056c5",
+  "synth/l7-index-check.json": "e13f40f3908c27d4ea62ba786da2fca4fdffc44cfbb5f85ecda2a363a6e354a7",
   "rusty-tiles-develop-e691a03": "d5c5309c11606e3610854cfcf3fa86049c9f01ec59c205f5830271b146fb4a10",
   "anchor.txt": "325dc18baef4a8af7b78044cff04ba67ea1bf07faa82575fc17fafa8fdf12120",
   "input/mgal_vertex_colour.glb": "7dfb1d25a7cf3b7ab59e585e10d5091ad6c2b72f6ff7fe6066f5165cf6316d97",
