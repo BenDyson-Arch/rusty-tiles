@@ -1,7 +1,7 @@
 // Load one served output in pinned Cesium and report runtime behaviour as JSON.
 // Usage: node cesium.cjs URL SPEC_JSON SCREENSHOT_PNG   (NODE_PATH exposes Playwright)
 //        node cesium.cjs --renderer SPEC_JSON            (preflight: WebGL renderer, browser and tab facts only)
-// SPEC: {kind:'tileset', url, maximumScreenSpaceError} or {kind:'raster', url, probes:[{name, rect:[w,s,e,n], expect}],
+// SPEC: {kind:'tileset', url, maximumScreenSpaceError, tilesetOptions?} or {kind:'raster', url, probes:[{name, rect:[w,s,e,n], expect}],
 // views:[{name, rect, probes}]} (extra raster cameras after the overview), plus stepMs, settleMs, browser,
 // an optional scheduler ({throttleRequests, maximumRequestsPerServer, maximumRequests}: a viewer setting,
 // diagnostic only) and an optional raster insetDegrees [w,s,e,n]. Every asynchronous step (page load,
@@ -120,7 +120,7 @@ async function run(spec) {
   if (!raster) {
     const start = performance.now();
     let tiles;
-    try { tiles = await bounded(C.Cesium3DTileset.fromUrl(spec.url, {maximumScreenSpaceError: spec.maximumScreenSpaceError ?? 16}), 'fromUrl'); }
+    try { tiles = await bounded(C.Cesium3DTileset.fromUrl(spec.url, {...(spec.tilesetOptions || {}), maximumScreenSpaceError: spec.maximumScreenSpaceError ?? 16}), 'fromUrl'); }
     catch (error) { failures.push('fromUrl: ' + describe(error)); return {...report, loaded: false}; }
     let loadedTiles = 0, allTilesLoaded = 0, firstTile = null;
     tiles.tileLoad.addEventListener(() => { loadedTiles++; if (firstTile === null) firstTile = performance.now(); });

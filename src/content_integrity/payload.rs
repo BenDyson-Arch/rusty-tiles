@@ -2,6 +2,7 @@
 use super::{json, FormatError, PayloadError, PayloadLimits};
 use serde_json::value::RawValue;
 use std::{borrow::Cow, collections::BTreeSet};
+mod ktx2;
 mod numbers;
 mod records;
 pub(crate) mod scene;
@@ -422,6 +423,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         "EXT_meshopt_compression",
         "KHR_materials_unlit",
         "KHR_mesh_primitive_restart",
+        "KHR_texture_basisu",
     ];
     for ext in &required {
         if !used.contains(ext) {
@@ -1098,51 +1100,41 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             );
         }
     }
-    let images = array::<records::Image<'_>>(root.images, slots)?;
-    let image_count = images.len();
-    for image in images {
-        if image.uri.is_some() && image.view.is_some() {
-            return Err(invalid("image has URI and bufferView").into());
-        }
-        if let Some(raw) = image.uri {
-            let uri = string(Some(raw))?;
-            if uri.starts_with("data:") {
-                return Err(unsupported("image data URI").into());
-            }
-            let remaining = limits
-                .member_bytes
-                .checked_sub(resource_bytes)
-                .ok_or_else(|| limit("resource byte allowance exhausted"))?;
-            external_resources += 1;
-            let data = resolve(&uri, remaining)
-                .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?;
-            if data.len() > remaining {
-                return Err(
-                    limit("actual image resource exceeds remaining resource allowance").into(),
-                );
-            }
-            resource_bytes = resource_bytes
-                .checked_add(data.len())
-                .ok_or_else(|| limit("image resource byte overflow"))?;
-        } else {
-            let view = at(&views, image.view)?;
-            if accessor_views[view] {
-                return Err(invalid("bufferView mixes image data and accessor data").into());
-            }
-            view_roles[view] = 3;
-        }
-        not_inspected.insert("image decoding".into());
-    }
+    // Texture and material references precede image resource reads; they
+    // give each image its roles. KHR_texture_basisu: a `source` image may be
+    // KTX2, a core (fallback) `source` image may not, and a texture without a
+    // fallback requires the extension.
+    let image_docs = array::<records::Image<'_>>(root.images, slots)?;
+    let image_count = image_docs.len();
     let textures = array::<&RawValue>(root.textures, slots)?;
     let texture_count = textures.len();
     let samplers = array::<&RawValue>(root.samplers, slots)?;
-    for texture in textures {
+    let mut texture_ktx2 = allocation(texture_count, None::<usize>)?;
+    // Per image: 1 core source, 2 KTX2 source, 4 KTX2 source of a material texture.
+    let mut image_roles = allocation(image_count, 0u8)?;
+    for (index, texture) in textures.into_iter().enumerate() {
         let texture: records::Texture<'_> = uninspected_record(Some(texture))?;
+        let fallback = texture.source.is_some();
         if let Some(source) = texture.source {
-            reference_count(image_count, Some(source))?;
+            image_roles[reference_count(image_count, Some(source))?] |= 1;
         }
         if let Some(sampler) = texture.sampler {
             at(&samplers, Some(sampler))?;
+        }
+        let extensions: records::Extensions<'_> = optional_record(texture.extensions)?;
+        if let Some(basisu) = extensions.basisu {
+            let basisu: records::Basisu<'_> = record(Some(basisu))?;
+            if let Some(source) = basisu.source {
+                let image = reference_count(image_count, Some(source))?;
+                image_roles[image] |= 2;
+                texture_ktx2[index] = Some(image);
+            }
+            if !fallback && !required.contains("KHR_texture_basisu") {
+                return Err(invalid(
+                    "KHR_texture_basisu without a fallback source must be in extensionsRequired",
+                )
+                .into());
+            }
         }
     }
     drop(samplers);
@@ -1159,8 +1151,87 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         ] {
             if info.is_some() && !records::is_null(info) {
                 let info: records::TextureInfo<'_> = record(info)?;
-                reference_count(texture_count, info.index)?;
+                if let Some(image) = texture_ktx2[reference_count(texture_count, info.index)?] {
+                    image_roles[image] |= 4;
+                }
             }
+        }
+    }
+    drop(texture_ktx2);
+    // Per bufferView: 1 when it holds a KTX2 source, 3 when a material uses one.
+    // Each view is inspected once after the image pass, so images sharing a view
+    // repeat no container work; external images are read and charged per image.
+    let mut ktx2_views = allocation(views.len(), 0u8)?;
+    for (image, roles) in image_docs.into_iter().zip(image_roles) {
+        if image.uri.is_some() && image.view.is_some() {
+            return Err(invalid("image has URI and bufferView").into());
+        }
+        let uri = image.uri.map(|raw| string(Some(raw))).transpose()?;
+        if uri.as_deref().is_some_and(|uri| uri.starts_with("data:")) {
+            return Err(unsupported("image data URI").into());
+        }
+        // An extension source, or a fallback source when the extension is used:
+        // the image's format matters.
+        let typed = roles & 2 != 0 || (roles & 1 != 0 && used.contains("KHR_texture_basisu"));
+        let mime = match image.mime {
+            Some(raw) if typed => Some(string(Some(raw))?),
+            _ => None,
+        };
+        // An extension source declares image/ktx2; glTF requires mimeType with bufferView.
+        if roles & 2 != 0
+            && (mime.as_deref().is_some_and(|mime| mime != "image/ktx2")
+                || (mime.is_none() && image.view.is_some()))
+        {
+            return Err(
+                invalid("KHR_texture_basisu source image is not declared image/ktx2").into(),
+            );
+        }
+        let (data, view) = if let Some(uri) = uri {
+            let remaining = limits
+                .member_bytes
+                .checked_sub(resource_bytes)
+                .ok_or_else(|| limit("resource byte allowance exhausted"))?;
+            external_resources += 1;
+            let data = resolve(&uri, remaining)
+                .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?;
+            if data.len() > remaining {
+                return Err(
+                    limit("actual image resource exceeds remaining resource allowance").into(),
+                );
+            }
+            resource_bytes = resource_bytes
+                .checked_add(data.len())
+                .ok_or_else(|| limit("image resource byte overflow"))?;
+            (Cow::Owned(data), None)
+        } else {
+            let view = at(&views, image.view)?;
+            if accessor_views[view] {
+                return Err(invalid("bufferView mixes image data and accessor data").into());
+            }
+            view_roles[view] = 3;
+            (Cow::Borrowed(&*views[view]), Some(view))
+        };
+        // Without mimeType, a URI image is KTX2 by its identifier.
+        let ktx2 = mime.as_deref().map_or_else(
+            || data.starts_with(&ktx2::IDENTIFIER),
+            |mime| mime == "image/ktx2",
+        );
+        if typed && roles & 1 != 0 && ktx2 {
+            return Err(invalid("texture source references a KTX2 image").into());
+        }
+        if roles & 2 != 0 {
+            match view {
+                Some(view) => ktx2_views[view] |= if roles & 4 != 0 { 3 } else { 1 },
+                None => ktx2::inspect(&data, roles & 4 != 0)?,
+            }
+            not_inspected.insert("KTX2 level data and transcoding".into());
+        }
+        not_inspected.insert("image decoding".into());
+    }
+    // Container only: admitted bytes, no allocation, at most 32 levels; once per view.
+    for (view, flags) in ktx2_views.into_iter().enumerate() {
+        if flags != 0 {
+            ktx2::inspect(&views[view], flags & 2 != 0)?;
         }
     }
     let extensions: records::Extensions<'_> = optional_record(root.extensions)?;
@@ -2385,5 +2456,7 @@ mod tests {
 
 #[cfg(test)]
 mod controls;
+#[cfg(test)]
+mod ktx2_controls;
 #[cfg(test)]
 mod meshopt_header_controls;

@@ -45,12 +45,13 @@ record!(Primitive {mode=>"mode", indices=>"indices", material=>"material", attri
 record!(Scene {nodes=>"nodes"});
 record!(Node {children=>"children", mesh=>"mesh", skin=>"skin", matrix=>"matrix", translation=>"translation", rotation=>"rotation", scale=>"scale", weights=>"weights"});
 record!(Polygon {count=>"count", offsets=>"indicesOffsets", loops=>"loopIndices", loop_offsets=>"loopIndicesOffsets"});
-record!(Image {uri=>"uri", view=>"bufferView"});
-record!(Texture {source=>"source", sampler=>"sampler"});
+record!(Image {uri=>"uri", view=>"bufferView", mime=>"mimeType"});
+record!(Texture {source=>"source", sampler=>"sampler", extensions=>"extensions"});
+record!(Basisu {source=>"source"});
 record!(Material {pbr=>"pbrMetallicRoughness", normal=>"normalTexture", occlusion=>"occlusionTexture", emissive=>"emissiveTexture"});
 record!(Pbr {base=>"baseColorTexture", metallic=>"metallicRoughnessTexture"});
 record!(TextureInfo {index=>"index"});
-record!(Extensions {meshopt=>"EXT_meshopt_compression", polygon=>"EXT_mesh_polygon", draco=>"KHR_draco_mesh_compression", metadata=>"EXT_structural_metadata"});
+record!(Extensions {meshopt=>"EXT_meshopt_compression", polygon=>"EXT_mesh_polygon", draco=>"KHR_draco_mesh_compression", metadata=>"EXT_structural_metadata", basisu=>"KHR_texture_basisu"});
 record!(Fallback {fallback=>"fallback"});
 record!(Metadata {uri=>"schemaUri"});
 

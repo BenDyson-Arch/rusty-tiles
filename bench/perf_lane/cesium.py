@@ -45,6 +45,22 @@ RATIO, FLOORS = 1.25, {'requests': 2, 'requestBytes': 64 * 1024, 'secondsToLoade
 TIMING = {'secondsToLoaded'}  # compared only between runs with the same renderer class
 
 
+def parse_tileset_options(items, kinds):
+    """{case name: options} from NAME=JSON items; kinds maps each case name to 'tileset' or 'raster'.
+    An unknown case, a raster case, a repeated name or a non-object value is a ValueError."""
+    found = {}
+    for item in items:
+        name, _, text = item.partition('=')
+        if name not in kinds: raise ValueError(f'--tileset-options {item!r}: no case named {name!r}')
+        if kinds[name] != 'tileset': raise ValueError(f'--tileset-options {item!r}: {name!r} is a {kinds[name]} case, not a tileset')
+        if name in found: raise ValueError(f'--tileset-options given twice for {name!r}')
+        try: options = json.loads(text)
+        except ValueError: options = None
+        if not isinstance(options, dict): raise ValueError(f'--tileset-options {item!r}: expected NAME={{JSON object}}')
+        found[name] = options
+    return found
+
+
 def renderer_class(renderer):
     """'gpu', 'software' (SwiftShader, llvmpipe, ...) or 'unknown' for a WebGL UNMASKED_RENDERER string."""
     if not renderer: return 'unknown'
@@ -284,6 +300,10 @@ def main():
                         'RequestScheduler.throttleRequests=false and record the per-frame request cap\'s effect (not gated)')
     parser.add_argument('--check-renderer', action='store_true', help='print the preflight renderer facts and exit; '
                         f'exit {ENVIRONMENT_EXIT} unless the renderer matches the mode')
+    parser.add_argument('--tileset-options', action='append', default=[], metavar='NAME=JSON',
+                        help='extra Cesium3DTileset options for one tileset case, e.g. '
+                        '\'terrain={"skipLevelOfDetail":true}\'; a viewer setting, recorded in the case spec and never '
+                        'changing the output. Repeat per case')
     parser.add_argument('--maximum-sse', type=float, default=16, help='3D Tiles maximumScreenSpaceError (default 16). '
                         'Any other value is a report-only probe, such as 1 for near-full refinement: baseline '
                         'comparisons are recorded as advisory and do not fail the run')
@@ -314,6 +334,8 @@ def main():
         name, _, path = item.partition('=')
         directory, kind, identity = mount(name, pathlib.Path(path).resolve(), work)
         mounts[name] = directory; plans.append((name, kind, identity, directory))
+    try: tileset_options = parse_tileset_options(args.tileset_options, {name: kind for name, kind, _, _ in plans})
+    except ValueError as error: parser.error(str(error))
     log = []
     server = serve(mounts, args.cesium.resolve(), log)
     browser = browser_spec(args)
@@ -337,6 +359,7 @@ def main():
         for name, kind, identity, directory in plans:
             spec = dict(base_spec, kind=kind, url=f'/data/{name}/' + ('' if kind == 'raster' else 'tileset.json'))
             if kind == 'tileset': spec['maximumScreenSpaceError'] = args.maximum_sse
+            if kind == 'tileset' and name in tileset_options: spec['tilesetOptions'] = tileset_options[name]
             if kind == 'raster' and args.inset:
                 spec['insetDegrees'] = inset_degrees(args.inset, json.loads((directory / 'tilejson.json').read_text())['maxzoom'])
             if kind == 'raster' and args.hole:
@@ -371,8 +394,10 @@ def main():
             case.update(name=name, kind=kind, output=identity, spec=spec, budgetSeconds=budget, screenshot=str(shot))
             if spec.get('insetDegrees'): case['warnings'] = [f"raster rectangle inset {spec['insetDegrees']} degrees: not the exact bounds"]
             shots = [shot] + [shot.with_name(f"{name}-{view['name']}.png") for view in case.get('views', [])]
-            case['problems'] = problems(case, baseline.get(name) if args.maximum_sse == 16 else None, renderer)
-            if args.maximum_sse != 16:  # report-only probe: baseline comparisons are advisory
+            # A probe (other SSE, or viewer options the baseline did not use) is report-only: baseline comparisons are advisory.
+            probe = args.maximum_sse != 16 or name in tileset_options
+            case['problems'] = problems(case, None if probe else baseline.get(name), renderer)
+            if probe:
                 case['advisory'] = [p for p in problems(case, baseline.get(name), renderer) if p not in case['problems']]
             passes = [('default', spec, case)]
             if kind == 'tileset' and not args.no_refined:
@@ -380,7 +405,12 @@ def main():
                 refined_shot = shot.with_name(f'{name}-refined.png'); shots.append(refined_shot)
                 refined = load(name, refined_spec, refined_shot, budget, directory)
                 refined['spec'] = refined_spec
-                refined['problems'] = problems(refined, (baseline.get(name) or {}).get('refined'), renderer)
+                refined_baseline = (baseline.get(name) or {}).get('refined')
+                refined['problems'] = problems(refined, None if name in tileset_options else refined_baseline, renderer)
+                if name in tileset_options:
+                    case['advisory'] = case.get('advisory', []) + [f'refined (SSE {REFINED_SSE:g}): {p}'
+                                                                   for p in problems(refined, refined_baseline, renderer)
+                                                                   if p not in refined['problems']]
                 case['refined'] = refined
                 case['problems'] += [f'refined (SSE {REFINED_SSE:g}): {p}' for p in refined['problems']]
                 passes.append(('refined', refined_spec, refined))
@@ -420,7 +450,7 @@ def main():
                                    cpuAffinity=sorted(os.sched_getaffinity(0)),
                                    baseline=str(args.baseline) if args.baseline else None,
                                    baselineTimingCompared=bool(args.baseline) and timing_comparable, rasterInset=args.inset,
-                                   maximumScreenSpaceError=args.maximum_sse,
+                                   maximumScreenSpaceError=args.maximum_sse, tilesetOptions=tileset_options,
                                    stepTimeoutSeconds=args.timeout,
                                    scriptSha256={name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
                                                  for name in ('cesium.py', 'cesium.cjs')}),
