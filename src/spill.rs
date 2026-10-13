@@ -22,7 +22,9 @@ pub(crate) use sequence::{
 #[allow(unused_imports)]
 pub(crate) use sort::{ExternalSorter, SortConfig, SortStats, SortedStream};
 #[allow(unused_imports)]
-pub(crate) use volume::{inspect_volume, preflight, PreflightStage, SpaceRole, Volume};
+pub(crate) use volume::{
+    inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume,
+};
 
 use crate::{JobError, JobErrorKind};
 use std::{fmt, io, path::PathBuf};

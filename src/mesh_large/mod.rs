@@ -152,7 +152,7 @@ pub(crate) fn build(
             check,
         )?;
         config::preflight_remaining(&scratch, need.need_bytes)?;
-        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, 0, check)?;
+        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, None, check)?;
         member_gate(tree.stats.nodes, config.member_ceiling)?;
         check()?;
         if scratch.peak_bytes() > need.logical_need_bytes {

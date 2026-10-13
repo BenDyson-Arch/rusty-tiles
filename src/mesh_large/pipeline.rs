@@ -196,6 +196,12 @@ pub struct CaptureDiagnostics {
     pub scratch_logical_need_bytes: u64,
     pub scratch_logical_peak_bytes: u64,
     pub scratch_memory_backed: bool,
+    /// Declared largest working set of each capture stage, retained files included.
+    pub scratch_stage_bytes: super::full::ScratchStages,
+    /// Measured peak of each capture stage (`lod_prepass` runs later and reads 0).
+    pub scratch_stage_peak_bytes: super::full::ScratchStages,
+    /// Output-side admission reservation on the work directory and output filesystems.
+    pub output_reserve_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -292,6 +298,8 @@ pub fn mesh_to_tileset(
         }
     };
     let work_path = work.path().to_owned();
+    // Capture admission also reserves output-side space where leaves and the archive stage.
+    config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
     let captured = match attempt
         .emit(&RunEvent::Progress {
             phase: "capture",
@@ -369,6 +377,9 @@ pub fn mesh_to_tileset(
                 scratch_logical_need_bytes: c.scratch.logical_need_bytes,
                 scratch_logical_peak_bytes: c.scratch_logical_peak_bytes,
                 scratch_memory_backed: c.scratch_memory_backed,
+                scratch_stage_bytes: c.scratch.stages,
+                scratch_stage_peak_bytes: c.scratch_stage_peaks,
+                output_reserve_bytes: c.scratch.output_reserve_bytes,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,

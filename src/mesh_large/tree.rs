@@ -37,7 +37,7 @@ impl Record for WeldDepth {
 
 /// Sort by welded position, with a unique rank/corner tie-breaker; reduction reads ALL corners.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct VertexDepth {
+pub(crate) struct VertexDepth {
     position: [u32; 3],
     rank: u64,
     corner: u8,
@@ -411,7 +411,7 @@ pub(crate) fn build(
     triangles: SortedStream<'_, TriangleRecord>,
     config: &TreeConfig,
     jobs: usize,
-    retained_allowance_bytes: u64,
+    weld_stage_need_bytes: Option<u64>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<TreeOutput, JobError> {
     check()?;
@@ -535,22 +535,22 @@ pub(crate) fn build(
     }
     let nodes = ordered_nodes.finish()?;
     check()?;
-    let need = super::config::scratch_need(
-        stats.triangles,
-        root.bytes,
-        config,
-        scratch.allocation_unit_bytes(),
-    )
-    .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64"))?;
-    // The shared Scratch may also retain records owned by a caller (H8 images/full capture).
-    // Ordinary H1 callers pass zero; the caller resolves its complete extra allowance once.
-    let global_need = need.checked_add(retained_allowance_bytes).ok_or_else(|| {
-        JobError::new(
-            JobErrorKind::ResourceLimit,
-            "shared tree scratch bound exceeds u64",
+    // Stage-entry recheck of the weld pass. A caller sharing the Scratch (H8 full capture)
+    // passes that stage's declared working set, which includes its retained files;
+    // standalone H1 rechecks its own whole need.
+    let stage_need = match weld_stage_need_bytes {
+        Some(need) => need,
+        None => super::config::scratch_need(
+            stats.triangles,
+            root.bytes,
+            config,
+            scratch.allocation_unit_bytes(),
         )
-    })?;
-    super::config::preflight_remaining(scratch, global_need)?;
+        .ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64")
+        })?,
+    };
+    super::config::preflight_remaining(scratch, stage_need)?;
     let weld_depths = vertex_depths(scratch, &triangles, &nodes, config, jobs, check)?;
     stats.welded_vertices = weld_depths.len();
     check()?;
@@ -667,7 +667,7 @@ mod tests {
             sorter.finish().unwrap(),
             config,
             jobs,
-            0,
+            None,
             &mut || Ok(()),
         )
         .unwrap();
@@ -784,7 +784,7 @@ mod tests {
             sorter.finish().unwrap(),
             &config,
             1,
-            0,
+            None,
             &mut || Ok(()),
         ) {
             Ok(_) => panic!("expected refusal"),
