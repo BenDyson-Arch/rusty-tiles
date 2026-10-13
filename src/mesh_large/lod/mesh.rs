@@ -408,7 +408,10 @@ impl Simplifier {
             for k in 0..3 {
                 let (a, b) = (f.v[k], f.v[(k + 1) % 3]);
                 if a != b {
-                    edges.entry((a.min(b), a.max(b))).or_default().push(i as u32);
+                    edges
+                        .entry((a.min(b), a.max(b)))
+                        .or_default()
+                        .push(i as u32);
                 }
             }
         }
@@ -452,7 +455,11 @@ impl Simplifier {
         let mut features = Vec::new();
         for (w, list) in ring.iter() {
             if list.len() > 2 {
-                return if self.relaxed { Role::Free } else { Role::Locked };
+                return if self.relaxed {
+                    Role::Free
+                } else {
+                    Role::Locked
+                };
             }
             let feature = list.len() == 1
                 || self.faces[list[0] as usize].label != self.faces[list[1] as usize].label;
@@ -524,7 +531,11 @@ impl Simplifier {
             {
                 return Some(2);
             }
-            let survivors = self.live(u).chain(self.live(v)).filter(|f| !shared.contains(f)).count();
+            let survivors = self
+                .live(u)
+                .chain(self.live(v))
+                .filter(|f| !shared.contains(f))
+                .count();
             if survivors == 0 {
                 return Some(3);
             }
@@ -535,7 +546,10 @@ impl Simplifier {
                 continue;
             }
             let old = normal(face.v.map(|x| self.pos[x as usize]));
-            let new = normal(face.v.map(|x| self.pos[if x == u { v } else { x } as usize]));
+            let new = normal(
+                face.v
+                    .map(|x| self.pos[if x == u { v } else { x } as usize]),
+            );
             let (lo, ln) = (dot(old, old).sqrt(), dot(new, new).sqrt());
             if lo == 0. || self.relaxed && ln == 0. {
                 continue;
@@ -724,7 +738,12 @@ impl Simplifier {
                 self.rejected.set(a);
                 continue;
             }
-            heap.push(Reverse((Cost(self.cost(u, v)), u, v, self.stamp[u as usize])));
+            heap.push(Reverse((
+                Cost(self.cost(u, v)),
+                u,
+                v,
+                self.stamp[u as usize],
+            )));
         }
     }
 
@@ -822,7 +841,11 @@ pub(crate) struct Loop {
 
 /// Simple border loops whose vertices all satisfy `eligible`, of one label, with at most
 /// `max` vertices, in canonical order (by least vertex).
-pub(crate) fn border_loops(faces: &[Face], eligible: impl Fn(u32) -> bool, max: usize) -> Vec<Loop> {
+pub(crate) fn border_loops(
+    faces: &[Face],
+    eligible: impl Fn(u32) -> bool,
+    max: usize,
+) -> Vec<Loop> {
     let mut count: BTreeMap<(u32, u32), u32> = BTreeMap::new();
     for f in faces {
         for k in 0..3 {
@@ -883,7 +906,9 @@ pub(crate) fn fan(l: &Loop) -> Vec<[u32; 3]> {
     let k = l.vertices.len();
     let start = (0..k).min_by_key(|&i| l.vertices[i]).unwrap();
     let order: Vec<u32> = (0..k).map(|i| l.vertices[(start + k - i) % k]).collect();
-    (1..k - 1).map(|i| [order[0], order[i], order[i + 1]]).collect()
+    (1..k - 1)
+        .map(|i| [order[0], order[i], order[i + 1]])
+        .collect()
 }
 
 #[cfg(test)]
@@ -1009,7 +1034,11 @@ mod tests {
         assert_eq!(loops[0].vertices.len(), 4);
         let mut closed = mesh.faces.clone();
         for t in fan(&loops[0]) {
-            closed.push(Face { v: t, label: 0, id: u32::MAX });
+            closed.push(Face {
+                v: t,
+                label: 0,
+                id: u32::MAX,
+            });
         }
         // Every interior edge now has two faces with opposite directions.
         let mut directed: BTreeMap<(u32, u32), i32> = BTreeMap::new();

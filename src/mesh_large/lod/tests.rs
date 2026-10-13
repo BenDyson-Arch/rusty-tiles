@@ -57,7 +57,8 @@ fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
         accessors.push(json!({"bufferView":views.len()-1,"componentType":5125,"count":m.indices.len(),"type":"SCALAR"}));
         gltf_meshes.push(json!({"primitives":[{"attributes":{"POSITION":accessors.len()-2},"indices":accessors.len()-1,"material":i}]}));
         nodes.push(json!({"mesh":i}));
-        materials.push(json!({"pbrMetallicRoughness":{"baseColorFactor":m.color,"metallicFactor":0.0}}));
+        materials
+            .push(json!({"pbrMetallicRoughness":{"baseColorFactor":m.color,"metallicFactor":0.0}}));
     }
     fs::write(dir.join("scene.bin"), &bin).unwrap();
     let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":(0..meshes.len()).collect::<Vec<_>>()}],
@@ -91,7 +92,11 @@ fn terrain(g: usize) -> Vec<Mesh> {
         h
     };
     let bands = [0, g * 2 / 5, g * 7 / 10, g];
-    let colors = [[0.6, 0.5, 0.4, 1.], [0.3, 0.6, 0.3, 1.], [0.5, 0.5, 0.6, 1.]];
+    let colors = [
+        [0.6, 0.5, 0.4, 1.],
+        [0.3, 0.6, 0.3, 1.],
+        [0.5, 0.5, 0.6, 1.],
+    ];
     let mut meshes = Vec::new();
     for b in 0..3 {
         let mut m = Mesh {
@@ -114,7 +119,8 @@ fn terrain(g: usize) -> Vec<Mesh> {
                 }
                 let v = |a: usize, c: usize| ((a - i0) * w + c) as u32;
                 m.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
-                m.indices.extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                m.indices
+                    .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
             }
         }
         meshes.push(m);
@@ -127,13 +133,23 @@ fn terrain(g: usize) -> Vec<Mesh> {
     let mut island = |x: f32, z: f32, lift: f32, size: f32| {
         let y = height(x, z) + lift;
         let base = islands.positions.len() as u32;
-        islands.positions.extend([[x, y, z], [x + size, y, z], [x, y, z + size], [x + size, y, z + size]]);
+        islands.positions.extend([
+            [x, y, z],
+            [x + size, y, z],
+            [x, y, z + size],
+            [x + size, y, z + size],
+        ]);
         islands
             .indices
             .extend([base, base + 2, base + 1, base + 1, base + 2, base + 3]);
     };
     for k in 0..40 {
-        island(3. + (k as f32 * 37.) % 94., 5. + (k as f32 * 53.) % 90., 0.3, 0.2);
+        island(
+            3. + (k as f32 * 37.) % 94.,
+            5. + (k as f32 * 53.) % 90.,
+            0.3,
+            0.2,
+        );
     }
     island(61.3, 27.9, 3., 0.2);
     meshes.push(islands);
@@ -158,11 +174,18 @@ fn cluster() -> Vec<Mesh> {
         for j in 0..n {
             let v = |a: usize, c: usize| (a * (n + 1) + c) as u32;
             dense.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
-            dense.indices.extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+            dense
+                .indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
         }
     }
     let frame = Mesh {
-        positions: vec![[-500., -1., -500.], [500., -1., -500.], [-500., 1., 500.], [500., 2., 500.]],
+        positions: vec![
+            [-500., -1., -500.],
+            [500., -1., -500.],
+            [-500., 1., 500.],
+            [500., 2., 500.],
+        ],
         indices: vec![0, 2, 1, 1, 2, 3],
         color: [0.5, 0.5, 0.5, 1.],
     };
@@ -226,17 +249,30 @@ fn read_glb(bytes: &[u8]) -> Glb {
         let stride = doc["bufferViews"][vi]["byteStride"]
             .as_u64()
             .map_or(size * width, |s| s as usize);
-        ((0..n).map(|i| data[i * stride..i * stride + size * width].to_vec()).collect(), ct)
+        (
+            (0..n)
+                .map(|i| data[i * stride..i * stride + size * width].to_vec())
+                .collect(),
+            ct,
+        )
     };
     let mut out = Glb::default();
     for root in doc["scenes"][0]["nodes"].as_array().unwrap() {
         let node = &doc["nodes"][root.as_u64().unwrap() as usize];
-        let t: Vec<f32> = node
-            .get("translation")
-            .map_or(vec![0.; 3], |v| v.as_array().unwrap().iter().map(|x| x.as_f64().unwrap() as f32).collect());
-        let s: Vec<f32> = node
-            .get("scale")
-            .map_or(vec![1.; 3], |v| v.as_array().unwrap().iter().map(|x| x.as_f64().unwrap() as f32).collect());
+        let t: Vec<f32> = node.get("translation").map_or(vec![0.; 3], |v| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_f64().unwrap() as f32)
+                .collect()
+        });
+        let s: Vec<f32> = node.get("scale").map_or(vec![1.; 3], |v| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_f64().unwrap() as f32)
+                .collect()
+        });
         let prim = &doc["meshes"][node["mesh"].as_u64().unwrap() as usize]["primitives"][0];
         let (pos, ct) = elements(prim["attributes"]["POSITION"].as_u64().unwrap() as usize);
         let points: Vec<[f32; 3]> = pos
@@ -249,18 +285,24 @@ fn read_glb(bytes: &[u8]) -> Glb {
                         f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())
                     };
                     let p = raw * s[a] + t[a];
-                    if p == 0. { 0. } else { p }
+                    if p == 0. {
+                        0.
+                    } else {
+                        p
+                    }
                 })
             })
             .collect();
         let feature = |name: &str| -> Vec<u32> {
-            prim["attributes"].get(name).map_or(vec![u32::MAX; points.len()], |a| {
-                elements(a.as_u64().unwrap() as usize)
-                    .0
-                    .iter()
-                    .map(|e| f32::from_le_bytes(e[..4].try_into().unwrap()) as u32)
-                    .collect()
-            })
+            prim["attributes"]
+                .get(name)
+                .map_or(vec![u32::MAX; points.len()], |a| {
+                    elements(a.as_u64().unwrap() as usize)
+                        .0
+                        .iter()
+                        .map(|e| f32::from_le_bytes(e[..4].try_into().unwrap()) as u32)
+                        .collect()
+                })
         };
         let (f0, f1) = (feature("_FEATURE_ID_0"), feature("_FEATURE_ID_1"));
         let second = prim["extensions"]["EXT_mesh_features"]["featureIds"][1]["propertyTable"]
@@ -270,7 +312,13 @@ fn read_glb(bytes: &[u8]) -> Glb {
             Some(i) => {
                 let (e, ct) = elements(i.as_u64().unwrap() as usize);
                 e.iter()
-                    .map(|b| if ct == 5123 { usize::from(u16::from_le_bytes([b[0], b[1]])) } else { u32::from_le_bytes(b[..4].try_into().unwrap()) as usize })
+                    .map(|b| {
+                        if ct == 5123 {
+                            usize::from(u16::from_le_bytes([b[0], b[1]]))
+                        } else {
+                            u32::from_le_bytes(b[..4].try_into().unwrap()) as usize
+                        }
+                    })
                     .collect()
             }
             None => (0..points.len()).collect(),
@@ -287,7 +335,9 @@ fn read_glb(bytes: &[u8]) -> Glb {
         let count = table["count"].as_u64().unwrap() as usize;
         let mut columns = BTreeMap::new();
         for (name, p) in table["properties"].as_object().unwrap() {
-            let ct = meta["schema"]["classes"][&class]["properties"][name]["componentType"].as_str().unwrap();
+            let ct = meta["schema"]["classes"][&class]["properties"][name]["componentType"]
+                .as_str()
+                .unwrap();
             let w = match ct {
                 "UINT8" => 1,
                 "UINT32" => 4,
@@ -319,7 +369,13 @@ fn rows(path: &Path) -> Vec<Value> {
 // ---------------------------------------------------------------------------------------
 // Runs.
 
-fn leaves(input: &Path, out: &Path, jobs: usize, mutation: Mutation, target: usize) -> Result<PathBuf, crate::JobFailure> {
+fn leaves(
+    input: &Path,
+    out: &Path,
+    jobs: usize,
+    mutation: Mutation,
+    target: usize,
+) -> Result<PathBuf, crate::JobFailure> {
     let scratch = out.with_extension("scratch");
     fs::create_dir_all(&scratch).unwrap();
     mesh_to_leaf_payloads(
@@ -333,8 +389,18 @@ fn leaves(input: &Path, out: &Path, jobs: usize, mutation: Mutation, target: usi
     .map(|r| r.output)
 }
 
-fn archive(leaves: &Path, output: &Path) -> (crate::mesh_large::MeshTilesetReport, BTreeMap<String, Vec<u8>>) {
-    let result = mesh_leaves_to_3tz(MeshTilesetRequest::new(leaves, output), &RunControl::default()).unwrap();
+fn archive(
+    leaves: &Path,
+    output: &Path,
+) -> (
+    crate::mesh_large::MeshTilesetReport,
+    BTreeMap<String, Vec<u8>>,
+) {
+    let result = mesh_leaves_to_3tz(
+        MeshTilesetRequest::new(leaves, output),
+        &RunControl::default(),
+    )
+    .unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(output).unwrap()).unwrap();
     let mut members = BTreeMap::new();
     for i in 0..zip.len() {
@@ -358,7 +424,9 @@ fn samples(t: &Tri, k: usize) -> Vec<[f64; 3]> {
     for i in 0..=k {
         for j in 0..=k - i {
             let (u, v) = (i as f64 / k as f64, j as f64 / k as f64);
-            out.push(std::array::from_fn(|a| t[0][a] + u * (t[1][a] - t[0][a]) + v * (t[2][a] - t[0][a])));
+            out.push(std::array::from_fn(|a| {
+                t[0][a] + u * (t[1][a] - t[0][a]) + v * (t[2][a] - t[0][a])
+            }));
         }
     }
     out
@@ -385,8 +453,14 @@ fn welded(p: [f32; 3]) -> [u32; 3] {
 /// Everything checkable from the leaf directory against the exact source.
 fn audit(source: &[Mesh], dir: &Path) -> Audit {
     let mut audit = Audit::default();
-    let manifest: Value = serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    let steps: Vec<f64> = manifest["lattice"]["steps"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let steps: Vec<f64> = manifest["lattice"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
     let leaf_rows = rows(&dir.join("leaves.jsonl"));
     let proxy_rows = rows(&dir.join("proxies.jsonl"));
     audit.proxies = proxy_rows.len();
@@ -399,7 +473,10 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
     for m in source {
         for t in m.indices.chunks(3) {
             for k in 0..3 {
-                let (a, b) = (welded(m.positions[t[k] as usize]), welded(m.positions[t[(k + 1) % 3] as usize]));
+                let (a, b) = (
+                    welded(m.positions[t[k] as usize]),
+                    welded(m.positions[t[(k + 1) % 3] as usize]),
+                );
                 *edge_count.entry((a.min(b), a.max(b))).or_default() += 1;
             }
         }
@@ -426,22 +503,50 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         fills: Vec<([u64; 3], f64)>,
     }
     let primitives = |g: &Glb| -> BTreeSet<(u64, u64, u64)> {
-        let t = &g.tables.iter().find(|t| t.0 == "source_primitive").unwrap().1;
-        (0..t["node_index"].len()).map(|i| (t["node_index"][i], t["mesh_index"][i], t["primitive_index"][i])).collect()
+        let t = &g
+            .tables
+            .iter()
+            .find(|t| t.0 == "source_primitive")
+            .unwrap()
+            .1;
+        (0..t["node_index"].len())
+            .map(|i| {
+                (
+                    t["node_index"][i],
+                    t["mesh_index"][i],
+                    t["primitive_index"][i],
+                )
+            })
+            .collect()
     };
     let mut tiles: Vec<Tile> = Vec::new();
     for r in &leaf_rows {
         let g = read_glb(&fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap());
-        let t = &g.tables.iter().find(|t| t.0 == "source_triangle").unwrap().1;
+        let t = &g
+            .tables
+            .iter()
+            .find(|t| t.0 == "source_triangle")
+            .unwrap()
+            .1;
         let source_tris = g
             .features
             .iter()
-            .map(|f| source_tri(t["mesh_index"][f[1] as usize] as usize, t["triangle_index"][f[1] as usize] as usize))
+            .map(|f| {
+                source_tri(
+                    t["mesh_index"][f[1] as usize] as usize,
+                    t["triangle_index"][f[1] as usize] as usize,
+                )
+            })
             .collect();
         let provenance = g
             .features
             .iter()
-            .map(|f| (t["mesh_index"][f[1] as usize], t["triangle_index"][f[1] as usize]))
+            .map(|f| {
+                (
+                    t["mesh_index"][f[1] as usize],
+                    t["triangle_index"][f[1] as usize],
+                )
+            })
             .collect();
         tiles.push(Tile {
             first: r["first"].as_u64().unwrap(),
@@ -472,7 +577,12 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .filter(|l| l.first >= first && l.end <= end)
             .flat_map(|l| l.provenance.iter().copied())
             .collect();
-        let present_rows = &g.tables.iter().find(|t| t.0 == "source_primitive").unwrap().1;
+        let present_rows = &g
+            .tables
+            .iter()
+            .find(|t| t.0 == "source_primitive")
+            .unwrap()
+            .1;
         if g.faces.len() <= 8192 {
             // One provenance table per proxy (CesiumJS picks through one table per model).
             assert_eq!(g.tables.iter().filter(|t| t.0 == "proxy_source").count(), 1);
@@ -481,9 +591,15 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             let (class, t) = &g.tables[*table];
             assert_eq!(class, "proxy_source");
             let row = f[1] as usize;
-            assert_eq!(t["mesh_index"][row], present_rows["mesh_index"][f[0] as usize], "provenance primitive");
+            assert_eq!(
+                t["mesh_index"][row], present_rows["mesh_index"][f[0] as usize],
+                "provenance primitive"
+            );
             if t["fill"][row] == 0 {
-                assert!(in_range.contains(&(t["mesh_index"][row], t["triangle_index"][row])), "provenance outside the tile");
+                assert!(
+                    in_range.contains(&(t["mesh_index"][row], t["triangle_index"][row])),
+                    "provenance outside the tile"
+                );
             } else {
                 audit.fill_faces += 1;
             }
@@ -493,11 +609,21 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         for (class, t) in &g.tables {
             for i in 0..t.values().next().map_or(0, Vec::len) {
                 if class == "lod_vanished" {
-                    vanished.push((t["node_index"][i], t["mesh_index"][i], t["primitive_index"][i]));
-                    assert_ne!(t["reopen_children"][i], 0, "a vanished record names no child");
+                    vanished.push((
+                        t["node_index"][i],
+                        t["mesh_index"][i],
+                        t["primitive_index"][i],
+                    ));
+                    assert_ne!(
+                        t["reopen_children"][i], 0,
+                        "a vanished record names no child"
+                    );
                 }
                 if class == "lod_filled" {
-                    fills.push(([t["loop_x"][i], t["loop_y"][i], t["loop_z"][i]], f64::from_bits(t["bound"][i])));
+                    fills.push((
+                        [t["loop_x"][i], t["loop_y"][i], t["loop_z"][i]],
+                        f64::from_bits(t["bound"][i]),
+                    ));
                 }
             }
         }
@@ -522,21 +648,34 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .filter(|c| c.depth == p.depth + 1 && c.first >= p.first && c.end <= p.end)
             .collect();
         assert!(!children.is_empty());
-        assert_eq!(children.iter().map(|c| c.end - c.first).sum::<u64>(), p.end - p.first, "children cover the range");
+        assert_eq!(
+            children.iter().map(|c| c.end - c.first).sum::<u64>(),
+            p.end - p.first,
+            "children cover the range"
+        );
         for c in &children {
             assert!(p.error >= c.error, "error not monotone");
             for prim in &c.present {
-                assert!(p.present.contains(prim) || p.vanished.contains(prim), "primitive {prim:?} unaccounted");
+                assert!(
+                    p.present.contains(prim) || p.vanished.contains(prim),
+                    "primitive {prim:?} unaccounted"
+                );
             }
         }
         for v in &p.vanished {
-            assert!(children.iter().any(|c| c.present.contains(v)), "vanished primitive does not reopen");
+            assert!(
+                children.iter().any(|c| c.present.contains(v)),
+                "vanished primitive does not reopen"
+            );
         }
         audit.vanished += p.vanished.len();
         for (key, bound) in &p.fills {
             assert!(*bound <= p.error);
             let k = key.map(|b| f64::from(f32::from_bits(b as u32)));
-            assert!(boundary.iter().any(|b| *b == k), "a fill closes something that is not a source hole");
+            assert!(
+                boundary.iter().any(|b| *b == k),
+                "a fill closes something that is not a source hole"
+            );
         }
         audit.fills += p.fills.len();
         // Two-directional sampled distances (lower bounds of the Hausdorff distance).
@@ -572,7 +711,11 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
     for d in depths {
         let mut count: BTreeMap<([u32; 3], [u32; 3]), u32> = BTreeMap::new();
         for (i, t) in tiles.iter().enumerate() {
-            let frontier = if i < leaf_count { t.depth <= d } else { t.depth == d };
+            let frontier = if i < leaf_count {
+                t.depth <= d
+            } else {
+                t.depth == d
+            };
             if !frontier {
                 continue;
             }
@@ -588,7 +731,9 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         let tol = steps[d as usize] * 1.5 + 1e-9;
         let near = |k: [u32; 3]| {
             let p = k.map(|b| f64::from(f32::from_bits(b)));
-            boundary.iter().any(|b| (0..3).all(|a| (b[a] - p[a]).abs() <= tol))
+            boundary
+                .iter()
+                .any(|b| (0..3).all(|a| (b[a] - p[a]).abs() <= tol))
         };
         for ((a, b), c) in count {
             if c == 1 {
@@ -619,8 +764,16 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
     let input = write_gltf(&work.path().join("src"), &source);
     let mut archives = Vec::new();
     for jobs in [1, 2] {
-        let dir = leaves(&input, &work.path().join(format!("leaves{jobs}")), jobs, Mutation::None, 1024).unwrap();
-        let manifest: Value = serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let dir = leaves(
+            &input,
+            &work.path().join(format!("leaves{jobs}")),
+            jobs,
+            Mutation::None,
+            1024,
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         assert_eq!(manifest["proxyManifest"], "proxies.jsonl");
         let lod = &manifest["lod"];
         let audit = audit(&source, &dir);
@@ -629,16 +782,33 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
         assert_eq!(audit.cracks, 0, "{audit:?}");
         assert!(audit.matched_edges > 0);
         assert!(audit.vanished > 0, "islands should vanish at the root");
-        assert!(audit.fills > 0, "small holes should be filled at a coarse depth");
+        assert!(
+            audit.fills > 0,
+            "small holes should be filled at a coarse depth"
+        );
         assert!(lod["seamMatched"].as_u64().unwrap() > 0);
         let (report, members) = archive(&dir, &work.path().join(format!("t{jobs}.3tz")));
         assert_eq!(report.proxies as usize, audit.proxies);
         for r in rows(&dir.join("proxies.jsonl")) {
             let bytes = fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap();
-            assert!(members.values().any(|m| *m == bytes), "proxy {} not published", r["uri"]);
+            assert!(
+                members.values().any(|m| *m == bytes),
+                "proxy {} not published",
+                r["uri"]
+            );
         }
-        let checked = inspect(ValidationRequest::new(work.path().join(format!("t{jobs}.3tz")))).unwrap();
-        assert!(checked.checks.iter().any(|c| c == "decodedContentContainment"), "{:?}", checked.not_inspected);
+        let checked = inspect(ValidationRequest::new(
+            work.path().join(format!("t{jobs}.3tz")),
+        ))
+        .unwrap();
+        assert!(
+            checked
+                .checks
+                .iter()
+                .any(|c| c == "decodedContentContainment"),
+            "{:?}",
+            checked.not_inspected
+        );
         archives.push(fs::read(work.path().join(format!("t{jobs}.3tz"))).unwrap());
     }
     assert!(archives[0] == archives[1], "archives differ across jobs");
@@ -668,11 +838,22 @@ fn control_skipped_removed_region_term_is_caught() {
     let work = tempfile::tempdir().unwrap();
     let source = terrain(150);
     let input = write_gltf(&work.path().join("src"), &source);
-    let dir = leaves(&input, &work.path().join("leaves"), 2, Mutation::SkipRemoved, 1024).unwrap();
+    let dir = leaves(
+        &input,
+        &work.path().join("leaves"),
+        2,
+        Mutation::SkipRemoved,
+        1024,
+    )
+    .unwrap();
     let caught = std::panic::catch_unwind(|| audit(&source, &dir));
-    let message = caught.err().map(|e| e.downcast::<String>().map(|s| *s).unwrap_or_default());
+    let message = caught
+        .err()
+        .map(|e| e.downcast::<String>().map(|s| *s).unwrap_or_default());
     assert!(
-        message.as_deref().is_some_and(|m| m.contains("exceeds published error")),
+        message
+            .as_deref()
+            .is_some_and(|m| m.contains("exceeds published error")),
         "the skipped removed-region term must be caught: {message:?}"
     );
 }
@@ -685,13 +866,34 @@ fn control_crack_relabelled_as_hole_is_caught() {
     let work = tempfile::tempdir().unwrap();
     let source = terrain(150);
     let input = write_gltf(&work.path().join("src"), &source);
-    let refused = leaves(&input, &work.path().join("refused"), 2, Mutation::InjectCrack, 1024).unwrap_err();
+    let refused = leaves(
+        &input,
+        &work.path().join("refused"),
+        2,
+        Mutation::InjectCrack,
+        1024,
+    )
+    .unwrap_err();
     assert_eq!(refused.error.kind(), JobErrorKind::InvalidState);
-    assert!(refused.error.message().contains("crack"), "{}", refused.error.message());
-    let dir = leaves(&input, &work.path().join("relabelled"), 2, Mutation::CrackAsHole, 1024).unwrap();
+    assert!(
+        refused.error.message().contains("crack"),
+        "{}",
+        refused.error.message()
+    );
+    let dir = leaves(
+        &input,
+        &work.path().join("relabelled"),
+        2,
+        Mutation::CrackAsHole,
+        1024,
+    )
+    .unwrap();
     // Either an unmatched frontier edge, or a fill over a loop that is not a source hole.
     match std::panic::catch_unwind(|| audit(&source, &dir)) {
-        Ok(audit) => assert!(audit.cracks > 0, "the relabelled crack must be found: {audit:?}"),
+        Ok(audit) => assert!(
+            audit.cracks > 0,
+            "the relabelled crack must be found: {audit:?}"
+        ),
         Err(e) => {
             let message = e.downcast::<String>().map(|s| *s).unwrap_or_default();
             assert!(message.contains("not a source hole"), "{message}");

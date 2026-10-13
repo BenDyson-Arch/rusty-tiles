@@ -12,10 +12,11 @@
 //!
 //! Proxies are untextured: flat material factors, smooth normals. Texture baking is H13.
 mod certify;
-mod codec;
+pub(in crate::mesh_large) mod codec;
 mod geom;
+pub(in crate::mesh_large) mod handoff;
 pub(crate) mod incidence;
-mod mesh;
+pub(in crate::mesh_large) mod mesh;
 #[cfg(test)]
 mod tests;
 
@@ -245,7 +246,9 @@ impl Record for SeamEdge {
     }
     fn decode(b: &[u8]) -> Self {
         let k = |i: usize| -> [u32; 3] {
-            std::array::from_fn(|a| u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap()))
+            std::array::from_fn(|a| {
+                u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap())
+            })
         };
         Self {
             lo: k(0),
@@ -279,7 +282,9 @@ impl Record for ForcedKey {
     }
     fn decode(b: &[u8]) -> Self {
         Self {
-            key: std::array::from_fn(|i| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())),
+            key: std::array::from_fn(|i| {
+                u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())
+            }),
             first: u64::from_le_bytes(b[12..20].try_into().unwrap()),
         }
     }
@@ -347,8 +352,15 @@ pub(crate) struct LodReport {
 /// A child reference while listing a depth.
 #[derive(Clone, Copy, Debug)]
 enum Child {
-    Leaf { node: NodeRecord, index: u64, error: f64 },
-    Proxy { node: NodeRecord },
+    Leaf {
+        node: NodeRecord,
+        index: u64,
+        error: f64,
+        density_drop: u32,
+    },
+    Proxy {
+        node: NodeRecord,
+    },
 }
 impl Child {
     fn node(&self) -> &NodeRecord {
@@ -385,6 +397,10 @@ struct Ctx<'a> {
     mutation: Mutation,
     ar: Arith,
     check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    /// The bake handoff sink, when a bake pass will consume the tiles.
+    handoff: Option<&'a handoff::HandoffSink>,
+    profile: String,
+    lattice_sha256: String,
 }
 
 fn slot_of(node: &NodeRecord) -> u8 {
@@ -401,7 +417,12 @@ fn sidecar_path(dir: &Path, node: &NodeRecord) -> PathBuf {
 
 /// Decoded position of a source vertex at `depth` (exactly what any tile publishing it at
 /// that depth decodes).
-fn decode_vertex(lattice: &LatticePlan, key: Key, ell: u8, depth: u32) -> Result<[f32; 3], JobError> {
+fn decode_vertex(
+    lattice: &LatticePlan,
+    key: Key,
+    ell: u8,
+    depth: u32,
+) -> Result<[f32; 3], JobError> {
     let p = key.map(f32::from_bits);
     Ok(lattice.encode(&[p, p, p], &[ell; 3], depth)?.decoded[0])
 }
@@ -452,7 +473,8 @@ impl Sidecar {
             b.extend_from_slice(&f.label.to_le_bytes());
         }
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
         }
         fs::write(path, &b).map_err(|e| JobError::io("write LOD sidecar", path, e))?;
         Ok(b.len() as u64)
@@ -584,7 +606,9 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
                     .filter(|&ell| {
                         ctx.lattice
                             .encode(&[s.positions[c]; 3], &[ell; 3], depth)
-                            .is_ok_and(|e| e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits))
+                            .is_ok_and(|e| {
+                                e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits)
+                            })
                     })
                     .collect();
                 return Err(state(format!(
@@ -652,10 +676,16 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
             };
         }
         if !codec::same_face(&expected, &published.p) {
-            return Err(state("proxy GLB bytes decode differently from their sidecar"));
+            return Err(state(
+                "proxy GLB bytes decode differently from their sidecar",
+            ));
         }
         let (label, _) = sidecar.labels[face.label as usize];
-        if published.feature(&decoded.tables, "source_primitive").map(|f| f.0) != Some(face.label) {
+        if published
+            .feature(&decoded.tables, "source_primitive")
+            .map(|f| f.0)
+            != Some(face.label)
+        {
             return Err(state("proxy feature ID differs from its sidecar label"));
         }
         // Provenance from the published per-triangle table.
@@ -718,6 +748,7 @@ struct Outcome {
     forced_keys: Vec<Key>,
     failed_keys: Vec<Key>,
     over_budget: bool,
+    handoff_bytes: u64,
 }
 
 /// Faces of a mesh grouped by label (stable), the GLB face order.
@@ -787,7 +818,9 @@ fn process(
     let mut children = Vec::with_capacity(job.children.len());
     for child in &job.children {
         children.push(match child {
-            Child::Leaf { node, index, error } => load_leaf(ctx, node, *index, *error)?,
+            Child::Leaf {
+                node, index, error, ..
+            } => load_leaf(ctx, node, *index, *error)?,
             Child::Proxy { node } => load_proxy(ctx, node)?,
         });
     }
@@ -929,8 +962,14 @@ fn process(
                     .collect(),
                 mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
             );
-            out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-            out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
+            out.forced_keys = forced
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .collect();
+            out.failed_keys = failed
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .collect();
             // At most P faces, and at least a halving of the children (single-child chains
             // and small subtrees still coarsen level by level).
             let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
@@ -964,7 +1003,10 @@ fn process(
         ));
     }
     if s_faces.is_empty() {
-        return Err(state(format!("coarse tile f{}-d{d} simplified to nothing", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d} simplified to nothing",
+            node.first
+        )));
     }
     if !full {
         // Topology pass: the seam edges are all the depth audit needs (fills never touch a
@@ -993,7 +1035,13 @@ fn process(
     lap(&mut phases[2]);
     let s_order = by_label(&s_faces);
     let flat_records: Vec<RecordTable> = Vec::new();
-    let unfilled = codec::encode(&primitives(&mesh, &s_order, &key_faces), ctx.materials, ctx.lattice, d, &flat_records)?;
+    let unfilled = codec::encode(
+        &primitives(&mesh, &s_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &flat_records,
+    )?;
     let s_dec = codec::decode(&unfilled.glb)?;
     if s_dec.faces.len() != unfilled.faces.len()
         || !s_dec
@@ -1002,7 +1050,9 @@ fn process(
             .zip(&unfilled.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     lap(&mut phases[7]);
     let s_tris: Vec<Tri> = s_dec.faces.iter().map(|f| tri_of(&f.p)).collect();
@@ -1032,7 +1082,12 @@ fn process(
     } else {
         t_tris.clone()
     };
-    let t_s = geom::directed(ar, &t_measured, &s_bvh, Limits::for_sizes(t_measured.len(), s_tris.len()));
+    let t_s = geom::directed(
+        ar,
+        &t_measured,
+        &s_bvh,
+        Limits::for_sizes(t_measured.len(), s_tris.len()),
+    );
     lap(&mut phases[9]);
     let composed_to = up_add(ar, s_t.bound, child_to);
     let composed_from = up_add(ar, child_from, t_s.bound);
@@ -1047,7 +1102,10 @@ fn process(
         BTreeSet::new()
     };
     let skip = |s: &LodSource| {
-        skip_removed && s.positions.iter().all(|p| removed_keys.contains(&incidence::weld(*p)))
+        skip_removed
+            && s.positions
+                .iter()
+                .all(|p| removed_keys.contains(&incidence::weld(*p)))
     };
     let lo = node.bounds.min.map(f64::from);
     let hi = node.bounds.max.map(f64::from);
@@ -1057,7 +1115,17 @@ fn process(
     let work = 256 * (s_tris.len() as u64 + t_tris.len() as u64);
     lap(&mut phases[3]);
     let direct = certify::direct(
-        ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, !leaf_parent, &skip,
+        ar,
+        ctx.source,
+        node.first,
+        node.end,
+        lo,
+        hi,
+        &s_tris,
+        &s_bvh,
+        work,
+        !leaf_parent,
+        &skip,
         ctx.check,
     )?;
     let direct_to = direct.proxy_to_source.unwrap_or(f64::INFINITY);
@@ -1068,7 +1136,10 @@ fn process(
     out.direct_from_used = direct_from < composed_from;
     let open = to.max(from);
     if !open.is_finite() {
-        return Err(state(format!("coarse tile f{}-d{d}: certificate is not finite", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d}: certificate is not finite",
+            node.first
+        )));
     }
 
     lap(&mut phases[4]);
@@ -1194,9 +1265,22 @@ fn process(
                 mask |= 1 << slot;
             }
         }
-        fill_rows.push((l.label, min_key, l.vertices.len() as u32, fan.len() as u32, bound, mask));
+        // Fill faces carry their record index as `u32::MAX - index` (never a T face id).
+        let fill_id = u32::MAX - fill_rows.len() as u32;
+        fill_rows.push((
+            l.label,
+            min_key,
+            l.vertices.len() as u32,
+            fan.len() as u32,
+            bound,
+            mask,
+        ));
         for t in fan {
-            fill_faces.push(Face { v: t, label: l.label, id: u32::MAX });
+            fill_faces.push(Face {
+                v: t,
+                label: l.label,
+                id: fill_id,
+            });
         }
     }
     let raw = to_filled.max(from);
@@ -1229,7 +1313,8 @@ fn process(
             .collect()
     };
     let mut v_rows = label_rows(&vanished_rows, 0);
-    let lost_rows: Vec<(u32, Key, u32, u8)> = lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
+    let lost_rows: Vec<(u32, Key, u32, u8)> =
+        lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
     v_rows.extend(label_rows(&lost_rows, 1));
     let mut records = Vec::new();
     if !v_rows.is_empty() {
@@ -1255,21 +1340,67 @@ fn process(
         records.push(RecordTable {
             class: "lod_filled",
             columns: vec![
-                ("node_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).0)).collect()),
-                ("mesh_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).1)).collect()),
-                ("primitive_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).2)).collect()),
-                ("loop_x", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[0])).collect()),
-                ("loop_y", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[1])).collect()),
-                ("loop_z", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[2])).collect()),
-                ("loop_vertices", "UINT32", fill_rows.iter().map(|r| u64::from(r.2)).collect()),
-                ("fan_faces", "UINT32", fill_rows.iter().map(|r| u64::from(r.3)).collect()),
-                ("bound", "FLOAT64", fill_rows.iter().map(|r| r.4.to_bits()).collect()),
-                ("reopen_children", "UINT8", fill_rows.iter().map(|r| u64::from(r.5)).collect()),
+                (
+                    "node_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).0)).collect(),
+                ),
+                (
+                    "mesh_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).1)).collect(),
+                ),
+                (
+                    "primitive_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).2)).collect(),
+                ),
+                (
+                    "loop_x",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[0])).collect(),
+                ),
+                (
+                    "loop_y",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[1])).collect(),
+                ),
+                (
+                    "loop_z",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[2])).collect(),
+                ),
+                (
+                    "loop_vertices",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.2)).collect(),
+                ),
+                (
+                    "fan_faces",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.3)).collect(),
+                ),
+                (
+                    "bound",
+                    "FLOAT64",
+                    fill_rows.iter().map(|r| r.4.to_bits()).collect(),
+                ),
+                (
+                    "reopen_children",
+                    "UINT8",
+                    fill_rows.iter().map(|r| u64::from(r.5)).collect(),
+                ),
                 ("depth", "UINT8", vec![u64::from(d); fill_rows.len()]),
             ],
         });
     }
-    let encoded = codec::encode(&primitives(&mesh, &final_order, &key_faces), ctx.materials, ctx.lattice, d, &records)?;
+    let encoded = codec::encode(
+        &primitives(&mesh, &final_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &records,
+    )?;
     let check = codec::decode(&encoded.glb)?;
     if check.faces.len() != encoded.faces.len()
         || !check
@@ -1278,7 +1409,9 @@ fn process(
             .zip(&encoded.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("final proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "final proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     // Every certified face is in the published bytes (fills added, nothing else changed).
     {
@@ -1295,10 +1428,30 @@ fn process(
         published_faces.sort_unstable();
         certified.sort_unstable();
         if published_faces != certified {
-            return Err(state("published proxy faces differ from the certified faces"));
+            return Err(state(
+                "published proxy faces differ from the certified faces",
+            ));
         }
     }
 
+    if let Some(sink) = ctx.handoff {
+        let packet = frozen_packet(
+            ctx,
+            job,
+            &mesh,
+            &key_faces,
+            &final_order,
+            &check,
+            &encoded.glb,
+            &label_error,
+            &fill_rows,
+            &v_rows,
+            published,
+            to_filled,
+            from,
+        )?;
+        out.handoff_bytes = sink.write(&packet, ctx.check)?;
+    }
     // Sidecar (key space, GLB face order) and the published member.
     let mut used: BTreeMap<u32, u32> = BTreeMap::new();
     let mut vertices = Vec::new();
@@ -1307,7 +1460,10 @@ fn process(
     let mut sidecar_faces = Vec::with_capacity(final_order.len());
     for f in &final_order {
         let label = *labels_used.entry(f.label).or_insert_with(|| {
-            labels.push((mesh.labels[f.label as usize], label_error.get(&f.label).copied().unwrap_or(published)));
+            labels.push((
+                mesh.labels[f.label as usize],
+                label_error.get(&f.label).copied().unwrap_or(published),
+            ));
             (labels.len() - 1) as u32
         });
         let v = f.v.map(|v| {
@@ -1368,6 +1524,249 @@ fn process(
     Ok(out)
 }
 
+/// The frozen bake packet of a finished tile, from its key-space mesh (original weld keys,
+/// lineage, fills) and its DECODED published bytes (raw POSITION words, TRS, features,
+/// tables). Faces are paired by published order and must decode bit-identically.
+#[allow(clippy::too_many_arguments)]
+fn frozen_packet(
+    ctx: &Ctx,
+    job: &Job,
+    mesh: &KeyMesh,
+    key_faces: &[KeyFace],
+    faces: &[Face],
+    published: &codec::Decoded,
+    glb: &[u8],
+    label_error: &BTreeMap<u32, f64>,
+    fill_rows: &[(u32, Key, u32, u32, f64, u8)],
+    v_rows: &[[u64; 9]],
+    geometric_error: f64,
+    proxy_to_source: f64,
+    source_to_proxy: f64,
+) -> Result<handoff::FrozenNode, JobError> {
+    use handoff::*;
+    let node = &job.node;
+    if published.faces.len() != faces.len() {
+        return Err(state(
+            "frozen packet: published faces differ from the tile's faces",
+        ));
+    }
+    // Source primitives in published order (the source_primitive rows).
+    let mut order: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut primitives: Vec<FrozenPrimitive> = Vec::new();
+    for f in faces {
+        if !order.contains_key(&f.label) {
+            let l = mesh.labels[f.label as usize];
+            order.insert(f.label, primitives.len() as u32);
+            primitives.push(FrozenPrimitive {
+                node: l.key.0,
+                mesh: l.key.1,
+                primitive: l.key.2,
+                expanded_ordinal: l.expanded_ordinal,
+                material: l.material,
+                row: primitives.len() as u32,
+                error: label_error
+                    .get(&f.label)
+                    .copied()
+                    .unwrap_or(geometric_error),
+                donor_ranges: Vec::new(),
+            });
+        }
+    }
+    let by_key: BTreeMap<(u32, u32, u32), u32> = primitives
+        .iter()
+        .enumerate()
+        .map(|(i, p)| ((p.node, p.mesh, p.primitive), i as u32))
+        .collect();
+    let mut rank = node.first;
+    for s in ctx.source.range(node.first, node.end, 1 << 16)? {
+        let s = s?;
+        if let Some(&i) = by_key.get(&s.primitive_key()) {
+            let ranges = &mut primitives[i as usize].donor_ranges;
+            match ranges.last_mut() {
+                Some(r) if r.end == rank => r.end = rank + 1,
+                _ => ranges.push(rank..rank + 1),
+            }
+        }
+        rank += 1;
+    }
+    let fill_base = u32::MAX - fill_rows.len() as u32;
+    let mut frozen_faces = Vec::with_capacity(faces.len());
+    for (f, d) in faces.iter().zip(&published.faces) {
+        let source = order[&f.label];
+        let fill = (f.id > fill_base).then(|| u32::MAX - f.id);
+        let origin = match key_faces.get(f.id as usize) {
+            Some(k) if fill.is_none() => k.origin,
+            _ => {
+                let p = &primitives[source as usize];
+                Origin {
+                    node: p.node,
+                    mesh: p.mesh,
+                    primitive: p.primitive,
+                    triangle: u64::MAX,
+                }
+            }
+        };
+        let corners = std::array::from_fn(|c| {
+            let v = mesh.vertices[f.v[c] as usize];
+            handoff::FrozenCorner {
+                raw: d.raw[c],
+                decoded: d.p[c].map(f32::to_bits),
+                weld: v.key,
+                ell: v.info.ell,
+            }
+        });
+        frozen_faces.push(FrozenFace {
+            gltf: d.primitive,
+            source,
+            corners,
+            origin,
+            fill,
+            features: d
+                .features
+                .iter()
+                .map(|(id, table)| (*id, table.map(|t| t as u32)))
+                .collect(),
+        });
+    }
+    // Every frozen corner decodes to the certified position of its weld key at this depth.
+    let mut seen: BTreeMap<Key, [u32; 3]> = BTreeMap::new();
+    for f in &frozen_faces {
+        for c in &f.corners {
+            let expected = match seen.get(&c.weld) {
+                Some(p) => *p,
+                None => {
+                    let p =
+                        decode_vertex(ctx.lattice, c.weld, c.ell, node.depth())?.map(f32::to_bits);
+                    seen.insert(c.weld, p);
+                    p
+                }
+            };
+            if expected != c.decoded {
+                return Err(state(
+                    "frozen packet: a published corner is not its weld key's lattice point",
+                ));
+            }
+        }
+    }
+    let mut gltf = Vec::with_capacity(published.primitives.len());
+    let mut start = 0u32;
+    for (i, p) in published.primitives.iter().enumerate() {
+        let end = start
+            + frozen_faces[start as usize..]
+                .iter()
+                .take_while(|f| f.gltf == i as u32)
+                .count() as u32;
+        let source = frozen_faces
+            .get(start as usize)
+            .map(|f| f.source)
+            .ok_or_else(|| state("frozen packet: an empty glTF primitive"))?;
+        gltf.push(FrozenGltfPrimitive {
+            node: p.node,
+            mesh: p.mesh,
+            index: p.index,
+            source,
+            translation: p.translation,
+            scale: p.scale,
+            quantized: p.quantized,
+            feature_ids: p.feature_ids.clone(),
+            faces: start..end,
+        });
+        start = end;
+    }
+    let fills = fill_rows
+        .iter()
+        .map(|r| FrozenFill {
+            source: order[&r.0],
+            loop_key: r.1,
+            loop_vertices: r.2,
+            fan_faces: r.3,
+            bound: r.4,
+            reopen_children: r.5,
+        })
+        .collect();
+    let vanished = v_rows
+        .iter()
+        .map(|r| FrozenVanished {
+            node: r[0] as u32,
+            mesh: r[1] as u32,
+            primitive: r[2] as u32,
+            component_key: [r[3] as u32, r[4] as u32, r[5] as u32],
+            faces: r[6] as u32,
+            reopen_children: r[7] as u8,
+            reason: r[8] as u8,
+        })
+        .collect();
+    let children = job
+        .children
+        .iter()
+        .map(|c| {
+            let n = c.node();
+            FrozenChild {
+                first: n.first,
+                end: n.end,
+                depth: n.depth(),
+                slot: n.slot(),
+                leaf: match c {
+                    Child::Leaf {
+                        index,
+                        density_drop,
+                        ..
+                    } => Some(LeafChild {
+                        index: *index,
+                        density_drop: *density_drop,
+                    }),
+                    Child::Proxy { .. } => None,
+                },
+            }
+        })
+        .collect();
+    let tables = published
+        .tables
+        .iter()
+        .map(|t| FrozenTable {
+            class: t.class.clone(),
+            count: t.count as u64,
+            columns: t
+                .columns
+                .iter()
+                .map(|(name, values)| {
+                    (
+                        name.clone(),
+                        t.components.get(name).cloned().unwrap_or_default(),
+                        values.clone(),
+                    )
+                })
+                .collect(),
+        })
+        .collect();
+    Ok(FrozenNode {
+        identity: NodeIdentity {
+            cell_depth: node.cell_depth,
+            cell: node.cell,
+            path_len: node.path_len,
+            path: node.path,
+            last_octant: node.last_octant,
+            depth: node.depth(),
+            first: node.first,
+            end: node.end,
+        },
+        profile: ctx.profile.clone(),
+        geometric_error,
+        proxy_to_source,
+        source_to_proxy,
+        lattice_sha256: ctx.lattice_sha256.clone(),
+        glb_sha256: Sha256::digest(glb).into(),
+        glb_bytes: glb.len() as u64,
+        primitives,
+        gltf,
+        faces: frozen_faces,
+        fills,
+        vanished,
+        children,
+        tables,
+    })
+}
+
 /// Cache of a tile's simplified faces (scratch), written by its latest topology run.
 fn write_topology(
     path: &Path,
@@ -1376,7 +1775,12 @@ fn write_topology(
     relaxed: bool,
 ) -> Result<(), JobError> {
     let mut b = Vec::with_capacity(faces.len() * 20 + 64);
-    for v in [report.forced, report.forced_unchecked, report.collapses, report.input_faces] {
+    for v in [
+        report.forced,
+        report.forced_unchecked,
+        report.collapses,
+        report.input_faces,
+    ] {
         b.extend_from_slice(&v.to_le_bytes());
     }
     b.push(u8::from(relaxed));
@@ -1387,7 +1791,8 @@ fn write_topology(
         }
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
     }
     fs::write(path, b).map_err(|e| JobError::io("write LOD topology cache", path, e))
 }
@@ -1400,7 +1805,9 @@ fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport,
     };
     let bad = || state("LOD topology cache is corrupt");
     let u64_at = |i: usize| -> Result<u64, JobError> {
-        Ok(u64::from_le_bytes(b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap()))
+        Ok(u64::from_le_bytes(
+            b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap(),
+        ))
     };
     let report = mesh::SimplifyReport {
         forced: u64_at(0)?,
@@ -1581,17 +1988,20 @@ fn audit(
 struct LeafFact {
     first: u64,
     error_bits: u64,
+    density_drop: u32,
 }
 impl Record for LeafFact {
-    const SIZE: usize = 16;
+    const SIZE: usize = 20;
     fn encode(&self, out: &mut [u8]) {
         out[..8].copy_from_slice(&self.first.to_le_bytes());
-        out[8..].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[8..16].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[16..].copy_from_slice(&self.density_drop.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
         Self {
             first: u64::from_le_bytes(b[..8].try_into().unwrap()),
-            error_bits: u64::from_le_bytes(b[8..].try_into().unwrap()),
+            error_bits: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            density_drop: u32::from_le_bytes(b[16..20].try_into().unwrap()),
         }
     }
 }
@@ -1605,6 +2015,8 @@ pub(crate) struct LodInput<'a> {
     pub mutation: Mutation,
     /// Proxy face target `P` ([`TARGET_FACES`] in production).
     pub target: usize,
+    /// Write one frozen packet per final tile for the bake pass (H13).
+    pub handoff: Option<&'a handoff::HandoffSink>,
 }
 
 /// Build, certify and write every coarse tile; returns the report. Writes `proxies/` and
@@ -1631,23 +2043,32 @@ pub(crate) fn produce(
     let recomputed = LatticePlan::new(captured.lattice.profile(), captured.scan.bounds, &extents)?;
     let frozen = serde_json::to_vec(&captured.lattice).map_err(|e| state(e.to_string()))?;
     if serde_json::to_vec(&recomputed).map_err(|e| state(e.to_string()))? != frozen {
-        return Err(state("the frozen H8 lattice differs from its recomputation"));
+        return Err(state(
+            "the frozen H8 lattice differs from its recomputation",
+        ));
     }
     report.lattice_sha256 = hex(Sha256::digest(&frozen));
     let proxies_dir = input.stage.join("proxies");
-    fs::create_dir_all(&proxies_dir).map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
+    fs::create_dir_all(&proxies_dir)
+        .map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
     // Leaf facts in leaf order.
     let leaf_facts = {
         let path = input.stage.join("leaves.jsonl");
         let text = fs::File::open(&path).map_err(|e| JobError::io("read leaf rows", &path, e))?;
-        let mut writer = crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
+        let mut writer =
+            crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
         for line in std::io::BufRead::lines(std::io::BufReader::new(text)) {
             let line = line.map_err(|e| JobError::io("read leaf rows", &path, e))?;
             let row: Value = serde_json::from_str(&line).map_err(|e| state(e.to_string()))?;
-            let error = row["geometryError"].as_f64().ok_or_else(|| state("leaf row without error"))?;
+            let error = row["geometryError"]
+                .as_f64()
+                .ok_or_else(|| state("leaf row without error"))?;
             writer.push(&LeafFact {
-                first: row["first"].as_u64().ok_or_else(|| state("leaf row without first"))?,
+                first: row["first"]
+                    .as_u64()
+                    .ok_or_else(|| state("leaf row without first"))?,
                 error_bits: error.to_bits(),
+                density_drop: row["densityDrop"].as_u64().unwrap_or(0) as u32,
             })?;
         }
         writer.finish()?
@@ -1672,7 +2093,8 @@ pub(crate) fn produce(
     }
     crate::spill::preflight(
         input.scratch.path(),
-        incidence::scratch_need(captured.scan.triangles).ok_or_else(|| resource("LOD scratch overflow"))?,
+        incidence::scratch_need(captured.scan.triangles)
+            .ok_or_else(|| resource("LOD scratch overflow"))?,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
@@ -1700,6 +2122,12 @@ pub(crate) fn produce(
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
         check,
+        handoff: input.handoff,
+        profile: serde_json::to_value(captured.lattice.profile())
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default(),
+        lattice_sha256: report.lattice_sha256.clone(),
     };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(input.jobs.max(1))
@@ -1751,7 +2179,10 @@ pub(crate) fn produce(
                 }
                 let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
                     use rayon::prelude::*;
-                    window.par_iter().map(|job| process(&ctx, job, &keep, finishing)).collect()
+                    window
+                        .par_iter()
+                        .map(|job| process(&ctx, job, &keep, finishing))
+                        .collect()
                 });
                 for (job, outcome) in window.iter().zip(outcomes) {
                     let mut o = outcome?;
@@ -1768,7 +2199,10 @@ pub(crate) fn produce(
                     }
                     if round == 0 {
                         for key in std::mem::take(&mut o.forced_keys) {
-                            forced_log.push(&ForcedKey { key, first: job.node.first })?;
+                            forced_log.push(&ForcedKey {
+                                key,
+                                first: job.node.first,
+                            })?;
                         }
                     }
                     failed.extend(std::mem::take(&mut o.failed_keys));
@@ -1795,6 +2229,7 @@ pub(crate) fn produce(
                                 node: n,
                                 index: leaf_index,
                                 error: f64::from_bits(fact.error_bits),
+                                density_drop: fact.density_drop,
                             });
                         }
                     }
@@ -1805,7 +2240,14 @@ pub(crate) fn produce(
                     if let Some(job) = current.take() {
                         window.push(job);
                         if window.len() >= window_size {
-                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+                            run(
+                                &mut window,
+                                &mut seam_log,
+                                &mut forced_log,
+                                &mut done,
+                                &mut failed,
+                                &mut report.tile_runs,
+                            )?;
                         }
                     }
                 }
@@ -1823,9 +2265,18 @@ pub(crate) fn produce(
             if let Some(job) = current.take() {
                 window.push(job);
             }
-            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+            run(
+                &mut window,
+                &mut seam_log,
+                &mut forced_log,
+                &mut done,
+                &mut failed,
+                &mut report.tile_runs,
+            )?;
             if finishing {
-                break final_counts.take().ok_or_else(|| state("finished without an audit"))?;
+                break final_counts
+                    .take()
+                    .ok_or_else(|| state("finished without an audit"))?;
             }
             // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
             // seam edge without a partner keeps every seam vertex its tile removed. Kept
@@ -1836,7 +2287,11 @@ pub(crate) fn produce(
             if contested.is_empty() {
                 let log = std::mem::replace(
                     &mut seam_log,
-                    crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?,
+                    crate::spill::SequenceWriter::<SeamEdge>::new(
+                        input.scratch,
+                        "lod-seams",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 let mut sorter = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
@@ -1864,7 +2319,11 @@ pub(crate) fn produce(
                     .collect();
                 let log = std::mem::replace(
                     &mut forced_log,
-                    crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                    crate::spill::SequenceWriter::<ForcedKey>::new(
+                        input.scratch,
+                        "lod-forced",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 for f in log.reader()? {
@@ -1898,7 +2357,11 @@ pub(crate) fn produce(
             report.seam_kept_extra += contested.len() as u64;
             let log = std::mem::replace(
                 &mut forced_log,
-                crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                crate::spill::SequenceWriter::<ForcedKey>::new(
+                    input.scratch,
+                    "lod-forced",
+                    1 << 16,
+                )?,
             )
             .finish()?;
             let mut rerun = BTreeSet::new();
@@ -1919,7 +2382,9 @@ pub(crate) fn produce(
         drop(seam_log);
         let mut written = 0u64;
         for Done(o) in done.into_values() {
-            let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
+            let row = o
+                .row
+                .ok_or_else(|| state("a coarse tile produced no row"))?;
             report.proxies += 1;
             report.proxy_faces += u64::from(row.faces);
             report.max_proxy_faces = report.max_proxy_faces.max(u64::from(row.faces));
@@ -1957,17 +2422,20 @@ pub(crate) fn produce(
         report.seam_relabelled += counts.relabelled;
         let topo_dir = sidecars.join(format!("topo-d{d}"));
         if topo_dir.exists() {
-            fs::remove_dir_all(&topo_dir).map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
+            fs::remove_dir_all(&topo_dir)
+                .map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
         }
         let child_dir = sidecars.join(format!("d{}", d + 1));
         if child_dir.exists() {
-            fs::remove_dir_all(&child_dir).map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
+            fs::remove_dir_all(&child_dir)
+                .map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
             sidecar_live -= sidecar_bytes.remove(&(d + 1)).unwrap_or(0);
         }
     }
     let _ = fs::remove_dir_all(&sidecars);
     // Rows in postorder (end ascending, deeper first): H16's tile-closing order.
-    let file = fs::File::create(&rows_path).map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
+    let file = fs::File::create(&rows_path)
+        .map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
     let mut writer = BufWriter::new(file);
     for row in rows.finish()? {
         let r = row?;
@@ -1995,4 +2463,3 @@ pub(crate) fn produce(
     report.seconds = started.elapsed().as_secs_f64();
     Ok(report)
 }
-

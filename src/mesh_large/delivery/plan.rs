@@ -195,7 +195,11 @@ impl<'s, S: Sink> Builder<'s, S> {
     }
 
     /// A builder that gives every internal tile the next H17 proxy row (postorder).
-    pub(crate) fn with_proxies(sink: &'s mut S, limits: Limits, proxies: Option<Proxies<'s>>) -> Self {
+    pub(crate) fn with_proxies(
+        sink: &'s mut S,
+        limits: Limits,
+        proxies: Option<Proxies<'s>>,
+    ) -> Self {
         Self {
             sink,
             proxies,
