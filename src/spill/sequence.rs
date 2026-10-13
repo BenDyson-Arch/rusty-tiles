@@ -135,7 +135,9 @@ impl<T: Record> Sequence<T> {
         buffer_bytes: usize,
     ) -> Result<SequenceReader<'_, T>, SpillError> {
         if first > end || end > self.records || buffer_bytes == 0 {
-            return Err(SpillError::InvalidConfig("sequence range outside its records"));
+            return Err(SpillError::InvalidConfig(
+                "sequence range outside its records",
+            ));
         }
         let offset = first
             .checked_mul(T::SIZE as u64)

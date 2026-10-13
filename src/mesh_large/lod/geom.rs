@@ -16,6 +16,8 @@ use std::{cmp::Ordering, collections::BinaryHeap};
 
 pub(crate) type P3 = [f64; 3];
 pub(crate) type Tri = [P3; 3];
+/// A target found by a search: stored index and plain squared estimate.
+pub(crate) type Found = Option<(usize, f64)>;
 
 /// Test-only certificate mutations (controls that must be caught). Production is `None`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -443,7 +445,7 @@ impl Bvh {
         evals: &mut u64,
         labels: &[u32],
         want: u32,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         self.search(x, cap, evals, Some((labels, want)))
     }
 
@@ -453,7 +455,7 @@ impl Bvh {
         cap: u32,
         evals: &mut u64,
         labels: Option<(&[u32], u32)>,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         if self.tris.is_empty() {
             return (None, None);
         }
@@ -473,7 +475,7 @@ impl Bvh {
         evals: &mut u64,
         labels: Option<(&[u32], u32)>,
         lower: &dyn Fn(&Node) -> f64,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         heap.clear();
         heap.push(Entry(lower(&self.nodes[0]), 0));
         let mut best: Option<(usize, f64)> = None;
@@ -489,7 +491,8 @@ impl Bvh {
             if node.count > 0 {
                 for k in node.first..node.first + node.count {
                     let t = &self.tris[k as usize];
-                    let matches = labels.is_some_and(|(l, w)| l[self.ids[k as usize] as usize] == w);
+                    let matches =
+                        labels.is_some_and(|(l, w)| l[self.ids[k as usize] as usize] == w);
                     let limit = match (best, same) {
                         (Some((_, b)), Some((_, s))) if matches => b.max(s),
                         (Some((_, b)), None) if matches => f64::INFINITY.max(b),
@@ -524,7 +527,8 @@ impl Bvh {
     /// Plain nearest squared distance from `p` (a refinement threshold, never a bound).
     pub(crate) fn nearest(&self, p: P3, cap: u32, evals: &mut u64) -> f64 {
         let x = [p, p, p];
-        self.best_target(&x, cap, evals).map_or(f64::INFINITY, |b| b.1)
+        self.best_target(&x, cap, evals)
+            .map_or(f64::INFINITY, |b| b.1)
     }
 }
 
@@ -754,7 +758,8 @@ pub(crate) fn directed_labelled(
             {
                 let mut children = split(ar, patch);
                 for child in &mut children {
-                    child.bound = witness(ar, y, &child.p, child.slack, limits.patch_cap, &mut evals);
+                    child.bound =
+                        witness(ar, y, &child.p, child.slack, limits.patch_cap, &mut evals);
                 }
                 next.extend(children);
                 changed = true;
@@ -868,9 +873,9 @@ mod tests {
         if nn > 0 {
             // Inside test: projection lies within all three edge half-planes.
             let w = s(p, a);
-            let inside = [(a, b), (b, c), (c, a)].iter().all(|&(x, y)| {
-                d(cross(s(y, x), s(p, x)), n) >= 0
-            });
+            let inside = [(a, b), (b, c), (c, a)]
+                .iter()
+                .all(|&(x, y)| d(cross(s(y, x), s(p, x)), n) >= 0);
             if inside {
                 let h = d(n, w);
                 return ((h * h) as u128, nn as u128);
@@ -904,7 +909,10 @@ mod tests {
     struct Lcg(u64);
     impl Lcg {
         fn next(&mut self) -> u64 {
-            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             self.0 >> 33
         }
         fn int(&mut self, span: i64) -> i64 {
@@ -1008,12 +1016,22 @@ mod tests {
                 0.
             }
         });
-        for (x, y) in [(&coarse, &fine), (&fine, &coarse), (&coarse, &pit), (&pit, &coarse)] {
+        for (x, y) in [
+            (&coarse, &fine),
+            (&fine, &coarse),
+            (&coarse, &pit),
+            (&pit, &coarse),
+        ] {
             let bvh = Bvh::new(y);
             let d = directed(Arith::OUTWARD, x, &bvh, Limits::for_sizes(x.len(), y.len()));
             let s = sampled(x, y, 12);
             assert!(d.bound >= s, "bound {} sample {}", d.bound, s);
-            assert!(d.bound <= s * 3. + 1e-9, "refinement too loose: {} vs {}", d.bound, s);
+            assert!(
+                d.bound <= s * 3. + 1e-9,
+                "refinement too loose: {} vs {}",
+                d.bound,
+                s
+            );
         }
         // The pit's floor is 0.3 below the coarse plane: the plane is within 0.3 of it.
         let d = directed(
@@ -1035,7 +1053,11 @@ mod tests {
     fn split_children_cover_the_parent_with_slack() {
         let ar = Arith::OUTWARD;
         let patch = Patch {
-            p: [[0.1, 1e6 + 0.3, -7.7], [1e-9, 3.3, 2.], [1e6, -1e6 + 0.1, 0.]],
+            p: [
+                [0.1, 1e6 + 0.3, -7.7],
+                [1e-9, 3.3, 2.],
+                [1e6, -1e6 + 0.1, 0.],
+            ],
             slack: 0.,
             depth: 0,
             bound: 0.,

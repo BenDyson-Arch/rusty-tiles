@@ -327,8 +327,10 @@ impl WriteSink<'_> {
         if !node.is_skeleton() {
             return self.implicit(node);
         }
-        let contents =
-            self.stage_proxy(&node, &format!("content/f{}-d{}.glb", node.first, node.depth))?;
+        let contents = self.stage_proxy(
+            &node,
+            &format!("content/f{}-d{}.glb", node.first, node.depth),
+        )?;
         let own = record(&node, contents)?;
         let children = node
             .children

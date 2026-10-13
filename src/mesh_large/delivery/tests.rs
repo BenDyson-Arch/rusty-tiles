@@ -908,7 +908,7 @@ fn untextured(input: &Path) -> PathBuf {
 
 /// Every payload's property tables are within the consumer limit; returns the number of
 /// leaves (two tables: source_primitive and source_triangle). H17 proxies (a
-/// source_primitive table, a proxy_source table per glTF primitive and record tables) are
+/// source_primitive table, one proxy_source table when it fits and record tables) are
 /// checked for the limit too but not counted.
 fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usize {
     let mut leaves = 0;

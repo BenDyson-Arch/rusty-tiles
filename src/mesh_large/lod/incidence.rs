@@ -192,13 +192,20 @@ impl PartialOrd for LodSource {
 }
 impl Ord for LodSource {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.node, self.mesh, self.primitive, self.triangle, self.expanded_ordinal).cmp(&(
-            other.node,
-            other.mesh,
-            other.primitive,
-            other.triangle,
-            other.expanded_ordinal,
-        ))
+        (
+            self.node,
+            self.mesh,
+            self.primitive,
+            self.triangle,
+            self.expanded_ordinal,
+        )
+            .cmp(&(
+                other.node,
+                other.mesh,
+                other.primitive,
+                other.triangle,
+                other.expanded_ordinal,
+            ))
     }
 }
 
@@ -315,10 +322,9 @@ pub(crate) fn build(
 ) -> Result<Sequence<LodSource>, JobError> {
     let mut incidences = ExternalSorter::<Incidence>::new(scratch, sort)?;
     {
-        let mut leaves = nodes.reader()?.filter(|n| {
-            n.as_ref()
-                .map_or(true, |node| node.kind == NodeKind::Leaf)
-        });
+        let mut leaves = nodes
+            .reader()?
+            .filter(|n| n.as_ref().map_or(true, |node| node.kind == NodeKind::Leaf));
         let mut leaf: Option<NodeRecord> = None;
         for (rank, triangle) in triangles.reader()?.enumerate() {
             let triangle = triangle?;
@@ -358,8 +364,8 @@ pub(crate) fn build(
         let mut overflow = false;
         let mut current: Option<[u32; 3]> = None;
         let flush = |group: &mut Vec<Incidence>,
-                         overflow: bool,
-                         infos: &mut ExternalSorter<CornerInfo>|
+                     overflow: bool,
+                     infos: &mut ExternalSorter<CornerInfo>|
          -> Result<(), JobError> {
             let Some(first) = group.first() else {
                 return Ok(());
@@ -494,10 +500,7 @@ mod tests {
         let (_, _, special) = reduce(k, &group[..3]);
         assert!(special);
         // One leaf only: never cut.
-        let solo = [
-            inc(k, ring(a, b), &[4], 0),
-            inc(k, ring(b, a), &[4], 1),
-        ];
+        let solo = [inc(k, ring(a, b), &[4], 0), inc(k, ring(b, a), &[4], 1)];
         assert_eq!(reduce(k, &solo).0, NEVER);
     }
 
@@ -512,18 +515,34 @@ mod tests {
             expanded_ordinal: 5,
             material: u32::MAX,
             info: [
-                VertexInfo { ell: 3, c2: 2, c3: NEVER, special: true },
+                VertexInfo {
+                    ell: 3,
+                    c2: 2,
+                    c3: NEVER,
+                    special: true,
+                },
                 VertexInfo::default(),
-                VertexInfo { ell: 31, c2: 0, c3: 0, special: false },
+                VertexInfo {
+                    ell: 31,
+                    c2: 0,
+                    c3: 0,
+                    special: false,
+                },
             ],
             degenerate: true,
         };
         let mut bytes = [0u8; LodSource::SIZE];
         s.encode(&mut bytes);
         let back = LodSource::decode(&bytes);
-        assert_eq!(back.positions.map(|p| p.map(f32::to_bits)), s.positions.map(|p| p.map(f32::to_bits)));
+        assert_eq!(
+            back.positions.map(|p| p.map(f32::to_bits)),
+            s.positions.map(|p| p.map(f32::to_bits))
+        );
         assert_eq!(back.info, s.info);
-        assert_eq!((back.triangle, back.mesh, back.degenerate), (s.triangle, s.mesh, true));
+        assert_eq!(
+            (back.triangle, back.mesh, back.degenerate),
+            (s.triangle, s.mesh, true)
+        );
         let i = Incidence {
             key: [1, 2, 3],
             rank: 99,

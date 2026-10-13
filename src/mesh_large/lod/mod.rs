@@ -245,7 +245,9 @@ impl Record for SeamEdge {
     }
     fn decode(b: &[u8]) -> Self {
         let k = |i: usize| -> [u32; 3] {
-            std::array::from_fn(|a| u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap()))
+            std::array::from_fn(|a| {
+                u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap())
+            })
         };
         Self {
             lo: k(0),
@@ -279,7 +281,9 @@ impl Record for ForcedKey {
     }
     fn decode(b: &[u8]) -> Self {
         Self {
-            key: std::array::from_fn(|i| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())),
+            key: std::array::from_fn(|i| {
+                u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())
+            }),
             first: u64::from_le_bytes(b[12..20].try_into().unwrap()),
         }
     }
@@ -347,8 +351,14 @@ pub(crate) struct LodReport {
 /// A child reference while listing a depth.
 #[derive(Clone, Copy, Debug)]
 enum Child {
-    Leaf { node: NodeRecord, index: u64, error: f64 },
-    Proxy { node: NodeRecord },
+    Leaf {
+        node: NodeRecord,
+        index: u64,
+        error: f64,
+    },
+    Proxy {
+        node: NodeRecord,
+    },
 }
 impl Child {
     fn node(&self) -> &NodeRecord {
@@ -380,6 +390,9 @@ struct Ctx<'a> {
     source: &'a Sequence<LodSource>,
     lattice: &'a LatticePlan,
     materials: &'a [Value],
+    /// Per material, the index of the first equal flat material: proxy faces sort by it so
+    /// one glTF primitive carries every source primitive of one flat material.
+    material_rank: &'a [u32],
     retention: &'a [u8],
     target: usize,
     mutation: Mutation,
@@ -401,7 +414,12 @@ fn sidecar_path(dir: &Path, node: &NodeRecord) -> PathBuf {
 
 /// Decoded position of a source vertex at `depth` (exactly what any tile publishing it at
 /// that depth decodes).
-fn decode_vertex(lattice: &LatticePlan, key: Key, ell: u8, depth: u32) -> Result<[f32; 3], JobError> {
+fn decode_vertex(
+    lattice: &LatticePlan,
+    key: Key,
+    ell: u8,
+    depth: u32,
+) -> Result<[f32; 3], JobError> {
     let p = key.map(f32::from_bits);
     Ok(lattice.encode(&[p, p, p], &[ell; 3], depth)?.decoded[0])
 }
@@ -452,7 +470,8 @@ impl Sidecar {
             b.extend_from_slice(&f.label.to_le_bytes());
         }
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
         }
         fs::write(path, &b).map_err(|e| JobError::io("write LOD sidecar", path, e))?;
         Ok(b.len() as u64)
@@ -584,7 +603,9 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
                     .filter(|&ell| {
                         ctx.lattice
                             .encode(&[s.positions[c]; 3], &[ell; 3], depth)
-                            .is_ok_and(|e| e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits))
+                            .is_ok_and(|e| {
+                                e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits)
+                            })
                     })
                     .collect();
                 return Err(state(format!(
@@ -639,10 +660,9 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
     let mut tris = Vec::with_capacity(sidecar.faces.len());
     for (face, published) in sidecar.faces.iter().zip(&decoded.faces) {
         let mut expected = [[0f32; 3]; 3];
-        for c in 0..3 {
-            let v = face.v[c];
+        for (slot, &v) in expected.iter_mut().zip(&face.v) {
             let (key, info) = sidecar.vertices[v as usize];
-            expected[c] = match cache.get(&v) {
+            *slot = match cache.get(&v) {
                 Some(p) => *p,
                 None => {
                     let p = decode_vertex(ctx.lattice, key, info.ell, depth)?;
@@ -652,13 +672,20 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
             };
         }
         if !codec::same_face(&expected, &published.p) {
-            return Err(state("proxy GLB bytes decode differently from their sidecar"));
+            return Err(state(
+                "proxy GLB bytes decode differently from their sidecar",
+            ));
         }
         let (label, _) = sidecar.labels[face.label as usize];
-        if published.feature(&decoded.tables, "source_primitive").map(|f| f.0) != Some(face.label) {
+        if published
+            .feature(&decoded.tables, "source_primitive")
+            .map(|f| f.0)
+            != Some(face.label)
+        {
             return Err(state("proxy feature ID differs from its sidecar label"));
         }
-        // Provenance from the published per-triangle table.
+        // Provenance: node, mesh and primitive from the face's set-0 row, the source
+        // triangle from its per-triangle `proxy_source` row (fills carry no triangle).
         let (row, table) = published
             .feature(&decoded.tables, "proxy_source")
             .ok_or_else(|| state("proxy triangle without a proxy_source feature ID"))?;
@@ -670,15 +697,20 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
                 .copied()
                 .ok_or_else(|| state("proxy_source table without its row"))
         };
+        let triangle = if column("fill")? != 0 {
+            u64::MAX
+        } else {
+            column("triangle_index")?
+        };
         faces.push(KeyFace {
             keys: face.v.map(|v| sidecar.vertices[v as usize].0),
             info: face.v.map(|v| sidecar.vertices[v as usize].1),
             label,
             origin: Origin {
-                node: column("node_index")? as u32,
-                mesh: column("mesh_index")? as u32,
-                primitive: column("primitive_index")? as u32,
-                triangle: column("triangle_index")?,
+                node: label.key.0,
+                mesh: label.key.1,
+                primitive: label.key.2,
+                triangle,
             },
         });
         tris.push(tri_of(&published.p));
@@ -720,10 +752,13 @@ struct Outcome {
     over_budget: bool,
 }
 
-/// Faces of a mesh grouped by label (stable), the GLB face order.
-fn by_label(faces: &[Face]) -> Vec<Face> {
+/// Faces of a mesh grouped by flat material, then label (stable): the GLB face order.
+fn by_label(faces: &[Face], mesh: &KeyMesh, rank: &[u32]) -> Vec<Face> {
     let mut out = faces.to_vec();
-    out.sort_by_key(|f| f.label);
+    out.sort_by_key(|f| {
+        let material = mesh.labels[f.label as usize].material as usize;
+        (rank.get(material).copied().unwrap_or(u32::MAX), f.label)
+    });
     out
 }
 
@@ -898,7 +933,7 @@ fn process(
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
             && node.first == 0
             && d >= 1
-            && key_hash(v.key) % 3 == 0
+            && key_hash(v.key).is_multiple_of(3)
             && !v.info.special
         {
             keep = false;
@@ -929,8 +964,14 @@ fn process(
                     .collect(),
                 mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
             );
-            out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-            out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
+            out.forced_keys = forced
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .collect();
+            out.failed_keys = failed
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .collect();
             // At most P faces, and at least a halving of the children (single-child chains
             // and small subtrees still coarsen level by level).
             let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
@@ -964,7 +1005,10 @@ fn process(
         ));
     }
     if s_faces.is_empty() {
-        return Err(state(format!("coarse tile f{}-d{d} simplified to nothing", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d} simplified to nothing",
+            node.first
+        )));
     }
     if !full {
         // Topology pass: the seam edges are all the depth audit needs (fills never touch a
@@ -991,9 +1035,15 @@ fn process(
 
     // Encode the unfilled proxy, decode its bytes, certify.
     lap(&mut phases[2]);
-    let s_order = by_label(&s_faces);
+    let s_order = by_label(&s_faces, &mesh, ctx.material_rank);
     let flat_records: Vec<RecordTable> = Vec::new();
-    let unfilled = codec::encode(&primitives(&mesh, &s_order, &key_faces), ctx.materials, ctx.lattice, d, &flat_records)?;
+    let unfilled = codec::encode(
+        &primitives(&mesh, &s_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &flat_records,
+    )?;
     let s_dec = codec::decode(&unfilled.glb)?;
     if s_dec.faces.len() != unfilled.faces.len()
         || !s_dec
@@ -1002,7 +1052,9 @@ fn process(
             .zip(&unfilled.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     lap(&mut phases[7]);
     let s_tris: Vec<Tri> = s_dec.faces.iter().map(|f| tri_of(&f.p)).collect();
@@ -1032,7 +1084,12 @@ fn process(
     } else {
         t_tris.clone()
     };
-    let t_s = geom::directed(ar, &t_measured, &s_bvh, Limits::for_sizes(t_measured.len(), s_tris.len()));
+    let t_s = geom::directed(
+        ar,
+        &t_measured,
+        &s_bvh,
+        Limits::for_sizes(t_measured.len(), s_tris.len()),
+    );
     lap(&mut phases[9]);
     let composed_to = up_add(ar, s_t.bound, child_to);
     let composed_from = up_add(ar, child_from, t_s.bound);
@@ -1047,7 +1104,10 @@ fn process(
         BTreeSet::new()
     };
     let skip = |s: &LodSource| {
-        skip_removed && s.positions.iter().all(|p| removed_keys.contains(&incidence::weld(*p)))
+        skip_removed
+            && s.positions
+                .iter()
+                .all(|p| removed_keys.contains(&incidence::weld(*p)))
     };
     let lo = node.bounds.min.map(f64::from);
     let hi = node.bounds.max.map(f64::from);
@@ -1057,7 +1117,17 @@ fn process(
     let work = 256 * (s_tris.len() as u64 + t_tris.len() as u64);
     lap(&mut phases[3]);
     let direct = certify::direct(
-        ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, !leaf_parent, &skip,
+        ar,
+        ctx.source,
+        node.first,
+        node.end,
+        lo,
+        hi,
+        &s_tris,
+        &s_bvh,
+        work,
+        !leaf_parent,
+        &skip,
         ctx.check,
     )?;
     let direct_to = direct.proxy_to_source.unwrap_or(f64::INFINITY);
@@ -1068,7 +1138,10 @@ fn process(
     out.direct_from_used = direct_from < composed_from;
     let open = to.max(from);
     if !open.is_finite() {
-        return Err(state(format!("coarse tile f{}-d{d}: certificate is not finite", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d}: certificate is not finite",
+            node.first
+        )));
     }
 
     lap(&mut phases[4]);
@@ -1132,8 +1205,8 @@ fn process(
     let decoded_of: BTreeMap<u32, [f32; 3]> = {
         let mut m = BTreeMap::new();
         for (f, dec) in s_order.iter().zip(&unfilled.faces) {
-            for c in 0..3 {
-                m.insert(f.v[c], dec[c]);
+            for (v, p) in f.v.iter().zip(dec) {
+                m.insert(*v, *p);
             }
         }
         m
@@ -1175,7 +1248,11 @@ fn process(
             .or_insert_with(|| Bvh::new(&t_by_label[&l.label]));
         let h = geom::directed(ar, &tris, bvh, Limits::for_sizes(tris.len(), bvh.len()));
         let bound = up_add(ar, h.bound, label_child[&l.label]);
-        if !(bound <= open) {
+        // NaN-safe: a bound that is not at most `open` is rejected.
+        if bound
+            .partial_cmp(&open)
+            .is_none_or(|o| o == std::cmp::Ordering::Greater)
+        {
             out.fills_rejected_bound += 1;
             continue;
         }
@@ -1194,9 +1271,20 @@ fn process(
                 mask |= 1 << slot;
             }
         }
-        fill_rows.push((l.label, min_key, l.vertices.len() as u32, fan.len() as u32, bound, mask));
+        fill_rows.push((
+            l.label,
+            min_key,
+            l.vertices.len() as u32,
+            fan.len() as u32,
+            bound,
+            mask,
+        ));
         for t in fan {
-            fill_faces.push(Face { v: t, label: l.label, id: u32::MAX });
+            fill_faces.push(Face {
+                v: t,
+                label: l.label,
+                id: u32::MAX,
+            });
         }
     }
     let raw = to_filled.max(from);
@@ -1209,7 +1297,7 @@ fn process(
     // Final encoding with fills and records; decode and compare once more.
     let mut all = s_order.clone();
     all.extend_from_slice(&fill_faces);
-    let final_order = by_label(&all);
+    let final_order = by_label(&all, &mesh, ctx.material_rank);
     let label_rows = |rows: &[(u32, Key, u32, u8)], reason: u64| -> Vec<[u64; 9]> {
         rows.iter()
             .map(|(label, key, faces, mask)| {
@@ -1229,7 +1317,8 @@ fn process(
             .collect()
     };
     let mut v_rows = label_rows(&vanished_rows, 0);
-    let lost_rows: Vec<(u32, Key, u32, u8)> = lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
+    let lost_rows: Vec<(u32, Key, u32, u8)> =
+        lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
     v_rows.extend(label_rows(&lost_rows, 1));
     let mut records = Vec::new();
     if !v_rows.is_empty() {
@@ -1255,21 +1344,67 @@ fn process(
         records.push(RecordTable {
             class: "lod_filled",
             columns: vec![
-                ("node_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).0)).collect()),
-                ("mesh_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).1)).collect()),
-                ("primitive_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).2)).collect()),
-                ("loop_x", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[0])).collect()),
-                ("loop_y", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[1])).collect()),
-                ("loop_z", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[2])).collect()),
-                ("loop_vertices", "UINT32", fill_rows.iter().map(|r| u64::from(r.2)).collect()),
-                ("fan_faces", "UINT32", fill_rows.iter().map(|r| u64::from(r.3)).collect()),
-                ("bound", "FLOAT64", fill_rows.iter().map(|r| r.4.to_bits()).collect()),
-                ("reopen_children", "UINT8", fill_rows.iter().map(|r| u64::from(r.5)).collect()),
+                (
+                    "node_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).0)).collect(),
+                ),
+                (
+                    "mesh_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).1)).collect(),
+                ),
+                (
+                    "primitive_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).2)).collect(),
+                ),
+                (
+                    "loop_x",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[0])).collect(),
+                ),
+                (
+                    "loop_y",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[1])).collect(),
+                ),
+                (
+                    "loop_z",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[2])).collect(),
+                ),
+                (
+                    "loop_vertices",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.2)).collect(),
+                ),
+                (
+                    "fan_faces",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.3)).collect(),
+                ),
+                (
+                    "bound",
+                    "FLOAT64",
+                    fill_rows.iter().map(|r| r.4.to_bits()).collect(),
+                ),
+                (
+                    "reopen_children",
+                    "UINT8",
+                    fill_rows.iter().map(|r| u64::from(r.5)).collect(),
+                ),
                 ("depth", "UINT8", vec![u64::from(d); fill_rows.len()]),
             ],
         });
     }
-    let encoded = codec::encode(&primitives(&mesh, &final_order, &key_faces), ctx.materials, ctx.lattice, d, &records)?;
+    let encoded = codec::encode(
+        &primitives(&mesh, &final_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &records,
+    )?;
     let check = codec::decode(&encoded.glb)?;
     if check.faces.len() != encoded.faces.len()
         || !check
@@ -1278,7 +1413,9 @@ fn process(
             .zip(&encoded.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("final proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "final proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     // Every certified face is in the published bytes (fills added, nothing else changed).
     {
@@ -1295,7 +1432,9 @@ fn process(
         published_faces.sort_unstable();
         certified.sort_unstable();
         if published_faces != certified {
-            return Err(state("published proxy faces differ from the certified faces"));
+            return Err(state(
+                "published proxy faces differ from the certified faces",
+            ));
         }
     }
 
@@ -1307,7 +1446,10 @@ fn process(
     let mut sidecar_faces = Vec::with_capacity(final_order.len());
     for f in &final_order {
         let label = *labels_used.entry(f.label).or_insert_with(|| {
-            labels.push((mesh.labels[f.label as usize], label_error.get(&f.label).copied().unwrap_or(published)));
+            labels.push((
+                mesh.labels[f.label as usize],
+                label_error.get(&f.label).copied().unwrap_or(published),
+            ));
             (labels.len() - 1) as u32
         });
         let v = f.v.map(|v| {
@@ -1376,7 +1518,12 @@ fn write_topology(
     relaxed: bool,
 ) -> Result<(), JobError> {
     let mut b = Vec::with_capacity(faces.len() * 20 + 64);
-    for v in [report.forced, report.forced_unchecked, report.collapses, report.input_faces] {
+    for v in [
+        report.forced,
+        report.forced_unchecked,
+        report.collapses,
+        report.input_faces,
+    ] {
         b.extend_from_slice(&v.to_le_bytes());
     }
     b.push(u8::from(relaxed));
@@ -1387,7 +1534,8 @@ fn write_topology(
         }
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
     }
     fs::write(path, b).map_err(|e| JobError::io("write LOD topology cache", path, e))
 }
@@ -1400,7 +1548,9 @@ fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport,
     };
     let bad = || state("LOD topology cache is corrupt");
     let u64_at = |i: usize| -> Result<u64, JobError> {
-        Ok(u64::from_le_bytes(b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap()))
+        Ok(u64::from_le_bytes(
+            b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap(),
+        ))
     };
     let report = mesh::SimplifyReport {
         forced: u64_at(0)?,
@@ -1631,22 +1781,30 @@ pub(crate) fn produce(
     let recomputed = LatticePlan::new(captured.lattice.profile(), captured.scan.bounds, &extents)?;
     let frozen = serde_json::to_vec(&captured.lattice).map_err(|e| state(e.to_string()))?;
     if serde_json::to_vec(&recomputed).map_err(|e| state(e.to_string()))? != frozen {
-        return Err(state("the frozen H8 lattice differs from its recomputation"));
+        return Err(state(
+            "the frozen H8 lattice differs from its recomputation",
+        ));
     }
     report.lattice_sha256 = hex(Sha256::digest(&frozen));
     let proxies_dir = input.stage.join("proxies");
-    fs::create_dir_all(&proxies_dir).map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
+    fs::create_dir_all(&proxies_dir)
+        .map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
     // Leaf facts in leaf order.
     let leaf_facts = {
         let path = input.stage.join("leaves.jsonl");
         let text = fs::File::open(&path).map_err(|e| JobError::io("read leaf rows", &path, e))?;
-        let mut writer = crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
+        let mut writer =
+            crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
         for line in std::io::BufRead::lines(std::io::BufReader::new(text)) {
             let line = line.map_err(|e| JobError::io("read leaf rows", &path, e))?;
             let row: Value = serde_json::from_str(&line).map_err(|e| state(e.to_string()))?;
-            let error = row["geometryError"].as_f64().ok_or_else(|| state("leaf row without error"))?;
+            let error = row["geometryError"]
+                .as_f64()
+                .ok_or_else(|| state("leaf row without error"))?;
             writer.push(&LeafFact {
-                first: row["first"].as_u64().ok_or_else(|| state("leaf row without first"))?,
+                first: row["first"]
+                    .as_u64()
+                    .ok_or_else(|| state("leaf row without first"))?,
                 error_bits: error.to_bits(),
             })?;
         }
@@ -1672,7 +1830,8 @@ pub(crate) fn produce(
     }
     crate::spill::preflight(
         input.scratch.path(),
-        incidence::scratch_need(captured.scan.triangles).ok_or_else(|| resource("LOD scratch overflow"))?,
+        incidence::scratch_need(captured.scan.triangles)
+            .ok_or_else(|| resource("LOD scratch overflow"))?,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
@@ -1686,7 +1845,26 @@ pub(crate) fn produce(
         check,
     )?;
     report.prepass_seconds = prepass.elapsed().as_secs_f64();
-    let materials: Vec<Value> = captured.materials.iter().map(|m| m.flat_proxy()).collect();
+    // Flat proxy materials without names, so equal flat materials share a glTF primitive.
+    let materials: Vec<Value> = captured
+        .materials
+        .iter()
+        .map(|m| {
+            let mut value = m.flat_proxy();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("name");
+            }
+            value
+        })
+        .collect();
+    let material_rank: Vec<u32> = (0..materials.len())
+        .map(|i| {
+            materials
+                .iter()
+                .position(|m| *m == materials[i])
+                .unwrap_or(i) as u32
+        })
+        .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
     let ctx = Ctx {
@@ -1695,6 +1873,7 @@ pub(crate) fn produce(
         source: &source,
         lattice: &captured.lattice,
         materials: &materials,
+        material_rank: &material_rank,
         retention: &report.retention.clone(),
         target: input.target,
         mutation: input.mutation,
@@ -1751,7 +1930,10 @@ pub(crate) fn produce(
                 }
                 let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
                     use rayon::prelude::*;
-                    window.par_iter().map(|job| process(&ctx, job, &keep, finishing)).collect()
+                    window
+                        .par_iter()
+                        .map(|job| process(&ctx, job, &keep, finishing))
+                        .collect()
                 });
                 for (job, outcome) in window.iter().zip(outcomes) {
                     let mut o = outcome?;
@@ -1768,7 +1950,10 @@ pub(crate) fn produce(
                     }
                     if round == 0 {
                         for key in std::mem::take(&mut o.forced_keys) {
-                            forced_log.push(&ForcedKey { key, first: job.node.first })?;
+                            forced_log.push(&ForcedKey {
+                                key,
+                                first: job.node.first,
+                            })?;
                         }
                     }
                     failed.extend(std::mem::take(&mut o.failed_keys));
@@ -1805,7 +1990,14 @@ pub(crate) fn produce(
                     if let Some(job) = current.take() {
                         window.push(job);
                         if window.len() >= window_size {
-                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+                            run(
+                                &mut window,
+                                &mut seam_log,
+                                &mut forced_log,
+                                &mut done,
+                                &mut failed,
+                                &mut report.tile_runs,
+                            )?;
                         }
                     }
                 }
@@ -1823,9 +2015,18 @@ pub(crate) fn produce(
             if let Some(job) = current.take() {
                 window.push(job);
             }
-            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+            run(
+                &mut window,
+                &mut seam_log,
+                &mut forced_log,
+                &mut done,
+                &mut failed,
+                &mut report.tile_runs,
+            )?;
             if finishing {
-                break final_counts.take().ok_or_else(|| state("finished without an audit"))?;
+                break final_counts
+                    .take()
+                    .ok_or_else(|| state("finished without an audit"))?;
             }
             // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
             // seam edge without a partner keeps every seam vertex its tile removed. Kept
@@ -1836,7 +2037,11 @@ pub(crate) fn produce(
             if contested.is_empty() {
                 let log = std::mem::replace(
                     &mut seam_log,
-                    crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?,
+                    crate::spill::SequenceWriter::<SeamEdge>::new(
+                        input.scratch,
+                        "lod-seams",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 let mut sorter = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
@@ -1864,7 +2069,11 @@ pub(crate) fn produce(
                     .collect();
                 let log = std::mem::replace(
                     &mut forced_log,
-                    crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                    crate::spill::SequenceWriter::<ForcedKey>::new(
+                        input.scratch,
+                        "lod-forced",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 for f in log.reader()? {
@@ -1898,7 +2107,11 @@ pub(crate) fn produce(
             report.seam_kept_extra += contested.len() as u64;
             let log = std::mem::replace(
                 &mut forced_log,
-                crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                crate::spill::SequenceWriter::<ForcedKey>::new(
+                    input.scratch,
+                    "lod-forced",
+                    1 << 16,
+                )?,
             )
             .finish()?;
             let mut rerun = BTreeSet::new();
@@ -1919,7 +2132,9 @@ pub(crate) fn produce(
         drop(seam_log);
         let mut written = 0u64;
         for Done(o) in done.into_values() {
-            let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
+            let row = o
+                .row
+                .ok_or_else(|| state("a coarse tile produced no row"))?;
             report.proxies += 1;
             report.proxy_faces += u64::from(row.faces);
             report.max_proxy_faces = report.max_proxy_faces.max(u64::from(row.faces));
@@ -1957,17 +2172,20 @@ pub(crate) fn produce(
         report.seam_relabelled += counts.relabelled;
         let topo_dir = sidecars.join(format!("topo-d{d}"));
         if topo_dir.exists() {
-            fs::remove_dir_all(&topo_dir).map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
+            fs::remove_dir_all(&topo_dir)
+                .map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
         }
         let child_dir = sidecars.join(format!("d{}", d + 1));
         if child_dir.exists() {
-            fs::remove_dir_all(&child_dir).map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
+            fs::remove_dir_all(&child_dir)
+                .map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
             sidecar_live -= sidecar_bytes.remove(&(d + 1)).unwrap_or(0);
         }
     }
     let _ = fs::remove_dir_all(&sidecars);
     // Rows in postorder (end ascending, deeper first): H16's tile-closing order.
-    let file = fs::File::create(&rows_path).map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
+    let file = fs::File::create(&rows_path)
+        .map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
     let mut writer = BufWriter::new(file);
     for row in rows.finish()? {
         let r = row?;
@@ -1995,4 +2213,3 @@ pub(crate) fn produce(
     report.seconds = started.elapsed().as_secs_f64();
     Ok(report)
 }
-

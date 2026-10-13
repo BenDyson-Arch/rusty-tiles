@@ -61,13 +61,16 @@ impl Reader<'_> {
             let start = ext["byteOffset"].as_u64().unwrap_or(0) as usize;
             let length = ext["byteLength"]
                 .as_u64()
-                .ok_or_else(|| invalid("meshopt view without length"))? as usize;
+                .ok_or_else(|| invalid("meshopt view without length"))?
+                as usize;
             let count = ext["count"]
                 .as_u64()
-                .ok_or_else(|| invalid("meshopt view without count"))? as usize;
+                .ok_or_else(|| invalid("meshopt view without count"))?
+                as usize;
             let stride = ext["byteStride"]
                 .as_u64()
-                .ok_or_else(|| invalid("meshopt view without stride"))? as usize;
+                .ok_or_else(|| invalid("meshopt view without stride"))?
+                as usize;
             let mode = match ext["mode"].as_str() {
                 Some("ATTRIBUTES") => Mode::Attributes,
                 Some("TRIANGLES") => Mode::Triangles,
@@ -167,8 +170,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
     let doc: Value = serde_json::from_slice(&bytes[20..20 + json_length])
         .map_err(|e| invalid(format!("GLB JSON: {e}")))?;
     let bin_start = 20 + json_length;
-    let bin = if bin_start + 8 <= bytes.len() && &bytes[bin_start + 4..bin_start + 8] == b"BIN\0"
-    {
+    let bin = if bin_start + 8 <= bytes.len() && &bytes[bin_start + 4..bin_start + 8] == b"BIN\0" {
         let length = u32_at(bin_start)? as usize;
         &bytes[bin_start + 8..bin_start + 8 + length]
     } else {
@@ -289,7 +291,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
             if !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i >= decoded.len()) {
                 return Err(invalid("triangle indices out of range"));
             }
-            for t in indices.chunks_exact(3) {
+            for t in indices.as_chunks::<3>().0 {
                 faces.push(DecodedFace {
                     p: [decoded[t[0]], decoded[t[1]], decoded[t[2]]],
                     features: sets.iter().map(|(v, table)| (v[t[0]], *table)).collect(),
@@ -392,14 +394,28 @@ fn component_width(component: &str) -> usize {
     }
 }
 
-/// The `proxy_source` columns of a run of faces.
-fn source_columns(origins: &[super::mesh::Origin]) -> [(&'static str, &'static str, Vec<u64>); 5] {
+/// The `proxy_source` columns of a run of faces: the source triangle index within its
+/// primitive (UINT32 unless an index needs 64 bits; 0 for a fill) and the fill marker. A
+/// face's node, mesh and primitive are its feature-ID set 0 row (`source_primitive`).
+fn source_columns(
+    origins: &[super::mesh::Origin],
+    wide: bool,
+) -> [(&'static str, &'static str, Vec<u64>); 2] {
+    let fill = |o: &super::mesh::Origin| o.triangle == u64::MAX;
     [
-        ("node_index", "UINT32", origins.iter().map(|o| u64::from(o.node)).collect()),
-        ("mesh_index", "UINT32", origins.iter().map(|o| u64::from(o.mesh)).collect()),
-        ("primitive_index", "UINT32", origins.iter().map(|o| u64::from(o.primitive)).collect()),
-        ("triangle_index", "UINT64", origins.iter().map(|o| o.triangle).collect()),
-        ("fill", "UINT8", origins.iter().map(|o| u64::from(o.triangle == u64::MAX)).collect()),
+        (
+            "triangle_index",
+            if wide { "UINT64" } else { "UINT32" },
+            origins
+                .iter()
+                .map(|o| if fill(o) { 0 } else { o.triangle })
+                .collect(),
+        ),
+        (
+            "fill",
+            "UINT8",
+            origins.iter().map(|o| u64::from(fill(o))).collect(),
+        ),
     ]
 }
 
@@ -462,11 +478,12 @@ impl Wire {
     }
 }
 
-/// Encode a proxy: per source primitive one scene node and mesh (as H8 leaves) whose
-/// glTF primitives hold at most 8192 non-indexed triangles each. Positions sit on the frozen
-/// lattice at `depth`; normals are smooth; the material is flat. Feature-ID sets: one into
-/// the shared `source_primitive` table (present primitives) and one into the primitive's
-/// own `proxy_source` table (per triangle, the source triangle it descends from), both
+/// Encode a proxy: per distinct flat material one scene node and mesh whose glTF primitives
+/// hold at most 8192 non-indexed triangles each (one primitive whenever the proxy has at
+/// most 8192 faces per material). Positions sit on the frozen lattice at `depth`; normals
+/// are smooth. Feature-ID sets: set 0 into the `source_primitive` table (present source
+/// primitives: node, mesh, primitive, ordinal, material) and set 1 into `proxy_source`
+/// (per triangle, the source triangle index it descends from, or a fill marker), both
 /// within CesiumJS's 8192-row limit; removal/fill records follow in <= 8192-row tables.
 pub(crate) fn encode(
     primitives: &[ProxyPrimitive],
@@ -511,14 +528,36 @@ pub(crate) fn encode(
         tables.len() - 1
     };
     let identity: [(&str, &str, Vec<u64>); 5] = [
-        ("node_index", "UINT32", primitives.iter().map(|p| u64::from(p.key.0)).collect()),
-        ("mesh_index", "UINT32", primitives.iter().map(|p| u64::from(p.key.1)).collect()),
-        ("primitive_index", "UINT32", primitives.iter().map(|p| u64::from(p.key.2)).collect()),
-        ("expanded_ordinal", "UINT64", primitives.iter().map(|p| p.expanded_ordinal).collect()),
-        ("material_index", "UINT32", primitives.iter().map(|p| u64::from(p.material)).collect()),
+        (
+            "node_index",
+            "UINT32",
+            primitives.iter().map(|p| u64::from(p.key.0)).collect(),
+        ),
+        (
+            "mesh_index",
+            "UINT32",
+            primitives.iter().map(|p| u64::from(p.key.1)).collect(),
+        ),
+        (
+            "primitive_index",
+            "UINT32",
+            primitives.iter().map(|p| u64::from(p.key.2)).collect(),
+        ),
+        (
+            "expanded_ordinal",
+            "UINT64",
+            primitives.iter().map(|p| p.expanded_ordinal).collect(),
+        ),
+        (
+            "material_index",
+            "UINT32",
+            primitives.iter().map(|p| u64::from(p.material)).collect(),
+        ),
     ];
-    let columns: Vec<(&str, &str, &[u64])> =
-        identity.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
+    let columns: Vec<(&str, &str, &[u64])> = identity
+        .iter()
+        .map(|(n, c, v)| (*n, *c, v.as_slice()))
+        .collect();
     let primitive_table = add_table(&mut wire, "source_primitive", &columns, 0..primitives.len());
     for record in records {
         let rows = record.rows();
@@ -535,61 +574,98 @@ pub(crate) fn encode(
         }
     }
     let total_faces: usize = primitives.iter().map(|p| p.faces.len()).sum();
+    if primitives
+        .iter()
+        .any(|p| p.faces.is_empty() || p.positions.is_empty() || p.origins.len() != p.faces.len())
+    {
+        return Err(invalid("empty or unaccounted proxy primitive"));
+    }
+    // Per-triangle provenance. Node, mesh and primitive come from feature-ID set 0
+    // (`source_primitive`), so `proxy_source` holds only the triangle index and fill marker,
+    // in one table for the whole proxy when it fits CesiumJS's row limit (it resolves a mesh
+    // pick through one table per model).
+    let all_origins: Vec<super::mesh::Origin> = primitives
+        .iter()
+        .flat_map(|p| p.origins.iter().copied())
+        .collect();
+    let wide = all_origins
+        .iter()
+        .any(|o| o.triangle != u64::MAX && o.triangle > u64::from(u32::MAX));
     let shared_source = (total_faces <= TABLE_ROWS).then(|| {
-        let origins: Vec<super::mesh::Origin> =
-            primitives.iter().flat_map(|p| p.origins.iter().copied()).collect();
-        let columns = source_columns(&origins);
-        let columns: Vec<(&str, &str, &[u64])> =
-            columns.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
+        let columns = source_columns(&all_origins, wide);
+        let columns: Vec<(&str, &str, &[u64])> = columns
+            .iter()
+            .map(|(n, c, v)| (*n, *c, v.as_slice()))
+            .collect();
         add_table(&mut wire, "proxy_source", &columns, 0..total_faces)
     });
+    // One glTF primitive per distinct material: consecutive source primitives with equal
+    // flat materials share one (the caller orders them by material). CesiumJS charges the
+    // property-table bytes once per glTF primitive, so fewer primitives load lighter.
+    let mut groups: Vec<(Value, Vec<usize>)> = Vec::new();
+    for (row, p) in primitives.iter().enumerate() {
+        let material = materials.get(p.material as usize).cloned().unwrap_or_else(
+            || json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
+        );
+        match groups.last_mut() {
+            Some((m, rows)) if *m == material => rows.push(row),
+            _ => groups.push((material, vec![row])),
+        }
+    }
     let mut face_base = 0usize;
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
     let mut out_faces = Vec::new();
-    let mut quantized = false;
-    for (row, primitive) in primitives.iter().enumerate() {
-        if primitive.faces.is_empty()
-            || primitive.positions.is_empty()
-            || primitive.origins.len() != primitive.faces.len()
-        {
-            return Err(invalid("empty or unaccounted proxy primitive"));
+    let mut materials_json = Vec::with_capacity(groups.len());
+    for (material_index, (material, rows)) in groups.into_iter().enumerate() {
+        materials_json.push(material);
+        // The group's faces in primitive order, re-indexed into one vertex space.
+        let mut offsets = Vec::with_capacity(rows.len());
+        let mut vertices = 0u32;
+        for &r in &rows {
+            offsets.push(vertices);
+            vertices += primitives[r].positions.len() as u32;
         }
-        // One lattice encoding of the primitive's corners: every chunk shares its node TRS.
-        let mut points = Vec::with_capacity(primitive.faces.len() * 3);
-        let mut ell = Vec::with_capacity(primitive.faces.len() * 3);
-        for f in &primitive.faces {
-            for &i in f {
-                let i = i as usize;
-                if i >= primitive.positions.len() {
-                    return Err(invalid("proxy face index out of range"));
+        let mut faces: Vec<(usize, [u32; 3])> = Vec::new();
+        let mut points = Vec::new();
+        let mut ell = Vec::new();
+        for (&r, &offset) in rows.iter().zip(&offsets) {
+            let primitive = &primitives[r];
+            for f in &primitive.faces {
+                for &i in f {
+                    let i = i as usize;
+                    if i >= primitive.positions.len() {
+                        return Err(invalid("proxy face index out of range"));
+                    }
+                    points.push(primitive.positions[i]);
+                    ell.push(primitive.ell[i]);
                 }
-                points.push(primitive.positions[i]);
-                ell.push(primitive.ell[i]);
+                faces.push((r, f.map(|i| i + offset)));
             }
         }
+        // One lattice encoding of the group's corners: every chunk shares its node TRS.
         let encoded = lattice.encode(&points, &ell, depth)?;
+        let indexed: Vec<[u32; 3]> = faces.iter().map(|(_, f)| *f).collect();
         let indexed_decoded: Vec<[f32; 3]> = {
-            let mut d = vec![[0f32; 3]; primitive.positions.len()];
-            for (corner, &i) in primitive.faces.iter().flatten().enumerate() {
+            let mut d = vec![[0f32; 3]; vertices as usize];
+            for (corner, &i) in indexed.iter().flatten().enumerate() {
                 d[i as usize] = encoded.decoded[corner];
             }
             d
         };
-        let smooth = normals(&indexed_decoded, &primitive.faces);
+        let smooth = normals(&indexed_decoded, &indexed);
         let mut node = json!({"mesh":meshes.len()});
         if let PositionStorage::Quantized {
             translation, scale, ..
         } = &encoded.storage
         {
-            quantized = true;
             node["translation"] = json!(translation.map(f64::from));
             node["scale"] = json!([f64::from(*scale), f64::from(*scale), f64::from(*scale)]);
         }
         let mut gltf_primitives = Vec::new();
-        for (chunk, faces) in primitive.faces.chunks(TABLE_ROWS).enumerate() {
+        for (chunk, run) in faces.chunks(TABLE_ROWS).enumerate() {
             let start = chunk * TABLE_ROWS;
-            let corners = start * 3..(start + faces.len()) * 3;
+            let corners = start * 3..(start + run.len()) * 3;
             let count = corners.len();
             let position = match &encoded.storage {
                 PositionStorage::Quantized { codes, .. } => {
@@ -622,7 +698,7 @@ pub(crate) fn encode(
             };
             // Normals as normalized bytes (KHR_mesh_quantization), padded to 4 bytes.
             let mut bytes = Vec::with_capacity(count * 4);
-            for f in faces {
+            for (_, f) in run {
                 for &i in f {
                     for v in smooth[i as usize] {
                         bytes.push(((v.clamp(-1., 1.) * 127.).round() as i8) as u8);
@@ -630,57 +706,77 @@ pub(crate) fn encode(
                     bytes.push(0);
                 }
             }
-            let normal = wire.attribute(&bytes, count, 4, json!({"componentType":5120,"type":"VEC3","normalized":true}));
+            let normal = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5120,"type":"VEC3","normalized":true}),
+            );
             let mut bytes = Vec::with_capacity(count * 4);
-            for _ in 0..count {
-                bytes.extend_from_slice(&(row as f32).to_le_bytes());
+            for (r, _) in run {
+                for _ in 0..3 {
+                    bytes.extend_from_slice(&(*r as f32).to_le_bytes());
+                }
             }
-            let primitive_id = wire.attribute(&bytes, count, 4, json!({"componentType":5126,"type":"SCALAR"}));
-            // One proxy_source table for the whole proxy when it fits (CesiumJS 1.146 resolves
-            // a mesh pick through one table per model); otherwise one per glTF primitive.
-            let (first_id, source_table, rows) = match shared_source {
+            let primitive_id = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5126,"type":"SCALAR"}),
+            );
+            // The shared proxy_source table when it fits; otherwise one per glTF primitive.
+            let (first_id, source_table, table_rows) = match shared_source {
                 Some(table) => (face_base, table, total_faces),
                 None => {
-                    let origins = &primitive.origins[start..start + faces.len()];
-                    let columns = source_columns(origins);
-                    let columns: Vec<(&str, &str, &[u64])> =
-                        columns.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
-                    (0, add_table(&mut wire, "proxy_source", &columns, 0..faces.len()), faces.len())
+                    let origins = &all_origins[face_base..face_base + run.len()];
+                    let columns = source_columns(origins, wide);
+                    let columns: Vec<(&str, &str, &[u64])> = columns
+                        .iter()
+                        .map(|(n, c, v)| (*n, *c, v.as_slice()))
+                        .collect();
+                    (
+                        0,
+                        add_table(&mut wire, "proxy_source", &columns, 0..run.len()),
+                        run.len(),
+                    )
                 }
             };
             let mut bytes = Vec::with_capacity(count * 4);
-            for k in 0..faces.len() {
+            for k in 0..run.len() {
                 for _ in 0..3 {
                     bytes.extend_from_slice(&((first_id + k) as f32).to_le_bytes());
                 }
             }
-            face_base += faces.len();
-            let face_id = wire.attribute(&bytes, count, 4, json!({"componentType":5126,"type":"SCALAR"}));
+            face_base += run.len();
+            let face_id = wire.attribute(
+                &bytes,
+                count,
+                4,
+                json!({"componentType":5126,"type":"SCALAR"}),
+            );
             let sets = [
                 json!({"featureCount":primitives.len(),"attribute":0,"propertyTable":primitive_table,"label":"source_primitive"}),
-                json!({"featureCount":rows,"attribute":1,"propertyTable":source_table,"label":"proxy_source"}),
+                json!({"featureCount":table_rows,"attribute":1,"propertyTable":source_table,"label":"proxy_source"}),
             ];
             let mut attributes = json!({"POSITION":position,"NORMAL":normal});
             for (k, id) in [primitive_id, face_id].into_iter().enumerate() {
                 attributes[format!("_FEATURE_ID_{k}")] = json!(id);
             }
-            gltf_primitives.push(json!({"attributes":attributes,"mode":4,"material":row,
-                "extensions":{"EXT_mesh_features":{"featureIds":sets}}}));
+            gltf_primitives.push(
+                json!({"attributes":attributes,"mode":4,"material":material_index,
+                "extensions":{"EXT_mesh_features":{"featureIds":sets}}}),
+            );
             for c in corners.clone().step_by(3) {
-                out_faces.push([encoded.decoded[c], encoded.decoded[c + 1], encoded.decoded[c + 2]]);
+                out_faces.push([
+                    encoded.decoded[c],
+                    encoded.decoded[c + 1],
+                    encoded.decoded[c + 2],
+                ]);
             }
         }
         meshes.push(json!({"primitives":gltf_primitives}));
         nodes.push(node);
     }
-    let materials_json: Vec<Value> = primitives
-        .iter()
-        .map(|p| {
-            materials.get(p.material as usize).cloned().unwrap_or_else(
-                || json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
-            )
-        })
-        .collect();
     let scene_nodes: Vec<usize> = (0..nodes.len()).collect();
     let Wire {
         binary,
@@ -694,7 +790,6 @@ pub(crate) fn encode(
         "extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_proxy_v1","classes":classes},"propertyTables":tables}}});
     // Byte normals need KHR_mesh_quantization even for float positions.
-    let _ = quantized;
     glb::add_extension(&mut document, "KHR_mesh_quantization", true)
         .map_err(|e| invalid(e.to_string()))?;
     let compressed = glb::meshopt_compress(
@@ -708,7 +803,8 @@ pub(crate) fn encode(
     )
     .map_err(|e| invalid(e.to_string()))?;
     let json_bytes = serde_json::to_vec(&document).map_err(|e| invalid(e.to_string()))?;
-    let reparsed: Value = serde_json::from_slice(&json_bytes).map_err(|e| invalid(e.to_string()))?;
+    let reparsed: Value =
+        serde_json::from_slice(&json_bytes).map_err(|e| invalid(e.to_string()))?;
     if reparsed["nodes"] != document["nodes"] {
         return Err(invalid("proxy JSON real TRS round trip mismatch"));
     }
