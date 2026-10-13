@@ -1,0 +1,745 @@
+{
+ "cases": [
+  {
+   "bytes": 1074,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "admitted",
+   "expectedExitCode": 0,
+   "fact": "Baseline: a GLB 2.0 triangle inside the root box.",
+   "members": [
+    "tileset.json",
+    "tile.glb"
+   ],
+   "messageIncludes": [],
+   "name": "glb-triangle",
+   "path": "glb-triangle.3tz",
+   "rule": "none",
+   "sha256": "31074995eac04747d38dba7a678a283f7aeaac6bd90b10fc19621e8c545f3045"
+  },
+  {
+   "bytes": 1151,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "admitted",
+   "expectedExitCode": 0,
+   "fact": "Legacy words in a directory, inside the stem and in JSON: only the final suffix and the first four bytes classify.",
+   "members": [
+    "tileset.json",
+    "b3dm.cmpt/pnts.i3dm.glb"
+   ],
+   "messageIncludes": [],
+   "name": "glb-legacy-words-in-path-and-json",
+   "path": "glb-legacy-words-in-path-and-json.3tz",
+   "rule": "none",
+   "sha256": "5075b83516535e29d1c9be27556bcc378e6b7c49eb09a5436d73cc518fef2bf5"
+  },
+  {
+   "bytes": 1486,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "admitted",
+   "expectedExitCode": 0,
+   "fact": "Legacy detection applies to content templates only; a subtree template is not content (like JSON detection).",
+   "members": [
+    "tileset.json",
+    "s/0/0/0.b3dm",
+    "c/0/0/0.glb"
+   ],
+   "messageIncludes": [],
+   "name": "subtree-template-legacy-suffix",
+   "path": "subtree-template-legacy-suffix.3tz",
+   "rule": "none",
+   "sha256": "692980fc957e5dc7dd3f1f06173a2175fdceef7e692df55309cc24d97d635f92"
+  },
+  {
+   "bytes": 1495,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "admitted",
+   "expectedExitCode": 0,
+   "fact": "Baseline implicit root: one available tile with GLB content.",
+   "members": [
+    "tileset.json",
+    "s/0/0/0.subtree",
+    "c/0/0/0.glb"
+   ],
+   "messageIncludes": [],
+   "name": "implicit-glb",
+   "path": "implicit-glb.3tz",
+   "rule": "none",
+   "sha256": "91b6cb6a7ff304d9a00e7a9b664985124d2d6b7d483226353db852b9ad20ce98"
+  },
+  {
+   "bytes": 1074,
+   "c2OracleOutcome": "Undecided",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "An unknown suffix keeps the existing generic Unsupported message; it is not reported as legacy.",
+   "members": [
+    "tileset.json",
+    "tile.bin"
+   ],
+   "messageIncludes": [
+    "outside GLB/local glTF"
+   ],
+   "name": "unknown-suffix-bin",
+   "path": "unknown-suffix-bin.3tz",
+   "rule": "generic",
+   "sha256": "98696645dce858f0346cf9036f42c9fd5dbce99d12c1d0657ff9cb03944d0792"
+  },
+  {
+   "bytes": 585,
+   "c2OracleOutcome": "Undecided",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "The retired vector draft format is outside the four legacy formats; generic Unsupported.",
+   "members": [
+    "tileset.json",
+    "tile.vctr"
+   ],
+   "messageIncludes": [
+    "outside GLB/local glTF"
+   ],
+   "name": "vctr-suffix",
+   "path": "vctr-suffix.3tz",
+   "rule": "generic",
+   "sha256": "ef246eeeffdcf16f903d01c87704debc890860a41350fb68a67d0cbef7242660"
+  },
+  {
+   "bytes": 1129,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Valid modern b3dm v1 wrapping the baseline GLB; develop unwraps and admits it.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.b3dm"
+   ],
+   "name": "b3dm-valid",
+   "path": "b3dm-valid.3tz",
+   "rule": "L1",
+   "sha256": "1885f55a3dcba79325fd17d55ebd93ccaf134f1cc68963041de6baf61035bb4c"
+  },
+  {
+   "bytes": 1129,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "The suffix comparison is ASCII case-insensitive.",
+   "members": [
+    "tileset.json",
+    "tile.B3DM"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.B3DM"
+   ],
+   "name": "b3dm-uppercase-suffix",
+   "path": "b3dm-uppercase-suffix.3tz",
+   "rule": "L1",
+   "sha256": "5a12b88e60032036112ea21f34d69f16d7fdb20ad103859b3cc30bca673c6601"
+  },
+  {
+   "bytes": 1185,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Valid i3dm v1 (gltfFormat 1, one instance) embedding the baseline GLB.",
+   "members": [
+    "tileset.json",
+    "tile.i3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "i3dm",
+    "tile.i3dm"
+   ],
+   "name": "i3dm-valid",
+   "path": "i3dm-valid.3tz",
+   "rule": "L1",
+   "sha256": "1d08b7e06df714c7e5fa19bd6471079087617778449b799fbef1ea294c05fb15"
+  },
+  {
+   "bytes": 649,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Valid pnts v1 with one POSITION point.",
+   "members": [
+    "tileset.json",
+    "tile.pnts"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "pnts",
+    "tile.pnts"
+   ],
+   "name": "pnts-valid",
+   "path": "pnts-valid.3tz",
+   "rule": "L1",
+   "sha256": "ff3379e8de5da50dfb19b5c7d22ae42aa6407384b347f751cd660f87c958f0d8"
+  },
+  {
+   "bytes": 1145,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "cmpt v1 with one inner b3dm; inner tiles are never inspected.",
+   "members": [
+    "tileset.json",
+    "tile.cmpt"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "cmpt",
+    "tile.cmpt"
+   ],
+   "name": "cmpt-b3dm",
+   "path": "cmpt-b3dm.3tz",
+   "rule": "L1",
+   "sha256": "805fe8cd464a74a555f54e678ea6b0839bc55cf70a99bfe8f21a168df2646cd1"
+  },
+  {
+   "bytes": 1097,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "cmpt whose single inner tile is a GLB: Unsupported as cmpt, the GLB is not unwrapped.",
+   "members": [
+    "tileset.json",
+    "tile.cmpt"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "cmpt",
+    "tile.cmpt"
+   ],
+   "name": "cmpt-wrapping-glb",
+   "path": "cmpt-wrapping-glb.3tz",
+   "rule": "L1",
+   "sha256": "2481dbf2273c9c4a1bbf3ad0e486e27dc11d075c868efb36ef8c349ef67b1b18"
+  },
+  {
+   "bytes": 557,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Four-byte magic without a header; develop reports truncated framing.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.b3dm"
+   ],
+   "name": "b3dm-magic-only",
+   "path": "b3dm-magic-only.3tz",
+   "rule": "L1",
+   "sha256": "6378ab7991087457e48c203903a38f21f5149e7b9ff7be1aa9fbd04fb78ad1d0"
+  },
+  {
+   "bytes": 1129,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Unknown version: the legacy verdict, not the old version message.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.b3dm"
+   ],
+   "name": "b3dm-version-2",
+   "path": "b3dm-version-2.3tz",
+   "rule": "L1",
+   "sha256": "69c4b4440bc7a01aa2ed62e90aaa0b813dc42d9bcde78d317457a8a0711cf5dd"
+  },
+  {
+   "bytes": 1129,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Feature-table JSON is malformed; develop parses it.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.b3dm"
+   ],
+   "name": "b3dm-malformed-feature-json",
+   "path": "b3dm-malformed-feature-json.3tz",
+   "rule": "L1",
+   "sha256": "1e2c3e2335252d9ec568789a7f009e25f91434bfd8eca58f31719acbd0f95b08"
+  },
+  {
+   "bytes": 1153,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "RTC_CENTER no longer reaches C2: develop admits with notInspected decodedContentBounds.rtcCenter.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.b3dm"
+   ],
+   "name": "b3dm-rtc-center",
+   "path": "b3dm-rtc-center.3tz",
+   "rule": "L1",
+   "sha256": "6800edc92df14b49241b78be4de56510508d8e1d39bf8dbc803332ce1119f776"
+  },
+  {
+   "bytes": 1137,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "unsupported",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Truncated cmpt: still the legacy verdict.",
+   "members": [
+    "tileset.json",
+    "tile.cmpt"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "cmpt",
+    "tile.cmpt"
+   ],
+   "name": "cmpt-inner-overclaim",
+   "path": "cmpt-inner-overclaim.3tz",
+   "rule": "L1",
+   "sha256": "33bc82683696a8ffa36c40c5206b2c6af2d6ae6b0c9ced89203da85579eb02df"
+  },
+  {
+   "bytes": 1126,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A .glb member whose first four bytes are b3dm; develop fails the GLB envelope.",
+   "members": [
+    "tileset.json",
+    "tile.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.glb"
+   ],
+   "name": "glb-holding-b3dm",
+   "path": "glb-holding-b3dm.3tz",
+   "rule": "L2",
+   "sha256": "7bfcc74e38430aadad4d45729b41b607b6d66b9e948c0809d86abb2bfc6e45a2"
+  },
+  {
+   "bytes": 1182,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A .glb member whose first four bytes are i3dm; develop fails the GLB envelope.",
+   "members": [
+    "tileset.json",
+    "tile.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "i3dm",
+    "tile.glb"
+   ],
+   "name": "glb-holding-i3dm",
+   "path": "glb-holding-i3dm.3tz",
+   "rule": "L2",
+   "sha256": "491a16665528c2812568f3ff2bfed81b2f4008656e769c8741ff23eb36fdb3bc"
+  },
+  {
+   "bytes": 646,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A .glb member whose first four bytes are pnts; develop fails the GLB envelope.",
+   "members": [
+    "tileset.json",
+    "tile.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "pnts",
+    "tile.glb"
+   ],
+   "name": "glb-holding-pnts",
+   "path": "glb-holding-pnts.3tz",
+   "rule": "L2",
+   "sha256": "b2375828e9067cdcbce9c3a95fe6820e381b5b828587888284bccff086c76a19"
+  },
+  {
+   "bytes": 1094,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A .glb member whose first four bytes are cmpt; develop fails the GLB envelope.",
+   "members": [
+    "tileset.json",
+    "tile.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "cmpt",
+    "tile.glb"
+   ],
+   "name": "glb-holding-cmpt",
+   "path": "glb-holding-cmpt.3tz",
+   "rule": "L2",
+   "sha256": "61af9302a9dae3b5913b3cb0f0bf53c96719ae6c786832013cb23c42273f15b9"
+  },
+  {
+   "bytes": 1129,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A .gltf member whose first four bytes are b3dm; develop fails JSON admission.",
+   "members": [
+    "tileset.json",
+    "tile.gltf"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tile.gltf"
+   ],
+   "name": "gltf-holding-b3dm",
+   "path": "gltf-holding-b3dm.3tz",
+   "rule": "L2",
+   "sha256": "5ce67749615c0bea34d2889bb7d8d2c08ca7dc39cfb00cda3935a3cb17c8b0b1"
+  },
+  {
+   "bytes": 435,
+   "c2OracleOutcome": "InvalidInput",
+   "developCategory": "invalid_input",
+   "expectedCategory": "invalid_input",
+   "expectedExitCode": 3,
+   "fact": "L0: a missing member stays InvalidInput; existence precedes the suffix rule.",
+   "members": [
+    "tileset.json"
+   ],
+   "messageIncludes": [
+    "tile.b3dm"
+   ],
+   "name": "missing-b3dm-member",
+   "path": "missing-b3dm-member.3tz",
+   "rule": "L0",
+   "sha256": "fbdc30f587b45278942d6a5011fec933c83c2e7d7d2e426376e09a4a0285fc82"
+  },
+  {
+   "bytes": 1189,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "invalid_input",
+   "expectedExitCode": 3,
+   "fact": "The tile-level content-volume check precedes payload classification. Neither oracle models that C1 hierarchy check, so the oracle outcome is the legacy verdict; production order decides.",
+   "members": [
+    "tileset.json",
+    "tile.b3dm"
+   ],
+   "messageIncludes": [
+    "content bounds"
+   ],
+   "name": "content-volume-escape-before-b3dm",
+   "path": "content-volume-escape-before-b3dm.3tz",
+   "rule": "order",
+   "sha256": "effd38dbe86852d3ead71cfb3fa3fdf5a7a70c8336609ca2d154335b8be9bc2a"
+  },
+  {
+   "bytes": 1947,
+   "c2OracleOutcome": "Undecided",
+   "developCategory": "invalid_input",
+   "expectedCategory": "invalid_input",
+   "expectedExitCode": 3,
+   "fact": "First failure in traversal order wins: a malformed GLB before the b3dm.",
+   "members": [
+    "tileset.json",
+    "a.glb",
+    "b.b3dm"
+   ],
+   "messageIncludes": [],
+   "name": "glb-defect-then-b3dm",
+   "path": "glb-defect-then-b3dm.3tz",
+   "rule": "order",
+   "sha256": "fc3569b0f57ea2239b0877870154e276231d13d998c7d808f55f060fb95697b2"
+  },
+  {
+   "bytes": 1947,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "First failure in traversal order wins: the b3dm before a malformed GLB.",
+   "members": [
+    "tileset.json",
+    "b.b3dm",
+    "a.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "b.b3dm"
+   ],
+   "name": "b3dm-then-glb-defect",
+   "path": "b3dm-then-glb-defect.3tz",
+   "rule": "L1",
+   "sha256": "9c8645f83d46dcde304273c09d5b745fb9d776f7ab3783d05ae686353043c5c0"
+  },
+  {
+   "bytes": 1968,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "C1 precedes C2: an upAxisOverride exclusion elsewhere does not mask the legacy verdict.",
+   "members": [
+    "tileset.json",
+    "a.glb",
+    "b.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "b.b3dm"
+   ],
+   "name": "b3dm-with-c2-exclusion",
+   "path": "b3dm-with-c2-exclusion.3tz",
+   "rule": "L1",
+   "sha256": "c3b78ad39753a7995d2a4ed3bbdbdd397f432185e285dfb06206ffdb46ab6576"
+  },
+  {
+   "bytes": 1453,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Content of an external tileset: the member name is resolved before classification.",
+   "members": [
+    "tileset.json",
+    "ext/external.json",
+    "ext/t.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "ext/t.b3dm"
+   ],
+   "name": "b3dm-in-external-tileset",
+   "path": "b3dm-in-external-tileset.3tz",
+   "rule": "L1",
+   "sha256": "40a8df49305bd947fe75193d2333cd1bfc7f4325ec4cce2397de2168fa33de2b"
+  },
+  {
+   "bytes": 1318,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "The URI cache never holds a legacy payload: the first reference already fails.",
+   "members": [
+    "tileset.json",
+    "b.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "b.b3dm"
+   ],
+   "name": "b3dm-referenced-twice",
+   "path": "b3dm-referenced-twice.3tz",
+   "rule": "L1",
+   "sha256": "39a1b3b236fa974906dee8269c01c584cfcd5e13583c5484b41857ea40943b38"
+  },
+  {
+   "bytes": 1276,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Template 'c/{level}/{x}/{y}.b3dm' is Unsupported at root admission. Its subtree member is deliberately absent: reading it would be InvalidInput, so the verdict proves no subtree read.",
+   "members": [
+    "tileset.json",
+    "c/0/0/0.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "tileset.json"
+   ],
+   "name": "implicit-template-b3dm",
+   "path": "implicit-template-b3dm.3tz",
+   "rule": "T",
+   "sha256": "a7555af54433d02874874d880bcd96769417cf1f6b2e7ea7247fca4b0f773ee4"
+  },
+  {
+   "bytes": 1276,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Template 'c/{level}/{x}/{y}.PNTS' is Unsupported at root admission. Its subtree member is deliberately absent: reading it would be InvalidInput, so the verdict proves no subtree read.",
+   "members": [
+    "tileset.json",
+    "c/0/0/0.pnts"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "pnts",
+    "tileset.json"
+   ],
+   "name": "implicit-template-pnts",
+   "path": "implicit-template-pnts.3tz",
+   "rule": "T",
+   "sha256": "121e3e6f6e7a17ec949ba6b126410c4e73c44824950629b23ecef6a7fb7bd3b8"
+  },
+  {
+   "bytes": 1278,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "Template 'c/{level}/{x}/{y}.cmpt/.' is Unsupported at root admission. Its subtree member is deliberately absent: reading it would be InvalidInput, so the verdict proves no subtree read.",
+   "members": [
+    "tileset.json",
+    "c/0/0/0.cmpt"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "cmpt",
+    "tileset.json"
+   ],
+   "name": "implicit-template-cmpt-dot-segment",
+   "path": "implicit-template-cmpt-dot-segment.3tz",
+   "rule": "T",
+   "sha256": "6ff659c99e7841ca0eb2883deb804f91269726de258e7bffb3a99dbf484dc75e"
+  },
+  {
+   "bytes": 1547,
+   "c2OracleOutcome": "Unsupported",
+   "developCategory": "invalid_input",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "An implicit content emitted under a .glb template whose bytes are b3dm.",
+   "members": [
+    "tileset.json",
+    "s/0/0/0.subtree",
+    "c/0/0/0.glb"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "c/0/0/0.glb"
+   ],
+   "name": "implicit-glb-template-b3dm-bytes",
+   "path": "implicit-glb-template-b3dm-bytes.3tz",
+   "rule": "L2",
+   "sha256": "2e7bf92fc98e4a3bcf1d0ad848d4207faae2f783e0578234dd385f1ee5353a8e"
+  },
+  {
+   "bytes": 1969,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A retained original payload named only by conversion.json retainedContentUris. The C2 oracle does not model conversion.json (C1 scope), so its outcome is the tileset content alone.",
+   "members": [
+    "tileset.json",
+    "tile.glb",
+    "conversion.json",
+    "orig.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "orig.b3dm"
+   ],
+   "name": "retained-b3dm",
+   "path": "retained-b3dm.3tz",
+   "rule": "L1",
+   "sha256": "f998d0642c0a7727946efb1d6f3c6694bf96dd740664bea1848074699417678b"
+  },
+  {
+   "bytes": 1275,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "invalid_input",
+   "expectedCategory": "invalid_input",
+   "expectedExitCode": 3,
+   "fact": "L0 on the one caller without a prior member lookup: a missing retained .b3dm stays InvalidInput (missing archive entry), not Unsupported.",
+   "members": [
+    "tileset.json",
+    "tile.glb",
+    "conversion.json"
+   ],
+   "messageIncludes": [
+    "orig.b3dm"
+   ],
+   "name": "retained-missing-b3dm",
+   "path": "retained-missing-b3dm.3tz",
+   "rule": "L0",
+   "sha256": "fab126fef688f9ccdcaa175b6cb7c38dd12c5bd9d09575fcd02c3af46ec5e498"
+  },
+  {
+   "bytes": 2244,
+   "c2OracleOutcome": "Contained",
+   "developCategory": "admitted",
+   "expectedCategory": "unsupported",
+   "expectedExitCode": 2,
+   "fact": "A raw source payload named by tileset extras rustyTilesSourceContents. The C2 oracle does not model that list (C1 scope).",
+   "members": [
+    "tileset.json",
+    "s/0/0/0.subtree",
+    "c/0/0/0.glb",
+    "raw/a.b3dm"
+   ],
+   "messageIncludes": [
+    "legacy",
+    "b3dm",
+    "raw/a.b3dm"
+   ],
+   "name": "source-contents-b3dm",
+   "path": "source-contents-b3dm.3tz",
+   "rule": "L1",
+   "sha256": "c9e717971dddb723d7a562c83ef4490c1a49a2c3c2ae69ce438c2f68901e2e18"
+  }
+ ],
+ "generatorSha256": "e713d9f83364460fd5789e6200194463673aadd2d95b201551facefbcc6a9a0f",
+ "lane": "H7 legacy content Unsupported (PROPOSED)",
+ "schemaVersion": 1,
+ "totalBytes": 44603
+}

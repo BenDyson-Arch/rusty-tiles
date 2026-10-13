@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -284,7 +284,9 @@
+@@ -286,7 +286,9 @@
              self.tiles += 1
              if self.tiles > self.max_tiles:
                  raise OracleUndecided("tile count exceeds the oracle's tile limit")

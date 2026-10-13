@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -207,7 +207,7 @@
+@@ -209,7 +209,7 @@
              for ci, content in enumerate(TS._contents(tile)):
                  cwhere = "%s.content[%d]" % (where, ci)
                  self._check_extensions(content, cwhere)

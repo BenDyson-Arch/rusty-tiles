@@ -37,7 +37,6 @@ pub(crate) enum NodeTransform {
 /// Exclusion facts owned by the payload format (contract domain table).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ContentExclusions {
-    pub rtc_center: bool,
     pub gltf_extension: bool,
     pub scene_selection: bool,
     pub skin: bool,
