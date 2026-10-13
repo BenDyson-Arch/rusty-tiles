@@ -15,8 +15,9 @@ Zero-area and scalar-only faces retain geometry/COLOR without unused atlas
 requirements. Positive child/error density is preserved; the finite source
 heuristic is used only when that prescribed density is zero.
 
-The H17 finishing sink, retained accepted leaf pre-encode packets, complete
-GLB writer/readback and pipeline activation are coordinator-owned dependencies.
+PR #216 now provides the H17 finishing sink, accepted leaf pre-encode pages
+and complete GLB writer/readback. Bounded owner readers/writer leases, accepted
+leaf renderer/source witnesses and pipeline activation remain dependencies.
 No component test establishes those integration or publication gates. In
 particular, the probe packets used for source/raster tests are not certified
 H17 packets, and no test returns an original untextured GLB as an assembled Fit.
@@ -89,10 +90,10 @@ Pinned cache receipts (SHA-256):
 - `review-acceptance.md`:
   `a5275d79a04abe5738354ecc3450852384468c82f2159ad8bc8fb83d2e519290`.
 
-Owned Rust formatting, changelog and final indexed tree budget pass. Strict
-workspace Clippy fails on fourteen inherited H17/integration diagnostics and
-reports none in bake. Full workspace formatting also fails on nine inherited
-paths. These are concrete owner follow-ups, not waived successful gates.
+At historical checkpoint `e441761`, owned formatting/changelog/tree checks
+passed but strict workspace Clippy and full workspace formatting failed in
+inherited paths. The new #216 integration checkpoint below passes both complete
+workspace checks; the historical failure receipts remain retained.
 
 The durable coordination and acceptance records are under
 `~/.cache/rusty-tiles-evidence/h27-bake-20261014/`: `coordinator-request.md`,
@@ -103,3 +104,57 @@ H17/complete assembly, independent final-GLB semantic readback, depth-six
 recursive drift, full-pipeline RSS/scratch, large meshes and consumer proof
 remain separate open acceptance obligations. This slice runs no browser or
 large-mesh work and provides no release or retirement acceptance.
+
+
+## H17 handoff adapter checkpoint
+
+At code checkpoint `b8dab956634c4dde745781ab66b4038590ef1f92`, #216 is merged and this PR is stacked on
+`ml/h17-bake-handoff`. Four bake-owned modules translate immutable individual
+source tuples inside shared-material glTF primitives, complete PBR/ID appearance
+and no-raster bindings, and exact-bit retained child packets. The leaf adapter
+requires an explicit accepted renderer/source witness; it derives each actual
+slot's UV/page/sampler/normal-scale binding and rejects understated decoded-UV
+texel spacing. The packet preflights resident plus serialized ownership and
+checks unit renderer axes, normal-frame invertibility, complete mip/support
+ledgers, duplicate base data and bounded metadata.
+
+`bake::integration::ProxyTextureBaker::new(BakeLimits)` takes caller-resolved
+policy. Its nonempty production entry currently returns `Unsupported` before
+unleased allocation. Root must supply bounded certified-member/packet reads,
+accepted leaf renderer/source witnesses and final density, enforce the complete
+writer's residual memory allowance and activate the real baker. It must also
+bind `Verified` to actual assembled bytes, preserve integer feature values above
+2^24 and remove the handoff wire's hidden 255-set count limit. These requests
+are in draft PR #215 and the durable `coordinator-integration-request.md`.
+
+All 44 focused controls pass with zero skips. Two new tiny **constructed**
+structural controls use the actual root complete writer, then independently
+read all five PBR images, categorical bindings, exact render attributes,
+source/feature metadata and unreferenced UINT64/FLOAT64 columns. They prove
+that structural writer domain, not authentic H17 -> real core -> production
+execution. All six `integration_mutants.json` regressions compile and fail at
+their intended assertions; exact restoration yields the same passing binary.
+Strict workspace/all-target Clippy, complete workspace formatting, changelog
+and indexed tree-budget checks pass. Final independent verdict is GO for this
+bounded preparatory integration; full H27 production/resources remain NO-GO.
+
+Reproduce the six additional mutants with the existing coordinator-only runner
+by passing `--cases bench/architecture_audit/mesh_large_h27/integration_mutants.json`.
+Keep the Cargo lane lock for the whole run, then rebuild the restored suite.
+
+Integration evidence pins (SHA-256, relative to the persistent evidence directory):
+
+- `integration-final-inputs.json`: `ae32276736c565b929912853eb47df4cf7cd08715cca7bf76370a098065b4a7f`.
+- `integration-restored-artifact.json`: `295b33185644f8f8a331a5cb92e0dcc5ffe1776ccb3d477e003d18a875015cf6`.
+- `integration-restored-tests.log`: `505d9fb4494f1dd549e8ef2a5c9d1f259cff603f31c01bb13a516b505dab9b5d`.
+- `integration-mutants/matrix.json`: `3c581de3711e85c74295096093f8ea5468ce381ba7408ddcb265b3d81e193ef3`.
+- `integration-clippy-final.log`: `98f17c2bde2a301c6da6f981af834fafe9796e6f085e225d7be88a02a535242c`.
+- `integration-acceptance.json`: `6a4bd0357724dcc43e172a63d9173c552aac01ab09afee82236a5cf3f732cd7e`.
+- `review-integration-final.md`: `571c4fa8cb2666d2e8a7208a6ea1e35eab43f99a36bfb553a1b85ac1ceaa44b6`.
+- `coordinator-integration-request.md`: `01a74fec0b5fd45379052dc220d396d137645d2ac8aa3180d0388c7f71306ff0`.
+
+The baseline and restored binary both hash to
+`8663cde0a571dab18e8fba70ef293ce7fc9b5ac3004c76b415c07eb818698838`.
+The full input manifest covers 2345 actual files. Historical ten-mutant and
+34-test receipts above are separate; this checkpoint adds six mutant controls
+and reruns all 44 focused tests against the concrete #216 API.
