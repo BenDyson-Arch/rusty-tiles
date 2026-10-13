@@ -62,7 +62,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/keep-implicitTiling-exclusion.patch",
-   "patchSha256": "5fdc141af06052ffd90a3cd3766c41823e89fa205b53e882a13cbb3072422e98"
+   "patchSha256": "190afcb600c0f5ff9a126dbac193c8eea50f7a0ad48572cd846ca0cd452e4b34"
   },
   {
    "contractRow": "Skip the I_0 level",
@@ -99,7 +99,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/skip-I0-level.patch",
-   "patchSha256": "0f2bf5917bfe9b1ba47ca08b4b191ebba3e550b56623d4db7808c3bf86946a8d"
+   "patchSha256": "35e87c4dcae9eb78ed89f73aa90a5cf73790b11b5cc43b51f32c23f6d6c1fa02"
   },
   {
    "contractRow": "Skip the V_R level (merge I_0 into R)",
@@ -137,7 +137,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/merge-I0-into-R.patch",
-   "patchSha256": "905b2916043b285f1c02231e8d4ddf7699e3865b4e8cd228decc9b2f1e4d8ca8"
+   "patchSha256": "df901c0215506f58f1f97e433814e5c0956ad3b7f15b349dadcf56c8037a13ff"
   },
   {
    "contractRow": "Test only the own row (skip implicit ancestors); also S3-3",
@@ -176,7 +176,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/own-row-only.patch",
-   "patchSha256": "844e3beef13699e7cfecf72f19b92f66eec45162acf283cd41436918e3bb8409"
+   "patchSha256": "bab8c67a2c8cf94181c77f9357446c93310da69dc09f3a664d14e123c4c00248"
   },
   {
    "contractRow": "Apply R.transform before testing V_R",
@@ -223,7 +223,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/R-transform-before-V_R.patch",
-   "patchSha256": "049b46bbb84ca66fdb90011d87e8b308e32451b008219e826c228188aa39a7dc"
+   "patchSha256": "0723f775d9474ce3728e92541c98db4a602206d05f07f4de52c6755b6d79aa42"
   },
   {
    "contractRow": "Test an external-root R's referencing content volume at R's level, before R.transform",
@@ -255,7 +255,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/external-content-at-R-level.patch",
-   "patchSha256": "0aef4d1ca03034a668bcbf372f1b2425f45da671c6c0930d5f507c2b9dd5adf5"
+   "patchSha256": "9eae247d68f01ebdf741d79768f7a4641e07fc756740ef6c62bfe4132c3b9b3d"
   },
   {
    "contractRow": "Use an approximate box for derived tiles (Cell::rounded_for_hierarchy_bounds stand-in: V_R)",
@@ -290,7 +290,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/derived-as-root-volume.patch",
-   "patchSha256": "1fb767cc46f0eb180b54eb1a5c3f6c12eedb0861295b3949caddca49c3df6395"
+   "patchSha256": "2181821e4e254be40ac1bee2c8cdf2ab7f6e37222b7ceadd7685de0d419a6380"
   },
   {
    "contractRow": "Archive-scoped derived exclusion",
@@ -324,7 +324,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/archive-scoped-derived.patch",
-   "patchSha256": "d2d265515892754930d4b1e0966494357a1fbde5906e0177cb7b6cd2ed8d4da1"
+   "patchSha256": "8d44cc8d7e0e8581e7b1b48e03c394c14bfe21a0882bc1b82654f4da3ce0fe79"
   },
   {
    "contractRow": "Derived detected in build_levels only (no chain bit): the precheck stops first",
@@ -361,7 +361,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/derived-detected-at-precheck-only.patch",
-   "patchSha256": "f9c461b3d5b4f84bb79462792e6dc76079688e14fd371f420ec022f6c4caae0c"
+   "patchSha256": "7c10f3d57e3abb805aa503ebafe7288f98e2c05d1a7660285a4f49dcfd0e304e"
   },
   {
    "contractRow": "Read FLOAT32 rows rounded (through their shortest decimal)",
@@ -395,7 +395,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/float32-rows-via-shortest-decimal.patch",
-   "patchSha256": "cf2bbfaef2fb6aa4b0e9600ef102c044a9bcba87095e09e84617fb230a03803b"
+   "patchSha256": "2ad3a6b6fa0079543e95d34d68e5c01aedb46e7c2e03089e1a54f5e0cea42cf6"
   },
   {
    "contractRow": "Treat subtree tileMetadata as tileMetadata (F-W1 when the evidence is present)",
@@ -444,7 +444,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/subtree-tileMetadata-is-tileMetadata.patch",
-   "patchSha256": "ac8df58567298dc822c444363f5269a76261aea5b4bfcad81bae204515614101"
+   "patchSha256": "9bcc7c8d7e6aa35934f3708cfd255446082e1e325ae1d0e8b299aa656f78fead"
   },
   {
    "contractRow": "Ignore header metadata (omit F step 7)",
@@ -478,7 +478,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/ignore-header-metadata.patch",
-   "patchSha256": "2e87f352ebebd9030cbd8bb3594494140c1a9fd0396f13092513743953c68e20"
+   "patchSha256": "a5db6a7a7023ac60bc59a7a0b1ef98ed0f6906e037cb28f247d9462a476d19f5"
   },
   {
    "contractRow": "depth = chain length - 1",
@@ -525,7 +525,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/depth-is-chain-length-minus-1.patch",
-   "patchSha256": "cda6064a245a66449a913014fc82aba10b312b6ea0d88fed8ef458cd56f624fa"
+   "patchSha256": "762ac61000d56a601ce5301c6738fb8c3ac5d68e922dffc9dbbbed97d1b93375"
   },
   {
    "contractRow": "Units per URI instead of per reference",
@@ -559,7 +559,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/units-per-URI.patch",
-   "patchSha256": "b201ea68e205e1d478fcda5d547f8581f9c82043f16460ad5f70d8e9f8b86997"
+   "patchSha256": "e0d48ee3eb7e105f85425bcc6c5ef0ff0c4b6f4525c1b7a4b0fceabcb5b77683"
   },
   {
    "contractRow": "A fixed 129-level chain capacity (synthetic; here hierarchy_depth + 1 = 13)",
@@ -591,7 +591,7 @@
    ],
    "pass": true,
    "patch": "oracle/mutants/slice3/fixed-chain-capacity.patch",
-   "patchSha256": "6e66f18bb79f37aad026da2e103e2f77c233fd3b960c25735a93ca56d4396c9d"
+   "patchSha256": "b339a9e4944954dabe8ced12183ac6c139df1e4ee09dc66e460f724f2b34f6eb"
   }
  ],
  "notModelled": [

@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -149,7 +149,7 @@
+@@ -151,7 +151,7 @@
      if vol.startswith("derived:"):
          if rec["level"] == 0:
              raise OracleUndecided("derived cell at level 0 (%s)" % where)

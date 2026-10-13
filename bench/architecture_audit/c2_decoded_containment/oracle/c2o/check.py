@@ -35,7 +35,7 @@ GLTF_ALLOWLIST = {
 
 REASONS = [
     "implicitTiling", "tilesetExtension", "tileMetadata", "upAxisOverride", "regionVolume",
-    "rotatedBox", "rtcCenter", "gltfExtension", "sceneSelection", "skin", "morphTargets",
+    "rotatedBox", "gltfExtension", "sceneSelection", "skin", "morphTargets",
     "animation", "quaternionWindow", "numericSpan", "workLimit",
 ]
 
@@ -125,8 +125,8 @@ class UriFacts:
         self.exclusions = set()
         self.c1_caveats = []
         admit(doc)  # raises NodeInvalid
-        # rtcCenter stays in the frozen REASONS list but is unreachable since H7: the
-        # only carrier, a b3dm feature table, is Unsupported in C1 (LegacyContent).
+        # H7 removed rtcCenter: its only carrier, a b3dm feature table, is Unsupported
+        # in C1 (LegacyContent).
         used = doc.get("extensionsUsed", [])
         required = doc.get("extensionsRequired", [])
         if not isinstance(used, list) or not isinstance(required, list):

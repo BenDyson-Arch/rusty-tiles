@@ -106,17 +106,6 @@ def point_glb(points, **kw):
     return glb_from_json(jdump(point_doc(points, **kw)), pack_points(points))
 
 
-def b3dm(glb, feature, batch=None):
-    """b3dm with feature-table JSON and optional batch-table JSON (no binary bodies)."""
-    ft = jdump(feature)
-    ft += b" " * (-(28 + len(ft)) % 8)
-    bt = jdump(batch) if batch is not None else b""
-    bt += b" " * (-len(bt) % 8)
-    body = ft + bt + glb
-    body += bytes(-(28 + len(body)) % 8)
-    return struct.pack("<4s6I", b"b3dm", 1, 28 + len(body), len(ft), 0, len(bt), 0) + body
-
-
 def nest(value, depth):
     for _ in range(depth):
         value = [value]
@@ -284,17 +273,8 @@ def long_decimal_glb(points, matrix_nodes, trs_nodes, bound_accessors, digits):
 def hand_payload(member, data, archive):
     """Per-URI facts derived from the written bytes with stdlib json only."""
     docs = []
-    head = data[:4]
-    if head == b"b3dm":
-        _, _, length, ftj, ftb, btj, btb = struct.unpack_from("<4s6I", data, 0)
-        if ftj:
-            docs.append(H.json_of(data[28:28 + ftj]))
-        if btj:
-            docs.append(H.json_of(data[28 + ftj + ftb:28 + ftj + ftb + btj]))
-        glb = data[28 + ftj + ftb + btj + btb:]
-        glb = glb[:struct.unpack_from("<I", glb, 8)[0]]
-    else:
-        glb = data if head == b"glTF" else None
+    # H7: every admitted payload is GLB or glTF JSON; legacy content is Unsupported in C1.
+    glb = data if data[:4] == b"glTF" else None
     if glb is not None:
         jlen = struct.unpack_from("<I", glb, 12)[0]
         doc = H.json_of(glb[20:20 + jlen])
@@ -434,15 +414,13 @@ def classes(large):
     for m in (40, 200):
         add(shared_accessor, pick(160, 16000), m if large else m // 10, S)
     add(json_flat, "numbers-glb", pick(1200, 120000), pick(5, 50), S)
-    add(json_flat, "numbers-b3dm", pick(1200, 120000), pick(5, 50), S)
     add(json_flat, "string-glb", pick(10240, 1 << 20), pick(5, 50), S)
     add(json_gltf_refs, pick(10240, 1 << 20), pick(10, 1000), S)
     add(json_deep, "string", "glb", 60, pick(10240, 1 << 20), pick(5, 50), S)
-    add(json_deep, "string", "b3dm", 60, pick(10240, 1 << 20), pick(5, 50), S)
     for d in (1, 30, 62):
         add(json_deep, "numbers", "glb", d, pick(1200, 120000), pick(5, 50), S)
-    for d in (1, 30, 60, 62):
-        add(json_deep, "numbers", "b3dm", d, pick(1200, 120000), pick(5, 50), S)
+    # H7 retired the six b3dm JSON classes (legacy content is Unsupported in C1);
+    # their GLB twins above keep the JSON-node cost covered.
     add(quad, pick(60, 6000), pick(2, 20), S)
     add(quad_b, "quadB", pick(50, 5000), pick(160, 16000), pick(4, 40), S)
     add(quad_b, "e2e", pick(50, 5000), pick(155, 15500), pick(5, 500), S)
@@ -617,8 +595,6 @@ def json_flat(kind, N, K, size):
     pt = [(0.25, 0.25, 0.25)]
     if kind == "numbers-glb":
         member, data = "j.glb", point_glb(pt, extras=[0] * N)
-    elif kind == "numbers-b3dm":
-        member, data = "j.b3dm", b3dm(point_glb(pt), {"BATCH_LENGTH": 0}, {"p": [0] * N})
     else:
         member, data = "j.glb", point_glb(pt, extras="x" * N)
     fx.payloads[member] = data
@@ -642,13 +618,10 @@ def json_gltf_refs(N, K, size):
 def json_deep(what, where, depth, N, K, size):
     value = [0] * N if what == "numbers" else "x" * N
     fx = Fx("json-deep-%s-%s-%d" % (what, where, depth),
-            "deep %s (%s), depth %d" % (what, "GLB extras" if where == "glb" else "b3dm batch table", depth),
+            "deep %s (GLB extras), depth %d" % (what, depth),
             size, "%s nested %d deep in %s x %d references" % (what, depth, where, K))
     pt = [(0.25, 0.25, 0.25)]
-    if where == "glb":
-        member, data = "d.glb", point_glb(pt, extras=nest(value, depth))
-    else:
-        member, data = "d.b3dm", b3dm(point_glb(pt), {"BATCH_LENGTH": 0}, {"p": nest(value, depth)})
+    member, data = "d.glb", point_glb(pt, extras=nest(value, depth))
     fx.payloads[member] = data
     kid_layout(fx, member, K, Q_F32_BOX)
     fx.node_q[member] = {}
@@ -1018,7 +991,9 @@ def main():
     previous = []
     if os.path.exists(manifest_path):
         with open(manifest_path) as fh:
-            previous = [r for r in json.load(fh)["fixtures"] if r.get("size") == "large"]
+            current = {fn(*a).id for fn, a in classes(True)} if not args.large else set()
+            previous = [r for r in json.load(fh)["fixtures"]
+                        if r.get("size") == "large" and r["id"] in current]
     if not args.only:
         for name in os.listdir(fdir):
             os.remove(os.path.join(fdir, name))

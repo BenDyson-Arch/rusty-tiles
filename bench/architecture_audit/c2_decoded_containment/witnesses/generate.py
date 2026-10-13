@@ -275,6 +275,14 @@ def build_cases(inputs):
     def ni(*reasons):
         return {"outcome": "NotInspected", "reasons": sorted(reasons)}
 
+    def legacy():
+        # H7: the oracle's LegacyContent verdict (C1 Unsupported, phase C1).
+        return {"outcome": "Unsupported"}
+
+    def legacy_row(case):
+        case.production = "C1:Unsupported (legacy b3dm content, H7)"
+        case.c1_refused = "unsupported"
+
     def nodes_of(w):
         return [n for n in range(len(w["nodes"])) if "mesh" in w["nodes"][n]]
 
@@ -289,20 +297,16 @@ def build_cases(inputs):
     # ---- 13 literal witnesses (W01 also as the no-RTC Contained variant)
     w = W["W01"]
     rtc_points = literal_points(w)
-    case = Case("W01-ordered-node-U-RTC-tile-chain", "literal", ni("rtcCenter"), w["id"])
+    # H7: legacy b3dm content is Unsupported in C1 before any table byte is read, so
+    # the RTC witness is a legacy row and the no-RTC variant is a plain GLB.
+    case = Case("W01-ordered-node-U-RTC-tile-chain", "literal", legacy(), w["id"])
     chain_case(case, "w.b3dm", payload_from_spec(w, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": w["rtc"]}),
                w["tile_chain_root_first"], [(0, rtc_points[0])])
-    case.literal.append({"what": "node_yp", "track": 0, "node_yp": True, "expected": F(w["expected"]["node_yp"][0])})
-    case.literal.append({"what": "own_tile_local minus rtc (slice 1 does not apply RTC)", "track": 0,
-                         "level": 0, "expected": [a - b for a, b in zip(rtc_points[0], F(w["rtc"]))]})
-    case.literal.append({"what": "parent_tile_local (literal, includes RTC) == T1(own_tile_local)",
-                         "generator_only": True, "track": 0, "level": 1,
-                         "expected": F(w["expected"]["parent_tile_local"][0])})
-    case.notes.append("Volumes enclose the RTC-applied literal points (slice-2 frame truth).")
+    legacy_row(case)
     cases.append(case)
     no_rtc = [a - b for a, b in zip(rtc_points[0], F(w["rtc"]))]
     case = Case("W01-noRTC-variant", "literal", contained(), w["id"])
-    chain_case(case, "w.b3dm", payload_from_spec(w, b3dm_table={"BATCH_LENGTH": 0}),
+    chain_case(case, "w.glb", payload_from_spec(w),
                w["tile_chain_root_first"], [(0, no_rtc)])
     case.literal.append({"what": "own_tile_local [4,-42,22]", "track": 0, "level": 0, "expected": F([4, -42, 22])})
     case.literal.append({"what": "node_yp", "track": 0, "node_yp": True, "expected": F(w["expected"]["node_yp"][0])})
@@ -421,11 +425,11 @@ def build_cases(inputs):
     spec["nodes"][1]["children"] = [2]
     cases.append(single("shared-child-not-shared-mesh", "context", spec, {"outcome": "InvalidNode"},
                         points=literal_points(w03)))
-    # 7. matrix and TRS on the RTC b3dm
+    # 7. matrix and TRS on the W01 node (a GLB since H7; formerly the RTC b3dm)
     spec = copy.deepcopy(w01)
     spec["nodes"][0]["translation"] = [0, 0, 0]
     case = Case("matrix-and-TRS", "context", {"outcome": "InvalidNode"}, "matrix-and-TRS")
-    chain_case(case, "w.b3dm", payload_from_spec(spec, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": w01["rtc"]}),
+    chain_case(case, "w.glb", payload_from_spec(spec),
                w01["tile_chain_root_first"], [(0, rtc_points[0])])
     cases.append(case)
     # 8. zero quaternion
@@ -528,13 +532,15 @@ def build_cases(inputs):
                       "inside every region; no tile transform (regions ignore transforms)")
     cases.append(case)
 
-    # 16/17. RTC binary form and range overrun
+    # 16/17. RTC binary form and range overrun: legacy b3dm rows since H7. The
+    # binary RTC_CENTER (in range or overrunning the body) is never read.
     rtc_bin = bytes(4) + struct.pack("<3f", *w01["rtc"])
     for cid, offset in (("RTC-binary-form", 4), ("RTC-range-overrun", 8)):
-        case = Case(cid, "context", ni("rtcCenter"), cid)
+        case = Case(cid, "context", legacy(), cid)
         chain_case(case, "w.b3dm", payload_from_spec(
             w01, b3dm_table={"BATCH_LENGTH": 0, "RTC_CENTER": {"byteOffset": offset}}, b3dm_bin=rtc_bin),
             w01["tile_chain_root_first"], [(0, rtc_points[0])])
+        legacy_row(case)
         cases.append(case)
 
     # ---- new slice-1 controls
@@ -1450,7 +1456,7 @@ def build_controls(cases, reports, rows, cdir, ldir, large_ok):
 
     pair("one-ulp-outside", "W12-TRS-half-turn-order", "W12-TRS-half-turn-order~ulp-L0-own-r0",
          "own box row 0 half-length one ulp smaller")
-    pair("RTC-added", "W01-noRTC-variant", "W01-ordered-node-U-RTC-tile-chain", "b3dm feature table gains RTC_CENTER")
+    # H7 retired the "RTC-added" pair: its mutated side is legacy b3dm content.
     pair("quaternion-past-window", "quaternion-window-at-2^-18", "quaternion-window-next-beyond",
          "x component moves to the next binary64")
     pair("span-at-cap-and-one-over", "worked-example-adjusted-containmentSpanBits-29",

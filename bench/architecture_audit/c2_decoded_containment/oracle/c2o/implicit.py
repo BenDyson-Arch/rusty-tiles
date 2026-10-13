@@ -54,7 +54,7 @@ I1_ORACLE_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "..", "implicit
 # H7 (PROPOSED legacy-content amendment, 2026-10-13) re-pinned check.py, gltf.py and
 # i1_oracle.py; the previous pins were e0209cb4…, 00afbf32… and 62fdc706….
 PINS = {
-    "c2o/check.py": "ee9fd9473f4e6dcd552bb888c76350950ce092d1f7976eb84410b03c535bdb0f",
+    "c2o/check.py": "8850766e4919de66cf0a220f171ed6cf34b9a6dc49d5ddcae43df7807b174e2b",
     "c2o/gltf.py": "280ecd59def49dd5f939f577bd46b1fa02204b56f51649f563308ccddc84806a",
     "c2o/meshopt.py": "946cbe81bf3baedcd3c1adb6863d4fb6ff309e28defa53ad5f1b9dfa22ef21e6",
     "c2o/numbers.py": "d28df9e87fa957a1a755bdbe409a2cf1e2c4fe4f76a0cc30075ad759ff06b40c",
