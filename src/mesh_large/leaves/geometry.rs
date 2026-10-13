@@ -95,6 +95,9 @@ fn power_step(required: f64) -> Result<f32, JobError> {
 }
 
 impl LatticePlan {
+    pub(crate) fn profile(&self) -> Profile {
+        self.profile
+    }
     pub(crate) fn steps(&self) -> &[f32] {
         &self.steps
     }

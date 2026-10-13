@@ -5,11 +5,11 @@ local static glTF/GLB scene into a 3D Tiles 1.1 implicit forest in one `.3tz`.
 Content is glTF 2.0. The encoder is bundled: meshopt and KTX2/Basis need no
 external executable or system geospatial library in the standard CLI or wheel.
 
-The current pipeline captures the source, writes full-detail leaf GLBs, and
-publishes their hierarchy. Parents currently carry no coarse content, so a far
-view can still load every visible leaf. Certified geometry LOD and proxy texture
-baking are separate downstream work; this interface will also serve that
-pipeline when it lands. A successful conversion does not establish the final
+The current pipeline captures the source, writes full-detail leaf GLBs, certifies
+coarse geometry for every parent tile (H17: simplified proxies whose geometric
+error bounds their two-way distance to the source), and publishes the hierarchy.
+Coarse tiles are untextured (flat material factors) until proxy texture baking
+lands; this interface will also serve that pipeline. A successful conversion does not establish the final
 tiler's resource, fidelity, scale or consumer acceptance.
 
 ## Convert a local scene
@@ -155,8 +155,9 @@ depth and packed/synthetic leaf counts, member limits, separate root/tileset
 errors, and normalized placement. `source_coordinates` is `local-gltf`;
 `coordinates` is `local-gltf` or `wgs84-ecef`. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
-for placed output. Current parent traversal errors are not proxy certificates.
-No LOD or appearance certificate is fabricated for stages that have not landed.
+for placed output. A parent tile's geometric error is its proxy's certified
+error ([H17 contract](architecture/h17-lod-contract.md)). No appearance
+certificate is fabricated: coarse tiles are untextured.
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,
