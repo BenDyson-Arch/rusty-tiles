@@ -59,7 +59,7 @@ MUTANTS = [
                               "        let _ = member;\n")]),
     # Only the vector-build digest is kept: it is never recorded.
     ("vector-digest-dropped", [(VALIDATE, "            vector_build = Some(hash);",
-                                "            let _ = hash;")]),
+                                "            vector_build = Some(hash).filter(|_| false);")]),
     # Tied rows take the group's first position instead of their run's.
     ("rows-run-start", [(ROWS, "                run_start = position;", "                run_start = row.group;")]),
     # The streamed report drops the separator between payload rows.
