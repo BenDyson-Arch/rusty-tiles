@@ -16,6 +16,8 @@ pub(crate) const MEMBER_CEILING: u64 = 178_956_970;
 mod catalog;
 mod read;
 #[cfg(test)]
+pub(crate) use catalog::FACTS_RECORD_BYTES;
+#[cfg(test)]
 pub(crate) use catalog::FORCED;
 pub(crate) use catalog::{CatalogConfig, Names};
 #[cfg(test)]

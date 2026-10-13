@@ -35,9 +35,11 @@ pub(crate) struct CatalogConfig {
     pub cache_bytes: u64,
     /// Buffer of each scratch log or sequence writer and reader.
     pub buffer_bytes: usize,
-    /// The validator's per-URI facts (195 B per entry) stay in memory when `N·195` fits
+    /// The validator's per-URI facts (199 B per entry) stay in memory when `N·199` fits
     /// (VS-B-5); otherwise they go to a rank-indexed scratch file.
     pub facts_resident_bytes: u64,
+    /// The validator's phase-2 stream log (VS-B-4) stays in memory up to this size.
+    pub stream_log_resident_bytes: usize,
 }
 
 impl CatalogConfig {
@@ -70,8 +72,9 @@ impl CatalogConfig {
         max_fences: 1 << 19,
         cache_bytes: 16 << 20,
         buffer_bytes: 256 << 10,
-        // 2^19 entries (the default entry limit) need 97.5 MiB.
+        // 2^19 entries (the default entry limit) need 99.5 MiB.
         facts_resident_bytes: 100 << 20,
+        stream_log_resident_bytes: 32 << 20,
     };
 
     /// Every store on scratch, runs of a few records, two fences and one cached page: the
@@ -101,6 +104,7 @@ impl CatalogConfig {
         cache_bytes: 0,
         buffer_bytes: 64,
         facts_resident_bytes: 0,
+        stream_log_resident_bytes: 0,
     };
 
     /// The profile of this build. Test builds and `validate-forced-spill` builds select
@@ -125,13 +129,15 @@ impl CatalogConfig {
     }
 
     /// Scratch estimate from the end record (design §1.3, labelled an estimate): two
-    /// generations of row runs and the log, plus two of extents and of index rows.
+    /// generations of row runs and the log, plus two of extents and of index rows, plus the
+    /// validator's rank-indexed facts file (VS-B-5).
     pub(crate) fn scratch_estimate(entries: u64, directory_bytes: u64) -> u64 {
         let rows = entries.saturating_mul(Row::SIZE as u64 + LOG_HEADER as u64);
         let sides = entries.saturating_mul(Extent32::SIZE as u64 + IndexRow::SIZE as u64);
         rows.saturating_add(directory_bytes)
             .saturating_mul(2)
             .saturating_add(sides.saturating_mul(2))
+            .saturating_add(entries.saturating_mul(FACTS_RECORD_BYTES))
     }
 }
 
@@ -140,6 +146,9 @@ thread_local! {
     /// Unit-test override of the catalog profile on this thread.
     pub(crate) static FORCED: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
 }
+
+/// Bytes of one validator facts record (`validate::facts::WIDTH`), for the scratch estimate.
+pub(crate) const FACTS_RECORD_BYTES: u64 = 199;
 
 /// Size stand-in for the extent record in the scratch estimate.
 struct Extent32;
