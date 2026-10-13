@@ -7,7 +7,8 @@ Each mutant is a set of exact single-occurrence string edits of `src/validate.rs
 The driver applies one mutant, runs the release EM controls
 (`validate::memo_controls`) and the explicit external-tileset tests in one test
 binary, records the failing tests, and restores `src/`. A mutant is caught when at least one control
-fails. `clean` must fail nothing. Writes OUT_DIR/report.json.
+fails. `clean` and the EQUIVALENT mutants must fail nothing. Writes
+OUT_DIR/report.json.
 
 Environment: CARGO_TARGET_DIR (default ~/.cache/rt-target-c), EM_LOCK (default
 ~/.cache/rusty-tiles-cargo-c.lock), EM_CPUS (default 16-19).
@@ -62,6 +63,11 @@ MUTANTS = [
     # The memo used for a document on the active path.
     ("memo-on-active-path", [("        if self.active.contains(name) {\n            return None;\n        }\n", "")]),
 ]
+# Equivalent by proof: no edit can make these observable.
+EQUIVALENT = {
+    "memo-on-active-path": "EM-5.5: a summarized document is never on the active path, so the "
+                           "defensive check never returns early",
+}
 TESTS = ["validate::memo_controls", "validate::tests::external", "validate::tests::shared_external",
          "validate::containment_controls::external", "validate::containment_controls::references_follow"]
 
@@ -104,10 +110,11 @@ def main(argv):
         finally:
             open(V, "w").write(source)
         caught = bool(failing) or aborted
-        row = {"name": name, "caught": caught, "failing": failing, "aborted": aborted, "patch": patch}
+        row = {"name": name, "caught": caught, "failing": failing, "aborted": aborted, "patch": patch,
+               "equivalent": EQUIVALENT.get(name)}
         report.append(row)
         print(name, "caught" if caught else "NOT caught", failing, flush=True)
-    ok = all(r["caught"] == (r["name"] != "clean") for r in report)
+    ok = all(r["caught"] == (r["name"] != "clean" and r["name"] not in EQUIVALENT) for r in report)
     with open(os.path.join(out, "report.json"), "w") as f:
         json.dump({"ok": ok, "mutants": report}, f, indent=1)
     sys.exit(0 if ok else 1)

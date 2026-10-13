@@ -169,7 +169,12 @@ These are the in-crate tests in `src/validate.rs` (`external_memo`):
 - **Mutants.** Each must fail at least one control: a replay that reuses the first
   placement's C2 link; a skipped root containment check; a skipped root
   geometric-error check; a missing, short or unsubtracted charge; a skipped depth
-  bound; replay without references; the memo disabled.
+  bound; replay without references; a nested placement missing from its enclosing
+  summary; the memo disabled.
+  - Removing the active-path test of EM-5.5 is equivalent by that proof. The test is
+    kept as a defensive guard.
+
+Driver and results: `bench/architecture_audit/external_memo/`.
 
 The parity suites, the hostile archives before and after, and the mutant runs are
 recorded in `~/.cache/rusty-tiles-evidence/ext-memo-20261013/`.
