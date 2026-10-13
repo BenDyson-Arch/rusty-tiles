@@ -85,7 +85,6 @@ fn countries_emit_filled_ids_without_skip_invalid_even_when_fragmented() {
     for (name, args) in [
         ("normal", vec![]),
         ("fragmented", vec!["--maxVertices", "256"]),
-        ("explicit", vec!["--explicit"]),
     ] {
         let archive = temp.path().join(format!("{name}.3tz"));
         let output = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))

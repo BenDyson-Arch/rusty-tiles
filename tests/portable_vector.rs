@@ -333,7 +333,7 @@ fn independent_geopackage_layers_filters_and_z_height_are_read_only() {
 }
 
 #[test]
-fn portable_library_entry_point_and_both_hierarchies_validate() {
+fn portable_library_entry_point_validates_implicit_forest() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("library.geojson");
     geojson(
@@ -342,62 +342,55 @@ fn portable_library_entry_point_and_both_hierarchies_validate() {
             .map(|i| point(json!(i), json!({"n":i}), [i as f64, 0., 0.]))
             .collect(),
     );
-    for explicit in [false, true] {
-        let output = root.path().join(format!("library-{explicit}.3tz"));
-        let options = rusty_tiles::vector::VectorOptions {
-            source_crs: Some("local".into()),
-            max_features: 2,
-            explicit,
-            reproducible: true,
-            jobs: 2,
-            ..Default::default()
-        };
-        let result = rusty_tiles::vector::vector_to_archive(
-            rusty_tiles::vector::VectorRequest::new(&source, &output, options),
-            &rusty_tiles::RunControl::default(),
-        )
-        .unwrap();
-        assert_eq!(result.output, std::fs::canonicalize(&output).unwrap());
-        assert_eq!(result.report["features"], 6);
-        assert!(
-            rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
-                .unwrap()
-                .ok
-        );
-        // Forest classification (design §4.1, S = 4): the root is the single
-        // implicit root iff the producer hierarchy's root height is below S;
-        // otherwise the root is explicit and implicit roots sit below it.
-        // Explicit output carries no implicit tiling anywhere.
-        fn height(node: &Value) -> usize {
-            node["children"]
-                .as_array()
-                .and_then(|children| children.iter().map(height).max())
-                .map_or(0, |h| h + 1)
-        }
-        fn implicit_roots(node: &Value) -> usize {
-            usize::from(node.get("implicitTiling").is_some())
-                + node["children"]
-                    .as_array()
-                    .map_or(0, |children| children.iter().map(implicit_roots).sum())
-        }
-        let manifest = archive_json(&output, "tileset.json");
-        if explicit {
-            assert_eq!(implicit_roots(&manifest["root"]), 0, "{manifest}");
-        } else {
-            let state = archive_json(&output, "vector-build.json");
-            let root_is_implicit = height(&state["explicitRoot"]) < 4;
-            assert_eq!(
-                manifest["root"].get("implicitTiling").is_some(),
-                root_is_implicit,
-                "{manifest}"
-            );
-            assert!(implicit_roots(&manifest["root"]) > 0, "{manifest}");
-        }
+    let output = root.path().join("library.3tz");
+    let options = rusty_tiles::vector::VectorOptions {
+        source_crs: Some("local".into()),
+        max_features: 2,
+        reproducible: true,
+        jobs: 2,
+        ..Default::default()
+    };
+    let result = rusty_tiles::vector::vector_to_archive(
+        rusty_tiles::vector::VectorRequest::new(&source, &output, options),
+        &rusty_tiles::RunControl::default(),
+    )
+    .unwrap();
+    assert_eq!(result.output, std::fs::canonicalize(&output).unwrap());
+    assert_eq!(result.report["features"], 6);
+    assert_eq!(result.report["tiling"], "implicit");
+    assert!(
+        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
+            .unwrap()
+            .ok
+    );
+    // Forest classification (design §4.1, S = 4): the root is the single
+    // implicit root iff the producer hierarchy's root height is below S;
+    // otherwise the root is explicit and implicit roots sit below it.
+    fn height(node: &Value) -> usize {
+        node["children"]
+            .as_array()
+            .and_then(|children| children.iter().map(height).max())
+            .map_or(0, |h| h + 1)
     }
+    fn implicit_roots(node: &Value) -> usize {
+        usize::from(node.get("implicitTiling").is_some())
+            + node["children"]
+                .as_array()
+                .map_or(0, |children| children.iter().map(implicit_roots).sum())
+    }
+    let manifest = archive_json(&output, "tileset.json");
+    let state = archive_json(&output, "vector-build.json");
+    let root_is_implicit = height(&state["explicitRoot"]) < 4;
+    assert_eq!(
+        manifest["root"].get("implicitTiling").is_some(),
+        root_is_implicit,
+        "{manifest}"
+    );
+    assert!(implicit_roots(&manifest["root"]) > 0, "{manifest}");
 }
 
 #[test]
-fn jobs_and_reuse_are_reproducible_in_both_tiling_modes() {
+fn jobs_and_reuse_are_reproducible() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("repeatable.geojson");
     geojson(
@@ -406,34 +399,29 @@ fn jobs_and_reuse_are_reproducible_in_both_tiling_modes() {
             .map(|i| point(json!(i), json!({"n":i}), [i as f64, 0., 0.]))
             .collect(),
     );
-    for explicit in [false, true] {
-        let mut arguments = vec![
-            "--source-crs",
-            "local",
-            "--max-features",
-            "2",
-            "--quantize",
-            "--meshopt",
-        ];
-        if explicit {
-            arguments.push("--explicit");
-        }
-        let one = root.path().join(format!("one-{explicit}.3tz"));
-        let four = root.path().join(format!("four-{explicit}.3tz"));
-        let mut first = arguments.clone();
-        first.extend(["--jobs", "1"]);
-        convert(&source, &one, &first);
-        let mut second = arguments.clone();
-        second.extend(["--jobs", "4"]);
-        convert(&source, &four, &second);
-        assert_eq!(fs::read(&one).unwrap(), fs::read(&four).unwrap());
-        let previous = one.to_str().unwrap();
-        second.extend(["--reuse-tileset", previous]);
-        let reused = root.path().join(format!("reused-{explicit}.3tz"));
-        let report = convert(&source, &reused, &second);
-        assert_eq!(report["reuse"]["rebuiltContents"], 0);
-        assert!(report["reuse"]["reusedContents"].as_u64().unwrap() > 0);
-    }
+    let arguments = vec![
+        "--source-crs",
+        "local",
+        "--max-features",
+        "2",
+        "--quantize",
+        "--meshopt",
+    ];
+    let one = root.path().join("one.3tz");
+    let four = root.path().join("four.3tz");
+    let mut first = arguments.clone();
+    first.extend(["--jobs", "1"]);
+    convert(&source, &one, &first);
+    let mut second = arguments.clone();
+    second.extend(["--jobs", "4"]);
+    convert(&source, &four, &second);
+    assert_eq!(fs::read(&one).unwrap(), fs::read(&four).unwrap());
+    let previous = one.to_str().unwrap();
+    second.extend(["--reuse-tileset", previous]);
+    let reused = root.path().join("reused.3tz");
+    let report = convert(&source, &reused, &second);
+    assert_eq!(report["reuse"]["rebuiltContents"], 0);
+    assert!(report["reuse"]["reusedContents"].as_u64().unwrap() > 0);
 }
 
 #[test]
@@ -451,7 +439,7 @@ fn polygons_preserve_holes_and_opt_in_repair_reports() {
         )],
     );
     let output = root.path().join("hole.3tz");
-    convert(&source, &output, &["--source-crs", "local", "--explicit"]);
+    convert(&source, &output, &["--source-crs", "local"]);
     let mut area = 0.;
     for (document, binary) in glbs(&output) {
         for primitive in document["meshes"][0]["primitives"].as_array().unwrap() {

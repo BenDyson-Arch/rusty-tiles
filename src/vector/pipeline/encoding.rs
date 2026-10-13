@@ -1,5 +1,8 @@
 //! Draft vector GLBs, typed metadata, quantization and direct Rust meshopt.
 use super::*;
+use crate::tileset_node::{
+    GeometricError, NodePlacement, Refine, SourceIdentity, TileBox, TileRecord,
+};
 use crate::{
     content_integrity::FormatError,
     glb,
@@ -378,7 +381,7 @@ struct Encoded {
     before_bytes: usize,
 }
 pub(super) struct Candidate {
-    pub node: Option<Value>,
+    pub node: Option<records::VectorRecord>,
     pub reports: Vec<Value>,
     pub reason: Option<&'static str>,
     pub worker: usize,
@@ -759,6 +762,10 @@ fn feature_schemas(feature: &Feature) -> BTreeMap<String, String> {
         .collect()
 }
 
+/// Bytes held back from `maxBytes` for the JSON that implicit scene-root
+/// placement adds to a content when the forest rebases it.
+pub(super) const IMPLICIT_FRAMING_RESERVE: usize = 128;
+
 /// Test the exact full-detail encodings before admitting a source fragment.
 /// Later cross-feature schema changes remain a fatal hierarchy constraint.
 /// Implicit scene framing uses the same reservation as final candidate encoding.
@@ -795,8 +802,8 @@ pub(super) fn fits_feature(
     } else {
         bridge_len(source.document, source.binary, policy, attempt)?
     };
-    let reserve = if options.explicit { 0 } else { 128 };
-    Ok(vertices <= options.max_vertices && bytes <= options.max_bytes.saturating_sub(reserve))
+    Ok(vertices <= options.max_vertices
+        && bytes <= options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE))
 }
 
 /// Inputs shared by every candidate encoded in one build.
@@ -981,7 +988,16 @@ pub(super) fn encode(
     let rounding = encoded.rounding;
     let quantization = encoded.quantization;
     let bytes = encoded.bytes;
-    let uri = format!("t/{}.glb", hash(&bytes));
+    let sources = if aggregation.is_some() {
+        SourceIdentity::Aggregate
+    } else {
+        SourceIdentity::Features {
+            count: u32::try_from(items.len())
+                .map_err(|_| data("a vector content holds more than 2^32 features"))?,
+            digest: records::identity_digest(&items)?,
+        }
+    };
+    let (content, uri) = records::content(&bytes, sources)?;
     let byte_count = bytes.len();
     let mut publication = tempfile::NamedTempFile::new_in(output.join("t"))?;
     publication.write_all(&bytes)?;
@@ -991,12 +1007,9 @@ pub(super) fn encode(
         Err(error) => return Err(error.error.into()),
     }
     drop(bytes);
-    let content = json!({"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}});
     // Implicit scene-root placement adds JSON to the content. Reserve its
     // maximum framing increase before accepting a content candidate.
-    let byte_limit = options
-        .max_bytes
-        .saturating_sub(if options.explicit { 0 } else { 128 });
+    let byte_limit = options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE);
     if vertex_count > options.max_vertices || byte_count > byte_limit {
         result.reason = Some(if vertex_count > options.max_vertices {
             "vertices"
@@ -1005,25 +1018,54 @@ pub(super) fn encode(
         });
         return Ok(result);
     }
-    let mut node = json!({"extras":{"featureFragments":items.len(),"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
-        "geometryErrorMetres":error,"positionRoundingMetres":rounding,"quantizationErrorMetres":quantization,"uncompressedBytes":before_bytes,"toleranceMetres":tolerance},
-        "geometricError":if level>0 || options.quantize {error+rounding+quantization}else{0.}});
-    if let Some(summary) = aggregation {
-        node["extras"]["pointAggregation"] = summary.clone();
-        let mut report = summary;
+    let own_error = if level > 0 || options.quantize {
+        error + rounding + quantization
+    } else {
+        0.
+    };
+    let extras = records::VectorTileExtras::Content(records::Statistics {
+        feature_fragments: items.len(),
+        vertices: vertex_count,
+        primitives,
+        encoded_bytes: byte_count,
+        geometry_error_metres: error,
+        position_rounding_metres: rounding,
+        quantization_error_metres: quantization,
+        uncompressed_bytes: before_bytes,
+        tolerance_metres: tolerance,
+        point_aggregation: aggregation.clone(),
+        build_path: None,
+    });
+    if let Some(mut report) = aggregation {
         report["substitution"] = json!("pointAggregates");
         report["buildPrefix"] = json!(prefix);
         report["toleranceMetres"] = json!(tolerance);
         result.reports.push(report);
     }
-    node["content"] = content;
-    result.node = Some(node);
+    // Attach places, bounds and refines the record within its hierarchy.
+    result.node = Some(TileRecord::new(
+        NodePlacement::INHERIT,
+        TileBox::centred([0.; 3])?,
+        GeometricError::new(own_error)?,
+        Refine::Replace,
+        vec![content],
+        Some(extras),
+    )?);
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A candidate's tile object as the producer writes it.
+    fn tile_json(record: records::VectorRecord) -> Value {
+        Value::Object(
+            record
+                .explicit_object(record.bounds(), crate::tileset_node::ObjectRole::Tile)
+                .unwrap(),
+        )
+    }
 
     fn point_feature() -> Feature {
         Feature {
@@ -1596,7 +1638,6 @@ mod tests {
                 let base = VectorOptions {
                     meshopt,
                     quantize,
-                    explicit: true,
                     max_bytes: 1_000_000,
                     ..Default::default()
                 };
@@ -1605,7 +1646,7 @@ mod tests {
                 let (result, files) =
                     final_point(&base, ProducerPolicy::new(meshopt).unwrap(), &attempt);
                 let candidate = result.unwrap();
-                let node = candidate.node.unwrap();
+                let node = tile_json(candidate.node.unwrap());
                 assert_eq!(files.len(), 1);
                 let actual = files[0].len();
                 let (document, _) = read_views(&files[0]);
@@ -1637,7 +1678,8 @@ mod tests {
                 if !meshopt {
                     assert_eq!(actual, raw.bytes.len());
                 }
-                for (limit, accepted) in [(actual, true), (actual - 1, false)] {
+                let limit = actual + IMPLICIT_FRAMING_RESERVE;
+                for (limit, accepted) in [(limit, true), (limit - 1, false)] {
                     let options = VectorOptions {
                         max_bytes: limit,
                         ..base.clone()
@@ -1878,38 +1920,32 @@ mod tests {
         // Uncompressed fitting counts bytes (no trial GLB, no admission);
         // meshopt fitting still encodes the trial content. Against the full
         // trial-encode oracle, both accept a feature exactly at the byte and
-        // vertex limits and reject it one below, with and without implicit
-        // reservations, including a fill fragment and an outline piece.
+        // vertex limits (after the implicit framing reservation) and reject it
+        // one below, including a fill fragment and an outline piece.
         let fixtures = fitting_fixtures();
         for meshopt in [false, true] {
-            for explicit in [false, true] {
-                let policy = ProducerPolicy::new(meshopt).unwrap();
-                let base = VectorOptions {
-                    meshopt,
-                    explicit,
-                    ..Default::default()
-                };
-                for feature in &fixtures {
-                    let (vertices, bytes) = trial_encode(feature, &base, policy);
-                    let limit = bytes + if explicit { 0 } else { 128 };
-                    let fits = |max_bytes: usize, max_vertices: usize| {
-                        let options = VectorOptions {
-                            max_bytes,
-                            max_vertices,
-                            ..base.clone()
-                        };
-                        let run = crate::RunControl::default();
-                        let attempt = run.begin().unwrap();
-                        fits_feature(feature, false, &options, policy, &attempt).unwrap()
+            let policy = ProducerPolicy::new(meshopt).unwrap();
+            let base = VectorOptions {
+                meshopt,
+                ..Default::default()
+            };
+            for feature in &fixtures {
+                let (vertices, bytes) = trial_encode(feature, &base, policy);
+                let limit = bytes + IMPLICIT_FRAMING_RESERVE;
+                let fits = |max_bytes: usize, max_vertices: usize| {
+                    let options = VectorOptions {
+                        max_bytes,
+                        max_vertices,
+                        ..base.clone()
                     };
-                    let case = format!(
-                        "meshopt {meshopt} explicit {explicit} {:?}",
-                        feature.geometry
-                    );
-                    assert!(fits(limit, vertices), "{case}");
-                    assert!(!fits(limit - 1, vertices), "{case}");
-                    assert!(!fits(limit, vertices - 1), "{case}");
-                }
+                    let run = crate::RunControl::default();
+                    let attempt = run.begin().unwrap();
+                    fits_feature(feature, false, &options, policy, &attempt).unwrap()
+                };
+                let case = format!("meshopt {meshopt} {:?}", feature.geometry);
+                assert!(fits(limit, vertices), "{case}");
+                assert!(!fits(limit - 1, vertices), "{case}");
+                assert!(!fits(limit, vertices - 1), "{case}");
             }
         }
     }
@@ -2007,7 +2043,7 @@ mod tests {
                 policy: ProducerPolicy::new(meshopt).unwrap(),
                 attempt: &attempt,
             };
-            let node = encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap();
+            let node = tile_json(encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap());
             assert!(node.get("contents").is_none());
             let content = &node["content"];
             assert_eq!(
@@ -2666,7 +2702,7 @@ mod tests {
                 attempt: &attempt,
             };
             let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
-            let node = candidate.node.expect("the parent keeps the source polygon");
+            let node = tile_json(candidate.node.expect("the parent keeps the source polygon"));
             assert_eq!(
                 node["extras"]["geometryErrorMetres"],
                 json!(0.),

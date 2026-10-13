@@ -1,13 +1,13 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 65ae7e6..fc828f9 100644
+index 88ee84a..5cc5a2f 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
-@@ -871,7 +871,7 @@ impl SceneConsumer for StreamConsumer<'_> {
+@@ -873,7 +873,7 @@ impl SceneConsumer for StreamConsumer<'_> {
              }
              let bitmap = &mut self.bitmap[..words];
              bitmap.fill(0);
 -            instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));
 +            (0..instance.count(accessor)).for_each(|v| bitmap[v / 64] |= 1 << (v % 64));
              let n = normalization(instance.format(accessor));
-             for (w, &bits) in bitmap.iter().enumerate() {
-                 let mut bits = bits;
+             let first =
+                 containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {

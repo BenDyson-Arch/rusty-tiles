@@ -9,7 +9,88 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// An explicit vector archive: third-party validator input, not producer output.
+/// Explicit vector output was retired in 0.4.0 (H6), so the archive is derived from
+/// a default (implicit forest) conversion: `tileset.json` takes the producer
+/// hierarchy recorded as `explicitRoot` in `vector-build.json`, and every raw payload
+/// is written to its content address `t/<sha256>.glb`, either copied in place or
+/// restored exactly from its rebased member. Build state and reports are unchanged.
 fn fixture(root: &Path) -> PathBuf {
+    let forest = forest_fixture(root);
+    let mut zip = zip::ZipArchive::new(fs::File::open(&forest).unwrap()).unwrap();
+    let mut read = |name: &str| {
+        let mut bytes = Vec::new();
+        zip.by_name(name).unwrap().read_to_end(&mut bytes).unwrap();
+        bytes
+    };
+    let manifest: Value = serde_json::from_slice(&read("tileset.json")).unwrap();
+    let state: Value = serde_json::from_slice(&read("vector-build.json")).unwrap();
+    let directory = root.join("explicit");
+    fs::create_dir_all(directory.join("t")).unwrap();
+    let mut view = json!({"root": state["explicitRoot"]});
+    for key in ["asset", "extensionsUsed", "geometricError"] {
+        view[key] = manifest[key].clone();
+    }
+    fs::write(directory.join("tileset.json"), view.to_string()).unwrap();
+    for name in [
+        "vector-build.json",
+        "conversion.json",
+        "geometry-reports.jsonl",
+    ] {
+        fs::write(directory.join(name), read(name)).unwrap();
+    }
+    fn uris(node: &Value, out: &mut Vec<String>) {
+        let contents = node["contents"].as_array().cloned().unwrap_or_default();
+        for content in contents.iter().chain(node.get("content")) {
+            out.push(content["uri"].as_str().unwrap().to_owned());
+        }
+        for child in node["children"].as_array().into_iter().flatten() {
+            uris(child, out);
+        }
+    }
+    let mut names = Vec::new();
+    uris(&state["explicitRoot"], &mut names);
+    for name in names {
+        let stem = name
+            .strip_prefix("t/")
+            .unwrap()
+            .strip_suffix(".glb")
+            .unwrap();
+        let bytes = match state["payloads"].get(stem) {
+            None => read(&name),
+            Some(entry) => {
+                let record = rusty_tiles::implicit::RebaseRecord {
+                    raw_sha256: std::array::from_fn(|i| {
+                        u8::from_str_radix(&stem[i * 2..i * 2 + 2], 16).unwrap()
+                    }),
+                    delta: serde_json::from_value(entry["delta"].clone()).unwrap(),
+                    raw_root_node: entry["rootNode"].as_str().unwrap().to_owned(),
+                    raw_json_length: entry["jsonLength"].as_u64().unwrap() as u32,
+                };
+                let published = read(entry["member"].as_str().unwrap());
+                rusty_tiles::implicit::restore_payload(&published, &record).unwrap()
+            }
+        };
+        fs::write(directory.join(&name), bytes).unwrap();
+    }
+    let out = root.join("valid.3tz");
+    let packed = support::rusty_tiles()
+        .args(["convert", "-i"])
+        .arg(&directory)
+        .arg("-o")
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(
+        packed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&packed.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+    out
+}
+
+fn forest_fixture(root: &Path) -> PathBuf {
     let source = root.join("source.geojson");
     let features: Vec<_> = (0..4)
         .map(|i| {
@@ -26,9 +107,9 @@ fn fixture(root: &Path) -> PathBuf {
         json!({"type":"FeatureCollection","features":features}).to_string(),
     )
     .unwrap();
-    let out = root.join("valid.3tz");
+    let out = root.join("forest.3tz");
     let result = support::rusty_tiles()
-        .args(["vector", "--explicit", "-i"])
+        .args(["vector", "-i"])
         .arg(&source)
         .arg("-o")
         .arg(&out)
@@ -83,6 +164,9 @@ fn payload(directory: &Path) -> PathBuf {
 fn valid_archive_and_corruption_categories() {
     let root = tempfile::tempdir().unwrap();
     let original = fixture(root.path());
+    // The default forest archive the explicit fixture was derived from validates too.
+    let (result, report) = validate(&root.path().join("forest.3tz"), &[]);
+    assert!(result.status.success(), "{report}");
     let before = fs::read(&original).unwrap();
     let (result, report) = validate(&original, &[]);
     assert!(result.status.success(), "{report}");

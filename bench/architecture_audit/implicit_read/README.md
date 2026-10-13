@@ -23,6 +23,10 @@ Conclusions recorded in the removed `acceptance/README.md`:
   0 oracle-side differences, 0 production disagreements, 0 skipped** (release build,
   large controls generated).
 
+`acceptance/scripts/produce.py` also writes an `--explicit` twin of every case. H6 (2026-10-13)
+removed `--explicit` from `vector` and `point-cloud`, so producing those twins needs a converter
+built at or before develop `7fad70c`; `mesh-to-3tz` keeps the flag.
+
 Kept as live tooling: `oracle/` with its self-test, `witnesses/`, `acceptance/scripts/`,
 the production-mutant set (patches, `mutants.json`, scripts) and `corpus/run.py`.
 Removed from the tree: `preparation/` (contract drafts v1-v3, precode reviews, primary

@@ -167,6 +167,21 @@ document, 128 MiB per member, 1 GiB source archive and total stored member bytes
 payload elements, 128 MiB decoded views per document, 128 levels of hierarchy
 depth, and 2 GiB explicit member-hash and payload/document read work including
 repeated reads and constructor index reads.
+Each placement of a shared external tileset is charged its full visits,
+references and document bytes, as if it were read and walked again. In fact each
+external-tileset document is parsed and checked once. Later placements re-check
+only what depends on the placement: the root's bounds and geometric error against
+the referencing tile, the depth limits, and decoded containment through that
+placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
+physical reads. Verdicts, messages and report counts are the same as a full
+re-walk ([memo amendment](architecture/c1-external-tileset-memo-amendment.md)).
+
+The 3TZ index is not a payload member: it is admitted at exactly 24 bytes per
+other member, as the central-directory count fixes it, and read in 64 KiB chunks.
+The 178,956,970-member 3TZ ceiling, which producers also enforce, is a format
+rule rather than a limit: a larger declared count is Unsupported before the entry
+limit and before any directory allocation. At the ceiling the index is
+4,294,967,256 bytes.
 Implicit availability scans count toward the same 2 GiB `total_bytes_read` work
 counter; an archive whose reads and scans together exceed it is refused with
 "availability scan exceeds total_bytes_read work limit".
@@ -182,9 +197,9 @@ presentation nodes (hierarchy visits under I1), one `tileset.json` value node an
 bytes per tile. Content volume is bounded separately. An archive over 1 GiB,
 2 GiB of reads or 16 million payload elements is refused at any tile count, so
 dense vector content can reach those ceilings well below 100,000 tiles.
-`--explicit` vector output keeps its whole hierarchy in one `tileset.json` of
-about 50.5 value nodes per tile. It reaches the 131,072 value-node ceiling at
-about 2,595 tiles. Measured costs at these ceilings are recorded in
+Explicit vector archives, written by the `--explicit` mode removed in 0.4.0,
+keep their whole hierarchy in one `tileset.json` of about 50.5 value nodes per
+tile. They reach the 131,072 value-node ceiling at about 2,595 tiles. Measured costs at these ceilings are recorded in
 [bench/architecture_audit/validator_caps](../bench/architecture_audit/validator_caps/README.md).
 The pinned C1 contract record
 ([c1-payload-integrity-contract.md](architecture/c1-payload-integrity-contract.md),

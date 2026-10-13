@@ -222,6 +222,103 @@ pub(super) fn metadata(
     Ok((sources, labels_removed(textures), labels_removed(samplers)))
 }
 
+/// One bounded decoder shared by the retained finite-source consumer and streamed images.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ImageInfo {
+    pub mime_type: &'static str,
+    pub extension: &'static str,
+    pub width: u32,
+    pub height: u32,
+}
+fn admitted_decoder<'a>(
+    encoded: &'a [u8],
+    mime: Option<&str>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<(impl ImageDecoder + 'a, ImageInfo)> {
+    let detected =
+        image::guess_format(encoded).map_err(|_| invalid("image signature is invalid"))?;
+    let (mime_type, extension, format) = match mime {
+        Some("image/png") => ("image/png", "png", ImageFormat::Png),
+        Some("image/jpeg") => ("image/jpeg", "jpg", ImageFormat::Jpeg),
+        Some(_) => return Err(unsupported("only PNG/JPEG images are supported")),
+        None => match detected {
+            ImageFormat::Png => ("image/png", "png", ImageFormat::Png),
+            ImageFormat::Jpeg => ("image/jpeg", "jpg", ImageFormat::Jpeg),
+            _ => return Err(unsupported("only PNG/JPEG image signatures are supported")),
+        },
+    };
+    if detected != format {
+        return Err(invalid("image MIME type does not match encoded bytes"));
+    }
+    match format {
+        ImageFormat::Png => png_framing(encoded, check)?,
+        // A terminal-marker requirement supplements pixel decoding; it
+        // does not claim a separate complete JPEG stream schema check.
+        ImageFormat::Jpeg if !encoded.ends_with(&[0xff, 0xd9]) => {
+            return Err(invalid("JPEG requires terminal EOI marker"));
+        }
+        _ => {}
+    }
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_DIMENSION);
+    limits.max_image_height = Some(MAX_DIMENSION);
+    // This allocation ceiling is a decoder guard. Callers also charge their
+    // encoded/RGBA owners; image's internal limits alone do not bound RSS.
+    limits.max_alloc = Some(128 * 1024 * 1024);
+    let mut reader = ImageReader::with_format(Cursor::new(encoded), format);
+    reader.limits(limits);
+    let decoder = reader.into_decoder().map_err(image_error)?;
+    if !matches!(
+        decoder.color_type(),
+        ColorType::L8 | ColorType::La8 | ColorType::Rgb8 | ColorType::Rgba8
+    ) {
+        return Err(unsupported(
+            "only images with 8-bit decoded channels are supported",
+        ));
+    }
+    let (width, height) = decoder.dimensions();
+    let pixels = u64::from(width) * u64::from(height);
+    if width == 0 || height == 0 {
+        return Err(invalid("image dimensions must be nonzero"));
+    }
+    if width > MAX_DIMENSION || height > MAX_DIMENSION || pixels > MAX_IMAGE_PIXELS {
+        return Err(unsupported(
+            "image exceeds 4096 edge or 4 Mi pixel admission ceiling",
+        ));
+    }
+    Ok((
+        decoder,
+        ImageInfo {
+            mime_type,
+            extension,
+            width,
+            height,
+        },
+    ))
+}
+
+/// Decodes one captured image, with per-image guards and no aggregate payload ceiling.
+/// The caller charges encoded bytes, decoder workspace and the owning RGBA8 allocation.
+pub(crate) fn decode_image(
+    encoded: &[u8],
+    mime: Option<&str>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<(ImageInfo, Vec<u8>)> {
+    if encoded.len() > MAX_SOURCE_BYTES {
+        return Err(unsupported(
+            "image exceeds 32 MiB encoded-byte admission ceiling",
+        ));
+    }
+    let (decoder, info) = admitted_decoder(encoded, mime, check)?;
+    check()?;
+    let rgba = DynamicImage::from_decoder(decoder)
+        .map_err(image_error)?
+        .into_rgba8()
+        .into_raw();
+    check()?;
+    Ok((info, rgba))
+}
+
 pub(super) fn decode(
     doc: &Value,
     buffers: &[&[u8]],
@@ -268,57 +365,12 @@ pub(super) fn decode(
         if total_bytes > MAX_SOURCE_BYTES {
             return Err(unsupported("owned image bytes exceed 32 MiB"));
         }
-        let detected =
-            image::guess_format(encoded).map_err(|_| invalid("image signature is invalid"))?;
-        let (mime_type, extension, format) = match source.get("mimeType").and_then(Value::as_str) {
-            Some("image/png") => ("image/png", "png", ImageFormat::Png),
-            Some("image/jpeg") => ("image/jpeg", "jpg", ImageFormat::Jpeg),
-            Some(_) => return Err(unsupported("only PNG/JPEG images are supported")),
-            None => match detected {
-                ImageFormat::Png => ("image/png", "png", ImageFormat::Png),
-                ImageFormat::Jpeg => ("image/jpeg", "jpg", ImageFormat::Jpeg),
-                _ => return Err(unsupported("only PNG/JPEG image signatures are supported")),
-            },
-        };
-        if detected != format {
-            return Err(invalid("image MIME type does not match encoded bytes"));
-        }
-        match format {
-            ImageFormat::Png => png_framing(encoded, check)?,
-            // A terminal-marker requirement supplements pixel decoding; it
-            // does not claim a separate complete JPEG stream schema check.
-            ImageFormat::Jpeg if !encoded.ends_with(&[0xff, 0xd9]) => {
-                return Err(invalid("JPEG requires terminal EOI marker"));
-            }
-            _ => {}
-        }
-        let mut limits = Limits::default();
-        limits.max_image_width = Some(MAX_DIMENSION);
-        limits.max_image_height = Some(MAX_DIMENSION);
-        // Decoded pixels are discarded serially. This allocation ceiling is a
-        // decoder guard, not a claim that image's internal limits bound RSS.
-        limits.max_alloc = Some(128 * 1024 * 1024);
-        let mut reader = ImageReader::with_format(Cursor::new(encoded), format);
-        reader.limits(limits);
-        let decoder = reader.into_decoder().map_err(image_error)?;
-        if !matches!(
-            decoder.color_type(),
-            ColorType::L8 | ColorType::La8 | ColorType::Rgb8 | ColorType::Rgba8
-        ) {
-            return Err(unsupported(
-                "only images with 8-bit decoded channels are supported",
-            ));
-        }
-        let (width, height) = decoder.dimensions();
-        let pixels = u64::from(width) * u64::from(height);
-        if width == 0 || height == 0 {
-            return Err(invalid("image dimensions must be nonzero"));
-        }
-        if width > MAX_DIMENSION || height > MAX_DIMENSION || pixels > MAX_IMAGE_PIXELS {
-            return Err(unsupported(
-                "image exceeds 4096 edge or 4 Mi pixel admission ceiling",
-            ));
-        }
+        let (decoder, info) = admitted_decoder(
+            encoded,
+            source.get("mimeType").and_then(Value::as_str),
+            check,
+        )?;
+        let pixels = u64::from(info.width) * u64::from(info.height);
         total_pixels = total_pixels
             .checked_add(pixels)
             .ok_or_else(|| unsupported("image pixel sum overflow"))?;
@@ -331,10 +383,10 @@ pub(super) fn decode(
         check()?;
         images.push(Image {
             bytes: encoded.to_vec(),
-            mime_type,
-            extension,
-            width,
-            height,
+            mime_type: info.mime_type,
+            extension: info.extension,
+            width: info.width,
+            height: info.height,
         });
     }
     Ok(images)

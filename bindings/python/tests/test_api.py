@@ -613,7 +613,7 @@ class WheelAPI(unittest.TestCase):
         before = source.read_bytes()
         output = self.root / "survey.3tz"
         result = rusty_tiles.vector_to_3tz(
-            source, output, layers=["survey"], height_offset=7, explicit=True,
+            source, output, layers=["survey"], height_offset=7,
         )
         self.assertEqual(result.report["features"], 1)
         self.assertEqual(result.report["layers"][0]["heightMode"], "explicit offset")
@@ -1014,6 +1014,24 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertFalse(output.exists())
 
+    def test_retired_explicit_keyword_is_an_unknown_argument(self):
+        # Explicit vector and point-cloud output retired in 0.4.0 (H6); the
+        # keyword is rejected before any input or output work.
+        source = self.root / "retired.las"
+        write_las(source)
+        output = self.root / "retired.3tz"
+        events = []
+        for value in (True, False):
+            with self.assertRaisesRegex(TypeError, "explicit"):
+                rusty_tiles.point_cloud_to_3tz(source, output, source_crs="local",
+                                             explicit=value, callback=events.append)
+            with self.assertRaisesRegex(TypeError, "explicit"):
+                rusty_tiles.vector_to_3tz(self.root / "absent.geojson", output,
+                                          source_crs="local", explicit=value,
+                                          callback=events.append)
+        self.assertEqual(events, [])
+        self.assertFalse(output.exists())
+
     def test_point_callback_abort_preserves_output_and_reentry_is_isolated(self):
         source = self.root / "callback-points.las"
         write_las(source)
@@ -1049,7 +1067,6 @@ class WheelAPI(unittest.TestCase):
         output = self.root / "globe.3tz"
         result = rusty_tiles.point_cloud_to_3tz(
             source, output, source_crs="EPSG:4326", height_offset=7,
-            explicit=True,
         )
         self.assertEqual(result.report["resolvedCrs"], "EPSG:4326")
         self.assertTrue(rusty_tiles.validate(output)["ok"])
@@ -1149,32 +1166,31 @@ class WheelAPI(unittest.TestCase):
     def test_point_metadata_attributes_are_available_from_python(self):
         source = self.root / "points.las"
         write_las(source)
-        for explicit in (False, True):
-            output = self.root / f"attributes-{explicit}.3tz"
-            rusty_tiles.point_cloud_to_3tz(source, output, max_points=2,
-                                         metadata_attributes=True, explicit=explicit, source_crs="local")
-            self.assertTrue(rusty_tiles.validate(output)["ok"])
-            with zipfile.ZipFile(output) as archive:
-                for entry in archive.namelist():
-                    if not entry.endswith(".glb"):
-                        continue
-                    payload = archive.read(entry)
-                    length = struct.unpack_from("<I", payload, 12)[0]
-                    gltf = json.loads(payload[20:20 + length])
-                    binary = payload[28 + length:]
-                    metadata = gltf["extensions"]["EXT_structural_metadata"]
-                    primitive = gltf["meshes"][0]["primitives"][0]
-                    self.assertEqual(primitive["extensions"]["EXT_structural_metadata"]["propertyAttributes"], [0])
-                    for name, expected, kind in (("classification", 2, "B"),
-                                                 ("intensity", 7, "H"),
-                                                 ("return_number", 1, "B")):
-                        self.assertIn(name, metadata["propertyTables"][0]["properties"])
-                        prop = metadata["propertyAttributes"][0]["properties"][f"vertex_{name}"]
-                        accessor = gltf["accessors"][primitive["attributes"][prop["attribute"]]]
-                        view = gltf["bufferViews"][accessor["bufferView"]]
-                        for index in range(accessor["count"]):
-                            at = view.get("byteOffset", 0) + index * view["byteStride"]
-                            self.assertEqual(struct.unpack_from("<" + kind, binary, at)[0], expected)
+        output = self.root / "attributes.3tz"
+        rusty_tiles.point_cloud_to_3tz(source, output, max_points=2,
+                                     metadata_attributes=True, source_crs="local")
+        self.assertTrue(rusty_tiles.validate(output)["ok"])
+        with zipfile.ZipFile(output) as archive:
+            for entry in archive.namelist():
+                if not entry.endswith(".glb"):
+                    continue
+                payload = archive.read(entry)
+                length = struct.unpack_from("<I", payload, 12)[0]
+                gltf = json.loads(payload[20:20 + length])
+                binary = payload[28 + length:]
+                metadata = gltf["extensions"]["EXT_structural_metadata"]
+                primitive = gltf["meshes"][0]["primitives"][0]
+                self.assertEqual(primitive["extensions"]["EXT_structural_metadata"]["propertyAttributes"], [0])
+                for name, expected, kind in (("classification", 2, "B"),
+                                             ("intensity", 7, "H"),
+                                             ("return_number", 1, "B")):
+                    self.assertIn(name, metadata["propertyTables"][0]["properties"])
+                    prop = metadata["propertyAttributes"][0]["properties"][f"vertex_{name}"]
+                    accessor = gltf["accessors"][primitive["attributes"][prop["attribute"]]]
+                    view = gltf["bufferViews"][accessor["bufferView"]]
+                    for index in range(accessor["count"]):
+                        at = view.get("byteOffset", 0) + index * view["byteStride"]
+                        self.assertEqual(struct.unpack_from("<" + kind, binary, at)[0], expected)
 
     def test_typed_errors_and_failed_publication(self):
         for error in (rusty_tiles.DataError, rusty_tiles.EnvironmentError,

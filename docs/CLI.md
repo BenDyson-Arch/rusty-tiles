@@ -41,7 +41,7 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling by default. Their `--explicit` flag keeps the earlier explicit hierarchy, partitioning and payloads (point-cloud `tileset.json` is now compact JSON, and vector `vector-build.json` and its state hash follow the encoder revision). To move an existing explicit archive to implicit tiling, re-run its converter from the original source without `--explicit`; there is no archive-to-archive rewrite command. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling. `point-cloud` and `vector` write only this layout: their `--explicit` flag was removed in 0.4.0 and is now an unknown argument. The legacy `mesh-to-3tz` keeps `--explicit`, which selects the earlier explicit hierarchy, partitioning and payloads. To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
 
 The default layout is a bounded implicit forest. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
 
@@ -93,9 +93,8 @@ Grid-free globe placement works in the default build. CRS selection automaticall
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
-| `--explicit` | | off | Keep the earlier explicit hierarchy and binary partition |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
-| `--maxPoints` | `--max-points` | `50000` | Maximum points per tile, at least 1 |
+| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. Each point is one row of the tile's property table, and CesiumJS 1.146 cannot build the GPU metadata texture of a table wider than the WebGL maximum texture size (8192 on the pinned target) |
 | `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
@@ -106,7 +105,6 @@ Converts GeoJSON or GeoPackage layers into draft glTF vector content in a `.3tz`
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
 | `--layer` | | automatic for one layer | Select a spatial layer. Repeat for several. |
-| `--explicit` | | off | Keep the earlier explicit hierarchy and payloads; `vector-build.json` and the `tileset.json` state hash follow the encoder revision |
 | `--allLayers` | `--all-layers` | off | Include every spatial layer |
 | `--sourceCrs` | `--source-crs` | layer CRS | Override the input CRS, or `local` for metre XYZ |
 | `--heightOffset` | `--height-offset` | none | Metres added to source heights to give ellipsoidal height |
@@ -420,6 +418,14 @@ records proof limits, including a potentially loose certificate and no general
 appearance guarantee. The
 [bounded evidence](../bench/architecture_audit/mesh_approximation_f1d2/README.md)
 records independent decoding, public consumer queries and separate review.
+
+Known limitation: each leaf has one `source_triangle` property table with a row
+per leaf triangle. CesiumJS 1.146 cannot build the GPU texture of a property
+table wider than the WebGL maximum texture size (8192 on the pinned target), so with `--leaf-triangles` above 8192 it warns
+`Cannot create a texture for the property table "undefined"` and metadata
+styling through the GPU fails on those leaves; the table itself stays
+complete. Keep `--leaf-triangles` at or below 8192 when styling by
+metadata. This writer is retired with the new mesh tiler rather than changed.
 
 ## Machine output
 

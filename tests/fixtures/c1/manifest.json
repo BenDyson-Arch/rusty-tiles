@@ -893,10 +893,26 @@
     {
       "name": "zip64_count_max",
       "path": "zip64_count_max.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "ZIP64 claims u64MAX entries, above the 3TZ member ceiling; refused before limits and directory allocation.",
+      "sha256": "0b57512aacf322db120635818d986e5d06eb6de9f8e25fc71ca6b25c1001cf84"
+    },
+    {
+      "name": "zip64_count_above_ceiling",
+      "path": "zip64_count_above_ceiling.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "ZIP64 claims 178,956,971 entries, one above the 3TZ member ceiling; refused before limits and directory allocation.",
+      "sha256": "950196b15aca1f71e8ce7db2e6ed61cf7c3cf6851e2bad332c11f98784863409"
+    },
+    {
+      "name": "zip64_count_at_ceiling",
+      "path": "zip64_count_at_ceiling.3tz",
       "expectedKind": "resource_limit",
       "exitCode": 3,
-      "analyticFact": "ZIP64 claims u64MAX entries; admission must reject before directory allocation.",
-      "sha256": "0b57512aacf322db120635818d986e5d06eb6de9f8e25fc71ca6b25c1001cf84"
+      "analyticFact": "ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it and the 524,288 default entry limit refuses it.",
+      "sha256": "0fb5b4d97cd321340224bda578fa07bdc9417fd13dee4318fc1dbbc65dca0fda"
     },
     {
       "name": "zip_local_crc_mismatch",

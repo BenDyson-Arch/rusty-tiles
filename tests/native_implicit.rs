@@ -250,7 +250,7 @@ fn deep_implicit_mesh_validates_and_corrupt_subtrees_roots_and_templates_are_rej
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("polygon.geojson");
     let ring = |radius: f64, count: usize| {
@@ -270,7 +270,7 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
         .to_string(),
     )
     .unwrap();
-    let convert = |name: &str, explicit: bool| {
+    let convert = |name: &str| {
         let output = work.path().join(name);
         let mut command = support::rusty_tiles();
         command
@@ -293,16 +293,10 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
                 "--meshopt",
                 "--reproducible",
             ]);
-        if explicit {
-            command.arg("--explicit");
-        }
         success(command.output().unwrap());
         output
     };
-    let output = convert("polygon.3tz", false);
-    // The explicit archive publishes every raw payload once, in place. It is
-    // the reference now that forest archives retain no raw sources.
-    let reference = convert("explicit.3tz", true);
+    let output = convert("polygon.3tz");
     rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output)).unwrap();
     let forest = forest(&output, "QUADTREE");
     fn payload(bytes: &[u8]) -> (Vec<u8>, String) {
@@ -321,10 +315,59 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
             .map(str::to_owned)
             .collect::<Vec<_>>()
     };
-    let sources: BTreeSet<_> = payloads(&reference)
-        .iter()
-        .map(|name| payload(&member(&reference, name)))
-        .collect();
+    // The producer hierarchy (`explicitRoot` in `vector-build.json`) names every
+    // raw payload `t/<sha256>.glb`. Each is published in place under that name or
+    // restored exactly from its rebased copy through the recorded payload map.
+    fn raw_uris(node: &Value, out: &mut BTreeSet<String>) {
+        let contents = node["contents"].as_array().cloned().unwrap_or_default();
+        for content in contents.iter().chain(node.get("content")) {
+            out.insert(content["uri"].as_str().unwrap().to_owned());
+        }
+        for child in node["children"].as_array().into_iter().flatten() {
+            raw_uris(child, out);
+        }
+    }
+    let sha256 = |bytes: &[u8]| {
+        use sha2::Digest;
+        format!("{:x}", sha2::Sha256::digest(bytes))
+    };
+    let state = document(&output, "vector-build.json");
+    let mut named = BTreeSet::new();
+    raw_uris(&state["explicitRoot"], &mut named);
+    let mut raws = BTreeMap::new();
+    for (raw, entry) in state["payloads"].as_object().unwrap() {
+        let published = member(&output, entry["member"].as_str().unwrap());
+        let record = rusty_tiles::implicit::RebaseRecord {
+            raw_sha256: std::array::from_fn(|i| {
+                u8::from_str_radix(&raw[i * 2..i * 2 + 2], 16).unwrap()
+            }),
+            delta: serde_json::from_value(entry["delta"].clone()).unwrap(),
+            raw_root_node: entry["rootNode"].as_str().unwrap().to_owned(),
+            raw_json_length: entry["jsonLength"].as_u64().unwrap() as u32,
+        };
+        let bytes = rusty_tiles::implicit::restore_payload(&published, &record).unwrap();
+        assert_eq!(&sha256(&bytes), raw, "restored payload {raw}");
+        raws.insert(format!("t/{raw}.glb"), bytes);
+    }
+    for name in payloads(&output)
+        .into_iter()
+        .filter(|n| n.starts_with("t/"))
+    {
+        let bytes = member(&output, &name);
+        let stem = name
+            .strip_prefix("t/")
+            .unwrap()
+            .strip_suffix(".glb")
+            .unwrap();
+        assert_eq!(sha256(&bytes), stem, "in-place payload {name}");
+        assert!(raws.insert(name, bytes).is_none());
+    }
+    assert_eq!(
+        raws.keys().cloned().collect::<BTreeSet<_>>(),
+        named,
+        "every raw payload of the producer hierarchy is published once"
+    );
+    let sources: BTreeSet<_> = raws.values().map(|bytes| payload(bytes)).collect();
     let mut published = BTreeSet::new();
     let mut fills = 0;
     for name in payloads(&output) {

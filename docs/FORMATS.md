@@ -108,7 +108,7 @@ Local metre XYZ data needs no globe placement and works in the standard build:
 
 ```sh
 rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz \
-  --source-crs local --max-points 50000 --chunk-points 100000
+  --source-crs local --max-points 8192 --chunk-points 100000
 ```
 
 Georeferenced data needs a CRS and an explicit height offset:
@@ -133,12 +133,13 @@ The converter automatically uses native fallback when that feature is built. Oth
 
 ### What the output keeps
 
-The default output uses a disk-backed midpoint octree written as the bounded implicit forest, with one binary subtree per implicit root. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. `--explicit` keeps the earlier binary partition and explicit manifest.
+The default output uses a disk-backed midpoint octree written as the bounded implicit forest, with one binary subtree per implicit root. Coincident points are distributed deterministically, with overlapping actual bounds retained in tile metadata. The earlier `--explicit` binary partition and explicit manifest were removed in 0.4.0.
 
 - Points stream through disk-backed partitions. Chunk/leaf budgets limit record counts; schema, hierarchy and encoded metadata still contribute memory. P1 records measured RSS/scratch/descriptor growth rather than promising a whole-job bound.
 - Parents hold voxel samples. Leaves keep every point, including coincident points.
 - Metadata keeps source coordinates, source record indices, original RGB and supported numeric LAS fields.
 - Rendered positions are float32, and their rounding is reported.
+- A tile holds at most `--maxPoints` points, at most 8192 (the default), each one row of the tile's single `points` property table. CesiumJS 1.146 cannot build the GPU texture of a property table wider than the WebGL maximum texture size (8192 on the pinned target; the device limit varies), which disables metadata styling through custom shaders for that tile.
 - Scalar metadata keeps exact raw values, including unscaled 64-bit integers, and no-data/min/max declarations in the property schema. Admitted scaled fields are stored as decoded float64; scaled INT64/UINT64 Extra Bytes are explicitly unsupported to prevent silent integer rounding.
 
 Waveforms, array/untyped or undocumented extra dimensions, unknown VLR preservation and compound vertical CRSs are unsupported. Source and Extra Bytes scales must be positive finite. Source metadata is limited to 65,536 VLR/EVLR records and 16 MiB; point data streams separately. The [P1 contract](architecture/point-acceptance-contract.md) records the exact source, coordinate, precision and lifecycle boundaries.

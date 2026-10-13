@@ -493,10 +493,21 @@ fn altered_published_payloads_and_records_fail_integrity() {
         state.as_object_mut().unwrap().remove("payloads");
     });
     case.refuse(&damaged, "run a fresh conversion");
+
+    // A retired `--explicit` archive records neither `explicitRoot` nor an
+    // implicit tiling identity nor rebased payloads (pre-H6 explicit state shape).
+    with_state(&base, &damaged, |state| {
+        let state = state.as_object_mut().unwrap();
+        state.remove("explicitRoot");
+        state.insert("payloads".into(), json!({}));
+        state["config"].as_object_mut().unwrap().remove("tiling");
+    });
+    case.refuse(&damaged, "retired explicit vector layout");
+    case.refuse(&damaged, "Run a fresh conversion without reuseTileset");
 }
 
 /// Re-specified from `native_implicit.rs`: a moved and a deleted point under
-/// reuse match a fresh build, and an implicit archive is no `--explicit` cache.
+/// reuse match a fresh build.
 #[test]
 fn moved_and_deleted_features_reuse_from_a_forest_archive() {
     let work = tempfile::tempdir().unwrap();
@@ -514,7 +525,7 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
         )
         .unwrap()
     };
-    let run = |name: &str, previous: Option<&Path>, explicit: bool| {
+    let run = |name: &str, previous: Option<&Path>| {
         let path = work.path().join(name);
         let mut command = support::rusty_tiles();
         command
@@ -532,9 +543,6 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
         if let Some(previous) = previous {
             command.arg("--reuseTileset").arg(previous);
         }
-        if explicit {
-            command.arg("--explicit");
-        }
         (path, command.output().unwrap())
     };
     let success = |result: std::process::Output| {
@@ -545,15 +553,15 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
         )
     };
     write(&features);
-    let (original, result) = run("original.3tz", None, false);
+    let (original, result) = run("original.3tz", None);
     success(result);
     // Keep the first source anchor and move a later feature across partitions.
     features[24]["geometry"]["coordinates"] = json!([3.5, 1.5, 0]);
     features.remove(31);
     write(&features);
-    let (updated, result) = run("updated.3tz", Some(&original), false);
+    let (updated, result) = run("updated.3tz", Some(&original));
     success(result);
-    let (fresh, result) = run("fresh.3tz", None, false);
+    let (fresh, result) = run("fresh.3tz", None);
     success(result);
     for path in [&updated, &fresh] {
         let archive = members(path);
@@ -578,8 +586,6 @@ fn moved_and_deleted_features_reuse_from_a_forest_archive() {
     let report: Value = serde_json::from_slice(&members(&updated)["conversion.json"]).unwrap();
     assert!(report["reuse"]["reusedContents"].as_u64().unwrap() > 0);
     assert!(report["reuse"]["rebuiltContents"].as_u64().unwrap() > 0);
-    let (_, result) = run("explicit-cache.3tz", Some(&updated), true);
-    assert!(!result.status.success());
 }
 
 /// Base, reused and fresh forest archives each validate through I1's reader,

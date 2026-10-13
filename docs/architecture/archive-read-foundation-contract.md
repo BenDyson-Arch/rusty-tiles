@@ -92,7 +92,14 @@ lookup outcome separate from I/O.
 
 The same catalog supplies exact index length 24 times the checked non-index
 entry count, last-central-entry identity and every offset/hash/name association.
-Verify the index's stored CRC explicitly. Member reads and hashes consume exact
+That length is the index's only size bound: the last central entry named
+`@3dtilesIndex1@` is exempt from the per-member limit, and every other member,
+including an index-named one elsewhere, keeps it. A declared count above the
+178,956,970-member 3TZ ceiling is Unsupported at end-record admission, before
+the entry limit and any catalog allocation, so the index is at most
+4,294,967,256 bytes. The index is read in whole-row 65,520-byte chunks, never
+whole. Verify the index's stored CRC explicitly; a CRC mismatch outranks the
+first row failure, which is held until the whole index has been read. Member reads and hashes consume exact
 admitted ranges, stop at their declared lengths and verify CRC, including empty
 members. Underlying InvalidData/other actual read or seek failures remain Io;
 premature EOF is malformed. No ZIP parser transforms raw I/O into a metadata
