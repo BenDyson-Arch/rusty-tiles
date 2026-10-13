@@ -42,8 +42,8 @@ fixed numbers, so an archive's legitimate work could exceed them: the H16 tiler 
 - **S**: the admitted stored member bytes (VS-A), fixed before any budgeted work.
 - **Path stack**: the C2 tile facts of the current traversal path, root first.
 - **Rank**: a member's catalog position (VS-A).
-- **Facts record**: the 131-byte per-URI record of C2 facts and the vertex count, keyed by
-  rank.
+- **Facts record**: the 195-byte per-URI record of C2 facts, the vertex count and the H23
+  replay receipt (VS-B-11), keyed by rank.
 - **In domain**: no exclusion and no precheck stop so far.
 
 ## Invariants
@@ -115,9 +115,9 @@ replaced by a second bit per rank (inspected) and the facts record, written at t
 inspection and read at each later reference (C1 vertex count for the tile budget, C2 facts for
 the exclusion bits and the precheck). The record holds the C2 facts exactly (`UriBounds`, `T`,
 `Nodes` or overflow, `Idx`, `E`, `B`, `Dec`, `J`, `Res`, `Prim`, the maximum node depth, the
-exclusion bits) and the vertex count. The store is chosen from N before traversal, like the
-catalog (CAT-5): rank-indexed pages of 64 records in memory when `N·131 ≤ 72 MiB` (every archive
-within the default entry limit 2^19), otherwise a rank-indexed scratch file read and written one
+exclusion bits), the vertex count and the replay receipt (VS-B-11). The store is chosen from N
+before traversal, like the catalog (CAT-5): rank-indexed pages of 64 records in memory when
+`N·195 ≤ 100 MiB` (every archive within the default entry limit 2^19), otherwise a rank-indexed scratch file read and written one
 record at a time. The forced-spill profile always uses the file. Repeat references are never
 re-inspected and never re-charged (C1 semantics unchanged). Recomputing evicted facts was
 rejected: it costs `Σ_refs size(u)`, which is not linear in S when more distinct payloads than
@@ -178,6 +178,57 @@ of the document and memoized for one schema check, then confirmed by the exact c
 the check is linear in the document, and its failure message is the built-in's
 `VALUE has non-unique elements`.
 
+**VS-B-11. Stream step 1 by payload replay (H23; amends C2 "Stream algorithm" step 1).** The
+first, full C1 inspection of a payload yields a private 64-byte receipt: the SHA-256 of the
+member bytes (with the payload kind) and of the ordered transcript of its external buffer and
+image resolutions (each entry `u64 URI length, URI, u64 byte length, bytes`, the full returned
+bytes). It exists only after that inspection succeeded, and is stored in the payload's facts
+record (VS-B-5), so a record is 195 bytes. Step 1 of the stream is now: re-read the member and
+replay it against that receipt (`payload::replay_scene`). Replay checks the member's byte
+allowance, then its digest before interpreting any layout; resolves every external resource in
+the original order under the original limits, charging the re-read to `containmentBytesRead` as
+before; reconstructs the same views, accessors and scene graph with the same parser and
+decoders; and compares the transcript digest before any consumer event. It skips only the
+accessor-value pass (extrema, finiteness, restart and index-range predicates) and the KTX2
+container inspection, which the receipt's admission already decided for the same bytes. The
+units are unchanged: `E`, `B`, `Dec` and the rest are still charged per reference, so they bound
+the replay (which does no more work than the full inspection plus linear hashing of bytes `B`
+already counts).
+
+- **Admission order.** A receipt is written only after its payload's full first admission
+  succeeded, and replay runs only for a reference whose precheck step passed while the archive
+  was in domain (VS-B-4). The stream's outcome is published only after whole-archive C1
+  admission, with no exclusion and no precheck stop. So replay never decides a C1 verdict, and
+  no replayed result reaches a report unless the whole archive was admitted.
+- **Trust.** Receipts are read back only from this validation's own facts store, for a rank
+  whose inspected bit it set, during the same validation. They are never decoded from archive
+  bytes, reports or metadata, and never outlive the validation (the store is dropped before the
+  report rows are ordered).
+- **Persistence bound.** One receipt per inspected member, inside its record: resident at most
+  `N·195` bytes when that fits 100 MiB (97.5 MiB at the default entry limit of 2^19), otherwise
+  in the rank-indexed scratch file (`N·195` bytes of disk, one record read per reference).
+- **Unchanged bytes.** For bytes identical to the first admission, replay produces the same
+  consumer events, facts and failures as the full inspection did (the old step 1), so every
+  verdict and message is unchanged.
+- **Changed bytes (failure-order distinction, kept explicit).** If the archive changes during
+  validation, changed bytes never reach a consumer event, but the failure is not always the one a
+  full re-inspection would give. A changed member fails its digest check, `source archive
+  changed during inspection`, before parsing. A changed external resource can first fail an
+  existing size, range, layout, decoder or allocation gate in replay order, or a real I/O error
+  of the resolver, before the transcript comparison; only otherwise is it the changed-source
+  error. A full re-inspection could instead have failed a skipped value check. This is not an
+  atomic snapshot of the archive; the final source-identity check after traversal is unchanged.
+
+**Allocation ledger (amends C2 "Representation and memory").** Phase-1 and precheck facts are
+the facts store (VS-B-5, receipts included), the path stack and the level chain; the tile arena,
+reference list and per-URI table are gone. Phase 2 reserves its arena (0.56 MiB at the default
+caps, separate from the phase-1 rotation arena) before the first vertex test of the first
+streamed reference, and keeps one bitmap of at most `accessorElements/8` bytes. Replay allocates
+the payload's views and decoded buffers as the first admission did (at most
+`documentDecodedBytes` per payload, charged as `Dec`) and two SHA-256 states; it allocates no
+per-accessor extrema. Every reservation is fallible; a refusal during the stream is recorded and
+published as ResourceLimit at precedence 4, as before.
+
 ## Memory bound
 
 Traversal memory that depends on the archive (design §1.4, `M_walk`) is now configuration only:
@@ -187,7 +238,7 @@ Traversal memory that depends on the archive (design §1.4, `M_walk`) is now con
 | Bits per rank (used, inspected, subtree) | `3·⌈N/64⌉·8/8` B, 64 MiB at the member ceiling |
 | Path stack and level chain | `(hierarchyDepth + 2)` entries of about 400 B each |
 | C2 arenas, bitmap | two arenas of `(16·(nodeDepth + 1) + 32)` values (about 0.56 MiB each), bitmap ≤ `accessorElements/8` B |
-| Facts | resident ≤ 72 MiB; spilled: one record |
+| Facts (receipts included) | resident ≤ 100 MiB; spilled: one record |
 | Memo | ≤ 64 MiB plus a summary header per summarized document within it |
 | Live documents | ≤ `liveDocumentBytes` (estimate: raw + 128 B per value node) |
 | I1 live path | ≤ `documentDecodedBytes`, index tables included |
@@ -196,7 +247,7 @@ Traversal memory that depends on the archive (design §1.4, `M_walk`) is now con
 | One payload in flight | as C1 (`memberBytes`, `documentDecodedBytes`, accessor plans) |
 
 The catalog, the payload rows and their sorts are VS-A's. Disk: the facts file is
-`N·131` bytes, sparse where ranks have no payload.
+`N·195` bytes, sparse where ranks have no payload.
 
 ## Work bound
 
@@ -233,9 +284,14 @@ as floors: at the floors, today's bounds hold unchanged.
    charge and one below; the I1 table charge at the cap and one below; the label cap; the
    `uniqueItems` keyword against the built-in on generated arrays (both sizes, `±0`, nested
    near-duplicates); budget resolution at each crossover.
-3. **Sensitive mutants** of each invariant, each caught by at least one control.
+3. **Sensitive mutants** of each invariant, each caught by at least one control, plus the H23
+   payload mutants and the existing C2 production mutants re-run on the integrated source.
+   The reference traversal of the controls streams after traversal with full re-inspection
+   (the old phase 2), so every differential control also compares replay with it.
 4. **Hostile archives** (`ext-amplification-20261013`): still bounded, with time and RSS.
-5. **Scale** (after the memory test on the host ends): peak RSS flat across tile counts up to
+5. **Performance**: mf2-lod3 and the perf-lane validate cases against VS-A, and the C2-WB
+   accessor-heavy and byte-heavy classes in ns per unit with replay, against τ.
+6. **Scale** (after the memory test on the host ends): peak RSS flat across tile counts up to
    the gate (d) archives and the 8.1 GB H16 archive, and time linear in tiles; run through the
    scale driver (volume caps raised, budgets scaled).
 
