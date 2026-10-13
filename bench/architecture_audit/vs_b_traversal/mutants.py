@@ -72,8 +72,11 @@ MUTANTS = [
     ("labels-boundary", [(V, "        if label.len() > LABEL_BYTES {", "        if label.len() >= LABEL_BYTES {")]),
     # VS-B-10: the pairwise path loses the 0 / -0.0 identity.
     ("unique-pairwise-bits", [(SCHEMA, "if pairwise { h.exact } else { h.bits }", "h.bits")]),
-    # VS-B-10: the hash-set path identifies 0 and -0.0.
-    ("unique-set-exact", [(SCHEMA, "(pairwise || same_bits(item, other))", "true")]),
+    # VS-B-10: the hash-set path identifies 0 and -0.0 (exact buckets and no bit comparison).
+    # Either edit alone is equivalent: the `bits` buckets and the `same_bits` confirmation each
+    # separate them (the first runs recorded both single edits as not caught).
+    ("unique-set-exact", [(SCHEMA, "if pairwise { h.exact } else { h.bits }", "h.exact"),
+                          (SCHEMA, "(pairwise || same_bits(item, other))", "true")]),
     # VS-B-2: the elements budget scales at 8 per byte.
     ("kappa-elements", [(TYPES, "            total_payload_elements: at_least(self.total_payload_elements, Kappa(16, 1)),",
                          "            total_payload_elements: at_least(self.total_payload_elements, Kappa(8, 1)),")]),

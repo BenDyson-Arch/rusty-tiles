@@ -1259,6 +1259,9 @@ struct Check<'a> {
     memo: HashMap<String, Rc<Summary>>,
     /// EM (VS-B-6): bytes held by summaries and by the events of recorders in progress.
     memo_bytes: usize,
+    /// The largest `memo_bytes` of the validation (VS-B-6 controls).
+    #[cfg(test)]
+    memo_peak: usize,
     /// EM: the expansions being traversed in full, innermost last.
     recording: Vec<Recorder>,
     /// The serial of the next recorder (owner tags of the path stack).
@@ -1927,6 +1930,10 @@ impl Check<'_> {
         recorder.events.push(event);
         recorder.held += cost;
         self.memo_bytes += cost;
+        #[cfg(test)]
+        {
+            self.memo_peak = self.memo_peak.max(self.memo_bytes);
+        }
         Ok(())
     }
     /// EM: the innermost recorder's document gets no summary; its events are freed.
@@ -1983,6 +1990,10 @@ impl Check<'_> {
                 let once_references = self.once_references - recorder.once_references;
                 let once_bytes = self.once_bytes - recorder.once_bytes;
                 self.memo_bytes += header;
+                #[cfg(test)]
+                {
+                    self.memo_peak = self.memo_peak.max(self.memo_bytes);
+                }
                 Some(Rc::new(Summary {
                     visits: self.task_visits - recorder.visits,
                     references: self.resources.reference_visits
@@ -2921,6 +2932,8 @@ struct Inspection {
     units: u64,
     #[cfg(test)]
     prepared: u64,
+    #[cfg(test)]
+    memo_peak: usize,
     /// `task_visits`, `reference_visits` and `bytes_read` at the end.
     #[cfg(test)]
     counters: [u64; 3],
@@ -3059,6 +3072,8 @@ fn inspect_run(
         deferred: DEFERRED_STREAM.with(std::cell::Cell::get).then(Vec::new),
         memo: HashMap::new(),
         memo_bytes: 0,
+        #[cfg(test)]
+        memo_peak: 0,
         recording: Vec::new(),
         recorder_serial: 0,
         once_references: 0,
@@ -3259,6 +3274,8 @@ fn inspect_run(
         prepared: check.prepared,
         #[cfg(test)]
         elements: check.elements,
+        #[cfg(test)]
+        memo_peak: check.memo_peak,
         #[cfg(test)]
         counters: [
             check.task_visits,

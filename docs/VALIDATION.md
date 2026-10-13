@@ -153,7 +153,13 @@ frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. H7 removed
 `rtcCenter`: its only carrier, a b3dm feature table, is Unsupported. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
-`notInspected` field records these boundaries explicitly. A required unsupported
+`notInspected` field records these boundaries explicitly. Unsupported glTF extension
+names declared by payloads are listed as they are named, at most the 64 byte-smallest
+of at most 256 bytes each; when any is left out the report adds
+`notInspectedTruncated: true`. Decoded containment streams each reference as soon as
+its precheck step passes and publishes the first escape only after the whole archive
+passed C1 with no exclusion and no precheck stop, replaying each payload against
+digests of its own first, full inspection. A required unsupported
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 
@@ -208,8 +214,10 @@ index included), fixed when the catalog is admitted.
 - **Per-item format limits** are fixed and cannot be changed: 8 MiB JSON (`jsonBytes`) with
   depth 64, 131,072 JSON value nodes per document (`documentItems`), 128 MiB per member
   (`memberBytes`), 4 million accessor elements per payload, 128 MiB decoded views per
-  document, 128 levels of hierarchy depth, 256 MiB of live tileset documents
-  (`liveDocumentBytes`) and the C2 span and node-depth limits.
+  document (which also holds an implicit subtree path's members, external buffers and
+  availability index tables), 128 levels of hierarchy depth, 256 MiB of tileset documents
+  held at once on the external-tileset path (raw bytes plus 128 bytes per JSON value node,
+  `liveDocumentBytes`) and the C2 span and node-depth limits.
 - **Volume caps** (`sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`,
   `archiveStoredBytes`) are opt-in and `null` unless set. Without them the archive is bounded
   by the file and the format: the 3TZ member ceiling (Unsupported), at least 46 directory
@@ -221,7 +229,9 @@ index included), fixed when the catalog is admitted.
   1 MB of stored bytes have exactly the floors. The report's `limitDerivation` gives each
   budget's floor, its ratio `perStoredByte` and its `source` (`floor`, `scaled` or
   `explicit`); `storedBytes`, `limits` and `limitDerivation` depend only on S and the
-  request's overrides.
+  request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so
+  a budget cannot grow from what traversal finds
+  ([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
 
 `--maxVolume KEY=N` (repeatable; `--max-volume`), Python `max_volume={KEY: N}` and Rust
 `ValidationRequest::max_volume(LimitKey, N)` set a volume cap or replace a budget. Values may
@@ -235,7 +245,8 @@ error carries `"limit": {"limit", "value", "observed", "derivation"}`, Python
 
 Each placement of a shared external tileset is charged its full visits,
 references and document bytes, as if it were read and walked again. In fact each
-external-tileset document is parsed and checked once. Later placements re-check
+external-tileset document is parsed and checked once, while its summaries fit
+64 MiB (beyond that, later placements are walked again with the same result). Later placements re-check
 only what depends on the placement: the root's bounds and geometric error against
 the referencing tile, the depth limits, and decoded containment through that
 placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
@@ -255,6 +266,9 @@ Separately bounded ZIP envelope/tail/header reads are outside that member-work
 counter. These admission limits
 are engineering bounds, not a total-process RSS promise. The serialized `limits` are the
 effective values of the validation.
+Validation memory does not grow with tiles, references or payloads: the traversal
+keeps only its current path, per-payload facts go to scratch once they exceed
+100 MiB, and summaries of shared external tilesets are capped at 64 MiB.
 
 The entry, visit, reference, central-directory, value-node, member and decoded
 ceilings are sized for default (implicit) vector output at its 100,000-tile
