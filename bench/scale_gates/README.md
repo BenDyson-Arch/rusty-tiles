@@ -10,7 +10,7 @@ ready for whichever binary and command line the tiler ends up with.
 | (a) | spilled 5.26×10^8-triangle production octree | `generate.py mesh --preset production --large` | `gate-a` |
 | (b) | 10^4 primitives and 10^4 holes/islands per root | `generate.py density` | `gate-b` |
 | (c) | procedural-texture bake | `generate.py texture --texture-size 1024` | `gate-c` |
-| (d) | ≥ 2^22 tiles; > 4 GiB output | `gen_archive.py implicit`, `gen_archive.py large` | `gate-d-implicit`, `gate-d-large` |
+| (d) | ONE archive: ≥ 2^22 available tiles AND > 4 GiB | `gen_archive.py combined` | `gate-d-combined` |
 
 Each run records peak RSS, scratch, wall time, output size and tile count, a
 `rusty-tiles validate` run with its own time and RSS, and optionally Cesium load and
@@ -70,6 +70,26 @@ zlib-compressed bytes depend on the zlib build.
   stores each image's sha256, colour class, pattern, channel means and 16 probe texels.
 
 ## Synthetic archives (`gen_archive.py`)
+
+`combined` is the single-archive gate (d) case. Defaults use QUADTREE levels12,
+subtreeLevels6 and contentLevels4: exactly 5,592,405 available tiles, 4,097
+subtrees and 85 triangle GLBs padded to 56 MiB each. The contents alone total
+4,991,221,760 bytes; ZIP headers, subtrees and index add to this. Padding is sparse
+zero-filled BIN space, with valid CRCs; logical bytes and allocated bytes are
+reported separately. All contents are referenced and each is below 128 MiB.
+The inherited validator/browser budget remains provisional, not an executed pass.
+
+```sh
+python3 -I bench/scale_gates/gen_archive.py combined --out archives/combined-d
+python3 -I bench/scale_gates/run_case.py --case combined-d --budget gate-d-combined \
+  --binary target/release/rusty-tiles --input ~/.cache/rusty-tiles-scale/archives/combined-d
+```
+
+Manifest scale checks conjunctively require `truth.tiles >= 4194304` and
+`truth.archive_bytes >= 4294967297` on this same input. Small overrides remain
+BELOW-SCALE. The separate `implicit` and `large` cases are diagnostic controls,
+not joint satisfaction of gate (d). Combined manifests always stream-hash the
+actual archive, including sparse zero padding, and report its logical byte size.
 
 The archives are stored ZIPs. ZIP64 records are written only where a field overflows. Every
 member is referenced. The `@3dtilesIndex1@` index is the last central entry: MD5 of the name
@@ -258,3 +278,24 @@ Proof limits:
   subtrees: about 40k accessor records per 10^4-primitive region.
 - Byte determinism is per writer version and NumPy integer/IEEE semantics. Only same-machine
   regeneration is tested.
+
+## H18 combined fixture execution
+
+The default combined fixture was generated and independently inspected on
+2026-10-13: 5,592,405 available tiles, 4,992,428,223 logical bytes, 4,097
+subtrees, 85 contents and 4,184 ZIP members. Sparse physical allocation is
+1,597,440 bytes. The independent reader checks every subtree, all content
+bounds and CRCs, strict index associations and ZIP64 offsets. All 16 harness
+self-tests pass, including controls missing either scale requirement. The retained
+`check_combined_archive.py --input <generator-directory> --report-json <receipt>`
+reader reruns the default full-archive check without trusting manifest counts.
+
+[combined-acceptance.json](combined-acceptance.json) binds exact source, archive,
+execution and independent review identities. The archive and bulk evidence are
+retained under `~/.cache/rusty-tiles-evidence/h18-combined-scale-20261013/`.
+
+The current validator returns exit 3, `resource_limit: source archive exceeds
+byte limit`, before traversal. Both scale predicates pass, but harness validation
+fails. H18 supplies the requested combined fixture; roadmap gate (d) remains
+unmet until successful validator/resource and consumer acceptance. No production
+limits were raised and no browser acceptance is claimed.
