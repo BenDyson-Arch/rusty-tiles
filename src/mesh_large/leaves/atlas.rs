@@ -289,7 +289,13 @@ fn pack(
 /// pages filtered with viewer-generated mips carry eight texels of real source
 /// context around every island, aligned to eight texels, so the first three
 /// box-filtered levels of an island never read a neighbouring island.
-fn crop_padding(profile: Profile, sampler: SourceSampler) -> (u32, u32) {
+/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel
+/// no-feature gutter and align islands to eight texels, so the first three
+/// authored mode levels used by coarse proxies never merge two islands.
+fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32, u32) {
+    if class == Class::Id {
+        return (2, 8);
+    }
     match profile {
         Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
         Profile::Lossless => (2, 1),
@@ -320,6 +326,7 @@ fn triangles_by_primitive(
             corner_depths,
             uvs: Vec::new(),
             material: None,
+            feature_id_textures: Vec::new(),
         })
         .collect())
 }
@@ -363,6 +370,7 @@ fn density_image(
         Class::Colour => 0,
         Class::Normal => 1,
         Class::Data => 2,
+        Class::Id => 3,
     };
     services.cache.get((index, drop * 4 + class_key), || {
         let memory = usize::try_from(services.memory).map_err(|_| resource())?;
@@ -815,7 +823,7 @@ fn layout(
                     p.triangles.len(),
                 )
             } else {
-                let (gutter, align) = crop_padding(profile, sampler);
+                let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
                 crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?
             };
             p.uvs.push(uvs);

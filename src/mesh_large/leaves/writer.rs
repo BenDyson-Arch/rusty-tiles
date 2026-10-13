@@ -260,6 +260,35 @@ fn validate_closure(atlas: &PreparedAtlas) -> Result<bool, JobError> {
                 )?;
             }
         }
+        for entry in &primitive.feature_id_textures {
+            let texture = &entry["texture"];
+            let n = index(
+                &texture["index"],
+                atlas.textures.len(),
+                "prepared ID texture missing",
+            )?;
+            let uv = texture.get("texCoord").cloned().unwrap_or(json!(0));
+            index(&uv, primitive.uvs.len(), "prepared ID TEXCOORD missing")?;
+            let channels = texture["channels"].as_array();
+            if entry["featureCount"].as_u64().is_none()
+                || channels.is_none_or(|c| {
+                    c.is_empty()
+                        || c.len() > 4
+                        || c.iter().any(|v| v.as_u64().is_none_or(|v| v > 3))
+                })
+                || atlas.textures[n].get("extensions").is_some()
+            {
+                return Err(invalid(
+                    "prepared ID texture entry is not a PNG feature ID texture",
+                ));
+            }
+            let s = index(
+                &atlas.textures[n]["sampler"],
+                atlas.samplers.len(),
+                "prepared ID texture sampler missing",
+            )?;
+            super::id_texture::check_sampler(&atlas.samplers[s])?;
+        }
     }
     Ok(basis)
 }
@@ -430,9 +459,12 @@ pub(super) fn encode(
             attributes[format!("_FEATURE_ID_{set}")] =
                 json!(wire.attribute(&bytes, count, 4, 5126, "SCALAR")?);
         }
-        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":[
-            {"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"},
-            {"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}]}}});
+        let mut feature_ids = vec![
+            json!({"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"}),
+            json!({"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}),
+        ];
+        feature_ids.extend(primitive.feature_id_textures.iter().cloned());
+        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":feature_ids}}});
         if let Some(material) = &primitive.material {
             output["material"] = json!(materials.len());
             materials.push(material.clone());
@@ -622,6 +654,7 @@ mod tests {
                     .map(|set| vec![[set as f32 / 8.0, 0.25]; 6])
                     .collect(),
                 material: Some(material),
+                feature_id_textures: Vec::new(),
             }],
             pages: vec![PreparedPage {
                 bytes: png.into_inner(),
@@ -798,6 +831,54 @@ mod tests {
         assert_eq!(page, input.pages[0].bytes);
     }
     #[test]
+    fn id_texture_sets_follow_the_source_sets_and_need_nearest() {
+        use super::super::id_texture::{bake, IdSet, Request};
+        // Five sets: the leaf carries 2 + 5 featureIds; nothing caps the count.
+        let sets = [IdSet { bytes: 1 }; 5];
+        let ids: Vec<u32> = (0..16 * 5).map(|i| (i % 7) as u32).collect();
+        let support = vec![1; 16];
+        let id = bake(&Request {
+            width: 4,
+            height: 4,
+            sets: &sets,
+            ids: &ids,
+            support: &support,
+            memory_limit: 1 << 30,
+        })
+        .unwrap();
+        let mut input = atlas();
+        let refs = id.append_level(&mut input, 0).unwrap();
+        input.primitives[0].feature_id_textures = refs
+            .iter()
+            .enumerate()
+            .map(|(k, r)| r.feature_id(0, &format!("annotation_{k}")))
+            .collect();
+        let leaf = encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).unwrap();
+        let (doc, _) = parse(&leaf.glb);
+        let ids =
+            &doc["meshes"][0]["primitives"][0]["extensions"]["EXT_mesh_features"]["featureIds"];
+        assert_eq!(ids.as_array().unwrap().len(), 7);
+        for (k, r) in refs.iter().enumerate() {
+            let entry = &ids[2 + k];
+            assert_eq!(entry["nullFeatureId"], 255);
+            let texture = &doc["textures"][entry["texture"]["index"].as_u64().unwrap() as usize];
+            let sampler = &doc["samplers"][texture["sampler"].as_u64().unwrap() as usize];
+            assert_eq!(
+                (sampler["magFilter"].as_u64(), sampler["minFilter"].as_u64()),
+                (Some(9728), Some(9728))
+            );
+            assert_eq!(
+                doc["images"][texture["source"].as_u64().unwrap() as usize]["mimeType"],
+                "image/png"
+            );
+            assert_eq!(entry["texture"]["channels"], json!(r.channels));
+        }
+        // Mutant: a LINEAR sampler on an ID texture is refused by the writer.
+        let s = input.textures[refs[0].texture]["sampler"].as_u64().unwrap() as usize;
+        input.samplers[s]["magFilter"] = json!(9729);
+        assert!(encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).is_err());
+    }
+    #[test]
     fn float_profiles_keep_position_bits_and_each_node_owns_its_trs() {
         for profile in [Profile::Quality, Profile::Lossless] {
             let mut input = atlas();
@@ -806,6 +887,7 @@ mod tests {
                 corner_depths: vec![[1; 3]],
                 uvs: vec![],
                 material: None,
+                feature_id_textures: Vec::new(),
             });
             let leaf = encode(&input, &plan(profile), 1, TILE_LIMIT).unwrap();
             let (doc, bin) = parse(&leaf.glb);

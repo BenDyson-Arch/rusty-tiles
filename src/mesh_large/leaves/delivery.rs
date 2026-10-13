@@ -1,4 +1,6 @@
 //! Explicit profile delivery. PNG is raw level0; KTX owns a complete class chain.
+//! ID pages ([`Class::Id`]) are PNG-only in every profile: one exact PNG per
+//! authored level ([`encode_id_chain`]); Basis ETC1S/UASTC are refused.
 use super::{
     mips::{self, Class},
     sparse_mips,
@@ -198,6 +200,13 @@ pub(super) fn channel_gate(
         Class::Normal => legacy(30., 112),
         Class::Data if slot == TextureSlot::Occlusion => legacy(30., if quality { 8 } else { 80 }),
         Class::Data => legacy(30., 32),
+        // Defensive: IDs admit no error at all.
+        Class::Id => ChannelGate {
+            psnr: f64::INFINITY,
+            p999: None,
+            block_rmse: None,
+            max: Some(0),
+        },
     }
 }
 pub(super) fn check_level(
@@ -463,6 +472,13 @@ pub(super) fn encode_authored(
             "PNG cannot carry an authored mip chain",
         ));
     }
+    if chain.class == Class::Id {
+        // Basis block codecs (ETC1S, UASTC) are lossy and blend IDs.
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "ID texture pages are lossless PNG only; Basis KTX2 refused",
+        ));
+    }
     let base = chain.levels.first().ok_or_else(resource)?;
     let charge = workspace_charge([base.width, base.height], profile)?;
     if charge > memory_limit {
@@ -661,6 +677,84 @@ pub(super) fn encode_authored(
         mip_count: chain.levels.len() as u32,
         receipts,
     })
+}
+
+/// One exact PNG per authored ID level. Level 0 is the delivered texture
+/// (sampled NEAREST, no runtime mips); coarser levels are ID-safe pages for
+/// coarse proxies. Every level is decoded independently and must equal the
+/// authored bytes; `validate` then sees each decoded level.
+#[derive(Debug)]
+pub(super) struct IdDelivery {
+    /// PNG bytes per level, level 0 first.
+    pub levels: Vec<Vec<u8>>,
+    pub receipts: Vec<Value>,
+}
+pub(super) fn encode_id_chain(
+    chain: &sparse_mips::Chain,
+    memory_limit: u64,
+    mut validate: impl FnMut(usize, &mips::Level) -> Result<Value, JobError>,
+) -> Result<IdDelivery, JobError> {
+    if chain.class != Class::Id {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "ID delivery requires an ID-class chain",
+        ));
+    }
+    let base = chain.levels.first().ok_or_else(resource)?;
+    let charge = workspace_charge([base.width, base.height], Profile::Lossless)?;
+    if charge > memory_limit {
+        return Err(resource());
+    }
+    let mut levels = Vec::new();
+    levels
+        .try_reserve_exact(chain.levels.len())
+        .map_err(|_| resource())?;
+    let mut receipts = Vec::new();
+    receipts
+        .try_reserve_exact(chain.levels.len() + 1)
+        .map_err(|_| resource())?;
+    for (index, level) in chain.levels.iter().enumerate() {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(level.rgba.len().checked_mul(2).ok_or_else(resource)?)
+            .map_err(|_| resource())?;
+        timing::time(Stage::PngEncode, || {
+            image::codecs::png::PngEncoder::new(&mut bytes).write_image(
+                &level.rgba,
+                level.width,
+                level.height,
+                image::ExtendedColorType::Rgba8,
+            )
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("ID PNG encode {e}")))?;
+        let decoded = timing::time(Stage::PngVerify, || {
+            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("ID PNG verify {e}")))?
+        .into_rgba8();
+        timing::count(
+            Counter::EncodedChainTexels,
+            u64::from(level.width) * u64::from(level.height),
+        );
+        let decoded = mips::Level {
+            width: decoded.width(),
+            height: decoded.height(),
+            rgba: decoded.into_raw(),
+        };
+        if decoded.width != level.width
+            || decoded.height != level.height
+            || decoded.rgba != level.rgba
+        {
+            return Err(error(
+                JobErrorKind::InvalidState,
+                format!("ID PNG level {index} changed authored IDs"),
+            ));
+        }
+        receipts.push(validate(index, &decoded)?);
+        levels.push(bytes);
+    }
+    receipts.push(json!({"profile":"id","encoding":"png","levels_exact":true,"charged_bytes":charge,"caller_levels":chain.levels.len()}));
+    Ok(IdDelivery { levels, receipts })
 }
 
 #[cfg(test)]
