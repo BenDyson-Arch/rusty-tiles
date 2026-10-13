@@ -1,17 +1,22 @@
 //! Per-URI facts at archive scale (VS-B-5).
 //!
 //! The first inspection of a payload writes one fixed-width record, keyed by the member's
-//! catalog rank: its C2 facts and its vertex count. Every later reference reads it back. The
-//! store is chosen once from the entry count, like the catalog: rank-indexed pages in memory
-//! when every record fits [`CatalogConfig::facts_resident_bytes`], otherwise a rank-indexed
-//! scratch file read and written one record at a time.
+//! catalog rank: its C2 facts, its vertex count and its C1 replay receipt (H23). Every later
+//! reference reads it back. The store is chosen once from the entry count, like the catalog:
+//! rank-indexed pages in memory when every record fits [`CatalogConfig::facts_resident_bytes`],
+//! otherwise a rank-indexed scratch file read and written one record at a time.
+//!
+//! The receipt is trusted only because this validation wrote it after a successful full
+//! admission and reads it back only for a rank whose inspected bit it set; the store lives
+//! for one validation. Receipts never come from archive bytes, reports or metadata.
 use super::containment::{Bound, Pair, ReferenceFacts, UriBounds};
 use super::{refused, spill_failure, Bits, Error, UriFacts};
 use crate::archive3tz::CatalogConfig;
+use crate::content_integrity::payload::ReplayAdmission;
 use crate::spill::{Scratch, SlotFile};
 
-/// Encoded record width.
-pub(super) const WIDTH: usize = 131;
+/// Encoded record width: 131 bytes of facts and the 64-byte replay receipt.
+pub(super) const WIDTH: usize = 195;
 /// Records per resident page.
 const PAGE: u64 = 64;
 
@@ -21,6 +26,8 @@ pub(super) struct Stored {
     pub facts: UriFacts,
     /// The C1 vertex count of the payload, for the per-tile budgets.
     pub vertices: u64,
+    /// The first admission's receipt, for the phase-2 replay (H23).
+    pub replay: ReplayAdmission,
 }
 
 fn encode(stored: &Stored, out: &mut [u8; WIDTH]) {
@@ -70,6 +77,7 @@ fn encode(stored: &Stored, out: &mut [u8; WIDTH]) {
     }
     put(out, &f.exclusions.to_le_bytes());
     put(out, &stored.vertices.to_le_bytes());
+    put(out, &stored.replay.to_stored_bytes());
     debug_assert_eq!(at, WIDTH);
     out[0] = flags;
 }
@@ -109,6 +117,8 @@ fn decode(bytes: &[u8; WIDTH]) -> Stored {
             exclusions: u16::from_le_bytes([bytes[121], bytes[122]]),
         },
         vertices: u64_at(123),
+        // Trusted: this validation's own record, guarded by the inspected bit.
+        replay: ReplayAdmission::from_stored_bytes(bytes[131..].try_into().unwrap()),
     }
 }
 
@@ -255,6 +265,9 @@ mod tests {
                 exclusions: (seed as u16).rotate_left(3),
             },
             vertices: seed ^ u64::MAX,
+            replay: ReplayAdmission::from_stored_bytes(std::array::from_fn(|i| {
+                (seed as u8).wrapping_mul(31).wrapping_add(i as u8)
+            })),
         }
     }
 

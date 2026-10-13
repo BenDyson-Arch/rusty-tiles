@@ -16,7 +16,11 @@ FILE_LIMIT = 1_000_000
 # About 1.25x the tracked sizes after evidence moved out (2026-10-12, on develop
 # e29cd19, live validator tooling kept): tree 17,243,688 bytes, bench/ 9,423,400.
 # The tree budget excludes vendor/, which has its own allowance (below).
-BUDGETS = {"": 21_600_000, "bench/": 11_800_000}
+# Raised 2026-10-14 (VS-B): the validator-scale slices (VS-A catalog, VS-B traversal facts,
+# schema keyword, controls and the I1 oracle amendment's fixtures) and the H23 payload-replay
+# controls brought the tree to 21,774,787 bytes, past 21,600,000 (VS-A alone was 717 bytes
+# over). New budget: that size plus about 0.6% headroom for VS-C and VS-D sources.
+BUDGETS = {"": 21_900_000, "bench/": 11_800_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the
 # compiled include closure plus licences, 10,852,575 bytes, about 1.1x of headroom

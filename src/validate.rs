@@ -1384,6 +1384,7 @@ impl Check<'_> {
         let stored = Stored {
             facts: uri_facts,
             vertices: facts.vertices,
+            replay: facts.replay,
         };
         self.facts.insert(rank, &stored, &self.scratch)?;
         #[cfg(test)]
@@ -1421,9 +1422,9 @@ impl Check<'_> {
         tile: usize,
         content: Option<VolumeFacts>,
         rank: u64,
-        facts: &UriFacts,
+        stored: &Stored,
     ) -> Result<(), Error> {
-        if !self.c2.reference(tile, content, facts)? {
+        if !self.c2.reference(tile, content, &stored.facts)? {
             return Ok(());
         }
         let depth = self.c2.on_path(tile)?.depth;
@@ -1431,11 +1432,13 @@ impl Check<'_> {
         if let Some(deferred) = &mut self.deferred {
             // The reference traversal: the old phase 2 streams after traversal.
             let levels = self.c2.levels.clone();
-            return try_push(deferred, (levels, rank, facts.t, depth));
+            return try_push(deferred, (levels, rank, stored.facts.t, depth));
         }
         self.c2.stream.started = true;
-        // Phase 2 of this reference, right after its passing precheck step (VS-B-4). A
-        // failure is recorded; it is published only under the outcome precedence.
+        // Phase 2 of this reference, right after its passing precheck step (VS-B-4), as a
+        // replay of the payload's own successful first admission (H23). A failure is
+        // recorded; it is published only after whole-archive C1, exclusion and precheck
+        // admission, under the outcome precedence.
         if let Err(failure) = stream_member(
             &mut self.resources,
             &mut self.c2.stream,
@@ -1443,7 +1446,8 @@ impl Check<'_> {
             &self.c2.levels,
             depth,
             rank,
-            facts.t,
+            stored.facts.t,
+            Some(&stored.replay),
         ) {
             self.c2.stream.failure = Some(failure);
         }
@@ -1502,7 +1506,7 @@ impl Check<'_> {
             } = task
             {
                 let stored = self.facts.get(rank)?;
-                self.c2_reference(tile, content, rank, &stored.facts)?;
+                self.c2_reference(tile, content, rank, &stored)?;
                 continue;
             }
             if let ValidationTask::Tileset {
@@ -1717,7 +1721,7 @@ impl Check<'_> {
                     content,
                 } => {
                     let stored = self.facts.get(*rank)?;
-                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored.facts)?;
+                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;
                     None
                 }
                 Event::Place(placement) => Some(Frame {
@@ -1911,9 +1915,9 @@ impl Check<'_> {
         tile: usize,
         content: Option<VolumeFacts>,
         rank: u64,
-        facts: &UriFacts,
+        stored: &Stored,
     ) -> Result<(), Error> {
-        self.c2_ref(tile, content, rank, facts)?;
+        self.c2_ref(tile, content, rank, stored)?;
         if self.recording.last().is_some_and(|r| !r.opaque) {
             match self.local(Some(tile)) {
                 Some(tile) => self.record(Event::Reference {
@@ -2228,7 +2232,7 @@ impl Check<'_> {
                     rank,
                 });
             } else {
-                self.c2_reference(tile, content, rank, &stored.facts)?;
+                self.c2_reference(tile, content, rank, &stored)?;
             }
             vertices = vertices
                 .checked_add(stored.vertices)
@@ -2394,7 +2398,7 @@ impl Check<'_> {
                 let (rank, stored) = self.payload(name)?;
                 // C2 registration only: C1 already counted this reference at
                 // subtree admission (`reference_reserved` above).
-                self.c2_ref(index, None, rank, &stored.facts)?;
+                self.c2_ref(index, None, rank, &stored)?;
                 vertices = vertices
                     .checked_add(stored.vertices)
                     .ok_or_else(|| invalid("tile vertex count overflow"))?;
@@ -2424,6 +2428,12 @@ impl Check<'_> {
 /// One reference's phase-2 stream: a serial pass over a re-read of its member along its level
 /// chain, continuing `stream`'s arena, bitmap, corner credit and re-read count in traversal
 /// order. Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
+///
+/// With `replay`, the member and its external resources are replayed against the receipt of
+/// their own successful first admission (H23): byte identity is checked before any consumer
+/// event, and the accessor-value and KTX2-container passes are not repeated. Without it the
+/// payload is inspected in full again (the reference traversal of the controls).
+#[allow(clippy::too_many_arguments)]
 fn stream_member(
     resources: &mut ArchiveResources<'_>,
     stream: &mut Stream,
@@ -2432,6 +2442,7 @@ fn stream_member(
     depth: usize,
     rank: u64,
     t: u64,
+    replay: Option<&payload::ReplayAdmission>,
 ) -> Result<(), Error> {
     if stream.arena.is_none() {
         stream.arena = Some(Arena::reserve(caps).map_err(|_| refused())?);
@@ -2463,14 +2474,29 @@ fn stream_member(
         credit: &mut stream.credit,
     };
     let reread = &mut stream.reread;
-    payload::inspect_scene(
-        payload_kind(&name)?,
-        &bytes,
-        limits,
-        limits.accessor_components,
-        |value, maximum| read_rerun(archive, &uri(&name, value)?, reread, cap, maximum as u64),
-        &mut consumer,
-    )
+    let kind = payload_kind(&name)?;
+    let resolve = |value: &str, maximum: usize| {
+        read_rerun(archive, &uri(&name, value)?, reread, cap, maximum as u64)
+    };
+    match replay {
+        Some(admission) => payload::replay_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+            admission,
+        ),
+        None => payload::inspect_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+        ),
+    }
     .map_err(scene_error)?;
     Ok(())
 }
@@ -2912,7 +2938,7 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
             };
             for (levels, rank, t, depth) in deferred {
                 let (caps, resources) = (check.c2.caps, &mut check.resources);
-                stream_member(resources, &mut stream, caps, &levels, depth, rank, t)?;
+                stream_member(resources, &mut stream, caps, &levels, depth, rank, t, None)?;
             }
         }
         check.not_inspected.remove("decodedContentBounds");
