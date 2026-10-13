@@ -355,7 +355,7 @@ impl Resolver<'_> {
         match command {
             Command::Mesh => built_in(details(json!({
                 "inputs":["glTF 2.0","GLB 2.0"],
-                "sourceCoordinates":"local metres, glTF Y-up; or a declared 2D horizontal EPSG/WKT/PROJ source CRS with explicit axes, f64 E/N/A offset and ellipsoidal height offset, mapped at capture (grid-free CRS portable; others need native-geospatial)",
+                "sourceCoordinates":"local metres, glTF Y-up; or a declared 2D horizontal EPSG/WKT/PROJ source CRS (axes y-up by default or xyz, f64 E/N/A offset or Metashape offset file, ellipsoidal height offset default 0), mapped exactly per vertex at capture (grid-free CRS portable; others need native-geospatial)",
                 "placement":"optional rigid WGS84 ellipsoidal anchor, ENU XYZW quaternion and source scene offset for local sources; a source CRS derives an ENU root at its source-bounds centre",
                 "output":"3D Tiles 1.1 implicit forest in .3tz",
                 "profiles":["fast","balanced","quality","lossless"],

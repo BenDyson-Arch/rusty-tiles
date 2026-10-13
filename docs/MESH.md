@@ -81,6 +81,9 @@ with an `offset.txt` shift, declare their CRS instead of a rigid placement:
 
 ```sh
 rusty-tiles mesh -i site.glb -o site.3tz \
+  --source-crs EPSG:3857 --source-offset-file site_offset.txt
+# the same request, spelled out:
+rusty-tiles mesh -i site.glb -o site.3tz \
   --source-crs EPSG:3857 --source-axes y-up \
   --source-offset 14812000 -1384000 100 --height-offset 0
 ```
@@ -88,27 +91,37 @@ rusty-tiles mesh -i site.glb -o site.3tz \
 | Option | Meaning |
 | --- | --- |
 | `--source-crs` (`--sourceCrs`) | `local` (the default) or a 2D horizontal EPSG, WKT or PROJ definition, resolved by the shared [conservative CRS resolver](FORMATS.md#point-clouds) |
-| `--source-axes` (`--sourceAxes`) | Required: `xyz` is X=E, Y=N, Z=height; `y-up` is X=E, Y=height, Z=−N. Axes are read after node transforms and never inferred |
+| `--source-axes` (`--sourceAxes`) | Default `y-up` (glTF is Y up): X=E, Y=height, Z=−N. `xyz` is X=E, Y=N, Z=height. Axes are read after node transforms and never inferred from data |
 | `--source-offset E N [A]` (`--sourceOffset`) | Added in double precision: E/N in horizontal CRS units, A metres (default 0). Default `0 0 0` |
-| `--height-offset` (`--heightOffset`) | Required: metres added to source height plus A to give WGS84 **ellipsoidal** height, including an explicit `0` |
+| `--source-offset-file` (`--sourceOffsetFile`) | A Metashape offset file holding exactly the lines `E: <number>`, `N: <number>`, `A: <number>` in that order (optional final LF or CRLF, at most 4 KiB). Anything else is `invalid_request`; excludes `--source-offset` |
+| `--height-offset` (`--heightOffset`) | Default `0`: metres added to source height plus A to give WGS84 **ellipsoidal** height. The default is right only when source height plus A is already ellipsoidal |
 
 A source CRS cannot be combined with `--anchor`, `--orientation-xyzw` or
 `--scene-offset` (`invalid_request`), and `local` admits none of the source-CRS
 options. Legacy `auto`, `geographic` and Web Mercator keywords and bare codes are
-not accepted: name the CRS, for example `EPSG:4326` or `EPSG:3857`. Offset files
-are not read; pass their E, N and A values to `--source-offset`. Horizontal feet
-never rescale source height or A, and no geoid model is applied.
+not accepted: name the CRS, for example `EPSG:4326` or `EPSG:3857`. Horizontal
+feet never rescale source height or A, and no geoid model is applied: Metashape
+heights that are orthometric need an explicit `--height-offset` to the
+ellipsoid.
 
 Capture maps each post-node source position plus the offset through the CRS to
 WGS84 ECEF and into one local east-north-up frame in f64, then rounds once to
-f32. The frame's origin is the mapped centre of the used post-node source
-bounds; the root transform carries ENU to ECEF. Authored normals are transformed
-by the inverse transpose of each vertex's Jacobian and tangents by the Jacobian,
-then renormalized; tangent handedness follows the Jacobian's orientation. The
-Jacobian uses central differences through the same CRS operation (one-sided at
-a projection-domain edge). A CRS map is not conformal in 3D (horizontal scale
-differs from vertical), so an authored tangent frame is transformed, not
-re-derived. Sorting, leaves, coarse levels and delivery then work in local
+f32; positions are mapped exactly for every vertex. The frame's origin is the
+mapped centre of the used post-node source bounds; the root transform carries
+ENU to ECEF. Authored normals are transformed by the inverse transpose of the
+Jacobian at the vertex and renormalized. Tangents are transformed by the
+Jacobian, then re-orthonormalized against the transformed normal (Gram–Schmidt)
+because a CRS map is not conformal in 3D (horizontal scale differs from
+vertical); the W handedness sign is kept (it would flip only for an
+orientation-reversing Jacobian). Jacobians use central differences through the
+same CRS operation (one-sided at a projection-domain edge), evaluated exactly at
+the nodes of a lattice over the source bounds (at most 32 cells per axis, each
+nominally 1 km horizontally or 0.01° geographic and 100 m vertically) and
+interpolated trilinearly. A cell whose interpolated Jacobian at its centre
+differs from the exact one by more than 1e-7 (relative), or that touches the
+CRS domain edge, uses per-vertex Jacobians instead; the measured normal error
+of interpolated cells is below 1e-7 rad. The report states the lattice and its
+per-vertex cells. Sorting, leaves, coarse levels and delivery then work in local
 metres. Every source coordinate must lie in the CRS's verified domain; a vertex
 outside it is `invalid_input`, and a mapped position beyond ±1,000,000 local
 metres is `unsupported`.
@@ -173,19 +186,19 @@ result = rusty_tiles.mesh_to_tileset(
 )
 projected = rusty_tiles.mesh_to_tileset(
     Path("site.glb"), Path("site.3tz"),
-    source_crs="EPSG:3857", source_axes="y-up",
-    source_offset=(14812000.0, -1384000.0, 100.0), height_offset=0.0,
+    source_crs="EPSG:3857", source_offset_file=Path("site_offset.txt"),
 )
 print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
-source_crs=None, source_axes=None, source_offset=None, height_offset=None,
-force=False, callback=None)` accepts `str` or `os.PathLike` paths.
-`source_crs=None` or `"local"` keeps local input; `source_axes` is `"xyz"` or
-`"y-up"` and `source_offset` a two- or three-number sequence, with the CLI's
-rules. `jobs=None`
+source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
+height_offset=None, force=False, callback=None)` accepts `str` or `os.PathLike`
+paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
+`"y-up"` (default with a CRS) or `"xyz"`, `source_offset` a two- or three-number
+sequence, `source_offset_file` a path, and `height_offset` defaults to 0, with
+the CLI's rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
 counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
@@ -213,7 +226,8 @@ depth and packed/synthetic leaf counts, member limits, separate root/tileset
 errors, and normalized placement. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
-`native` operation and the chosen origin) and reports its derived ENU frame as a
+`native` operation, the chosen origin, `jacobian_lattice_cells` and
+`jacobian_exact_cells`) and reports its derived ENU frame as a
 `wgs84` placement at that origin. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
 for placed output. A parent tile's geometric error is its proxy's certified
@@ -265,11 +279,11 @@ are deprecated and will retire together with their old writers. Existing
 legacy calls continue to select those old products; they are not aliases of
 `mesh`.
 
-Geographic/projected meshes use `--source-crs` with explicit `--source-axes`
-and `--height-offset`; the legacy Web Mercator adapter call
-`--source-crs epsg:3857 --source-offset E N A` becomes
-`--source-crs EPSG:3857 --source-axes y-up --source-offset E N A --height-offset 0`.
-Mesh `auto` CRS, the `geographic`/Web Mercator keywords, `--source-offset-file`
+Geographic/projected meshes use `--source-crs`; the legacy Web Mercator adapter
+call `--source-crs epsg:3857 --source-offset E N A` becomes
+`--source-crs EPSG:3857 --source-offset E N A` (default `y-up` axes and zero
+height offset), and `--source-offset-file` accepts only the strict
+`E:`/`N:`/`A:` format. Mesh `auto` CRS, the `geographic`/Web Mercator keywords
 and old Euler placement do not migrate to new flags. Vector/point CRS support remains a separate retained capability.
 
 Old leaf/proxy triangle and error knobs, atlas sizes and JPEG/WebP/general-PNG

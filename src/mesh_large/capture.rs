@@ -3,7 +3,6 @@
 use super::{
     input::{ElementReader, StreamSource},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
-    source_crs::SourceFrame,
 };
 use crate::{
     gltf_source::source::{self, ScenePrimitive},
@@ -95,39 +94,10 @@ pub(super) fn bake(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
     vertex: u64,
-    frame: &mut SourceFrame,
 ) -> Result<[f32; 3]> {
     Ok(canonical(
-        frame.position(source_position(p, positions, vertex)?)?,
+        source_position(p, positions, vertex)?.map(|x| x as f32),
     ))
-}
-
-/// Bounds `[min, max]` of the used post-node source corners in f64, before any source CRS.
-/// A source CRS chooses its origin from them; empty sources return an inverted box.
-pub(crate) fn source_bounds(
-    source: &StreamSource,
-    buffer_bytes: usize,
-    check: &mut dyn FnMut() -> Result<()>,
-) -> Result<[[f64; 3]; 2]> {
-    let mut bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
-    for p in source.document.scene_primitives() {
-        check()?;
-        let mut positions = source.reader(&p.position, buffer_bytes);
-        let mut indices = p.indices.map(|v| source.reader(&v, buffer_bytes));
-        for triangle in 0..p.triangles {
-            if triangle.is_multiple_of(1024) {
-                check()?;
-            }
-            for vertex in vertices(&p, &mut indices, triangle)? {
-                let position = source_position(&p, &mut positions, vertex)?;
-                for axis in 0..3 {
-                    bounds[0][axis] = bounds[0][axis].min(position[axis]);
-                    bounds[1][axis] = bounds[1][axis].max(position[axis]);
-                }
-            }
-        }
-    }
-    Ok(bounds)
 }
 
 /// Read-only preflight scan gives the tight box of used baked corners. It observes payload
@@ -137,16 +107,18 @@ pub(crate) fn scan(
     buffer_bytes: usize,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SourceScan> {
-    scan_in(source, &mut SourceFrame::Local, buffer_bytes, check)
+    Ok(scan_with_source_bounds(source, buffer_bytes, check)?.0)
 }
 
-/// [`scan`] in a resolved capture frame; the frame must be the one capture uses.
-pub(crate) fn scan_in(
+/// [`scan`] plus the f64 bounds `[min, max]` of the used post-node corners, from which a
+/// source CRS chooses its origin. With a source CRS the f32 box is a local-frame placeholder
+/// that capture replaces with its mapped box.
+pub(crate) fn scan_with_source_bounds(
     source: &StreamSource,
-    frame: &mut SourceFrame,
     buffer_bytes: usize,
     check: &mut dyn FnMut() -> Result<()>,
-) -> Result<SourceScan> {
+) -> Result<(SourceScan, [[f64; 3]; 2])> {
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     let mut bounds = Bounds::EMPTY;
     let mut triangles = 0u64;
     let mut geometry_bytes = 0u64;
@@ -168,16 +140,24 @@ pub(crate) fn scan_in(
                 check()?;
             }
             for vertex in vertices(&p, &mut indices, triangle)? {
-                bounds.include(bake(&p, &mut positions, vertex, frame)?);
+                let world = source_position(&p, &mut positions, vertex)?;
+                for axis in 0..3 {
+                    source_bounds[0][axis] = source_bounds[0][axis].min(world[axis]);
+                    source_bounds[1][axis] = source_bounds[1][axis].max(world[axis]);
+                }
+                bounds.include(canonical(world.map(|x| x as f32)));
             }
         }
     }
     source.verify_unchanged()?;
-    Ok(SourceScan {
-        triangles,
-        bounds,
-        geometry_bytes,
-    })
+    Ok((
+        SourceScan {
+            triangles,
+            bounds,
+            geometry_bytes,
+        },
+        source_bounds,
+    ))
 }
 
 /// Reads all source geometry before returning a sorted stream that refers only to scratch.
@@ -224,16 +204,15 @@ pub(crate) fn capture<'s>(
             if records.is_multiple_of(3072) {
                 check()?;
             }
-            let position = if let Some((vertex, position)) =
-                cached.filter(|(v, _)| *v == corner.vertex)
-            {
-                let _ = vertex;
-                position
-            } else {
-                let position = bake(&p, &mut positions, corner.vertex, &mut SourceFrame::Local)?;
-                cached = Some((corner.vertex, position));
-                position
-            };
+            let position =
+                if let Some((vertex, position)) = cached.filter(|(v, _)| *v == corner.vertex) {
+                    let _ = vertex;
+                    position
+                } else {
+                    let position = bake(&p, &mut positions, corner.vertex)?;
+                    cached = Some((corner.vertex, position));
+                    position
+                };
             positioned.push(CornerPosition {
                 primitive: corner.primitive,
                 triangle: corner.triangle,

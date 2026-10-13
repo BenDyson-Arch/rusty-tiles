@@ -328,7 +328,7 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
 /// maximum, and None means auto.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, height_offset=None, force=false, callback=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -343,6 +343,7 @@ fn mesh_to_tileset(
     source_crs: Option<&str>,
     source_axes: Option<&str>,
     source_offset: Option<Vec<f64>>,
+    source_offset_file: Option<PathBuf>,
     height_offset: Option<f64>,
     force: bool,
     callback: Option<Py<PyAny>>,
@@ -368,6 +369,7 @@ fn mesh_to_tileset(
         source_crs,
         source_axes,
         source_offset.as_deref(),
+        source_offset_file.as_deref(),
         height_offset,
     )
     .map_err(|error| tiler_request_error(py, error))?;

@@ -156,8 +156,20 @@ fn request_errors_precede_source_io_and_preserve_existing_outputs() {
             ],
         ),
         (
-            work.path().join("axes.3tz"),
-            vec!["--source-crs", "EPSG:3857", "--height-offset", "0"],
+            work.path().join("both-offsets.3tz"),
+            vec![
+                "--source-crs",
+                "EPSG:3857",
+                "--source-offset-file",
+                "offset.txt",
+                "--source-offset",
+                "1",
+                "2",
+            ],
+        ),
+        (
+            work.path().join("local-offset-file.3tz"),
+            vec!["--source-offset-file", "offset.txt"],
         ),
         (
             work.path().join("local-offset.3tz"),
@@ -372,6 +384,8 @@ fn source_crs_spellings_publish_identical_archives_with_a_derived_root() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("mesh.glb");
     source(&input, false);
+    let offset_file = work.path().join("mesh_offset.txt");
+    fs::write(&offset_file, "E: 14812000\nN: -1384000\nA: 100\n").unwrap();
     let mut archives = Vec::new();
     for (name, crs, axes, offset, height) in [
         (
@@ -441,5 +455,40 @@ fn source_crs_spellings_publish_identical_archives_with_a_derived_root() {
         }
         archives.push(fs::read(&output).unwrap());
     }
+    // The Metashape offset file with default y-up axes and zero height offset is the same request.
+    let output = work.path().join("file.3tz");
+    let result = mesh(
+        &input,
+        &output,
+        &[
+            "--jobs",
+            "1",
+            "--source-crs",
+            "EPSG:3857",
+            "--source-offset-file",
+            offset_file.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(archives[0], fs::read(&output).unwrap());
     assert_eq!(archives[0], archives[1]);
+    // A malformed offset file is a typed request error.
+    fs::write(&offset_file, "E=14812000\nN=-1384000\n").unwrap();
+    let result = mesh(
+        &input,
+        &work.path().join("bad.3tz"),
+        &[
+            "--source-crs",
+            "EPSG:3857",
+            "--source-offset-file",
+            offset_file.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(result.status.code(), Some(2));
+    let error: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(error["error"]["kind"], "invalid_request");
 }

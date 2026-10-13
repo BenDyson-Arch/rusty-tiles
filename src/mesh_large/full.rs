@@ -336,15 +336,15 @@ pub(crate) fn capture_admitted(
         config.member_ceiling,
     )
     .map_err(super::failure)?;
-    // One frame, resolved once from the used source bounds, serves scan and capture.
+    let (mut scan, source_bounds) =
+        capture::scan_with_source_bounds(&source, config.sort.buffer_bytes, check)
+            .map_err(super::failure)?;
+    // One frame, resolved once from the used post-node source bounds, serves capture; with a
+    // source CRS, capture replaces the scan's placeholder box with the mapped one.
     let mut frame = match &config.source_crs {
         None => SourceFrame::Local,
-        Some(spec) => capture::source_bounds(&source, config.sort.buffer_bytes, check)
-            .and_then(|bounds| SourceFrame::resolve(spec, bounds))
-            .map_err(super::failure)?,
+        Some(spec) => SourceFrame::resolve(spec, source_bounds).map_err(super::failure)?,
     };
-    let scan = capture::scan_in(&source, &mut frame, config.sort.buffer_bytes, check)
-        .map_err(super::failure)?;
     let source_crs = frame.placement();
     let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
     let parent = config
@@ -411,7 +411,7 @@ pub(crate) fn capture_admitted(
             &mut frame,
             &scratch,
             config.sorter(workers),
-            &scan,
+            &mut scan,
             check,
         )?;
         let mut full_writer = SequenceWriter::<FullTriangle>::new(

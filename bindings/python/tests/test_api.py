@@ -146,6 +146,19 @@ class WheelAPI(unittest.TestCase):
             self.assertEqual(len(report["root_transform"]), 16)
             outputs.append(output.read_bytes())
         self.assertEqual(outputs[0], outputs[1])
+        offset_file = self.root / "projected_offset.txt"
+        offset_file.write_text("E: 14812000\nN: -1384000\nA: 100\n")
+        defaults = rusty_tiles.mesh_to_tileset(
+            source, self.root / "crs-file.3tz", jobs=1, source_crs="EPSG:3857",
+            source_offset_file=offset_file,
+        )
+        self.assertEqual(defaults.report["source_crs"]["axes"], "y-up")
+        self.assertEqual(defaults.report["source_crs"]["height_offset_metres"], 0.0)
+        self.assertEqual((self.root / "crs-file.3tz").read_bytes(), outputs[0])
+        offset_file.write_text("E: 1\nN: 2\n")
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "bad.3tz", source_crs="EPSG:3857",
+                                        source_offset_file=offset_file)
         local = rusty_tiles.mesh_to_tileset(source, self.root / "local.3tz", source_crs="local")
         self.assertNotIn("source_crs", local.report)
 
@@ -159,8 +172,9 @@ class WheelAPI(unittest.TestCase):
             {"orientation_xyzw": (0, 0, 0, 1)}, {"scene_offset": (0, 0, 0)},
             {"anchor": (153, -27, 0), "orientation_xyzw": (0, 0, 0, 2)},
             {"source_crs": "auto", "source_axes": "y-up", "height_offset": 0.0},
-            {"source_crs": "EPSG:3857", "height_offset": 0.0},
-            {"source_crs": "EPSG:3857", "source_axes": "y-up"},
+            {"source_crs": "EPSG:3857", "source_offset": (1.0, 2.0),
+             "source_offset_file": "offset.txt"},
+            {"source_offset_file": "offset.txt"},
             {"source_crs": "EPSG:3857", "source_axes": "z-up", "height_offset": 0.0},
             {"source_crs": "EPSG:3857", "source_axes": "y-up", "height_offset": 0.0,
              "source_offset": (1.0,)},

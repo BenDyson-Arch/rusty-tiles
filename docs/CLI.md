@@ -65,9 +65,10 @@ Rust exports are now internal.
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
 | `--sceneOffset X Y Z` | `--scene-offset` | zero with anchor | Post-node source Y-up metre translation before orientation; requires anchor |
 | `--sourceCrs` | `--source-crs` | `local` | `local` or a 2D horizontal EPSG/WKT/PROJ definition, mapped at capture; excludes the anchor options |
-| `--sourceAxes` | `--source-axes` | none | Required with a source CRS: `xyz` (E, N, height) or `y-up` (E, height, −N) after node transforms |
+| `--sourceAxes` | `--source-axes` | `y-up` with a source CRS | `y-up` (E, height, −N) or `xyz` (E, N, height) after node transforms |
 | `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Added in double precision: E/N in horizontal CRS units, A metres |
-| `--heightOffset` | `--height-offset` | none | Required with a source CRS: metres added to source height plus A to give ellipsoidal height, including `0` |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape offset file of exactly `E: <n>`, `N: <n>`, `A: <n>` lines; excludes `--sourceOffset` |
+| `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height |
 
 Shared `-i`/`-o`/`--force`, `--json` and `--progress json` apply. Output is `.3tz`
 only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`),
@@ -75,8 +76,8 @@ only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`
 `cleanupDiagnostics`, and the resolved output. Input is local with optional
 rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
 per-vertex map (positions, normals and tangents) is applied at capture and whose
-ENU frame becomes the root transform. There is no CRS inference, offset-file
-option, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
+ENU frame becomes the root transform. There is no CRS inference, geoid
+conversion, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
 `lossless` is not a source-GLB byte-preservation promise.
 
 ### mesh-to-3tz

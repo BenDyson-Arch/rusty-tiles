@@ -1,9 +1,11 @@
 //! Declared source CRS of a mesh, applied at capture (H1) in f64. Each post-node source
-//! position plus the source offset maps through the shared conservative resolver to WGS84
-//! ECEF and then into one local ENU frame (glTF Y-up) at the source-bounds centre. Normals
-//! use the per-vertex Jacobian inverse transpose and tangents the Jacobian, both from the
-//! legacy bake's central differences. Every later stage sees local metres only; the root
-//! transform carries ENU to ECEF.
+//! position plus the source offset maps exactly, per vertex, through the shared conservative
+//! resolver to WGS84 ECEF and then into one local ENU frame (glTF Y-up) at the source-bounds
+//! centre. Normals use the Jacobian inverse transpose and tangents the Jacobian, then are
+//! re-orthonormalized. Jacobians come from the legacy bake's central differences, evaluated
+//! on an adaptive lattice over the source bounds and interpolated; a cell whose centre check
+//! exceeds the tolerance uses per-vertex Jacobians. Every later stage sees local metres
+//! only; the root transform carries ENU to ECEF.
 use crate::{
     crs::Transform,
     georef::{ecef_to_cartographic, EnuFrame, SourceAxes, SourceOffset},
@@ -12,9 +14,10 @@ use crate::{
     mesh_crs, JobError, JobErrorKind, MeshPlacement,
 };
 use serde::Serialize;
-use std::mem::Discriminant;
+use std::{io::Read, mem::Discriminant, path::Path};
 
 type Result<T> = std::result::Result<T, JobError>;
+type Columns = [[f64; 3]; 3];
 
 /// Legacy adapter keywords and bare codes are refused: name the CRS explicitly.
 const LEGACY_KEYWORDS: [&str; 9] = [
@@ -28,12 +31,14 @@ const LEGACY_KEYWORDS: [&str; 9] = [
     "4326",
     "3857",
 ];
+/// Offset files larger than this are refused before parsing.
+const OFFSET_FILE_BYTES: u64 = 4096;
 
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidRequest, message)
 }
 
-/// A declared horizontal source CRS with explicit axes, source offset and height decision.
+/// A declared horizontal source CRS with axes, source offset and height decision.
 /// Without it (`local`) the mesh is local metres with glTF Y up.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MeshSourceCrs {
@@ -43,23 +48,68 @@ pub struct MeshSourceCrs {
     height_offset_metres: f64,
 }
 
+/// Parse a Metashape-style offset file: exactly the three lines `E: <number>`,
+/// `N: <number>` and `A: <number>` in that order, each value finite, with an optional final
+/// line break (LF or CRLF). Anything else is an `invalid_request`.
+pub fn parse_offset_file(text: &str) -> Result<[f64; 3]> {
+    let bad = || {
+        invalid("source offset file must be exactly the lines \"E: <number>\", \"N: <number>\", \"A: <number>\"")
+    };
+    let body = text
+        .strip_suffix("\r\n")
+        .or_else(|| text.strip_suffix('\n'))
+        .unwrap_or(text);
+    let lines: Vec<&str> = body.split('\n').collect();
+    if lines.len() != 3 {
+        return Err(bad());
+    }
+    let mut values = [0.; 3];
+    for ((line, key), value) in lines.iter().zip(["E: ", "N: ", "A: "]).zip(&mut values) {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        let number = line.strip_prefix(key).ok_or_else(bad)?;
+        *value = number
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite())
+            .ok_or_else(bad)?;
+    }
+    Ok(values)
+}
+
+fn read_offset_file(path: &Path) -> Result<[f64; 3]> {
+    let mut text = String::new();
+    std::fs::File::open(path)
+        .and_then(|file| file.take(OFFSET_FILE_BYTES + 1).read_to_string(&mut text))
+        .map_err(|error| JobError::io("read source offset file", path, error))?;
+    if text.len() as u64 > OFFSET_FILE_BYTES {
+        return Err(invalid("source offset file exceeds 4 KiB"));
+    }
+    parse_offset_file(&text)
+}
+
 impl MeshSourceCrs {
     /// Shared adapter grammar. `None` or `local` keeps local coordinates and admits no
-    /// other source-CRS parameter. Any other definition requires explicit axes and a height
-    /// offset (including zero); the offset is `E N [A]`, with A defaulting to zero.
+    /// other source-CRS parameter. Any other definition takes axes (default `y-up`, as glTF
+    /// is Y up), a height offset in metres (default 0) and at most one of an `E N [A]`
+    /// offset (A defaults to zero) and a Metashape-style offset file.
     pub fn from_parameters(
         source_crs: Option<&str>,
         axes: Option<SourceAxes>,
         offset: Option<&[f64]>,
+        offset_file: Option<&Path>,
         height_offset_metres: Option<f64>,
     ) -> Result<Option<Self>> {
         let definition = source_crs
             .map(str::trim)
             .filter(|d| !d.eq_ignore_ascii_case("local"));
         let Some(definition) = definition else {
-            if axes.is_some() || offset.is_some() || height_offset_metres.is_some() {
+            if axes.is_some()
+                || offset.is_some()
+                || offset_file.is_some()
+                || height_offset_metres.is_some()
+            {
                 return Err(invalid(
-                    "source axes, source offset and height offset require a source CRS",
+                    "source axes, source offset, offset file and height offset require a source CRS",
                 ));
             }
             return Ok(None);
@@ -69,16 +119,19 @@ impl MeshSourceCrs {
                 "source CRS must be an EPSG:<code>, WKT or PROJ definition or local; legacy auto/geographic/Web Mercator keywords are not inferred",
             ));
         }
-        let axes = axes.ok_or_else(|| {
-            invalid("a source CRS requires source axes xyz or y-up; axes are not inferred")
-        })?;
-        let height_offset_metres = height_offset_metres.ok_or_else(|| {
-            invalid("a source CRS requires a height offset in metres to ellipsoidal height, including an explicit 0")
-        })?;
-        let offset = match offset.unwrap_or(&[0., 0.]) {
-            [easting, northing] => [*easting, *northing, 0.],
-            [easting, northing, height] => [*easting, *northing, *height],
-            _ => return Err(invalid("source offset takes E N or E N A")),
+        let height_offset_metres = height_offset_metres.unwrap_or(0.);
+        let offset = match (offset, offset_file) {
+            (Some(_), Some(_)) => {
+                return Err(invalid(
+                    "pass only one of a source offset and a source offset file",
+                ))
+            }
+            (None, Some(path)) => read_offset_file(path)?,
+            (offset, None) => match offset.unwrap_or(&[0., 0.]) {
+                [easting, northing] => [*easting, *northing, 0.],
+                [easting, northing, height] => [*easting, *northing, *height],
+                _ => return Err(invalid("source offset takes E N or E N A")),
+            },
         };
         if !offset
             .iter()
@@ -89,7 +142,7 @@ impl MeshSourceCrs {
         }
         Ok(Some(Self {
             definition: definition.to_owned(),
-            axes,
+            axes: axes.unwrap_or(SourceAxes::YUp),
             offset: SourceOffset {
                 easting: offset[0],
                 northing: offset[1],
@@ -125,11 +178,15 @@ pub struct MeshSourceCrsReport {
     pub operation: &'static str,
     /// The local ENU origin: the mapped centre of the used post-node source bounds.
     pub origin_degrees_metres: [f64; 3],
+    /// Jacobian lattice cells per post-node source axis.
+    pub jacobian_lattice_cells: [u64; 3],
+    /// Lattice cells that use per-vertex Jacobians (failed centre check or domain edge).
+    pub jacobian_exact_cells: u64,
 }
 
 /// Per-vertex Jacobian columns d(local Y-up)/d(post-node source axis).
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Jacobian([[f64; 3]; 3]);
+pub(crate) struct Jacobian(pub(crate) Columns);
 
 impl Jacobian {
     /// Unnormalized inverse-transpose image of a normal.
@@ -157,8 +214,78 @@ impl Jacobian {
     }
 }
 
-const CACHE_SLOTS: usize = 4096;
-const EMPTY: [u64; 3] = [u64::MAX; 3];
+/// At most this many lattice cells per axis; each nominally spans 1000 probe steps
+/// (1 km horizontally in metre units, 0.01 degree geographic, 100 m vertically).
+const LATTICE_CELLS: usize = 32;
+const LATTICE_PROBE_STEPS: f64 = 1000.;
+/// Largest relative Frobenius error of the interpolated Jacobian at a cell centre. With
+/// the Jacobian's condition number this keeps normal error well under 1e-6 rad.
+const LATTICE_TOLERANCE: f64 = 1e-7;
+
+/// Exact Jacobians at the nodes of a regular lattice over the used post-node source bounds,
+/// trilinearly interpolated inside cells that pass their centre check.
+#[derive(Default)]
+struct Lattice {
+    min: [f64; 3],
+    max: [f64; 3],
+    cell: [f64; 3],
+    cells: [usize; 3],
+    nodes: Vec<Option<Columns>>,
+    exact: Vec<bool>,
+}
+
+impl Lattice {
+    fn coordinate(&self, axis: usize, k: usize) -> f64 {
+        if k == self.cells[axis] {
+            self.max[axis]
+        } else {
+            self.min[axis] + k as f64 * self.cell[axis]
+        }
+    }
+    fn node(&self, k: [usize; 3]) -> usize {
+        (k[2] * (self.cells[1] + 1) + k[1]) * (self.cells[0] + 1) + k[0]
+    }
+    fn cell_index(&self, k: [usize; 3]) -> usize {
+        (k[2] * self.cells[1] + k[1]) * self.cells[0] + k[0]
+    }
+    /// The cell holding `world` and its fractional position, both clamped to the lattice.
+    fn locate(&self, world: [f64; 3]) -> ([usize; 3], [f64; 3]) {
+        let mut cell = [0; 3];
+        let mut t = [0.; 3];
+        for axis in 0..3 {
+            if self.cell[axis] > 0. {
+                let u = (world[axis] - self.min[axis]) / self.cell[axis];
+                let k = u.floor().clamp(0., (self.cells[axis] - 1) as f64);
+                cell[axis] = k as usize;
+                t[axis] = (u - k).clamp(0., 1.);
+            }
+        }
+        (cell, t)
+    }
+    /// Trilinear interpolation in a cell, or `None` when a corner node is unavailable.
+    fn interpolate(&self, cell: [usize; 3], t: [f64; 3]) -> Option<Columns> {
+        let mut out = [[0.; 3]; 3];
+        for corner in 0..8 {
+            let bit = |axis: usize| (corner >> axis) & 1;
+            let weight = (0..3)
+                .map(|axis| {
+                    if bit(axis) == 1 {
+                        t[axis]
+                    } else {
+                        1. - t[axis]
+                    }
+                })
+                .product::<f64>();
+            let node = self.nodes[self.node(std::array::from_fn(|axis| cell[axis] + bit(axis)))]?;
+            for (column, value) in out.iter_mut().zip(node) {
+                for (o, v) in column.iter_mut().zip(value) {
+                    *o += weight * v;
+                }
+            }
+        }
+        Some(out)
+    }
+}
 
 pub(crate) struct CrsFrame {
     operation: Transform,
@@ -170,8 +297,7 @@ pub(crate) struct CrsFrame {
     frame: EnuFrame,
     placement: ResolvedPlacement,
     report: MeshSourceCrsReport,
-    /// Direct-mapped memo of the pure position map for repeated scan corners.
-    cache: Vec<([u64; 3], [f32; 3])>,
+    lattice: Lattice,
 }
 
 /// Capture's coordinate frame: identity rounding, or a resolved source CRS.
@@ -241,8 +367,10 @@ impl SourceFrame {
                 Transform::Native(_) => "native",
             },
             origin_degrees_metres: anchor,
+            jacobian_lattice_cells: [0; 3],
+            jacobian_exact_cells: 0,
         };
-        Ok(Self::Crs(Box::new(CrsFrame {
+        let mut frame = Box::new(CrsFrame {
             operation,
             kind,
             axes: spec.axes,
@@ -252,8 +380,13 @@ impl SourceFrame {
             frame: EnuFrame::new(origin),
             placement,
             report,
-            cache: vec![(EMPTY, [0.; 3]); CACHE_SLOTS],
-        })))
+            lattice: Lattice::default(),
+        });
+        frame.lattice = frame.build_lattice(min, max)?;
+        frame.report.jacobian_lattice_cells = frame.lattice.cells.map(|n| n as u64);
+        frame.report.jacobian_exact_cells =
+            frame.lattice.exact.iter().filter(|e| **e).count() as u64;
+        Ok(Self::Crs(frame))
     }
 
     /// Root placement and report of a resolved source CRS.
@@ -264,27 +397,15 @@ impl SourceFrame {
         }
     }
 
-    /// The single f32 rounding of a post-node f64 position (memoized for CRS).
-    pub(crate) fn position(&mut self, world: [f64; 3]) -> Result<[f32; 3]> {
+    /// The used post-node source bounds a CRS frame was resolved from.
+    pub(crate) fn source_bounds(&self) -> Option<[[f64; 3]; 2]> {
         match self {
-            Self::Local => Ok(world.map(|x| x as f32)),
-            Self::Crs(frame) => {
-                let key = world.map(f64::to_bits);
-                let slot = (key[0] ^ key[1].rotate_left(21) ^ key[2].rotate_left(42))
-                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
-                    >> (64 - CACHE_SLOTS.trailing_zeros());
-                let slot = slot as usize;
-                if frame.cache[slot].0 == key {
-                    return Ok(frame.cache[slot].1);
-                }
-                let (position, _) = frame.vertex(world, false)?;
-                frame.cache[slot] = (key, position);
-                Ok(position)
-            }
+            Self::Local => None,
+            Self::Crs(frame) => Some([frame.lattice.min, frame.lattice.max]),
         }
     }
 
-    /// A position and, when requested in CRS mode, its Jacobian.
+    /// A position, rounded once to f32, and, when requested in CRS mode, its Jacobian.
     pub(crate) fn vertex(
         &mut self,
         world: [f64; 3],
@@ -305,14 +426,109 @@ fn promoted() -> JobError {
 }
 
 impl CrsFrame {
-    fn vertex(&mut self, world: [f64; 3], jacobian: bool) -> Result<([f32; 3], Option<Jacobian>)> {
-        let ecef = self
+    fn ecef(&mut self, world: [f64; 3]) -> std::result::Result<[f64; 3], crate::Error> {
+        Ok(self
             .operation
-            .transform(&[self.axes.coordinates(world, self.offset)])
-            .map_err(source_error)?[0];
+            .transform(&[self.axes.coordinates(world, self.offset)])?[0])
+    }
+
+    fn check_kind(&self) -> Result<()> {
         if std::mem::discriminant(&self.operation) != self.kind {
             return Err(promoted());
         }
+        Ok(())
+    }
+
+    /// The per-vertex Jacobian from central differences at a validated ECEF position.
+    fn exact(
+        &mut self,
+        world: [f64; 3],
+        ecef: [f64; 3],
+    ) -> std::result::Result<Columns, crate::Error> {
+        mesh_crs::vertex_jacobian(
+            &mut self.operation,
+            world,
+            ecef,
+            self.axes,
+            self.offset,
+            self.horizontal_step,
+            self.degrees_per_unit,
+            &self.frame,
+        )
+    }
+
+    /// A lattice Jacobian; `None` outside the CRS domain. Other failures are errors.
+    fn lattice_sample(&mut self, world: [f64; 3]) -> Result<Option<Columns>> {
+        let result = self.ecef(world).and_then(|ecef| self.exact(world, ecef));
+        self.check_kind()?;
+        match result {
+            Ok(columns) => Ok(Some(columns)),
+            Err(crate::Error::Data(_)) => Ok(None),
+            Err(error) => Err(source_error(error)),
+        }
+    }
+
+    fn build_lattice(&mut self, min: [f64; 3], max: [f64; 3]) -> Result<Lattice> {
+        let mut lattice = Lattice {
+            min,
+            max,
+            ..Lattice::default()
+        };
+        for axis in 0..3 {
+            let extent = max[axis] - min[axis];
+            let span =
+                mesh_crs::probe_step(self.axes, axis, self.horizontal_step) * LATTICE_PROBE_STEPS;
+            lattice.cells[axis] = if extent > 0. {
+                ((extent / span).ceil() as usize).clamp(1, LATTICE_CELLS)
+            } else {
+                1
+            };
+            lattice.cell[axis] = extent / lattice.cells[axis] as f64;
+        }
+        let [nx, ny, nz] = lattice.cells;
+        lattice.nodes = Vec::with_capacity((nx + 1) * (ny + 1) * (nz + 1));
+        for k in 0..=nz {
+            for j in 0..=ny {
+                for i in 0..=nx {
+                    let world = [
+                        lattice.coordinate(0, i),
+                        lattice.coordinate(1, j),
+                        lattice.coordinate(2, k),
+                    ];
+                    lattice.nodes.push(self.lattice_sample(world)?);
+                }
+            }
+        }
+        lattice.exact = Vec::with_capacity(nx * ny * nz);
+        for k in 0..nz {
+            for j in 0..ny {
+                for i in 0..nx {
+                    let cell = [i, j, k];
+                    let centre: [f64; 3] = std::array::from_fn(|axis| {
+                        (lattice.coordinate(axis, cell[axis])
+                            + lattice.coordinate(axis, cell[axis] + 1))
+                            * 0.5
+                    });
+                    let exact = match (
+                        self.lattice_sample(centre)?,
+                        lattice.interpolate(cell, [0.5; 3]),
+                    ) {
+                        (Some(want), Some(got)) => {
+                            let error = relative_error(&want, &got);
+                            !error.is_finite() || error > LATTICE_TOLERANCE
+                        }
+                        _ => true,
+                    };
+                    lattice.exact.push(exact);
+                }
+            }
+        }
+        Ok(lattice)
+    }
+
+    fn vertex(&mut self, world: [f64; 3], jacobian: bool) -> Result<([f32; 3], Option<Jacobian>)> {
+        let ecef = self.ecef(world).map_err(source_error)?;
+        self.check_kind()?;
         let local = mesh_crs::to_y_up(self.frame.to_enu(ecef));
         if !local.iter().all(|v| within_local_domain(*v)) {
             return Err(JobError::new(
@@ -321,26 +537,39 @@ impl CrsFrame {
             ));
         }
         let jacobian = if jacobian {
-            let columns = mesh_crs::vertex_jacobian(
-                &mut self.operation,
-                world,
-                ecef,
-                self.axes,
-                self.offset,
-                self.horizontal_step,
-                self.degrees_per_unit,
-                &self.frame,
-            )
-            .map_err(source_error)?;
-            if std::mem::discriminant(&self.operation) != self.kind {
-                return Err(promoted());
-            }
-            Some(Jacobian(columns))
+            let (cell, t) = self.lattice.locate(world);
+            let interpolated = (!self.lattice.exact[self.lattice.cell_index(cell)])
+                .then(|| self.lattice.interpolate(cell, t))
+                .flatten();
+            Some(Jacobian(match interpolated {
+                Some(columns) => columns,
+                None => {
+                    let columns = self.exact(world, ecef).map_err(source_error)?;
+                    self.check_kind()?;
+                    columns
+                }
+            }))
         } else {
             None
         };
         Ok((local.map(|v| v as f32), jacobian))
     }
+
+    /// The per-vertex Jacobian, bypassing the lattice (accuracy audits).
+    #[cfg(test)]
+    fn exact_jacobian(&mut self, world: [f64; 3]) -> Jacobian {
+        let ecef = self.ecef(world).unwrap();
+        Jacobian(self.exact(world, ecef).unwrap())
+    }
+}
+
+fn relative_error(want: &Columns, got: &Columns) -> f64 {
+    let (mut error, mut norm) = (0., 0.);
+    for (w, g) in want.iter().flatten().zip(got.iter().flatten()) {
+        error += (w - g) * (w - g);
+        norm += w * w;
+    }
+    (error / norm).sqrt()
 }
 
 #[cfg(test)]

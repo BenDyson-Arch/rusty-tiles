@@ -235,6 +235,7 @@ fn spec(offset: V3) -> MeshSourceCrs {
         Some("EPSG:3857"),
         Some(SourceAxes::YUp),
         Some(&offset),
+        None,
         Some(HEIGHT_OFFSET),
     )
     .unwrap()
@@ -242,72 +243,54 @@ fn spec(offset: V3) -> MeshSourceCrs {
 }
 
 #[test]
-fn parameters_are_explicit_and_local_admits_no_crs_parameter() {
+fn parameters_default_to_gltf_y_up_and_zero_height_and_local_admits_none() {
     let kind = |result: Result<Option<MeshSourceCrs>>| result.unwrap_err().kind();
-    assert_eq!(
-        MeshSourceCrs::from_parameters(None, None, None, None).unwrap(),
-        None
-    );
-    assert_eq!(
-        MeshSourceCrs::from_parameters(Some(" Local "), None, None, None).unwrap(),
-        None
-    );
-    for (axes, offset, height) in [
-        (Some(SourceAxes::Xyz), None, None),
-        (None, Some(&[1., 2.][..]), None),
-        (None, None, Some(0.)),
+    let p = MeshSourceCrs::from_parameters;
+    assert_eq!(p(None, None, None, None, None).unwrap(), None);
+    assert_eq!(p(Some(" Local "), None, None, None, None).unwrap(), None);
+    let file = Path::new("offset.txt");
+    for (axes, offset, path, height) in [
+        (Some(SourceAxes::Xyz), None, None, None),
+        (None, Some(&[1., 2.][..]), None, None),
+        (None, None, Some(file), None),
+        (None, None, None, Some(0.)),
     ] {
         assert_eq!(
-            kind(MeshSourceCrs::from_parameters(
-                Some("local"),
-                axes,
-                offset,
-                height
-            )),
+            kind(p(Some("local"), axes, offset, path, height)),
             JobErrorKind::InvalidRequest
         );
     }
     for legacy in ["auto", "geographic", "WGS84", "3857", "Mercator"] {
         assert_eq!(
-            kind(MeshSourceCrs::from_parameters(
-                Some(legacy),
-                Some(SourceAxes::Xyz),
-                None,
-                Some(0.)
-            )),
+            kind(p(Some(legacy), None, None, None, None)),
             JobErrorKind::InvalidRequest,
             "{legacy}"
         );
     }
     let crs = Some("EPSG:32632");
-    assert_eq!(
-        kind(MeshSourceCrs::from_parameters(crs, None, None, Some(0.))),
-        JobErrorKind::InvalidRequest
-    );
-    assert_eq!(
-        kind(MeshSourceCrs::from_parameters(
-            crs,
-            Some(SourceAxes::Xyz),
-            None,
-            None
-        )),
-        JobErrorKind::InvalidRequest
-    );
+    let defaults = p(crs, None, None, None, None).unwrap().unwrap();
+    assert_eq!(defaults.axes, SourceAxes::YUp);
+    assert_eq!(defaults.height_offset_metres, 0.);
+    assert_eq!(defaults.offset, SourceOffset::default());
     for offset in [&[1.][..], &[1., 2., 3., 4.], &[f64::NAN, 0.]] {
         assert_eq!(
-            kind(MeshSourceCrs::from_parameters(
-                crs,
-                Some(SourceAxes::Xyz),
-                Some(offset),
-                Some(0.)
-            )),
+            kind(p(crs, None, Some(offset), None, None)),
             JobErrorKind::InvalidRequest
         );
     }
-    let two =
-        MeshSourceCrs::from_parameters(crs, Some(SourceAxes::Xyz), Some(&[5e5, 1e6]), Some(-3.))
-            .unwrap()
-            .unwrap();
+    assert_eq!(
+        kind(p(crs, None, None, None, Some(f64::INFINITY))),
+        JobErrorKind::InvalidRequest
+    );
+    let two = p(
+        crs,
+        Some(SourceAxes::Xyz),
+        Some(&[5e5, 1e6]),
+        None,
+        Some(-3.),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(
         two.offset,
         SourceOffset {
@@ -316,27 +299,113 @@ fn parameters_are_explicit_and_local_admits_no_crs_parameter() {
             height: 0.
         }
     );
+    assert_eq!(two.axes, SourceAxes::Xyz);
     two.check().unwrap();
     // Syntax errors are request errors; grid-requiring CRS need native PROJ.
-    let bad =
-        MeshSourceCrs::from_parameters(Some("EPSG:abc"), Some(SourceAxes::Xyz), None, Some(0.))
-            .unwrap()
-            .unwrap();
+    let bad = p(Some("EPSG:abc"), None, None, None, None)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         bad.check().unwrap_err().kind(),
         JobErrorKind::InvalidRequest
     );
     #[cfg(not(feature = "native-geospatial"))]
     {
-        let grid = MeshSourceCrs::from_parameters(
-            Some("EPSG:27700"),
-            Some(SourceAxes::Xyz),
-            None,
-            Some(0.),
-        )
-        .unwrap()
-        .unwrap();
+        let grid = p(Some("EPSG:27700"), None, None, None, None)
+            .unwrap()
+            .unwrap();
         assert_eq!(grid.check().unwrap_err().kind(), JobErrorKind::Unsupported);
+    }
+}
+
+/// The real Metashape files' exact format, as shipped beside the user's GLBs.
+const MGAL_OFFSET: &str = "E: 14812000\nN: -1384000\nA: 100\n";
+const POHNPEI_OFFSET: &str = "E: 17620600\nN: 768700\nA: 70\n";
+
+#[test]
+fn offset_files_parse_exactly_the_metashape_lines() {
+    assert_eq!(
+        parse_offset_file(MGAL_OFFSET).unwrap(),
+        [14_812_000., -1_384_000., 100.]
+    );
+    assert_eq!(
+        parse_offset_file(POHNPEI_OFFSET).unwrap(),
+        [17_620_600., 768_700., 70.]
+    );
+    assert_eq!(
+        parse_offset_file("E: 1.25\r\nN: -2.5e3\r\nA: 0").unwrap(),
+        [1.25, -2500., 0.]
+    );
+    for text in [
+        "",
+        "E: 1\nN: 2\n",
+        "E: 1\nN: 2\nA: 3\n\n",
+        "N: 2\nE: 1\nA: 3\n",
+        "E 1\nN: 2\nA: 3\n",
+        "E=1\nN=2\nA=3\n",
+        "e: 1\nn: 2\na: 3\n",
+        "E:  1\nN: 2\nA: 3\n",
+        "E: 1 \nN: 2\nA: 3\n",
+        "# shift\nE: 1\nN: 2\nA: 3\n",
+        "E: 1\nN: 2\nA: 3\nH: 4\n",
+        "E: nan\nN: 2\nA: 3\n",
+        "E: inf\nN: 2\nA: 3\n",
+        "E: 1m\nN: 2\nA: 3\n",
+    ] {
+        assert_eq!(
+            parse_offset_file(text).unwrap_err().kind(),
+            JobErrorKind::InvalidRequest,
+            "{text:?}"
+        );
+    }
+    let work = tempfile::tempdir().unwrap();
+    let path = work.path().join("mgal_detail_offset.txt");
+    fs::write(&path, MGAL_OFFSET).unwrap();
+    let from_file =
+        MeshSourceCrs::from_parameters(Some("EPSG:3857"), None, None, Some(&path), None)
+            .unwrap()
+            .unwrap();
+    let from_numbers = MeshSourceCrs::from_parameters(
+        Some("EPSG:3857"),
+        None,
+        Some(&[14_812_000., -1_384_000., 100.]),
+        None,
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(from_file, from_numbers);
+    assert_eq!(
+        MeshSourceCrs::from_parameters(Some("EPSG:3857"), None, Some(&[1., 2.]), Some(&path), None)
+            .unwrap_err()
+            .kind(),
+        JobErrorKind::InvalidRequest
+    );
+    assert_eq!(
+        MeshSourceCrs::from_parameters(
+            Some("EPSG:3857"),
+            None,
+            None,
+            Some(&work.path().join("missing.txt")),
+            None
+        )
+        .unwrap_err()
+        .kind(),
+        JobErrorKind::Io
+    );
+    fs::write(&path, "E: 1\n".repeat(2000)).unwrap();
+    assert_eq!(
+        MeshSourceCrs::from_parameters(Some("EPSG:3857"), None, None, Some(&path), None)
+            .unwrap_err()
+            .kind(),
+        JobErrorKind::InvalidRequest
+    );
+    // The shipped files, when this machine has them.
+    for name in ["mgal_detail_offset.txt", "pohnpei_offset.txt"] {
+        let real = Path::new("/run/media/bend/projects/tinyowl-demodata/glb").join(name);
+        if let Ok(text) = fs::read_to_string(&real) {
+            parse_offset_file(&text).unwrap();
+        }
     }
 }
 
@@ -406,19 +475,30 @@ fn errors(fixture: &Fixture, root: &[f64; 16], corners: &[Corner]) -> [f64; 3] {
         worst[0] = worst[0].max(distance(place(root, position, true), oracle(world)));
         let expected = oracle_normal(world, fixture.normals[vertex]);
         worst[1] = worst[1].max(angle(place(root, normal, false), expected));
+        // Tangent: Jacobian image, Gram-Schmidt against the oracle normal.
         let t = fixture.tangents[vertex];
-        let expected = apply(&oracle_jacobian(world), [t[0], t[1], t[2]]);
-        worst[2] = worst[2].max(angle(
-            place(root, [tangent[0], tangent[1], tangent[2]], false),
-            expected,
-        ));
-        assert_eq!(
-            f64::from(tangent[3]),
-            t[3],
-            "positive Jacobian keeps handedness"
-        );
+        let n = unit(expected);
+        let mapped = apply(&oracle_jacobian(world), [t[0], t[1], t[2]]);
+        let expected = sub(mapped, n.map(|v| v * dot(mapped, n)));
+        let got = place(root, [tangent[0], tangent[1], tangent[2]], false);
+        worst[2] = worst[2].max(angle(got, expected));
     }
     worst
+}
+
+/// Published tangents are unit, orthogonal to the published normal, and keep the source
+/// handedness sign (the EPSG:3857 Jacobian is orientation-preserving).
+fn assert_tangent_frames(fixture: &Fixture, corners: &[Corner]) {
+    let mut worst = 0_f64;
+    for &(vertex, _, normal, tangent) in corners {
+        let n = normal.map(f64::from);
+        let t = [tangent[0], tangent[1], tangent[2]].map(f64::from);
+        worst = worst.max(dot(unit(t), unit(n)).abs());
+        assert!((dot(t, t).sqrt() - 1.).abs() < 1e-6, "tangent is unit");
+        assert_eq!(f64::from(tangent[3]), fixture.tangents[vertex][3]);
+    }
+    eprintln!("tangent orthogonality: worst |t.n| {worst:e}");
+    assert!(worst < 1e-6, "tangent orthogonality {worst}");
 }
 
 #[test]
@@ -449,6 +529,7 @@ fn capture_maps_positions_normals_and_tangents_onto_the_independent_oracle() {
     assert_eq!(captured.report.source_offset, OFFSET);
 
     let [position, normal, tangent] = errors(&fixture, &captured.root, &captured.corners);
+    assert_tangent_frames(&fixture, &captured.corners);
     eprintln!(
         "capture errors: position {position:e} m, normal {normal:e} rad, tangent {tangent:e} rad"
     );
@@ -698,6 +779,7 @@ fn legacy_general_and_web_mercator_bakes_agree_with_the_capture_frame() {
             Some("EPSG:3857"),
             Some(SourceAxes::YUp),
             Some(&OFFSET),
+            None,
             Some(height_offset),
         )
         .unwrap()
@@ -710,7 +792,7 @@ fn legacy_general_and_web_mercator_bakes_agree_with_the_capture_frame() {
         let root = frame.placement().unwrap().0.transform();
         let new: Vec<V3> = world
             .iter()
-            .map(|p| place(&root, frame.position(*p).unwrap(), true))
+            .map(|p| place(&root, frame.vertex(*p, false).unwrap().0, true))
             .collect();
 
         let mut options = crate::tile::MeshTo3tzOptions {
@@ -753,6 +835,108 @@ fn legacy_general_and_web_mercator_bakes_agree_with_the_capture_frame() {
                 worst < 1e-4,
                 "legacy Web Mercator adapter differs by {worst}"
             );
+        }
+    }
+}
+
+fn normal_angle(jacobian: &Jacobian, exact: &Jacobian, n: V3) -> f64 {
+    angle(jacobian.normal(n).unwrap(), exact.normal(n).unwrap())
+}
+
+/// Lattice Jacobians stay within 1e-6 rad of per-vertex Jacobians in normal direction over
+/// a 30 km x 20 km x 600 m projected site, and the centre check sends cells whose
+/// interpolation is too coarse (an 8-degree geographic site) to per-vertex Jacobians.
+#[test]
+fn lattice_jacobian_normals_match_per_vertex_jacobians() {
+    let normals = [
+        unit([0.3, 1., -0.2]),
+        unit([1., 0.1, 0.]),
+        unit([0., 0.2, 1.]),
+        unit([-0.7, 0.4, 0.6]),
+    ];
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for (definition, axes, offset, min, max, latitude) in [
+        // EPSG:3857 near mgal (-12 degrees) and at 60 degrees north; y-up metres.
+        (
+            "EPSG:3857",
+            SourceAxes::YUp,
+            OFFSET,
+            [-15e3, -100., -10e3],
+            [15e3, 500., 10e3],
+            -12.3,
+        ),
+        (
+            "EPSG:3857",
+            SourceAxes::YUp,
+            [1e6, 8_399_737.889, 0.],
+            [-15e3, 0., -10e3],
+            [15e3, 600., 10e3],
+            60.,
+        ),
+        // UTM 32N, xyz metres.
+        (
+            "EPSG:32632",
+            SourceAxes::Xyz,
+            [5e5, 5e6, 0.],
+            [-15e3, -10e3, 0.],
+            [15e3, 10e3, 600.],
+            45.,
+        ),
+    ] {
+        let spec =
+            MeshSourceCrs::from_parameters(Some(definition), Some(axes), Some(&offset), None, None)
+                .unwrap()
+                .unwrap();
+        let SourceFrame::Crs(mut frame) = SourceFrame::resolve(&spec, [min, max]).unwrap() else {
+            unreachable!()
+        };
+        let cells = frame.report.jacobian_lattice_cells;
+        assert!(
+            cells.iter().product::<u64>() > 1,
+            "{definition} {latitude}: {cells:?}"
+        );
+        assert_eq!(
+            frame.report.jacobian_exact_cells, 0,
+            "{definition} {latitude}"
+        );
+        let mut worst = 0_f64;
+        for _ in 0..400 {
+            let world: V3 = std::array::from_fn(|i| min[i] + next() * (max[i] - min[i]));
+            let lattice = frame.vertex(world, true).unwrap().1.unwrap();
+            let exact = frame.exact_jacobian(world);
+            for n in normals {
+                worst = worst.max(normal_angle(&lattice, &exact, n));
+            }
+        }
+        eprintln!(
+            "{definition} at {latitude}: lattice {cells:?}, worst normal error {worst:e} rad"
+        );
+        assert!(worst < 1e-6, "{definition}: {worst}");
+    }
+    // Control: a coarse geographic lattice fails its centre checks and falls back exactly.
+    let spec =
+        MeshSourceCrs::from_parameters(Some("EPSG:4326"), Some(SourceAxes::Xyz), None, None, None)
+            .unwrap()
+            .unwrap();
+    let (min, max) = ([0., 0., 0.], [8., 8., 100.]);
+    let SourceFrame::Crs(mut frame) = SourceFrame::resolve(&spec, [min, max]).unwrap() else {
+        unreachable!()
+    };
+    let exact_cells = frame.report.jacobian_exact_cells;
+    eprintln!("geographic 8-degree control: {exact_cells} per-vertex cells");
+    assert!(exact_cells > 0);
+    for _ in 0..200 {
+        let world: V3 = std::array::from_fn(|i| min[i] + next() * (max[i] - min[i]));
+        let lattice = frame.vertex(world, true).unwrap().1.unwrap();
+        let exact = frame.exact_jacobian(world);
+        for n in normals {
+            assert!(normal_angle(&lattice, &exact, n) < 1e-6);
         }
     }
 }

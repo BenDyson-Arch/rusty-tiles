@@ -154,7 +154,7 @@ struct SourceCrsArgs {
         default_value = "local"
     )]
     source_crs: String,
-    /// Source CRS axes after node transforms: xyz (E,N,height) or y-up (E,height,-N)
+    /// Source CRS axes after node transforms: y-up (E,height,-N; default) or xyz (E,N,height)
     #[arg(long = "sourceAxes", visible_alias = "source-axes", value_enum)]
     source_axes: Option<SourceAxes>,
     /// Source CRS shift E N [A], added in f64: E/N in horizontal CRS units, A metres
@@ -165,7 +165,10 @@ struct SourceCrsArgs {
         allow_hyphen_values = true
     )]
     source_offset: Vec<f64>,
-    /// Metres added to source height plus A to give ellipsoidal height; required with a source CRS
+    /// Metashape offset file with exactly the lines "E: <n>", "N: <n>", "A: <n>"
+    #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
+    source_offset_file: Option<PathBuf>,
+    /// Metres added to source height plus A to give ellipsoidal height (default 0 with a source CRS)
     #[arg(
         long = "heightOffset",
         visible_alias = "height-offset",
@@ -179,6 +182,7 @@ impl SourceCrsArgs {
             Some(&self.source_crs),
             self.source_axes,
             (!self.source_offset.is_empty()).then_some(&self.source_offset[..]),
+            self.source_offset_file.as_deref(),
             self.height_offset,
         )
         .map_err(|error| rusty_tiles::JobFailure {
