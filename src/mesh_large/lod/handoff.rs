@@ -63,8 +63,11 @@ pub(in crate::mesh_large) struct FrozenGltfPrimitive {
     pub node: u32,
     pub mesh: u32,
     pub index: u32,
-    /// Index into [`FrozenNode::primitives`].
-    pub source: u32,
+    /// The source primitives it carries (indices into [`FrozenNode::primitives`]): one
+    /// glTF primitive holds every source primitive of one flat material, consecutively.
+    pub sources: Range<u32>,
+    /// Published material index.
+    pub material: Option<u32>,
     /// Node translation / scale as f32 bit patterns.
     pub translation: [u32; 3],
     pub scale: [u32; 3],
@@ -235,7 +238,8 @@ impl FrozenNode {
         for g in &self.gltf {
             if g.faces.start != next
                 || g.faces.end < g.faces.start
-                || g.source as usize >= self.primitives.len()
+                || g.sources.start >= g.sources.end
+                || g.sources.end as usize > self.primitives.len()
             {
                 return Err(state("frozen glTF primitives do not partition the faces"));
             }
@@ -249,7 +253,7 @@ impl FrozenNode {
                 .gltf
                 .get(f.gltf as usize)
                 .ok_or_else(|| state("frozen face without its glTF primitive"))?;
-            if g.source != f.source
+            if !g.sources.contains(&f.source)
                 || f.fill.is_some_and(|i| {
                     self.fills
                         .get(i as usize)

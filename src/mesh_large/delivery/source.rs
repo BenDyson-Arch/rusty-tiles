@@ -495,9 +495,7 @@ impl LeafDirectory {
 
     /// The H17 proxy rows with their decoded bounds, in file (post)order; empty when the
     /// directory has none.
-    pub(crate) fn proxy_rows(
-        &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<(ProxyRow, Aabb), JobError>> + '_>, JobError> {
+    pub(crate) fn proxy_rows(&self) -> Result<super::plan::Proxies<'_>, JobError> {
         if !self.proxies {
             return Ok(Box::new(std::iter::empty()));
         }

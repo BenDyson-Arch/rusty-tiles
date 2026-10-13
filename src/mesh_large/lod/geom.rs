@@ -16,6 +16,8 @@ use std::{cmp::Ordering, collections::BinaryHeap};
 
 pub(crate) type P3 = [f64; 3];
 pub(crate) type Tri = [P3; 3];
+/// A target found by a search: stored index and plain squared estimate.
+pub(crate) type Found = Option<(usize, f64)>;
 
 /// Test-only certificate mutations (controls that must be caught). Production is `None`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -30,6 +32,11 @@ pub(crate) enum Mutation {
     InjectCrack,
     /// The injected crack, with fills and the seam audit relabelling it a hole (control C3).
     CrackAsHole,
+    /// Stress, not a control: forced seam removals fail on one side, so the seam consensus
+    /// must re-run the neighbour tiles (the output must still audit clean).
+    ForcedFailures,
+    /// Fills may close loops through seam vertices (control: must be caught).
+    FillAcrossSeams,
 }
 
 /// The rounding direction of upper bounds; inward only under the C1 mutation.
@@ -443,7 +450,7 @@ impl Bvh {
         evals: &mut u64,
         labels: &[u32],
         want: u32,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         self.search(x, cap, evals, Some((labels, want)))
     }
 
@@ -453,7 +460,7 @@ impl Bvh {
         cap: u32,
         evals: &mut u64,
         labels: Option<(&[u32], u32)>,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         if self.tris.is_empty() {
             return (None, None);
         }
@@ -473,7 +480,7 @@ impl Bvh {
         evals: &mut u64,
         labels: Option<(&[u32], u32)>,
         lower: &dyn Fn(&Node) -> f64,
-    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+    ) -> (Found, Found) {
         heap.clear();
         heap.push(Entry(lower(&self.nodes[0]), 0));
         let mut best: Option<(usize, f64)> = None;

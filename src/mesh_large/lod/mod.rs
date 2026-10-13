@@ -47,10 +47,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Proxy face target `P` per tile. Above `2P` after simplification a tile is reported over
-/// budget; above `4P` it is Unsupported. (Property tables stay within CesiumJS's 8192 rows
-/// whatever the face count: each glTF primitive holds at most 8192 triangles.)
+/// Proxy face cap `P` per tile (PROVISIONAL). Simplification aims at `P - P/16`, the relaxed
+/// pass runs above `P`, and fills never take a proxy above `P`, so a proxy normally fits one
+/// 8192-row `proxy_source` table (CesiumJS resolves picks through one table per model).
+/// Tiles still above `P` are reported (`splitProvenanceTiles`); above `2P` over budget;
+/// above `4P` Unsupported. Every property table stays within 8192 rows regardless.
 pub(crate) const TARGET_FACES: usize = 8192;
+/// Simplification stops at `P - P / FILL_HEADROOM` faces so accepted fills fit under `P`.
+const FILL_HEADROOM: usize = 16;
 /// Most vertices of a fillable hole loop.
 const FILL_LOOP: usize = 64;
 
@@ -76,6 +80,9 @@ fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     x ^ (x >> 31)
 }
+/// Seed of the topology-cache binding over a tile's forced seam vertices.
+const FORCED_BINDING: u64 = 0x4831_3746_4f52_4345;
+
 pub(crate) fn key_hash(key: Key) -> u64 {
     mix(mix(u64::from(key[0]) | (u64::from(key[1]) << 32)) ^ u64::from(key[2]))
 }
@@ -308,6 +315,8 @@ pub(crate) struct LodReport {
     pub fills: u64,
     pub fills_rejected_bound: u64,
     pub fills_rejected_topology: u64,
+    /// Fills left open because they would take the proxy above the 8192-face cap.
+    pub fills_rejected_budget: u64,
     pub forced_collapses: u64,
     pub forced_unchecked: u64,
     pub direct_to_used: u64,
@@ -392,6 +401,9 @@ struct Ctx<'a> {
     source: &'a Sequence<LodSource>,
     lattice: &'a LatticePlan,
     materials: &'a [Value],
+    /// Per material, the index of the first equal flat material: proxy faces sort by it so
+    /// one glTF primitive carries every source primitive of one flat material.
+    material_rank: &'a [u32],
     retention: &'a [u8],
     target: usize,
     mutation: Mutation,
@@ -663,10 +675,9 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
     let mut tris = Vec::with_capacity(sidecar.faces.len());
     for (face, published) in sidecar.faces.iter().zip(&decoded.faces) {
         let mut expected = [[0f32; 3]; 3];
-        for c in 0..3 {
-            let v = face.v[c];
+        for (slot, &v) in expected.iter_mut().zip(&face.v) {
             let (key, info) = sidecar.vertices[v as usize];
-            expected[c] = match cache.get(&v) {
+            *slot = match cache.get(&v) {
                 Some(p) => *p,
                 None => {
                     let p = decode_vertex(ctx.lattice, key, info.ell, depth)?;
@@ -688,7 +699,8 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
         {
             return Err(state("proxy feature ID differs from its sidecar label"));
         }
-        // Provenance from the published per-triangle table.
+        // Provenance: node, mesh and primitive from the face's set-0 row, the source
+        // triangle from its per-triangle `proxy_source` row (fills carry no triangle).
         let (row, table) = published
             .feature(&decoded.tables, "proxy_source")
             .ok_or_else(|| state("proxy triangle without a proxy_source feature ID"))?;
@@ -700,15 +712,20 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
                 .copied()
                 .ok_or_else(|| state("proxy_source table without its row"))
         };
+        let triangle = if column("fill")? != 0 {
+            u64::MAX
+        } else {
+            column("triangle_index")?
+        };
         faces.push(KeyFace {
             keys: face.v.map(|v| sidecar.vertices[v as usize].0),
             info: face.v.map(|v| sidecar.vertices[v as usize].1),
             label,
             origin: Origin {
-                node: column("node_index")? as u32,
-                mesh: column("mesh_index")? as u32,
-                primitive: column("primitive_index")? as u32,
-                triangle: column("triangle_index")?,
+                node: label.key.0,
+                mesh: label.key.1,
+                primitive: label.key.2,
+                triangle,
             },
         });
         tris.push(tri_of(&published.p));
@@ -736,6 +753,7 @@ struct Outcome {
     fill_candidates: u64,
     fills_rejected_bound: u64,
     fills_rejected_topology: u64,
+    fills_rejected_budget: u64,
     forced: u64,
     forced_unchecked: u64,
     sidecar_bytes: u64,
@@ -751,10 +769,13 @@ struct Outcome {
     handoff_bytes: u64,
 }
 
-/// Faces of a mesh grouped by label (stable), the GLB face order.
-fn by_label(faces: &[Face]) -> Vec<Face> {
+/// Faces of a mesh grouped by flat material, then label (stable): the GLB face order.
+fn by_label(faces: &[Face], mesh: &KeyMesh, rank: &[u32]) -> Vec<Face> {
     let mut out = faces.to_vec();
-    out.sort_by_key(|f| f.label);
+    out.sort_by_key(|f| {
+        let material = mesh.labels[f.label as usize].material as usize;
+        (rank.get(material).copied().unwrap_or(u32::MAX), f.label)
+    });
     out
 }
 
@@ -921,6 +942,7 @@ fn process(
     let k = ctx.retention.get(d as usize).copied().unwrap_or(0);
     let mut locked = vec![false; mesh.vertices.len()];
     let mut forced = Vec::new();
+    let mut stalled = Vec::new();
     for (i, v) in mesh.vertices.iter().enumerate() {
         if !v.info.cut(d) {
             continue;
@@ -931,10 +953,24 @@ fn process(
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
             && node.first == 0
             && d >= 1
-            && key_hash(v.key) % 3 == 0
+            && key_hash(v.key).is_multiple_of(3)
             && !v.info.special
         {
             keep = false;
+        }
+        // Stress (test-only): the first tile of each depth cannot remove a third of its
+        // forced seam vertices, as if every collapse were invalid; seam consensus must keep
+        // them in every tile sharing them (the neighbours re-run).
+        if !keep
+            && ctx.mutation == Mutation::ForcedFailures
+            && node.first == 0
+            && d >= 1
+            && key_hash(v.key).is_multiple_of(3)
+            && !v.info.special
+        {
+            locked[i] = true;
+            stalled.push(v.key);
+            continue;
         }
         if keep {
             locked[i] = true;
@@ -949,7 +985,24 @@ fn process(
         .sidecars
         .join(format!("topo-d{d}"))
         .join(format!("f{}.bin", node.first));
-    let cached = if full { read_topology(&cache)? } else { None };
+    // The cache is bound to the forced set, so a keep set that changed since the cached run
+    // cannot silently reuse stale faces.
+    let binding = forced.iter().fold(FORCED_BINDING, |h, &i| {
+        mix(h ^ key_hash(mesh.vertices[i as usize].key))
+    });
+    // The finishing pass publishes exactly the topology the seam audit checked: its cache
+    // must exist and match the tile's forced set under the final keep set.
+    let cached = if full {
+        Some(read_topology(&cache, binding)?.ok_or_else(|| {
+            state(format!(
+                "coarse tile f{}-d{d}: the finishing pass has no audited topology for its \
+                 forced seam set (a seam-consensus re-run was missed)",
+                node.first
+            ))
+        })?)
+    } else {
+        None
+    };
     let (s_faces, report, relaxed) = match cached {
         Some(c) => c,
         None => {
@@ -969,19 +1022,25 @@ fn process(
             out.failed_keys = failed
                 .iter()
                 .map(|&i| mesh.vertices[i as usize].key)
+                .chain(stalled.iter().copied())
                 .collect();
-            // At most P faces, and at least a halving of the children (single-child chains
-            // and small subtrees still coarsen level by level).
-            let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
+            // At most P - P/16 faces (the rest is headroom for hole fills under the P cap),
+            // and at least a halving of the children (single-child chains and small
+            // subtrees still coarsen level by level).
+            let target = (ctx.target - ctx.target / FILL_HEADROOM)
+                .min(kept_faces.len().div_ceil(2))
+                .max(1);
             simplifier.simplify(target);
-            let relaxed = simplifier.live_faces() > 2 * ctx.target;
+            // Above the face cap the relaxed pass runs, so the proxy fits one 8192-row
+            // provenance table (CesiumJS resolves picks through one table per model).
+            let relaxed = simplifier.live_faces() > ctx.target;
             if relaxed {
                 simplifier.relax();
                 simplifier.simplify(target);
             }
             let (s_faces, report) = simplifier.finish();
             if !full {
-                write_topology(&cache, &s_faces, &report, relaxed)?;
+                write_topology(&cache, binding, &s_faces, &report, relaxed)?;
             }
             (s_faces, report, relaxed)
         }
@@ -1033,7 +1092,7 @@ fn process(
 
     // Encode the unfilled proxy, decode its bytes, certify.
     lap(&mut phases[2]);
-    let s_order = by_label(&s_faces);
+    let s_order = by_label(&s_faces, &mesh, ctx.material_rank);
     let flat_records: Vec<RecordTable> = Vec::new();
     let unfilled = codec::encode(
         &primitives(&mesh, &s_order, &key_faces),
@@ -1187,10 +1246,13 @@ fn process(
     }
 
     // Fills: simple interior loops, accepted only within the certified error.
-    let crack_as_hole = ctx.mutation == Mutation::CrackAsHole;
+    let any_loop = matches!(
+        ctx.mutation,
+        Mutation::CrackAsHole | Mutation::FillAcrossSeams
+    );
     let loops = mesh::border_loops(
         &s_order,
-        |v| crack_as_hole || !mesh.vertices[v as usize].info.cut(d),
+        |v| any_loop || !mesh.vertices[v as usize].info.cut(d),
         FILL_LOOP,
     );
     let mut edges: BTreeSet<(u32, u32)> = BTreeSet::new();
@@ -1203,8 +1265,8 @@ fn process(
     let decoded_of: BTreeMap<u32, [f32; 3]> = {
         let mut m = BTreeMap::new();
         for (f, dec) in s_order.iter().zip(&unfilled.faces) {
-            for c in 0..3 {
-                m.insert(f.v[c], dec[c]);
+            for (v, p) in f.v.iter().zip(dec) {
+                m.insert(*v, *p);
             }
         }
         m
@@ -1240,15 +1302,39 @@ fn process(
             out.fills_rejected_topology += 1;
             continue;
         }
+        // A fill never takes the proxy above the face cap (one provenance table per model).
+        if s_order.len() + fill_faces.len() + fan.len() > ctx.target.max(s_order.len()) {
+            out.fills_rejected_budget += 1;
+            continue;
+        }
         let tris: Vec<Tri> = fan_tris.iter().map(tri_of).collect();
         let bvh = label_bvh
             .entry(l.label)
             .or_insert_with(|| Bvh::new(&t_by_label[&l.label]));
         let h = geom::directed(ar, &tris, bvh, Limits::for_sizes(tris.len(), bvh.len()));
         let bound = up_add(ar, h.bound, label_child[&l.label]);
-        if !(bound <= open) {
+        // NaN-safe: a bound that is not at most `open` is rejected.
+        if bound
+            .partial_cmp(&open)
+            .is_none_or(|o| o == std::cmp::Ordering::Greater)
+        {
             out.fills_rejected_bound += 1;
             continue;
+        }
+        // Border-hole rule, checked again on the accepted loop: a fill never closes a loop
+        // through a seam (cut) vertex, so it cannot cap a tile's own seam perimeter or a
+        // hole a seam cuts (the C3 control relabels a crack on purpose and is audited).
+        if ctx.mutation != Mutation::CrackAsHole
+            && l.vertices.iter().any(|&v| {
+                let c2 = mesh.vertices[v as usize].info.c2;
+                c2 != NEVER && u32::from(c2) <= d
+            })
+        {
+            return Err(state(format!(
+                "coarse tile f{}-d{d}: a fill loop passes through a seam vertex (border-hole \
+                 rule)",
+                node.first
+            )));
         }
         to_filled = to_filled.max(bound);
         let e = label_error.entry(l.label).or_insert(0.);
@@ -1293,7 +1379,7 @@ fn process(
     // Final encoding with fills and records; decode and compare once more.
     let mut all = s_order.clone();
     all.extend_from_slice(&fill_faces);
-    let final_order = by_label(&all);
+    let final_order = by_label(&all, &mesh, ctx.material_rank);
     let label_rows = |rows: &[(u32, Key, u32, u8)], reason: u64| -> Vec<[u64; 9]> {
         rows.iter()
             .map(|(label, key, faces, mask)| {
@@ -1656,15 +1742,16 @@ fn frozen_packet(
                 .iter()
                 .take_while(|f| f.gltf == i as u32)
                 .count() as u32;
-        let source = frozen_faces
-            .get(start as usize)
-            .map(|f| f.source)
-            .ok_or_else(|| state("frozen packet: an empty glTF primitive"))?;
+        let run = &frozen_faces[start as usize..end as usize];
+        let (Some(first), Some(last)) = (run.first(), run.last()) else {
+            return Err(state("frozen packet: an empty glTF primitive"));
+        };
         gltf.push(FrozenGltfPrimitive {
             node: p.node,
             mesh: p.mesh,
             index: p.index,
-            source,
+            sources: first.source..last.source + 1,
+            material: p.material,
             translation: p.translation,
             scale: p.scale,
             quantized: p.quantized,
@@ -1770,12 +1857,14 @@ fn frozen_packet(
 /// Cache of a tile's simplified faces (scratch), written by its latest topology run.
 fn write_topology(
     path: &Path,
+    binding: u64,
     faces: &[Face],
     report: &mesh::SimplifyReport,
     relaxed: bool,
 ) -> Result<(), JobError> {
     let mut b = Vec::with_capacity(faces.len() * 20 + 64);
     for v in [
+        binding,
         report.forced,
         report.forced_unchecked,
         report.collapses,
@@ -1797,7 +1886,11 @@ fn write_topology(
     fs::write(path, b).map_err(|e| JobError::io("write LOD topology cache", path, e))
 }
 
-fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport, bool)>, JobError> {
+/// The cached run, or None when there is none or it was computed for another forced set.
+fn read_topology(
+    path: &Path,
+    binding: u64,
+) -> Result<Option<(Vec<Face>, mesh::SimplifyReport, bool)>, JobError> {
     let b = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -1809,22 +1902,25 @@ fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport,
             b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap(),
         ))
     };
+    if u64_at(0)? != binding {
+        return Ok(None);
+    }
     let report = mesh::SimplifyReport {
-        forced: u64_at(0)?,
-        forced_unchecked: u64_at(8)?,
-        collapses: u64_at(16)?,
-        input_faces: u64_at(24)?,
+        forced: u64_at(8)?,
+        forced_unchecked: u64_at(16)?,
+        collapses: u64_at(24)?,
+        input_faces: u64_at(32)?,
         ..Default::default()
     };
-    let relaxed = *b.get(32).ok_or_else(bad)? != 0;
-    let n = u64_at(33)? as usize;
-    if b.len() != 41 + 20 * n {
+    let relaxed = *b.get(40).ok_or_else(bad)? != 0;
+    let n = u64_at(41)? as usize;
+    if b.len() != 49 + 20 * n {
         return Err(bad());
     }
     let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
     let faces = (0..n)
         .map(|k| {
-            let o = 41 + 20 * k;
+            let o = 49 + 20 * k;
             Face {
                 v: [u(o), u(o + 4), u(o + 8)],
                 label: u(o + 12),
@@ -2108,7 +2204,26 @@ pub(crate) fn produce(
         check,
     )?;
     report.prepass_seconds = prepass.elapsed().as_secs_f64();
-    let materials: Vec<Value> = captured.materials.iter().map(|m| m.flat_proxy()).collect();
+    // Flat proxy materials without names, so equal flat materials share a glTF primitive.
+    let materials: Vec<Value> = captured
+        .materials
+        .iter()
+        .map(|m| {
+            let mut value = m.flat_proxy();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("name");
+            }
+            value
+        })
+        .collect();
+    let material_rank: Vec<u32> = (0..materials.len())
+        .map(|i| {
+            materials
+                .iter()
+                .position(|m| *m == materials[i])
+                .unwrap_or(i) as u32
+        })
+        .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
     let ctx = Ctx {
@@ -2117,6 +2232,7 @@ pub(crate) fn produce(
         source: &source,
         lattice: &captured.lattice,
         materials: &materials,
+        material_rank: &material_rank,
         retention: &report.retention.clone(),
         target: input.target,
         mutation: input.mutation,
@@ -2397,6 +2513,7 @@ pub(crate) fn produce(
             report.fills += u64::from(row.filled);
             report.fills_rejected_bound += o.fills_rejected_bound;
             report.fills_rejected_topology += o.fills_rejected_topology;
+            report.fills_rejected_budget += o.fills_rejected_budget;
             report.forced_collapses += o.forced;
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);

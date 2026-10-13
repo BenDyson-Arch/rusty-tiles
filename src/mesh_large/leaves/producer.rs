@@ -473,6 +473,7 @@ fn encode_leaf(
 /// of one leaf also run in parallel), and written strictly in leaf order, so
 /// every member, manifest row and the first reported failure are independent
 /// of the worker count.
+#[allow(clippy::too_many_arguments)]
 fn produce(
     path: &Path,
     captured: &full::FullCaptured,

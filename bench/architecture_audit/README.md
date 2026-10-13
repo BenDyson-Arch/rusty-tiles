@@ -20,7 +20,7 @@ collected evidence, not that the release gate passes.
 | --- | --- | --- |
 | [API probes](api/README.md) / [results](api/results.json) | Build unmodified portable CLI/core/Python binding, generate invented GLBs, compare decoded archive members and inspect output after exceptions | Geographic offsets, rotation-only requests, omitted texture choice, callback failure/publication |
 | [Runtime probes](runtime/README.md) / [results](runtime/evidence/publication-vector.json) | Natural vector conversions plus clearly identified isolated source fault injection | Feature rollback/reporting, source callback I/O failure, directory publication race, orphan-content control |
-| [Foundation design model](foundation/README.md) / [results](foundation/results.json) | Exhaustive finite state/history exploration with seven negative controls | Proposed gate, seal/drain, primary failure, publication and recovery contracts; no production execution |
+| [Foundation design model](foundation/README.md) / [results](../MOVED_EVIDENCE.md) | Exhaustive finite state/history exploration with seven negative controls | Proposed gate, seal/drain, primary failure, publication and recovery contracts; no production execution |
 
 The individual READMEs contain replay commands and prerequisites. Build targets
 and generated inputs/outputs live outside tracked source. Results record the

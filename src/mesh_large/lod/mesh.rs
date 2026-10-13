@@ -69,7 +69,7 @@ impl KeyMesh {
             .iter()
             .flat_map(|f| (0..3).map(move |i| (f.keys[i], f.info[i])))
             .collect();
-        keys.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        keys.sort_unstable_by_key(|a| a.0);
         keys.dedup_by(|a, b| a.0 == b.0);
         let mut labels: Vec<Label> = faces.iter().map(|f| f.label).collect();
         labels.sort_unstable();
@@ -219,9 +219,19 @@ enum Role {
     Locked,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug)]
 struct Cost(f64);
+impl PartialEq for Cost {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
 impl Eq for Cost {}
+impl PartialOrd for Cost {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.total_cmp(&other.0)

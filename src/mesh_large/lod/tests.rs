@@ -202,6 +202,9 @@ struct Glb {
     /// Property table of each face's second feature-ID set.
     second_table: Vec<usize>,
     tables: Vec<(String, BTreeMap<String, Vec<u64>>)>,
+    /// glTF primitives over all scene meshes, and declared materials.
+    gltf_primitives: usize,
+    materials: usize,
 }
 
 fn read_glb(bytes: &[u8]) -> Glb {
@@ -273,62 +276,68 @@ fn read_glb(bytes: &[u8]) -> Glb {
                 .map(|x| x.as_f64().unwrap() as f32)
                 .collect()
         });
-        let prim = &doc["meshes"][node["mesh"].as_u64().unwrap() as usize]["primitives"][0];
-        let (pos, ct) = elements(prim["attributes"]["POSITION"].as_u64().unwrap() as usize);
-        let points: Vec<[f32; 3]> = pos
-            .iter()
-            .map(|e| {
-                std::array::from_fn(|a| {
-                    let raw = if ct == 5123 {
-                        f32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]]))
-                    } else {
-                        f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())
-                    };
-                    let p = raw * s[a] + t[a];
-                    if p == 0. {
-                        0.
-                    } else {
-                        p
-                    }
-                })
-            })
-            .collect();
-        let feature = |name: &str| -> Vec<u32> {
-            prim["attributes"]
-                .get(name)
-                .map_or(vec![u32::MAX; points.len()], |a| {
-                    elements(a.as_u64().unwrap() as usize)
-                        .0
-                        .iter()
-                        .map(|e| f32::from_le_bytes(e[..4].try_into().unwrap()) as u32)
-                        .collect()
-                })
-        };
-        let (f0, f1) = (feature("_FEATURE_ID_0"), feature("_FEATURE_ID_1"));
-        let second = prim["extensions"]["EXT_mesh_features"]["featureIds"][1]["propertyTable"]
-            .as_u64()
-            .map_or(usize::MAX, |t| t as usize);
-        let index: Vec<usize> = match prim.get("indices") {
-            Some(i) => {
-                let (e, ct) = elements(i.as_u64().unwrap() as usize);
-                e.iter()
-                    .map(|b| {
-                        if ct == 5123 {
-                            usize::from(u16::from_le_bytes([b[0], b[1]]))
+        for prim in doc["meshes"][node["mesh"].as_u64().unwrap() as usize]["primitives"]
+            .as_array()
+            .unwrap()
+        {
+            out.gltf_primitives += 1;
+            let (pos, ct) = elements(prim["attributes"]["POSITION"].as_u64().unwrap() as usize);
+            let points: Vec<[f32; 3]> = pos
+                .iter()
+                .map(|e| {
+                    std::array::from_fn(|a| {
+                        let raw = if ct == 5123 {
+                            f32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]]))
                         } else {
-                            u32::from_le_bytes(b[..4].try_into().unwrap()) as usize
+                            f32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())
+                        };
+                        let p = raw * s[a] + t[a];
+                        if p == 0. {
+                            0.
+                        } else {
+                            p
                         }
                     })
-                    .collect()
+                })
+                .collect();
+            let feature = |name: &str| -> Vec<u32> {
+                prim["attributes"]
+                    .get(name)
+                    .map_or(vec![u32::MAX; points.len()], |a| {
+                        elements(a.as_u64().unwrap() as usize)
+                            .0
+                            .iter()
+                            .map(|e| f32::from_le_bytes(e[..4].try_into().unwrap()) as u32)
+                            .collect()
+                    })
+            };
+            let (f0, f1) = (feature("_FEATURE_ID_0"), feature("_FEATURE_ID_1"));
+            let second = prim["extensions"]["EXT_mesh_features"]["featureIds"][1]["propertyTable"]
+                .as_u64()
+                .map_or(usize::MAX, |t| t as usize);
+            let index: Vec<usize> = match prim.get("indices") {
+                Some(i) => {
+                    let (e, ct) = elements(i.as_u64().unwrap() as usize);
+                    e.iter()
+                        .map(|b| {
+                            if ct == 5123 {
+                                usize::from(u16::from_le_bytes([b[0], b[1]]))
+                            } else {
+                                u32::from_le_bytes(b[..4].try_into().unwrap()) as usize
+                            }
+                        })
+                        .collect()
+                }
+                None => (0..points.len()).collect(),
+            };
+            for t in index.chunks(3) {
+                out.faces.push([points[t[0]], points[t[1]], points[t[2]]]);
+                out.features.push([f0[t[0]], f1[t[0]]]);
+                out.second_table.push(second);
             }
-            None => (0..points.len()).collect(),
-        };
-        for t in index.chunks(3) {
-            out.faces.push([points[t[0]], points[t[1]], points[t[2]]]);
-            out.features.push([f0[t[0]], f1[t[0]]]);
-            out.second_table.push(second);
         }
     }
+    out.materials = doc["materials"].as_array().map_or(0, Vec::len);
     let meta = &doc["extensions"]["EXT_structural_metadata"];
     for table in meta["propertyTables"].as_array().unwrap() {
         let class = table["class"].as_str().unwrap().to_owned();
@@ -443,6 +452,8 @@ struct Audit {
     fills: usize,
     vanished: usize,
     fill_faces: usize,
+    /// Fill-face corners on a seam vertex of their depth (the border-hole rule forbids).
+    seam_fill_vertices: usize,
     max_depth: u64,
 }
 
@@ -501,6 +512,8 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         present: BTreeSet<(u64, u64, u64)>,
         vanished: Vec<(u64, u64, u64)>,
         fills: Vec<([u64; 3], f64)>,
+        /// Decoded fill faces (proxies).
+        filled: Vec<[[f32; 3]; 3]>,
     }
     let primitives = |g: &Glb| -> BTreeSet<(u64, u64, u64)> {
         let t = &g
@@ -559,6 +572,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             provenance,
             vanished: vec![],
             fills: vec![],
+            filled: vec![],
         });
     }
     let leaf_count = tiles.len();
@@ -584,29 +598,35 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .unwrap()
             .1;
         if g.faces.len() <= 8192 {
-            // One provenance table per proxy (CesiumJS picks through one table per model).
+            // One provenance table per proxy (CesiumJS picks through one table per model)
+            // and one glTF primitive per distinct flat material.
             assert_eq!(g.tables.iter().filter(|t| t.0 == "proxy_source").count(), 1);
+            assert_eq!(
+                g.gltf_primitives, g.materials,
+                "one glTF primitive per material"
+            );
         }
-        for (f, table) in g.features.iter().zip(&g.second_table) {
+        let mut filled = vec![];
+        for ((f, table), face) in g.features.iter().zip(&g.second_table).zip(&g.faces) {
             let (class, t) = &g.tables[*table];
             assert_eq!(class, "proxy_source");
             let row = f[1] as usize;
-            assert_eq!(
-                t["mesh_index"][row], present_rows["mesh_index"][f[0] as usize],
-                "provenance primitive"
-            );
+            assert!(!t.contains_key("mesh_index"), "slim provenance");
+            let mesh = present_rows["mesh_index"][f[0] as usize];
             if t["fill"][row] == 0 {
                 assert!(
-                    in_range.contains(&(t["mesh_index"][row], t["triangle_index"][row])),
+                    in_range.contains(&(mesh, t["triangle_index"][row])),
                     "provenance outside the tile"
                 );
             } else {
                 audit.fill_faces += 1;
+                filled.push(*face);
             }
         }
         let mut vanished = vec![];
         let mut fills = vec![];
         for (class, t) in &g.tables {
+            #[allow(clippy::needless_range_loop)] // several columns share the row index
             for i in 0..t.values().next().map_or(0, Vec::len) {
                 if class == "lod_vanished" {
                     vanished.push((
@@ -638,6 +658,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             provenance: vec![],
             vanished,
             fills,
+            filled,
         });
     }
     for p in &tiles[leaf_count..] {
@@ -673,7 +694,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             assert!(*bound <= p.error);
             let k = key.map(|b| f64::from(f32::from_bits(b as u32)));
             assert!(
-                boundary.iter().any(|b| *b == k),
+                boundary.contains(&k),
                 "a fill closes something that is not a source hole"
             );
         }
@@ -725,6 +746,23 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
                     if a != b {
                         *count.entry((a.min(b), a.max(b))).or_default() += 1;
                     }
+                }
+            }
+        }
+        // Border-hole rule: no fill at depth d touches a seam vertex, a decoded position
+        // shared by two frontier tiles.
+        let mut owners: BTreeMap<[u32; 3], BTreeSet<usize>> = BTreeMap::new();
+        for (i, t) in tiles.iter().enumerate() {
+            if (i < leaf_count && t.depth <= d) || (i >= leaf_count && t.depth == d) {
+                for p in t.faces.iter().flatten() {
+                    owners.entry(welded(*p)).or_default().insert(i);
+                }
+            }
+        }
+        for t in tiles[leaf_count..].iter().filter(|t| t.depth == d) {
+            for p in t.filled.iter().flatten() {
+                if owners.get(&welded(*p)).is_some_and(|o| o.len() > 1) {
+                    audit.seam_fill_vertices += 1;
                 }
             }
         }
@@ -780,6 +818,7 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
         eprintln!("terrain jobs {jobs}: {audit:?}\nlod {lod}");
         assert!(audit.proxies >= 3 && audit.max_depth >= 1, "{audit:?}");
         assert_eq!(audit.cracks, 0, "{audit:?}");
+        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
         assert!(audit.matched_edges > 0);
         assert!(audit.vanished > 0, "islands should vanish at the root");
         assert!(
@@ -826,6 +865,7 @@ fn synthetic_depth_lod_is_certified_and_seamless() {
     eprintln!("cluster: {audit:?}");
     assert!(audit.max_depth > 21, "{audit:?}");
     assert_eq!(audit.cracks, 0);
+    assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
     let leaf_rows = rows(&dir.join("leaves.jsonl"));
     assert!(leaf_rows.iter().any(|r| r["depth"].as_u64().unwrap() > 21));
     archive(&dir, &work.path().join("c.3tz"));
@@ -899,4 +939,66 @@ fn control_crack_relabelled_as_hole_is_caught() {
             assert!(message.contains("not a source hole"), "{message}");
         }
     }
+}
+
+/// Seam consensus under stress: the first tile of each depth cannot remove a third of its
+/// forced seam vertices, so every neighbour that removed them re-runs with them kept. The
+/// published proxies (finishing pass over the audited topology caches) must still be
+/// crack-free on decoded bytes and certified, with identical bytes across worker counts.
+#[test]
+fn seam_consensus_reruns_are_audited() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let mut proxies = Vec::new();
+    for jobs in [1, 2] {
+        let dir = leaves(
+            &input,
+            &work.path().join(format!("leaves{jobs}")),
+            jobs,
+            Mutation::ForcedFailures,
+            1024,
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let lod = &manifest["lod"];
+        let audit = audit(&source, &dir);
+        eprintln!("consensus jobs {jobs}: {audit:?}\nlod {lod}");
+        assert!(lod["seamRounds"].as_u64().unwrap() > 0, "{lod}");
+        assert!(lod["seamKeptExtra"].as_u64().unwrap() > 0, "{lod}");
+        assert_eq!(audit.cracks, 0, "{audit:?}");
+        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
+        assert!(audit.matched_edges > 0);
+        let mut bytes = Vec::new();
+        for r in rows(&dir.join("proxies.jsonl")) {
+            bytes.push(fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap());
+        }
+        proxies.push(bytes);
+    }
+    assert!(proxies[0] == proxies[1], "proxies differ across jobs");
+}
+
+/// Control C4: with the fill eligibility opened to seam (cut) vertices, tiles of the deep
+/// cluster cap their own seam perimeters; the production border-hole check refuses the run.
+/// (Published outputs are also audited: `seam_fill_vertices` counts fill corners on seams.)
+#[test]
+fn control_fill_across_seams_is_caught() {
+    let work = tempfile::tempdir().unwrap();
+    let source = cluster();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let refused = leaves(
+        &input,
+        &work.path().join("leaves"),
+        2,
+        Mutation::FillAcrossSeams,
+        512,
+    )
+    .unwrap_err();
+    assert_eq!(refused.error.kind(), JobErrorKind::InvalidState);
+    assert!(
+        refused.error.message().contains("border-hole rule"),
+        "{}",
+        refused.error.message()
+    );
 }
