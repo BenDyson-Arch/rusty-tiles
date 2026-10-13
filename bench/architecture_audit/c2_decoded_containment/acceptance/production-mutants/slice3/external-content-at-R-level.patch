@@ -1,5 +1,5 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 65ae7e6..c9da576 100644
+index 88ee84a..9d65689 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
 @@ -1697,6 +1697,7 @@ impl Check<'_> {

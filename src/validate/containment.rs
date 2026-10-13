@@ -799,6 +799,205 @@ pub(crate) fn walk(
     Verdict::Contained
 }
 
+// ---- corner fast path (H11) ----
+
+/// Bitmap words per chunk: a chunk is the marked vertices of 1,024 consecutive indices.
+const CHUNK_WORDS: usize = 16;
+/// Corner credit per drawn-vertex bound: each reference adds `T(u)/64` corner walks.
+const CREDIT_DIVISOR: u64 = 64;
+
+/// Corner-walk budget of one phase-2 stream (H11 V7), kept in 1/64 walks. Each reference adds
+/// its `T(u)`; a corner test spends 64 per corner and a skipped chunk refunds 64 per marked vertex.
+/// So, after every reference, the walks performed never exceed the marked vertices so far plus
+/// `⌊ΣT(u)/64⌋` over the references so far.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Credit {
+    left: u64,
+    /// Exact walks performed (corners and vertices), for the work-bound controls.
+    pub(crate) walks: u64,
+    /// Corner tests attempted, and those that skipped their chunk.
+    pub(crate) tests: u64,
+    pub(crate) skips: u64,
+}
+impl Credit {
+    /// Start a reference to a URI with `T(u) = t`.
+    pub(crate) fn accrue(&mut self, t: u64) {
+        self.left = self.left.saturating_add(t);
+    }
+    fn covers(&self, corners: u64) -> bool {
+        corners.saturating_mul(CREDIT_DIVISOR) <= self.left
+    }
+    fn spend(&mut self, corners: u64) {
+        self.left -= corners * CREDIT_DIVISOR;
+    }
+    fn refund(&mut self, marked: u64) {
+        self.left = self
+            .left
+            .saturating_add(marked.saturating_mul(CREDIT_DIVISOR));
+    }
+}
+
+/// The componentwise raw minimum and maximum over the marked vertices of `words` (bit `b` of
+/// `words[i]` is vertex `64·(first + i) + b`), read with the walk's own reader. `None` when a
+/// FLOAT component is not finite or the word kinds differ: that chunk takes the per-vertex walk.
+fn raw_box(
+    words: &[u64],
+    first: usize,
+    vertex: &impl Fn(usize) -> RawVertex,
+) -> Option<(RawVertex, RawVertex)> {
+    let mut extent: Option<(RawVertex, RawVertex)> = None;
+    for (w, &bits) in words.iter().enumerate() {
+        let mut bits = bits;
+        while bits != 0 {
+            let v = 64 * (first + w) + bits.trailing_zeros() as usize;
+            bits &= bits - 1;
+            extent = Some(match (extent, vertex(v)) {
+                (_, RawVertex::F32(a)) if !a.iter().all(|c| c.is_finite()) => return None,
+                (None, raw) => (raw, raw),
+                (Some((RawVertex::F32(lo), RawVertex::F32(hi))), RawVertex::F32(a)) => (
+                    RawVertex::F32(std::array::from_fn(
+                        |c| if a[c] < lo[c] { a[c] } else { lo[c] },
+                    )),
+                    RawVertex::F32(std::array::from_fn(
+                        |c| if a[c] > hi[c] { a[c] } else { hi[c] },
+                    )),
+                ),
+                (Some((RawVertex::Int(lo), RawVertex::Int(hi))), RawVertex::Int(a)) => (
+                    RawVertex::Int(std::array::from_fn(|c| lo[c].min(a[c]))),
+                    RawVertex::Int(std::array::from_fn(|c| hi[c].max(a[c]))),
+                ),
+                _ => return None,
+            });
+        }
+    }
+    extent
+}
+/// Whether every tested quantity is a function of at most one decoded coordinate and every test is
+/// a box row: each row `r < 3` of the top composite and of every level step has at most one nonzero
+/// entry in columns 0–2, and no level holds a sphere. Then each tested row ranges over the box
+/// between its values at the two diagonal corners, and box rows are tested independently, so those
+/// two corners decide the whole box.
+fn diagonal_suffices(arena: &Arena, levels: &[LevelFacts]) -> bool {
+    let top = arena.top;
+    let composite = (0..3).all(|r| {
+        (0..3)
+            .filter(|&c| !arena.d.is_zero(arena.g(top, r, c)))
+            .count()
+            <= 1
+    });
+    composite
+        && levels.iter().enumerate().all(|(l, level)| {
+            let step = level.to_parent.filter(|_| l > 0).is_none_or(|t| {
+                (0..3).all(|r| (0..3).filter(|&c| t[4 * c + r] != 0.0).count() <= 1)
+            });
+            step && level
+                .volumes
+                .iter()
+                .flatten()
+                .all(|(_, v)| matches!(v, VolumeFacts::Box(_)))
+        })
+}
+/// The distinct corners of a raw box that decide it: bit `c` of a corner index selects `hi_c`, and a
+/// component with `lo_c == hi_c` contributes only its `lo_c` choice, giving 1, 2, 4 or 8 corners; with
+/// `diagonal`, only the all-`lo` and all-`hi` corners (1 or 2).
+fn corners(lo: RawVertex, hi: RawVertex, diagonal: bool) -> impl Iterator<Item = RawVertex> {
+    let differs = |c: usize| match (lo, hi) {
+        (RawVertex::F32(l), RawVertex::F32(h)) => l[c] != h[c],
+        (RawVertex::Int(l), RawVertex::Int(h)) => l[c] != h[c],
+        _ => unreachable!("raw_box returns one word kind"),
+    };
+    let vary = (0..3)
+        .filter(|&c| differs(c))
+        .fold(0usize, |m, c| m | 1 << c);
+    let pick = move |i: usize| match (lo, hi) {
+        (RawVertex::F32(l), RawVertex::F32(h)) => RawVertex::F32(std::array::from_fn(|c| {
+            if i >> c & 1 == 1 {
+                h[c]
+            } else {
+                l[c]
+            }
+        })),
+        (RawVertex::Int(l), RawVertex::Int(h)) => RawVertex::Int(std::array::from_fn(|c| {
+            if i >> c & 1 == 1 {
+                h[c]
+            } else {
+                l[c]
+            }
+        })),
+        _ => unreachable!("raw_box returns one word kind"),
+    };
+    (0..8usize)
+        .filter(move |&i| i & !vary == 0 && (!diagonal || i == 0 || i == vary))
+        .map(pick)
+}
+/// The first marked vertex of one (instance, accessor) that `walk` finds Outside, in ascending
+/// index order, with its verdict; `None` when every marked vertex is Contained. On a fault the
+/// result is meaningless and `arena.fault()` is set.
+///
+/// Corner fast path (H11): the marked vertices are taken in chunks of [`CHUNK_WORDS`] bitmap words.
+/// A chunk whose every distinct raw-box corner `walk`s Contained is skipped: the decode is monotone
+/// per component, every level maps the decoded vertex affinely with one constant `W`, and every
+/// box row and sphere is convex, so the box spanned by the decoded corners lies in the convex
+/// intersection of all test sets. Any other chunk is walked vertex by vertex, as before. The box
+/// comes from the marked raw words themselves, never from declared accessor bounds; corners are raw
+/// words of the accessor's type, so the static span bound covers them.
+pub(crate) fn walk_marked(
+    arena: &mut Arena,
+    n: Normalization,
+    levels: &[LevelFacts],
+    bitmap: &[u64],
+    credit: &mut Credit,
+    vertex: impl Fn(usize) -> RawVertex,
+) -> Option<(usize, Verdict)> {
+    let diagonal = diagonal_suffices(arena, levels);
+    for (chunk, words) in bitmap.chunks(CHUNK_WORDS).enumerate() {
+        let first = chunk * CHUNK_WORDS;
+        let marked: u64 = words.iter().map(|w| u64::from(w.count_ones())).sum();
+        let extent = (marked > 1 && credit.covers(1))
+            .then(|| raw_box(words, first, &vertex))
+            .flatten();
+        if let Some((lo, hi)) = extent {
+            let count = corners(lo, hi, diagonal).count() as u64;
+            if count < marked && credit.covers(count) {
+                credit.spend(count);
+                credit.tests += 1;
+                let mut contained = true;
+                for corner in corners(lo, hi, diagonal) {
+                    credit.walks += 1;
+                    contained = walk(arena, n, corner, levels) == Verdict::Contained;
+                    if arena.fault() {
+                        return None;
+                    }
+                    if !contained {
+                        break;
+                    }
+                }
+                if contained {
+                    credit.skips += 1;
+                    credit.refund(marked);
+                    continue;
+                }
+            }
+        }
+        for (w, &bits) in words.iter().enumerate() {
+            let mut bits = bits;
+            while bits != 0 {
+                let v = 64 * (first + w) + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                credit.walks += 1;
+                let verdict = walk(arena, n, vertex(v), levels);
+                if arena.fault() {
+                    return None;
+                }
+                if verdict != Verdict::Contained {
+                    return Some((v, verdict));
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2019,5 +2218,413 @@ mod tests {
             assert!(!arena.fault());
         }
         assert!(contained > tested / 4 && contained < tested);
+    }
+
+    // ---- corner fast path (H11) ----
+
+    /// The pre-H11 stream: every marked vertex in ascending order, first Outside wins.
+    fn per_vertex(
+        arena: &mut Arena,
+        n: Normalization,
+        levels: &[LevelFacts],
+        bitmap: &[u64],
+        vertex: impl Fn(usize) -> RawVertex,
+    ) -> Option<(usize, Verdict)> {
+        for (w, &bits) in bitmap.iter().enumerate() {
+            let mut bits = bits;
+            while bits != 0 {
+                let v = 64 * w + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let verdict = walk(arena, n, vertex(v), levels);
+                assert!(!arena.fault());
+                if verdict != Verdict::Contained {
+                    return Some((v, verdict));
+                }
+            }
+        }
+        None
+    }
+    fn bitmap_of(count: usize, mut marked: impl FnMut(usize) -> bool) -> Vec<u64> {
+        let mut bitmap = vec![0u64; count.div_ceil(64)];
+        (0..count)
+            .filter(|&v| marked(v))
+            .for_each(|v| bitmap[v / 64] |= 1 << (v % 64));
+        bitmap
+    }
+    fn rich() -> Credit {
+        let mut c = Credit::default();
+        c.accrue(u64::MAX / 2);
+        c
+    }
+    /// A raw word near `centre` within `spread` (clamped to the type's range).
+    fn raw_near(rng: &mut Rng, n: Normalization, centre: [i64; 3], spread: i64) -> RawVertex {
+        let (lo, hi) = match n {
+            Normalization::None(Word::F32) => {
+                return RawVertex::F32(std::array::from_fn(|c| {
+                    let k = centre[c] + rng.below(2 * spread as u64 + 1) as i64 - spread;
+                    // Quarter steps keep FLOAT words exact and dense.
+                    k as f32 * 0.25
+                }));
+            }
+            Normalization::None(Word::Int8) | Normalization::I8 => (-128, 127),
+            Normalization::U8 => (0, 255),
+            Normalization::None(Word::Int16) | Normalization::I16 => (-32768, 32767),
+            Normalization::U16 => (0, 65535),
+        };
+        RawVertex::Int(std::array::from_fn(|c| {
+            (centre[c] + rng.below(2 * spread as u64 + 1) as i64 - spread).clamp(lo, hi) as i32
+        }))
+    }
+    fn chain_local(rng: &mut Rng) -> Local {
+        match rng.below(6) {
+            0 => Local::Skip,
+            1 => Local::Trs {
+                t: [0.0; 3].map(|_| rng.below(9) as f64 - 4.0),
+                q: [0.0, 0.0, 0.0, 1.0],
+                s: [0.0; 3].map(|_| [0.5, 1.0, 2.0, -1.0][rng.below(4) as usize]),
+            },
+            // Rotations: a quarter turn and a 3-4-5 turn (exact, not a signed permutation).
+            2 => Local::Trs {
+                t: [1.0, -2.0, 0.5],
+                q: [0.0, 0.6, 0.0, 0.8],
+                s: [1.0; 3],
+            },
+            3 => Local::Trs {
+                t: [0.0; 3],
+                q: [0.5, 0.5, 0.5, 0.5],
+                s: [1.0, 2.0, 1.0],
+            },
+            // A permutation matrix with a sign and a translation.
+            4 => Local::Matrix([
+                0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 3.0, -1.0, 0.25, 1.0,
+            ]),
+            _ => IDENTITY_TRS,
+        }
+    }
+    fn step(rng: &mut Rng) -> Option<[f64; 16]> {
+        match rng.below(3) {
+            0 => None,
+            1 => Some(affine([1.0, 1.0, 1.0], [0.5, -3.0, 2.0])),
+            // A shear step (not a signed permutation).
+            _ => Some([
+                1.0, 0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.25, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
+            ]),
+        }
+    }
+    fn volume_at(rng: &mut Rng, s: f64) -> VolumeFacts {
+        let c = [0.0; 3].map(|_| (rng.below(5) as f64 - 2.0) * s / 8.0);
+        if rng.below(3) == 0 {
+            VolumeFacts::Sphere([c[0], c[1], c[2], s])
+        } else {
+            let h = [0.0; 3].map(|_| s * [1.0, 0.75, 1.25][rng.below(3) as usize]);
+            bx(c, h)
+        }
+    }
+
+    #[test]
+    fn walk_marked_equals_the_per_vertex_walk() {
+        let norms = [
+            Normalization::None(Word::F32),
+            Normalization::None(Word::Int8),
+            Normalization::None(Word::Int16),
+            Normalization::I8,
+            Normalization::U8,
+            Normalization::I16,
+            Normalization::U16,
+        ];
+        let mut rng = Rng(0x5eed_1111_2222_3333);
+        let (mut skipped, mut fell_back, mut outside, mut contained) = (0, 0, 0, 0);
+        for trial in 0..400 {
+            let chain: Vec<Local> = (0..rng.below(3)).map(|_| chain_local(&mut rng)).collect();
+            let n = norms[rng.below(7) as usize];
+            let count = [1, 2, 3, 7, 9, 40, 300, 1500, 2600][rng.below(9) as usize];
+            let spread = [0, 1, 3, 40, 2000][rng.below(5) as usize];
+            let centre = [0; 3].map(|_| rng.below(200) as i64 - 100);
+            let words: Vec<RawVertex> = (0..count)
+                .map(|_| raw_near(&mut rng, n, centre, spread))
+                .collect();
+            let density = rng.below(4);
+            let bitmap = bitmap_of(count, |_| density == 0 || rng.below(4) < density + 1);
+            let mut arena = arena_with(4096, &chain);
+            // Scale: the smallest power of two whose centred own box holds every marked vertex.
+            let mut s = 2f64.powi(-40);
+            loop {
+                let own = [level(None, &[(Role::Own, bx([0.0; 3], [s; 3]))])];
+                if per_vertex(&mut arena, n, &own, &bitmap, |v| words[v]).is_none() {
+                    break;
+                }
+                s *= 2.0;
+            }
+            let shrink = [1.0, 1.0, 0.75, 0.5, 0.95][rng.below(5) as usize];
+            let levels: Vec<LevelFacts> = (0..1 + rng.below(3))
+                .map(|l| {
+                    let role = if l == 0 {
+                        Role::Own
+                    } else {
+                        Role::Ancestor(l as u32)
+                    };
+                    let mut v = vec![(role, volume_at(&mut rng, s * shrink * (1 + l) as f64))];
+                    if rng.below(3) == 0 {
+                        let second = if l == 0 {
+                            Role::Content
+                        } else {
+                            Role::ExternalContent(l as u32)
+                        };
+                        v.push((second, volume_at(&mut rng, 4.0 * s)));
+                    }
+                    level((l > 0).then(|| step(&mut rng)).flatten(), &v)
+                })
+                .collect();
+            let want = per_vertex(&mut arena, n, &levels, &bitmap, |v| words[v]);
+            let marked: u64 = bitmap.iter().map(|w| u64::from(w.count_ones())).sum();
+            for mut credit in [rich(), Credit::default()] {
+                let got = walk_marked(&mut arena, n, &levels, &bitmap, &mut credit, |v| words[v]);
+                assert!(!arena.fault());
+                assert_eq!(got, want, "trial {trial}");
+                skipped += credit.skips;
+                fell_back += credit.tests - credit.skips;
+                assert!(credit.walks <= marked + credit.tests * 8);
+            }
+            match want {
+                Some(_) => outside += 1,
+                None => contained += 1,
+            }
+        }
+        // Both branches and both outcomes are exercised.
+        assert!(skipped > 50 && fell_back > 20, "{skipped} {fell_back}");
+        assert!(outside > 50 && contained > 50, "{outside} {contained}");
+    }
+
+    #[test]
+    fn diagonal_corners_only_for_axis_aligned_box_chains() {
+        let own = |v: VolumeFacts| [level(None, &[(Role::Own, v)])];
+        let unit = bx([0.0; 3], [1.0; 3]);
+        let sphere = VolumeFacts::Sphere([0.0, 0.0, 0.0, 1.0]);
+        let permutation = Local::Matrix([
+            0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 3.0, -1.0, 0.25, 1.0,
+        ]);
+        let scaled = Local::Trs {
+            t: [1.0, 2.0, 3.0],
+            q: [0.0, 0.0, 0.0, 1.0],
+            s: [2.0, -1.0, 0.0],
+        };
+        let rotated = Local::Trs {
+            t: [0.0; 3],
+            q: [0.0, 0.6, 0.0, 0.8],
+            s: [1.0; 3],
+        };
+        for (chain, levels, want) in [
+            (vec![], own(unit).to_vec(), true),
+            (vec![permutation, scaled], own(unit).to_vec(), true),
+            (vec![rotated], own(unit).to_vec(), false),
+            (vec![], own(sphere).to_vec(), false),
+            (
+                vec![scaled],
+                vec![
+                    level(None, &[(Role::Own, unit)]),
+                    level(
+                        Some(affine([1.0, -2.0, 0.5], [3.0; 3])),
+                        &[(Role::Ancestor(1), unit)],
+                    ),
+                ],
+                true,
+            ),
+            (
+                vec![],
+                vec![
+                    level(None, &[(Role::Own, unit)]),
+                    level(
+                        Some([
+                            1.0, 0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+                            0.0, 1.0,
+                        ]),
+                        &[(Role::Ancestor(1), unit)],
+                    ),
+                ],
+                false,
+            ),
+            (
+                vec![],
+                vec![
+                    level(None, &[(Role::Own, unit)]),
+                    level(
+                        None,
+                        &[
+                            (Role::Ancestor(1), unit),
+                            (Role::ExternalContent(1), sphere),
+                        ],
+                    ),
+                ],
+                false,
+            ),
+        ] {
+            let arena = arena_with(4096, &chain);
+            assert_eq!(diagonal_suffices(&arena, &levels), want, "{chain:?}");
+        }
+        // Distinct corners: degenerate components collapse.
+        let lo = RawVertex::Int([0, 5, -3]);
+        let count = |hi, d| corners(lo, hi, d).count();
+        assert_eq!(count(RawVertex::Int([1, 6, -2]), false), 8);
+        assert_eq!(count(RawVertex::Int([1, 6, -2]), true), 2);
+        assert_eq!(count(RawVertex::Int([1, 5, -2]), false), 4);
+        assert_eq!(count(RawVertex::Int([0, 5, -2]), false), 2);
+        assert_eq!(count(RawVertex::Int([0, 5, -3]), false), 1);
+        assert_eq!(count(RawVertex::Int([0, 5, -3]), true), 1);
+        assert_eq!(
+            corners(lo, RawVertex::Int([1, 5, -2]), true).collect::<Vec<_>>(),
+            [lo, RawVertex::Int([1, 5, -2])]
+        );
+        // -0.0 and 0.0 are one value.
+        let f = |v: [f32; 3]| RawVertex::F32(v);
+        assert_eq!(
+            corners(f([0.0, 1.0, 2.0]), f([-0.0, 1.0, 2.0]), false).count(),
+            1
+        );
+    }
+
+    #[test]
+    fn corner_walks_stay_within_the_credit_bound() {
+        // Every chunk inconclusive: the axis points lie on the unit sphere, the corners do not.
+        let n = Normalization::None(Word::F32);
+        let axes = [
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+        ];
+        let count = 12_000;
+        let words: Vec<RawVertex> = (0..count).map(|v| RawVertex::F32(axes[v % 6])).collect();
+        let bitmap = bitmap_of(count, |_| true);
+        let sphere = [level(
+            None,
+            &[(Role::Own, VolumeFacts::Sphere([0.0, 0.0, 0.0, 1.0]))],
+        )];
+        let mut arena = arena_with(4096, &[]);
+        let mut credit = Credit::default();
+        credit.accrue(count as u64);
+        assert_eq!(
+            walk_marked(&mut arena, n, &sphere, &bitmap, &mut credit, |v| words[v]),
+            None
+        );
+        let bound = count as u64 + count as u64 / CREDIT_DIVISOR;
+        assert!(
+            credit.walks > count as u64 && credit.walks <= bound,
+            "{}",
+            credit.walks
+        );
+        // The same words in a box: two corners per chunk, and refunds keep the credit positive.
+        let cube = [level(None, &[(Role::Own, bx([0.0; 3], [1.0; 3]))])];
+        let mut credit = Credit::default();
+        credit.accrue(count as u64);
+        assert_eq!(
+            walk_marked(&mut arena, n, &cube, &bitmap, &mut credit, |v| words[v]),
+            None
+        );
+        assert_eq!(credit.walks, 2 * count.div_ceil(64 * CHUNK_WORDS) as u64);
+        // No credit, no corner walks: exactly the per-vertex walks.
+        let mut credit = Credit::default();
+        assert_eq!(
+            walk_marked(&mut arena, n, &cube, &bitmap, &mut credit, |v| words[v]),
+            None
+        );
+        assert_eq!(credit.walks, count as u64);
+        // Many small inconclusive accessors (references with T = 9): the credit, not the chunking,
+        // keeps the corner walks within T/64 of the stream.
+        let small = bitmap_of(9, |_| true);
+        let mut credit = Credit::default();
+        for _ in 0..1000 {
+            credit.accrue(9);
+            assert_eq!(
+                walk_marked(&mut arena, n, &sphere, &small, &mut credit, |v| words[v]),
+                None
+            );
+        }
+        assert!(
+            credit.walks <= 9000 + 9000 / CREDIT_DIVISOR,
+            "{}",
+            credit.walks
+        );
+        assert!(credit.tests > 0);
+        assert!(!arena.fault());
+    }
+
+    #[test]
+    fn signed_clamp_and_first_outside_survive_the_fast_path() {
+        // i8 normalized: -128 and -127 both decode to -1; the box row ends at -1.
+        let n = Normalization::I8;
+        let words: Vec<RawVertex> = (0..200)
+            .map(|v| RawVertex::Int([[-128, -127, 0, 127][v % 4], 0, 0]))
+            .collect();
+        let bitmap = bitmap_of(200, |_| true);
+        let mut arena = arena_with(4096, &[]);
+        let at = |h: f64| [level(None, &[(Role::Own, bx([0.0; 3], [h, 1.0, 1.0]))])];
+        let mut credit = rich();
+        assert_eq!(
+            walk_marked(&mut arena, n, &at(1.0), &bitmap, &mut credit, |v| words[v]),
+            None
+        );
+        assert!(credit.walks < 200);
+        // One step inside: vertex 0 (-128 → -1) is the first Outside, as in the per-vertex walk.
+        let tight = at(1f64.next_down());
+        let want = per_vertex(&mut arena, n, &tight, &bitmap, |v| words[v]);
+        assert_eq!(want.map(|(v, _)| v), Some(0));
+        let got = walk_marked(&mut arena, n, &tight, &bitmap, &mut rich(), |v| words[v]);
+        assert_eq!(got, want);
+        // An escape only at a later vertex is still found at that vertex.
+        let mut late = words.clone();
+        late[150] = RawVertex::Int([0, 0, 127]);
+        let flat = [level(None, &[(Role::Own, bx([0.0; 3], [1.0, 0.5, 1.0]))])];
+        let want = per_vertex(&mut arena, n, &flat, &bitmap, |v| late[v]);
+        assert_eq!(want.map(|(v, _)| v), Some(150));
+        assert_eq!(
+            walk_marked(&mut arena, n, &flat, &bitmap, &mut rich(), |v| late[v]),
+            want
+        );
+        assert!(!arena.fault());
+    }
+
+    #[test]
+    fn non_finite_words_take_the_per_vertex_walk() {
+        // C1 refuses non-finite FLOAT words, so no archive reaches this; the raw words are injected.
+        // Vertex 5 is Outside in X and a later vertex is not finite: the per-vertex walk reports
+        // vertex 5 before it meets the non-finite word. A raw box holding that word would put it in
+        // a corner, and that corner's walk would fault (an InvalidState) instead.
+        let n = Normalization::None(Word::F32);
+        let cube = [level(None, &[(Role::Own, bx([0.0; 3], [1.0; 3]))])];
+        let bitmap = bitmap_of(200, |_| true);
+        let mut arena = arena_with(4096, &[]);
+        for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            for at in [10, 199] {
+                let mut words: Vec<RawVertex> = (0..200)
+                    .map(|v| RawVertex::F32([(v % 9) as f32 / 16.0, (v % 7) as f32 / -16.0, 0.0]))
+                    .collect();
+                words[5] = RawVertex::F32([2.0, 0.0, 0.0]);
+                words[at] = RawVertex::F32([0.0, bad, 0.0]);
+                let want = Some((
+                    5,
+                    Verdict::Outside {
+                        role: Role::Own,
+                        level: 0,
+                    },
+                ));
+                assert_eq!(
+                    per_vertex(&mut arena, n, &cube, &bitmap, |v| words[v]),
+                    want
+                );
+                let mut credit = rich();
+                let got = walk_marked(&mut arena, n, &cube, &bitmap, &mut credit, |v| words[v]);
+                assert!(!arena.fault(), "{bad} at {at}");
+                assert_eq!(got, want, "{bad} at {at}");
+                // No corner test ran: the chunk fell back before any corner walk (a NaN would
+                // otherwise drop out of the box's comparisons and leave a finite, wrong box).
+                assert_eq!(credit.tests, 0, "{bad} at {at}");
+                assert!(
+                    raw_box(&bitmap, 0, &|v| words[v]).is_none(),
+                    "{bad} at {at}"
+                );
+            }
+        }
     }
 }
