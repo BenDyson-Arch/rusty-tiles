@@ -10,6 +10,8 @@
             4.5 GiB). Each GLB is a valid triangle whose BIN chunk is padded with unreferenced
             bytes. With the default --fill zeros the padding is written as file holes, so the
             archive costs almost no disk; --fill pattern writes deterministic dense bytes.
+  combined  the implicit hierarchy and padded sparse GLBs in ONE archive: defaults give
+            5,592,405 available tiles and 85 x 56 MiB contents (>4 GiB), 4,097 subtrees.
 
 Archives are stored ZIP with ZIP64 records wherever a field overflows, every member referenced,
 and the @3dtilesIndex1@ index (MD5 of the name + u64 local-header offset, sorted by the two
@@ -176,6 +178,12 @@ def prepare(out, force):
 
 def implicit(args):
     A, L, D = args.levels, args.subtree_levels, args.content_levels
+    combined = args.kind == 'combined'
+    if not (1 <= L <= A and 0 <= D <= L) or (combined and D == 0):
+        raise SystemExit('require positive levels/subtree-levels and 0 <= content-levels <= subtree-levels; combined needs content')
+    member = args.member_mib * sc.MiB if combined else None
+    if combined and not (1 <= args.member_mib <= 120):
+        raise SystemExit('--member-mib must be in [1,120]')
     if A % L:
         raise SystemExit('--levels must be a multiple of --subtree-levels (constant availability per subtree)')
     if D > L:
@@ -185,7 +193,7 @@ def implicit(args):
     contents = ((1 << (2 * D)) - 1) // 3
     subtrees = sum(1 << (2 * k * L) for k in range(A // L))
     out = prepare(args.out, args.force)
-    disk = sc.disk_preflight(out, subtrees * 512 + contents * 2048 + sc.MiB, args.reserve_gib * sc.GiB)
+    disk = sc.disk_preflight(out, subtrees * 512 + contents * 2048 + (64 * sc.MiB if combined else sc.MiB), args.reserve_gib * sc.GiB)
     started = time.monotonic()
     half, hz = args.half_size, 50.0
     root = dict(boundingVolume=dict(box=[0, 0, 0, half, 0, 0, 0, half, 0, 0, 0, hz]), geometricError=args.root_error,
@@ -228,18 +236,26 @@ def implicit(args):
         side = 1 << level
         for y in range(side):
             for x in range(side):
-                head, _ = glb(tile_triangle(half, hz, level, x, y))
-                z.add(f'content/{level}/{x}/{y}.glb', head)
+                head, pad = glb(tile_triangle(half, hz, level, x, y), pad_to=member)
+                z.add(f'content/{level}/{x}/{y}.glb', head, pad=pad)
     info = z.finish()
     path = out / 'archive.3tz'
     params = dict(levels=A, subtree_levels=L, content_levels=D, half_size_m=half, root_error=args.root_error,
                   anchor=args.anchor, subdivision='QUADTREE')
+    if combined:
+        params.update(member_mib=args.member_mib, fill='zeros')
     truth = dict(input_file='archive.3tz', tiles=tiles, tiles_at_least_2p22=tiles >= 1 << 22,
                  subtrees=subtrees, subtree_tiles=sub_tiles, contents=contents, archive_bytes=path.stat().st_size,
                  members=info['members'], zip64=info['zip64'],
                  expected_validator=dict(tiles=tiles, contentReferences=contents, entries=info['members'],
                                          min_hierarchy_visits=tiles + 3))
-    manifest = sc.write_manifest(out, 'archive-implicit', params, ['archive.3tz'], truth,
+    if combined:
+        truth.update(allocated_bytes=path.stat().st_blocks * 512,
+                     over_4gib=path.stat().st_size > 4 * sc.GiB,
+                     combined_scale_met=tiles >= 1 << 22 and path.stat().st_size > 4 * sc.GiB,
+                     member_bytes=member)
+        truth['expected_validator']['min_source_archive_bytes'] = path.stat().st_size
+    manifest = sc.write_manifest(out, 'archive-combined' if combined else 'archive-implicit', params, ['archive.3tz'], truth,
                                  dict(disk_preflight=disk, generation_seconds=round(time.monotonic() - started, 3)))
     print(json.dumps(dict(out=str(path), tiles=tiles, subtrees=subtrees, members=info['members'],
                           bytes=manifest['total_bytes'])))
@@ -296,7 +312,7 @@ def large(args):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='kind', required=True)
-    for name in ('implicit', 'large'):
+    for name in ('implicit', 'large', 'combined'):
         s = sub.add_parser(name)
         s.add_argument('--out', required=True, help='directory (relative: under ~/.cache/rusty-tiles-scale)')
         s.add_argument('--force', action='store_true')
@@ -305,11 +321,13 @@ def main(argv=None):
         s.add_argument('--anchor', type=float, nargs=3, default=[115.86, -31.95, 20.0],
                        metavar=('LON', 'LAT', 'H'), help='ENU root transform; pass --no-anchor for none')
         s.add_argument('--no-anchor', dest='anchor', action='store_const', const=None)
-        if name == 'implicit':
+        if name != 'large':
             s.add_argument('--levels', type=int, default=12, help='availableLevels (12 -> 5,592,405 tiles)')
             s.add_argument('--subtree-levels', type=int, default=6)
-            s.add_argument('--content-levels', type=int, default=1, help='levels < D carry a triangle GLB')
+            s.add_argument('--content-levels', type=int, default=4 if name == 'combined' else 1, help='levels < D carry a triangle GLB')
             s.add_argument('--root-error', type=float, default=4096.0)
+            if name == 'combined':
+                s.add_argument('--member-mib', type=int, default=56)
         else:
             s.add_argument('--target-gib', type=float, default=4.5)
             s.add_argument('--member-mib', type=int, default=120)
@@ -318,7 +336,7 @@ def main(argv=None):
             s.add_argument('--seed', type=int, default=20261013)
             s.add_argument('--no-hash', action='store_true', help='skip the manifest sha256 of the archive')
     a = p.parse_args(argv)
-    return implicit(a) if a.kind == 'implicit' else large(a)
+    return large(a) if a.kind == 'large' else implicit(a)
 
 
 if __name__ == '__main__':

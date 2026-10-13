@@ -63,6 +63,11 @@ max = { validate_peak_rss_bytes = 1_073_741_824, validate_wall_seconds = 1_800, 
 
 # ------------------------------------------------------------------ harness validation (current binaries)
 
+[budget.gate-d-combined]
+# ONE archive must satisfy both independent scale predicates.
+extends = "gate-d-implicit"
+scale = { "truth.tiles" = 4_194_304, "truth.archive_bytes" = 4_294_967_297 }
+
 [budget.mesh-local]
 # Existing mesh-local-to-3tz (in-memory, 100,000-triangle / 32 MiB source ceiling).
 extends = "converter"
