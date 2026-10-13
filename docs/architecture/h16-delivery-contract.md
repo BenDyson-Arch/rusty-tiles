@@ -1,261 +1,249 @@
-# H16 streamed hierarchy and 3TZ delivery preparation
+# H16 streamed hierarchy and 3TZ delivery
 
-Status: design and test-only registered addressing/count preparation, not a publisher.
-The initial inspection used `origin/develop` `0fe2e83`; preparation is now
-based on `beedaec`. M1 was examined at `656e37f`, including core `5ffdc61`.
-M1 and H8 must merge before publication wiring. Four addressing/count preparation
-tests and all-target Clippy passed. No publisher, validator, archive, viewer or
-resource acceptance is claimed by this preparation.
+Status: implemented on `ml/h16-delivery` (PR #192), light process (tests, one
+nonauthor review, perf/memory evidence, consumer proof, CI). This slice publishes
+H1's tile tree ([H1 contract](h1-capture-tree-contract.md)) and H8's full-detail
+leaves (#187) as one Tiles 1.1 implicit forest in a `.3tz`, through the shared
+typed serializer of #191/#198 (`src/tileset_node.rs`, `src/implicit/tileset.rs`,
+`src/implicit/tileset/stream.rs`). Parents carry no content: coarse levels are
+H17. The hidden CLI entries are `mesh-leaves-to-3tz` (an H8 leaf directory to a
+`.3tz`) and `mesh-large-to-3tz` (H8, then H16); public naming is frozen in
+roadmap milestone 4. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
+([acceptance record](../../bench/architecture_audit/mesh_large_h16/README.md)).
 
-H4's independently reviewed metadata diagnosis adds a consumer integration
-gate: Cesium 1.146 packs compatible structural properties into a texture whose
-width equals table rows, and the pinned device limit is 8192. UINT64 scalar
-properties still enter that path through a lossy GPU downcast. This does not
-limit core glTF or establish a picking failure; CPU provenance must remain exact.
-H8's maximum leaf triangle budget can exceed this consumer width. H8 owns any
-early planned/charged per-primitive feature-table partitions, including both
-source identity sets and local ID remapping. H16 must not split frozen leaves,
-change their lattice or rewrite emitted GLBs to suppress a warning. Integration
-must verify the chosen table layout and actual consumer picking/property access
-before claiming full delivery acceptance. The source-bound diagnosis/review are
-retained in `~/.cache/rusty-tiles-evidence/h4-property-budget-20261013/`.
+## Input boundary
 
-## Ownership and retained boundaries
+H16 consumes H8's published leaf directory unchanged: `manifest.json`
+(`kind: full_detail_leaf_payloads`, schema 1, totals), `leaves.jsonl` (one row
+per leaf, in rank order) and `leaves/<n>.glb`. A row carries the H1 identity
+(`cellDepth`, `cell`, `pathLength`, `path`, `lastOctant`, `packed`, `depth`), the
+rank range `[first, end)`, H8's outward `geometryError`, and the payload's byte
+length and SHA-256. Rows are checked as H1 defines them: valid octant digits,
+synthetic run octants only below a depth-21 cell, depth at most 31, `packed`
+exactly when an unpacked-address leaf covers more than its first octant, ranks
+contiguous from 0, and the totals equal to `manifest.json`. Violations are
+`InvalidInput`. H8's tree, lattice and payload bytes are never changed, split or
+rebuilt. A row of more than 8,192 triangles is `Unsupported` (see Consumer
+property tables).
 
-H1 owns immutable captured tree identities, rank ranges and exact welded minimum
-leaf depth. H8 owns its frozen/versioned all-depth lattice, prepared attributes,
-source picking tables, actual decoded GLB positions/bounds and leaf displacement
-bounds. H16 consumes those outputs unchanged. It owns delivery layout, final
-ancestor bounds, availability, paths, member counting and staged publication.
+Leaf bounds come from each GLB's JSON chunk only. H8 writes one scene-root node
+per primitive with at most `translation` and `scale`, and POSITION accessors
+(`FLOAT`, or unnormalized `UNSIGNED_SHORT` codes with `KHR_mesh_quantization`)
+whose `min`/`max` bound the stored values. Each decoded coordinate is `t + s·c`;
+products and sums are rounded outward with exact FMA/TwoSum residuals. The box
+is then taken from glTF y-up to the tile frame's z-up as `(x, y, z) -> (x, -z,
+y)`, the conversion C2 applies exactly once. A node with any other field is
+refused. The forest writer reads and hashes every payload against its row when
+it publishes it.
 
-M1 remains the sole generated Tiles 1.1 JSON record/serializer boundary. H16 must
-import the actual `tileset_node::{TileRecord, TileBox, NodePlacement,
-GeometricError, Refine, ContentRef, MemberName, UriTemplate, ContentTemplate,
-ImplicitTiling, TilesetDocument, SourceIdentity}` types after the owning branch
-merges. Do not copy their implementations or create another tile JSON model.
-`TileTree` is usable only for an explicitly bounded document/chunk, never the
-whole capture. M1 `TileTree::preorder()` and the existing whole-tree
-`implicit::tileset::write_forest` are not streaming pipeline implementations.
+## Hierarchy reconstruction
 
-Retain `implicit::{Coordinates, SubdivisionScheme, Subtree, TileMetadata}` only
-for one bounded subtree. Its existing schema/wire stores box/error FLOAT64:
-retain that representation rather than introducing the earlier H12 design's
-provisional FLOAT32 storage. Fresh C2 final-byte validation decides acceptance.
-Retain runtime staging/publication semantics. The archive writer's current
-resident entry/index vectors require a bounded spill replacement before H16 can
-claim streamed 3TZ delivery. No work migrates retiring legacy mesh writers.
+An H1 address is the `cell_depth` spatial octants of `cell` followed by the
+`path_len` synthetic octants of `path`, most significant first; a digit is the
+implicit slot `x + 2y + 4z`. The H1 cell tree opens a cell at every depth on the
+way down and a run hierarchy a node at every run length, so every proper prefix
+of a leaf address is an internal tile and the leaf rows alone determine the
+tree. A packed leaf occupies its FIRST octant only; its later octants are
+covered metadata (`lastOctant` in its extras) and the next sibling must take a
+later slot. No phantom siblings are created and no payload is duplicated.
 
-## Logical addresses and the bounded implicit forest
+The rows are streamed with a stack of at most 32 open tiles (`plan::Builder`).
+A tile closes when the next leaf leaves its subtree; preorder and octant order
+are checked as tiles open. Global depth is the address length, so synthetic run
+depths beyond 21 are ordinary levels. Coordinates are three u32 axes, never a
+combined Morton key. A tile's key is H1's `(first rank, depth)`.
 
-An H1 address concatenates the `cell_depth` spatial octants in `cell` and the
-`path_len` synthetic octants in `path`, most significant group first. The slot
-is `x + 2*y + 4*z`. Global depth is their sum, not truncated to 21. At accepted
-height <=32, three u32 coordinate axes represent depths 0..31; a combined u64
-Morton key cannot represent all 93 bits and must not be used. Parent identity
-and prefix correspondence are checked. Existing H1 strict preorder key
-`(first_rank, depth)` uniquely identifies a delivery node across jobs/run sizes.
+## Roles, partition and the serializer API
 
-A packed leaf occupies only its FIRST slot. Its last-octant interval and exact
-rank range remain metadata; do not duplicate its payload into every covered
-octant or create phantom siblings. Synthetic run slots are logical transport
-addresses. Neither spatial centroid cells nor synthetic addresses bound the
-triangles: final content and every ancestor require actual decoded bounds.
+Roles follow P-IMPL §4 with `S = 4`. A closed tile of height 4 or more is an
+explicit skeleton tile; its leaf children are explicit leaves and its other
+children (height 1 to 3) are implicit roots, each one subtree with
+`subtreeLevels == availableLevels == height + 1` and no child subtrees. A whole
+tree of height below 4 is one implicit root at `tileset.json`; a one-leaf tree is
+an explicit root leaf.
 
-Use the already accepted bounded implicit forest: source nodes whose descendant
-height is >=4 form an explicit structural skeleton. A non-leaf child with height
-<4 becomes an implicit root with one subtree, `subtreeLevels == availableLevels
-== height+1 <=4`, and zero child-subtree availability. Leaf children remain
-explicit leaves; a whole short tree uses one implicit root. Every available
-implicit tile has a metadata row, including its root. In an OCTREE L=4 chunk,
-at most 585 tile positions and 4096 child-subtree bits are resident.
+H16 is the first caller of the streamed API (#198), not of the whole-tree
+`write_forest_records`:
 
-This avoids a demonstrated consumer defect: child-subtree placeholders are
-culled using subdivided grid bounds before their actual metadata loads. Packed
-and synthetic supports can escape those grid cells. Do not introduce a long
-child-subtree chain or an implicit external-JSON content template. This forest
-contains real implicit GLB templates and core explicit external-document links.
-It does not restore a public `--explicit` exporter or maintain two producers.
+- `ForestWriter::new(tileset.json document, staging, OCTREE)
+  .with_max_implicit_levels(4)`;
+- each document is a tree of `ForestTile`s: `ForestTile::explicit(record,
+  children)` for skeleton tiles and explicit leaves, `ForestTile::named(
+  ImplicitNames::Templates { contents, subtree }, TileTree::with_slots(..))
+  .planned(Availability)` for implicit roots, and `ForestTile::Link` for a
+  document written earlier;
+- external documents are written children first by `ForestWriter::external` as
+  tiles close; `tileset.json` last by `ForestWriter::root`.
 
-Tile metadata semantics override derived tile values in the Tiles 1.1 contract;
-see [OGC 22-025r4](https://docs.ogc.org/cs/22-025r4/22-025r4.html) and the retained
-P-IMPL/C2 contracts. The metadata rows therefore carry the source node's actual
-support, not a claimed clipped cell. This normative rule does not replace the
-required actual viewer traversal proof.
+Partition (`plan::LIMITS`): a closed skeleton tile whose inline fragment exceeds
+32 tile objects or 1,024 tile records, or reaches 8 tile levels, is written at
+once as the external document `tileset-f<first>-d<depth>.json` and replaced by
+its link. Every document therefore holds at most `1 + 8·32 = 257` tile objects
+(about 30 JSON value nodes each) and 8 tile levels, well within the writer's
+16,384 nodes, 2 MiB and depth 32, which it still enforces. These constants are a
+chosen layout, not an optimum; perf acceptance may retune them.
 
-## Frames, containment and errors
+External documents sit at the archive root. Content, template and link URIs
+resolve relative to the document that holds them and the writer emits
+archive-root member names, so this slice also makes `ForestWriter::external`
+refuse a document name containing `/`.
 
-H8 payload positions remain in glTF-world Y-up, with its dataset-wide encoding
-origin zero and unchanged meshopt/TRS bytes. Convert decoded coordinate bounds
-once to Tiles-local Z-up via `(x,y,z) -> (x,-z,y)`. This signed permutation is
-exact and preserves the local displacement bound. All forest roots, structural
-nodes and external-document links inherit this common dataset frame. No payload
-rebasing, per-root origin, additional glTF scene node or child RTC translation is
-introduced. Geographic placement is one validated rigid anchor/orientation/
-offset matrix on the dataset root, through M1 `NodePlacement::rigid`; retain the
-placement boundary's existing units/order, not a second CRS implementation.
+## Addressing, members and availability
 
-Precompute final snapped leaf bounds from the frozen H8 plan in a bounded pass,
-then require the emitted GLB descriptor to match. Internal nodes union final
-decoded children (and future own content), not H1 unsnapped centroid bounds.
-Represent a box with f64 centre and half lengths, round every subtraction and
-sum outward, and fold the ENCODED child endpoints into its parent. Recheck the
-stored box after M1 JSON/FLOAT64 serialization. M1 `sum_up` is a retained helper;
-its centred-box `grow_to_enclose` restriction must not force all tiles to centre
-zero: use outward AABB union and `TileBox::offset` for tight common-frame boxes.
-All available metadata boxes must nest and contain final decoded geometry under
-the inherited root transform in merged C2 slice 3.
+Implicit roots use caller templates:
+`implicit-content/f<first>-d<depth>-{level}-{x}-{y}-{z}.glb` and
+`subtrees/f<first>-d<depth>-{level}-{x}-{y}-{z}.subtree`. Explicit leaves are
+`content/f<first>-d<depth>.glb`. Child slots are explicit
+(`TileTree::with_slots`, the H1 digit). The planned `Availability` is computed
+from each tile's H1 axes relative to its root, sorted level-major and Morton
+within a level, independently of the slots from which the writer derives its
+own; the writer refuses any positional difference before writing. Every
+available tile has a metadata row (FLOAT64 box and error, the existing tile
+schema) and leaves are the only content.
 
-S3 has leaf payloads and empty structural parents, not invented coarse meshes.
-Leaf geometric error is H8's outward source-correspondence bound. Structural
-error is `max(1 metre, decoded-bound diagonal, child errors)`; this is a finite
-traversal policy on an empty node, not a certified proxy error. Every parent
-error is >=child errors; top-level error uses M1's existing policy. Actual
-consumer checks must prove empty-parent traversal at declared near/far views.
-If empty parents suppress reachable content, fix this owner before acceptance.
-H17 later supplies real internal proxy certificates instead of reusing this
-structural policy as a surface proof. Rigid placement/RTC rounding and all-camera
-screen seam equality remain separate proof gates; local decoded seams are not
-geographic screen equality.
+Payloads are hard-linked (copied only without hard links) from the leaf
+directory into a staging folder at their FINAL member names, so the writer keeps
+them in place: no raw source is ever a different name, `ChunkOutput.
+implicit_sources` must be empty (checked), and #198's caveat that `check_sources`
+does not see implicit members of earlier documents cannot apply, because no
+source name is reused. No payload needs a rebase: every tile shares the dataset
+frame. This slice adds the missing #198 test that a payload staged at its final
+member but needing a rebase is refused and leaves the staging directory as it
+was.
 
-## Streaming pass order and fixed publication plan
+## Bounds, errors and placement
 
-1. Capture/sort/tree/weld/lattice ownership stays H1/H8. Validate immutable rank
-   closure and source identities. No source file reads after snapshot release.
-2. Stream H1 preorder with a <=32-frame stack. Join leaf ranks and frozen lattice
-   to compute predicted final bounds and leaf errors. Close frames into a fixed
-   spill record containing identity, actual bounds, error and descendant height;
-   external-sort back to strict preorder. Reconcile actual encoded leaf bounds
-   later rather than silently rebuilding a lattice or splitting leaves.
-3. Classify skeleton/implicit-root/explicit-leaf roles from descendant height.
-   Freeze deterministic chunk roots and paths. A root name uses original
-   `(first_rank, depth)`; relative coordinates are prefix-checked. Example GLB
-   template: `implicit-content/f<rank>-d<depth>/{level}/{x}/{y}/{z}.glb`.
-   Subtree templates include all OCTREE placeholders, even when its one root
-   file expands to relative zero. Explicit payload names retain the same key.
-4. Partition skeleton documents with a fixed structural limit: initially eight
-   skeleton records/document, <=10 relative skeleton levels, and at most eight
-   boundary children per record. This produces an EXACT document count before
-   codecs; it is a chosen layout, not an estimate of optimal packing. Audit M1
-   objects to prove <=128 value nodes/4 KiB per tile/link, so <=72 objects plus
-   the shared document/schema head stay within 16,384 nodes, 2 MiB and depth32.
-   The actual serialized document is checked too. Unknown schema growth is
-   InvalidState, not an unplanned extra document or late member-count change.
-   Perf acceptance may change these constants only through a new frozen plan.
-5. Count all chosen GLBs, subtree files, root/external JSON documents and any
-   explicitly selected debug members. Check the archive cap before leaf codecs
-   or publication staging. During early scan, a proven leaf-count lower bound
-   already exceeding the cap refuses immediately. Exact chosen counts are the
-   final gate; do not refuse from a loose node/document UPPER bound.
-6. Encode H8 leaves to staged members using its existing per-member byte budget.
-   Verify content descriptors and join them to bounded M1 records. For implicit
-   chunks use `Subtree` tile/content availability in level-major Morton order;
-   property row order equals rank among AVAILABLE tile bits. Source identities
-   remain in GLB `source_primitive`/`source_triangle` feature/property tables,
-   including full-width original triangle/expanded/corner values. A `ContentRef`
-   uses `ContentKind::Glb`, vector=false and `SourceIdentity::Features` with a
-   canonical domain-separated digest of both original identity tables. Do not
-   invent fake digests/byte lengths to create a serializer placeholder.
-7. Serialize one bounded subtree/document at a time, release it, and append an
-   archive-member spill descriptor. Metadata extras are fixed owned rank/depth/
-   packed/synthetic context; large integer keys use decimal/hex strings in JSON.
-   Do not store source authored names absent H8 capture. `encodedBytes` need not
-   enter tile extras; keep actual byte counts in the descriptor/debug receipt so
-   codec output cannot alter the frozen document partition.
-8. Write the archive from the checked descriptor stream, root `tileset.json`
-   first, deterministic remaining member order, index last. Spill MD5+offset
-   index rows and central-directory descriptors rather than retaining Vecs for
-   every member. External-sort the 24-byte index entries by the retained wire
-   ordering; stream CRC/ZIP64 headers and directory in bounded buffers. Reuse
-   audited codec primitives, not a new loosely interpreted ZIP framework.
-   Close all spill/GLB owners before scratch close and final atomic publication.
+A tile box is the f64 centre of its bounds and outward half lengths; its closed
+extent, rounded outward, is what its parent encloses, so boxes nest and every
+decoded vertex lies in every ancestor's box. Internal boxes are the union of the
+children's extents, never H1's centroid cells. Leaf error is H8's outward
+correspondence bound. An empty parent's error is `max(16 · box diagonal,
+children's errors)`: CesiumJS (default maximum screen-space error 16) refines it
+until the whole box projects below about one pixel, so leaves are reached at
+any distance. This is a traversal policy for empty tiles, not a proxy
+certificate; with full-detail-only output a far view loads every visible leaf
+until H17 supplies certified coarse content. The tileset error is
+`max(1 m, root error, root diagonal)`.
 
-The test-only registered preparation only implements real H1 addressing,
-frame-bound conversion and checked member arithmetic. M1 records are absent on
-this develop base; `publication_pending` is an honest typed gate, not a fallback
-exporter. A compile/run claim requires coordinator registration and testing.
+Placement is local metres with one rigid anchor/orientation/offset matrix on
+the `tileset.json` root, from the existing placement boundary
+(`mesh_archive::ResolvedPlacement`; WGS84 anchor, ENU unit quaternion, source
+y-up offset; no CRS conversion). No other tile has a `transform`, payloads keep
+H8's frame and no RTC is introduced. Under the merged C2 frame chain the root
+placement transform enters no containment predicate, so C2 checks containment
+in the dataset frame only; it does not cover rotated boxes, RTC or the
+placement itself, and none is claimed. The placement is checked by a unit test
+(the written matrix equals the boundary's exactly, on the root only) and by the
+consumer proof.
 
-## Limits and failure semantics
+## Consumer property tables (CesiumJS 8192 limit)
 
-The chosen cap is 178,956,970 TOTAL ZIP members, including the index, matching
-the existing H1 gate. Indexed count excludes the index itself; indexed bytes
-are 24*indexed_count and must fit u32. Count roots, links/subtrees and diagnostics,
-not merely leaf GLBs. Reconcile this count convention against the merged #189
-validator before integration; do not add another off-by-one container policy.
-The H1/H8 temporary `nodes+2` count gate is not exact for this forest with empty
-internals. The capture API must hand actual counting to H16 rather than treating
-all nodes as payloads. This is an integration obligation, not permission to
-bypass the real container cap with a huge configured value.
+CesiumJS 1.146 builds one GPU structural-metadata texture per property table,
+whose width is the table's row count, and refuses tables wider than its 8,192
+maximum texture size ([H4 diagnosis](../../bench/architecture_audit/README.md),
+`~/.cache/rusty-tiles-evidence/h4-property-budget-20261013/`); it resolves picks
+through one table per model. An H8 leaf has a `source_triangle` table with one
+row per triangle and a `source_primitive` table with at most as many rows.
 
-Keep existing height32, single GLB96MiB, document/subtree and source-domain
-limits. Add no total triangle/vertex-size cap. Checked count/address/size
-overflow or one-job memory/scratch exhaustion is ResourceLimit; actual container
-ceiling is Unsupported; corrupt captured state or mismatched bytes/metadata is
-InvalidState; user configuration/placement invalidity belongs to its existing
-admission boundary. Source/codec/fidelity failure never retries by changing the
-delivery tree. H8's physical-member Budget-only density policy remains separate.
-Cancellation and I/O retain their typed meaning and secondary cleanup failures.
+**Decision: cap the leaf size.** Every profile's leaf budget `L` is 8,192
+(`config::CONSUMER_TABLE_ROWS`; `fast` was 32,768 and `balanced` 16,384), so
+both tables of every leaf fit, and the H8 writer refuses a wider table as a
+broken plan (`InvalidState`, not a retryable budget). Exact per-triangle
+provenance stays in the leaf's own tables and Cesium picks it per model. The
+alternatives were rejected:
 
-Before each pass, charge source-global retained handles, fixed record generations,
-sort runs/fan-in/accessor windows, <=32 stack frames, one <=585-slot subtree, one
-bounded document, one H8 leaf lease and the archive spool/index/directory buffers.
-Stages lease sequentially; include tmpfs scratch in available-memory admission.
-Compute physical allocation/file inventory before creating scratch/staging.
-Record actual logical peak, sampled physical peak and measured RSS separately;
-native codec workspace remains provisional until its measured acceptance.
+- Splitting a leaf into several contents costs the same requests and draw calls
+  as smaller leaves, but every part shares one bounding volume (no culling or
+  refinement benefit), atlases would have to be split or duplicated, and H8's
+  frozen leaves would be re-cut after planning.
+- A coarser table with per-triangle IDs resolved elsewhere breaks per-triangle
+  picking in the viewer, needs a sidecar resolver, and does not bound the
+  primitive table: a leaf of 32,768 triangles may touch more than 8,192
+  primitives.
 
-## Independent acceptance and commit sequence
+The cost is up to four times as many leaves for `fast` and twice for
+`balanced`; profiles still differ in texture pages and encoding. H16 refuses a
+leaf directory from an older producer with wider leaves.
 
-First commit: this contract and test-only registered preparation, after a fresh nonauthor
-design/source review. Publication remains gated. After M1/H8 merge: enable the
-module for production and add the actual typed bridge, bounded planner/chunk/document emitter
-and spilled archive writer in reviewed bounded commits; coordinator owns builds.
-Do not cherry-pick or fork M1 types to simulate satisfying the dependency.
+## Streaming, memory and determinism
 
-Acceptance requires an independent raw archive/subtree/GLB reader, not producer
-plan records as truth. Check full URI/rank/provenance closure, availability
-parent closure and row order, 8-byte subtree framing/tail bits, bounds/errors,
-FLOAT64 storage, root placement and identical GLB bytes across publication.
-Sensitive controls: swapped Morton axes, packed duplicate siblings, truncated
-synthetic path, missing root/content bit, incorrect metadata row, inward bound,
-wrong default glTF axis conversion, double root transform, underestimated member
-count, malformed index/ZIP64 and changed source identity. Exercise exact cap,
-overflow, cancellation and injected cleanup failures without generating bulk.
+Two passes stream the rows through the same builder. The first counts: exact
+members per document, document count, the root error the `tileset.json`
+document needs. Nothing is staged. The second stages and writes one document at
+a time and must reproduce the first pass's shape and member count exactly.
+Resident hierarchy state is the open stack plus inline fragments below the
+partition limits: at most 32 frames of 8 children each below 1,024 records,
+reported as `peakHeldRecords`. A planning test streams 2^12 and 2^18 leaves:
+4,680 and 4,687 held records. The serializer keeps one name per explicit leaf
+and per document between documents (#198's deliberate residue); explicit leaves
+are a fraction of all leaves.
 
-Use tiny actual packed/mixed/synthetic-depth31 and ordinary spatial trees, plus
-the >=10m textured spill run. Check deterministic complete archives across jobs,
-run sizes, fan-ins and scratch locations. Run merged C2 containment on FINAL
-decoded archive bytes, including child boxes escaping nominal centroid cells.
-Rebinding accepted H8 geometry is allowed only on complete byte-identity proof;
-it cannot accept the new hierarchy/placement/availability/archive layer.
+The archive is written after `tileset.json`: `tileset.json` first, the other
+members in their deterministic production order, the index last. Index rows
+(MD5, offset) are external-sorted in scratch; central-directory records are
+spooled to a scratch file; members are copied with one 64 KiB buffer. The ZIP
+records are the shared `archive3tz` primitives (`local_header`,
+`complete_entry`, `central_header`, `end_records`), factored out unchanged.
 
-The pinned user Chromium CDP consumer must load through the actual archive/server
-bridge (not assumed direct `.3tz` loading), select target leaves through multiple
-external documents and implicit roots, refine empty parents, and pick both
-`source_primitive` and `source_triangle` labels. Decode selected metadata values
-and compare original source IDs. Include anchor/heading/pitch/roll/offset,
-reflected TBN, mixed-depth seams and boundary/near/far controls. Carry H8's known
-Cesium colour-transfer limits; no producer compensation or codec-floor waiver.
-Run the relevant perf comparison; hierarchy changes require their own acceptance.
-Applicable exact-head CI/wheel/official Blender checks and merge remain coordinator
-and user responsibilities. The 0.5 format transition does not enter this slice.
+Output depends only on the leaf directory and placement: not on jobs, run size,
+fan-in or scratch/work location (H8 already makes leaf bytes independent of
+them). Tests compare whole archives across work locations, and across H8 jobs
+1 and 2 with separate scratch.
 
-## Prior design status and remaining questions
+## Member count and the 3TZ ceiling
 
-H12 B1–B3 and H13 B1–B4 were fixed in revised PRECODE designs and independently
-reviewed; the original external reviews describe historical drafts. H12 current
-design `83f403f9` includes later H8 checkpoints; accepted decoder-origin revision
-snapshot is `f1a09102`. H13 current `ed66c0e1` includes the later literal LEAF
-normalScale correction; proxy normals still bake into the proxy frame/emit1.
-See cache `h12-revised-independent-review.md`, `h13-revised-independent-review.md`,
-the design revision audit, normal-scale delta and H8 producer acceptance.
-Simplification, bidirectional proxy certification, baking and legal V/F topology
-records remain implementation/acceptance gates, not already accepted code.
+Members are `tileset.json`, external documents, explicit and implicit payloads,
+subtrees, and the index. The ceiling is the codec's 178,956,970 TOTAL members,
+index included (`archive3tz::MEMBER_CEILING`, the validator's), so the index
+holds `24·(N - 1)` bytes. Refusal is `Unsupported` and happens before anything
+is staged: first a lower bound (leaves + 2) from `manifest.json`, then the exact
+planned count. The exact count itself is admitted. Arithmetic overflow and
+scratch exhaustion are `ResourceLimit`; a leaf directory that contradicts itself
+is `InvalidInput`; a writer refusal of a planned document or a plan/write
+mismatch is `InvalidState`; cancellation keeps its kind. A failed run removes
+its staging and publishes nothing.
 
-1. M1 merge plus H8 descriptor/capture count ownership must be wired explicitly.
-2. Confirm #189 total-member convention and the streamed archive primitive owner.
-3. Audit fixed per-document typed schema bounds and measure the initial eight-record
-   partition's request/perf cost before selecting final constants.
-4. Prove decoded containment and placement on final C2/consumer paths; resolve any
-   empty-parent traversal or RTC precision defect at its actual owner.
-5. H17/H13 need legal published V/F/reopening records before proxy integration;
-   extend the shared schema through its owner, never a private draft extension.
+## Validator acceptance and limits
+
+The merged validator (C2 slice 3 with the H11 fast path) accepts the output with
+`decodedContentContainment` for untextured and PNG (`lossless`) leaves, on the
+synthetic mixed trees (packed leaves, depth-24 synthetic runs, external
+documents) and on real H8 leaves. Two limits are recorded, not fixed here
+(validator changes need the full process):
+
+- **KTX2 leaves.** H8's lossy profiles emit KTX2 textures and correctly list
+  `KHR_texture_basisu` in `extensionsRequired`. The merged C1 payload profile
+  admits only four required extensions, so the validator refuses such archives
+  as `Unsupported` ("required extension KHR_texture_basisu"). A test pins this.
+  Admitting it is a validator follow-up.
+- **Scale.** Validating archives of 2^22 tiles or more (milestone 4's delivery
+  gate) needs the validator-scale slices (VS-A to VS-D: catalog, traversal/C2,
+  limits, scale acceptance). Today's entry, visit and work caps refuse such
+  archives; H16's own planning streams them.
+
+## Acceptance
+
+Tests (`src/mesh_large/delivery/tests.rs` and the M1/H8 additions):
+
+- mixed tree: roles, explicit and implicit members, slots and subtree
+  availability read back by an independent subtree-bitstream reader and compared
+  with the generator's H1 addresses; payload bytes unchanged; validator accepts;
+- determinism across work locations, and across H8 jobs 1 and 2 on real leaves;
+- ceiling: early and exact refusals before staging, exact count admitted;
+- malformed input: preorder, octant order (including a packed overlap), rank
+  gap, tampered payload, a 8,193-triangle row, totals mismatch, bad address;
+- root forms (one leaf, one implicit root) and the exact rigid placement;
+- planner memory bounded by the partition at 2^18 leaves;
+- 8,192/8,193 table rows at the H8 writer; every real leaf's tables within it;
+- outward z-up GLB bounds and the rotated-node refusal;
+- M1: external documents outside the root refused; final-member rebase refused.
+
+Real mesh, consumer proof and performance figures are in the acceptance record.
+
+## Follow-ups
+
+H17 coarse content and certificates; the C1 `KHR_texture_basisu` admission; the
+validator-scale slices; H8 throughput (`ml/h8-throughput`) and its texture
+gates; the documented CesiumJS sRGB/ASTC colour limit; retuning the partition
+constants with perf evidence; a bounded-memory replacement for the serializer's
+explicit-name set if explicit leaves dominate at scale.
