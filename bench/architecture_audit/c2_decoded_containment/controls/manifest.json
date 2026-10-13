@@ -72,46 +72,6 @@
     "expected": {
      "outcome": "Contained"
     },
-    "file": "witnesses/fixtures/W01-noRTC-variant.3tz",
-    "id": "W01-noRTC-variant",
-    "limits": {},
-    "oracle": {
-     "facts": null,
-     "outcome": "Contained",
-     "reasons": null,
-     "why": null
-    },
-    "sha256": "ab38ca0b03fe4c7ce4eed858f092552058771b197bd498906f354aef711855a3"
-   },
-   "control": "RTC-added",
-   "mutated": {
-    "expected": {
-     "outcome": "NotInspected",
-     "reasons": [
-      "rtcCenter"
-     ]
-    },
-    "file": "witnesses/fixtures/W01-ordered-node-U-RTC-tile-chain.3tz",
-    "id": "W01-ordered-node-U-RTC-tile-chain",
-    "limits": {},
-    "oracle": {
-     "facts": null,
-     "outcome": "NotInspected",
-     "reasons": [
-      "rtcCenter"
-     ],
-     "why": null
-    },
-    "sha256": "24c478cd2de73d42b029d31e2457f925400b72a9cc119cf84db6b11d3ce1b065"
-   },
-   "what": "b3dm feature table gains RTC_CENTER"
-  },
-  {
-   "agree": true,
-   "base": {
-    "expected": {
-     "outcome": "Contained"
-    },
     "file": "controls/fixtures/quaternion-window-at-2^-18.3tz",
     "id": "quaternion-window-at-2^-18",
     "limits": {},

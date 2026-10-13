@@ -1,6 +1,6 @@
 --- a/oracle/c2o/check.py
 +++ b/oracle/c2o/check.py
-@@ -420,7 +420,11 @@
+@@ -425,7 +425,11 @@
          budget = self.oracle_limits["maxVertexLevelTests"]
          used = 0
          outside = None

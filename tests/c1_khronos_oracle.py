@@ -64,7 +64,7 @@ def main():
       limitations=['Official validator independently checks these core/quantization positive controls.',
                    'Meshopt compressed golden fixture is excluded: this validator does not provide a decoded meshopt geometry oracle.',
                    'Pinned draft KHR_mesh_primitive_restart is excluded: this official validator does not implement the draft.',
-                   'b3dm outer framing and 3TZ index are checked by the independent C1 corpus, not this glTF-only tool.'])
+                   'Legacy 3D Tiles 1.0 content (Unsupported since H7) and the 3TZ index are checked by the independent C1 corpus, not this glTF-only tool.'])
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     failures=[r for r in evidence['reports'] if r['report']['issues']['numErrors']]
     assert not failures,json.dumps(failures,indent=2)

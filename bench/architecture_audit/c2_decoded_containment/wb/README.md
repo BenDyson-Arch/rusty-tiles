@@ -122,11 +122,11 @@ scored on the 55 CI at-cap pairs. Each must flip its named pair.
 | drop `Prim` | `shared-accessor-160x20` | 55 |
 | node floor 128 | `terms-node` | 4 |
 | drop `8·(L_r+1)` | `tiny-refs-L103` | 55 |
-| `J` without the b3dm batch table | `json-flat-numbers-b3dm` | 6 |
+| ~~`J` without the b3dm batch table~~ (retired by H7) | ~~json-flat-numbers-b3dm~~ | 6 |
 | `Res` per distinct resolved member (reading probe) | `reading-res-duplicate-uri` | 1 |
 | `B` deduplicated per member (undoes per-entry `B`; also caught by `oracle/self_test`) | `reading-res-duplicate-uri` | 1 |
 
-All 15 pass. The production mutants that concern performance (re-scanning JSON
+All 15 passed. H7 retired the b3dm mutant and the six b3dm classes; the 14 remaining mutants pass (2026-10-13). The production mutants that concern performance (re-scanning JSON
 admission, quadratic `mark`, `build_levels` before the gate) are R's perf controls,
 not unit pairs.
 
@@ -158,7 +158,7 @@ not unit pairs.
    `Dec`. Image data URIs are C1-refused.
 3. **`J` counts the root and only nonempty tables.**
    - The root counts, as the C1 contract says (`{}` is 1 node).
-   - A b3dm table with JSON length 0 contributes no document.
+   - A b3dm table with JSON length 0 contributed no document (before H7; b3dm is now C1 Unsupported).
 4. **Per-reference terms apply to every reference**, including references to a URI with
    no drawn instance. There `T·V = 0`, but `1152 + 8·(L_r+1) + B + Dec + 16J + 160Res +
    4Prim + Nodes + Idx + E` is still charged. The contract's per-reference formula says
@@ -216,18 +216,18 @@ CI units are the at-cap values: `containmentWorkUnits = units` gives Contained a
 | primitives sharing one accessor, 16,000 x 40 / x 200 instances | `shared-accessor-160x4` | 160 POINTS primitives on one accessor x 4 instances, one reference | 22,495 | see below |  |  |
 | primitives sharing one accessor, 16,000 x 40 / x 200 instances | `shared-accessor-160x20` | 160 POINTS primitives on one accessor x 20 instances, one reference | 38,299 | see below |  |  |
 | JSON: flat dense numbers GLB / b3dm, 1 MiB flat string | `json-flat-numbers-glb` | numbers-glb, 1200 numbers x 5 references | 119,950 | numbers-glb, 120000 numbers x 50 references | 108,119,500 | Contained / Contained |
-| JSON: flat dense numbers GLB / b3dm, 1 MiB flat string | `json-flat-numbers-b3dm` | numbers-b3dm, 1200 numbers x 5 references | 120,430 | numbers-b3dm, 120000 numbers x 50 references | 108,124,300 | Contained / Contained |
+| JSON: flat dense numbers GLB / b3dm, 1 MiB flat string | ~~`json-flat-numbers-b3dm`~~ (retired by H7: legacy content is C1 Unsupported) | numbers-b3dm, 1200 numbers x 5 references | 120,430 | numbers-b3dm, 120000 numbers x 50 references | 108,124,300 | Contained / Contained |
 | JSON: flat dense numbers GLB / b3dm, 1 MiB flat string | `json-flat-string-glb` | string-glb, 10240 characters x 5 references | 63,150 | string-glb, 1048576 characters x 50 references | 52,548,300 | Contained / Contained |
 | 1 MiB JSON payload x 1,000 references | `json-gltf-1MiB-refs` | .gltf with a 10240-character extras string and a data-URI buffer x 10 references | 126,790 | .gltf with a 1048576-character extras string and a data-URI buffer x 1000 references | 1,051,015,000 | workLimit / workLimit |
 | deep string (GLB extras), depth 60 | `json-deep-string-glb-60` | string nested 60 deep in glb x 5 references | 68,550 | string nested 60 deep in glb x 50 references | 52,602,300 | Contained / Contained |
-| deep string (b3dm batch table), depth 60 | `json-deep-string-b3dm-60` | string nested 60 deep in b3dm x 5 references | 69,030 | string nested 60 deep in b3dm x 50 references | 52,607,100 | Contained / Contained |
+| deep string (b3dm batch table), depth 60 | ~~`json-deep-string-b3dm-60`~~ (retired by H7: legacy content is C1 Unsupported) | string nested 60 deep in b3dm x 5 references | 69,030 | string nested 60 deep in b3dm x 50 references | 52,607,100 | Contained / Contained |
 | deep numbers (GLB extras), depth 1 | `json-deep-numbers-glb-1` | numbers nested 1 deep in glb x 5 references | 120,030 | numbers nested 1 deep in glb x 50 references | 108,120,300 | Contained / Contained |
 | deep numbers (GLB extras), depth 30 | `json-deep-numbers-glb-30` | numbers nested 30 deep in glb x 5 references | 122,650 | numbers nested 30 deep in glb x 50 references | 108,146,500 | Contained / Contained |
 | deep numbers (GLB extras), depth 62 | `json-deep-numbers-glb-62` | numbers nested 62 deep in glb x 5 references | 125,530 | numbers nested 62 deep in glb x 50 references | 108,175,300 | Contained / Contained |
-| deep numbers (b3dm batch table), depth 1 | `json-deep-numbers-b3dm-1` | numbers nested 1 deep in b3dm x 5 references | 120,550 | numbers nested 1 deep in b3dm x 50 references | 108,125,500 | Contained / Contained |
-| deep numbers (b3dm batch table), depth 30 | `json-deep-numbers-b3dm-30` | numbers nested 30 deep in b3dm x 5 references | 123,150 | numbers nested 30 deep in b3dm x 50 references | 108,151,500 | Contained / Contained |
-| deep numbers (b3dm batch table), depth 60 | `json-deep-numbers-b3dm-60` | numbers nested 60 deep in b3dm x 5 references | 125,830 | numbers nested 60 deep in b3dm x 50 references | 108,178,300 | Contained / Contained |
-| deep numbers (b3dm batch table), depth 62 | `json-deep-numbers-b3dm-62` | numbers nested 62 deep in b3dm x 5 references | 126,030 | numbers nested 62 deep in b3dm x 50 references | 108,180,300 | Contained / Contained |
+| deep numbers (b3dm batch table), depth 1 | ~~`json-deep-numbers-b3dm-1`~~ (retired by H7: legacy content is C1 Unsupported) | numbers nested 1 deep in b3dm x 5 references | 120,550 | numbers nested 1 deep in b3dm x 50 references | 108,125,500 | Contained / Contained |
+| deep numbers (b3dm batch table), depth 30 | ~~`json-deep-numbers-b3dm-30`~~ (retired by H7: legacy content is C1 Unsupported) | numbers nested 30 deep in b3dm x 5 references | 123,150 | numbers nested 30 deep in b3dm x 50 references | 108,151,500 | Contained / Contained |
+| deep numbers (b3dm batch table), depth 60 | ~~`json-deep-numbers-b3dm-60`~~ (retired by H7: legacy content is C1 Unsupported) | numbers nested 60 deep in b3dm x 5 references | 125,830 | numbers nested 60 deep in b3dm x 50 references | 108,178,300 | Contained / Contained |
+| deep numbers (b3dm batch table), depth 62 | ~~`json-deep-numbers-b3dm-62`~~ (retired by H7: legacy content is C1 Unsupported) | numbers nested 62 deep in b3dm x 5 references | 126,030 | numbers nested 62 deep in b3dm x 50 references | 108,180,300 | Contained / Contained |
 | one accessor per primitive, 6,000 x 20 (quad) | `quad` | 60 primitives each with its own accessor x 2 instances, one reference | 42,842 | 6000 primitives each with its own accessor x 20 instances, one reference | 18,151,888 | Contained / Contained |
 | 5,000 accessors x 16,000 primitives x 40 (quadB) | `quadB` | 50 accessors x 160 primitives (primitive i uses accessor i mod A) x 4 instances, one reference | 62,746 | 5000 accessors x 16000 primitives (primitive i uses accessor i mod A) x 40 instances, one reference | 31,490,820 | Contained / Contained |
 | end-to-end, 5,000 x 15,500 x 500 (one reference; the many-accessor case) | `e2e` | 50 accessors x 155 primitives (primitive i uses accessor i mod A) x 5 instances, one reference | 69,220 | 5000 accessors x 15500 primitives (primitive i uses accessor i mod A) x 500 instances, one reference | 354,517,700 | workLimit / Contained |

@@ -40,9 +40,6 @@ MUTANTS = [
      "shared-accessor-160x20"),
     ("node-floor-128", "c2o/scene.py", "NODE_FLOOR = 256", "NODE_FLOOR = 128", "terms-node"),
     ("drop-8-per-level", "c2o/check.py", "PER_LEVEL = 8  ", "PER_LEVEL = 0  ", "tiny-refs-L103"),
-    ("J-without-b3dm-batch-table", "c2o/gltf.py",
-     '        nodes += value_nodes(_table_json(data[bt_start:bt_start + btj], "batch table", where))',
-     '        _table_json(data[bt_start:bt_start + btj], "batch table", where)', "json-flat-numbers-b3dm"),
     ("Res-counts-per-distinct-member", "c2o/gltf.py",
      "                data = self._read_resource(uri)\n                self.external_resources += 1",
      "                data = self._read_resource(uri)\n                members = self.__dict__.setdefault('_members', set())\n"

@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -294,6 +294,8 @@
+@@ -296,6 +296,8 @@
                                  "slot": slot}
                  self.implicit_references += 1
                  self.max_chain = max(self.max_chain, len(ref.levels))

@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -126,7 +126,7 @@
+@@ -128,7 +128,7 @@
          super().__init__("derived", raw=raw)
  
      def exclusion(self):

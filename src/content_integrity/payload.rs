@@ -1,4 +1,4 @@
-//! Private immutable-byte GLB/glTF/b3dm integrity owner. No paths or operation defaults.
+//! Private immutable-byte GLB/glTF integrity owner. No paths or operation defaults.
 use super::{json, FormatError, PayloadError, PayloadLimits};
 use serde_json::value::RawValue;
 use std::{borrow::Cow, collections::BTreeSet};
@@ -12,7 +12,24 @@ type FormatResult<T> = std::result::Result<T, FormatError>;
 pub(crate) enum PayloadKind {
     Glb,
     LocalGltf,
-    B3dm,
+}
+/// H7: the 3D Tiles 1.0 content formats. They are Unsupported, never inspected.
+pub(crate) const LEGACY_FORMATS: [&str; 4] = ["b3dm", "i3dm", "pnts", "cmpt"];
+/// The legacy format named by the final suffix of `name` (ASCII case-insensitive).
+/// Reads nothing.
+pub(crate) fn legacy_suffix(name: &str) -> Option<&'static str> {
+    let (_, suffix) = name.rsplit_once('.')?;
+    LEGACY_FORMATS
+        .into_iter()
+        .find(|format| suffix.eq_ignore_ascii_case(format))
+}
+/// The legacy format whose magic is the first four bytes of `bytes`. No other
+/// byte is examined; a payload shorter than four bytes is not legacy.
+pub(crate) fn legacy_magic(bytes: &[u8]) -> Option<&'static str> {
+    let magic = bytes.get(..4)?;
+    LEGACY_FORMATS
+        .into_iter()
+        .find(|format| magic == format.as_bytes())
 }
 #[derive(Debug)]
 pub(crate) struct PayloadInspection {
@@ -26,9 +43,7 @@ pub(crate) struct PayloadInspection {
     pub not_inspected: BTreeSet<String>,
     /// C2 format-owned exclusion facts of this payload.
     pub exclusions: scene::ContentExclusions,
-    /// `J(u)`: Σ `value_nodes()` over every JSON document admitted here: the
-    /// glTF JSON or GLB JSON chunk (a b3dm's embedded GLB included) and the
-    /// b3dm feature-table and batch-table JSON.
+    /// `J(u)`: `value_nodes()` of the glTF JSON or GLB JSON chunk admitted here.
     pub json_nodes: u64,
     /// `Res(u)`: external resources resolved through the resolver, one per
     /// buffer or image with a non-`data:` `uri`.
@@ -305,59 +320,6 @@ fn decode_meshopt(
     let out = super::meshopt::decode(compressed, count, stride, mode)?;
     Ok((out, stride))
 }
-/// The embedded GLB, whether the feature-table JSON has the `RTC_CENTER` key
-/// (JSON value or binary-body reference; the value and range are not consumed)
-/// and the value nodes of the admitted feature-table and batch-table JSON.
-fn unwrap_b3dm(bytes: &[u8], limits: super::JsonLimits) -> FormatResult<(&[u8], bool, u64)> {
-    if bytes.len() < 28 || &bytes[..4] != b"b3dm" {
-        return Err(invalid("truncated or invalid b3dm header"));
-    }
-    let word = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
-    if word(4) != 1 {
-        return Err(unsupported("b3dm version other than 1"));
-    }
-    if word(8) != bytes.len() || !bytes.len().is_multiple_of(8) {
-        return Err(invalid("b3dm length/alignment invalid"));
-    }
-    let lengths = [word(12), word(16), word(20), word(24)];
-    if lengths[0] == 0 || (lengths[2] == 0 && lengths[3] != 0) {
-        return Err(invalid("b3dm table framing invalid"));
-    }
-    let mut offset = 28usize;
-    let mut rtc_center = false;
-    let mut table_nodes = 0u64;
-    for (index, length) in lengths.iter().enumerate() {
-        let table = range(bytes, offset, *length)?;
-        if index == 0 || (index == 2 && *length > 0) {
-            let doc = json::admit(table, limits)?;
-            table_nodes += doc.value_nodes() as u64;
-            let feature: records::FeatureTable<'_> = record(Some(doc.raw()))?;
-            if index == 0 {
-                domain(feature.batch_length, u32::MAX as u64)?;
-                rtc_center = feature.rtc_center.is_some();
-            }
-        }
-        offset = offset
-            .checked_add(*length)
-            .ok_or_else(|| invalid("b3dm table length overflow"))?;
-        if !offset.is_multiple_of(8) {
-            return Err(invalid("b3dm table boundary must be eight-byte aligned"));
-        }
-    }
-    let header = range(bytes, offset, 12)?;
-    if &header[..4] != b"glTF" {
-        return Err(invalid("b3dm does not contain GLB"));
-    }
-    let length = u32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    let glb = range(bytes, offset, length)?;
-    let end = offset
-        .checked_add(length)
-        .ok_or_else(|| invalid("embedded GLB length overflow"))?;
-    if bytes.len() - end > 7 || bytes[end..].iter().any(|b| *b != 0) {
-        return Err(invalid("invalid b3dm trailing padding"));
-    }
-    Ok((glb, rtc_center, table_nodes))
-}
 // Extension declarations are semantic checks. Opaque extras and extension bodies
 // remain outside this traversal; JSON admission already checked their structure.
 fn check_extensions(raw: &RawValue, used: &BTreeSet<String>, ceiling: usize) -> FormatResult<()> {
@@ -439,20 +401,13 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         return Err(limit("payload exceeds member byte allowance").into());
     }
     let mut exclusions = scene::ContentExclusions::default();
-    let mut json_nodes = 0u64;
     let (source, bin) = match kind {
-        PayloadKind::B3dm => {
-            let (glb, rtc_center, table_nodes) = unwrap_b3dm(bytes, limits.json)?;
-            exclusions.rtc_center = rtc_center;
-            json_nodes = table_nodes;
-            envelope(glb)?
-        }
         PayloadKind::Glb => envelope(bytes)?,
         PayloadKind::LocalGltf => (bytes, None),
     };
     let document = json::admit(source, limits.json)?;
     let slots = document.value_nodes();
-    json_nodes += slots as u64;
+    let json_nodes = slots as u64;
     let mut external_resources = 0u64;
     let root: records::Root<'_> = record(Some(document.raw()))?;
     let asset: records::Asset<'_> = record(root.asset)?;
@@ -518,9 +473,6 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         .filter(|s| !supported.contains(&s.as_str()))
         .cloned()
         .collect::<BTreeSet<_>>();
-    if matches!(kind, PayloadKind::B3dm) {
-        not_inspected.insert("b3dm feature and batch table semantics".into());
-    }
     check_extensions(document.raw(), &used, slots)?;
     let buffer_docs = array::<records::Buffer<'_>>(root.buffers, slots)?;
     let mut lengths = Vec::new();
@@ -1291,9 +1243,7 @@ mod tests {
         remaining: u64,
         mut resolve: impl FnMut(&str) -> FormatResult<Vec<u8>>,
     ) -> FormatResult<PayloadInspection> {
-        let kind = if name.ends_with(".b3dm") {
-            PayloadKind::B3dm
-        } else if name.ends_with(".gltf") {
+        let kind = if name.ends_with(".gltf") {
             PayloadKind::LocalGltf
         } else {
             PayloadKind::Glb
@@ -1334,59 +1284,43 @@ mod tests {
     fn triangle() -> Value {
         json!({"asset":{"version":"2.0"},"buffers":[{"byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":3,"min":[0,0,0],"max":[0,0,0]}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]})
     }
-    fn b3dm(glb: &[u8]) -> Vec<u8> {
-        let mut table = br#"{"BATCH_LENGTH":0}"#.to_vec();
-        while !(28 + table.len()).is_multiple_of(8) {
-            table.push(b' ');
-        }
-        let mut result = b"b3dm".to_vec();
-        result.extend(1u32.to_le_bytes());
-        result.extend(0u32.to_le_bytes());
-        result.extend((table.len() as u32).to_le_bytes());
-        result.extend([0u8; 12]);
-        result.extend(table);
-        result.extend(glb);
-        while !result.len().is_multiple_of(8) {
-            result.push(0);
-        }
-        let length = result.len() as u32;
-        result[8..12].copy_from_slice(&length.to_le_bytes());
-        result
-    }
+    /// R-2: the legacy classifier reads the final suffix (ASCII case-insensitive)
+    /// and the first four bytes only.
     #[test]
-    fn modern_b3dm_checks_tables_and_embedded_length() {
-        let good = b3dm(&frame(&triangle(), &[0; 36]));
-        assert_eq!(
-            inspect("a.b3dm", &good, 4_000_000, |_| panic!())
-                .unwrap()
-                .vertices,
-            3
-        );
-        for offset in [8, 12, 16, 20, 24] {
-            let mut bad = good.clone();
-            bad[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
-            assert!(matches!(
-                super::unwrap_b3dm(&bad, fixture_limits().json).map(|_| ()),
-                Err(FormatError::InvalidInput(_))
-            ));
+    fn legacy_classifier_reads_final_suffix_and_four_byte_magic_only() {
+        for (name, format) in [
+            ("tile.b3dm", Some("b3dm")),
+            ("t/tile.B3DM", Some("b3dm")),
+            ("x.I3dm", Some("i3dm")),
+            ("a/b.c/x.pnts", Some("pnts")),
+            ("tile.cmpt", Some("cmpt")),
+            ("x.glb.cmpt", Some("cmpt")),
+            // Only the final suffix of the whole name counts.
+            ("a.b3dm/x.glb", None),
+            ("x.b3dm.glb", None),
+            ("b3dm", None),
+            ("x.b3dmx", None),
+            ("x.vctr", None),
+            ("tile.glb", None),
+            ("tile.gltf", None),
+        ] {
+            assert_eq!(super::legacy_suffix(name), format, "{name}");
         }
-        assert!(matches!(
-            super::unwrap_b3dm(b"b3dm", fixture_limits().json),
-            Err(FormatError::InvalidInput(_))
-        ));
-        let mut bad = good.clone();
-        let start = 28 + u32::from_le_bytes(bad[12..16].try_into().unwrap()) as usize;
-        bad[start + 8..start + 12].copy_from_slice(&u32::MAX.to_le_bytes());
-        assert!(matches!(
-            super::unwrap_b3dm(&bad, fixture_limits().json),
-            Err(FormatError::InvalidInput(_))
-        ));
-        let mut bad = good.clone();
-        bad[30] = b'X';
-        assert!(matches!(
-            super::unwrap_b3dm(&bad, fixture_limits().json),
-            Err(FormatError::InvalidInput(_))
-        ));
+        for (bytes, format) in [
+            (&b"b3dm"[..], Some("b3dm")),
+            (b"i3dm\x01\0\0\0", Some("i3dm")),
+            (b"pnts", Some("pnts")),
+            (b"cmpt", Some("cmpt")),
+            // Magic is anchored at offset 0, case-sensitive, and needs four bytes.
+            (b"B3DM", None),
+            (b" b3dm", None),
+            (b"glTFb3dm", None),
+            (b"b3d", None),
+            (b"", None),
+            (b"{\"asset\":\"b3dm\"}", None),
+        ] {
+            assert_eq!(super::legacy_magic(bytes), format, "{bytes:?}");
+        }
     }
     #[test]
     fn matrix_padding_and_actual_ranges_are_checked() {
@@ -1875,50 +1809,6 @@ mod tests {
                 .gltf_extension
         );
     }
-    fn b3dm_with_table(glb: &[u8], table: &[u8], body: usize) -> Vec<u8> {
-        let mut table = table.to_vec();
-        while !(28 + table.len()).is_multiple_of(8) {
-            table.push(b' ');
-        }
-        let mut result = b"b3dm".to_vec();
-        result.extend(1u32.to_le_bytes());
-        result.extend(0u32.to_le_bytes());
-        result.extend((table.len() as u32).to_le_bytes());
-        result.extend((body as u32).to_le_bytes());
-        result.extend([0u8; 8]);
-        result.extend(table);
-        result.extend(vec![0u8; body]);
-        result.extend(glb);
-        while !result.len().is_multiple_of(8) {
-            result.push(0);
-        }
-        let length = result.len() as u32;
-        result[8..12].copy_from_slice(&length.to_le_bytes());
-        result
-    }
-    #[test]
-    fn b3dm_rtc_center_key_is_detected_in_json_and_binary_form() {
-        let glb = frame(&scene_doc(), &[0; 36]);
-        for (table, body, rtc) in [
-            (&br#"{"BATCH_LENGTH":0}"#[..], 0, false),
-            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":[1,2,3]}"#[..], 0, true),
-            (
-                &br#"{"BATCH_LENGTH":0,"RTC_CENTER":{"byteOffset":0}}"#[..],
-                16,
-                true,
-            ),
-            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":null}"#[..], 0, true),
-        ] {
-            let bytes = b3dm_with_table(&glb, table, body);
-            let facts = inspect("a.b3dm", &bytes, 4_000_000, |_| panic!()).unwrap();
-            assert_eq!(
-                facts.exclusions.rtc_center,
-                rtc,
-                "{}",
-                String::from_utf8_lossy(table)
-            );
-        }
-    }
     #[derive(Default)]
     struct Recorder {
         events: Vec<String>,
@@ -2090,31 +1980,6 @@ mod tests {
             _ => 0,
         }
     }
-    fn b3dm_tables(glb: &[u8], feature: &Value, batch: Option<&Value>) -> Vec<u8> {
-        let mut ft = serde_json::to_vec(feature).unwrap();
-        while !(28 + ft.len()).is_multiple_of(8) {
-            ft.push(b' ');
-        }
-        let mut bt = batch.map_or(Vec::new(), |b| serde_json::to_vec(b).unwrap());
-        while !bt.len().is_multiple_of(8) {
-            bt.push(b' ');
-        }
-        let mut result = b"b3dm".to_vec();
-        result.extend(1u32.to_le_bytes());
-        result.extend(0u32.to_le_bytes());
-        for n in [ft.len(), 0, bt.len(), 0] {
-            result.extend((n as u32).to_le_bytes());
-        }
-        result.extend(ft);
-        result.extend(bt);
-        result.extend(glb);
-        while !result.len().is_multiple_of(8) {
-            result.push(0);
-        }
-        let length = result.len() as u32;
-        result[8..12].copy_from_slice(&length.to_le_bytes());
-        result
-    }
     #[test]
     fn json_nodes_sum_value_nodes_of_every_admitted_document() {
         let doc = scene_doc();
@@ -2142,29 +2007,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(local_facts.json_nodes, count_value_nodes(&local));
-        let glb = frame(&doc, &[0; 36]);
-        let feature = json!({"BATCH_LENGTH":2,"RTC_CENTER":[1,2,3]});
-        let batch = json!({"id":[1,2],"name":["a","b"],"nested":{"k":[{"x":null},true]}});
-        for (batch, expected) in [
-            (None, count_value_nodes(&feature) + doc_nodes),
-            (
-                Some(&batch),
-                count_value_nodes(&feature) + count_value_nodes(&batch) + doc_nodes,
-            ),
-        ] {
-            let bytes = b3dm_tables(&glb, &feature, batch);
-            let facts = inspect("a.b3dm", &bytes, 4_000_000, |_| panic!()).unwrap();
-            assert_eq!(facts.json_nodes, expected, "batch table {batch:?}");
-        }
-        // Hand count for the smallest b3dm: {"BATCH_LENGTH":0} is 2 nodes.
-        let facts = inspect(
-            "a.b3dm",
-            &b3dm_tables(&glb, &json!({"BATCH_LENGTH":0}), None),
-            4_000_000,
-            |_| panic!(),
-        )
-        .unwrap();
-        assert_eq!(facts.json_nodes, 2 + doc_nodes);
     }
     #[test]
     fn external_resources_count_resolved_buffer_and_image_uris() {

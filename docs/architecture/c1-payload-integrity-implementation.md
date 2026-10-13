@@ -39,7 +39,7 @@ copy before decoding. POSITION use counts vertices per primitive while accessor
 components charge once per payload; successful resolved names charge once in
 C1's aggregate owner.
 
-The existing finite GLB/local glTF/modern b3dm, accessor/quantization/matrix,
+The existing finite GLB/local glTF, accessor/quantization/matrix,
 supported primitive, meshopt NONE and producer profiles remain within scope.
 Undefined primitive modes are invalid; defined modes outside the selected
 profile are Unsupported. Viewless nonsparse accessors retain zero semantics.
@@ -88,8 +88,10 @@ exercise actual component/decode equality and one-less limits.
 The final frozen portable/native CLI artifacts each pass 210 corrected and
 supplemental payload controls plus the seven stride controls, all 135 original
 C1 cases, 45 archive controls and 20 resource runs. Producer framing independently
-passes eight portable and six native b3dm members; this is framing evidence,
-not geometry or byte equivalence. Linux observations measured 63,272–71,456 KiB
+passed eight portable and six native b3dm members; this is framing evidence,
+not geometry or byte equivalence. Since H7
+([amendment](c1-legacy-content-unsupported-amendment.md)) b3dm, i3dm, pnts and cmpt
+content is Unsupported and no b3dm framing is inspected. Linux observations measured 63,272–71,456 KiB
 maximum RSS for portable and 84,164–90,272 KiB for native, with sampled descriptor
 maxima six each. These finite observations are not universal process-memory
 limits. Actual `cargo package --locked -p rusty-tiles` at `e4ec3cc` compiled the

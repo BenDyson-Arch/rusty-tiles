@@ -9,71 +9,28 @@
    "agree": true,
    "c1Caveats": [],
    "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ]
+    "kind": "unsupported",
+    "outcome": "C1Refused"
    },
+   "expectedProduction": "C1:Unsupported (legacy b3dm content, H7)",
    "file": "witnesses/fixtures/W01-ordered-node-U-RTC-tile-chain.3tz",
    "group": "literal",
    "id": "W01-ordered-node-U-RTC-tile-chain",
    "limits": {},
-   "literal": [
-    {
-     "expected": [
-      "4",
-      "22",
-      "42"
-     ],
-     "got": [
-      "4",
-      "22",
-      "42"
-     ],
-     "node": 0,
-     "ok": true,
-     "what": "node_yp"
-    },
-    {
-     "expected": [
-      "4",
-      "-42",
-      "22"
-     ],
-     "got": [
-      "4",
-      "-42",
-      "22"
-     ],
-     "node": 0,
-     "ok": true,
-     "what": "own_tile_local minus rtc (slice 1 does not apply RTC)"
-    },
-    {
-     "expected": [
-      "215",
-      "-147",
-      "979"
-     ],
-     "got": [
-      "215",
-      "-147",
-      "979"
-     ],
-     "ok": true,
-     "what": "parent_tile_local (literal, includes RTC) == T1(own_tile_local) [generator chain arithmetic]"
-    }
-   ],
-   "notes": [
-    "Volumes enclose the RTC-applied literal points (slice-2 frame truth)."
-   ],
+   "notes": [],
    "oracle": {
-    "facts": null,
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ],
+    "facts": {
+     "format": "b3dm",
+     "member": "w.b3dm",
+     "rule": "suffix",
+     "why": "legacy b3dm content is unsupported (glTF 2.0 content only): w.b3dm (suffix)"
+    },
+    "outcome": "Unsupported",
+    "reasons": null,
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "Unsupported"
    },
    "sha256": "24c478cd2de73d42b029d31e2457f925400b72a9cc119cf84db6b11d3ce1b065",
    "source": "W01-ordered-node-U-RTC-tile-chain"
@@ -131,7 +88,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -157,21 +114,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -179,13 +136,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "ab38ca0b03fe4c7ce4eed858f092552058771b197bd498906f354aef711855a3",
+   "sha256": "1a8752d957b40bc94532993d972e7b293e6a01bd0de7fa802727cfdd34470539",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -238,13 +195,13 @@
      "depth": 1,
      "k": 1,
      "level": 1,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "ancestor",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root"
     },
@@ -256,7 +213,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -282,21 +239,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -304,13 +261,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "902e6e48232d26ac33b64b2fd0a091a1528eed6fed3ad8ad41b66c33ddb06964",
+   "sha256": "5add57e22d4740014e1a0abc7d69f8c931dec4bb2bf2b0b5dbeafd05ea906f80",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -363,13 +320,13 @@
      "depth": 1,
      "k": 1,
      "level": 1,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "ancestor",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root"
     },
@@ -381,7 +338,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -407,21 +364,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -429,13 +386,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "a3169e1a188556596fd243941af3dc621ed76c9a4e7cc1c51649a16fdb00df07",
+   "sha256": "922acb8e1c821d3dce28b40bd05b3ec6f764d9ad215c8216d9aab187883c2798",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -488,13 +445,13 @@
      "depth": 1,
      "k": 1,
      "level": 1,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "ancestor",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root"
     },
@@ -506,7 +463,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -532,21 +489,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -554,13 +511,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "778b5d1b8e4f6bd3f5730e6dccf474b64b6877093edb5912783bfbcf0f6f3ba6",
+   "sha256": "c453588b0087c41f115782b0599e23a6601f57bc0c087952f6a9f69135e53880",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -619,13 +576,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "own",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0]"
     },
@@ -637,7 +594,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -663,21 +620,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -685,13 +642,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "6cca1cef2d3da58375b0e068a01407554bb68db50df4d4d7b0f6a01405141950",
+   "sha256": "abcd2ed0169c2092685c1befecf4efd210c72aa73420ef61851f5fe4cf047004",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -750,13 +707,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "own",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0]"
     },
@@ -768,7 +725,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -794,21 +751,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -816,13 +773,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "996e359fe61bb8933b60c8ab2e447fa9189309bcbe467a6b943708bfac307711",
+   "sha256": "427aef1661f4ff793908cd280275f297b50a7e15fedd20a3b1234e21978426da",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -881,13 +838,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "own",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0]"
     },
@@ -899,7 +856,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -925,21 +882,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -947,13 +904,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "72918921350e3f4e0695c32e85f8f9f78ad459b08a7a54670333f7c1185bffb5",
+   "sha256": "7bbd4f060104a1f8a118654c2c63d4df975913633fe3461cd7a7f604087a871e",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -1006,13 +963,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "content",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0].content[0]"
     },
@@ -1024,7 +981,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -1050,21 +1007,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -1072,13 +1029,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "26492464d032b4871cb72b62f351895772b4d967805dbaadc9df5d070946f727",
+   "sha256": "c743643dc81d675186f6e98e68517d713bfca390e1de2bbc673b6ee69e50cb13",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -1131,13 +1088,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "content",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0].content[0]"
     },
@@ -1149,7 +1106,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -1175,21 +1132,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -1197,13 +1154,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "08ffd7ac8e7d21079541d9c2f49a80e1b7da35a862e687b0116f2404fa95ae98",
+   "sha256": "9ebbc3958af399c1334208701b1c671ef8b375f39f39ad55ff0e6da82e4e5173",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -1256,13 +1213,13 @@
      "depth": 1,
      "k": null,
      "level": 0,
-     "member": "w.b3dm",
+     "member": "w.glb",
      "mesh": 0,
      "node": 0,
      "primitive": 0,
      "reference": 0,
      "role": "content",
-     "uri": "w.b3dm",
+     "uri": "w.glb",
      "vertex": 0,
      "volumeAt": "tileset.json:root.children[0].content[0]"
     },
@@ -1274,7 +1231,7 @@
     "references": [
      {
       "V": 130,
-      "bytes": 560,
+      "bytes": 512,
       "decoded": 0,
       "levelOps": [
        [
@@ -1300,21 +1257,21 @@
       ],
       "levels": 2,
       "maxNodeDepth": 1,
-      "member": "w.b3dm",
+      "member": "w.glb",
       "reference": 0,
-      "referenceUnits": 2708,
+      "referenceUnits": 2628,
       "sInst": 4,
-      "units": 3098,
+      "units": 3018,
       "vertexUnits": 130
      }
     ],
     "terms": {
      "1152": 1152,
      "160Res": 0,
-     "16J": 976,
+     "16J": 944,
      "4Prim": 4,
      "8levels": 16,
-     "B": 560,
+     "B": 512,
      "Dec": 0,
      "E": 3,
      "Idx": 1,
@@ -1322,13 +1279,13 @@
      "vertex": 130
     },
     "totals": {
-     "bytes": 560,
+     "bytes": 512,
      "decoded": 0,
      "maxNodeDepth": 1,
-     "units": 3098
+     "units": 3018
     }
    },
-   "sha256": "04051a90985f599dbd5030ebff8fc6f67093e3b190d234b3b66366e7198736fd",
+   "sha256": "d46db43e70ecb67f9a53e0732b443cb0aea6f037a1adcb3468baaa04fed98571",
    "source": "W01-ordered-node-U-RTC-tile-chain"
   },
   {
@@ -14206,7 +14163,7 @@
    "notes": [],
    "oracle": {
     "facts": {
-     "member": "w.b3dm",
+     "member": "w.glb",
      "node": 0,
      "reference": 0,
      "why": "nodes[0] has matrix together with TRS"
@@ -14215,7 +14172,7 @@
     "reasons": null,
     "why": null
    },
-   "sha256": "8e8ae7ac48c940e9d2aeaa6b3367a67ab802f4fff18fb718951c60b8c04527b2",
+   "sha256": "8d25cf1bb1d02146e6fbe83596c8b0a4326ff2c1339490eb726d20bc057a910d",
    "source": "matrix-and-TRS"
   },
   {
@@ -15288,23 +15245,28 @@
    "agree": true,
    "c1Caveats": [],
    "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ]
+    "kind": "unsupported",
+    "outcome": "C1Refused"
    },
+   "expectedProduction": "C1:Unsupported (legacy b3dm content, H7)",
    "file": "witnesses/fixtures/RTC-binary-form.3tz",
    "group": "context",
    "id": "RTC-binary-form",
    "limits": {},
    "notes": [],
    "oracle": {
-    "facts": null,
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ],
+    "facts": {
+     "format": "b3dm",
+     "member": "w.b3dm",
+     "rule": "suffix",
+     "why": "legacy b3dm content is unsupported (glTF 2.0 content only): w.b3dm (suffix)"
+    },
+    "outcome": "Unsupported",
+    "reasons": null,
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "Unsupported"
    },
    "sha256": "0d1acb3e38dbbc0b45a80e0ad647be075b988a16fac5bde77d06d65cf298ad71",
    "source": "RTC-binary-form"
@@ -15313,23 +15275,28 @@
    "agree": true,
    "c1Caveats": [],
    "expected": {
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ]
+    "kind": "unsupported",
+    "outcome": "C1Refused"
    },
+   "expectedProduction": "C1:Unsupported (legacy b3dm content, H7)",
    "file": "witnesses/fixtures/RTC-range-overrun.3tz",
    "group": "context",
    "id": "RTC-range-overrun",
    "limits": {},
    "notes": [],
    "oracle": {
-    "facts": null,
-    "outcome": "NotInspected",
-    "reasons": [
-     "rtcCenter"
-    ],
+    "facts": {
+     "format": "b3dm",
+     "member": "w.b3dm",
+     "rule": "suffix",
+     "why": "legacy b3dm content is unsupported (glTF 2.0 content only): w.b3dm (suffix)"
+    },
+    "outcome": "Unsupported",
+    "reasons": null,
     "why": null
+   },
+   "oracleExpected": {
+    "outcome": "Unsupported"
    },
    "sha256": "dc3dfdccaa96511f7ac2610bf4cbb47529bde20c348682f5e6dfb147c0eaf851",
    "source": "RTC-range-overrun"
@@ -27741,8 +27708,8 @@
   ],
   "c1PreconditionPossible": 154,
   "cases": 261,
-  "controlPairs": 16,
-  "controlPairsAgree": 16,
+  "controlPairs": 15,
+  "controlPairsAgree": 15,
   "disagree": [],
   "identityLevelSpansIdentical": true,
   "skipped": []

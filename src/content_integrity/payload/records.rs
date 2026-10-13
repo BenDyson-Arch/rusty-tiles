@@ -53,8 +53,6 @@ record!(TextureInfo {index=>"index"});
 record!(Extensions {meshopt=>"EXT_meshopt_compression", polygon=>"EXT_mesh_polygon", draco=>"KHR_draco_mesh_compression", metadata=>"EXT_structural_metadata"});
 record!(Fallback {fallback=>"fallback"});
 record!(Metadata {uri=>"schemaUri"});
-// RTC_CENTER is consumed for key presence only, in either JSON or binary-reference form.
-record!(FeatureTable {batch_length=>"BATCH_LENGTH", rtc_center=>"RTC_CENTER"});
 
 pub(super) fn record<'a, T: Deserialize<'a>>(raw: Raw<'a>) -> FormatResult<T> {
     let raw = raw.ok_or_else(|| invalid("missing object record"))?;
