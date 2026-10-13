@@ -4429,7 +4429,6 @@ mod records_tests {
     /// cap refuses deep roots.
     #[test]
     fn caller_templates_and_payloads_without_copies() {
-        use std::os::unix::fs::MetadataExt;
         let octree = SubdivisionScheme::Octree;
         let template = |t: &str| UriTemplate::new(t, octree).unwrap();
         let names = ImplicitNames::Templates {
@@ -4494,8 +4493,12 @@ mod records_tests {
         let written = files(dir.path());
         assert_eq!(written[final_root], root_bytes);
         assert_eq!(written[child_member], child_bytes);
-        let links = |m: &str| std::fs::metadata(dir.path().join(m)).unwrap().nlink();
-        assert_eq!((links(final_root), links(child_member)), (1, 2));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let links = |m: &str| std::fs::metadata(dir.path().join(m)).unwrap().nlink();
+            assert_eq!((links(final_root), links(child_member)), (1, 2));
+        }
     }
 
     /// A refused document removes everything it created; explicit payloads are listed once
