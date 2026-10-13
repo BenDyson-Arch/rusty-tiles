@@ -25,7 +25,7 @@ pub use model::{
     model_to_archive, model_to_manifest, ModelManifestRequest, ModelManifestResult, ModelReport,
     ModelWrapRequest, ModelWrapResult,
 };
-use placement::ResolvedPlacement;
+pub(crate) use placement::ResolvedPlacement;
 pub use placement::{MeshPlacement, MeshPlacementReport};
 
 /// Full-detail delivery or one bounded coarse root over unchanged leaves.
