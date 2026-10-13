@@ -143,7 +143,7 @@ impl LeafRow {
         if w.first >= w.end {
             return Err(bad("empty or reversed rank range"));
         }
-        if w.end - w.first > super::super::config::bench_leaf_triangles().unwrap_or(CONSUMER_TABLE_ROWS) {
+        if w.end - w.first > CONSUMER_TABLE_ROWS {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(

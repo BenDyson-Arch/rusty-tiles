@@ -71,14 +71,6 @@ fn key(row: &FullTriangle) -> PrimitiveKey {
         row.triangle.source.primitive,
     )
 }
-/// A run of at most one table's triangles of one prepared primitive.
-struct Piece<'a> {
-    triangles: &'a [FullTriangle],
-    corner_depths: &'a [[u8; 3]],
-    uvs: Vec<&'a [[f32; 2]]>,
-    material: &'a Option<Value>,
-}
-
 fn allocate(length: usize) -> Result<Vec<u8>, JobError> {
     let mut bytes = Vec::new();
     bytes.try_reserve_exact(length).map_err(|_| overflow())?;
@@ -268,6 +260,35 @@ fn validate_closure(atlas: &PreparedAtlas) -> Result<bool, JobError> {
                 )?;
             }
         }
+        for entry in &primitive.feature_id_textures {
+            let texture = &entry["texture"];
+            let n = index(
+                &texture["index"],
+                atlas.textures.len(),
+                "prepared ID texture missing",
+            )?;
+            let uv = texture.get("texCoord").cloned().unwrap_or(json!(0));
+            index(&uv, primitive.uvs.len(), "prepared ID TEXCOORD missing")?;
+            let channels = texture["channels"].as_array();
+            if entry["featureCount"].as_u64().is_none_or(|n| n == 0)
+                || channels.is_none_or(|c| {
+                    c.is_empty()
+                        || c.len() > 4
+                        || c.iter().any(|v| v.as_u64().is_none_or(|v| v > 3))
+                })
+                || atlas.textures[n].get("extensions").is_some()
+            {
+                return Err(invalid(
+                    "prepared ID texture entry is not a PNG feature ID texture",
+                ));
+            }
+            let s = index(
+                &atlas.textures[n]["sampler"],
+                atlas.samplers.len(),
+                "prepared ID texture sampler missing",
+            )?;
+            super::id_texture::check_sampler(&atlas.samplers[s])?;
+        }
     }
     Ok(basis)
 }
@@ -299,10 +320,7 @@ pub(super) fn encode(
     // Both property tables have at most `total` rows (one per triangle, one per present
     // primitive). The tree's leaf budget already bounds `total`; a wider table is a broken
     // plan, never a silent consumer-incompatible leaf.
-    // Bench-only (`RUSTY_TILES_BENCH_LEAF_TRIANGLES`): a wider leaf is split into pieces of
-    // at most 8192 triangles, each with its own source_triangle table.
-    let split = total as u64 > CONSUMER_TABLE_ROWS;
-    if split && super::super::config::bench_leaf_triangles().is_none() {
+    if total as u64 > CONSUMER_TABLE_ROWS {
         return Err(invalid("leaf property table exceeds the consumer row limit").into());
     }
     // Every triangle's mandatory numeric columns are uncompressed: this lower
@@ -350,27 +368,7 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
-    let rows_per_piece = if split {
-        CONSUMER_TABLE_ROWS as usize
-    } else {
-        usize::MAX
-    };
-    let mut pieces: Vec<Piece<'_>> = Vec::new();
     for primitive in &atlas.primitives {
-        let n = primitive.triangles.len();
-        let mut start = 0;
-        while start < n {
-            let end = n.min(start.saturating_add(rows_per_piece));
-            pieces.push(Piece {
-                triangles: &primitive.triangles[start..end],
-                corner_depths: &primitive.corner_depths[start..end],
-                uvs: primitive.uvs.iter().map(|uv| &uv[3 * start..3 * end]).collect(),
-                material: &primitive.material,
-            });
-            start = end;
-        }
-    }
-    for (piece_index, primitive) in pieces.iter().enumerate() {
         let flags = primitive.triangles[0].flags;
         if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
             return Err(invalid("prepared primitive mixes attribute presence").into());
@@ -451,8 +449,6 @@ pub(super) fn encode(
             for (i, row) in primitive.triangles.iter().enumerate() {
                 let id = if set == 0 {
                     primitive_ids[&key(row)]
-                } else if split {
-                    i
                 } else {
                     rank + i
                 };
@@ -463,14 +459,12 @@ pub(super) fn encode(
             attributes[format!("_FEATURE_ID_{set}")] =
                 json!(wire.attribute(&bytes, count, 4, 5126, "SCALAR")?);
         }
-        let (triangle_count, triangle_table) = if split {
-            (primitive.triangles.len(), 1 + piece_index)
-        } else {
-            (total, 1)
-        };
-        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":[
-            {"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"},
-            {"featureCount":triangle_count,"attribute":1,"propertyTable":triangle_table,"label":"source_triangle"}]}}});
+        let mut feature_ids = vec![
+            json!({"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"}),
+            json!({"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}),
+        ];
+        feature_ids.extend(primitive.feature_id_textures.iter().cloned());
+        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":feature_ids}}});
         if let Some(material) = &primitive.material {
             output["material"] = json!(materials.len());
             materials.push(material.clone());
@@ -479,23 +473,20 @@ pub(super) fn encode(
         nodes.push(node);
         rank += primitive.triangles.len();
     }
-    let mut table_inputs: Vec<(&str, Vec<&FullTriangle>)> = vec![(
-        "source_primitive",
-        primitive_rows.values().copied().collect::<Vec<_>>(),
-    )];
-    if split {
-        for piece in &pieces {
-            table_inputs.push(("source_triangle", piece.triangles.iter().collect()));
-        }
-    } else {
-        table_inputs.push((
-            "source_triangle",
-            pieces.iter().flat_map(|p| p.triangles.iter()).collect(),
-        ));
-    }
+    let rows: Vec<&FullTriangle> = atlas
+        .primitives
+        .iter()
+        .flat_map(|p| p.triangles.iter())
+        .collect();
     let mut classes = Map::new();
     let mut tables = Vec::new();
-    for (class, input) in table_inputs {
+    for (class, input) in [
+        (
+            "source_primitive",
+            primitive_rows.values().copied().collect::<Vec<_>>(),
+        ),
+        ("source_triangle", rows),
+    ] {
         let mut schema = Map::new();
         let mut properties = Map::new();
         let columns = if class == "source_primitive" { 5 } else { 11 };
@@ -663,6 +654,7 @@ mod tests {
                     .map(|set| vec![[set as f32 / 8.0, 0.25]; 6])
                     .collect(),
                 material: Some(material),
+                feature_id_textures: Vec::new(),
             }],
             pages: vec![PreparedPage {
                 bytes: png.into_inner(),
@@ -839,6 +831,54 @@ mod tests {
         assert_eq!(page, input.pages[0].bytes);
     }
     #[test]
+    fn id_texture_sets_follow_the_source_sets_and_need_nearest() {
+        use super::super::id_texture::{bake, IdSet, Request};
+        // Five sets: the leaf carries 2 + 5 featureIds; nothing caps the count.
+        let sets = [IdSet { bytes: 1 }; 5];
+        let ids: Vec<u32> = (0..16 * 5).map(|i| (i % 7) as u32).collect();
+        let support = vec![1; 16];
+        let id = bake(&Request {
+            width: 4,
+            height: 4,
+            sets: &sets,
+            ids: &ids,
+            support: &support,
+            memory_limit: 1 << 30,
+        })
+        .unwrap();
+        let mut input = atlas();
+        let refs = id.append_level(&mut input, 0).unwrap();
+        input.primitives[0].feature_id_textures = refs
+            .iter()
+            .enumerate()
+            .map(|(k, r)| r.feature_id(0, &format!("annotation_{k}")).unwrap())
+            .collect();
+        let leaf = encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).unwrap();
+        let (doc, _) = parse(&leaf.glb);
+        let ids =
+            &doc["meshes"][0]["primitives"][0]["extensions"]["EXT_mesh_features"]["featureIds"];
+        assert_eq!(ids.as_array().unwrap().len(), 7);
+        for (k, r) in refs.iter().enumerate() {
+            let entry = &ids[2 + k];
+            assert_eq!(entry["nullFeatureId"], 255);
+            let texture = &doc["textures"][entry["texture"]["index"].as_u64().unwrap() as usize];
+            let sampler = &doc["samplers"][texture["sampler"].as_u64().unwrap() as usize];
+            assert_eq!(
+                (sampler["magFilter"].as_u64(), sampler["minFilter"].as_u64()),
+                (Some(9728), Some(9728))
+            );
+            assert_eq!(
+                doc["images"][texture["source"].as_u64().unwrap() as usize]["mimeType"],
+                "image/png"
+            );
+            assert_eq!(entry["texture"]["channels"], json!(r.channels));
+        }
+        // Mutant: a LINEAR sampler on an ID texture is refused by the writer.
+        let s = input.textures[refs[0].texture]["sampler"].as_u64().unwrap() as usize;
+        input.samplers[s]["magFilter"] = json!(9729);
+        assert!(encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).is_err());
+    }
+    #[test]
     fn float_profiles_keep_position_bits_and_each_node_owns_its_trs() {
         for profile in [Profile::Quality, Profile::Lossless] {
             let mut input = atlas();
@@ -847,6 +887,7 @@ mod tests {
                 corner_depths: vec![[1; 3]],
                 uvs: vec![],
                 material: None,
+                feature_id_textures: Vec::new(),
             });
             let leaf = encode(&input, &plan(profile), 1, TILE_LIMIT).unwrap();
             let (doc, bin) = parse(&leaf.glb);

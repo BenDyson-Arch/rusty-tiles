@@ -259,10 +259,10 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
                 .and_then(Value::as_array)
             {
                 for set in ids {
-                    let attribute = set
-                        .get("attribute")
-                        .and_then(Value::as_u64)
-                        .ok_or_else(|| invalid("feature-ID set without an attribute"))?;
+                    // Texture-based sets (H8 ID textures) carry no per-vertex IDs.
+                    let Some(attribute) = set.get("attribute").and_then(Value::as_u64) else {
+                        continue;
+                    };
                     let values = feature(&format!("_FEATURE_ID_{attribute}"))?
                         .ok_or_else(|| invalid("feature-ID attribute missing"))?;
                     let table = set
