@@ -910,27 +910,43 @@ fn process(
         }
     }
     lap(&mut phases[1]);
-    let mut simplifier = Simplifier::new(&mesh, &kept_faces, locked);
-    let failed = simplifier.force(&forced);
-    simplifier.set_seam(
-        mesh.vertices
-            .iter()
-            .map(|v| v.info.cut(d) && !v.info.special)
-            .collect(),
-        mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
-    );
-    out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-    out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-    // At most P faces, and at least a halving of the children (single-child chains and
-    // small subtrees still coarsen level by level).
-    let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
-    simplifier.simplify(target);
-    let relaxed = simplifier.live_faces() > 2 * ctx.target;
-    if relaxed {
-        simplifier.relax();
-        simplifier.simplify(target);
-    }
-    let (s_faces, report) = simplifier.finish();
+    // The finishing pass reuses the simplification of the tile's last topology run (same
+    // children, same keep set, so the same result); the topology pass computes and caches it.
+    let cache = ctx
+        .sidecars
+        .join(format!("topo-d{d}"))
+        .join(format!("f{}.bin", node.first));
+    let cached = if full { read_topology(&cache)? } else { None };
+    let (s_faces, report, relaxed) = match cached {
+        Some(c) => c,
+        None => {
+            let mut simplifier = Simplifier::new(&mesh, &kept_faces, locked);
+            let failed = simplifier.force(&forced);
+            simplifier.set_seam(
+                mesh.vertices
+                    .iter()
+                    .map(|v| v.info.cut(d) && !v.info.special)
+                    .collect(),
+                mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
+            );
+            out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
+            out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
+            // At most P faces, and at least a halving of the children (single-child chains
+            // and small subtrees still coarsen level by level).
+            let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
+            simplifier.simplify(target);
+            let relaxed = simplifier.live_faces() > 2 * ctx.target;
+            if relaxed {
+                simplifier.relax();
+                simplifier.simplify(target);
+            }
+            let (s_faces, report) = simplifier.finish();
+            if !full {
+                write_topology(&cache, &s_faces, &report, relaxed)?;
+            }
+            (s_faces, report, relaxed)
+        }
+    };
     out.relaxed = relaxed;
     out.forced = report.forced;
     out.forced_unchecked = report.forced_unchecked;
@@ -1350,6 +1366,66 @@ fn process(
     lap(&mut phases[6]);
     out.phases = phases;
     Ok(out)
+}
+
+/// Cache of a tile's simplified faces (scratch), written by its latest topology run.
+fn write_topology(
+    path: &Path,
+    faces: &[Face],
+    report: &mesh::SimplifyReport,
+    relaxed: bool,
+) -> Result<(), JobError> {
+    let mut b = Vec::with_capacity(faces.len() * 20 + 64);
+    for v in [report.forced, report.forced_unchecked, report.collapses, report.input_faces] {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    b.push(u8::from(relaxed));
+    b.extend_from_slice(&(faces.len() as u64).to_le_bytes());
+    for f in faces {
+        for v in [f.v[0], f.v[1], f.v[2], f.label, f.id] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
+    }
+    fs::write(path, b).map_err(|e| JobError::io("write LOD topology cache", path, e))
+}
+
+fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport, bool)>, JobError> {
+    let b = match fs::read(path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(JobError::io("read LOD topology cache", path, e)),
+    };
+    let bad = || state("LOD topology cache is corrupt");
+    let u64_at = |i: usize| -> Result<u64, JobError> {
+        Ok(u64::from_le_bytes(b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap()))
+    };
+    let report = mesh::SimplifyReport {
+        forced: u64_at(0)?,
+        forced_unchecked: u64_at(8)?,
+        collapses: u64_at(16)?,
+        input_faces: u64_at(24)?,
+        ..Default::default()
+    };
+    let relaxed = *b.get(32).ok_or_else(bad)? != 0;
+    let n = u64_at(33)? as usize;
+    if b.len() != 41 + 20 * n {
+        return Err(bad());
+    }
+    let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+    let faces = (0..n)
+        .map(|k| {
+            let o = 41 + 20 * k;
+            Face {
+                v: [u(o), u(o + 4), u(o + 8)],
+                label: u(o + 12),
+                id: u(o + 16),
+            }
+        })
+        .collect();
+    Ok(Some((faces, report, relaxed)))
 }
 
 /// Border edges of a depth-`d` proxy with both endpoints seam vertices, for the audit.
@@ -1879,6 +1955,10 @@ pub(crate) fn produce(
         report.seam_matched += counts.matched;
         report.seam_unmatched_boundary += counts.boundary;
         report.seam_relabelled += counts.relabelled;
+        let topo_dir = sidecars.join(format!("topo-d{d}"));
+        if topo_dir.exists() {
+            fs::remove_dir_all(&topo_dir).map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
+        }
         let child_dir = sidecars.join(format!("d{}", d + 1));
         if child_dir.exists() {
             fs::remove_dir_all(&child_dir).map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
