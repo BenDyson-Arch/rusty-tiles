@@ -6,7 +6,7 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Legacy mesh source-CRS conversion can need native support; the new `mesh` command and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
+The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh source-CRS conversion (legacy and `mesh --source-crs`) can need native support for CRS outside the verified grid-free tier; the new `mesh` command, its grid-free source CRS and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
 
 Both builds expose the command help, including commands whose native capability is unavailable. Check `rusty-tiles doctor --command COMMAND` before using a converter. Adding GDAL to a standard installation does not enable the feature. The Python wheel exposes only the [standard Python API](../bindings/python/README.md), not this CLI.
 
@@ -49,8 +49,8 @@ The shared layout is a bounded implicit forest. Producer naming/partition detail
 
 ### mesh
 
-Streams one local metre/Y-up static glTF/GLB scene through capture, leaf encoding
-and Tiles 1.1 implicit `.3tz` delivery. Current parents have no coarse content;
+Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
+through capture, leaf encoding and Tiles 1.1 implicit `.3tz` delivery. Current parents have no coarse content;
 certified LOD and proxy baking are downstream work. See the [mesh guide](MESH.md)
 for admitted sources, placement, resources, migration and the known Cesium
 KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
@@ -64,13 +64,19 @@ Rust exports are now internal.
 | `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
 | `--sceneOffset X Y Z` | `--scene-offset` | zero with anchor | Post-node source Y-up metre translation before orientation; requires anchor |
+| `--sourceCrs` | `--source-crs` | `local` | `local` or a 2D horizontal EPSG/WKT/PROJ definition, mapped at capture; excludes the anchor options |
+| `--sourceAxes` | `--source-axes` | none | Required with a source CRS: `xyz` (E, N, height) or `y-up` (E, height, −N) after node transforms |
+| `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Added in double precision: E/N in horizontal CRS units, A metres |
+| `--heightOffset` | `--height-offset` | none | Required with a source CRS: metres added to source height plus A to give ellipsoidal height, including `0` |
 
 Shared `-i`/`-o`/`--force`, `--json` and `--progress json` apply. Output is `.3tz`
 only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`),
 `diagnostics` (requested/actual workers and resources, outside the archive),
-`cleanupDiagnostics`, and the resolved output. Only local input and rigid
-placement are admitted: no source CRS, leaf/proxy tuning, explicit/full-detail
-mode or texture-format flags. Profiles do not freeze numerical settings and
+`cleanupDiagnostics`, and the resolved output. Input is local with optional
+rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
+per-vertex map (positions, normals and tangents) is applied at capture and whose
+ENU frame becomes the root transform. There is no CRS inference, offset-file
+option, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
 `lossless` is not a source-GLB byte-preservation promise.
 
 ### mesh-to-3tz

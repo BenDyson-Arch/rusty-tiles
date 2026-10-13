@@ -145,6 +145,40 @@ fn request_errors_precede_source_io_and_preserve_existing_outputs() {
             vec!["--orientation-xyzw", "0", "0", "0", "1"],
         ),
         (
+            work.path().join("auto.3tz"),
+            vec![
+                "--source-crs",
+                "auto",
+                "--source-axes",
+                "y-up",
+                "--height-offset",
+                "0",
+            ],
+        ),
+        (
+            work.path().join("axes.3tz"),
+            vec!["--source-crs", "EPSG:3857", "--height-offset", "0"],
+        ),
+        (
+            work.path().join("local-offset.3tz"),
+            vec!["--source-offset", "1", "2"],
+        ),
+        (
+            work.path().join("exclusive.3tz"),
+            vec![
+                "--source-crs",
+                "EPSG:3857",
+                "--source-axes",
+                "y-up",
+                "--height-offset",
+                "0",
+                "--anchor",
+                "153",
+                "-27",
+                "0",
+            ],
+        ),
+        (
             work.path().join("quaternion.3tz"),
             vec![
                 "--anchor",
@@ -178,7 +212,8 @@ fn parser_rejects_legacy_tuning_and_internal_commands_as_usage() {
         vec!["--leaf-triangles", "1"],
         vec!["--root-proxy-triangles", "1"],
         vec!["--max-proxy-error-metres", "1"],
-        vec!["--source-crs", "auto"],
+        vec!["--source-axes", "z-up"],
+        vec!["--source-offset", "1"],
         vec!["--texture-format", "jpeg"],
         vec!["--explicit"],
     ] {
@@ -328,4 +363,83 @@ fn mesh_doctor_is_read_only_and_does_not_require_source_crs() {
     assert_eq!(report["commands"]["mesh"]["requires"], json!([]));
     assert_eq!(report["commands"]["mesh"]["profilesProvisional"], true);
     assert_eq!(work.path().read_dir().unwrap().count(), 0);
+}
+
+/// Kebab and camelCase spellings of the source CRS options publish the same archive,
+/// whose report states the resolved CRS and whose root is its ENU frame.
+#[test]
+fn source_crs_spellings_publish_identical_archives_with_a_derived_root() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("mesh.glb");
+    source(&input, false);
+    let mut archives = Vec::new();
+    for (name, crs, axes, offset, height) in [
+        (
+            "kebab.3tz",
+            "--source-crs",
+            "--source-axes",
+            "--source-offset",
+            "--height-offset",
+        ),
+        (
+            "camel.3tz",
+            "--sourceCrs",
+            "--sourceAxes",
+            "--sourceOffset",
+            "--heightOffset",
+        ),
+    ] {
+        let output = work.path().join(name);
+        let result = mesh(
+            &input,
+            &output,
+            &[
+                "--jobs",
+                "1",
+                crs,
+                "EPSG:3857",
+                axes,
+                "y-up",
+                offset,
+                "14812000",
+                "-1384000",
+                "100",
+                height,
+                "0",
+            ],
+        );
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let summary: Value = serde_json::from_slice(&result.stdout).unwrap();
+        let report = &summary["tilerReport"];
+        assert_eq!(report, &archive_json(&output, "conversion.json"));
+        assert_eq!(report["source_coordinates"], "source-crs");
+        assert_eq!(report["coordinates"], "wgs84-ecef");
+        assert_eq!(report["placement"]["kind"], "wgs84");
+        let crs = &report["source_crs"];
+        assert_eq!(crs["definition"], "EPSG:3857");
+        assert_eq!(crs["axes"], "y-up");
+        assert_eq!(crs["source_offset"], json!([14812000., -1384000., 100.]));
+        assert_eq!(crs["height_offset_metres"], 0.);
+        assert_eq!(crs["operation"], "portable");
+        // Independent EPSG:3857 inverse of the source-bounds centre (0.5, 0.5, 0).
+        let a = 6_378_137_f64;
+        let origin = crs["origin_degrees_metres"].as_array().unwrap();
+        let lon = (14_812_000.5 / a).to_degrees();
+        let lat = ((-1_384_000_f64 / a).sinh().atan()).to_degrees();
+        assert!((origin[0].as_f64().unwrap() - lon).abs() < 1e-10);
+        assert!((origin[1].as_f64().unwrap() - lat).abs() < 1e-10);
+        assert!((origin[2].as_f64().unwrap() - 100.5).abs() < 1e-6);
+        let emitted = archive_json(&output, "tileset.json")["root"]["transform"].clone();
+        let reported = report["root_transform"].as_array().unwrap();
+        assert_eq!(reported.len(), 16);
+        for (reported, emitted) in reported.iter().zip(emitted.as_array().unwrap()) {
+            assert_eq!(reported.as_f64(), emitted.as_f64());
+        }
+        archives.push(fs::read(&output).unwrap());
+    }
+    assert_eq!(archives[0], archives[1]);
 }

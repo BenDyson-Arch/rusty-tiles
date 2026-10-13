@@ -194,7 +194,7 @@ impl SourceFrame {
     /// Resolve the frame once from the used post-node source bounds `[min, max]`.
     pub(crate) fn resolve(spec: &MeshSourceCrs, bounds: [[f64; 3]; 2]) -> Result<Self> {
         let [min, max] = bounds;
-        if (0..3).any(|i| !(min[i] <= max[i])) {
+        if !(0..3).all(|i| min[i] <= max[i]) {
             return Err(JobError::new(
                 JobErrorKind::InvalidInput,
                 "a source CRS needs at least one source triangle to choose its origin",

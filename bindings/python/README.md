@@ -56,7 +56,7 @@ results with required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `mesh_local_to_3tz(input, output, ...)` (deprecated) | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` (deprecated) | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
@@ -70,6 +70,7 @@ results with required reports and cleanup diagnostics, as described below.
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+source_crs=None, source_axes=None, source_offset=None, height_offset=None,
 force=False, callback=None)` is the single new public source-mesh operation.
 It runs capture, leaf payloads and implicit hierarchy delivery through one core
 run and publication; leaf directories/manifests are internal. Current output
@@ -78,8 +79,12 @@ separate downstream work, with the same public request surface.
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
-scene translation. There is no source CRS inference/conversion, projected
-height adjustment, texture-format selector, explicit mode or leaf/proxy tuning.
+scene translation. Alternatively a declared [source CRS](../../docs/MESH.md#source-crs)
+(`source_crs="EPSG:3857"`, `source_axes="y-up"` or `"xyz"`, `source_offset=(E, N[, A])`
+added in double precision, required `height_offset` metres) is mapped at capture,
+with the CLI's rules; it excludes the rigid placement keywords and `None` or
+`"local"` keeps local input. There is no CRS inference, geoid height adjustment,
+texture-format selector, explicit mode or leaf/proxy tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
 provisional; constants will be calibrated together after coarse levels and
 baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf

@@ -22,7 +22,7 @@ use std::{
 const A: f64 = 6_378_137.0;
 const FLATTENING: f64 = 1.0 / 298.257_223_563;
 // Metashape-style shift near the mgal site, with fractions that f32 cannot hold.
-const OFFSET: [f64; 3] = [14_812_000.4375, -1_384_000.3125, 100.25];
+const OFFSET: [f64; 3] = [14_812_000.437_5, -1_384_000.312_5, 100.25];
 const HEIGHT_OFFSET: f64 = 0.5;
 const NODE: [f64; 3] = [3., 0.5, -2.];
 const GRID: usize = 5;
@@ -360,11 +360,14 @@ fn rigid_placement_and_source_crs_are_exclusive_before_any_output() {
     assert!(!output.exists());
 }
 
+/// (source vertex, local position, normal, tangent) of one captured corner.
+type Corner = (usize, [f32; 3], [f32; 3], [f32; 4]);
+
 struct Captured {
     root: [f64; 16],
     report: MeshSourceCrsReport,
     /// (source vertex, local position, normal, tangent) for every captured corner.
-    corners: Vec<(usize, [f32; 3], [f32; 3], [f32; 4])>,
+    corners: Vec<Corner>,
 }
 
 fn capture(input: &Path, scratch: &Path, offset: V3) -> Captured {
@@ -396,11 +399,7 @@ fn capture(input: &Path, scratch: &Path, offset: V3) -> Captured {
 }
 
 /// Largest position (metres), normal and tangent (radians) errors against the oracle.
-fn errors(
-    fixture: &Fixture,
-    root: &[f64; 16],
-    corners: &[(usize, [f32; 3], [f32; 3], [f32; 4])],
-) -> [f64; 3] {
+fn errors(fixture: &Fixture, root: &[f64; 16], corners: &[Corner]) -> [f64; 3] {
     let mut worst = [0_f64; 3];
     for &(vertex, position, normal, tangent) in corners {
         let world = fixture.world(vertex);

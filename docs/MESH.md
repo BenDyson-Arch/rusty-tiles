@@ -1,7 +1,8 @@
 # Mesh tiling
 
 `rusty-tiles mesh` and Python's `rusty_tiles.mesh_to_tileset` stream one admitted
-local static glTF/GLB scene into a 3D Tiles 1.1 implicit forest in one `.3tz`.
+static glTF/GLB scene, in local metres or a declared source CRS, into a 3D Tiles
+1.1 implicit forest in one `.3tz`.
 Content is glTF 2.0. The encoder is bundled: meshopt and KTX2/Basis need no
 external executable or system geospatial library in the standard CLI or wheel.
 
@@ -29,12 +30,13 @@ source or its dependencies. Installation does not promise power-loss durability.
 
 ## Source and placement
 
-The source is **local metres with glTF Y up**. Node transforms are evaluated as
-part of capture. Each source POSITION component and each component after the
-accumulated node transform must lie within ±1,000,000 metres, before the final
-f32 rounding. This finite source domain is separate from the placement precision
-domain. Coordinates are never interpreted as geographic or projected because of
-their magnitudes, file names or an offset file.
+By default the source is **local metres with glTF Y up**. Node transforms are
+evaluated as part of capture. Each source POSITION component and each component
+after the accumulated node transform must lie within ±1,000,000 metres (source
+units with a [source CRS](#source-crs)), before the final f32 rounding. This
+finite source domain is separate from the placement precision domain.
+Coordinates are never interpreted as geographic or projected because of their
+magnitudes, file names or an offset file; a source CRS is always declared.
 
 The admitted source has a default or sole scene, TRIANGLES, bounded local
 resources and core PBR materials. It supports authored normals/tangents, UV0/UV1,
@@ -66,10 +68,57 @@ before orientation. Both require an anchor. Their defaults with an anchor are
 identity rotation and zero translation. `--orientationXyzw` and `--sceneOffset`
 are equivalent camelCase spellings.
 
-Placement applies one rigid transform at the tileset root. No projected CRS,
-source-axis inference, Metashape E/N/A shift or geoid-height conversion is
-performed. A large finite anchor/offset outside the shared precision budget is
+Placement applies one rigid transform at the tileset root. It never converts a
+projected CRS, infers source axes, applies an E/N/A shift or converts geoid
+heights; use a [source CRS](#source-crs) for projected or geographic sources. A
+large finite anchor/offset outside the shared precision budget is
 `unsupported`; an invalid number, range or quaternion is `invalid_request`.
+
+## Source CRS
+
+Projected or geographic sources, such as Metashape GLB exports in EPSG:3857
+with an `offset.txt` shift, declare their CRS instead of a rigid placement:
+
+```sh
+rusty-tiles mesh -i site.glb -o site.3tz \
+  --source-crs EPSG:3857 --source-axes y-up \
+  --source-offset 14812000 -1384000 100 --height-offset 0
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--source-crs` (`--sourceCrs`) | `local` (the default) or a 2D horizontal EPSG, WKT or PROJ definition, resolved by the shared [conservative CRS resolver](FORMATS.md#point-clouds) |
+| `--source-axes` (`--sourceAxes`) | Required: `xyz` is X=E, Y=N, Z=height; `y-up` is X=E, Y=height, Z=−N. Axes are read after node transforms and never inferred |
+| `--source-offset E N [A]` (`--sourceOffset`) | Added in double precision: E/N in horizontal CRS units, A metres (default 0). Default `0 0 0` |
+| `--height-offset` (`--heightOffset`) | Required: metres added to source height plus A to give WGS84 **ellipsoidal** height, including an explicit `0` |
+
+A source CRS cannot be combined with `--anchor`, `--orientation-xyzw` or
+`--scene-offset` (`invalid_request`), and `local` admits none of the source-CRS
+options. Legacy `auto`, `geographic` and Web Mercator keywords and bare codes are
+not accepted: name the CRS, for example `EPSG:4326` or `EPSG:3857`. Offset files
+are not read; pass their E, N and A values to `--source-offset`. Horizontal feet
+never rescale source height or A, and no geoid model is applied.
+
+Capture maps each post-node source position plus the offset through the CRS to
+WGS84 ECEF and into one local east-north-up frame in f64, then rounds once to
+f32. The frame's origin is the mapped centre of the used post-node source
+bounds; the root transform carries ENU to ECEF. Authored normals are transformed
+by the inverse transpose of each vertex's Jacobian and tangents by the Jacobian,
+then renormalized; tangent handedness follows the Jacobian's orientation. The
+Jacobian uses central differences through the same CRS operation (one-sided at
+a projection-domain edge). A CRS map is not conformal in 3D (horizontal scale
+differs from vertical), so an authored tangent frame is transformed, not
+re-derived. Sorting, leaves, coarse levels and delivery then work in local
+metres. Every source coordinate must lie in the CRS's verified domain; a vertex
+outside it is `invalid_input`, and a mapped position beyond ±1,000,000 local
+metres is `unsupported`.
+
+EPSG:4326, EPSG:3857, EPSG:3395, UTM (EPSG:326xx/327xx) and the grid-free PROJ
+methods listed for point clouds work in the standard CLI and wheel. Other EPSG
+codes, coordinate epochs and Lambert azimuthal equal area need the
+`native-geospatial` build and its PROJ database; without it they are
+`unsupported` before source I/O. One operation serves the whole capture: a
+source that would need native PROJ for only some vertices is refused.
 
 ## Profiles and resources
 
@@ -122,12 +171,21 @@ result = rusty_tiles.mesh_to_tileset(
     scene_offset=(10.0, 2.0, -5.0),
     force=False, callback=None,
 )
+projected = rusty_tiles.mesh_to_tileset(
+    Path("site.glb"), Path("site.3tz"),
+    source_crs="EPSG:3857", source_axes="y-up",
+    source_offset=(14812000.0, -1384000.0, 100.0), height_offset=0.0,
+)
 print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
-force=False, callback=None)` accepts `str` or `os.PathLike` paths. `jobs=None`
+source_crs=None, source_axes=None, source_offset=None, height_offset=None,
+force=False, callback=None)` accepts `str` or `os.PathLike` paths.
+`source_crs=None` or `"local"` keeps local input; `source_axes` is `"xyz"` or
+`"y-up"` and `source_offset` a two- or three-number sequence, with the CLI's
+rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
 counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
@@ -152,8 +210,11 @@ snake_case and equals Python's `result.report` and the published report.
 The semantic report includes profile, source/resource counts, leaf/triangle/GLB
 counts and maximum leaf geometry error, hierarchy/implicit/document counts,
 depth and packed/synthetic leaf counts, member limits, separate root/tileset
-errors, and normalized placement. `source_coordinates` is `local-gltf`;
-`coordinates` is `local-gltf` or `wgs84-ecef`. `root_transform` is null for local
+errors, and normalized placement. `source_coordinates` is `local-gltf` or
+`source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
+`source_crs` (definition, axes, source offset, height offset, `portable` or
+`native` operation and the chosen origin) and reports its derived ENU frame as a
+`wgs84` placement at that origin. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
 for placed output. A parent tile's geometric error is its proxy's certified
 error ([H17 contract](architecture/h17-lod-contract.md)). No appearance
@@ -204,11 +265,12 @@ are deprecated and will retire together with their old writers. Existing
 legacy calls continue to select those old products; they are not aliases of
 `mesh`.
 
-Prepare geographic/projected meshes as admitted local metre/Y-up glTF before
-using the new tiler. Supply an ellipsoidal anchor, ENU quaternion and local scene
-translation as needed. Mesh `auto` CRS, EPSG/WKT/PROJ, source-axis/height
-conversion, Metashape shifts/offset files and old Euler placement do not migrate
-to new flags. Vector/point CRS support remains a separate retained capability.
+Geographic/projected meshes use `--source-crs` with explicit `--source-axes`
+and `--height-offset`; the legacy Web Mercator adapter call
+`--source-crs epsg:3857 --source-offset E N A` becomes
+`--source-crs EPSG:3857 --source-axes y-up --source-offset E N A --height-offset 0`.
+Mesh `auto` CRS, the `geographic`/Web Mercator keywords, `--source-offset-file`
+and old Euler placement do not migrate to new flags. Vector/point CRS support remains a separate retained capability.
 
 Old leaf/proxy triangle and error knobs, atlas sizes and JPEG/WebP/general-PNG
 output selectors have no one-to-one replacements: choose a profile. JPEG source

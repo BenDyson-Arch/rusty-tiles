@@ -80,7 +80,7 @@ pub(super) fn source_position(
         return Err(invalid("nonfinite accessor data"));
     }
     source::check_source_position(position)?;
-    Ok(source::world_position(p.world, position)?)
+    source::world_position(p.world, position)
 }
 /// Positive zero for every zero component, so equal positions have equal bits.
 pub(super) fn canonical(mut position: [f32; 3]) -> [f32; 3] {
