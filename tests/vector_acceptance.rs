@@ -53,7 +53,6 @@ fn relative_paths_survive_observer_cwd_change() {
     let control = RunControl::new(Some(observer.clone()));
     let options = VectorOptions {
         source_crs: Some("local".into()),
-        explicit: true,
         reproducible: true,
         ..VectorOptions::default()
     };

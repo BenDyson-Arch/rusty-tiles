@@ -11,7 +11,7 @@ pub(crate) const TILE_BYTES: u64 = 96 << 20;
 /// P's hierarchy cap: at most 32 levels (design §2.4 B3).
 pub(crate) const HEIGHT_CAP: u32 = 32;
 /// The accepted 3TZ member ceiling (U2, design §9.2).
-pub(crate) const MEMBER_CEILING_3TZ: u64 = 178_956_970;
+pub(crate) const MEMBER_CEILING_3TZ: u64 = crate::archive3tz::MEMBER_CEILING;
 /// Members besides tiles that every archive holds at least: one subtree, one document and the
 /// three fixed members (design §2.5). The exact subtree and document counts belong to the
 /// forest writer; both stages here use these lower terms.

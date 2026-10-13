@@ -7,6 +7,7 @@ use acceptance::{FeatureFailure, FeatureResult};
 mod encoding;
 mod geometry;
 mod outline;
+mod records;
 mod reuse;
 mod source;
 #[cfg(feature = "native-geospatial")]

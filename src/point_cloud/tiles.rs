@@ -114,9 +114,6 @@ impl<O: ProducerIo> Tree<'_, O> {
         }
         let center: [f64; 3] = std::array::from_fn(|i| lo[i] + extent[i] / 2.);
         let leaf = count <= self.options.max_points as u64;
-        if leaf && count > 16_777_217 {
-            return Err(Error::Data("too many exact feature IDs in one tile".into()));
-        }
         let (rows, error) = if leaf {
             (std::fs::read(path)?, 0.)
         } else {
@@ -134,7 +131,6 @@ impl<O: ProducerIo> Tree<'_, O> {
             self.attempt,
             self.operations,
         )?;
-        self.members.push(uri.clone());
         self.max_rounding = self.max_rounding.max(rounding);
         drop(rows);
         // The padded estimate can sit an ulp inside the f32 positions actually written;
@@ -151,16 +147,15 @@ impl<O: ProducerIo> Tree<'_, O> {
             progress(self.attempt, "tiling", self.leaf_points, self.total_points)?;
             return Ok(node);
         }
-        let depth_limit = if self.options.explicit { 64 } else { 31 };
-        if depth >= depth_limit {
+        // Implicit subtree addressing caps the octree at 31 levels.
+        const DEPTH_LIMIT: usize = 31;
+        if depth >= DEPTH_LIMIT {
             return Err(Error::Data(format!(
-                "point partition exceeds {depth_limit} levels; inspect source extent or raise maxPoints"
+                "point partition exceeds {DEPTH_LIMIT} levels; inspect source extent or raise maxPoints (at most {})",
+                super::MAX_POINTS_PER_TILE
             )));
         }
-        let axis = (0..3)
-            .max_by(|a, b| extent[*a].total_cmp(&extent[*b]).then_with(|| b.cmp(a)))
-            .unwrap();
-        let branches = if self.options.explicit { 2 } else { 8 };
+        let branches = 8;
         let (cell_lo, cell_hi) = cell.unwrap_or((lo, hi));
         let midpoint: [f64; 3] =
             std::array::from_fn(|i| cell_lo[i] + (cell_hi[i] - cell_lo[i]) / 2.);
@@ -183,14 +178,7 @@ impl<O: ProducerIo> Tree<'_, O> {
                     break;
                 }
                 for row in batch.chunks_exact(self.layout.record_len) {
-                    let left = if extent[axis] == 0. {
-                        seen < count / 2
-                    } else {
-                        position(row)[axis] < center[axis]
-                    };
-                    let branch = if self.options.explicit {
-                        usize::from(!left)
-                    } else if extent == [0.; 3] {
+                    let branch = if extent == [0.; 3] {
                         ((seen as u128 * 8 / count as u128) as usize).min(7)
                     } else {
                         let p = position(row);
@@ -206,9 +194,6 @@ impl<O: ProducerIo> Tree<'_, O> {
             for file in &mut files {
                 file.flush()?;
             }
-            if self.options.explicit && counts.contains(&0) {
-                return Err(Error::Data("spatial split made no progress".into()));
-            }
         }
         std::fs::remove_file(path)?;
         let mut children = Vec::new();
@@ -217,30 +202,24 @@ impl<O: ProducerIo> Tree<'_, O> {
                 std::fs::remove_file(path)?;
                 continue;
             }
-            let child_cell = if self.options.explicit {
-                None
-            } else {
-                Some((
-                    std::array::from_fn(|i| {
-                        if branch & (1 << i) != 0 {
-                            midpoint[i]
-                        } else {
-                            cell_lo[i]
-                        }
-                    }),
-                    std::array::from_fn(|i| {
-                        if branch & (1 << i) != 0 {
-                            cell_hi[i]
-                        } else {
-                            midpoint[i]
-                        }
-                    }),
-                ))
-            };
-            let mut child = self.build(path, center, depth + 1, child_cell)?;
-            if !self.options.explicit {
-                child["extras"] = json!({"implicitChildIndex":branch});
-            }
+            let child_cell = (
+                std::array::from_fn(|i| {
+                    if branch & (1 << i) != 0 {
+                        midpoint[i]
+                    } else {
+                        cell_lo[i]
+                    }
+                }),
+                std::array::from_fn(|i| {
+                    if branch & (1 << i) != 0 {
+                        cell_hi[i]
+                    } else {
+                        midpoint[i]
+                    }
+                }),
+            );
+            let mut child = self.build(path, center, depth + 1, Some(child_cell))?;
+            child["extras"] = json!({"implicitChildIndex":branch});
             children.push(child);
         }
         let offsets = children
@@ -290,8 +269,11 @@ fn emit(
     operations: &mut impl ProducerIo,
 ) -> Result<(f64, [f64; 3]), Error> {
     let count = rows.len() / layout.record_len;
-    if count > 16_777_217 {
-        return Err(Error::Data("too many exact feature IDs in one tile".into()));
+    // Admission caps tiles at MAX_POINTS_PER_TILE, so 16-bit feature IDs are exact.
+    if count > super::MAX_POINTS_PER_TILE {
+        return Err(Error::Data(
+            "point tile exceeds its property-table budget".into(),
+        ));
     }
     let mut glb = MetadataGlb::new("rusty-tiles native point cloud");
     let mut positions = Vec::with_capacity(count * 12);
@@ -318,12 +300,8 @@ fn emit(
             hi[i] = hi[i].max(encoded[i]);
             positions.extend_from_slice(&encoded[i].to_le_bytes());
         }
-        if count <= 65_536 {
-            ids.extend_from_slice(&(index as u16).to_le_bytes());
-            ids.extend_from_slice(&[0, 0]);
-        } else {
-            ids.extend_from_slice(&(index as f32).to_le_bytes());
-        }
+        ids.extend_from_slice(&(index as u16).to_le_bytes());
+        ids.extend_from_slice(&[0, 0]);
         if let Some(at) = layout.rgb {
             colors.extend_from_slice(&row[RAW + at..RAW + at + 6]);
             colors.extend_from_slice(&65535_u16.to_le_bytes());
@@ -333,10 +311,9 @@ fn emit(
     let position_accessor = glb.accessor(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC3","min":lo,"max":hi}));
     drop(positions);
     let view = glb.view(&ids);
-    if count <= 65_536 {
-        glb.document["bufferViews"][view]["byteStride"] = 4.into();
-    }
-    let feature_accessor = glb.accessor(json!({"bufferView":view,"componentType":if count <= 65_536 {5123} else {5126},"count":count,"type":"SCALAR"}));
+    glb.document["bufferViews"][view]["byteStride"] = 4.into();
+    let feature_accessor =
+        glb.accessor(json!({"bufferView":view,"componentType":5123,"count":count,"type":"SCALAR"}));
     drop(ids);
     let mut attributes = json!({"POSITION":position_accessor,"_FEATURE_ID_0":feature_accessor});
     if layout.rgb.is_some() {

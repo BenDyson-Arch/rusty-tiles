@@ -745,5 +745,4 @@ fn inspect_postcommit_name(path: &Path, files: &dyn FileOperations) -> Option<Cl
 #[cfg(test)]
 mod tests;
 
-#[cfg(any(feature = "native-geospatial", test))]
 pub(crate) mod directory;

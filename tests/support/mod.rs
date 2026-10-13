@@ -53,7 +53,8 @@ fn recipe(
         output,
         args: {
             let mut args = args.concat();
-            if matches!(command, "mesh-to-3tz" | "point-cloud" | "vector") {
+            // Only the legacy mesh producer still has an explicit mode.
+            if command == "mesh-to-3tz" {
                 args.push("--explicit");
             }
             args
