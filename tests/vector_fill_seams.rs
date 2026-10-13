@@ -1,8 +1,8 @@
 //! Quantized fill fragments in different tiles must meet without cracks.
 //!
 //! Each published content is decoded as a client does (meshopt vertex
-//! stream, normalized u16, node translation and scale, implicit-root
-//! translations) into the tileset root frame. Wherever two contents that can
+//! stream, normalized u16 or float32, node translation and scale,
+//! implicit-root translations) into the tileset root frame. Wherever two contents that can
 //! render together (neither is the other's ancestor) put fill vertices within
 //! one lattice step of each other, they must be the same point: a vertex
 //! shared across a seam decodes identically on both sides. Deriving the
@@ -79,11 +79,14 @@ struct Content {
     /// Implicit root, level, x, y (quadtree).
     tile: (String, usize, u64, u64),
     depth: usize,
-    step: [f64; 3],
+    /// The lattice step of u16 contents; float32 contents have none.
+    step: Option<[f64; 3]>,
     fills: Vec<[f64; 3]>,
+    lines: Vec<[f64; 3]>,
 }
 
-/// Every content's fill (mode 4) vertices in the root frame (glTF y-up).
+/// Every content's fill (mode 4) and line (mode 3) vertices in the root
+/// frame (glTF y-up).
 fn contents(archive: &Path) -> Vec<Content> {
     let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
     let manifest: Value = serde_json::from_slice(&member(&mut zip, "tileset.json")).unwrap();
@@ -116,44 +119,64 @@ fn contents(archive: &Path) -> Vec<Content> {
         // z-up tile offset as the glTF y-up translation it composes with.
         let offset = [offset[0], offset[2], -offset[1]];
         let mut fills = Vec::new();
+        let mut lines = Vec::new();
+        let mut float = None;
         for primitive in doc["meshes"][0]["primitives"].as_array().unwrap() {
-            if primitive["mode"].as_u64().unwrap_or(4) != 4 {
+            let mode = primitive["mode"].as_u64().unwrap_or(4);
+            if mode != 4 && mode != 3 {
                 continue;
             }
             let accessor =
                 &doc["accessors"][primitive["attributes"]["POSITION"].as_u64().unwrap() as usize];
+            // Normalized u16 codes, or float32 lattice values (a tile
+            // coarser than a tile it shares a vertex with).
+            let is_float = match accessor["componentType"].as_u64() {
+                Some(5123) => {
+                    assert_eq!(accessor["normalized"], true, "{name}");
+                    false
+                }
+                Some(5126) => true,
+                other => panic!("{name}: position component type {other:?}"),
+            };
             assert_eq!(
-                accessor["componentType"], 5123,
-                "{name}: quantized positions"
+                *float.get_or_insert(is_float),
+                is_float,
+                "{name}: one storage"
             );
-            assert_eq!(accessor["normalized"], true);
             let count = accessor["count"].as_u64().unwrap() as usize;
             let view = &doc["bufferViews"][accessor["bufferView"].as_u64().unwrap() as usize];
-            let quantized: Vec<[u16; 4]> =
-                if let Some(e) = view["extensions"].get("EXT_meshopt_compression") {
-                    assert_eq!(e["mode"], "ATTRIBUTES");
-                    let start = e["byteOffset"].as_u64().unwrap_or(0) as usize;
-                    let stream = &binary[start..start + e["byteLength"].as_u64().unwrap() as usize];
-                    meshopt::encoding::decode_vertex_buffer::<[u16; 4]>(stream, count).unwrap()
+            let stride = if is_float { 12 } else { 8 };
+            let raw: Vec<u8> = if let Some(e) = view["extensions"].get("EXT_meshopt_compression") {
+                assert_eq!(e["mode"], "ATTRIBUTES");
+                let start = e["byteOffset"].as_u64().unwrap_or(0) as usize;
+                let stream = &binary[start..start + e["byteLength"].as_u64().unwrap() as usize];
+                if is_float {
+                    meshopt::encoding::decode_vertex_buffer::<[u8; 12]>(stream, count)
+                        .unwrap()
+                        .concat()
                 } else {
-                    let start = view["byteOffset"].as_u64().unwrap_or(0) as usize
-                        + accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
-                    (0..count)
-                        .map(|v| {
-                            std::array::from_fn(|i| {
-                                let at = start + v * 8 + i * 2;
-                                u16::from_le_bytes([binary[at], binary[at + 1]])
-                            })
-                        })
-                        .collect()
-                };
-            fills.extend(quantized.iter().map(|q| {
+                    meshopt::encoding::decode_vertex_buffer::<[u8; 8]>(stream, count)
+                        .unwrap()
+                        .concat()
+                }
+            } else {
+                let start = view["byteOffset"].as_u64().unwrap_or(0) as usize
+                    + accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
+                binary[start..start + count * stride].to_vec()
+            };
+            let target = if mode == 4 { &mut fills } else { &mut lines };
+            target.extend(raw.chunks_exact(stride).map(|v| -> [f64; 3] {
                 std::array::from_fn(|i| {
-                    offset[i] + (translation[i] + f64::from(q[i]) / 65535. * scale[i])
+                    let value = if is_float {
+                        f64::from(f32::from_le_bytes(v[i * 4..i * 4 + 4].try_into().unwrap()))
+                    } else {
+                        f64::from(u16::from_le_bytes([v[i * 2], v[i * 2 + 1]])) / 65535.
+                    };
+                    offset[i] + (translation[i] + value * scale[i])
                 })
             }));
         }
-        if !fills.is_empty() {
+        if !fills.is_empty() || !lines.is_empty() {
             out.push(Content {
                 tile: (
                     fields[0].to_string(),
@@ -163,8 +186,9 @@ fn contents(archive: &Path) -> Vec<Content> {
                 ),
                 name,
                 depth: root_depth + level,
-                step: scale.map(|s| s / 65535.),
+                step: (float == Some(false)).then(|| scale.map(|s| s / 65535.)),
                 fills,
+                lines,
             });
         }
     }
@@ -181,23 +205,54 @@ fn nested(a: &Content, b: &Content) -> bool {
     above(a, b) || above(b, a)
 }
 
-/// Fill vertices of different contents within one lattice step on every
-/// axis must coincide. Returns (seam vertex pairs, pairs at mixed depth).
+/// The largest u16 lattice step of any content, per axis.
+fn largest_step(contents: &[Content]) -> [f64; 3] {
+    std::array::from_fn(|i| {
+        contents
+            .iter()
+            .filter_map(|c| c.step)
+            .map(|s| s[i])
+            .fold(0., f64::max)
+    })
+}
+
+/// Fill vertices, and line vertices, of different contents within one
+/// lattice step on every axis must coincide. Returns (fill seam vertex
+/// pairs, pairs at mixed depth).
 fn assert_seams_agree(archive: &Path) -> (usize, usize) {
     let contents = contents(archive);
     assert!(
         contents.len() > 1,
         "{archive:?}: fragments in several contents"
     );
-    let step: [f64; 3] =
-        std::array::from_fn(|i| contents.iter().map(|c| c.step[i]).fold(0., f64::max));
+    let (seams, mixed) = assert_kind_agrees(archive, &contents, |c| &c.fills);
+    // Boundary runs meet across tiles too.
+    let (line_seams, _) = assert_kind_agrees(archive, &contents, |c| &c.lines);
+    assert!(line_seams > 0, "line seam vertices exercised");
+    // Both storages are exercised: u16 contents, and float32 contents that
+    // are coarser than a content they share a vertex with.
+    let floats = contents.iter().filter(|c| c.step.is_none()).count();
+    assert!(
+        floats > 0 && floats < contents.len(),
+        "{archive:?}: {floats} of {} contents float32",
+        contents.len()
+    );
+    (seams, mixed)
+}
+
+fn assert_kind_agrees(
+    archive: &Path,
+    contents: &[Content],
+    kind: fn(&Content) -> &Vec<[f64; 3]>,
+) -> (usize, usize) {
+    let step = largest_step(contents);
     // Points of one grid are equal or at least one step apart on an axis.
     let cell =
         |p: &[f64; 3]| -> [i64; 3] { std::array::from_fn(|i| (p[i] / step[i]).floor() as i64) };
     let mut buckets: BTreeMap<[i64; 3], Vec<(usize, [f64; 3])>> = BTreeMap::new();
     for (c, content) in contents.iter().enumerate() {
         let unique: BTreeSet<[u64; 3]> =
-            content.fills.iter().map(|p| p.map(f64::to_bits)).collect();
+            kind(content).iter().map(|p| p.map(f64::to_bits)).collect();
         for p in unique {
             let p = p.map(f64::from_bits);
             buckets.entry(cell(&p)).or_default().push((c, p));
@@ -444,9 +499,16 @@ fn assert_source_vertices_snapped(archive: &Path, sources: &[([f64; 3], bool)]) 
     let contents = contents(archive);
     // Source index -> (content, decoded copy).
     let mut copies: BTreeMap<usize, Vec<(usize, [f64; 3])>> = BTreeMap::new();
-    // A shared vertex snaps at the coarsest step of the tiles it joins.
-    let step = contents.iter().flat_map(|c| c.step).fold(0., f64::max);
+    // Precision: a u16 content keeps its own step, so every vertex,
+    // shared or not, is within half that step of its source on each axis.
+    // Grouping that snaps shared vertices at a coarser member's step (one
+    // coarse step for all) fails here. A float32 content's shared vertices
+    // snap at its u16 partners' steps.
+    let largest = largest_step(&contents);
+    let mut steps = BTreeSet::new();
     for (c, content) in contents.iter().enumerate() {
+        let step = content.step.unwrap_or(largest);
+        steps.insert(content.step.map(|s| s.map(f64::to_bits)));
         for p in &content.fills {
             let p: [f64; 3] = std::array::from_fn(|i| p[i] + center[i]);
             let gap = |s: &[f64; 3]| (0..3).map(|i| (s[i] - p[i]).abs()).fold(0., f64::max);
@@ -455,14 +517,17 @@ fn assert_source_vertices_snapped(archive: &Path, sources: &[([f64; 3], bool)]) 
                 .enumerate()
                 .min_by(|a, b| gap(a.1).total_cmp(&gap(b.1)))
                 .unwrap();
-            assert!(
-                gap(source) <= step,
-                "{}: {p:?} far from {source:?}",
-                content.name
-            );
+            for i in 0..3 {
+                assert!(
+                    (source[i] - p[i]).abs() <= step[i] / 2. + 1e-9 * p[i].abs().max(1.),
+                    "{}: {p:?} more than half a step {step:?} from {source:?}",
+                    content.name
+                );
+            }
             copies.entry(index).or_default().push((c, p));
         }
     }
+    assert!(steps.len() > 2, "u16 steps exercised: {steps:?}");
     let mut compared = 0;
     for (index, held) in &copies {
         if !sources[*index].1 {

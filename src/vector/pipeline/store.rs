@@ -437,17 +437,18 @@ fn fingerprint(db: &Connection, id: i64, value: &str, grid: bool) -> Result<(), 
     hasher.update(mask);
     if grid {
         let mut exponents = db
-            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
+            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez,fl FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
             .map_err(sql)?;
         for p in &points {
             let p = encoding::cell(**p);
-            let held: Vec<(i64, String, u32, [i32; 3])> = exponents
+            let held: Vec<(i64, String, u32, [i32; 3], bool)> = exponents
                 .query_map(params![p[0], p[1], p[2]], |r| {
                     Ok((
                         r.get(0)?,
                         r.get(1)?,
                         r.get(2)?,
                         [r.get(3)?, r.get(4)?, r.get(5)?],
+                        r.get(6)?,
                     ))
                 })
                 .map_err(sql)?
@@ -470,16 +471,22 @@ fn ancestor(a: &(String, u32), b: &(String, u32)) -> bool {
     b.0.starts_with(&a.0) && (b.0.len() > a.0.len() || b.1 < a.1)
 }
 
-/// Per shared vertex and kind (fill or line), join the surveyed tiles holding it that can render
-/// together (neither is the other's ancestor) and give each joined group the
-/// largest exponent among its tiles, per axis, in `grid`.
-fn resolve_grid(db: &Connection) -> Result<(), Error> {
-    type Holder = ((String, u32), [i32; 3]);
-    fn flush(
-        insert: &mut rusqlite::CachedStatement<'_>,
-        p: [i64; 4],
-        held: &[Holder],
-    ) -> Result<(), Error> {
+/// The survey's record of shared vertices (`holders`: per vertex cell and
+/// kind, each tile holding it and that tile's own u16 and float32
+/// exponents) and the resolved grid (`grid`: each holder's snapping
+/// exponents and whether the tile stores float32).
+const GRID_TABLES: &str = "CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fx INTEGER,fy INTEGER,fz INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;";
+
+type Tile = (String, u32);
+
+/// Calls `visit` with each shared vertex (cell and kind) and its holders'
+/// co-rendering groups: holders that can render together (neither is the
+/// other's ancestor) are joined, transitively.
+fn vertex_groups(
+    db: &Connection,
+    mut visit: impl FnMut([i64; 4], Vec<Vec<Tile>>) -> Result<(), Error>,
+) -> Result<(), Error> {
+    fn groups(held: &[Tile]) -> Vec<Vec<Tile>> {
         let n = held.len();
         let mut group: Vec<usize> = (0..n).collect();
         fn root(group: &mut [usize], mut i: usize) -> usize {
@@ -491,69 +498,126 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
         }
         for a in 0..n {
             for b in a + 1..n {
-                if !ancestor(&held[a].0, &held[b].0) && !ancestor(&held[b].0, &held[a].0) {
+                if !ancestor(&held[a], &held[b]) && !ancestor(&held[b], &held[a]) {
                     let (ra, rb) = (root(&mut group, a), root(&mut group, b));
                     group[ra] = rb;
                 }
             }
         }
-        let mut exponent: BTreeMap<usize, [i32; 3]> = BTreeMap::new();
-        for (i, (_, e)) in held.iter().enumerate() {
-            let r = root(&mut group, i);
-            let max = exponent.entry(r).or_insert(*e);
-            for axis in 0..3 {
-                max[axis] = max[axis].max(e[axis]);
+        let mut out: BTreeMap<usize, Vec<Tile>> = BTreeMap::new();
+        for (i, tile) in held.iter().enumerate() {
+            out.entry(root(&mut group, i))
+                .or_default()
+                .push(tile.clone());
+        }
+        out.into_values().collect()
+    }
+    let mut stmt = db
+        .prepare(
+            "SELECT cx,cy,cz,kind,prefix,level FROM holders ORDER BY cx,cy,cz,kind,prefix,level",
+        )
+        .map_err(sql)?;
+    let mut rows = stmt.query([]).map_err(sql)?;
+    let mut current: Option<[i64; 4]> = None;
+    let mut held: Vec<Tile> = Vec::new();
+    while let Some(r) = rows.next().map_err(sql)? {
+        let p: [i64; 4] = [
+            r.get(0).map_err(sql)?,
+            r.get(1).map_err(sql)?,
+            r.get(2).map_err(sql)?,
+            r.get(3).map_err(sql)?,
+        ];
+        if let Some(c) = current.filter(|c| *c != p) {
+            visit(c, groups(&held))?;
+            held.clear();
+        }
+        current = Some(p);
+        held.push((r.get(4).map_err(sql)?, r.get(5).map_err(sql)?));
+    }
+    if let Some(c) = current {
+        visit(c, groups(&held))?;
+    }
+    Ok(())
+}
+
+/// Resolves the survey into `grid`. Each co-rendering group of a shared
+/// vertex must decode it to one point, a multiple of every member's step.
+/// A tile whose own u16 step is coarser, on any axis, than another member's
+/// in any of its groups stores float32 (2^8 times finer); the u16 members of
+/// a group then share one step. Each group snaps at the largest step its
+/// members can hold, per axis: the u16 members' own, or a float32 member's.
+fn resolve_grid(db: &Connection) -> Result<(), Error> {
+    let mut own: BTreeMap<Tile, encoding::OwnExponents> = BTreeMap::new();
+    {
+        let mut stmt = db
+            .prepare("SELECT DISTINCT prefix,level,ex,ey,ez,fx,fy,fz FROM holders")
+            .map_err(sql)?;
+        let mut rows = stmt.query([]).map_err(sql)?;
+        while let Some(r) = rows.next().map_err(sql)? {
+            let get = |i: usize| r.get::<_, i32>(i).map_err(sql);
+            own.insert(
+                (r.get(0).map_err(sql)?, r.get(1).map_err(sql)?),
+                encoding::OwnExponents {
+                    u16: [get(2)?, get(3)?, get(4)?],
+                    float: [get(5)?, get(6)?, get(7)?],
+                },
+            );
+        }
+    }
+    let mut float: BTreeSet<Tile> = BTreeSet::new();
+    vertex_groups(db, |_, groups| {
+        for group in groups {
+            for tile in &group {
+                let e = own[tile].u16;
+                if group
+                    .iter()
+                    .any(|other| (0..3).any(|i| own[other].u16[i] < e[i]))
+                {
+                    float.insert(tile.clone());
+                }
             }
         }
-        for (i, ((prefix, level), _)) in held.iter().enumerate() {
-            let e = exponent[&root(&mut group, i)];
-            insert
-                .execute(params![
-                    p[0], p[1], p[2], p[3], prefix, level, e[0], e[1], e[2]
-                ])
-                .map_err(sql)?;
-        }
         Ok(())
-    }
+    })?;
     db.execute_batch("BEGIN;").map_err(sql)?;
     {
         let mut insert = db
             .prepare_cached(
-                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez,fl) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             )
             .map_err(sql)?;
-        let mut stmt = db
-            .prepare(
-                "SELECT cx,cy,cz,kind,prefix,level,ex,ey,ez FROM holders ORDER BY cx,cy,cz,kind,prefix,level",
-            )
-            .map_err(sql)?;
-        let mut rows = stmt.query([]).map_err(sql)?;
-        let mut current: Option<[i64; 4]> = None;
-        let mut held: Vec<Holder> = Vec::new();
-        while let Some(r) = rows.next().map_err(sql)? {
-            let p: [i64; 4] = [
-                r.get(0).map_err(sql)?,
-                r.get(1).map_err(sql)?,
-                r.get(2).map_err(sql)?,
-                r.get(3).map_err(sql)?,
-            ];
-            if current.is_some_and(|c| c != p) {
-                flush(&mut insert, current.unwrap(), &held)?;
-                held.clear();
+        vertex_groups(db, |p, groups| {
+            for group in groups {
+                let finest = |tile: &Tile| match float.contains(tile) {
+                    true => own[tile].float,
+                    false => own[tile].u16,
+                };
+                let e: [i32; 3] = std::array::from_fn(|i| {
+                    group
+                        .iter()
+                        .map(|t| finest(t)[i])
+                        .max()
+                        .expect("a group has a member")
+                });
+                for tile in &group {
+                    insert
+                        .execute(params![
+                            p[0],
+                            p[1],
+                            p[2],
+                            p[3],
+                            tile.0,
+                            tile.1,
+                            e[0],
+                            e[1],
+                            e[2],
+                            float.contains(tile)
+                        ])
+                        .map_err(sql)?;
+                }
             }
-            current = Some(p);
-            held.push((
-                (r.get(4).map_err(sql)?, r.get(5).map_err(sql)?),
-                [
-                    r.get(6).map_err(sql)?,
-                    r.get(7).map_err(sql)?,
-                    r.get(8).map_err(sql)?,
-                ],
-            ));
-        }
-        if let Some(c) = current {
-            flush(&mut insert, c, &held)?;
-        }
+            Ok(())
+        })?;
     }
     db.execute_batch("COMMIT;").map_err(sql)?;
     Ok(())
@@ -621,7 +685,14 @@ impl Build<'_> {
                 _ => None,
             })
             .collect();
-        let refused = |level: &u32| refusals[levels.iter().position(|l| l == level).unwrap()];
+        // A refused full-detail leaf discards its coarse levels too.
+        let leaf_refused = levels
+            .iter()
+            .position(|l| *l == 0)
+            .and_then(|i| refusals[i]);
+        let refused = |level: &u32| {
+            refusals[levels.iter().position(|l| l == level).unwrap()].or(leaf_refused)
+        };
         let todo: Vec<u32> = levels
             .iter()
             .filter(|level| refused(level).is_none())
@@ -671,8 +742,9 @@ impl Build<'_> {
                 // Each shared vertex records the tiles that hold it and their
                 // exponents; reports are written by the final pass.
                 if let Some(survey) = &candidate.survey {
-                    let mut insert = self.db.prepare_cached("INSERT OR REPLACE INTO holders(cx,cy,cz,kind,prefix,level,ex,ey,ez) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)").map_err(sql)?;
-                    let e = survey.exponent;
+                    self.db.execute_batch("SAVEPOINT holders;").map_err(sql)?;
+                    let mut insert = self.db.prepare_cached("INSERT OR REPLACE INTO holders(cx,cy,cz,kind,prefix,level,ex,ey,ez,fx,fy,fz) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)").map_err(sql)?;
+                    let (e, f) = (survey.exponent.u16, survey.exponent.float);
                     for (p, kind) in &survey.shared {
                         insert
                             .execute(params![
@@ -684,10 +756,15 @@ impl Build<'_> {
                                 survey.level,
                                 e[0],
                                 e[1],
-                                e[2]
+                                e[2],
+                                f[0],
+                                f[1],
+                                f[2]
                             ])
                             .map_err(sql)?;
                     }
+                    drop(insert);
+                    self.db.execute_batch("RELEASE holders;").map_err(sql)?;
                 }
             } else {
                 for report in candidate.reports {
@@ -1150,8 +1227,7 @@ pub(super) fn convert(
         // Survey: build the hierarchy with every content on its own range and
         // record, per shared vertex, the largest exponent of the tiles holding
         // it. Splits and partitions it makes are kept; tiles are rebuilt.
-        db.execute_batch("CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;")
-            .map_err(sql)?;
+        db.execute_batch(GRID_TABLES).map_err(sql)?;
         std::fs::create_dir_all(survey_output.join("t"))?;
         let before = build.counters.clone();
         build.pass = encoding::GridPass::Survey;
@@ -1889,6 +1965,80 @@ mod countries_fragment_tests {
             actual.into_iter().collect::<BTreeSet<_>>(),
             expected,
             "fragmentation must not introduce internal meridian outlines"
+        );
+    }
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    /// Four tiles hold one fill vertex: two sibling leaves, a coarse leaf
+    /// elsewhere and an LOD ancestor of the siblings. All are joined (the
+    /// coarse leaf renders with each), yet the vertex snaps at the finest
+    /// leaf's own step, not the coarse leaf's: every tile coarser than it
+    /// stores float32. An ancestor and its descendant are never joined, and
+    /// line copies group apart from fill copies.
+    #[test]
+    fn grid_groups_keep_the_finest_tile_on_its_own_step() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        let tiles = [
+            ("00", 0, [3, 3, 3]),
+            ("01", 0, [4, 3, 3]),
+            ("1", 0, [6, 6, 6]),
+            ("0", 2, [5, 5, 5]),
+        ];
+        let hold = |cell: i64, kind: i64, tile: usize| {
+            let (prefix, level, e) = tiles[tile];
+            db.execute(
+                "INSERT INTO holders VALUES(?1,0,0,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params![
+                    cell,
+                    kind,
+                    prefix,
+                    level,
+                    e[0],
+                    e[1],
+                    e[2],
+                    e[0] - 8,
+                    e[1] - 8,
+                    e[2] - 8
+                ],
+            )
+            .unwrap();
+        };
+        for tile in 0..4 {
+            hold(1, 0, tile);
+        }
+        hold(2, 0, 0);
+        hold(2, 0, 3);
+        hold(3, 1, 0);
+        hold(3, 1, 1);
+        resolve_grid(&db).unwrap();
+        let row = |cell: i64, kind: i64, prefix: &str, level: u32| -> ([i32; 3], bool) {
+            db.query_row(
+                "SELECT ex,ey,ez,fl FROM grid WHERE cx=?1 AND kind=?2 AND prefix=?3 AND level=?4",
+                params![cell, kind, prefix, level],
+                |r| Ok(([r.get(0)?, r.get(1)?, r.get(2)?], r.get(3)?)),
+            )
+            .unwrap()
+        };
+        for (prefix, level, float) in [
+            ("00", 0, false),
+            ("01", 0, true),
+            ("1", 0, true),
+            ("0", 2, true),
+        ] {
+            assert_eq!(row(1, 0, prefix, level), ([3, 3, 3], float), "{prefix}");
+        }
+        assert_eq!(row(2, 0, "00", 0), ([3, 3, 3], false));
+        assert_eq!(row(2, 0, "0", 2), ([-3, -3, -3], true));
+        assert_eq!(row(3, 1, "01", 0), ([3, 3, 3], true));
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM grid", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            8
         );
     }
 }

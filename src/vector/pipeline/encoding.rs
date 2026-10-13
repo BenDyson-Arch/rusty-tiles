@@ -378,17 +378,46 @@ fn bridge_len(
 /// that vertex at the largest exponent among its tiles. The final pass
 /// replays the same hierarchy and snaps each shared vertex, from its exact
 /// source position, at its group's exponent: a multiple of every member's
-/// own step.
+/// step.
+///
+/// A u16 window holds 65,536 steps, so a tile spanning a large area (a
+/// fragment with long triangles) has a coarse step, and every tile that
+/// shares a vertex with it would inherit that step. Instead, a tile whose
+/// own step is coarser, on any axis, than that of a tile it can render
+/// together with and shares a vertex with stores float32 lattice values
+/// ([`Storage::Float32`], 2^24 steps, so 2^8 times finer). The u16 tiles
+/// of a group then all have the same step, which the group snaps at, and
+/// each keeps its own precision.
+///
 /// The tile's other vertices keep its own finest step. Deriving the range
 /// per payload instead rounds a shared vertex differently on each side of a
 /// seam (cracks).
 pub(super) mod lattice {
     use super::*;
-    /// Lowest exponent: keeps `65535 * 2^e` a normal float32.
+    /// Lowest exponent: keeps `65535 * 2^e` and every float32 lattice value
+    /// normal.
     const MIN_EXPONENT: i32 = -120;
-    /// Per axis, the finest exponent whose u16 window (with one cell of
-    /// rounding slack) spans `lo..hi`, with every index exact in f64.
-    pub(in super::super) fn enclosing(lo: Point, hi: Point) -> [i32; 3] {
+    /// How a payload on the lattice stores its positions.
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub(in super::super) enum Storage {
+        /// Normalized u16 codes (`KHR_mesh_quantization`).
+        U16,
+        /// Float32 multiples of the step: every integer up to 2^24 is exact.
+        Float32,
+    }
+    impl Storage {
+        /// Lattice indices one window spans (its highest index).
+        pub fn window(self) -> i64 {
+            match self {
+                Self::U16 => 65535,
+                Self::Float32 => 1 << 24,
+            }
+        }
+    }
+    /// Per axis, the finest exponent whose `storage` window (with one cell
+    /// of rounding slack) spans `lo..hi`, with every index exact in f64.
+    pub(in super::super) fn enclosing(lo: Point, hi: Point, storage: Storage) -> [i32; 3] {
+        let cells = (storage.window() - 1) as f64;
         std::array::from_fn(|i| {
             let span = hi[i] - lo[i];
             let magnitude = lo[i].abs().max(hi[i].abs());
@@ -400,8 +429,8 @@ pub(super) mod lattice {
                 MIN_EXPONENT
             };
             if span > 0. && span.is_finite() {
-                e = e.max((span / 65534.).log2().floor() as i32 - 1);
-                while 65534. * 2f64.powi(e) < span {
+                e = e.max((span / cells).log2().floor() as i32 - 1);
+                while cells * 2f64.powi(e) < span {
                     e += 1;
                 }
             }
@@ -410,16 +439,18 @@ pub(super) mod lattice {
     }
     /// One payload's exponent and lowest index per axis. It starts at the
     /// payload's finest exponent and doubles until every position and every
-    /// line-strip end mirror `2c - n` fits one u16 window. `shared[b][v]`
-    /// gives a vertex's recorded exponents: it snaps there first.
+    /// line-strip end mirror `2c - n` fits one `storage` window.
+    /// `shared[b][v]` gives a vertex's recorded exponents: it snaps there
+    /// first.
     pub(in super::super) fn place(
         sources: &[&[Point]],
         shared: &[Vec<Option<[i32; 3]>>],
         ends: &[(usize, u32, u32)],
+        storage: Storage,
     ) -> Placement {
         let all = || sources.iter().flat_map(|s| s.iter());
         let own = bounds(all())
-            .map(|(lo, hi)| enclosing(lo, hi))
+            .map(|(lo, hi)| enclosing(lo, hi, storage))
             .unwrap_or([0; 3]);
         let mut placement = Placement {
             exponent: own,
@@ -445,7 +476,7 @@ pub(super) mod lattice {
                     low = low.min(k);
                     high = high.max(k);
                 }
-                if low > high || high - low <= 65535 {
+                if low > high || high - low <= storage.window() {
                     placement.low[i] = if low > high { 0 } else { low };
                     break;
                 }
@@ -472,14 +503,29 @@ pub(super) mod lattice {
     }
 }
 
+use lattice::Storage;
 /// How a payload quantizes its positions.
 #[derive(Clone, Copy)]
 pub(super) enum Quantize<'a> {
     /// Its own range, as admitted (fitting, the survey pass, and payloads
     /// without shared vertices).
     Own,
-    /// The frame lattice; shared vertices snap at their recorded exponents.
-    Shared(&'a BTreeMap<(Cell, Kind), [i32; 3]>),
+    /// The frame lattice, stored as `Storage`; shared vertices snap at
+    /// their recorded exponents.
+    Shared(&'a BTreeMap<(Cell, Kind), [i32; 3]>, Storage),
+}
+/// Each position accessor's values: normalized u16 codes, or float32
+/// lattice values.
+enum Codes {
+    U16(Vec<Vec<[u16; 3]>>),
+    Float32(Vec<Vec<[f32; 3]>>),
+}
+/// A payload's finest lattice exponents on its own range: with u16 codes
+/// (strip-end mirrors included) and with float32 values.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct OwnExponents {
+    pub u16: [i32; 3],
+    pub float: [i32; 3],
 }
 /// The nearest lattice index (ties to even): `v / 2^e` is exact.
 fn lattice_index(v: f64, exponent: i32) -> i64 {
@@ -511,7 +557,7 @@ struct Encoded {
     rounding: f64,
     quantization: f64,
     /// This payload's finest own lattice exponents (quantized only).
-    survey: Option<[i32; 3]>,
+    survey: Option<OwnExponents>,
     /// A shared vertex was re-rounded at a coarser step than recorded.
     inexact: bool,
     before_bytes: usize,
@@ -628,7 +674,7 @@ struct Source {
     primitives: usize,
     rounding: f64,
     quantization: f64,
-    survey: Option<[i32; 3]>,
+    survey: Option<OwnExponents>,
     inexact: bool,
 }
 /// See [`Quantize`] for how quantized positions are placed.
@@ -820,160 +866,234 @@ fn emit_source(
             .iter()
             .map(|(_, _, _, s)| s.as_slice())
             .collect();
-        let own = lattice::place(&sources, &[], &line_ends).exponent;
-        survey = Some(own);
+        survey = Some(OwnExponents {
+            u16: lattice::place(&sources, &[], &line_ends, Storage::U16).exponent,
+            float: lattice::place(&sources, &[], &[], Storage::Float32).exponent,
+        });
         // Workaround for a CesiumJS bug (seen in 1.146,
         // renderBufferPolylineCollection.js): a line strip's missing end
         // neighbour is synthesised as 2c-n and stored in prev/next buffers of
         // the position component type, so with u16 positions an end on the
         // range edge wraps (e.g. -65535 -> 1) into a sheared cap or long
-        // spike. Both ranges below keep every end's mirror in [0, 65535].
+        // spike. Both u16 ranges below keep every end's mirror in [0, 65535]
+        // (float32 positions do not wrap).
         //
         // `lo`, `scale`, half a step per axis, and each accessor's codes.
-        let (lo, scale, half_step, codes): (Point, Point, Point, Vec<Vec<[u16; 3]>>) =
-            match quantize {
-                Quantize::Shared(exponents) => {
-                    // The frame lattice, from exact source positions; the window
-                    // holds the written mirrors 2c-n exactly.
-                    let coarse: Vec<Vec<Option<[i32; 3]>>> = sources
-                        .iter()
-                        .zip(&accessor_modes)
-                        .map(|(points, mode)| {
-                            let kind = Kind::of_mode(*mode);
-                            points
-                                .iter()
-                                .map(|p| kind.and_then(|k| exponents.get(&(cell(*p), k)).copied()))
-                                .collect()
+        let (lo, scale, half_step, codes): (Point, Point, Point, Codes) = match quantize {
+            Quantize::Shared(exponents, storage) => {
+                // The frame lattice, from exact source positions; the window
+                // holds the written mirrors 2c-n exactly.
+                let coarse: Vec<Vec<Option<[i32; 3]>>> = sources
+                    .iter()
+                    .zip(&accessor_modes)
+                    .map(|(points, mode)| {
+                        let kind = Kind::of_mode(*mode);
+                        points
+                            .iter()
+                            .map(|p| kind.and_then(|k| exponents.get(&(cell(*p), k)).copied()))
+                            .collect()
+                    })
+                    .collect();
+                let ends: &[_] = match storage {
+                    Storage::U16 => &line_ends,
+                    Storage::Float32 => &[],
+                };
+                let placement = lattice::place(&sources, &coarse, ends, storage);
+                // A shared vertex recorded finer than this payload's final
+                // step (its snapped positions widened the window) is
+                // re-rounded here: that seam is not exact.
+                inexact = coarse
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .any(|e| (0..3).any(|i| e[i] < placement.exponent[i]));
+                let step: Point = placement.exponent.map(|e| 2f64.powi(e));
+                // Exact: |k_lo| < 2^53 and the step is a power of two.
+                let lo = std::array::from_fn(|i| placement.low[i] as f64 * step[i] - center[i]);
+                // Window offsets: `place` sized the window from these same indices.
+                let offsets = sources.iter().zip(&coarse).map(|(points, coarse)| {
+                    points.iter().zip(coarse).map(|(p, snap)| -> [i64; 3] {
+                        std::array::from_fn(|i| {
+                            placement.index(p[i], snap.map(|e| e[i]), i) - placement.low[i]
                         })
-                        .collect();
-                    let placement = lattice::place(&sources, &coarse, &line_ends);
-                    // A shared vertex recorded finer than this payload's final
-                    // step (its snapped positions widened the window) is
-                    // re-rounded here: that seam is not exact.
-                    inexact = coarse
-                        .iter()
-                        .flatten()
-                        .flatten()
-                        .any(|e| (0..3).any(|i| e[i] < placement.exponent[i]));
-                    let step: Point = placement.exponent.map(|e| 2f64.powi(e));
-                    // Exact: |k_lo| < 2^53 and the step is a power of two.
-                    let lo = std::array::from_fn(|i| placement.low[i] as f64 * step[i] - center[i]);
-                    let codes = sources
-                        .iter()
-                        .zip(&coarse)
-                        .map(|(points, coarse)| {
-                            points
-                                .iter()
-                                .zip(coarse)
-                                .map(|(p, snap)| {
-                                    std::array::from_fn(|i| {
-                                        let k = placement.index(p[i], snap.map(|e| e[i]), i)
-                                            - placement.low[i];
-                                        // `place` sized the window from these same indices.
-                                        u16::try_from(k)
-                                            .expect("lattice index inside its u16 window")
+                    })
+                });
+                let codes = match storage {
+                    Storage::U16 => Codes::U16(
+                        offsets
+                            .map(|points| {
+                                points
+                                    .map(|k| {
+                                        k.map(|k| {
+                                            u16::try_from(k)
+                                                .expect("lattice index inside its u16 window")
+                                        })
                                     })
-                                })
-                                .collect()
-                        })
-                        .collect();
-                    (lo, step.map(|s| s * 65535.), step.map(|s| s / 2.), codes)
+                                    .collect()
+                            })
+                            .collect(),
+                    ),
+                    // Exact: an integer below 2^24 times a power of two
+                    // no smaller than 2^MIN_EXPONENT.
+                    Storage::Float32 => Codes::Float32(
+                        offsets
+                            .map(|points| {
+                                points
+                                    .map(|k| {
+                                        std::array::from_fn(|i| {
+                                            let value = k[i] as f64 * step[i];
+                                            assert!(
+                                                k[i] <= Storage::Float32.window()
+                                                    && f64::from(value as f32) == value,
+                                                "lattice value exact in float32"
+                                            );
+                                            value as f32
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .collect(),
+                    ),
+                };
+                let scale = match storage {
+                    Storage::U16 => step.map(|s| s * 65535.),
+                    Storage::Float32 => [1.; 3],
+                };
+                (lo, scale, step.map(|s| s / 2.), codes)
+            }
+            Quantize::Own => {
+                // This payload's own range (as admitted), padded by the
+                // strip-end reach plus two
+                // quanta (rounding of c and n):
+                // pad >= reach + 2 (extent + 2 pad) / 65535.
+                let values = || position_accessors.iter().flat_map(|(_, _, p, _)| p.iter());
+                let (lo, hi) = bounds(values())?;
+                let mut reach = [0f64; 3];
+                for (batch, c, n) in &line_ends {
+                    let points = &position_accessors[*batch].2;
+                    for i in 0..3 {
+                        reach[i] =
+                            reach[i].max((points[*c as usize][i] - points[*n as usize][i]).abs());
+                    }
                 }
-                Quantize::Own => {
-                    // This payload's own range (as admitted), padded by the
-                    // strip-end reach plus two
-                    // quanta (rounding of c and n):
-                    // pad >= reach + 2 (extent + 2 pad) / 65535.
-                    let values = || position_accessors.iter().flat_map(|(_, _, p, _)| p.iter());
-                    let (lo, hi) = bounds(values())?;
-                    let mut reach = [0f64; 3];
-                    for (batch, c, n) in &line_ends {
-                        let points = &position_accessors[*batch].2;
+                let pad: Point = std::array::from_fn(|i| {
+                    if reach[i] > 0. {
+                        (reach[i] + 2. * (hi[i] - lo[i]) / 65535.) / (1. - 4. / 65535.)
+                    } else {
+                        0.
+                    }
+                });
+                // Outward to float32 so the node translation stays exact and short.
+                let lo: Point = std::array::from_fn(|i| match pad[i] > 0. {
+                    true => ((lo[i] - pad[i]) as f32).next_down() as f64,
+                    false => lo[i],
+                });
+                let hi: Point = std::array::from_fn(|i| match pad[i] > 0. {
+                    true => ((hi[i] + pad[i]) as f32).next_up() as f64,
+                    false => hi[i],
+                });
+                let extent = sub(hi, lo);
+                let scale = extent.map(|v| if v > 0. { v } else { 1. });
+                let codes = position_accessors
+                    .iter()
+                    .map(|(_, _, points, _)| {
+                        points
+                            .iter()
+                            .map(|p| {
+                                std::array::from_fn(|i| {
+                                    ((p[i] - lo[i]) / scale[i] * 65535.)
+                                        .round_ties_even()
+                                        .clamp(0., 65535.)
+                                        as u16
+                                })
+                            })
+                            .collect()
+                    })
+                    .collect();
+                (lo, scale, mul(extent, 1. / 131070.), Codes::U16(codes))
+            }
+        };
+        // From the position that was snapped: exact source on the build's
+        // lattice, the float32 position on a payload range.
+        let snapped = |values: &[Point], sources: &[Point], v: usize| match quantize {
+            Quantize::Shared(..) => sub(sources[v], center),
+            Quantize::Own => values[v],
+        };
+        let mut largest: f64 = 0.;
+        match &codes {
+            Codes::U16(codes) => {
+                for ((accessor, view, values, sources), codes) in
+                    position_accessors.iter().zip(codes)
+                {
+                    let mut bytes = Vec::new();
+                    let mut low = [u16::MAX; 3];
+                    let mut high = [0u16; 3];
+                    for (v, q) in codes.iter().enumerate() {
+                        let decoded: Point =
+                            std::array::from_fn(|i| q[i] as f64 / 65535. * scale[i] + lo[i]);
+                        quantization =
+                            quantization.max(norm(sub(decoded, snapped(values, sources, v))));
                         for i in 0..3 {
-                            reach[i] = reach[i]
-                                .max((points[*c as usize][i] - points[*n as usize][i]).abs());
+                            low[i] = low[i].min(q[i]);
+                            high[i] = high[i].max(q[i]);
+                            bytes.extend(q[i].to_le_bytes());
+                        }
+                        bytes.extend(0u16.to_le_bytes());
+                    }
+                    glb.replace_view(*view, &bytes);
+                    glb.document["bufferViews"][*view]["byteStride"] = json!(8);
+                    let ac = &mut glb.document["accessors"][*accessor];
+                    ac["componentType"] = json!(5123);
+                    ac["normalized"] = json!(true);
+                    ac["min"] = json!(low);
+                    ac["max"] = json!(high);
+                }
+                glb.document["nodes"][0]["scale"] = json!(scale);
+                glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
+            }
+            Codes::Float32(codes) => {
+                for ((accessor, view, values, sources), codes) in
+                    position_accessors.iter().zip(codes)
+                {
+                    let mut bytes = Vec::new();
+                    let mut low = [f32::INFINITY; 3];
+                    let mut high = [f32::NEG_INFINITY; 3];
+                    for (v, q) in codes.iter().enumerate() {
+                        let decoded: Point = std::array::from_fn(|i| f64::from(q[i]) + lo[i]);
+                        quantization =
+                            quantization.max(norm(sub(decoded, snapped(values, sources, v))));
+                        largest = largest.max(norm(q.map(f64::from)));
+                        for i in 0..3 {
+                            low[i] = low[i].min(q[i]);
+                            high[i] = high[i].max(q[i]);
+                            bytes.extend(q[i].to_le_bytes());
                         }
                     }
-                    let pad: Point = std::array::from_fn(|i| {
-                        if reach[i] > 0. {
-                            (reach[i] + 2. * (hi[i] - lo[i]) / 65535.) / (1. - 4. / 65535.)
-                        } else {
-                            0.
-                        }
-                    });
-                    // Outward to float32 so the node translation stays exact and short.
-                    let lo: Point = std::array::from_fn(|i| match pad[i] > 0. {
-                        true => ((lo[i] - pad[i]) as f32).next_down() as f64,
-                        false => lo[i],
-                    });
-                    let hi: Point = std::array::from_fn(|i| match pad[i] > 0. {
-                        true => ((hi[i] + pad[i]) as f32).next_up() as f64,
-                        false => hi[i],
-                    });
-                    let extent = sub(hi, lo);
-                    let scale = extent.map(|v| if v > 0. { v } else { 1. });
-                    let codes = position_accessors
-                        .iter()
-                        .map(|(_, _, points, _)| {
-                            points
-                                .iter()
-                                .map(|p| {
-                                    std::array::from_fn(|i| {
-                                        ((p[i] - lo[i]) / scale[i] * 65535.)
-                                            .round_ties_even()
-                                            .clamp(0., 65535.)
-                                            as u16
-                                    })
-                                })
-                                .collect()
-                        })
-                        .collect();
-                    (lo, scale, mul(extent, 1. / 131070.), codes)
+                    glb.replace_view(*view, &bytes);
+                    let ac = &mut glb.document["accessors"][*accessor];
+                    ac["min"] = json!(low);
+                    ac["max"] = json!(high);
                 }
-            };
-        for ((accessor, view, values, sources), codes) in position_accessors.iter().zip(&codes) {
-            let mut bytes = Vec::new();
-            let mut low = [u16::MAX; 3];
-            let mut high = [0u16; 3];
-            for (v, q) in codes.iter().enumerate() {
-                let decoded: Point =
-                    std::array::from_fn(|i| q[i] as f64 / 65535. * scale[i] + lo[i]);
-                // From the position that was snapped: exact source on the
-                // build's lattice, the float32 position on a payload range.
-                let snapped = match quantize {
-                    Quantize::Shared(_) => sub(sources[v], center),
-                    Quantize::Own => values[v],
-                };
-                quantization = quantization.max(norm(sub(decoded, snapped)));
-                for i in 0..3 {
-                    low[i] = low[i].min(q[i]);
-                    high[i] = high[i].max(q[i]);
-                    bytes.extend(q[i].to_le_bytes());
-                }
-                bytes.extend(0u16.to_le_bytes());
             }
-            glb.replace_view(*view, &bytes);
-            glb.document["bufferViews"][*view]["byteStride"] = json!(8);
-            let ac = &mut glb.document["accessors"][*accessor];
-            ac["componentType"] = json!(5123);
-            ac["normalized"] = json!(true);
-            ac["min"] = json!(low);
-            ac["max"] = json!(high);
         }
         glb.compact_views();
         glb.document["nodes"][0]["translation"] = json!(lo);
-        glb.document["nodes"][0]["scale"] = json!(scale);
-        glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
         // Source-to-decoded displacement (measured, and at least half a
         // step), plus the float32 placement allowance of a client that holds
-        // the node translation, scale and normalized value in float32 and
-        // rounds their product and sum. (`positionRoundingMetres`, still added
-        // to the tile error, double-counts float32 rounding on the shared
-        // lattice, which snaps exact source positions: conservative.)
+        // the node translation, scale and position in float32 and rounds the
+        // normalization, product and sum. (`positionRoundingMetres`, still
+        // added to the tile error, double-counts float32 rounding on the
+        // shared lattice, which snaps exact source positions: conservative.)
         quantization = quantization.max(norm(half_step));
-        quantization += norm(sub(lo, lo.map(|v| v as f32 as f64)))
-            + norm(sub(scale, scale.map(|v| v as f32 as f64)))
-            + (norm(lo) + 2. * norm(scale)) * 2f64.powi(-24);
+        quantization += norm(sub(lo, lo.map(|v| v as f32 as f64)));
+        quantization += match codes {
+            Codes::U16(_) => {
+                norm(sub(scale, scale.map(|v| v as f32 as f64)))
+                    + (norm(lo) + 3. * norm(scale)) * 2f64.powi(-24)
+            }
+            // Exact float32 values: only the sum rounds.
+            Codes::Float32(_) => (norm(lo) + largest) * 2f64.powi(-24),
+        };
     }
     let vertices = all_positions.len();
     let primitives = batches.len();
@@ -1095,7 +1215,7 @@ pub(super) enum GridPass {
 pub(super) struct Survey {
     pub prefix: String,
     pub level: u32,
-    pub exponent: [i32; 3],
+    pub exponent: OwnExponents,
     pub shared: Vec<(Cell, Kind)>,
 }
 
@@ -1342,30 +1462,41 @@ pub(super) fn encode(
         schemas
     };
     let mut exponents = BTreeMap::new();
+    // Whether the resolved grid stores this tile as float32 (the same on
+    // every row of the tile).
+    let mut storage = Storage::U16;
+    // Shared vertices the survey did not record for this tile (the spool's
+    // shared set can grow during the survey): kept on this tile's own step.
+    let mut unrecorded = 0usize;
     if options.quantize && pass == GridPass::Final && !shared.is_empty() {
         let mut query = db
             .prepare_cached(
-                "SELECT ex,ey,ez FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 AND kind=?4 AND prefix=?5 AND level=?6",
+                "SELECT ex,ey,ez,fl FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 AND kind=?4 AND prefix=?5 AND level=?6",
             )
             .map_err(sql)?;
         for k in &shared {
             let (p, kind) = k;
             use rusqlite::OptionalExtension;
-            if let Some(e) = query
+            if let Some((e, float)) = query
                 .query_row(
                     rusqlite::params![p[0], p[1], p[2], *kind as i64, prefix, level],
-                    |r| Ok([r.get(0)?, r.get(1)?, r.get(2)?]),
+                    |r| Ok(([r.get(0)?, r.get(1)?, r.get(2)?], r.get::<_, bool>(3)?)),
                 )
                 .optional()
                 .map_err(sql)?
             {
                 exponents.insert(*k, e);
+                if float {
+                    storage = Storage::Float32;
+                }
+            } else {
+                unrecorded += 1;
             }
         }
     }
     let on_grid = !exponents.is_empty();
     let quantize = if on_grid {
-        Quantize::Shared(&exponents)
+        Quantize::Shared(&exponents, storage)
     } else {
         Quantize::Own
     };
@@ -1478,6 +1609,10 @@ pub(super) fn encode(
         // past its recorded exponent, so that vertex is re-rounded here.
         result.reports.push(json!({"buildPrefix":prefix,"level":level,"quantizationGrid":"coarsened",
             "reason":"a shared vertex is re-rounded at a coarser step than its other tiles use; its seams are not exact"}));
+    }
+    if unrecorded > 0 {
+        result.reports.push(json!({"buildPrefix":prefix,"level":level,"quantizationGrid":"unrecorded","vertices":unrecorded,
+            "reason":"shared vertices without a surveyed step keep this tile's own step; their seams are not exact"}));
     }
     if grid_fallback {
         // Exceeded maxBytes on the shared lattice: quantized on its own
@@ -2030,13 +2165,12 @@ mod tests {
     }
 
     /// Fill vertices of one payload as a client decodes them into the frame
-    /// (meshopt stream, normalized u16, node translation and scale, tile
-    /// center): in f64, and with float32 node values and product.
+    /// (meshopt stream, normalized u16 or float32, node translation and
+    /// scale, tile center): in f64, and with float32 node values and product.
     fn decoded_fills(encoded: &Encoded, center: Point) -> (Vec<Point>, Vec<Point>) {
         let (document, views) = read_views(&encoded.bytes);
         let node = &document["nodes"][0];
         let t: Point = std::array::from_fn(|i| node["translation"][i].as_f64().unwrap());
-        let s: Point = std::array::from_fn(|i| node["scale"][i].as_f64().unwrap());
         let primitive = document["meshes"][0]["primitives"]
             .as_array()
             .unwrap()
@@ -2045,9 +2179,26 @@ mod tests {
             .unwrap();
         let position =
             &document["accessors"][primitive["attributes"]["POSITION"].as_u64().unwrap() as usize];
-        assert_eq!(position["componentType"], 5123);
         let data = &views[position["bufferView"].as_u64().unwrap() as usize];
         let (mut wide, mut narrow) = (Vec::new(), Vec::new());
+        if position["componentType"] == 5126 {
+            // Float32 lattice values, without a node scale.
+            assert!(node.get("scale").is_none());
+            let (vertices, rest) = data.as_chunks::<12>();
+            assert!(rest.is_empty());
+            for v in vertices {
+                let q: [f32; 3] = std::array::from_fn(|i| {
+                    f32::from_le_bytes(v[i * 4..i * 4 + 4].try_into().unwrap())
+                });
+                wide.push(std::array::from_fn(|i| center[i] + t[i] + f64::from(q[i])));
+                narrow.push(std::array::from_fn(|i| {
+                    center[i] + f64::from(t[i] as f32 + q[i])
+                }));
+            }
+            return (wide, narrow);
+        }
+        assert_eq!(position["componentType"], 5123);
+        let s: Point = std::array::from_fn(|i| node["scale"][i].as_f64().unwrap());
         for v in 0..position["count"].as_u64().unwrap() as usize {
             let q: [u16; 3] = std::array::from_fn(|i| {
                 u16::from_le_bytes([data[v * 8 + i * 2], data[v * 8 + i * 2 + 1]])
@@ -2069,8 +2220,10 @@ mod tests {
     /// for tiles that render together), each, including one just past a
     /// rounding tie, decodes to one frame position in both payloads, within
     /// each certified bound (also through float32 placement), while the small
-    /// payload keeps its own finer step. Each payload's own range opens the
-    /// seam.
+    /// payload keeps its own finer step. Stored as float32, the large payload
+    /// instead holds the seam at the small payload's step, within a quarter
+    /// of its own u16 half step; as u16 it cannot. Each payload's own range
+    /// opens the seam.
     #[test]
     fn adjacent_payloads_decode_shared_fill_vertices_identically() {
         let (x, h) = (-12345.678, -20.25);
@@ -2121,6 +2274,7 @@ mod tests {
             .unwrap()
             .survey
             .unwrap()
+            .u16
         };
         // The survey exponents, and the seam's: the larger per axis.
         let (_, a, b, outline) = fixture(-2996.);
@@ -2143,15 +2297,13 @@ mod tests {
             lattice_index(recentred, seam[2]),
             lattice_index(zt, seam[2])
         );
-        let exponents: BTreeMap<(Cell, Kind), [i32; 3]> = shared
-            .iter()
-            .flat_map(|p| {
-                [
-                    ((cell(*p), Kind::Fill), seam),
-                    ((cell(*p), Kind::Line), seam),
-                ]
-            })
-            .collect();
+        let at = |e: [i32; 3]| -> BTreeMap<(Cell, Kind), [i32; 3]> {
+            shared
+                .iter()
+                .flat_map(|p| [((cell(*p), Kind::Fill), e), ((cell(*p), Kind::Line), e)])
+                .collect()
+        };
+        let (exponents, fine) = (at(seam), at(small));
         for meshopt in [false, true] {
             let options = VectorOptions {
                 meshopt,
@@ -2178,10 +2330,20 @@ mod tests {
                     .min_by(|u, w| norm(sub(**u, p)).total_cmp(&norm(sub(**w, p))))
                     .unwrap()
             };
-            let seam_gap = |quantize: Quantize<'_>| -> f64 {
+            let seam_gap = |quantize: Quantize<'_>, large_quantize: Quantize<'_>| -> f64 {
                 let first = encode(&[&a], center_a, quantize);
-                let second = encode(&[&b, &outline], center_b, quantize);
-                if let Quantize::Shared(_) = quantize {
+                let second = encode(&[&b, &outline], center_b, large_quantize);
+                if let Quantize::Shared(_, Storage::Float32) = large_quantize {
+                    // Float32 holds the small payload's step: the large
+                    // payload's bound is far below half its own u16 step.
+                    let half = norm(large.map(|e| 2f64.powi(e - 1)));
+                    assert!(
+                        second.quantization < half / 4.,
+                        "{} vs {half}",
+                        second.quantization
+                    );
+                }
+                if let Quantize::Shared(..) = quantize {
                     assert!(!first.inexact && !second.inexact);
                     // The small payload keeps its own finer step.
                     let (document, _) = read_views(&first.bytes);
@@ -2206,9 +2368,26 @@ mod tests {
                     .map(|p| norm(sub(nearest(&wide_a, *p), nearest(&wide_b, *p))))
                     .fold(0., f64::max)
             };
-            assert!(seam_gap(Quantize::Shared(&exponents)) < 1e-9, "shared seam");
+            let both = Quantize::Shared(&exponents, Storage::U16);
+            assert!(seam_gap(both, both) < 1e-9, "shared seam");
+            // The large payload stores float32 and holds the seam at the
+            // small payload's own step instead.
+            let fine = Quantize::Shared(&fine, Storage::U16);
+            let float = match fine {
+                Quantize::Shared(exponents, _) => Quantize::Shared(exponents, Storage::Float32),
+                Quantize::Own => unreachable!(),
+            };
+            assert!(seam_gap(fine, float) < 1e-9, "float32 seam");
+            // At the small step, a u16 large payload cannot hold the seam.
+            assert!(
+                encode(&[&b, &outline], center_b, fine).inexact,
+                "u16 re-rounds the seam"
+            );
             // Each payload's own range (the behaviour before the fix).
-            assert!(seam_gap(Quantize::Own) > 1e-3, "per-payload ranges crack");
+            assert!(
+                seam_gap(Quantize::Own, Quantize::Own) > 1e-3,
+                "per-payload ranges crack"
+            );
         }
     }
 
@@ -2217,8 +2396,8 @@ mod tests {
     #[test]
     fn line_strip_mirrors_fit_the_lattice_window() {
         let points = [[-100., 0., 0.], [100., 0., 0.]];
-        let own = lattice::enclosing(points[0], points[1]);
-        let placement = lattice::place(&[&points], &[], &[(0, 0, 1), (0, 1, 0)]);
+        let own = lattice::enclosing(points[0], points[1], Storage::U16);
+        let placement = lattice::place(&[&points], &[], &[(0, 0, 1), (0, 1, 0)], Storage::U16);
         // Mirrors reach +-300 against a 256-unit window: two doublings.
         assert_eq!(placement.exponent[0], own[0] + 2);
         let mut line = point_feature();
@@ -2233,7 +2412,7 @@ mod tests {
         let encoded = emit(
             &[&line],
             [0.; 3],
-            Quantize::Shared(&BTreeMap::new()),
+            Quantize::Shared(&BTreeMap::new(), Storage::U16),
             false,
             &BTreeMap::new(),
             &options,
