@@ -8,7 +8,7 @@
    },
    "file": "h11/fixtures/h11-sphere-offdiagonal.base.3tz",
    "id": "h11-sphere-offdiagonal.base",
-   "note": "sphere r=1; base corners at distance <= 0.89; vertex 400 at (-0.75, 0.75, 0) is outside while the diagonal corners (-0.75, -0.6, -0.25) and (0.6, 0.75, 0.25) are inside",
+   "note": "sphere r=1; base corners at distance <= 0.89; tile vertex 400 at (-0.75, -0.75, 0) is outside while the raw diagonal corners, tile (-0.75, 0.6, -0.25) and (0.6, -0.75, 0.25), are inside",
    "oracle": {
     "archive": "h11/fixtures/h11-sphere-offdiagonal.base.3tz",
     "c1Caveats": [],
@@ -100,10 +100,10 @@
      }
     },
     "references": 1,
-    "sha256": "82c5e736d636a5835034072ca1f0c49f240553f3ab911d3dc4004af4ef09ab83"
+    "sha256": "0f54788d0c85e3d13f875248b4489d2b1a2130b65c0f4b813d64b60e58190492"
    },
    "pair": "h11-sphere-offdiagonal",
-   "sha256": "82c5e736d636a5835034072ca1f0c49f240553f3ab911d3dc4004af4ef09ab83",
+   "sha256": "0f54788d0c85e3d13f875248b4489d2b1a2130b65c0f4b813d64b60e58190492",
    "side": "base",
    "targets": [
     "two-diagonal-corners",
@@ -123,7 +123,7 @@
    },
    "file": "h11/fixtures/h11-sphere-offdiagonal.mutated.3tz",
    "id": "h11-sphere-offdiagonal.mutated",
-   "note": "sphere r=1; base corners at distance <= 0.89; vertex 400 at (-0.75, 0.75, 0) is outside while the diagonal corners (-0.75, -0.6, -0.25) and (0.6, 0.75, 0.25) are inside",
+   "note": "sphere r=1; base corners at distance <= 0.89; tile vertex 400 at (-0.75, -0.75, 0) is outside while the raw diagonal corners, tile (-0.75, 0.6, -0.25) and (0.6, -0.75, 0.25), are inside",
    "oracle": {
     "archive": "h11/fixtures/h11-sphere-offdiagonal.mutated.3tz",
     "c1Caveats": [],
@@ -133,12 +133,12 @@
      "contentAt": "tileset.json:root.content[0]",
      "coordinate": [
       "-3/4",
-      "3/4",
+      "-3/4",
       "0"
      ],
      "coordinateApprox": [
       -0.75,
-      0.75,
+      -0.75,
       0.0
      ],
      "depth": 0,
@@ -241,10 +241,10 @@
      }
     },
     "references": 1,
-    "sha256": "e9fcc8b49f916a707a13ac6c7eae4257f7f714ded11c3dfbcf2cbff2fbe8e0ad"
+    "sha256": "d633114120cf623d06b0b282018d53ababd1ef210591859ed4150db38383224d"
    },
    "pair": "h11-sphere-offdiagonal",
-   "sha256": "e9fcc8b49f916a707a13ac6c7eae4257f7f714ded11c3dfbcf2cbff2fbe8e0ad",
+   "sha256": "d633114120cf623d06b0b282018d53ababd1ef210591859ed4150db38383224d",
    "side": "mutated",
    "targets": [
     "two-diagonal-corners",

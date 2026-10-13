@@ -1,0 +1,87 @@
+diff --git a/src/content_integrity/payload.rs b/src/content_integrity/payload.rs
+index 2954060..90146d1 100644
+--- a/src/content_integrity/payload.rs
++++ b/src/content_integrity/payload.rs
+@@ -841,6 +841,16 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
+         }
+         parsed.min = min;
+         parsed.max = max;
++        if view.is_none() {
++            for (bound, out) in [(a.min, &mut parsed.min), (a.max, &mut parsed.max)] {
++                if let Some(bound) = bound {
++                    let declared = array::<&RawValue>(Some(bound), slots)?;
++                    for (raw, o) in declared.iter().zip(out.iter_mut()) {
++                        *o = serde_json::from_str::<f64>(raw.get()).unwrap_or(*o);
++                    }
++                }
++            }
++        }
+         push(&mut accessors, parsed, slots)?;
+     }
+     let mut view_roles = allocation(views.len(), 0u8)?;
+diff --git a/src/content_integrity/payload/scene.rs b/src/content_integrity/payload/scene.rs
+index 5ab1d8e..b2e8327 100644
+--- a/src/content_integrity/payload/scene.rs
++++ b/src/content_integrity/payload/scene.rs
+@@ -520,6 +520,10 @@ impl Instance<'_, '_> {
+     pub(crate) fn positions(&self) -> &[usize] {
+         self.positions
+     }
++    pub(crate) fn extent(&self, accessor: usize) -> ([f64; 3], [f64; 3]) {
++        let a = &self.draws.accessors[accessor];
++        (std::array::from_fn(|c| a.min[c]), std::array::from_fn(|c| a.max[c]))
++    }
+     pub(crate) fn count(&self, accessor: usize) -> usize {
+         self.draws.accessors[accessor].count
+     }
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..df9e35e 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -876,8 +876,15 @@ impl SceneConsumer for StreamConsumer<'_> {
+             instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));
+             let n = normalization(instance.format(accessor));
+             let first =
+-                containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {
++                containment::walk_marked_declared(self.arena, n, self.levels, bitmap, self.credit, |v| {
+                     raw_vertex(instance.vertex(accessor, v))
++                }, {
++                    let (lo, hi) = instance.extent(accessor);
++                    let word = |p: [f64; 3]| match instance.format(accessor) {
++                        PositionFormat::F32 => RawVertex::F32(p.map(|x| x as f32)),
++                        _ => RawVertex::Int(p.map(|x| x as i32)),
++                    };
++                    Some((word(lo), word(hi)))
+                 });
+             if self.arena.fault() {
+                 return Err(containment_fault());
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..e4a9cf3 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -948,13 +948,24 @@ pub(crate) fn walk_marked(
+     bitmap: &[u64],
+     credit: &mut Credit,
+     vertex: impl Fn(usize) -> RawVertex,
++) -> Option<(usize, Verdict)> {
++    walk_marked_declared(arena, n, levels, bitmap, credit, vertex, None)
++}
++pub(crate) fn walk_marked_declared(
++    arena: &mut Arena,
++    n: Normalization,
++    levels: &[LevelFacts],
++    bitmap: &[u64],
++    credit: &mut Credit,
++    vertex: impl Fn(usize) -> RawVertex,
++    declared: Option<(RawVertex, RawVertex)>,
+ ) -> Option<(usize, Verdict)> {
+     let diagonal = diagonal_suffices(arena, levels);
+     for (chunk, words) in bitmap.chunks(CHUNK_WORDS).enumerate() {
+         let first = chunk * CHUNK_WORDS;
+         let marked: u64 = words.iter().map(|w| u64::from(w.count_ones())).sum();
+         let extent = (marked > 1 && credit.covers(1))
+-            .then(|| raw_box(words, first, &vertex))
++            .then(|| declared.or_else(|| raw_box(words, first, &vertex)))
+             .flatten();
+         if let Some((lo, hi)) = extent {
+             let count = corners(lo, hi, diagonal).count() as u64;

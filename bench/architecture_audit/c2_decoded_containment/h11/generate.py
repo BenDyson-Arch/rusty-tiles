@@ -83,16 +83,17 @@ def pairs():
     out = []
 
     # F1, F3, F6: a sphere needs every corner. The escaping vertex is an off-diagonal corner of the
-    # raw box; both diagonal corners lie inside the sphere.
+    # raw (glTF) box; both raw diagonal corners lie inside the sphere. Raw (x, y, z) is tile (x, -z, y),
+    # so the raw diagonal runs along tile X = -Y.
     inner = cloud(11, 520, 0.25)
-    inner[100] = [-0.6, -0.6, 0.0]
-    inner[200] = [0.6, 0.6, 0.0]
+    inner[100] = [-0.6, 0.6, 0.0]
+    inner[200] = [0.6, -0.6, 0.0]
     sphere = {"sphere": [0, 0, 0, 1]}
     escape = [p[:] for p in inner]
-    escape[400] = [-0.75, 0.75, 0.0]
+    escape[400] = [-0.75, -0.75, 0.0]
     out.append(("h11-sphere-offdiagonal", ["two-diagonal-corners", "skip-fallback", "report-first-marked-vertex"],
-                "sphere r=1; base corners at distance <= 0.89; vertex 400 at (-0.75, 0.75, 0) is outside "
-                "while the diagonal corners (-0.75, -0.6, -0.25) and (0.6, 0.75, 0.25) are inside",
+                "sphere r=1; base corners at distance <= 0.89; tile vertex 400 at (-0.75, -0.75, 0) is outside "
+                "while the raw diagonal corners, tile (-0.75, 0.6, -0.25) and (0.6, -0.75, 0.25), are inside",
                 archive(sphere, payload([gltf(p) for p in inner])),
                 archive(sphere, payload([gltf(p) for p in escape]))))
 

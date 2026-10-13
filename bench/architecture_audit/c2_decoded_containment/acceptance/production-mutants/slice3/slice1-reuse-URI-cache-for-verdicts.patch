@@ -1,8 +1,8 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 65ae7e6..5f85932 100644
+index 88ee84a..8b668ac 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
-@@ -1161,7 +1161,11 @@ impl Check<'_> {
+@@ -1159,7 +1159,11 @@ impl Check<'_> {
          let cap = self.resources.limits.containment_bytes_read;
          let limits = self.resources.content_limits;
          let references = std::mem::take(&mut self.c2.references);
@@ -12,5 +12,5 @@ index 65ae7e6..5f85932 100644
 +                continue;
 +            }
              self.c2.build_levels(reference.tile, reference.content)?;
+             credit.accrue(self.c2.uris[reference.uri].1.t);
              let name = self.c2.uris[reference.uri].0.as_str();
-             let archive = &mut *self.resources.archive;
