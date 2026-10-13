@@ -70,6 +70,189 @@ def write_local_mesh(path, *, extras=False):
 
 
 class WheelAPI(unittest.TestCase):
+    def test_tiler_installed_result_matches_archive_report_and_keeps_diagnostics(self):
+        source = self.root / "tiler.glb"
+        write_local_mesh(source)
+        output = self.root / "tiler.3tz"
+        events = []
+
+        def observe(event):
+            self.assertFalse(output.exists(), "required callback ran after installation")
+            events.append(event)
+
+        result = rusty_tiles.mesh_to_tileset(source, output, jobs=1, callback=observe)
+        self.assertIsInstance(result, rusty_tiles.TilerResult)
+        self.assertEqual(result.output, output.resolve())
+        self.assertTrue(result.archive)
+        self.assertEqual(result.cleanup_diagnostics, [])
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(result.report, json.loads(archive.read("conversion.json")))
+            self.assertIn("tileset.json", archive.namelist())
+        report = result.report
+        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["operation"], "mesh_tiler")
+        self.assertEqual((report["tiles_version"], report["gltf_version"]), ("1.1", "2.0"))
+        self.assertEqual(report["triangles"], 3)
+        self.assertEqual(report["profile"], "balanced")
+        self.assertEqual(report["source_coordinates"], "local-gltf")
+        self.assertEqual(report["coordinates"], "local-gltf")
+        self.assertIsNone(report["root_transform"])
+        self.assertNotIn("diagnostics", report)
+        self.assertNotIn("requested_jobs", report)
+        self.assertEqual(result.diagnostics["leaf_delivery"]["jobs"], 1)
+        self.assertEqual(result.diagnostics["archive_bytes"], output.stat().st_size)
+        self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
+        with self.assertRaises(AttributeError):
+            result.output = self.root / "redirected.3tz"
+
+    def test_tiler_provisional_profiles_and_worker_scratch_choices_preserve_bytes(self):
+        source = self.root / "profiles.glb"
+        write_local_mesh(source)
+        for profile in ("fast", "balanced", "quality", "lossless"):
+            with self.subTest(profile=profile):
+                result = rusty_tiles.mesh_to_tileset(
+                    source, self.root / f"profile-{profile}.3tz", profile=profile, jobs=1,
+                )
+                self.assertEqual(result.report["profile"], profile)
+                self.assertEqual(result.report["triangles"], 3)
+        first = self.root / "one-worker.3tz"
+        second = self.root / "auto-workers.3tz"
+        scratch = self.root / "scratch"
+        scratch.mkdir()
+        a = rusty_tiles.mesh_to_tileset(source, first, jobs=1)
+        b = rusty_tiles.mesh_to_tileset(source, second, jobs=None, scratch_dir=scratch)
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertEqual(a.report, b.report)
+        self.assertEqual(list(scratch.iterdir()), [])
+        self.assertGreaterEqual(b.diagnostics["leaf_delivery"]["jobs"], 1)
+
+    def test_tiler_python_request_errors_precede_source_io_and_callbacks(self):
+        source = self.root / "missing.glb"
+        output = self.root / "invalid.3tz"
+        output.write_bytes(b"previous")
+        events = []
+        for options in (
+            {"profile": "unknown"}, {"jobs": 0}, {"jobs": -1}, {"jobs": 2**128},
+            {"orientation_xyzw": (0, 0, 0, 1)}, {"scene_offset": (0, 0, 0)},
+            {"anchor": (153, -27, 0), "orientation_xyzw": (0, 0, 0, 2)},
+        ):
+            with self.subTest(options=options):
+                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                    rusty_tiles.mesh_to_tileset(source, output, force=True,
+                                                callback=events.append, **options)
+                self.assertEqual(caught.exception.kind, "invalid_request")
+                self.assertEqual(output.read_bytes(), b"previous")
+                self.assertEqual(events, [])
+        for jobs in (True, False, "auto", 1.0):
+            with self.subTest(jobs=jobs), self.assertRaises(TypeError):
+                rusty_tiles.mesh_to_tileset(source, output, jobs=jobs)
+        for keyword, value in (
+            ("leaf_triangles", 1), ("root_proxy_triangles", 1),
+            ("max_proxy_error_metres", 1), ("source_crs", "auto"),
+            ("texture_format", "jpeg"), ("explicit", True),
+        ):
+            with self.subTest(keyword=keyword), self.assertRaises(TypeError):
+                rusty_tiles.mesh_to_tileset(source, output, **{keyword: value})
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(source, output, callback=42)
+
+    def test_tiler_output_is_3tz_only_and_preserves_existing_entry(self):
+        source = self.root / "missing.glb"
+        for suffix in (".zip", ".3dtiles.zip", ".glb", ""):
+            output = self.root / ("invalid" + suffix)
+            output.write_bytes(b"prior")
+            with self.subTest(suffix=suffix), self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                rusty_tiles.mesh_to_tileset(source, output, force=True)
+            self.assertEqual(caught.exception.kind, "invalid_request")
+            self.assertEqual(output.read_bytes(), b"prior")
+
+    def test_tiler_typed_source_failures_and_conflict_preserve_destination(self):
+        source = self.root / "source.glb"
+        output = self.root / "existing.3tz"
+        output.write_bytes(b"previous")
+        with self.assertRaises(rusty_tiles.TilesIOError) as caught:
+            rusty_tiles.mesh_to_tileset(source, output, force=True, jobs=1)
+        self.assertEqual(caught.exception.kind, "io")
+        source.write_bytes(b"invalid glTF")
+        with self.assertRaises(rusty_tiles.DataError) as caught:
+            rusty_tiles.mesh_to_tileset(source, output, force=True, jobs=1)
+        self.assertEqual(caught.exception.kind, "invalid_input")
+        write_local_mesh(source, extras=True)
+        with self.assertRaises(rusty_tiles.UnsupportedError) as caught:
+            rusty_tiles.mesh_to_tileset(source, output, force=True, jobs=1)
+        self.assertEqual(caught.exception.kind, "unsupported")
+        write_local_mesh(source)
+        with self.assertRaises(rusty_tiles.OutputExistsError) as caught:
+            rusty_tiles.mesh_to_tileset(source, output, jobs=1)
+        self.assertEqual(caught.exception.kind, "output_conflict")
+        self.assertEqual(output.read_bytes(), b"previous")
+        result = rusty_tiles.mesh_to_tileset(source, output, force=True, jobs=1)
+        with zipfile.ZipFile(result.output) as archive:
+            self.assertEqual(result.report, json.loads(archive.read("conversion.json")))
+
+    def test_tiler_callbacks_keep_the_original_winning_exception_before_publication(self):
+        source = self.root / "callback.glb"
+        write_local_mesh(source)
+        observed = []
+        rusty_tiles.mesh_to_tileset(source, self.root / "baseline.3tz", jobs=1,
+                                    callback=observed.append)
+        self.assertTrue(observed)
+        self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in observed))
+        for final in (False, True):
+            for replace in (False, True):
+                output = self.root / f"abort-{final}-{replace}.3tz"
+                if replace:
+                    output.write_bytes(b"original")
+                failure = RuntimeError(f"tiler callback {final}/{replace}")
+
+                def fail(event):
+                    if not final or event.get("phase") == "ready_to_publish":
+                        raise failure
+
+                with self.assertRaises(RuntimeError) as caught:
+                    rusty_tiles.mesh_to_tileset(source, output, jobs=1, force=replace,
+                                                callback=fail)
+                self.assertIs(caught.exception, failure)
+                self.assertEqual(output.read_bytes() if replace else output.exists(),
+                                 b"original" if replace else False)
+        self.assertFalse(any(path.name.startswith(".tiles-") for path in self.root.iterdir()))
+
+    def test_tiler_placement_and_callback_cwd_changes_use_bound_output(self):
+        source = self.root / "placed.glb"
+        write_local_mesh(source)
+        other = self.root / "other"
+        other.mkdir()
+        scratch = self.root / "scratch"
+        scratch.mkdir()
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(self.root)
+
+            def move_cwd(event):
+                os.chdir(other)
+
+            result = rusty_tiles.mesh_to_tileset(
+                Path("placed.glb"), Path("bound.3tz"), jobs=1,
+                scratch_dir=Path("scratch"),
+                anchor=(153, -27, 25), orientation_xyzw=(0, 0, 0, 1 + 1e-13),
+                scene_offset=(10, 2, -5), callback=move_cwd,
+            )
+        finally:
+            os.chdir(original_cwd)
+        self.assertEqual(result.output, (self.root / "bound.3tz").resolve())
+        self.assertFalse((other / "bound.3tz").exists())
+        self.assertEqual(list(scratch.iterdir()), [])
+        placement = result.report["placement"]
+        self.assertEqual(placement["kind"], "wgs84")
+        self.assertEqual(placement["anchor_degrees_metres"], [153, -27, 25])
+        self.assertEqual(placement["orientation_xyzw"], [0, 0, 0, 1])
+        self.assertEqual(placement["scene_offset_metres"], [10, 2, -5])
+        with zipfile.ZipFile(result.output) as archive:
+            transform = json.loads(archive.read("tileset.json"))["root"]["transform"]
+            self.assertEqual(len(transform), 16)
+            self.assertEqual(result.report["root_transform"], transform)
+        self.assertEqual(result.report["coordinates"], "wgs84-ecef")
+
     def test_certified_root_proxy_installed_api(self):
         sys.path.insert(0, str(ROOT / "tests"))
         try:
@@ -646,7 +829,7 @@ class WheelAPI(unittest.TestCase):
         self.assertFalse(importlib.metadata.requires("rusty-tiles"))
         readme = (ROOT / "bindings/python/README.md").read_text()
         example = readme.split("```python\n", 1)[1].split("```", 1)[0]
-        shutil.copy(EXAMPLE, self.root / "example.gltf")
+        write_local_mesh(self.root / "example.glb")
         previous = Path.cwd()
         try:
             os.chdir(self.root)

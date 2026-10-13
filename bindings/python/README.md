@@ -31,17 +31,16 @@ Use CPython 3.10 or newer. Release wheels cover Linux x86_64 and ARM64
 (glibc 2.28+), macOS Intel and Apple Silicon (macOS 15+), and Windows x64.
 The CPython stable ABI lets each wheel work across Python minor versions.
 
-Copy `tests/fixtures/example.gltf` from the repository to your working directory,
-then run this example:
+For an admitted local metre/Y-up static `example.glb`, run:
 
 ```python
 from pathlib import Path
 import rusty_tiles
 
-result = rusty_tiles.mesh_to_3tz(
-    Path("example.gltf"),
+result = rusty_tiles.mesh_to_tileset(
+    Path("example.glb"),
     Path("example.3tz"),
-    cartographic=(153.02, -27.47, 0.0),
+    anchor=(153.02, -27.47, 0.0),
 )
 assert result.archive
 assert rusty_tiles.validate(result.output)["ok"]
@@ -57,14 +56,63 @@ results with required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_local_to_3tz(input, output, ...)` | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
-| `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_local_to_3tz(input, output, ...)` (deprecated) | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
+| `mesh_to_3tz(input, output, ...)` (deprecated) | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
+
+### Streamed local mesh tiler
+
+`mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
+scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+force=False, callback=None)` is the single new public source-mesh operation.
+It runs capture, leaf payloads and implicit hierarchy delivery through one core
+run and publication; leaf directories/manifests are internal. Current output
+has full-detail leaves and empty parents. Certified LOD and proxy baking are
+separate downstream work, with the same public request surface.
+
+It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
+with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
+scene translation. There is no source CRS inference/conversion, projected
+height adjustment, texture-format selector, explicit mode or leaf/proxy tuning.
+All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
+provisional; constants will be calibrated together after coarse levels and
+baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf
+texture exception; JPEG source decoding remains supported.
+
+`jobs=None` means memory-aware auto. A positive integer is a maximum capped by
+cores and the stage's memory admission. Unknown memory uses one worker; a
+mandatory item that cannot fit is still refused. Booleans/nonintegers are
+rejected. `scratch_dir` selects owned working data, while final archive staging
+stays beside output. Output must be `.3tz`. `force=True` allows completed-file
+replacement while preserving the original on precommit failure.
+
+Frozen `TilerResult` exposes resolved `output`, `archive=True`, required `report`
+and `diagnostics` dictionaries and `cleanup_diagnostics`. `report` is the exact
+snake_case semantic `conversion.json` in the archive; `diagnostics` contains
+requested/admitted stage workers, memory/scratch ownership, archive bytes and
+peak held records outside the archive, so jobs and scratch do not change its
+bytes. Placement/coordinate labels and the actual root transform are reported.
+Declared memory accounting is not a measured RSS guarantee. The dictionaries
+are not deeply immutable.
+
+Required callbacks are precommit and share the existing fallible observer
+contract; the original winning Python callback exception is preserved. Normal
+request/source/I/O/unsupported/conflict/resource kinds use the existing typed
+exceptions. Path binding precedes callbacks, including cwd changes. See the
+[guide's error table and Cesium colour limitation](../../docs/MESH.md#reports-and-errors).
+The standard wheel needs no external encoder or system geospatial dependency.
+
+The old `mesh_to_3tz` and `mesh_local_to_3tz` remain temporarily available until
+full tiler acceptance, with their old semantics and parameters documented
+below. Prepare geographic/projected inputs as local metres before migrating;
+use anchor/quaternion/scene offset for placement. Exact wrapping through
+`glb_to_3tz` and sibling `model_to_manifest` remains a separate retained product.
 
 For legacy `mesh_to_3tz`, `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
 `rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh
