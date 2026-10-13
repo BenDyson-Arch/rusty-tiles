@@ -11,7 +11,8 @@ the run aborts (a timeout counts as caught). `clean` must fail nothing. Writes
 OUT_DIR/report.json.
 
 Environment: CARGO_TARGET_DIR (default ~/.cache/rt-target-c), VSA_LOCK (default
-~/.cache/rusty-tiles-cargo-c.lock), VSA_CPUS (default 16-19), VSA_TIMEOUT (default 1800 s).
+~/.cache/rusty-tiles-cargo-c.lock), VSA_CPUS (default 16-19), VSA_JOBS (default 4),
+VSA_TIMEOUT (default 1800 s).
 Scratch for the forced-spill controls goes to TMPDIR; set it away from /tmp.
 """
 import json
@@ -95,6 +96,7 @@ def main(argv):
     lock = os.environ.get("VSA_LOCK", f"{home}/.cache/rusty-tiles-cargo-c.lock")
     cpus = os.environ.get("VSA_CPUS", "16-19")
     timeout = int(os.environ.get("VSA_TIMEOUT", "1800"))
+    jobs = os.environ.get("VSA_JOBS", "4")
     report = []
     for name, edits in MUTANTS:
         if names and name not in names:
@@ -108,7 +110,7 @@ def main(argv):
         try:
             patch = sh(["git", "diff", "--", "src"]).stdout
             cargo = ["nice", "-n", "10", "taskset", "-c", cpus, "cargo", "test", "--locked", "--release",
-                     "--lib", "-j", "4", "--target-dir", target, "--", "--test-threads=2"] + TESTS
+                     "--lib", "-j", jobs, "--target-dir", target, "--", "--test-threads=2"] + TESTS
             try:
                 run = sh(["flock", "-o", lock, "sh", "-c", 'touch src/lib.rs && exec "$@"', "sh"] + cargo,
                          timeout=timeout)
