@@ -899,8 +899,8 @@ pub(super) struct Services<'a> {
     /// Declared per-page workspace limit for internal allocation checks.
     pub memory: u64,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
-    /// Keep every accepted page's pre-encode values for the bake pass.
-    pub retain_preencode: bool,
+    /// Spill every page's pre-encode values for the bake pass (accepted attempts kept).
+    pub preencode: Option<&'a crate::mesh_large::bake_pass::PreencodeStore>,
 }
 
 /// Bytes leased from the memory gate for one page: page assembly, the
@@ -998,6 +998,7 @@ fn class_name(class: Class) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn encode_page(
     services: &Services<'_>,
     layout: &Layout,
@@ -1006,6 +1007,7 @@ fn encode_page(
     profile: Profile,
     depth: u8,
     drop: u32,
+    leaf: u64,
 ) -> Result<EncodedPage, JobError> {
     let captured = services.captured;
     let memory = services.memory;
@@ -1109,29 +1111,35 @@ fn encode_page(
                 )
             },
         )?;
-        if services.retain_preencode {
-            preencode = Some(super::prepared::PreencodePage {
-                page: page_id as u32,
-                slot: slot_name(b.slot).to_owned(),
-                class: class_name(class).to_owned(),
-                width: page.width,
-                height: page.height,
-                levels: chain
-                    .page
-                    .levels
-                    .into_iter()
-                    .map(|l| super::prepared::PreencodeLevel {
-                        width: l.width,
-                        height: l.height,
-                        rgba: l.rgba,
-                    })
-                    .collect(),
-                support: None,
-                min_filter: b.sampler.min_filter,
-                mag_filter: b.sampler.mag_filter,
-                density_drop: drop,
-                source_mips: true,
-            });
+        if let Some(store) = services.preencode {
+            preencode = Some(
+                store.write_page(
+                    leaf,
+                    drop,
+                    &super::prepared::PreencodePage {
+                        page: page_id as u32,
+                        slot: slot_name(b.slot).to_owned(),
+                        class: class_name(class).to_owned(),
+                        width: page.width,
+                        height: page.height,
+                        levels: chain
+                            .page
+                            .levels
+                            .into_iter()
+                            .map(|l| super::prepared::PreencodeLevel {
+                                width: l.width,
+                                height: l.height,
+                                rgba: l.rgba,
+                            })
+                            .collect(),
+                        support: None,
+                        min_filter: b.sampler.min_filter,
+                        mag_filter: b.sampler.mag_filter,
+                        density_drop: drop,
+                        source_mips: true,
+                    },
+                )?,
+            );
         }
         delivered
     } else {
@@ -1221,24 +1229,28 @@ fn encode_page(
             mask,
         )?;
         drop_mask_borrow(mask);
-        if services.retain_preencode {
-            preencode = Some(super::prepared::PreencodePage {
-                page: page_id as u32,
-                slot: slot_name(page.slot).to_owned(),
-                class: class_name(class(page.slot)).to_owned(),
-                width: page.width,
-                height: page.height,
-                levels: vec![super::prepared::PreencodeLevel {
+        if let Some(store) = services.preencode {
+            preencode = Some(store.write_page(
+                leaf,
+                drop,
+                &super::prepared::PreencodePage {
+                    page: page_id as u32,
+                    slot: slot_name(page.slot).to_owned(),
+                    class: class_name(class(page.slot)).to_owned(),
                     width: page.width,
                     height: page.height,
-                    rgba,
-                }],
-                support: Some(support),
-                min_filter: page.sampler.min_filter,
-                mag_filter: page.sampler.mag_filter,
-                density_drop: drop,
-                source_mips: false,
-            });
+                    levels: vec![super::prepared::PreencodeLevel {
+                        width: page.width,
+                        height: page.height,
+                        rgba,
+                    }],
+                    support: Some(support),
+                    min_filter: page.sampler.min_filter,
+                    mag_filter: page.sampler.mag_filter,
+                    density_drop: drop,
+                    source_mips: false,
+                },
+            )?);
         }
         delivered
     };
@@ -1265,6 +1277,7 @@ pub(super) fn prepare(
     profile: Profile,
     depth: u8,
     drop: u32,
+    leaf: u64,
 ) -> Result<(PreparedAtlas, Vec<Value>), PrepareError> {
     let captured = services.captured;
     let resources = AtlasResources {
@@ -1282,7 +1295,9 @@ pub(super) fn prepare(
         .pages
         .par_iter()
         .enumerate()
-        .map(|(page_id, page)| encode_page(services, &layout, page, page_id, profile, depth, drop))
+        .map(|(page_id, page)| {
+            encode_page(services, &layout, page, page_id, profile, depth, drop, leaf)
+        })
         .collect();
     let Layout {
         primitives,

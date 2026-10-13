@@ -433,6 +433,7 @@ fn encode_leaf(
                     config.profile,
                     node.depth() as u8,
                     density_drop,
+                    index,
                 ),
                 |atlas| {
                     let leaf = timing::time(Stage::GlbWrite, || {
@@ -445,7 +446,7 @@ fn encode_leaf(
                     })?;
                     // Only the accepted density attempt reaches here.
                     if let Some(store) = preencode {
-                        store.write_leaf(index, atlas)?;
+                        store.write_leaf(index, density_drop, atlas)?;
                     }
                     Ok(leaf)
                 },
@@ -487,21 +488,26 @@ fn produce(
 ) -> Result<LeafOutputReport, JobError> {
     use super::super::{bake_pass, lod::handoff::HandoffSink};
     // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
-    // tile packets, each charged against half the scratch volume's free space.
+    // tile packets.
     let bake_dir = captured.scratch.path().join("bake");
-    let allowance = crate::spill::inspect_volume(captured.scratch.path())
-        .map(|v| v.available_bytes / 2)
-        .unwrap_or(0);
-    let preencode = match baker {
-        Some(_) => Some(bake_pass::PreencodeStore::new(
-            bake_dir.join("preencode"),
-            allowance,
-        )?),
-        None => None,
-    };
-    let handoff = match baker {
-        Some(_) => Some(HandoffSink::new(bake_dir.join("handoff"), allowance)?),
-        None => None,
+    // One allowance for both stores: half the scratch volume's free space, measured before
+    // the leaves are written (a failed probe is an error, never an allowance of zero). Both
+    // stores fill during H8 and H17 and drain only as the baker consumes them.
+    let (preencode, handoff) = match baker {
+        Some(_) => {
+            let volume = crate::spill::inspect_volume(captured.scratch.path())?;
+            let budget = std::sync::Arc::new(super::super::lod::handoff::ScratchBudget::new(
+                volume.available_bytes / 2,
+            ));
+            (
+                Some(bake_pass::PreencodeStore::new(
+                    bake_dir.join("preencode"),
+                    budget.clone(),
+                )?),
+                Some(HandoffSink::new(bake_dir.join("handoff"), budget)?),
+            )
+        }
+        None => (None, None),
     };
     let leaves = path.join("leaves");
     fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
@@ -550,7 +556,7 @@ fn produce(
         gate: &gate,
         memory: stage.page_bytes,
         check: &leaf_check,
-        retain_preencode: preencode.is_some(),
+        preencode: preencode.as_ref(),
     };
     let preencode_ref = preencode.as_ref();
     let mut nodes = captured.tree.nodes.reader()?;

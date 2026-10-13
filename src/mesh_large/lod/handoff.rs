@@ -437,22 +437,72 @@ impl FrozenNode {
     }
 }
 
+/// One scratch allowance shared by every bake-pass store (frozen packets and retained
+/// pre-encode pages), so together they never claim more than it.
+#[derive(Debug)]
+pub(in crate::mesh_large) struct ScratchBudget {
+    limit: u64,
+    live: AtomicU64,
+    peak: AtomicU64,
+}
+
+impl ScratchBudget {
+    pub(in crate::mesh_large) fn new(limit: u64) -> Self {
+        Self {
+            limit,
+            live: AtomicU64::new(0),
+            peak: AtomicU64::new(0),
+        }
+    }
+    /// Charge `size` bytes for `what`; `ResourceLimit` beyond the allowance (nothing kept).
+    pub(in crate::mesh_large) fn charge(&self, size: u64, what: &str) -> Result<(), JobError> {
+        let live = self.live.fetch_add(size, Ordering::Relaxed) + size;
+        if live > self.limit {
+            self.live.fetch_sub(size, Ordering::Relaxed);
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "{what} exceeds the bake pass's {} byte scratch allowance",
+                    self.limit
+                ),
+            ));
+        }
+        self.peak.fetch_max(live, Ordering::Relaxed);
+        Ok(())
+    }
+    pub(in crate::mesh_large) fn refund(&self, size: u64) {
+        self.live.fetch_sub(size, Ordering::Relaxed);
+    }
+    /// `(live, peak, limit)` bytes.
+    pub(in crate::mesh_large) fn usage(&self) -> (u64, u64, u64) {
+        (
+            self.live.load(Ordering::Relaxed),
+            self.peak.load(Ordering::Relaxed),
+            self.limit,
+        )
+    }
+}
+
 /// Where frozen tiles go: one file per node identity under an owned scratch folder, with
-/// every byte charged against `limit` and the volume preflighted before each write.
+/// every byte charged against the shared [`ScratchBudget`] and the volume preflighted
+/// before each write.
 pub(in crate::mesh_large) struct HandoffSink {
     dir: PathBuf,
-    limit: u64,
+    budget: std::sync::Arc<ScratchBudget>,
     live: AtomicU64,
     peak: AtomicU64,
     written: AtomicU64,
 }
 
 impl HandoffSink {
-    pub(in crate::mesh_large) fn new(dir: PathBuf, limit: u64) -> Result<Self, JobError> {
+    pub(in crate::mesh_large) fn new(
+        dir: PathBuf,
+        budget: std::sync::Arc<ScratchBudget>,
+    ) -> Result<Self, JobError> {
         fs::create_dir_all(&dir).map_err(|e| JobError::io("create bake handoff", &dir, e))?;
         Ok(Self {
             dir,
-            limit,
+            budget,
             live: AtomicU64::new(0),
             peak: AtomicU64::new(0),
             written: AtomicU64::new(0),
@@ -475,17 +525,8 @@ impl HandoffSink {
         node.validate()?;
         let bytes = node.encode()?;
         let size = bytes.len() as u64;
+        self.budget.charge(size, "the bake handoff")?;
         let live = self.live.fetch_add(size, Ordering::Relaxed) + size;
-        if live > self.limit {
-            self.live.fetch_sub(size, Ordering::Relaxed);
-            return Err(JobError::new(
-                JobErrorKind::ResourceLimit,
-                format!(
-                    "bake handoff exceeds its {} byte scratch allowance",
-                    self.limit
-                ),
-            ));
-        }
         self.peak.fetch_max(live, Ordering::Relaxed);
         self.written.fetch_add(1, Ordering::Relaxed);
         let path = self.path(node.identity.first, node.identity.depth);
@@ -519,6 +560,7 @@ impl HandoffSink {
             .len();
         fs::remove_file(&path).map_err(|e| JobError::io("remove bake handoff", &path, e))?;
         self.live.fetch_sub(size, Ordering::Relaxed);
+        self.budget.refund(size);
         Ok(())
     }
 
