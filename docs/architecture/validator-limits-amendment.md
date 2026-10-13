@@ -97,7 +97,8 @@ for a real file; the check stays).
 replaces the rule entirely (it is neither raised to the floor nor to `⌊S·p/q⌋`). A Class B
 override sets the cap. Overrides never change a Class A value.
 
-**VS-C-4. Report.** A successful report gains:
+**VS-C-4. Report.** A successful report (the CLI's `--json` object, Python's dict, Rust's
+`ValidationReport::summary_json`) gains two top-level keys and one `limits` key:
 
 1. `storedBytes`: S (u64).
 2. `limits`: the same twenty keys as before plus `liveDocumentBytes`. Class A values are the
@@ -143,12 +144,18 @@ T3 refusals carry `LimitExceeded { limit, value, observed, derivation }`:
 - `limit`: the camelCase key;
 - `value`: the effective value of that key;
 - `observed`: the total the refused charge would have reached (saturating at u64::MAX), or for
-  a cap the observed quantity (file length, N, directory bytes, the running stored sum);
+  a cap the observed quantity (file length, N, directory bytes, the running stored sum). For
+  the accessor planner below it is the elements already charged plus the payload's planned
+  total at the refusal (at a count-token refusal, a lower bound);
 - `derivation`: `"floor"`, `"scaled"` or `"explicit"` for Class C, `"cap"` for Class B.
 
 The message keeps its old text and gains the suffix ` (limit <key>=<value>, <derivation>)`, for
-example `hierarchy exceeds 262144 traversal tasks (limit hierarchyVisits=262144, floor)`. The
-CLI JSON error gains `"limit": {"limit": …, "value": …, "observed": …, "derivation": …}`; Python
+example `hierarchy exceeds 262144 traversal tasks (limit hierarchyVisits=262144, floor)`. Two
+messages that named the old fixed values change: "member reads exceed 2 GiB work limit" is now
+"member reads exceed work limit" and "payload elements exceed 16 million" is now "payload
+elements exceed archive budget". The CLI JSON error (`{"ok": false, "error": {"code":
+"resource_limit", "message": …}, "exitCode": 3}`) gains
+`error.limit = {"limit": …, "value": …, "observed": …, "derivation": …}`; Python
 `ResourceLimitError.limit` is the same dict (absent attribute value `None` for other resource
 limits). The structured sites are every validator-owned charge of the eleven keys: the hash
 pass, member reads, reference visits, traversal tasks, payload elements, and the three I1

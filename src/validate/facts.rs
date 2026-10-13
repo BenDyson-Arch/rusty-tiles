@@ -319,7 +319,8 @@ mod tests {
 
     #[test]
     fn default_profile_keeps_the_default_entry_limit_resident() {
-        let limit = crate::validate::ValidationLimits::default().archive_entries;
+        // The former default entry cap (2^19), now opt-in (VS-C-2).
+        let limit = 1 << 19;
         assert!(
             FactStore::new(limit, &CatalogConfig::DEFAULT)
                 .unwrap()

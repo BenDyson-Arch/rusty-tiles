@@ -378,6 +378,11 @@ fn codec_error(error: CodecError, output: &Path) -> JobError {
             invalid(JobErrorKind::InvalidInput, "package missing tileset.json")
         }
         CodecError::Invalid(message) => invalid(JobErrorKind::InvalidInput, message),
+        CodecError::Scratch(refusal) => JobError::io(
+            "archive catalog scratch",
+            output,
+            std::io::Error::other(refusal.to_string()),
+        ),
     }
 }
 

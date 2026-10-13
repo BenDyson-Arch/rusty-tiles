@@ -11,6 +11,9 @@ use crate::content_integrity::{
 mod catalog_controls;
 mod containment;
 mod facts;
+mod limits;
+#[cfg(test)]
+mod limits_controls;
 #[cfg(test)]
 mod memo_controls;
 mod rows;
@@ -20,10 +23,15 @@ mod schema;
 #[cfg(test)]
 mod traversal_controls;
 mod types;
+pub use limits::{
+    BudgetRule, Derivation, LimitDerivation, LimitExceeded, LimitKey, LimitRefusal,
+    UnknownLimitKey, LIMIT_MODEL,
+};
+use limits::{LimitPlan, Sources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    PayloadReport, ScratchReport, ValidationFailure, ValidationLimits, ValidationReport,
-    ValidationRequest,
+    PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure, ValidationLimits,
+    ValidationReport, ValidationRequest,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -62,7 +70,7 @@ fn format_error(error: FormatError) -> Error {
     match error {
         FormatError::InvalidInput(message) => Error::InvalidInput(message),
         FormatError::Unsupported(message) => Error::Unsupported(message),
-        FormatError::ResourceLimit(message) => Error::ResourceLimit(message),
+        FormatError::ResourceLimit(message) => Error::limit(message),
     }
 }
 fn payload_error(error: PayloadError<Error>) -> Error {
@@ -143,7 +151,21 @@ fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFai
     match error {
         ReadError::InvalidInput(message) => Error::InvalidInput(message),
         ReadError::Unsupported(message) => Error::Unsupported(message),
-        ReadError::ResourceLimit(message) => Error::ResourceLimit(message),
+        ReadError::ResourceLimit(message) => Error::limit(message),
+        ReadError::Cap {
+            key,
+            message,
+            value,
+            observed,
+        } => Error::ResourceLimit(LimitRefusal::exceeded(
+            message,
+            LimitExceeded {
+                limit: key,
+                value,
+                observed,
+                derivation: limits::Derivation::Cap,
+            },
+        )),
         ReadError::Io(error) => Error::Io(error),
         ReadError::MissingMember(name) => invalid(format!("missing archive member: {name}")),
         ReadError::Scratch(error) => spill_failure(error),
@@ -153,14 +175,127 @@ fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFai
 /// the archive.
 fn spill_failure(error: crate::spill::SpillError) -> Error {
     use crate::spill::SpillError;
+    let error = match ScratchRefusal::from_spill(error) {
+        Ok(refusal) => return Error::Scratch(refusal),
+        Err(error) => error,
+    };
     let message = format!("validation scratch: {error}");
     match error {
-        SpillError::Io { source, .. } => Error::Io(std::io::Error::new(source.kind(), message)),
-        SpillError::InsufficientSpace(_) => Error::Io(std::io::Error::other(message)),
         SpillError::Overflow => Error::limit(message),
-        SpillError::CorruptRun { .. } | SpillError::Poisoned | SpillError::InvalidConfig(_) => {
-            Error::InvalidState(message)
+        _ => Error::InvalidState(message),
+    }
+}
+/// Cooperative cancellation and progress of one inspection (VS-C-6): the control is checked
+/// at every step of a phase, and an event is emitted at the phase start and every
+/// `PROGRESS_STEP` steps. Without a control (`inspect`) both are no-ops.
+struct Progress<'a> {
+    attempt: Option<&'a crate::runtime::Attempt>,
+    phase: &'static str,
+    done: u64,
+    total: Option<u64>,
+}
+const PROGRESS_STEP: u64 = 1024;
+#[cfg(test)]
+thread_local! {
+    /// The phase and step at which the last run control check failed (VS-C-6 controls).
+    static STOPPED: std::cell::Cell<Option<(&'static str, u64)>> = const { std::cell::Cell::new(None) };
+    /// Cancels this handle when a step reaches this phase and count, between events.
+    static CANCEL_AT: std::cell::RefCell<Option<(&'static str, u64, crate::CancellationHandle)>> =
+        const { std::cell::RefCell::new(None) };
+}
+fn run_failure(error: crate::JobError) -> Error {
+    match error.kind() {
+        crate::JobErrorKind::Cancelled => Error::Cancelled,
+        crate::JobErrorKind::ObserverFailure => Error::Observer(error.message().to_owned()),
+        _ => Error::InvalidState(error.message().to_owned()),
+    }
+}
+impl<'a> Progress<'a> {
+    fn new(attempt: Option<&'a crate::runtime::Attempt>) -> Self {
+        Self {
+            attempt,
+            phase: "",
+            done: 0,
+            total: None,
         }
+    }
+    /// Starts `phase`: checks the control and emits its first event.
+    fn phase(&mut self, phase: &'static str, total: Option<u64>) -> Result<(), Error> {
+        (self.phase, self.done, self.total) = (phase, 0, total);
+        self.emit()
+    }
+    /// One unit of the current phase, before its work.
+    fn step(&mut self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        self.done += 1;
+        #[cfg(test)]
+        CANCEL_AT.with(|cancel| {
+            if let Some((phase, done, handle)) = &*cancel.borrow() {
+                if (*phase, *done) == (self.phase, self.done) {
+                    handle.cancel();
+                }
+            }
+        });
+        if self.done.is_multiple_of(PROGRESS_STEP) {
+            self.emit()
+        } else {
+            attempt.check().map_err(|error| self.stopped(error))
+        }
+    }
+    fn emit(&self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        attempt.check().map_err(|error| self.stopped(error))?;
+        attempt
+            .emit(&crate::RunEvent::Progress {
+                phase: self.phase,
+                done: self.done,
+                total: self.total,
+            })
+            .map_err(|error| self.stopped(error))
+    }
+    fn stopped(&self, error: crate::JobError) -> Error {
+        #[cfg(test)]
+        STOPPED.with(|stopped| stopped.set(Some((self.phase, self.done))));
+        run_failure(error)
+    }
+}
+/// One configurable limit of this validation: its effective value and derivation.
+#[derive(Clone, Copy, Debug)]
+struct Budget {
+    key: LimitKey,
+    value: u64,
+    source: limits::Derivation,
+}
+impl Budget {
+    /// `used + add`, refused over the budget with the structured cause (VS-C-5 T3).
+    fn charge(self, used: u64, add: u64, message: impl FnOnce() -> String) -> Result<u64, Error> {
+        match used.checked_add(add).filter(|&n| n <= self.value) {
+            Some(total) => Ok(total),
+            None => Err(self.refuse(used.saturating_add(add), message())),
+        }
+    }
+    fn refuse(self, observed: u64, message: String) -> Error {
+        Error::ResourceLimit(LimitRefusal::exceeded(
+            message,
+            LimitExceeded {
+                limit: self.key,
+                value: self.value,
+                observed,
+                derivation: self.source,
+            },
+        ))
+    }
+}
+/// The effective budget `key` of `limits`, derived as `sources` says.
+fn budget(limits: &ValidationLimits, sources: &Sources, key: LimitKey) -> Budget {
+    Budget {
+        key,
+        value: limits.get(key).unwrap_or(u64::MAX),
+        source: sources.of(key),
     }
 }
 /// One bit per catalog rank: whether a reference reached the member.
@@ -185,7 +320,7 @@ fn read_member(
     archive: &mut Archive,
     name: &str,
     bytes_read: &mut u64,
-    limits: &ValidationLimits,
+    reads: Budget,
     maximum: u64,
 ) -> Result<Vec<u8>, Error> {
     let size = archive.member(name).map_err(archive_admission_error)?.size;
@@ -194,10 +329,9 @@ fn read_member(
             "member exceeds admitted byte limit: {name}"
         )));
     }
-    *bytes_read = bytes_read
-        .checked_add(size)
-        .filter(|&n| n <= limits.total_bytes_read)
-        .ok_or_else(|| Error::limit("member reads exceed 2 GiB work limit"))?;
+    *bytes_read = reads.charge(*bytes_read, size, || {
+        "member reads exceed work limit".into()
+    })?;
     archive
         .read_member(name, maximum)
         .map_err(archive_admission_error)
@@ -827,9 +961,15 @@ struct FactConsumer<'a> {
     quaternion_window: bool,
     /// Maximum path `s_step` over every instance, with or without POSITION.
     s_inst_all: u32,
+    /// The planned elements of a plan refused against the archive's remaining
+    /// `totalPayloadElements` (VS-C-5).
+    remainder_refused: Option<u64>,
 }
 impl SceneConsumer for FactConsumer<'_> {
     type Error = Error;
+    fn remainder_refused(&mut self, planned: u64) {
+        self.remainder_refused = Some(planned);
+    }
     fn instances_only(&self) -> bool {
         false
     }
@@ -975,18 +1115,24 @@ struct ArchiveResources<'a> {
     /// Members resolved as I1 subtrees, by catalog rank (OD-7, A-I1-3).
     subtrees: Bits,
     limits: ValidationLimits,
+    /// How each configurable key of `limits` was derived (VS-C-5).
+    sources: Sources,
     content_limits: PayloadLimits,
     bytes_read: u64,
     reference_visits: u64,
 }
 impl ArchiveResources<'_> {
+    fn budget(&self, key: LimitKey) -> Budget {
+        budget(&self.limits, &self.sources, key)
+    }
     /// A JSON member and its live-document charge, `raw bytes + 128 · value nodes` (VS-B-7).
     fn read_json(&mut self, name: &str) -> Result<(Value, u64), Error> {
+        let reads = self.budget(LimitKey::TotalBytesRead);
         let bytes = read_member(
             self.archive,
             name,
             &mut self.bytes_read,
-            &self.limits,
+            reads,
             self.limits.json_bytes,
         )?;
         let (value, nodes) =
@@ -995,16 +1141,10 @@ impl ArchiveResources<'_> {
         Ok((value, charge))
     }
     fn reference(&mut self, name: String) -> Result<(), Error> {
-        self.reference_visits = self
-            .reference_visits
-            .checked_add(1)
-            .filter(|&n| n <= self.limits.references)
-            .ok_or_else(|| {
-                Error::limit(format!(
-                    "archive exceeds {} reference visits",
-                    self.limits.references
-                ))
-            })?;
+        let references = self.budget(LimitKey::References);
+        self.reference_visits = references.charge(self.reference_visits, 1, || {
+            format!("archive exceeds {} reference visits", references.value)
+        })?;
         self.mark(&name)
     }
     /// Records use of an existing member; a missing one is InvalidInput.
@@ -1086,6 +1226,8 @@ struct Check<'a> {
     elements: u64,
     /// Report rows of first-inspected payloads, in inspection order until the report.
     rows: rows::RowSink<'a>,
+    /// Cancellation and progress (VS-C-6).
+    progress: Progress<'a>,
     /// Per-URI facts by rank: the C2 facts and vertex count of every inspected payload.
     facts: FactStore,
     /// The catalog's scratch, for a spilled facts store.
@@ -1310,11 +1452,12 @@ impl Check<'_> {
         rank: u64,
         bytes_before: u64,
     ) -> Result<Stored, Error> {
+        let reads = self.resources.budget(LimitKey::TotalBytesRead);
         let bytes = read_member(
             self.resources.archive,
             name,
             &mut self.resources.bytes_read,
-            &self.resources.limits,
+            reads,
             self.resources.limits.member_bytes,
         )?;
         // L2: legacy magic in the buffer just read wins over any other suffix.
@@ -1334,6 +1477,7 @@ impl Check<'_> {
             max_depth: 0,
             quaternion_window: false,
             s_inst_all: 0,
+            remainder_refused: None,
         };
         let resources = &mut self.resources;
         let facts = payload::inspect_scene(
@@ -1344,17 +1488,29 @@ impl Check<'_> {
             |value, maximum| {
                 let resource = uri(name, value)?;
                 resources.reference(resource.clone())?;
+                let reads = resources.budget(LimitKey::TotalBytesRead);
                 read_member(
                     resources.archive,
                     &resource,
                     &mut resources.bytes_read,
-                    &resources.limits,
+                    reads,
                     maximum as u64,
                 )
             },
             &mut consumer,
         )
-        .map_err(scene_error)?;
+        .map_err(|error| match (error, consumer.remainder_refused) {
+            (
+                payload::SceneError::Payload(PayloadError::Format(FormatError::ResourceLimit(
+                    message,
+                ))),
+                Some(planned),
+            ) => self
+                .resources
+                .budget(LimitKey::TotalPayloadElements)
+                .refuse(self.elements.saturating_add(planned), message),
+            (error, _) => scene_error(error),
+        })?;
         drop(bytes);
         let mut exclusions = content_reasons(&facts.exclusions);
         if consumer.quaternion_window {
@@ -1390,10 +1546,11 @@ impl Check<'_> {
         #[cfg(test)]
         try_push(&mut self.uri_work, (name.to_owned(), uri_facts))?;
         self.elements = self
-            .elements
-            .checked_add(facts.elements_checked)
-            .filter(|&n| n <= self.resources.limits.total_payload_elements)
-            .ok_or_else(|| Error::limit("payload elements exceed 16 million"))?;
+            .resources
+            .budget(LimitKey::TotalPayloadElements)
+            .charge(self.elements, facts.elements_checked, || {
+                "payload elements exceed archive budget".into()
+            })?;
         if let Some(value) = facts.schema_uri.as_deref() {
             self.schema_uri(name, value)?;
         }
@@ -1499,6 +1656,7 @@ impl Check<'_> {
             refine: None,
         }];
         while let Some(task) = pending.pop() {
+            self.progress.step()?;
             if let ValidationTask::Reference {
                 tile,
                 content,
@@ -1523,16 +1681,10 @@ impl Check<'_> {
                     continue;
                 }
             }
-            self.task_visits = self
-                .task_visits
-                .checked_add(1)
-                .filter(|&n| n <= self.resources.limits.hierarchy_visits)
-                .ok_or_else(|| {
-                    Error::limit(format!(
-                        "hierarchy exceeds {} traversal tasks",
-                        self.resources.limits.hierarchy_visits
-                    ))
-                })?;
+            let visits = self.resources.budget(LimitKey::HierarchyVisits);
+            self.task_visits = visits.charge(self.task_visits, 1, || {
+                format!("hierarchy exceeds {} traversal tasks", visits.value)
+            })?;
             match task {
                 ValidationTask::Tileset {
                     name,
@@ -2283,6 +2435,30 @@ impl Check<'_> {
     /// and report-level budgets. C2 (slice 3 §4 steps 3-4): each visited tile
     /// is a `TileFact` whose parent is R for I_0 and its path parent otherwise,
     /// and each emitted content is a C2 reference, in walk order.
+    /// An I1 failure; a refused reservation of a validation budget gets its structured cause
+    /// (VS-C-5 T3). The counters were synchronized after the refused step, unchanged by it.
+    fn implicit_refusal(&mut self, error: ImplicitError<Error>) -> Error {
+        use crate::content_integrity::implicit::Reservation;
+        let error = implicit_error(error);
+        match (self.implicit.refused.take(), error) {
+            (Some((reservation, amount)), Error::ResourceLimit(refusal))
+                if refusal.limit.is_none() =>
+            {
+                let (key, used) = match reservation {
+                    Reservation::Scan => (LimitKey::TotalBytesRead, self.resources.bytes_read),
+                    Reservation::Visits => (LimitKey::HierarchyVisits, self.task_visits),
+                    Reservation::References => {
+                        (LimitKey::References, self.resources.reference_visits)
+                    }
+                };
+                let observed = u64::try_from(u128::from(used) + amount).unwrap_or(u64::MAX);
+                self.resources
+                    .budget(key)
+                    .refuse(observed, refusal.message().to_owned())
+            }
+            (_, error) => error,
+        }
+    }
     fn walk_implicit(&mut self, root: &ImplicitRoot<'_>, r: ImplicitParent) -> Result<(), Error> {
         self.implicit_roots += 1;
         let mut walk = root.walk();
@@ -2290,6 +2466,7 @@ impl Check<'_> {
         // with its C1 volume, its error and its C2 path position.
         let mut path: Vec<(Volume, f64, usize)> = Vec::new();
         loop {
+            self.progress.step()?;
             // Counter sync around every `Walk::next` (owner charging protocol).
             let limits = &self.resources.limits;
             self.implicit.visits_remaining = remaining(limits.hierarchy_visits, self.task_visits)?;
@@ -2297,6 +2474,7 @@ impl Check<'_> {
                 remaining(limits.references, self.resources.reference_visits)?;
             self.implicit.scan_remaining =
                 remaining(limits.total_bytes_read, self.resources.bytes_read)?;
+            self.implicit.refused = None;
             let resources = &mut self.resources;
             let next = walk.next(
                 &mut self.implicit,
@@ -2310,11 +2488,12 @@ impl Check<'_> {
                     };
                     resources.reference(member.clone())?;
                     let maximum = maximum.min(resources.limits.member_bytes);
+                    let reads = resources.budget(LimitKey::TotalBytesRead);
                     read_member(
                         resources.archive,
                         &member,
                         &mut resources.bytes_read,
-                        &resources.limits,
+                        reads,
                         maximum,
                     )
                 },
@@ -2323,7 +2502,7 @@ impl Check<'_> {
             self.task_visits = limits.hierarchy_visits - self.implicit.visits_remaining;
             self.resources.reference_visits = limits.references - self.implicit.refs_remaining;
             self.resources.bytes_read = limits.total_bytes_read - self.implicit.scan_remaining;
-            let Some(tile) = next.map_err(implicit_error)? else {
+            let Some(tile) = next.map_err(|error| self.implicit_refusal(error))? else {
                 break;
             };
             let level = tile.level as usize;
@@ -2563,8 +2742,23 @@ fn open_archive(path: &Path) -> Result<File, Error> {
 /// Success certifies the named checks, not uninspected scene/source semantics.
 /// The amplification budgets scale with the archive's stored bytes (VS-B-2).
 pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
-    inspect_facts(request, Budgets::Scaled(ValidationLimits::default()))
-        .map(|inspection| inspection.report)
+    let budgets = Budgets::Plan(request.plan().clone());
+    inspect_facts(request, budgets).map(|inspection| inspection.report)
+}
+
+/// [`inspect`] under a run control (VS-C-6): cancellation through its handle is honoured at
+/// the next charge site, and its observer receives `validate.hash`, `validate.traverse` and
+/// `validate.rows` progress events. An observer error aborts the validation. The control is
+/// claimed once and cannot be reused.
+pub fn inspect_with(
+    request: ValidationRequest,
+    control: &crate::RunControl,
+) -> Result<ValidationReport, Error> {
+    let attempt = control
+        .begin()
+        .map_err(|failure| run_failure(failure.error))?;
+    let budgets = Budgets::Plan(request.plan().clone());
+    inspect_run(request, budgets, Some(&attempt)).map(|inspection| inspection.report)
 }
 
 // C1 selects its profile above. Explicit limits also permit bounded internal
@@ -2577,27 +2771,32 @@ pub(crate) fn inspect_selected(
     inspect_facts(request, Budgets::Absolute(limits)).map(|inspection| inspection.report)
 }
 
-/// How the limits of one validation are selected, once at the operation boundary (VS-B-2).
+/// How the limits of one validation are selected, once at the operation boundary (VS-C-1).
 #[derive(Clone, Debug)]
 pub(crate) enum Budgets {
-    /// Every limit exactly as given (the in-crate controls; VS-C's explicit overrides).
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Every limit exactly as given, Class A included (the in-crate controls).
+    #[cfg(test)]
     Absolute(ValidationLimits),
-    /// The seven amplification budgets at `max(given, κ·S)`; every other limit as given.
-    Scaled(ValidationLimits),
+    /// The request's overrides over the model: caps as given, budgets explicit or
+    /// `max(floor, ⌊S·p/q⌋)`, per-item limits fixed.
+    Plan(LimitPlan),
 }
 impl Budgets {
-    /// The limits before the catalog exists: per-item and volume limits only are read.
-    fn admission(&self) -> &ValidationLimits {
+    /// The limits before the catalog exists: per-item limits and caps only are read.
+    fn admission(&self) -> ValidationLimits {
         match self {
-            Self::Absolute(limits) | Self::Scaled(limits) => limits,
+            #[cfg(test)]
+            Self::Absolute(limits) => limits.clone(),
+            Self::Plan(plan) => plan.admission(),
         }
     }
-    /// The effective limits for `stored_bytes` admitted stored bytes.
-    fn resolve(self, stored_bytes: u64) -> ValidationLimits {
+    /// The effective limits for `stored_bytes` admitted stored bytes, their derivation and
+    /// the source of each configurable key.
+    fn resolve(self, stored_bytes: u64) -> (ValidationLimits, LimitDerivation, Sources) {
         match self {
-            Self::Absolute(limits) => limits,
-            Self::Scaled(floors) => floors.scaled(stored_bytes),
+            #[cfg(test)]
+            Self::Absolute(limits) => (limits, limits::absolute_derivation(), Sources::absolute()),
+            Self::Plan(plan) => plan.resolve(stored_bytes),
         }
     }
 }
@@ -2715,16 +2914,41 @@ struct Inspection {
     /// `task_visits`, `reference_visits` and `bytes_read` at the end.
     #[cfg(test)]
     counters: [u64; 3],
+    /// Payload elements charged to `totalPayloadElements` at the end.
+    #[cfg(test)]
+    elements: u64,
     #[cfg(test)]
     implicit: Vec<ImplicitTileFact>,
 }
 
 fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspection, Error> {
+    inspect_run(request, budgets, None)
+}
+
+fn inspect_run(
+    request: ValidationRequest,
+    budgets: Budgets,
+    attempt: Option<&crate::runtime::Attempt>,
+) -> Result<Inspection, Error> {
+    let mut progress = Progress::new(attempt);
+    // VS-C-7: an explicit scratch directory is checked before the input is opened.
+    let placement = match request.scratch() {
+        Some(dir) if dir.is_dir() => crate::spill::Placement::In(dir.to_owned()),
+        Some(dir) => {
+            return Err(Error::InvalidRequest(format!(
+                "scratch directory does not exist or is not a directory: {}",
+                dir.display()
+            )))
+        }
+        // A spilled catalog prefers disk-backed scratch; memory-backed scratch is used only
+        // as a last resort, and the report then states it (`scratch.memoryBacked`).
+        None => crate::spill::Placement::disk(true),
+    };
     let path = request.input();
     let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
-    let limits = budgets.admission().clone();
+    let limits = budgets.admission();
     let content_limits = content_limits(&limits)?;
     let archive_limits = crate::archive3tz::ReadLimits {
         source_archive_bytes: limits.source_archive_bytes,
@@ -2733,26 +2957,28 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
         member_bytes: limits.member_bytes,
         archive_stored_bytes: limits.archive_stored_bytes,
     };
-    // A spilled catalog prefers disk-backed scratch; memory-backed scratch is used only
-    // as a last resort, and the report then states it (`scratch.memoryBacked`).
     let mut archive = Archive::new_with(
         source.try_clone()?,
         before.len(),
         &archive_limits,
         crate::archive3tz::CatalogConfig::selected(),
-        crate::spill::Placement::disk(true),
+        placement,
     )
     .map_err(archive_admission_error)?;
-    // VS-B-2: S is fixed by the admitted catalog before any budgeted work.
-    let limits = budgets.resolve(archive.stored_bytes());
+    // VS-C-1: S is fixed by the admitted catalog before any budgeted work.
+    let stored_bytes = archive.stored_bytes();
+    let (limits, limit_derivation, sources) = budgets.resolve(stored_bytes);
+    let reads = budget(&limits, &sources, LimitKey::TotalBytesRead);
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
     let mut bytes_read = archive.index_read_bytes();
     // The hash pass stays in central-directory order, so its first failure is unchanged.
     // Only the `vector-build.json` digest is kept.
     let mut vector_build = None;
+    progress.phase("validate.hash", Some(archive.len()))?;
     let mut directory = archive.directory().map_err(archive_admission_error)?;
     while let Some(member) = directory.next_entry().map_err(spill_failure)? {
+        progress.step()?;
         let name = member.name;
         if name.split('/').any(|v| matches!(v, "" | "." | ".."))
             || name.starts_with('/')
@@ -2760,10 +2986,9 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
         {
             return Err(invalid(format!("unsafe archive path: {name}")));
         }
-        bytes_read = bytes_read
-            .checked_add(member.size)
-            .filter(|&n| n <= limits.total_bytes_read)
-            .ok_or_else(|| Error::limit("archive hash reads exceed work limit"))?;
+        bytes_read = reads.charge(bytes_read, member.size, || {
+            "archive hash reads exceed work limit".into()
+        })?;
         let digest = archive
             .hash_range(member.size, member.data_offset, member.crc32)
             .map_err(archive_admission_error)?;
@@ -2789,7 +3014,7 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
                 &mut archive,
                 "conversion.json",
                 &mut bytes_read,
-                &limits,
+                reads,
                 limits.json_bytes,
             )?,
             content_limits.json,
@@ -2839,6 +3064,7 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
             used,
             subtrees,
             limits,
+            sources,
             content_limits,
             bytes_read,
             reference_visits: 0,
@@ -2851,6 +3077,7 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
         task_visits: 0,
         elements: 0,
         rows: rows::RowSink::new(&scratch, &config)?,
+        progress,
         not_inspected: BTreeSet::from([
             "decodedContentBounds".into(),
             "metadataSemantics".into(),
@@ -2896,6 +3123,7 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
             }
         }
     }
+    check.progress.phase("validate.traverse", None)?;
     check.tileset("tileset.json", None, None, 0)?;
     if let Some(limit) = check.reports["budgets"]["tiles"].as_u64() {
         // Amendment D-1: link tiles count in the report, not in the budget.
@@ -2967,7 +3195,9 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
     check.c2.arena = None;
     check.c2.stream = Stream::default();
     check.facts = FactStore::new(0, &config)?;
+    check.progress.phase("validate.rows", None)?;
     let payloads = check.rows.finish(names, scratch.clone())?;
+    check.progress.step()?;
     let report = ValidationReport {
         ok: true,
         archive: path.into(),
@@ -2979,7 +3209,9 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
             memory_backed: scratch.memory_backed(),
             peak_bytes: scratch.peak_bytes(),
         }),
+        stored_bytes,
         limits: check.resources.limits,
+        limit_derivation,
         checks: [
             "archiveIndex",
             "archiveCrc",
@@ -3013,6 +3245,8 @@ fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspect
         units: check.c2.units,
         #[cfg(test)]
         prepared: check.prepared,
+        #[cfg(test)]
+        elements: check.elements,
         #[cfg(test)]
         counters: [
             check.task_visits,

@@ -8,6 +8,7 @@ use super::catalog::{
     RowsWriter,
 };
 use crate::spill::{Placement, Record, Scratch, SpillError};
+use crate::validate::LimitKey;
 use sha2::{Digest, Sha256};
 use std::{
     io::{self, Read, Seek, SeekFrom},
@@ -21,11 +22,30 @@ const DIRECTORY_CHUNK: u64 = 64 * 1024;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ReadLimits {
-    pub source_archive_bytes: u64,
-    pub central_directory_bytes: u64,
-    pub archive_entries: u64,
+    /// Opt-in volume caps (VS-C-2): `None` leaves the format's natural bound.
+    pub source_archive_bytes: Option<u64>,
+    pub central_directory_bytes: Option<u64>,
+    pub archive_entries: Option<u64>,
     pub member_bytes: u64,
-    pub archive_stored_bytes: u64,
+    pub archive_stored_bytes: Option<u64>,
+}
+
+/// Refuses `observed` over an opt-in cap (strictly greater; equal passes).
+fn cap(
+    key: LimitKey,
+    message: &'static str,
+    cap: Option<u64>,
+    observed: u64,
+) -> Result<(), ReadError> {
+    match cap {
+        Some(value) if observed > value => Err(ReadError::Cap {
+            key,
+            message,
+            value,
+            observed,
+        }),
+        _ => Ok(()),
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -36,6 +56,14 @@ pub(crate) enum ReadError {
     Unsupported(String),
     #[error("{0}")]
     ResourceLimit(String),
+    /// An opt-in volume cap refused the archive (VS-C-5 T3).
+    #[error("{message}")]
+    Cap {
+        key: LimitKey,
+        message: &'static str,
+        value: u64,
+        observed: u64,
+    },
     #[error("missing archive member: {0}")]
     MissingMember(String),
     #[error(transparent)]
@@ -60,8 +88,7 @@ pub(crate) struct StoredArchive<R> {
     reader: R,
     catalog: Catalog,
     last: Last,
-    /// S, fixed before traversal: the basis of VS-C's scaled budgets.
-    #[allow(dead_code)]
+    /// S, fixed before traversal: the basis of the scaled budgets (VS-C-1).
     stored_bytes: u64,
     index_read_bytes: u64,
     config: CatalogConfig,
@@ -116,7 +143,6 @@ impl<R: Read + Seek> StoredArchive<R> {
     }
 
     /// S: the sum of admitted stored member sizes.
-    #[allow(dead_code)]
     pub(crate) fn stored_bytes(&self) -> u64 {
         self.stored_bytes
     }
@@ -691,9 +717,12 @@ fn scan_directory(
     config: &CatalogConfig,
     placement: Placement,
 ) -> Result<Scanned, ReadError> {
-    if size > limits.source_archive_bytes {
-        return Err(ReadError::limit("source archive exceeds byte limit"));
-    }
+    cap(
+        LimitKey::SourceArchiveBytes,
+        "source archive exceeds byte limit",
+        limits.source_archive_bytes,
+        size,
+    )?;
     if size < 22 {
         return Err(malformed("truncated ZIP end record"));
     }
@@ -794,12 +823,18 @@ fn scan_directory(
             super::MEMBER_CEILING
         )));
     }
-    if entries > limits.archive_entries {
-        return Err(ReadError::limit("archive exceeds entry limit"));
-    }
-    if bytes > limits.central_directory_bytes {
-        return Err(ReadError::limit("ZIP central directory exceeds byte limit"));
-    }
+    cap(
+        LimitKey::ArchiveEntries,
+        "archive exceeds entry limit",
+        limits.archive_entries,
+        entries,
+    )?;
+    cap(
+        LimitKey::CentralDirectoryBytes,
+        "ZIP central directory exceeds byte limit",
+        limits.central_directory_bytes,
+        bytes,
+    )?;
     let stop = offset
         .checked_add(bytes)
         .filter(|&n| n <= boundary)
@@ -997,10 +1032,14 @@ fn scan_directory(
                 crc32: crc as u32,
             });
         }
-        total = total
-            .checked_add(member)
-            .filter(|&n| n <= limits.archive_stored_bytes)
-            .ok_or_else(|| ReadError::limit("stored archive payload exceeds byte limit"))?;
+        let sum = total.checked_add(member);
+        cap(
+            LimitKey::ArchiveStoredBytes,
+            "stored archive payload exceeds byte limit",
+            limits.archive_stored_bytes,
+            sum.unwrap_or(u64::MAX),
+        )?;
+        total = sum.ok_or_else(|| malformed("stored member sizes overflow"))?;
         cursor = next;
     }
     if cursor != stop {
@@ -1249,11 +1288,11 @@ pub(crate) mod tests {
     }
     fn limits() -> ReadLimits {
         ReadLimits {
-            source_archive_bytes: 4096,
-            central_directory_bytes: 2048,
-            archive_entries: 16,
+            source_archive_bytes: Some(4096),
+            central_directory_bytes: Some(2048),
+            archive_entries: Some(16),
             member_bytes: 1024,
-            archive_stored_bytes: 2048,
+            archive_stored_bytes: Some(2048),
         }
     }
     fn admit(bytes: &[u8]) -> Result<(), ReadError> {
@@ -1481,25 +1520,25 @@ pub(crate) mod tests {
         let bytes = stored_zip(&[(b"a", b"data"), (b"b", b"more")]);
         let cd_bytes = u32_at(&bytes, bytes.len() - 10);
         let exact = ReadLimits {
-            source_archive_bytes: bytes.len() as u64,
-            central_directory_bytes: cd_bytes,
-            archive_entries: 2,
+            source_archive_bytes: Some(bytes.len() as u64),
+            central_directory_bytes: Some(cd_bytes),
+            archive_entries: Some(2),
             member_bytes: 4,
-            archive_stored_bytes: 8,
+            archive_stored_bytes: Some(8),
         };
         scan(&mut Cursor::new(&bytes), bytes.len() as u64, &exact).unwrap();
         for field in 0..5 {
             let mut bounded = exact;
             match field {
-                0 => bounded.source_archive_bytes -= 1,
-                1 => bounded.central_directory_bytes -= 1,
-                2 => bounded.archive_entries -= 1,
+                0 => bounded.source_archive_bytes = exact.source_archive_bytes.map(|n| n - 1),
+                1 => bounded.central_directory_bytes = exact.central_directory_bytes.map(|n| n - 1),
+                2 => bounded.archive_entries = exact.archive_entries.map(|n| n - 1),
                 3 => bounded.member_bytes -= 1,
-                _ => bounded.archive_stored_bytes -= 1,
+                _ => bounded.archive_stored_bytes = exact.archive_stored_bytes.map(|n| n - 1),
             }
             assert!(matches!(
                 scan(&mut Cursor::new(&bytes), bytes.len() as u64, &bounded),
-                Err(ReadError::ResourceLimit(_))
+                Err(ReadError::ResourceLimit(_) | ReadError::Cap { .. })
             ));
         }
     }
@@ -1613,7 +1652,11 @@ pub(crate) mod tests {
         };
         assert!(matches!(
             scan(&mut reader, 4097, &limits()),
-            Err(ReadError::ResourceLimit(_))
+            Err(ReadError::Cap {
+                observed: 4097,
+                value: 4096,
+                ..
+            })
         ));
         assert_eq!(reader.reads, 0);
         assert!(
@@ -1632,11 +1675,11 @@ pub(crate) mod tests {
     fn natural_limits(length: usize) -> ReadLimits {
         let length = length as u64;
         ReadLimits {
-            source_archive_bytes: length,
-            central_directory_bytes: length,
-            archive_entries: length / 46,
+            source_archive_bytes: Some(length),
+            central_directory_bytes: Some(length),
+            archive_entries: Some(length / 46),
             member_bytes: length,
-            archive_stored_bytes: length,
+            archive_stored_bytes: Some(length),
         }
     }
 
@@ -1948,7 +1991,7 @@ pub(crate) mod tests {
             seek_fault: false,
         };
         let mut generous = natural_limits(length);
-        generous.archive_entries = 1000;
+        generous.archive_entries = Some(1000);
         assert!(
             matches!(StoredArchive::new(source, length as u64, &generous), Err(ReadError::InvalidInput(message)) if message.contains("count exceeds directory length"))
         );
@@ -1992,8 +2035,8 @@ pub(crate) mod tests {
         let ceiling = super::super::MEMBER_CEILING;
         assert_eq!(ceiling, 178_956_970);
         let generous = ReadLimits {
-            archive_entries: u64::MAX,
-            central_directory_bytes: u64::MAX,
+            archive_entries: Some(u64::MAX),
+            central_directory_bytes: Some(u64::MAX),
             ..limits()
         };
         for count in [ceiling + 1, ceiling + 2, u64::MAX] {
@@ -2011,7 +2054,7 @@ pub(crate) mod tests {
         // limit or the directory length then decides.
         let (bytes, _) = zip64_end(base, ceiling);
         assert!(
-            matches!(admit(&bytes), Err(ReadError::ResourceLimit(message)) if message == "archive exceeds entry limit")
+            matches!(admit(&bytes), Err(ReadError::Cap { message, .. }) if message == "archive exceeds entry limit")
         );
         assert!(
             matches!(scan(&mut Cursor::new(&bytes), bytes.len() as u64, &generous),
@@ -2257,11 +2300,11 @@ pub(crate) mod tests {
         }
         let length = file.as_file().metadata().unwrap().len();
         let limits = ReadLimits {
-            source_archive_bytes: length,
-            central_directory_bytes: length,
-            archive_entries: MEMBERS,
+            source_archive_bytes: Some(length),
+            central_directory_bytes: Some(length),
+            archive_entries: Some(MEMBERS),
             member_bytes,
-            archive_stored_bytes: length,
+            archive_stored_bytes: Some(length),
         };
         let owner = StoredArchive::new(file.reopen().unwrap(), length, &limits).unwrap();
         assert_eq!(owner.len() as u64, MEMBERS);

@@ -188,7 +188,7 @@ fn production(file: &Path, limits: ValidationLimits, dump: Option<(&Path, &str)>
             let (kind, m) = match &f {
                 ValidationFailure::InvalidInput(m) => ("InvalidInput", m.clone()),
                 ValidationFailure::Unsupported(m) => ("Unsupported", m.clone()),
-                ValidationFailure::ResourceLimit(m) => ("ResourceLimit", m.clone()),
+                ValidationFailure::ResourceLimit(m) => ("ResourceLimit", m.message().to_owned()),
                 other => ("Other", other.to_string()),
             };
             let kind = if kind == "ResourceLimit" {

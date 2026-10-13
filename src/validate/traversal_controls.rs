@@ -568,7 +568,7 @@ fn archive_named_labels_keep_the_smallest_sixty_four() {
 #[test]
 fn budgets_scale_from_stored_bytes_at_their_crossovers() {
     let floors = ValidationLimits::default();
-    let at = |stored: u64| floors.scaled(stored);
+    let at = |stored: u64| super::LimitPlan::default().resolve(stored).0;
     let budgets = |l: &ValidationLimits| {
         [
             l.hierarchy_visits,
@@ -654,7 +654,7 @@ fn default_validation_scales_the_visit_budget_with_stored_bytes() {
     let (_work, path) = package(&files);
     let refused = inspect_selected(ValidationRequest::new(&path), ValidationLimits::default());
     assert!(
-        matches!(&refused, Err(Error::ResourceLimit(m)) if m.contains("hierarchy visits")),
+        matches!(&refused, Err(Error::ResourceLimit(m)) if m.message().contains("hierarchy visits")),
         "{refused:?}"
     );
     let report = inspect(ValidationRequest::new(&path)).unwrap();

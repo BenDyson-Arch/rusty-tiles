@@ -33,22 +33,45 @@ create_exception!(rusty_tiles, InvalidRequestError, TilesError);
 create_exception!(rusty_tiles, CancelledError, TilesError);
 create_exception!(rusty_tiles, ObserverError, TilesError);
 
+fn scratch_error(refusal: &tiles_core::validate::ScratchRefusal, message: String) -> PyErr {
+    match refusal {
+        tiles_core::validate::ScratchRefusal::MemoryBackedOnly { .. } => {
+            EnvironmentError::new_err(message)
+        }
+        _ => TilesIOError::new_err(message),
+    }
+}
+
 fn error_to_python(error: Error) -> PyErr {
+    use tiles_core::validate::ValidationFailure;
     let message = error.to_string();
     match error {
         Error::Validation(failure) => match failure {
-            tiles_core::validate::ValidationFailure::InvalidInput(_) => DataError::new_err(message),
-            tiles_core::validate::ValidationFailure::Unsupported(_) => {
-                UnsupportedError::new_err(message)
+            ValidationFailure::InvalidInput(_) => DataError::new_err(message),
+            ValidationFailure::Unsupported(_) => UnsupportedError::new_err(message),
+            ValidationFailure::ResourceLimit(refusal) => {
+                // VS-C-5: `limit` is the structured cause of a configurable-limit refusal.
+                let error = ResourceLimitError::new_err(message);
+                Python::attach(|py| {
+                    let limit = match refusal.limit {
+                        Some(limit) => serde_json::to_value(limit)
+                            .ok()
+                            .and_then(|value| json_to_python(py, &value).ok())
+                            .unwrap_or_else(|| py.None()),
+                        None => py.None(),
+                    };
+                    let _ = error.value(py).setattr("limit", limit);
+                });
+                error
             }
-            tiles_core::validate::ValidationFailure::ResourceLimit(_) => {
-                ResourceLimitError::new_err(message)
-            }
-            tiles_core::validate::ValidationFailure::Io(_) => TilesIOError::new_err(message),
-            tiles_core::validate::ValidationFailure::InvalidState(_) => {
-                TilesError::new_err(message)
-            }
+            ValidationFailure::Io(_) => TilesIOError::new_err(message),
+            ValidationFailure::Scratch(refusal) => scratch_error(&refusal, message),
+            ValidationFailure::InvalidRequest(_) => InvalidRequestError::new_err(message),
+            ValidationFailure::Cancelled => CancelledError::new_err(message),
+            ValidationFailure::Observer(_) => ObserverError::new_err(message),
+            ValidationFailure::InvalidState(_) => TilesError::new_err(message),
         },
+        Error::Scratch(refusal) => scratch_error(&refusal, message),
         Error::Job(failure) => Python::attach(|py| job_failure_to_python(py, failure)),
         Error::Environment(_) => EnvironmentError::new_err(message),
         Error::OutputExists(_) => OutputExistsError::new_err(message),
@@ -1046,14 +1069,81 @@ impl ValidationPayloadsIter {
 /// `lazy_payloads=True` it is a read-only `ValidationPayloads` sequence that reads rows on
 /// demand instead, for reports too large to hold (it is not JSON-serializable as is;
 /// `list(...)` materializes it).
+///
+/// `max_volume` maps configurable limit keys (`sourceArchiveBytes`, `archiveEntries`,
+/// `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`,
+/// `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead`,
+/// `containmentDecodedBytes`) to non-negative ints below 2**64: a volume cap is set, a budget is
+/// replaced (values below the defaults are allowed). `scratch_dir` places validation scratch
+/// in that existing directory. `callback` receives progress events; raising from it (or
+/// Ctrl-C) stops the validation and the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false))]
-fn validate(py: Python<'_>, input: PathBuf, lazy_payloads: bool) -> PyResult<Py<PyAny>> {
-    let result = py
-        .detach(|| {
-            tiles_core::validate::inspect(tiles_core::validate::ValidationRequest::new(input))
-        })
-        .map_err(|failure| error_to_python(Error::Validation(failure)))?;
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, callback = None))]
+fn validate(
+    py: Python<'_>,
+    input: PathBuf,
+    lazy_payloads: bool,
+    max_volume: Option<Bound<'_, PyAny>>,
+    scratch_dir: Option<PathBuf>,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    use tiles_core::validate::{LimitKey, ValidationFailure, ValidationRequest};
+    if callback
+        .as_ref()
+        .is_some_and(|callback| !callback.bind(py).is_callable())
+    {
+        return Err(PyTypeError::new_err("callback must be callable"));
+    }
+    let mut request = ValidationRequest::new(input);
+    if let Some(mapping) = max_volume {
+        let mapping = mapping
+            .cast::<pyo3::types::PyMapping>()
+            .map_err(|_| InvalidRequestError::new_err("max_volume must be a mapping"))?;
+        for item in mapping.items()?.iter() {
+            let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item.extract()?;
+            let key: String = key
+                .extract()
+                .map_err(|_| InvalidRequestError::new_err("max_volume keys must be strings"))?;
+            let key = key
+                .parse::<LimitKey>()
+                .map_err(|error| InvalidRequestError::new_err(error.to_string()))?;
+            if value.is_instance_of::<pyo3::types::PyBool>()
+                || !value.is_instance_of::<pyo3::types::PyInt>()
+            {
+                return Err(InvalidRequestError::new_err(format!(
+                    "max_volume[{key:?}] must be an int",
+                    key = key.as_str()
+                )));
+            }
+            let value: u64 = value.extract().map_err(|_| {
+                InvalidRequestError::new_err(format!(
+                    "max_volume[{:?}] must be in 0..2**64",
+                    key.as_str()
+                ))
+            })?;
+            request = request.max_volume(key, value);
+        }
+    }
+    if let Some(dir) = scratch_dir {
+        request = request.scratch_dir(dir);
+    }
+    py.check_signals()?;
+    let observer = Arc::new(RunObserver {
+        callback,
+        error: Mutex::new(None),
+    });
+    let run = RunControl::new(Some(observer.clone()));
+    let result = match py.detach(|| tiles_core::validate::inspect_with(request, &run)) {
+        Ok(result) => result,
+        Err(failure) => {
+            if matches!(failure, ValidationFailure::Observer(_)) {
+                if let Some(error) = observer.error.lock().unwrap().take() {
+                    return Err(error);
+                }
+            }
+            return Err(error_to_python(Error::Validation(failure)));
+        }
+    };
     py.check_signals()?;
     let mut summary = result
         .summary_json()

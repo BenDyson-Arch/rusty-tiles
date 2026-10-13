@@ -157,6 +157,9 @@ pub(crate) trait SceneConsumer {
     fn leave(&mut self, transform: &NodeTransform);
     /// A selected node with a mesh, visited after `enter` of that node.
     fn instance(&mut self, instance: &Instance<'_, '_>) -> Result<(), Self::Error>;
+    /// The accessor plan is about to be refused for exceeding the caller's remaining element
+    /// allowance (the binding one), with `planned` elements (VS-C-5).
+    fn remainder_refused(&mut self, _planned: u64) {}
 }
 
 /// The C1-only consumer, used by callers without a C2 consumer.

@@ -2058,7 +2058,7 @@ impl ExpansionBudget {
 }
 fn expansion_limit(message: &str) -> Error {
     Error::Validation(crate::validate::ValidationFailure::ResourceLimit(
-        message.into(),
+        message.to_owned().into(),
     ))
 }
 

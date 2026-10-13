@@ -94,6 +94,22 @@ enum Command {
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
         input: PathBuf,
+        /// Set an opt-in volume cap or replace an amplification budget; repeatable. KEY is one
+        /// of sourceArchiveBytes, archiveEntries, centralDirectoryBytes, archiveStoredBytes,
+        /// hierarchyVisits, references, totalBytesRead, totalPayloadElements,
+        /// containmentWorkUnits, containmentBytesRead, containmentDecodedBytes; N is a decimal
+        /// integer. Values may be below the defaults (stricter); per-item format limits are fixed
+        #[arg(
+            long = "maxVolume",
+            visible_alias = "max-volume",
+            value_name = "KEY=N",
+            value_parser = parse_max_volume
+        )]
+        max_volume: Vec<(rusty_tiles::validate::LimitKey, u64)>,
+        /// Put validation scratch files inside this existing directory (default: TMPDIR, then
+        /// the user cache directory, then the system temporary directory, disk-backed first)
+        #[arg(long = "scratchDir", visible_alias = "scratch-dir", value_name = "DIR")]
+        scratch_dir: Option<PathBuf>,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -861,6 +877,12 @@ fn native_recovery_paths(_: &rusty_tiles::DirectoryRecovery) -> Value {
 fn error_summary(error: &Error, category: &str, code: u8) -> Value {
     let mut failure =
         json!({"ok":false,"error":{"code":category,"message":error.to_string()},"exitCode":code});
+    if let Some(limit) = match error {
+        Error::Validation(failure) => failure.exceeded(),
+        _ => None,
+    } {
+        failure["error"]["limit"] = json!(limit);
+    }
     if let Error::Job(job) = error {
         failure["error"]["kind"] = json!(category);
         failure["error"]["recovery"] = job.recovery.as_ref().map_or(Value::Null, |recovery| json!({"output":recovery.output.to_string_lossy(),"previousOutput":recovery.previous_output.to_string_lossy(),"nativePaths":native_recovery_paths(recovery)}));
@@ -1109,6 +1131,24 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
 /// `auto` (memory-aware) or an explicit positive worker count.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct JobsArg(Option<std::num::NonZeroUsize>);
+/// `KEY=N` of `validate --maxVolume`: a configurable limit key and a decimal u64 with no sign,
+/// separator or suffix.
+fn parse_max_volume(value: &str) -> Result<(rusty_tiles::validate::LimitKey, u64), String> {
+    let (key, number) = value
+        .split_once('=')
+        .ok_or_else(|| format!("expected KEY=N, got {value:?}"))?;
+    let key = key
+        .parse::<rusty_tiles::validate::LimitKey>()
+        .map_err(|error| error.to_string())?;
+    if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!("{key}: expected a decimal integer, got {number:?}"));
+    }
+    let number = number
+        .parse::<u64>()
+        .map_err(|_| format!("{key}: {number} exceeds the largest value 18446744073709551615"))?;
+    Ok((key, number))
+}
+
 fn parse_jobs(value: &str) -> Result<JobsArg, String> {
     if value == "auto" {
         return Ok(JobsArg(None));
@@ -1214,10 +1254,29 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
             )
         }
-        Command::Validate { input } => {
-            let report = rusty_tiles::validate::inspect(
-                rusty_tiles::validate::ValidationRequest::new(&input),
-            )?;
+        Command::Validate {
+            input,
+            max_volume,
+            scratch_dir,
+        } => {
+            let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            let mut seen = std::collections::BTreeSet::new();
+            for (key, value) in max_volume {
+                if !seen.insert(key) {
+                    return Err(
+                        rusty_tiles::validate::ValidationFailure::InvalidRequest(format!(
+                            "--maxVolume {key} is given more than once"
+                        ))
+                        .into(),
+                    );
+                }
+                request = request.max_volume(key, value);
+            }
+            if let Some(dir) = scratch_dir {
+                request = request.scratch_dir(dir);
+            }
+            let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let report = rusty_tiles::validate::inspect_with(request, &RunControl::new(observer))?;
             if !json {
                 println!(
                     "Inspected {}: {} tiles, {} content references",

@@ -1183,3 +1183,12 @@ Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publ
 
   The executed threshold equals the contract value, so the R2b window `[190,944, 246,583]` is
   unchanged.
+
+## VS-C amendment (limits surface, 2026-10-14)
+
+[validator-limits-amendment.md](validator-limits-amendment.md) governs. A-I1-1: the remaining
+visits, references and scan allowances are derived from the effective `hierarchyVisits`,
+`references` and `totalBytesRead` of the validation (scaled or explicit). A refused reservation
+records which allowance it exceeded and by how much, so the validator's refusal carries the
+structured `limit` and the message suffix ` (limit KEY=VALUE, SOURCE)` after the unchanged I1
+text.
