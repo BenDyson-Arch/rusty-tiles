@@ -300,43 +300,56 @@ impl<R: Read + Seek> StoredArchive<R> {
             }
             Ok(())
         })?;
-        let mut members = members.finish()?.peekable();
-        type Group = Option<(([u64; 2], u64), u64, bool)>;
-        // A pair's rows all fail when no member has it; otherwise only its later rows do.
-        fn close(group: Group, second: Option<u64>, first: &mut Option<u64>) {
-            if let Some((_, lowest, present)) = group {
-                let failing = if present { second } else { Some(lowest) };
-                if let Some(failing) = failing {
-                    *first = Some(first.map_or(failing, |first| first.min(failing)));
-                }
-            }
-        }
-        let mut first: Option<u64> = None;
-        let mut group: Group = None;
-        let mut second = None;
-        for row in rows.finish()? {
-            let row = row?;
-            let pair = (row.md5, row.offset);
-            if group.is_some_and(|(held, _, _)| held == pair) {
-                second.get_or_insert(row.position);
-                continue;
-            }
-            close(group, second.take(), &mut first);
-            let present = loop {
-                match members.peek() {
-                    Some(Ok(member)) if (member.md5, member.offset) < pair => {
-                        members.next();
-                    }
-                    Some(Ok(member)) => break (member.md5, member.offset) == pair,
-                    Some(Err(_)) => return Err(members.next().unwrap().unwrap_err().into()),
-                    None => break false,
-                }
-            };
-            group = Some((pair, row.position, present));
-        }
-        close(group, second, &mut first);
-        Ok(first)
+        Ok(first_failing_row(rows.finish()?, members.finish()?)?)
     }
+}
+
+/// The first index position the sequential check rejects, from the index rows and the
+/// non-index catalog pairs, each sorted by `(md5, offset)` (rows then by position).
+///
+/// Before the first failure every row passes, so the first failure is the least of: each
+/// pair absent from the catalog, at its earliest row; each present pair repeated, at its
+/// second row. Equal MD5s (collisions) need no special case: pairs are exact.
+fn first_failing_row(
+    rows: impl Iterator<Item = Result<IndexRow, SpillError>>,
+    members: impl Iterator<Item = Result<IndexRow, SpillError>>,
+) -> Result<Option<u64>, SpillError> {
+    let mut members = members.peekable();
+    type Group = Option<(([u64; 2], u64), u64, bool)>;
+    // A pair's rows all fail when no member has it; otherwise only its later rows do.
+    fn close(group: Group, second: Option<u64>, first: &mut Option<u64>) {
+        if let Some((_, lowest, present)) = group {
+            let failing = if present { second } else { Some(lowest) };
+            if let Some(failing) = failing {
+                *first = Some(first.map_or(failing, |first| first.min(failing)));
+            }
+        }
+    }
+    let mut first: Option<u64> = None;
+    let mut group: Group = None;
+    let mut second = None;
+    for row in rows {
+        let row = row?;
+        let pair = (row.md5, row.offset);
+        if group.is_some_and(|(held, _, _)| held == pair) {
+            second.get_or_insert(row.position);
+            continue;
+        }
+        close(group, second.take(), &mut first);
+        let present = loop {
+            match members.peek() {
+                Some(Ok(member)) if (member.md5, member.offset) < pair => {
+                    members.next();
+                }
+                Some(Ok(member)) => break (member.md5, member.offset) == pair,
+                Some(Err(_)) => return Err(members.next().unwrap().unwrap_err()),
+                None => break false,
+            }
+        };
+        group = Some((pair, row.position, present));
+    }
+    close(group, second, &mut first);
+    Ok(first)
 }
 
 /// Reads the index once in whole-row chunks, giving each row's position, MD5 key and
@@ -2237,5 +2250,291 @@ pub(crate) mod tests {
         let owner = StoredArchive::new(file.reopen().unwrap(), length, &limits).unwrap();
         assert_eq!(owner.len() as u64, MEMBERS);
         assert_eq!(owner.index_read_bytes(), 24 * rows);
+    }
+
+    // ---- VS-A catalog controls -------------------------------------------------------
+
+    /// The pre-VS-A index check, kept as the independent reference: non-index members by
+    /// offset, a binary search per row and a seen table, first failure in index order.
+    fn reference_index(
+        rows: &[([u8; 16], u64)],
+        members: &[([u8; 16], u64)],
+    ) -> Result<(), &'static str> {
+        let mut offsets: Vec<usize> = (0..members.len()).collect();
+        offsets.sort_by_key(|&i| members[i].1);
+        let mut seen = vec![false; members.len()];
+        let mut previous = None;
+        for (hash, offset) in rows {
+            let key = (u64_at(hash, 0), u64_at(hash, 8));
+            if previous.is_some_and(|previous| previous > key) {
+                return Err("3TZ index hashes are not ordered");
+            }
+            previous = Some(key);
+            let Ok(position) = offsets.binary_search_by_key(offset, |&i| members[i].1) else {
+                return Err("3TZ index differs from admitted directory");
+            };
+            let i = offsets[position];
+            if seen[i] || members[i].0 != *hash {
+                return Err("3TZ index differs from admitted directory");
+            }
+            seen[i] = true;
+        }
+        Ok(())
+    }
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    fn admit_with<'a>(
+        bytes: &'a [u8],
+        config: CatalogConfig,
+        parent: &Path,
+    ) -> Result<StoredArchive<Cursor<&'a [u8]>>, ReadError> {
+        StoredArchive::new_with(
+            Cursor::new(bytes),
+            bytes.len() as u64,
+            &natural_limits(bytes.len()),
+            config,
+            Some(parent),
+        )
+    }
+
+    fn outcome<R>(result: Result<R, ReadError>) -> Result<(), String> {
+        result.map(|_| ()).map_err(|error| format!("{error:?}"))
+    }
+
+    /// Randomly defected indexes give the reference check's verdict under both catalog
+    /// profiles: the merge-join and its exact diagnosis decide every first failure.
+    #[test]
+    fn index_merge_join_matches_the_sequential_reference() {
+        let parent = tempfile::tempdir().unwrap();
+        let names: Vec<Vec<u8>> = (0..40)
+            .map(|i| format!("m/{i:03}.glb").into_bytes())
+            .collect();
+        let mut random = XorShift(0x9e37_79b9_7f4a_7c15);
+        let (mut verdicts, mut trials) = (std::collections::BTreeMap::new(), 0);
+        for trial in 0..600 {
+            let count = 1 + random.below(names.len());
+            let mut records = vec![Record::stored(b"tileset.json", b"{}")];
+            records.extend(names[..count].iter().map(|name| Record::stored(name, b"x")));
+            let mut offset = 0u64;
+            let members: Vec<([u8; 16], u64)> = records
+                .iter()
+                .map(|record| {
+                    let row = (md5::compute(record.name).0, offset);
+                    offset += local(record).len() as u64;
+                    row
+                })
+                .collect();
+            let index_member = (md5::compute(TZ_INDEX).0, offset);
+            let mut edited = Vec::new();
+            let bytes = indexed_rows(&records, |rows| {
+                for _ in 0..random.below(4) {
+                    let n = rows.len();
+                    let (a, b) = (random.below(n), random.below(n));
+                    match random.below(8) {
+                        0 => rows.swap(a, b),
+                        1 => rows[a].0 = members[random.below(members.len())].0,
+                        2 => rows[a].1 = members[random.below(members.len())].1,
+                        3 => rows[a].1 = 7,
+                        4 => rows[a] = rows[b],
+                        5 => rows[a] = index_member,
+                        6 => rows[a..].reverse(),
+                        _ => rows[a].0[15] ^= 1,
+                    }
+                }
+                edited = rows.clone();
+            });
+            let expected = reference_index(&edited, &members).map_err(str::to_owned);
+            for config in [CatalogConfig::DEFAULT, CatalogConfig::FORCED_SPILL] {
+                let actual = admit_with(&bytes, config, parent.path())
+                    .map(|_| ())
+                    .map_err(|error| match error {
+                        ReadError::InvalidInput(message) => message,
+                        other => panic!("trial {trial}: {other:?}"),
+                    });
+                assert_eq!(actual, expected, "trial {trial}, {config:?}");
+            }
+            *verdicts.entry(format!("{expected:?}")).or_insert(0) += 1;
+            trials += 1;
+        }
+        // Sensitivity: every verdict occurs often.
+        assert_eq!(verdicts.len(), 3, "{verdicts:?}");
+        assert!(
+            verdicts.values().all(|&n| n >= 50),
+            "{verdicts:?} of {trials}"
+        );
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);
+    }
+
+    const TZ_INDEX: &[u8] = super::super::TZ_INDEX_NAME.as_bytes();
+
+    /// MD5-colliding members cannot be written as valid UTF-8 names, so the diagnosis is
+    /// checked on synthetic keys: equal MD5s with distinct offsets, in either index order.
+    #[test]
+    fn diagnosis_resolves_md5_collisions_by_offset() {
+        let row = |md5: u64, offset, position| IndexRow {
+            md5: [md5, 0],
+            offset,
+            position,
+        };
+        let diagnose = |index: &[(u64, u64)], members: &[(u64, u64)]| {
+            let mut rows: Vec<_> = index
+                .iter()
+                .enumerate()
+                .map(|(i, &(m, o))| row(m, o, i as u64))
+                .collect();
+            rows.sort();
+            let mut pairs: Vec<_> = members.iter().map(|&(m, o)| row(m, o, 0)).collect();
+            pairs.sort();
+            first_failing_row(rows.into_iter().map(Ok), pairs.into_iter().map(Ok)).unwrap()
+        };
+        let members = [(1, 10), (5, 30), (5, 20), (9, 40)];
+        // A colliding group in either order is admitted.
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 20), (5, 30), (9, 40)], &members),
+            None
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 20), (9, 40)], &members),
+            None
+        );
+        // A repeated pair fails at its second row; an absent pair at its first.
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 30), (9, 40)], &members),
+            Some(2)
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 40), (9, 40)], &members),
+            Some(2)
+        );
+        assert_eq!(
+            diagnose(&[(5, 10), (5, 20), (5, 30), (9, 40)], &members),
+            Some(0)
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 20), (5, 30), (9, 40), (9, 40)], &members),
+            Some(4)
+        );
+        // Collisions in the catalog are matched by offset as well.
+        let mut random = XorShift(7);
+        for _ in 0..2000 {
+            let members: Vec<(u64, u64)> =
+                (0..8).map(|i| (random.below(3) as u64, 10 * i)).collect();
+            let mut index = members.clone();
+            index.sort_by_key(|&(m, _)| m);
+            for _ in 0..random.below(3) {
+                let (a, b) = (random.below(8), random.below(8));
+                match random.below(3) {
+                    0 => index[a].1 = index[b].1,
+                    1 => index[a].0 = random.below(3) as u64,
+                    _ => index.swap(a, b),
+                }
+            }
+            index.sort_by_key(|&(m, _)| m);
+            let digest = |m: u64| {
+                let mut d = [0u8; 16];
+                d[..8].copy_from_slice(&m.to_le_bytes());
+                d
+            };
+            let as_rows = |list: &[(u64, u64)]| {
+                list.iter()
+                    .map(|&(m, o)| (digest(m), o))
+                    .collect::<Vec<_>>()
+            };
+            let expected = reference_index(&as_rows(&index), &as_rows(&members)).is_err();
+            assert_eq!(
+                diagnose(&index, &members).is_some(),
+                expected,
+                "{index:?} {members:?}"
+            );
+        }
+    }
+
+    /// The forced-spill profile really spills (scratch appears during admission and is
+    /// removed with the archive); the default keeps a small catalog in memory.
+    #[test]
+    fn forced_spill_profile_uses_scratch_and_default_does_not() {
+        let parent = tempfile::tempdir().unwrap();
+        let names: Vec<Vec<u8>> = (0..9).map(|i| format!("{i}.bin").into_bytes()).collect();
+        let mut records = vec![Record::stored(b"tileset.json", b"{}")];
+        records.extend(names.iter().map(|name| Record::stored(name, b"x")));
+        let bytes = indexed(&records);
+        let mut default = admit_with(&bytes, CatalogConfig::DEFAULT, parent.path()).unwrap();
+        assert!(!default.scratch().is_created());
+        let mut forced = admit_with(&bytes, CatalogConfig::FORCED_SPILL, parent.path()).unwrap();
+        assert!(forced.scratch().is_created());
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 1);
+        for archive in [&mut default, &mut forced] {
+            assert_eq!(archive.len(), 11);
+            for name in names.iter().chain([&b"tileset.json".to_vec()]) {
+                let name = std::str::from_utf8(name).unwrap();
+                let member = archive.member(name).unwrap();
+                assert_eq!(archive.name(member.rank).unwrap(), name);
+            }
+            assert!(archive.find("absent").unwrap().is_none());
+            assert!(archive.find("0.bi").unwrap().is_none());
+        }
+        let ranks = |archive: &mut StoredArchive<_>| {
+            (0..archive.len())
+                .map(|rank| archive.name(rank).unwrap())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ranks(&mut default), ranks(&mut forced));
+        assert_eq!(
+            outcome(admit_with(&bytes, CatalogConfig::DEFAULT, parent.path())),
+            outcome(admit_with(
+                &bytes,
+                CatalogConfig::FORCED_SPILL,
+                parent.path()
+            ))
+        );
+        drop((default, forced));
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);
+    }
+
+    /// Duplicate names and overlapping records keep their messages and precedence on the
+    /// spilled path.
+    #[test]
+    fn duplicate_and_overlap_failures_agree_across_profiles() {
+        let parent = tempfile::tempdir().unwrap();
+        let cases: Vec<Vec<u8>> = vec![
+            indexed(&[
+                Record::stored(b"tileset.json", b"{}"),
+                Record::stored(b"a", b"1"),
+                Record::stored(b"b", b"2"),
+                Record::stored(b"a", b"3"),
+            ]),
+            {
+                let a = Record::stored(b"tileset.json", b"{}");
+                let b = Record::stored(b"b", b"2");
+                let index = Record::stored(TZ_INDEX, b"");
+                archive(&[a, b, index], &[0, 1, 2], 0)
+            },
+        ];
+        for bytes in &cases {
+            assert_eq!(
+                outcome(admit_with(bytes, CatalogConfig::DEFAULT, parent.path())),
+                outcome(admit_with(
+                    bytes,
+                    CatalogConfig::FORCED_SPILL,
+                    parent.path()
+                ))
+            );
+        }
+        assert!(matches!(
+            admit_with(&cases[0], CatalogConfig::FORCED_SPILL, parent.path()),
+            Err(ReadError::InvalidInput(message)) if message == "duplicate ZIP member name"
+        ));
     }
 }

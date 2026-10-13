@@ -15,6 +15,8 @@ pub const TZ_INDEX_NAME: &str = "@3dtilesIndex1@";
 pub(crate) const MEMBER_CEILING: u64 = 178_956_970;
 mod catalog;
 mod read;
+#[cfg(test)]
+pub(crate) use catalog::FORCED;
 pub(crate) use catalog::{CatalogConfig, Names};
 pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 

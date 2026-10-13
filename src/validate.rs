@@ -7,6 +7,8 @@ use crate::content_integrity::implicit::{
 use crate::content_integrity::{
     json, payload, FormatError, JsonLimits, PayloadError, PayloadLimits,
 };
+#[cfg(test)]
+mod catalog_controls;
 mod containment;
 #[cfg(test)]
 mod memo_controls;
@@ -2648,6 +2650,22 @@ fn inspect_facts(
         return Err(invalid("source archive changed during inspection"));
     }
     let implicit = check.implicit_roots > 0;
+    // The walk's working storage is released before the report rows are ordered: the
+    // sorts and the walk are never live together (design §1.4).
+    check.memo = HashMap::new();
+    check.schemas = HashMap::new();
+    check.payload_counts = Vec::new();
+    check.recording = Vec::new();
+    check.c2.tiles = Vec::new();
+    check.c2.references = Vec::new();
+    check.c2.content_volumes = Vec::new();
+    check.c2.uri_index = HashMap::new();
+    check.c2.levels = Vec::new();
+    check.c2.arena = None;
+    #[cfg(not(test))]
+    {
+        check.c2.uris = Vec::new();
+    }
     let payloads = check.rows.finish(names, scratch.clone())?;
     let report = ValidationReport {
         ok: true,

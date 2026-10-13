@@ -35,8 +35,11 @@ pub(crate) struct CatalogConfig {
 }
 
 impl CatalogConfig {
-    /// Design §1.3/§1.4: `R` = 64 MiB, `F` = 32, `b` = 1 MiB; 32 MiB resident catalog,
-    /// 2^19 fences (12 MiB) and a 16 MiB page cache.
+    /// Design §1.3/§1.4: `R` = 64 MiB, `F` = 32, `b` = 1 MiB. A catalog stays resident up
+    /// to 96 MiB, which covers every archive within the default entry (2^19) and
+    /// central-directory (32 MiB) limits: at most 2^19·86 B + 32 MiB ≈ 77 MiB. Larger
+    /// catalogs use 2^19 fences (12 MiB) and a 16 MiB page cache. Payload rows collect in a
+    /// 32 MiB run (2^19 rows of 48 B) before they spill.
     pub(crate) const DEFAULT: Self = Self {
         sort: SortConfig {
             run_bytes: 64 << 20,
@@ -45,12 +48,12 @@ impl CatalogConfig {
             jobs: 1,
         },
         rows_sort: SortConfig {
-            run_bytes: 16 << 20,
+            run_bytes: 32 << 20,
             fan_in: 16,
             buffer_bytes: 256 << 10,
             jobs: 1,
         },
-        resident_bytes: 32 << 20,
+        resident_bytes: 96 << 20,
         max_fences: 1 << 19,
         cache_bytes: 16 << 20,
         buffer_bytes: 256 << 10,

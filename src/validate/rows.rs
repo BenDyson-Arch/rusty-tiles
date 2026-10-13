@@ -134,10 +134,12 @@ fn chunk_of(name: &[u8], depth: usize, group: u64, row: Placed) -> Pending {
     }
 }
 
-/// Collects first-inspection payload rows during traversal.
+/// Collects first-inspection payload rows during traversal: 42-byte rows, held in name-log
+/// order so that the name chunks are later read sequentially.
 pub(super) struct RowSink<'s> {
-    sorter: ExternalSorter<'s, Pending>,
+    sorter: ExternalSorter<'s, Placed>,
     scratch: &'s Scratch,
+    /// The ordering passes run after the walk, with the catalog's sort resources.
     config: SortConfig,
 }
 
@@ -149,7 +151,7 @@ impl<'s> RowSink<'s> {
         Ok(Self {
             sorter: ExternalSorter::new(scratch, config.rows_sort).map_err(scratch_error)?,
             scratch,
-            config: config.rows_sort,
+            config: config.sort,
         })
     }
 
@@ -168,22 +170,25 @@ impl<'s> RowSink<'s> {
             primitives: report.primitives_checked,
             vertices: report.vertices,
         };
-        self.sorter
-            .push(chunk_of(name.as_bytes(), 0, 0, row))
-            .map_err(scratch_error)
+        self.sorter.push(row).map_err(scratch_error)
     }
 }
 
 /// Runs the passes: returns every row with its final position, unordered.
 fn order<'s>(
-    first: ExternalSorter<'s, Pending>,
+    rows: ExternalSorter<'s, Placed>,
     scratch: &'s Scratch,
     config: SortConfig,
     names: &Names,
 ) -> Result<ExternalSorter<'s, Placed>, SpillError> {
-    let mut placed = ExternalSorter::new(scratch, config)?;
-    let mut pass = first;
     let mut buffer = Vec::new();
+    let mut pass = ExternalSorter::new(scratch, config)?;
+    for row in rows.finish()? {
+        let row = row?;
+        names.read(row.name_ref, row.name_len, &mut buffer)?;
+        pass.push(chunk_of(&buffer, 0, 0, row))?;
+    }
+    let mut placed = ExternalSorter::new(scratch, config)?;
     for depth in 1.. {
         let mut next = ExternalSorter::<Pending>::new(scratch, config)?;
         let mut tied = 0u64;
