@@ -975,27 +975,22 @@ pub(super) fn convert(
     let mut manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
     // The forest holds each payload once; reuse recovers rebased payloads from the
     // published members through `vector-build.json` (no retained raw sources).
-    let forest = if options.explicit {
-        None
-    } else {
-        let explicit_root = manifest["root"].clone();
-        let written = crate::implicit::write_forest(
-            &mut manifest,
-            output,
-            crate::implicit::SubdivisionScheme::Quadtree,
-            &mut || {
-                attempt
-                    .check()
-                    .map_err(|error| Error::Job(attempt.fail(error)))
-            },
-        )?;
-        Some((explicit_root, written))
-    };
-    let reuse_report = build.reuse.publish(
+    // The producer's explicit hierarchy is the forest's input and is kept in the
+    // build state as `explicitRoot`.
+    let explicit_root = manifest["root"].clone();
+    let written = crate::implicit::write_forest(
         &mut manifest,
-        frame,
-        forest.as_ref().map(|(root, written)| (root, written)),
+        output,
+        crate::implicit::SubdivisionScheme::Quadtree,
+        &mut || {
+            attempt
+                .check()
+                .map_err(|error| Error::Job(attempt.fail(error)))
+        },
     )?;
+    let reuse_report = build
+        .reuse
+        .publish(&mut manifest, frame, &explicit_root, &written)?;
     std::fs::write(output.join("tileset.json"), serde_json::to_vec(&manifest)?)?;
     build.reports.finish()?;
     let shared: usize = db
@@ -1005,26 +1000,12 @@ pub(super) fn convert(
         .map_err(sql)?;
     // Tile statistics: one extras record per tile of the hierarchy, in preorder.
     // Implicit tiles carry the written (rebased) encodedBytes (design §4.5).
-    fn nodes<'a>(node: &'a Value, out: &mut Vec<&'a Value>) {
-        out.push(&node["extras"]);
-        if let Some(children) = node["children"].as_array() {
-            for child in children {
-                nodes(child, out);
-            }
-        }
-    }
-    let mut list = Vec::new();
-    match &forest {
-        Some((_, written)) => list.extend(written.tiles.iter().map(|tile| &tile.extras)),
-        None => nodes(&manifest["root"], &mut list),
-    }
-    if !options.explicit {
-        build.counters.maximum_tile_bytes = list
-            .iter()
-            .map(|extras| extras["encodedBytes"].as_u64().unwrap_or(0) as usize)
-            .max()
-            .unwrap_or(0);
-    }
+    let list: Vec<&Value> = written.tiles.iter().map(|tile| &tile.extras).collect();
+    build.counters.maximum_tile_bytes = list
+        .iter()
+        .map(|extras| extras["encodedBytes"].as_u64().unwrap_or(0) as usize)
+        .max()
+        .unwrap_or(0);
     let sum = |key: &str| {
         list.iter()
             .map(|extras| extras[key].as_u64().unwrap_or(0))
@@ -1053,9 +1034,7 @@ pub(super) fn convert(
     if options.reproducible {
         report.as_object_mut().unwrap().remove("performance");
     }
-    if !options.explicit {
-        report["tiling"] = json!("implicit");
-    }
+    report["tiling"] = json!("implicit");
     let report = crate::output::write_report(output, report, true)?;
     // Close resources explicitly before inventory admission. Earlier failures
     // leave scratch beneath the facade-owned workspace for required cleanup.
@@ -1340,7 +1319,6 @@ mod countries_fragment_tests {
             max_vertices: 16,
             max_bytes: 100_000,
             skip_invalid: true,
-            explicit: true,
             ..VectorOptions::default()
         };
         let mut counters = Counters::default();
@@ -1500,7 +1478,6 @@ mod countries_fragment_tests {
         let options = VectorOptions {
             max_vertices: 2,
             max_bytes: 1_000_000,
-            explicit: true,
             ..VectorOptions::default()
         };
         let rejected = make(

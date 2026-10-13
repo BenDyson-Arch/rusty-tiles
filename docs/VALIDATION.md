@@ -159,9 +159,9 @@ presentation nodes (hierarchy visits under I1), one `tileset.json` value node an
 bytes per tile. Content volume is bounded separately. An archive over 1 GiB,
 2 GiB of reads or 16 million payload elements is refused at any tile count, so
 dense vector content can reach those ceilings well below 100,000 tiles.
-`--explicit` vector output keeps its whole hierarchy in one `tileset.json` of
-about 50.5 value nodes per tile. It reaches the 131,072 value-node ceiling at
-about 2,595 tiles. Measured costs at these ceilings are recorded in
+Explicit vector archives, written by the `--explicit` mode removed in 0.4.0,
+keep their whole hierarchy in one `tileset.json` of about 50.5 value nodes per
+tile. They reach the 131,072 value-node ceiling at about 2,595 tiles. Measured costs at these ceilings are recorded in
 [bench/architecture_audit/validator_caps](../bench/architecture_audit/validator_caps/README.md).
 The pinned C1 contract record
 ([c1-payload-integrity-contract.md](architecture/c1-payload-integrity-contract.md),

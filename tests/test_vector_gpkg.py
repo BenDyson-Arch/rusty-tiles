@@ -92,10 +92,8 @@ class GeoPackageTests(unittest.TestCase):
                 self.assertEqual(read(out/leaf['content']['uri'])[2],['7'])
             report=json.loads((out/'conversion.json').read_text())
             self.assertEqual(report['features'],8);self.assertEqual(report['fragments'],8)
-            previous=root/'previous.3tz'
-            with zipfile.ZipFile(previous,'w') as archive:
-                for file in out.rglob('*'):
-                    if file.is_file():archive.write(file,file.relative_to(out).as_posix())
+            from vector_test_support import published
+            previous=published(out)
             # Every surviving row moves to one side of the saved cuts. They
             # must be recomputed while retaining duplicate source identities.
             features=features[:3]

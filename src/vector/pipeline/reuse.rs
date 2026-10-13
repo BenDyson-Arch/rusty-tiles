@@ -59,8 +59,8 @@ fn encoder() -> String {
     encoder_with_framing(include_str!("../../vector_encoding/framing.rs"))
 }
 fn encoder_with_framing(framing_source: &str) -> String {
-    // Intrinsic source-chart triangulation changes native explicit content too;
-    // every hierarchy uses the reviewed source/dependency fingerprint.
+    // Intrinsic source-chart triangulation changes native content too; the
+    // encoder identity is the reviewed source/dependency fingerprint.
     let mut hasher = Sha256::new();
     for source in [
         include_str!("../pipeline.rs"),
@@ -115,6 +115,12 @@ fn encoder_with_framing(framing_source: &str) -> String {
     }
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
 }
+
+/// Archives published by the retired explicit vector mode record no
+/// `explicitRoot` and no implicit tiling; their layout cannot be reused.
+const RETIRED_EXPLICIT: &str = "previous archive uses the retired explicit vector layout; \
+     reuse needs an archive from the default implicit output. Run a fresh conversion without \
+     reuseTileset (--reuse-tileset)";
 
 /// Fragmented polygon fills were b3dm-wrapped before glTF-only fills. Their
 /// payloads cannot be reused; the archive must be rebuilt.
@@ -190,6 +196,9 @@ impl Reuse {
                 let message = "previous encoder differs; run a fresh portable conversion without reuseTileset";
                 return Err(data(message));
             }
+            if state.get("explicitRoot").is_none() {
+                return Err(data(RETIRED_EXPLICIT));
+            }
             if state["version"] != 1
                 || state["records"]
                     .as_object()
@@ -249,7 +258,7 @@ impl Reuse {
                 }
                 Ok(())
             }
-            let previous_root = state.get("explicitRoot").unwrap_or(&manifest["root"]);
+            let previous_root = &state["explicitRoot"];
             if has_legacy_fill(previous_root) {
                 return Err(data(LEGACY_FILL));
             }
@@ -301,9 +310,7 @@ impl Reuse {
             "quantize":options.quantize,"meshopt":options.meshopt,"maxFeatures":max_features,"maxParentFeatures":options.max_parent_features,"maxVertices":options.max_vertices,"maxBytes":options.max_bytes,
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
-        if !options.explicit {
-            self.config["tiling"] = json!("implicit-forest-v3");
-        }
+        self.config["tiling"] = json!("implicit-forest-v3");
         // Accepted schema/list inventory is derived from this source revision.
         // It belongs in cache signatures, but changes must rebuild content rather
         // than refusing deletions or an empty accepted inventory.
@@ -466,13 +473,14 @@ impl Reuse {
             },
         );
     }
-    /// Record build state and publish only referenced raw payloads. `forest` is the
-    /// producer's explicit hierarchy and the writer's output for implicit archives.
+    /// Record build state and publish only referenced raw payloads. `explicit_root`
+    /// is the producer's hierarchy (the forest's input); `forest` is the writer's output.
     pub fn publish(
         &mut self,
         manifest: &mut Value,
         frame: &Frame,
-        forest: Option<(&Value, &ForestOutput)>,
+        explicit_root: &Value,
+        forest: &ForestOutput,
     ) -> Result<Value, Error> {
         fn used(node: &Value, result: &mut BTreeSet<String>) {
             for content in contents(node) {
@@ -487,17 +495,11 @@ impl Reuse {
             }
         }
         let mut contents = BTreeSet::new();
-        used(
-            forest.map_or(&manifest["root"], |(root, _)| root),
-            &mut contents,
-        );
-        // Raw payloads stay published only where a tile names them in place: every
-        // content of an explicit archive, a forest's explicit-tile payloads. The
-        // forest writer has already removed the raw sources it rebased.
-        let published: BTreeSet<&str> = match forest {
-            Some((_, output)) => output.members.iter().map(String::as_str).collect(),
-            None => contents.iter().map(String::as_str).collect(),
-        };
+        used(explicit_root, &mut contents);
+        // Raw payloads stay published only where a forest's explicit tile names
+        // them in place. The forest writer has already removed the raw sources it
+        // rebased.
+        let published: BTreeSet<&str> = forest.members.iter().map(String::as_str).collect();
         let raw = self.output.join("t");
         if raw.is_dir() {
             for entry in std::fs::read_dir(raw)? {
@@ -509,10 +511,8 @@ impl Reuse {
             }
         }
         let mut state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,
-            "payloads":payload_map(forest.map(|(_, output)| output)),"manifestSha256":digest(manifest)?});
-        if let Some((root, _)) = forest {
-            state["explicitRoot"] = root.clone();
-        }
+            "payloads":payload_map(forest),"manifestSha256":digest(manifest)?});
+        state["explicitRoot"] = explicit_root.clone();
         let raw = canonical(&state)?;
         std::fs::write(self.output.join("vector-build.json"), &raw)?;
         manifest["asset"]["extras"] = json!({"vectorBuildStateSha256":hash(&raw)});
@@ -545,13 +545,9 @@ fn unhex(text: &str) -> Option<[u8; 32]> {
 
 /// One entry per distinct raw payload the forest publishes only rebased, first in
 /// tile preorder. Shared raw contents need one location; any one restores exactly.
-fn payload_map(forest: Option<&ForestOutput>) -> BTreeMap<String, Payload> {
+fn payload_map(forest: &ForestOutput) -> BTreeMap<String, Payload> {
     let mut map = BTreeMap::new();
-    for content in forest
-        .into_iter()
-        .flat_map(|output| &output.tiles)
-        .flat_map(|tile| &tile.contents)
-    {
+    for content in forest.tiles.iter().flat_map(|tile| &tile.contents) {
         if let Some(record) = &content.rebase {
             map.entry(hex(&record.raw_sha256))
                 .or_insert_with(|| Payload {
@@ -640,21 +636,32 @@ mod codec_reuse_tests {
     use super::*;
 
     /// An intact earlier archive whose explicit hierarchy still names a
-    /// b3dm fill is refused up front with the actionable rebuild message.
+    /// b3dm fill, or that the retired explicit mode published (no
+    /// `explicitRoot`), is refused up front with the actionable rebuild message.
     #[test]
-    fn previous_b3dm_fill_archive_refuses_reuse() {
+    fn previous_b3dm_fill_or_explicit_archive_refuses_reuse() {
         let root = tempfile::tempdir().unwrap();
-        for (uri, refused) in [("t/aa.b3dm", true), ("t/aa.glb", false)] {
+        for (uri, implicit, refusal) in [
+            ("t/aa.b3dm", true, Some(LEGACY_FILL)),
+            ("t/aa.glb", true, None),
+            ("t/aa.glb", false, Some(RETIRED_EXPLICIT)),
+        ] {
+            let refused = refusal.is_some();
             let tile = json!({"geometricError":0,"children":[{"geometricError":0,
                 "contents":[{"uri":"t/bb.glb"},{"uri":uri}]}]});
             let manifest = json!({"asset":{"version":"1.1"},"geometricError":1,"root":tile});
-            let state = json!({"version":1,"records":{},"config":{"encoder":encoder(),"where":null},
+            let mut state = json!({"version":1,"records":{},"config":{"encoder":encoder(),"where":null},
                 "manifestSha256":digest(&manifest).unwrap(),"anchor":[0.,0.,0.],
                 "frame":[[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]]});
+            if implicit {
+                state["explicitRoot"] = tile.clone();
+            }
             let raw = serde_json::to_vec(&state).unwrap();
             let mut published = manifest.clone();
             published["asset"]["extras"] = json!({"vectorBuildStateSha256":hash(&raw)});
-            let path = root.path().join(format!("previous-{refused}.3tz"));
+            let path = root
+                .path()
+                .join(format!("previous-{refused}-{implicit}.3tz"));
             let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
             let options = zip::write::SimpleFileOptions::default();
             zip.start_file("tileset.json", options).unwrap();
@@ -666,14 +673,15 @@ mod codec_reuse_tests {
                 reuse_tileset: Some(path),
                 ..VectorOptions::default()
             };
-            match Reuse::new(root.path(), &options) {
-                Err(Error::Data(message)) if refused => assert_eq!(message, LEGACY_FILL),
-                Ok(_) if !refused => {}
-                Err(error) => panic!("unexpected refusal for {uri}: {error}"),
-                Ok(_) => panic!("b3dm fill archive must not be reused"),
+            match (Reuse::new(root.path(), &options), refusal) {
+                (Err(Error::Data(message)), Some(expected)) => assert_eq!(message, expected),
+                (Ok(_), None) => {}
+                (Err(error), _) => panic!("unexpected refusal for {uri}: {error}"),
+                (Ok(_), Some(_)) => panic!("{uri} implicit {implicit} must not be reused"),
             }
         }
         assert!(LEGACY_FILL.contains("without reuseTileset"));
+        assert!(RETIRED_EXPLICIT.contains("without reuseTileset"));
     }
 
     /// Exercise the real subtree signature and restore decision: an unchanged

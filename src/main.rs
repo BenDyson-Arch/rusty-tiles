@@ -299,9 +299,6 @@ struct RasterArgs {
 struct PointCloudArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Keep the legacy explicit tileset hierarchy.
-    #[arg(long)]
-    explicit: bool,
     /// Expose classification, intensity and return number as vertex property attributes
     #[arg(long = "metadataAttributes", visible_alias = "metadata-attributes")]
     metadata_attributes: bool,
@@ -335,9 +332,6 @@ struct PointCloudArgs {
 struct VectorArgs {
     #[command(flatten)]
     io: IoArgs,
-    /// Keep the legacy explicit tileset hierarchy.
-    #[arg(long)]
-    explicit: bool,
     /// Omit volatile performance diagnostics for byte-identical archives
     #[arg(long)]
     reproducible: bool,
@@ -1165,7 +1159,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 }
             };
             let options = PointCloudOptions {
-                explicit: a.explicit,
                 metadata_attributes: a.metadata_attributes,
                 max_points: a.max_points,
                 chunk_points: a.chunk_points,
@@ -1266,7 +1259,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 OutputPolicy::CreateNew
             };
             let options = vector::VectorOptions {
-                explicit: a.explicit,
                 reproducible: a.reproducible,
                 jobs: a.jobs,
                 quantize: a.quantize,
