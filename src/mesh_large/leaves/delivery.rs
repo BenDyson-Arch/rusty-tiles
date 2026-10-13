@@ -166,12 +166,15 @@ pub(super) fn channel_gate(
             80.,
         )
     } else if class(slot) == Class::Colour {
-        // Real-mesh worst cases (fast and balanced share UASTC pack level 0;
-        // quality uses level 1): PSNR 27.8 dB, p99.9 66, block RMSE 63.
+        // Worst levels of >=1024 texels on the real 10M-triangle mesh: fast
+        // and balanced (UASTC pack level 0) PSNR 27.2 dB, p99.9 67, block
+        // RMSE 63.4; quality (pack level 1, smaller leaves) PSNR 30.3 dB,
+        // p99.9 45, block RMSE 26.6. Floors keep about 3 dB and 13 levels of
+        // margin below those.
         (
-            if quality { 25. } else { 24. },
-            if quality { 72 } else { 80 },
-            80.,
+            if quality { 27. } else { 24. },
+            if quality { 64 } else { 80 },
+            if quality { 48. } else { 80. },
         )
     } else if slot == TextureSlot::Normal {
         (30., 112, 96.)
