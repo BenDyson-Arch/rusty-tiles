@@ -358,6 +358,10 @@ fn donor_runs(
     Ok(out.finish()?)
 }
 
+fn is_zero(v: &u64) -> bool {
+    *v == 0
+}
+
 /// What the LOD stage reports into the leaf manifest.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -366,6 +370,13 @@ pub(crate) struct LodReport {
     pub proxies: u64,
     pub proxy_faces: u64,
     pub proxy_bytes: u64,
+    /// After a bake pass: the certified untextured proxies' bytes (`proxy_bytes` is then
+    /// the published, baked total). Absent without a baker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub untextured_proxy_bytes: Option<u64>,
+    /// Bytes of frozen bake-handoff packets written (absent without a baker).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub handoff_bytes: u64,
     pub target_faces: u64,
     pub max_proxy_faces: u64,
     pub retention: Vec<u8>,
@@ -2608,6 +2619,7 @@ pub(crate) fn produce(
             report.fills_rejected_bound += o.fills_rejected_bound;
             report.fills_rejected_topology += o.fills_rejected_topology;
             report.fills_rejected_budget += o.fills_rejected_budget;
+            report.handoff_bytes += o.handoff_bytes;
             report.forced_collapses += o.forced;
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);

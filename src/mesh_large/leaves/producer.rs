@@ -647,7 +647,7 @@ fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
-    let lod = timing::time(Stage::Lod, || {
+    let mut lod = timing::time(Stage::Lod, || {
         super::super::lod::produce(
             super::super::lod::LodInput {
                 stage: path,
@@ -677,7 +677,12 @@ fn produce(
             check,
         );
         baker.bake(&pass)?;
-        report.proxy_bytes = pass.finish()?;
+        // The manifest reports the published (baked) proxy bytes, and keeps the certified
+        // untextured figure beside them.
+        let baked = pass.finish()?;
+        lod.untextured_proxy_bytes = Some(lod.proxy_bytes);
+        lod.proxy_bytes = baked;
+        report.proxy_bytes = baked;
     }
     drop(handoff);
     drop(preencode);
