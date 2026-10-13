@@ -56,7 +56,11 @@ preparation output) goes to `~/.cache/rusty-tiles-evidence/` and is referenced
 from a tracked README by SHA-256 and the last commit that held it.
 `scripts/check_tree_budget.py` runs in CI and fails when any tracked file
 exceeds 1 MB or the tree, `bench/` or `vendor/` exceeds its total budget; raise a
-budget only with a stated reason. `vendor/` holds only third-party source vendored
+budget only with a stated reason. On 2026-10-14, after
+trimming generated result files (listed in `bench/MOVED_EVIDENCE.md`), the tree
+budget went from 21.6 to 24.0 MB and `bench/` from 11.8 to 12.5 MB, because real
+code grew with the large-mesh tiler and validator-scale work. Trim before raising
+again. `vendor/` holds only third-party source vendored
 for a shipped feature, one pinned version per component, replaced rather than
 accumulated, with its own budget and an exact-path list of upstream files allowed
 over 1 MB. The guard sees only the final tree, so a PR that adds
