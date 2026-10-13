@@ -137,7 +137,18 @@ feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 
 ZIP admission uses one selected central-directory catalog for index validation,
-member lookup, CRC verification and exact stored-range reads. The report's
+member lookup, CRC verification and exact stored-range reads. The catalog holds one
+fixed-width row per member in `@3dtilesIndex1@` MD5 order and the names in a log. It
+stays in memory up to 96 MiB (every archive within the default entry and directory
+limits); a larger catalog moves to a scratch directory, created at its first spilled
+file, so resident memory does not grow with the entry count except for one bit per
+member. The index is checked by one streamed merge against the catalog. More than 16
+unreferenced members are reported as the first 16 names in byte order and a count. A
+failure of the validator's own scratch storage is `io`, `resource_limit` or
+`invalid_state` with the prefix "validation scratch:", never a verdict on the archive.
+The report's `payloads` rows are read on demand: the CLI streams them and Python's
+`report["payloads"]` is a lazy read-only sequence. See the
+[catalog-at-scale amendment](architecture/c1-archive-catalog-scale-amendment.md). The report's
 `archiveStoredRecordLayout` check requires disjoint local-header/data/descriptor
 extents; coherent nested member records are Unsupported. Ordinary nested ZIP
 bytes within one opaque payload are permitted. Duplicate logical names and

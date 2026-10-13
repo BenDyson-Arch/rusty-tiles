@@ -13,6 +13,8 @@ mod containment;
 #[cfg(test)]
 mod memo_controls;
 mod rows;
+#[cfg(test)]
+mod scale_driver;
 mod types;
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{

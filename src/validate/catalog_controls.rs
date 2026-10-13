@@ -133,3 +133,29 @@ fn profiles_agree_on_reports_and_failures() {
         "invalid_input: missing archive entry: t/7.glb"
     );
 }
+
+/// Only the `vector-build.json` digest survives the hash pass, and `conversion.json` is
+/// marked used by its presence alone: both checks keep their verdicts.
+#[test]
+fn vector_build_digest_and_conversion_marker_survive_the_hash_pass() {
+    use sha2::Digest;
+    let state = b"{\"state\":1}".to_vec();
+    let digest = format!("{:x}", sha2::Sha256::digest(&state));
+    let manifest = |expected: &str| {
+        let mut doc: Value =
+            serde_json::from_slice(&tileset(content_tile(&["a.glb".into()]))).unwrap();
+        doc["asset"]["extras"] = json!({"vectorBuildStateSha256": expected});
+        serde_json::to_vec(&doc).unwrap()
+    };
+    let mut files = Files::new();
+    files.insert("a.glb".into(), point_glb());
+    files.insert("vector-build.json".into(), state);
+    files.insert("conversion.json".into(), b"{}".to_vec());
+    files.insert("tileset.json".into(), manifest(&digest));
+    assert!(both(&files).contains("\"ok\":true"));
+    files.insert("tileset.json".into(), manifest(&"0".repeat(64)));
+    assert_eq!(
+        both(&files),
+        "invalid_input: vector build-state checksum mismatch"
+    );
+}
