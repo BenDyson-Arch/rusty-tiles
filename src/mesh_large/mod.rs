@@ -12,6 +12,7 @@ mod full;
 mod images;
 mod input;
 mod leaves;
+mod lod;
 mod records;
 mod tree;
 pub use delivery::{mesh_leaves_to_3tz, MeshTilesetReport, MeshTilesetRequest, MeshTilesetResult};

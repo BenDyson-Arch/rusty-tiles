@@ -57,6 +57,7 @@ pub struct LeafOutputRequest {
     profile: LeafProfile,
     jobs: Jobs,
     scratch_dir: Option<PathBuf>,
+    lod_mutation: super::super::lod::Mutation,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -70,6 +71,7 @@ impl LeafOutputRequest {
             profile,
             jobs: Jobs::Auto,
             scratch_dir: None,
+            lod_mutation: super::super::lod::Mutation::None,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -78,6 +80,12 @@ impl LeafOutputRequest {
     }
     pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.scratch_dir = Some(path.into());
+        self
+    }
+    /// Test controls: run the coarse levels with a certificate mutation.
+    #[cfg(test)]
+    pub(crate) fn with_lod_mutation(mut self, mutation: super::super::lod::Mutation) -> Self {
+        self.lod_mutation = mutation;
         self
     }
 }
@@ -91,6 +99,9 @@ pub struct LeafOutputReport {
     pub maximum_glb_bytes: u64,
     pub maximum_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// H17 coarse tiles (untextured certified proxies) written beside the leaves.
+    pub proxies: u64,
+    pub proxy_bytes: u64,
 }
 #[derive(Debug)]
 pub struct LeafOutputResult {
@@ -430,6 +441,7 @@ fn produce(
     config: &TreeConfig,
     stage: &StagePlan,
     profile: LeafProfile,
+    mutation: super::super::lod::Mutation,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafOutputReport, JobError> {
     let leaves = path.join("leaves");
@@ -450,6 +462,8 @@ fn produce(
         maximum_glb_bytes: 0,
         maximum_geometry_error: 0.,
         density_reduced_leaves: 0,
+        proxies: 0,
+        proxy_bytes: 0,
     };
     let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
     let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
@@ -565,12 +579,27 @@ fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
-    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
+    let lod = timing::time(Stage::Lod, || {
+        super::super::lod::produce(
+            super::super::lod::LodInput {
+                stage: path,
+                captured,
+                scratch: &captured.scratch,
+                sort: config.sorter(stage.jobs as usize),
+                jobs: stage.jobs as usize,
+                mutation,
+            },
+            check,
+        )
+    })?;
+    report.proxies = lod.proxies;
+    report.proxy_bytes = lod.proxy_bytes;
+    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","lod":lod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
     write_file(
         &path.join("manifest.json"),
         &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let resources = json!({"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
+    let resources = json!({"lod":{"jobs":lod.jobs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
     write_file(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
@@ -674,6 +703,7 @@ pub fn mesh_to_leaf_payloads(
         &config,
         &stage_plan,
         request.profile,
+        request.lod_mutation,
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();
@@ -916,6 +946,13 @@ mod tests {
             rows.as_bytes().to_vec(),
         ];
         for row in rows.lines() {
+            let row: serde_json::Value = serde_json::from_str(row).unwrap();
+            files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
+        }
+        // H17 coarse tiles are part of the deterministic output too.
+        let proxies = fs::read_to_string(output.join("proxies.jsonl")).unwrap();
+        files.push(proxies.as_bytes().to_vec());
+        for row in proxies.lines() {
             let row: serde_json::Value = serde_json::from_str(row).unwrap();
             files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
         }

@@ -123,6 +123,33 @@ impl<T: Record> Sequence<T> {
             sequence: self,
             remaining: self.records,
             encoded: vec![0; T::SIZE],
+            ranged: false,
+        })
+    }
+
+    /// A reader of records `[first, end)` only, positioned by seeking (fixed-size records).
+    pub(crate) fn range(
+        &self,
+        first: u64,
+        end: u64,
+        buffer_bytes: usize,
+    ) -> Result<SequenceReader<'_, T>, SpillError> {
+        if first > end || end > self.records || buffer_bytes == 0 {
+            return Err(SpillError::InvalidConfig("sequence range outside its records"));
+        }
+        let offset = first
+            .checked_mul(T::SIZE as u64)
+            .ok_or(SpillError::Overflow)?;
+        let inner = self
+            .io
+            .open_at(self.file.path(), offset)
+            .map_err(|e| SpillError::io("open spill sequence", self.file.path(), e))?;
+        Ok(SequenceReader {
+            reader: Some(BufReader::with_capacity(buffer_bytes, inner)),
+            sequence: self,
+            remaining: end - first,
+            encoded: vec![0; T::SIZE],
+            ranged: true,
         })
     }
 }
@@ -134,6 +161,8 @@ pub(crate) struct SequenceReader<'a, T: Record> {
     sequence: &'a Sequence<T>,
     remaining: u64,
     encoded: Vec<u8>,
+    /// A range reader ends at its range; the rest of the file is not its business.
+    ranged: bool,
 }
 
 impl<T: Record> SequenceReader<'_, T> {
@@ -148,6 +177,10 @@ impl<T: Record> SequenceReader<'_, T> {
         let Some(reader) = self.reader.as_mut() else {
             return Ok(None);
         };
+        if self.remaining == 0 && self.ranged {
+            self.reader = None;
+            return Ok(None);
+        }
         if self.remaining == 0 {
             let mut probe = [0u8; 1];
             loop {

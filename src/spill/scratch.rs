@@ -14,6 +14,18 @@ use std::{
 pub(crate) trait SpillIo: Send + Sync {
     fn create(&self, path: &Path) -> io::Result<Box<dyn Write + Send>>;
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>>;
+    /// Open `path` positioned `offset` bytes in. The default reads and discards the prefix.
+    fn open_at(&self, path: &Path, offset: u64) -> io::Result<Box<dyn Read + Send>> {
+        let mut reader = self.open(path)?;
+        let skipped = io::copy(&mut (&mut reader).take(offset), &mut io::sink())?;
+        if skipped != offset {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "spill file is shorter than the requested offset",
+            ));
+        }
+        Ok(reader)
+    }
 }
 
 pub(crate) struct FileIo;
@@ -25,6 +37,12 @@ impl SpillIo for FileIo {
     }
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         Ok(Box::new(File::open(path)?))
+    }
+    fn open_at(&self, path: &Path, offset: u64) -> io::Result<Box<dyn Read + Send>> {
+        use std::io::Seek;
+        let mut file = File::open(path)?;
+        file.seek(io::SeekFrom::Start(offset))?;
+        Ok(Box::new(file))
     }
 }
 
