@@ -230,7 +230,7 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
         if at != kvd_length {
             return Err(invalid("KTX2 key/value pairs do not sum to kvdByteLength"));
         }
-        end += kvd_length;
+        end = kvd_offset + kvd_length;
     }
 
     // Supercompression global data: BasisLZ only, at the next 8-byte boundary.

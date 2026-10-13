@@ -9,7 +9,7 @@ Nothing outside this directory is modified except the CI harness entry in
 | File | Role |
 | --- | --- |
 | `ktx2_oracle.py` | Independent stdlib oracle written from the pinned texts: lists every rule a container or document breaks |
-| `generator.py` | Builds the 66 archives; each case states its intended rule and category, and the oracle must agree |
+| `generator.py` | Builds the 67 archives; each case states its intended rule and category, and the oracle must agree |
 | `runner.py` | Regenerates the archives into the run directory, checks them against `fixtures/manifest.json`, then runs the supplied CLI |
 | `mutants.py` | Oracle mutants (patched oracle copies) and production mutants (patched Rust, rebuilt, run through `runner.py`) |
 | `primary/` | Pinned texts and reference KTX2 files, hashes and sources in `pins.json` |
@@ -45,7 +45,7 @@ Admitted (13):
 - a 2D image, and a premultiplied image, whose texture no material uses;
 - `shared-view-heavy-kvd`: 4,000 images over one view holding an 8 MiB key/value pair. Per-image inspection makes this one time out (audit F1).
 
-Refused (53):
+Refused (54):
 - truncated header, base level and encoder output;
 - bad identifier;
 - level past EOF;
@@ -75,7 +75,7 @@ Refused (53):
 - non-square cubemap;
 - `image/png`, and a missing `mimeType` on a bufferView;
 - PNG bytes at a URI without `mimeType`;
-- data URIs with and without `mimeType` (Unsupported);
+- data URIs without `mimeType`, with `image/ktx2` and with `image/png` (Unsupported, decided first);
 - a fallback that is the KTX2 image, by declaration or by identifier;
 - no fallback without `extensionsRequired`;
 - an undeclared extension object.

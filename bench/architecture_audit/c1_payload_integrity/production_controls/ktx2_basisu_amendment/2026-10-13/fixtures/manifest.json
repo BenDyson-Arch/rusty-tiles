@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "Predictions frozen before target execution; not execution evidence",
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
-  "generatorSha256": "d36ed393f52701014c4e6f38c9b511392a864a01bdaa879b6b13057881ec8615",
+  "generatorSha256": "71b261ecbd7eaab88f3c6456d39b88567b5236cbfe8bb488583bd0966012dd4e",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
   "runnerSha256": "35dd09509f09bd5e6d70f482753726a19b972b3572d8eac8346ae3b160e91949",
   "referencePins": {
@@ -2213,6 +2213,28 @@
       "memberSha256": {
         "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
         "tile.glb": "5871b849fb34e9b66d1c89b07fc76155ed4f2dc0bb4f0076fb8bb81cdb1de83d"
+      }
+    },
+    {
+      "name": "data-uri-png-mime",
+      "path": "data-uri-png-mime/input.3tz",
+      "source": "data: URI declared image/png (data URI decided first)",
+      "intendedRule": "data-uri",
+      "oracleViolations": [
+        "data-uri"
+      ],
+      "oracleCategory": "unsupported",
+      "expectedCategory": "unsupported",
+      "expectedExitCode": 2,
+      "expectedReport": null,
+      "imageSha256": [
+        "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
+      ],
+      "sha256": "5f2d3b730ca86d3752a0dcbffd668dd8d73730c7c58863cd6898c35df4adddba",
+      "bytes": 1301,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "0ab457e7b83230bbe3dca6fe40148285e3798b888d0009fe78130e4dd84025f9"
       }
     },
     {

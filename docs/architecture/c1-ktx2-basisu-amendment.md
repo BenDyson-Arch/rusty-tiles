@@ -167,8 +167,8 @@ levels by the packed-offset rule.
 
 Independent lane:
 `bench/architecture_audit/c1_payload_integrity/production_controls/ktx2_basisu_amendment/2026-10-13/`.
-A standard-library oracle written from the pinned texts recomputes every verdict; 66
-archive controls (13 admitted, 53 refused) cover:
+A standard-library oracle written from the pinned texts recomputes every verdict; 67
+archive controls (13 admitted, 54 refused) cover:
 
 - upstream KTX-Software reference files: ETC1S RGB+A, ETC1S with mips, UASTC, UASTC+Zstd
   with mips, and an upstream file carrying `KTXswizzle ra01`;

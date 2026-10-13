@@ -1,6 +1,6 @@
 {
   "kind": "production",
-  "sourceCommit": "aac8854950a5f9cd70dc0588083361d2bac20c40",
+  "sourceCommit": "e27f66b93934a7a66afe8f12205c58824e0c49ea",
   "sourceSha256": {
     "/home/bend/.cache/rt-wt/ktx2val/src/archive3tz/read.rs": "53b4c098f4ce2120f6b01bc49753b087a1188ed646355420c8f777f64a906b03",
     "/home/bend/.cache/rt-wt/ktx2val/src/archive3tz.rs": "ae0c3b96c1d79de6eb27d8c550f308488b00e93aef9fec279473dfbda0d0cf58",
@@ -18,13 +18,13 @@
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/meshopt.rs": "01c6e87fe4f02ac86972f1148f299393035b5320fb410b8e7a7710e09a5f32b1",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/numbers.rs": "d9df98565ac36231b537e6e3d7116e21485ec5a36b3cad64f4770b1ccb905dc7",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/controls.rs": "8b81a3f19e14348e849fc56a12a9ea35bb108600ebab26141a8b1efbb81e06b4",
-    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2.rs": "4c8c6488e7d031f651f57c82992c574bd767e48adff0d73214212b27b6e7406a",
-    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2_controls.rs": "97de48cc91a22b8721d44ddb4a13ad1520babfb7e51cb297ecd731b70b12544f",
+    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2.rs": "07049fee05f20e0e107f922f01900d3108f28574b2f285b2748b3b7b2610258e",
+    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2_controls.rs": "15d944110595f21b3d2a95ae5b3aa77a34eb4774f7442e493a20093c54ae46b1",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/meshopt_header_controls.rs": "f7251699f86ee210d6fb448567348ab907935e299e0f19811da7c1993d2f1548",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/numbers.rs": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/records.rs": "6299e846fa47899293e8001f833612ed5bce03eef50da8bbaad680e4d8f12ad3",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/scene.rs": "eb863adfb116ee89ff4c4273a3fb67d2db235528ceb6d5453b60587ac30ebaa2",
-    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload.rs": "2d63339743f0d3aa61becb64f3925eb912ad46e54a26100481d4e498029815b9",
+    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload.rs": "07caaee31ecce7211e3668266e735e34bbb902816ec098769ce92cfff1277ea0",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity.rs": "f5a3086634948faa94405aaea528d715088c5154e93b5e07fb8619124186f3f6",
     "/home/bend/.cache/rt-wt/ktx2val/src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
     "/home/bend/.cache/rt-wt/ktx2val/src/dir_sync.rs": "d6225f5e7260ada9d3240cb857649471f69efb981643132446516c114ff665eb",
@@ -240,7 +240,11 @@
       "buildStderrTail": "",
       "failedCases": [
         "external-ktx2-uri",
+        "external-uri-no-suffix",
         "non-material-2d",
+        "premultiplied-no-material",
+        "red-linear",
+        "shared-view-heavy-kvd",
         "uastc-none-packed-mips",
         "uastc-none-upstream"
       ],
@@ -327,28 +331,206 @@
     {
       "mutant": "skip-mime",
       "file": "src/content_integrity/payload.rs",
-      "old": "if roles & 2 != 0 && !ktx2 {",
-      "new": "if roles & 2 != 0 && false {",
-      "namedCase": "mime-png",
+      "old": "|| (mime.is_none() && image.view.is_some()))",
+      "new": "|| false)",
+      "namedCase": "mime-missing-buffer-view",
       "built": true,
       "buildStderrTail": "",
       "failedCases": [
-        "mime-missing-buffer-view",
-        "mime-png",
-        "uri-png-suffix"
+        "mime-missing-buffer-view"
       ],
       "pass_": true
     },
     {
       "mutant": "fallback-may-be-ktx2",
       "file": "src/content_integrity/payload.rs",
-      "old": "if roles & 1 != 0 && ktx2 {",
-      "new": "if roles & 1 != 0 && false {",
+      "old": "if typed && roles & 1 != 0 && ktx2 {",
+      "new": "if typed && roles & 1 != 0 && false {",
       "namedCase": "fallback-is-ktx2",
       "built": true,
       "buildStderrTail": "",
       "failedCases": [
-        "fallback-is-ktx2"
+        "fallback-is-ktx2",
+        "fallback-ktx2-by-identifier"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "suffix-free-identifier-ignored",
+      "file": "src/content_integrity/payload.rs",
+      "old": "|| data.starts_with(&ktx2::IDENTIFIER),",
+      "new": "|| false,",
+      "namedCase": "fallback-ktx2-by-identifier",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "fallback-ktx2-by-identifier"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "data-uri-not-first",
+      "file": "src/content_integrity/payload.rs",
+      "old": "if uri.as_deref().is_some_and(|uri| uri.starts_with(\"data:\")) {",
+      "new": "if false {",
+      "namedCase": "data-uri-no-mime",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [],
+      "pass_": false
+    },
+    {
+      "mutant": "per-image-inspection",
+      "file": "src/content_integrity/payload.rs",
+      "old": "Some(view) => ktx2_views[view] |= if roles & 4 != 0 { 3 } else { 1 },",
+      "new": "Some(_) => ktx2::inspect(&data, roles & 4 != 0)?,",
+      "namedCase": "shared-view-heavy-kvd",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "shared-view-heavy-kvd"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "global-data-unaligned",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if scheme != BASIS_LZ || sgd_offset != align_up(end, 8)? {",
+      "new": "if scheme != BASIS_LZ {",
+      "namedCase": "global-data-8-late",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "global-data-8-late"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-red-srgb",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if red && dfd[14] == TRANSFER_SRGB {",
+      "new": "if red && false {",
+      "namedCase": "red-srgb",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "red-srgb",
+        "rg-srgb-upstream-patched"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-premultiplied",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if material && dfd[15] & FLAG_PREMULTIPLIED != 0 {",
+      "new": "if material && false {",
+      "namedCase": "premultiplied-material",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "premultiplied-material"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "kvd-anywhere",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if kvd_offset != end {",
+      "new": "if false {",
+      "namedCase": "kvd-misplaced",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [],
+      "pass_": false
+    },
+    {
+      "mutant": "allow-empty-key",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "nul.is_none_or(|nul| nul == 0)",
+      "new": "nul.is_none()",
+      "namedCase": "kvd-empty-key",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "kvd-empty-key"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-pframe-flag",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if flags != 0 || rgb_length == 0",
+      "new": "if rgb_length == 0",
+      "namedCase": "basislz-pframe-flag",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "basislz-pframe-flag"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-extended",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "|| extended != 0 {",
+      "new": "{",
+      "namedCase": "basislz-extended",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "basislz-extended"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "alpha-may-be-empty",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "alpha_length != 0 && alpha_offset + alpha_length <= *length",
+      "new": "alpha_offset + alpha_length <= *length",
+      "namedCase": "basislz-alpha-missing",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "basislz-alpha-missing"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-etc1s-rgb-ggg",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "| (2, [0, 15]) |",
+      "new": "| (2, [0, 15 | 4]) |",
+      "namedCase": "etc1s-rgb-ggg",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "etc1s-rgb-ggg"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "any-dfd-vendor",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if word(dfd, 4)? != 0",
+      "new": "if word(dfd, 4)? > 1",
+      "namedCase": "dfd-vendor",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "dfd-vendor"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "any-cubemap",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if faces == 6 && (height != width || depth != 0) {",
+      "new": "if false {",
+      "namedCase": "cubemap-not-square-no-material",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "cubemap-not-square-no-material"
       ],
       "pass_": true
     },
@@ -368,22 +550,32 @@
     {
       "mutant": "skip-container",
       "file": "src/content_integrity/payload.rs",
-      "old": "ktx2::inspect(&data, roles & 4 != 0)?;",
-      "new": "let _ = ktx2::inspect;",
+      "old": "ktx2::inspect(&views[view], flags & 2 != 0)?;",
+      "new": "let _ = view;",
       "namedCase": "truncated-base-level",
       "built": true,
       "buildStderrTail": "",
       "failedCases": [
         "bad-identifier",
+        "basislz-alpha-missing",
+        "basislz-extended",
         "basislz-global-length",
+        "basislz-pframe-flag",
         "basislz-slice-past-level",
+        "cubemap-not-square-no-material",
         "dfd-misplaced",
         "dfd-total-size",
+        "dfd-vendor",
+        "dfd-version",
+        "etc1s-rgb-ggg",
         "etc1s-swizzle-upstream",
         "etc1s-zstd-scheme",
+        "global-data-8-late",
         "global-data-for-uastc",
         "hostile-level-count",
         "hostile-level-offset",
+        "kvd-empty-key",
+        "kvd-misplaced",
         "kvd-pair-length",
         "level-count-over-dimensions",
         "level-count-zero",
@@ -394,6 +586,9 @@
         "not-multiple-of-4",
         "orientation-ru",
         "overlapping-levels",
+        "premultiplied-material",
+        "red-srgb",
+        "rg-srgb-upstream-patched",
         "texel-block-6x4",
         "trailing-bytes",
         "truncated-base-level",
@@ -409,6 +604,6 @@
       "pass_": true
     }
   ],
-  "passes": 16,
-  "failures": 0
+  "passes": 28,
+  "failures": 2
 }

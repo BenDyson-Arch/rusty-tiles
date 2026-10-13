@@ -277,6 +277,8 @@ def cases():
          tile([(cyan, {'uri': 'data:image/ktx2;base64,AAAA'})], BASISU)),
         ('data-uri-ktx2-mime', 'data:image/ktx2 URI with image/ktx2', 'data-uri', U,
          tile([(cyan, {'uri': 'data:image/ktx2;base64,AAAA', 'mimeType': 'image/ktx2'})], BASISU)),
+        ('data-uri-png-mime', 'data: URI declared image/png (data URI decided first)', 'data-uri', U,
+         tile([(cyan, {'uri': 'data:image/png;base64,AAAA', 'mimeType': 'image/png'})], BASISU)),
         ('fallback-ktx2-by-identifier', 'fallback fallback.bin without mimeType holding KTX2', 'fallback-is-ktx2', I,
          tile([(cyan, KTX2), (cyan, {'uri': 'fallback.bin'})],
               [{'source': 1, 'extensions': {EXT: {'source': 0}}}], required=())),
