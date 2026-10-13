@@ -10,7 +10,7 @@ mod texture;
 pub(crate) use material::{Material, TextureSlot};
 #[cfg(test)]
 pub(crate) use texture::decode_image;
-pub(crate) use texture::{decode_image_admitted, DecodeAdmission, ImageInfo};
+pub(crate) use texture::{decode_image_admitted, probe_image_admitted, DecodeAdmission, ImageInfo};
 
 pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const MAX_TRIANGLES: usize = 100_000;

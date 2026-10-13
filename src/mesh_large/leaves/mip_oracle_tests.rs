@@ -1178,9 +1178,7 @@ fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
                     );
                     let gate = super::delivery::channel_gate(slot, profile, channel, stats.texels);
                     assert!(
-                        stats.psnr >= gate.psnr
-                            && gate.p999.is_none_or(|cap| stats.p999 <= cap)
-                            && stats.block_rmse <= gate.block_rmse,
+                        gate.accepts(&stats),
                         "{slot:?}/{profile:?}/mip{mip}/channel{channel}: {stats:?} {gate:?}"
                     );
                 }

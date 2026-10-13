@@ -220,7 +220,7 @@ fn real_page_gate_and_encoder_calibration() {
                                 continue;
                             }
                             let gate = channel_gate(slot, profile, channel, stats.texels);
-                            writeln!(out, "{}", json!({"kind":"level","page":page.name,"slot":format!("{slot:?}"),"profile":format!("{profile:?}"),"effort":effort.unwrap_or(codec_settings(slot, profile).1.effort),"mip":mip,"width":level.width,"height":level.height,"channel":channel,"psnr":if stats.psnr.is_finite(){stats.psnr}else{99.},"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"gate":{"psnr":gate.psnr,"p999":gate.p999,"blockRmse":gate.block_rmse},"levelPass":pass[mip]})).unwrap();
+                            writeln!(out, "{}", json!({"kind":"level","page":page.name,"slot":format!("{slot:?}"),"profile":format!("{profile:?}"),"effort":effort.unwrap_or(codec_settings(slot, profile).1.effort),"mip":mip,"width":level.width,"height":level.height,"channel":channel,"psnr":if stats.psnr.is_finite(){stats.psnr}else{99.},"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"gate":{"psnr":gate.psnr,"p999":gate.p999,"blockRmse":gate.block_rmse,"max":gate.max},"levelPass":pass[mip]})).unwrap();
                         }
                     }
                     failures += pass.iter().filter(|p| !**p).count();

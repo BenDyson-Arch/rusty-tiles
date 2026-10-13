@@ -885,11 +885,12 @@ mod tests {
         fs::write(parent.join("attributes.bin"), &bytes).unwrap();
         // Smooth gradients with mild texel detail, like photographed surfaces.
         let texture = image::RgbaImage::from_fn(1024, 1024, |x, y| {
-            let detail = ((x * 37 + y * 91) % 13) as u8;
+            // Every channel stays below 256 for x, y < 1024.
+            let detail = (x * 37 + y * 91) % 13;
             image::Rgba([
-                x as u8 / 2 + detail,
-                y as u8 / 2 + 40,
-                ((x + y) / 4) as u8 + detail,
+                (x / 8 + detail) as u8,
+                (y / 8 + 40) as u8,
+                ((x + y) / 16 + detail) as u8,
                 255,
             ])
         });
@@ -951,7 +952,7 @@ mod tests {
                 for binding in bindings {
                     // Scattered footprints become many small islands whose
                     // real texels are a small part of the 256x256 hull.
-                    assert!(binding["islands"].as_u64().unwrap() > 1);
+                    assert!(binding["islands"].as_array().unwrap().len() > 1);
                     assert!(binding["islandInteriorTexels"].as_u64().unwrap() < 1024 * 1024 / 5);
                 }
                 for page in row["appearance"]
@@ -992,10 +993,17 @@ mod tests {
             .iter()
             .find(|r| r.get("islands").is_some())
             .unwrap();
-        assert!(binding["islands"].as_u64().unwrap() > 1);
-        for axis in 0..2 {
-            assert_eq!(binding["pageOffset"][axis].as_u64().unwrap() % 8, 0);
-            assert_eq!(binding["cropSize"][axis].as_u64().unwrap() % 8, 0);
+        let islands = binding["islands"].as_array().unwrap();
+        assert!(islands.len() > 1);
+        assert_eq!(binding["islandGutter"], 8);
+        for island in islands {
+            for axis in 0..2 {
+                // Allocation origin and size are multiples of eight texels.
+                let interior = island[2 + axis].as_u64().unwrap();
+                let page = island[4 + axis].as_u64().unwrap();
+                assert_eq!((page - 8) % 8, 0, "{island}");
+                assert_eq!((interior + 16) % 8, 0, "{island}");
+            }
         }
     }
     #[test]

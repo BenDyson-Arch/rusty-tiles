@@ -126,25 +126,34 @@ pub(super) fn channel_stats(
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct ChannelGate {
     pub psnr: f64,
-    /// 99.9th-percentile cap; `None` on small levels (see [`SMALL_LEVEL_TEXELS`]).
+    /// 99.9th-percentile cap (calibrated colour channels of large levels).
     pub p999: Option<u8>,
-    pub block_rmse: f64,
+    /// Worst 4x4-block RMSE cap (colour channels).
+    pub block_rmse: Option<f64>,
+    /// Maximum absolute error cap (alpha, data and normal channels).
+    pub max: Option<u8>,
+}
+impl ChannelGate {
+    pub(super) fn accepts(&self, stats: &ChannelStats) -> bool {
+        stats.psnr >= self.psnr
+            && self.p999.is_none_or(|cap| stats.p999 <= cap)
+            && self.block_rmse.is_none_or(|cap| stats.block_rmse <= cap)
+            && self.max.is_none_or(|cap| stats.max <= cap)
+    }
 }
 /// Below this many supported texels (a 32x32 level) a 99.9th percentile is
 /// the maximum of a few hundred samples, and mips this small are sampled only
 /// at extreme minification. Small colour levels of packed island pages mix
 /// neighbouring islands inside codec blocks; they keep the block corruption
-/// guard and a PSNR floor 4 dB lower, without a percentile cap. Data, normal
-/// and alpha channels keep their floors at every size.
+/// guard and a PSNR floor 4 dB lower, without a percentile cap.
 pub(super) const SMALL_LEVEL_TEXELS: u64 = 1024;
-/// PSNR bounds mean quality per channel, the 99.9th percentile bounds the
-/// error tail without being decided by one outlier texel, and the worst 4x4
-/// codec-block RMSE catches one localized corrupted block that neither can
-/// see on a large page. Colour floors are calibrated on every level of the
-/// real 10M-triangle photogrammetry mesh (worst observed values plus margin,
-/// bench/architecture_audit/mesh_large_h8/throughput.md); data and normal
-/// floors keep their previous synthetic calibration with the maximum cap now
-/// applied to the 99.9th percentile.
+/// Colour channels: PSNR bounds mean quality, the 99.9th percentile bounds
+/// the error tail without being decided by one outlier texel, and the worst
+/// 4x4 codec-block RMSE catches one localized corrupted block that neither
+/// can see on a large page. They are calibrated on every level of the real
+/// 10M-triangle photogrammetry mesh (bench/architecture_audit/mesh_large_h8/
+/// throughput.md). Alpha, data and normal channels have no real-data
+/// calibration yet and keep their previous PSNR floors and maximum caps.
 pub(super) fn channel_gate(
     slot: TextureSlot,
     profile: Profile,
@@ -153,8 +162,14 @@ pub(super) fn channel_gate(
 ) -> ChannelGate {
     let quality = profile == Profile::Quality;
     let fast = profile == Profile::Fast;
-    let (psnr, p999, block_rmse) = if channel == 3 {
-        (
+    let legacy = |psnr: f64, max: u8| ChannelGate {
+        psnr,
+        p999: None,
+        block_rmse: None,
+        max: Some(max),
+    };
+    if channel == 3 {
+        return legacy(
             if quality { 34. } else { 30. },
             if fast {
                 80
@@ -163,42 +178,26 @@ pub(super) fn channel_gate(
             } else {
                 64
             },
-            80.,
-        )
-    } else if class(slot) == Class::Colour {
-        // Worst levels of >=1024 texels on the real 10M-triangle mesh: fast
-        // and balanced (UASTC pack level 0) PSNR 27.2 dB, p99.9 67, block
-        // RMSE 63.4; quality (pack level 1, smaller leaves) PSNR 30.3 dB,
-        // p99.9 45, block RMSE 26.6. Floors keep about 3 dB and 13 levels of
-        // margin below those.
-        (
-            if quality { 27. } else { 24. },
-            if quality { 64 } else { 80 },
-            if quality { 48. } else { 80. },
-        )
-    } else if slot == TextureSlot::Normal {
-        (30., 112, 96.)
-    } else if slot == TextureSlot::Occlusion {
-        (
-            30.,
-            if quality { 8 } else { 80 },
-            if quality { 24. } else { 96. },
-        )
-    } else {
-        (30., 32, 64.)
-    };
-    if texels < SMALL_LEVEL_TEXELS && channel != 3 && class(slot) == Class::Colour {
-        ChannelGate {
-            psnr: psnr - 4.,
-            p999: None,
-            block_rmse,
+        );
+    }
+    match class(slot) {
+        Class::Colour => {
+            // Worst levels of >=1024 texels on the real mesh: fast and balanced
+            // (UASTC pack level 0) PSNR 27.2 dB, p99.9 67, block RMSE 63.4;
+            // quality (pack level 1, smaller leaves) PSNR 30.3 dB, p99.9 45,
+            // block RMSE 26.6. Floors keep about 3 dB and 13 levels of margin.
+            let psnr = if quality { 27. } else { 24. };
+            let small = texels < SMALL_LEVEL_TEXELS;
+            ChannelGate {
+                psnr: if small { psnr - 4. } else { psnr },
+                p999: (!small).then_some(if quality { 64 } else { 80 }),
+                block_rmse: Some(if quality { 48. } else { 80. }),
+                max: None,
+            }
         }
-    } else {
-        ChannelGate {
-            psnr,
-            p999: Some(p999),
-            block_rmse,
-        }
+        Class::Normal => legacy(30., 112),
+        Class::Data if slot == TextureSlot::Occlusion => legacy(30., if quality { 8 } else { 80 }),
+        Class::Data => legacy(30., 32),
     }
 }
 pub(super) fn check_level(
@@ -229,14 +228,11 @@ pub(super) fn check_level(
     for &channel in channels {
         let stats = channel_stats(expected, decoded, support, width as usize, channel);
         let gate = channel_gate(slot, profile, channel, stats.texels);
-        metrics.push(json!({"channel":channel,"psnr":if stats.psnr.is_finite(){Some(stats.psnr)}else{None},"exact":stats.psnr.is_infinite(),"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"floor":gate.psnr,"p999Cap":gate.p999,"blockRmseCap":gate.block_rmse}));
-        if stats.psnr < gate.psnr
-            || gate.p999.is_some_and(|cap| stats.p999 > cap)
-            || stats.block_rmse > gate.block_rmse
-        {
+        metrics.push(json!({"channel":channel,"psnr":if stats.psnr.is_finite(){Some(stats.psnr)}else{None},"exact":stats.psnr.is_infinite(),"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"floor":gate.psnr,"p999Cap":gate.p999,"blockRmseCap":gate.block_rmse,"maxCap":gate.max}));
+        if !gate.accepts(&stats) {
             return Err(fidelity(format!(
-                "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{} p99.9 {} blockRMSE{} over {} texels (floors PSNR{} p99.9 {:?} block{})",
-                stats.psnr, stats.p999, stats.block_rmse, stats.texels, gate.psnr, gate.p999, gate.block_rmse
+                "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{} p99.9 {} blockRMSE{} max{} over {} texels (gate {gate:?})",
+                stats.psnr, stats.p999, stats.block_rmse, stats.max, stats.texels
             )));
         }
     }
@@ -1087,6 +1083,75 @@ mod tests {
                 }
             }
             assert!(check(&damaged).is_err(), "{profile:?} spread damage");
+        }
+    }
+    #[test]
+    fn shifted_levels_and_flipped_normal_green_are_refused_every_profile() {
+        let edge = 64usize;
+        let support = vec![1; edge * edge];
+        // One-texel saturated checker: a level shifted by one (each texel
+        // replaced by the next coarser level) loses all its contrast.
+        let checker: Vec<u8> = (0..edge * edge)
+            .flat_map(|i| {
+                if (i % edge + i / edge).is_multiple_of(2) {
+                    [0, 255, 0, 255]
+                } else {
+                    [255, 0, 255, 255]
+                }
+            })
+            .collect();
+        // Smooth tangent-space bumps, unit length.
+        let normals: Vec<u8> = (0..edge * edge)
+            .flat_map(|i| {
+                let (x, y) = ((i % edge) as f64, (i / edge) as f64);
+                let n = [0.25 * (x / 40.).sin(), 0.25 * (y / 48.).cos(), 1.];
+                let l = n.iter().map(|v| v * v).sum::<f64>().sqrt();
+                let q = |v: f64| ((v / l + 1.) * 127.5).round() as u8;
+                [q(n[0]), q(n[1]), q(n[2]), 255]
+            })
+            .collect();
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            let out = encode(
+                [edge as u32, edge as u32],
+                &checker,
+                &support,
+                TextureSlot::BaseColor,
+                profile,
+                128 * 1024 * 1024,
+                None,
+            )
+            .unwrap();
+            let decoded = decoded_levels(&out, edge);
+            let half = edge / 2;
+            let shifted: Vec<u8> = (0..edge * edge)
+                .flat_map(|i| {
+                    let (x, y) = (i % edge / 2, i / edge / 2);
+                    decoded[1][(y * half + x) * 4..(y * half + x) * 4 + 4].to_vec()
+                })
+                .collect();
+            let check = |slot, expected: &[u8], level: &[u8]| {
+                check_level(expected, level, &support, edge as u32, slot, profile, 0)
+            };
+            assert!(check(TextureSlot::BaseColor, &checker, &decoded[0]).is_ok());
+            assert!(check(TextureSlot::BaseColor, &checker, &shifted).is_err());
+            let out = encode(
+                [edge as u32, edge as u32],
+                &normals,
+                &support,
+                TextureSlot::Normal,
+                profile,
+                128 * 1024 * 1024,
+                None,
+            )
+            .unwrap();
+            let mut flipped = decoded_levels(&out, edge).swap_remove(0);
+            for px in flipped.as_chunks_mut::<4>().0 {
+                px[1] = 255 - px[1];
+            }
+            assert!(
+                check(TextureSlot::Normal, &normals, &flipped).is_err(),
+                "{profile:?} flipped green"
+            );
         }
     }
     #[test]

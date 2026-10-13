@@ -111,23 +111,26 @@ percentile is just the maximum of a few hundred samples. Packed islands also
 share codec blocks at those levels. The worst small-level colour PSNR was
 24.8 dB.
 
-Alpha, data and normal channels keep their previous synthetic calibration,
-because the real mesh has none of them. Their old maximum caps now apply to
-the 99.9th percentile, a block guard is added, and there is no small-level
-relaxation.
+Alpha, data and normal channels are unchanged: they keep their previous
+PSNR floors and maximum caps. The real mesh has none of them, so the robust
+statistics stay limited to calibrated colour.
 
 The old balanced colour PSNR floor was 22 dB, so the new 24 dB floor is
 stricter. Quality's old 34 dB floor was unattainable on real blue channels:
 level 3 encoding (38x the cost) reached only 34.5 dB on the worst crop page.
 
-Sensitivity controls still fail. In CI, on a procedural photo-like page,
-every profile refuses a corrupted 4x4 block (the block guard alone), swapped
-red and blue channels, and damage spread over 10% of texels (the percentile).
-The 1-texel radial normal error, the colour-transfer data mutant and the
-small-level colour, normal and garbage cases are also refused. A single
-full-range outlier texel, which the old cap refused, is accepted. On the four
-real crop pages (`calibration_tests`, ignored, reads page dumps) the gate
-refuses each of these at mip 0:
+Sensitivity controls still fail in CI, for every profile:
+- on a procedural photo-like page: a corrupted 4x4 block (the block guard
+  alone), swapped red and blue channels, and damage spread over 10% of texels
+  (the percentile);
+- on a one-texel checker: a mip level shifted by one;
+- on a smooth normal page: a flipped green channel;
+- the 1-texel radial normal error, the colour-transfer data mutant, and the
+  small-level colour, normal and garbage cases.
+
+A single full-range outlier texel, which the old cap refused, is accepted.
+The ignored `calibration_tests` reads page dumps and runs the same mutants on
+the four real crop pages; there the gate refuses each of these at mip 0:
 
 - a corrupted base block;
 - corrupted payload bytes (the decode fails);
@@ -200,6 +203,15 @@ coordinator approval.
 
 ## Known limits
 
+- Binding receipts record every island as
+  `[sourceX, sourceY, width, height, pageX, pageY]` (interior origin), plus
+  `islandGutter`. Only dedicated MIP pages keep `cropOrigin` and `cropSize`,
+  so `leaf_oracle.py` needs island support before it can re-check non-MIP
+  pages.
+- Capture charges each admission decode from the image's header dimensions
+  (12 bytes per texel plus the encoded bytes). The budget is the decoder
+  allowance plus the memory left by capture's resident bound. An image that
+  cannot fit is a typed resource refusal.
 - MIP-sampled lossy bindings still use dedicated, aligned whole-hull pages.
   Their source-sampler checks keep the maximum caps. This mesh does not
   exercise them.

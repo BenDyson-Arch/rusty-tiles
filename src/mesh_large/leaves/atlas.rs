@@ -936,6 +936,29 @@ fn page_charge(
         .ok_or_else(resource)
 }
 
+/// Every island's source-to-page mapping: interior source origin, interior
+/// size and the page texel where that interior starts. The allocation adds
+/// `islandGutter` texels of context on each side.
+fn island_receipts(b: &Binding) -> Value {
+    Value::Array(
+        b.block
+            .islands
+            .iter()
+            .map(|island| {
+                let c = &island.crop;
+                json!([
+                    c.origin[0],
+                    c.origin[1],
+                    c.interior_width,
+                    c.interior_height,
+                    b.offset[0] + island.offset[0] + c.gutter,
+                    b.offset[1] + island.offset[1] + c.gutter
+                ])
+            })
+            .collect(),
+    )
+}
+
 struct EncodedPage {
     delivered: delivery::Delivery,
     binding_receipts: Vec<Value>,
@@ -1037,7 +1060,7 @@ fn encode_page(
         let planned = timing::time(Stage::SamplerCheckPlanned, || {
             source_sampler_mips::check_authored(&chain, &context)
         })?;
-        receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
+        receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
         delivery::encode_authored(&chain.page, b.slot, profile, memory, mask, |decoded| {
             let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
             Ok(
@@ -1111,7 +1134,7 @@ fn encode_page(
                 )?);
                 mask_context = Some((factor, cutoff, b.sampler.mag_filter == 9729));
             }
-            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":b.block.islands.len(),"islandInteriorTexels":b.block.interior_texels(),"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter}}));
+            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"islandInteriorTexels":b.block.interior_texels(),"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter}}));
         }
         let min_linear = matches!(page.sampler.min_filter, 9729 | 9985 | 9987);
         let mask = mask_context.map(|(factor, cutoff, linear)| MaskDelivery {

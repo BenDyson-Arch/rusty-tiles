@@ -337,6 +337,22 @@ pub(crate) fn decode_image(
     decode_image_admitted(encoded, mime, DecodeAdmission::FINITE, check)
 }
 
+/// Admits one image's header under `admission` and returns its dimensions
+/// without decoding pixels, so callers can charge the decode before it runs.
+pub(crate) fn probe_image_admitted(
+    encoded: &[u8],
+    mime: Option<&str>,
+    admission: DecodeAdmission,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<ImageInfo> {
+    if encoded.len() > MAX_SOURCE_BYTES {
+        return Err(unsupported(
+            "image exceeds 32 MiB encoded-byte admission ceiling",
+        ));
+    }
+    admitted_decoder(encoded, mime, admission, check).map(|(_, info)| info)
+}
+
 /// [`decode_image`] under an explicit per-image admission.
 pub(crate) fn decode_image_admitted(
     encoded: &[u8],
