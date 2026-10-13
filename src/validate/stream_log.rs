@@ -13,8 +13,10 @@ use crate::archive3tz::CatalogConfig;
 use crate::spill::{ByteFile, ByteWriter, Scratch};
 use std::io::Read;
 
-/// One logged event.
+/// One logged event. Entries are encoded and decoded one at a time, never stored together,
+/// so the variant size difference costs nothing.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub(super) enum Entry {
     Tile(TileFact),
     Reference {
