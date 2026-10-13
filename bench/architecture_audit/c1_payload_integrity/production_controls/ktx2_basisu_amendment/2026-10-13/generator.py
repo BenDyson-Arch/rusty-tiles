@@ -32,14 +32,16 @@ def get64(raw, at): return struct.unpack_from('<Q', raw, at)[0]
 def level_entry(p): return 80 + 24 * p
 
 
-def pack_uastc(width, height, levels, orientation=b'rd'):
-    """An unsupercompressed UASTC RGB container laid out per KTX 2.0 "Basic Structure":
-    header, level index, one basic DFD block, one KTXorientation pair, then levels
-    smallest first, each 16-aligned. Block bytes are a fixed pattern: C1 does not decode
-    them."""
-    dfd = struct.pack('<IIIBBBB4B8BIIII', 44, 0, 2 | (40 << 16), 166, 1, 2, 0, 3, 3, 0, 0,
-                      16, 0, 0, 0, 0, 0, 0, 0, (0 << 24) | (127 << 16), 0, 0, 0xFFFFFFFF)
-    pair = b'KTXorientation\0' + orientation + b'\0'
+def pack_uastc(width, height, levels, orientation=b'rd', channel=0, transfer=2, flags=0, pairs=()):
+    """An unsupercompressed UASTC container laid out per KTX 2.0 "Basic Structure":
+    header, level index, one basic DFD block (one sample of `channel`), the
+    KTXorientation pair and any extra `pairs`, then levels smallest first, each
+    16-aligned. Block bytes are a fixed pattern: C1 does not decode them."""
+    dfd = struct.pack('<IIIBBBB4B8BIIII', 44, 0, 2 | (40 << 16), 166, 1, transfer, flags, 3, 3, 0, 0,
+                      16, 0, 0, 0, 0, 0, 0, 0, (channel << 24) | (127 << 16), 0, 0, 0xFFFFFFFF)
+    kvd = b''
+    for pair in [b'KTXorientation\0' + orientation + b'\0', *pairs]:
+        kvd += struct.pack('<I', len(pair)) + pair + b'\0' * (-len(pair) % 4)
     kvd = struct.pack('<I', len(pair)) + pair + b'\0' * (-len(pair) % 4)
     dfd_offset = 80 + 24 * levels
     kvd_offset = dfd_offset + len(dfd)
@@ -94,16 +96,21 @@ TILESET = dict(asset=dict(version='1.1'), geometricError=0,
                          content=dict(uri='tile.glb')))
 
 
-def tile(images, textures, material_texture=True, used=(EXT,), required=(EXT,)):
+def tile(images, textures, material_texture=True, used=(EXT,), required=(EXT,), share=False):
     """One-triangle GLB. `images` are (bytes, image fields); fields without `uri` are stored
-    in a bufferView. Returns (glb bytes, extra archive members, document, image bytes)."""
+    in a bufferView (with `share`, all of them in the first one). Returns (glb bytes, extra
+    archive members, document, image bytes)."""
     binary = struct.pack('<9f', 0, 0, 0, 1, 0, 0, 0, 1, 0)
     views = [dict(buffer=0, byteOffset=0, byteLength=36)]
     doc_images, extra = [], []
     for data, fields in images:
         image = dict(fields)
-        if 'uri' in image:
+        if image.get('uri', '').startswith('data:'):
+            pass
+        elif 'uri' in image:
             extra.append((image['uri'], data))
+        elif share and len(views) > 1:
+            image['bufferView'] = 1
         else:
             binary += b'\0' * (-len(binary) % 4)
             views.append(dict(buffer=0, byteOffset=len(binary), byteLength=len(data)))
@@ -120,6 +127,26 @@ def tile(images, textures, material_texture=True, used=(EXT,), required=(EXT,)):
     if used: doc['extensionsUsed'] = list(used)
     if required: doc['extensionsRequired'] = list(required)
     return glb(doc, binary), extra, doc, [data for data, _ in images]
+
+
+def late_global(raw):
+    """BasisLZ global data and every level 8 bytes later, zero-filled gap."""
+    at = get64(raw, 64)
+    raw = raw[:at] + b'\0' * 8 + raw[at:]
+    raw = put64(raw, 64, at + 8)
+    for p in range(get32(raw, 40)):
+        raw = put64(raw, level_entry(p), get64(raw, level_entry(p)) + 8)
+    return raw
+
+
+def late_kvd(raw):
+    """Key/value data and every level 16 bytes later (keeps 16-byte level alignment)."""
+    at = get32(raw, 56)
+    raw = raw[:at] + b'\0' * 16 + raw[at:]
+    raw = put32(raw, 56, at + 16)
+    for p in range(get32(raw, 40)):
+        raw = put64(raw, level_entry(p), get64(raw, level_entry(p)) + 16)
+    return raw
 
 
 KTX2 = {'mimeType': 'image/ktx2'}
@@ -139,6 +166,7 @@ def cases():
     document = primary('ktx_document_uastc_rdo4_zstd5.ktx2')  # UASTC RGBA 1024^2, Zstd, 11 levels
     leaf = primary('h8-quality-leaf4-uastc-zstd.ktx2')  # in-repo encoder, UASTC RGB 128x256, Zstd, 9 levels
     synthetic = pack_uastc(12, 8, 4)
+    heavy = pack_uastc(4, 4, 1, pairs=[b'x' * (8 << 20) + b'\0'])
     png = png_rgba_4x4()
     A, I, U = 'admitted', oracle.INVALID, oracle.UNSUPPORTED
     dfd = lambda raw: get32(raw, 48)
@@ -154,6 +182,13 @@ def cases():
               [{'source': 1, 'extensions': {EXT: {'source': 0}}}], required=())),
         ('external-ktx2-uri', 'cyan as tex.ktx2 member, no mimeType', None, A,
          tile([(cyan, {'uri': 'tex.ktx2'})], BASISU)),
+        ('external-uri-no-suffix', 'cyan as tex_0 member, no mimeType', None, A,
+         tile([(cyan, {'uri': 'tex_0'})], BASISU)),
+        ('red-linear', 'packed UASTC_RRR, linear', None, A, single(pack_uastc(8, 8, 1, channel=4, transfer=1))),
+        ('premultiplied-no-material', 'cyan premultiplied, texture unused by the material', None, A,
+         single(cyan[:dfd(cyan) + 15] + b'\x01' + cyan[dfd(cyan) + 16:], False)),
+        ('shared-view-heavy-kvd', '4000 images sharing one view; 8 MiB key/value pair', None, A,
+         tile([(heavy, KTX2)] * 4000, [{'extensions': {EXT: {'source': i}}} for i in range(4000)], share=True)),
         ('non-material-2d', 'cyan, texture unused by the material', None, A, single(cyan, False)),
         # Container integrity.
         ('truncated-header', 'alpha_simple[:60]', 'header-truncated', I, single(alpha[:60])),
@@ -202,6 +237,32 @@ def cases():
          single(put32(alpha, get64(alpha, 64) + 12, get32(alpha, get64(alpha, 64) + 12) + 1))),
         ('global-data-for-uastc', 'cyan sgdByteOffset 8 without global data', 'global-data', I,
          single(put64(cyan, 64, 8))),
+        ('red-srgb', 'packed UASTC_RRR with sRGB', 'red-srgb', I, single(pack_uastc(8, 8, 1, channel=4))),
+        ('rg-srgb-upstream-patched', 'rg_reference_basis without swizzle check: RRR+GGG sRGB', 'red-srgb', I,
+         single(rg.replace(b'KTXswizzle\0ra01', b'KTXswizzlx\0ra01')[:dfd(rg) + 14] + b'\x02'
+                + rg.replace(b'KTXswizzle\0ra01', b'KTXswizzlx\0ra01')[dfd(rg) + 15:])),
+        ('premultiplied-material', 'cyan premultiplied, material map', 'premultiplied', I,
+         single(cyan[:dfd(cyan) + 15] + b'\x01' + cyan[dfd(cyan) + 16:])),
+        ('global-data-8-late', 'alpha_simple global data and level moved 8 bytes later', 'global-data', I,
+         single(late_global(alpha))),
+        ('kvd-misplaced', 'cyan key/value data and level moved 16 bytes later', 'kvd-position', I,
+         single(late_kvd(cyan))),
+        ('kvd-empty-key', 'cyan first key starts with NUL', 'kvd-pairs', I,
+         single(cyan[:get32(cyan, 56) + 4] + b'\0' + cyan[get32(cyan, 56) + 5:])),
+        ('basislz-pframe-flag', 'alpha_simple ImageDesc flags isPFrame', 'image-descriptor', I,
+         single(put32(alpha, get64(alpha, 64) + 20, 2))),
+        ('basislz-extended', 'alpha_simple extendedByteLength 4, tables - 4', 'basislz-length', I,
+         single(put32(put32(alpha, get64(alpha, 64) + 16, 4), get64(alpha, 64) + 12,
+                      get32(alpha, get64(alpha, 64) + 12) - 4))),
+        ('basislz-alpha-missing', 'alpha_simple alphaSliceByteLength 0', 'image-descriptor', I,
+         single(put32(alpha, get64(alpha, 64) + 20 + 16, 0))),
+        ('etc1s-rgb-ggg', 'alpha_simple channels RGB+GGG', 'channels', I,
+         single(alpha[:dfd(alpha) + 47] + b'\x04' + alpha[dfd(alpha) + 48:])),
+        ('dfd-vendor', 'cyan DFD vendorId 1', 'dfd-block', I, single(put32(cyan, dfd(cyan) + 4, 1))),
+        ('dfd-version', 'cyan DFD versionNumber 3', 'dfd-block', I,
+         single(put32(cyan, dfd(cyan) + 8, (get32(cyan, dfd(cyan) + 8) & 0xFFFF0000) | 3))),
+        ('cubemap-not-square-no-material', 'cyan faceCount 6, height 32, no material use', 'texture-type', I,
+         single(put32(put32(cyan, 36, 6), 24, 32), False)),
         ('non-2d-material', 'cyan layerCount 1, material map', 'not-2d', I, single(put32(cyan, 32, 1))),
         ('non-2d-no-material', 'cyan layerCount 1, no material use', 'not-2d', U,
          single(put32(cyan, 32, 1), False)),
@@ -210,8 +271,15 @@ def cases():
          tile([(cyan, {'mimeType': 'image/png'})], BASISU)),
         ('mime-missing-buffer-view', 'cyan in a bufferView without mimeType', 'mime-type', I,
          tile([(cyan, {})], BASISU)),
-        ('uri-png-suffix', 'cyan as tex.png member, no mimeType', 'mime-type', I,
-         tile([(cyan, {'uri': 'tex.png'})], BASISU)),
+        ('uri-png-bytes', 'PNG bytes as tex.png member, no mimeType', 'identifier', I,
+         tile([(png, {'uri': 'tex.png'})], BASISU)),
+        ('data-uri-no-mime', 'data:image/ktx2 URI, no mimeType', 'data-uri', U,
+         tile([(cyan, {'uri': 'data:image/ktx2;base64,AAAA'})], BASISU)),
+        ('data-uri-ktx2-mime', 'data:image/ktx2 URI with image/ktx2', 'data-uri', U,
+         tile([(cyan, {'uri': 'data:image/ktx2;base64,AAAA', 'mimeType': 'image/ktx2'})], BASISU)),
+        ('fallback-ktx2-by-identifier', 'fallback fallback.bin without mimeType holding KTX2', 'fallback-is-ktx2', I,
+         tile([(cyan, KTX2), (cyan, {'uri': 'fallback.bin'})],
+              [{'source': 1, 'extensions': {EXT: {'source': 0}}}], required=())),
         ('fallback-is-ktx2', 'core source and extension source both the KTX2 image', 'fallback-is-ktx2', I,
          tile([(cyan, KTX2)], [{'source': 0, 'extensions': {EXT: {'source': 0}}}], required=())),
         ('no-fallback-not-required', 'no fallback, extension only in extensionsUsed', 'fallback-required', I,
@@ -237,6 +305,15 @@ LIMITS = dict(jsonBytes=8388608, jsonDepth=64, memberBytes=134217728, archiveSto
               containmentBytesRead=2147483648, containmentDecodedBytes=2147483648, containmentNodeDepth=64)
 
 
+def distinct_hashes(images):
+    """SHA-256 of each distinct image byte string, in first-use order."""
+    seen = {}
+    for data in images:
+        if id(data) not in seen:
+            seen[id(data)] = sha(data)
+    return list(seen.values())
+
+
 def generate(directory, check_oracle=oracle):
     """Write every case archive under `directory`; return the manifest rows."""
     directory.mkdir(parents=True, exist_ok=False)
@@ -255,7 +332,7 @@ def generate(directory, check_oracle=oracle):
             oracleViolations=sorted({r for _, r in violations}), oracleCategory=verdict,
             expectedCategory=expected, expectedExitCode={'admitted': 0, 'unsupported': 2}.get(expected, 3),
             expectedReport=report if expected == 'admitted' else None,
-            ktx2Sha256=[sha(b) for b in image_bytes], sha256=sha(raw), bytes=len(raw),
+            imageSha256=distinct_hashes(image_bytes), sha256=sha(raw), bytes=len(raw),
             memberSha256={k: sha(v) for k, v in members}))
     return rows
 

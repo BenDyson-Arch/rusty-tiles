@@ -98,6 +98,13 @@ def ktx2_violations(raw, material):
             bad('channels')
     else:
         bad('color-model')
+    # Extension: Red and Red-Green textures MUST NOT use the sRGB transfer function
+    # (KHR_DF_TRANSFER_SRGB = 2); material textures MUST NOT set
+    # KHR_DF_FLAG_ALPHA_PREMULTIPLIED (= 1), which no core material requires.
+    if channels and ((model == 163 and channels[0] == 3) or (model == 166 and channels[0] in (4, 6))) and dfd[14] == 2:
+        bad('red-srgb')
+    if material and dfd[15] & 1:
+        bad('premultiplied')
     # ETC1S and UASTC are 4x4 blocks (texelBlockDimension stores size - 1).
     if dfd[16:20] != bytes([3, 3, 0, 0]):
         bad('texel-block')
@@ -191,11 +198,11 @@ def ktx2_violations(raw, material):
     return found
 
 
-def declared_ktx2(image):
-    """image/ktx2, or no mimeType and a `.ktx2` URI."""
+def declared_ktx2(image, data):
+    """A declared mimeType decides; without one (a URI image) the KTX2 identifier does."""
     if 'mimeType' in image:
         return image['mimeType'] == 'image/ktx2'
-    return image.get('uri', '').lower().endswith('.ktx2')
+    return data[:12] == IDENTIFIER
 
 
 def gltf_violations(doc, image_bytes):
@@ -226,15 +233,28 @@ def gltf_violations(doc, image_bytes):
         if 'source' in extension:
             basisu_sources.setdefault(extension['source'], False)
             basisu_sources[extension['source']] |= index in material_textures
+    checked = {}
     for index, image in enumerate(images):
-        ktx2 = declared_ktx2(image)
-        # Extension: image/ktx2 is allowed for images referenced by its `source`.
-        if index in basisu_sources and not ktx2:
+        data = image_bytes[index]
+        # glTF: data URIs are outside C1's image profile (Unsupported) before any rule.
+        if image.get('uri', '').startswith('data:'):
+            if index in basisu_sources or (index in core_sources and EXT in used):
+                found.append((UNSUPPORTED, 'data-uri'))
+            continue
+        # Extension: the source points to a KTX v2 image; glTF requires mimeType with a
+        # bufferView, and image/ktx2 is the extension's mimeType.
+        if index in basisu_sources and (image.get('mimeType', 'image/ktx2') != 'image/ktx2'
+                                        or ('mimeType' not in image and 'bufferView' in image)):
             found.append((INVALID, 'mime-type'))
-        if index in core_sources and ktx2 and EXT in used:
+        # Extension: image/ktx2 is allowed only for images referenced by its `source`.
+        if index in core_sources and EXT in used and declared_ktx2(image, data):
             found.append((INVALID, 'fallback-is-ktx2'))
         if index in basisu_sources:
-            found += ktx2_violations(image_bytes[index], basisu_sources[index])
+            # A container's rules depend only on its bytes and material use.
+            key = (id(data), basisu_sources[index])
+            if key not in checked:
+                checked[key] = ktx2_violations(data, basisu_sources[index])
+            found += checked[key]
     return found
 
 

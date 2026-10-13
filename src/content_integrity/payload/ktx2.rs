@@ -5,11 +5,13 @@
 //! 30cb4530) with its BasisLZ global-data appendix. Only the container is read:
 //! header, index, level index, the first DFD block, key/value framing and
 //! BasisLZ image descriptors. No level is inflated, transcoded or decoded, and
-//! nothing is allocated. Work is at most 32 levels plus one step per key/value
-//! pair, over bytes the caller has already admitted and charged.
+//! nothing is allocated. Work is linear in the image's bytes (the key/value scan
+//! reads each byte once) plus at most 32 levels and descriptors, over bytes the
+//! caller has already admitted and charged; the caller inspects each image
+//! resource once (one pass per bufferView however many images share it).
 use super::{invalid, unsupported, FormatResult};
 
-const IDENTIFIER: [u8; 12] = [
+pub(super) const IDENTIFIER: [u8; 12] = [
     0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A,
 ];
 const HEADER: u64 = 80;
@@ -19,6 +21,8 @@ const BASIS_LZ: u32 = 1;
 const ZSTD: u32 = 2;
 const MODEL_ETC1S: u8 = 163;
 const MODEL_UASTC: u8 = 166;
+const TRANSFER_SRGB: u8 = 2;
+const FLAG_PREMULTIPLIED: u8 = 1;
 /// Bytes per 4x4 UASTC block, and the `lcm(texel block size, 4)` level
 /// alignment of unsupercompressed UASTC.
 const UASTC_BLOCK: u64 = 16;
@@ -48,10 +52,18 @@ fn align_up(value: u64, to: u64) -> FormatResult<u64> {
         .ok_or_else(|| invalid("KTX2 offset overflow"))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Containers inspected on this thread: controls prove one pass per view.
+    pub(super) static INSPECTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Check one KTX2 image referenced by a `KHR_texture_basisu` `source`.
 /// `material` is true when a material texture-info role uses the texture,
-/// which makes the extension's 2D requirement apply.
+/// which makes the extension's 2D and premultiplied-alpha requirements apply.
 pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
+    #[cfg(test)]
+    INSPECTIONS.with(|n| n.set(n.get() + 1));
     if bytes.get(..12) != Some(&IDENTIFIER[..]) {
         return Err(invalid("KTX2 identifier is absent"));
     }
@@ -165,6 +177,16 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
         _ => {
             return Err(invalid("KHR_texture_basisu image is not ETC1S or UASTC"));
         }
+    }
+    // Red and Red-Green textures (ETC1S RRR first, UASTC_RRR, UASTC_RG) MUST NOT
+    // use the sRGB transfer function; material textures MUST NOT be premultiplied.
+    let red = (model == MODEL_ETC1S && channels[0] == 3)
+        || (model == MODEL_UASTC && matches!(channels[0], 4 | 6));
+    if red && dfd[14] == TRANSFER_SRGB {
+        return Err(invalid("Red and Red-Green KTX2 textures must not use sRGB"));
+    }
+    if material && dfd[15] & FLAG_PREMULTIPLIED != 0 {
+        return Err(invalid("KTX2 material texture must not be premultiplied"));
     }
     if dfd[16..20] != [3, 3, 0, 0] {
         return Err(invalid("Basis Universal KTX2 texel block is not 4x4"));

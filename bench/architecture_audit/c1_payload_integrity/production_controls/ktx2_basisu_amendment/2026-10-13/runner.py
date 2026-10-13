@@ -36,8 +36,12 @@ def run(args):
     for case in manifest['cases']:
         path = (fixtures / case['path']).resolve(); assert sha(path.read_bytes()) == case['sha256']
         command = [str(binary), '--json', 'validate', str(path)]; started = time.monotonic()
-        result = subprocess.run(command, env=env, preexec_fn=controlled_launch, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, timeout=60, check=False)
+        try:
+            result = subprocess.run(command, env=env, preexec_fn=controlled_launch, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=60, check=False)
+        except subprocess.TimeoutExpired as expired:
+            # Uncharged repeated work (e.g. one view inspected per image) shows as a timeout.
+            result = subprocess.CompletedProcess(command, -1, expired.stdout or b'', b'timeout after 60 s')
         (args.run_dir / (case['name'] + '.stdout')).write_bytes(result.stdout)
         (args.run_dir / (case['name'] + '.stderr')).write_bytes(result.stderr)
         try: response = json.loads(result.stdout)

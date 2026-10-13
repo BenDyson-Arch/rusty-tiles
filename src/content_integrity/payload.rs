@@ -1158,35 +1158,35 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         }
     }
     drop(texture_ktx2);
+    // Per bufferView: 1 when it holds a KTX2 source, 3 when a material uses one.
+    // Each view is inspected once after the image pass, so images sharing a view
+    // repeat no container work; external images are read and charged per image.
+    let mut ktx2_views = allocation(views.len(), 0u8)?;
     for (image, roles) in image_docs.into_iter().zip(image_roles) {
         if image.uri.is_some() && image.view.is_some() {
             return Err(invalid("image has URI and bufferView").into());
         }
         let uri = image.uri.map(|raw| string(Some(raw))).transpose()?;
-        if roles & 2 != 0 || (roles & 1 != 0 && used.contains("KHR_texture_basisu")) {
-            // A URI image without mimeType is KTX2 by its `.ktx2` suffix.
-            let ktx2 = match (image.mime, &uri) {
-                (Some(mime), _) => string(Some(mime))? == "image/ktx2",
-                (None, Some(uri)) => uri
-                    .len()
-                    .checked_sub(5)
-                    .and_then(|at| uri.get(at..))
-                    .is_some_and(|suffix| suffix.eq_ignore_ascii_case(".ktx2")),
-                (None, None) => false,
-            };
-            if roles & 2 != 0 && !ktx2 {
-                return Err(
-                    invalid("KHR_texture_basisu source image is not declared image/ktx2").into(),
-                );
-            }
-            if roles & 1 != 0 && ktx2 {
-                return Err(invalid("texture source references a KTX2 image").into());
-            }
+        if uri.as_deref().is_some_and(|uri| uri.starts_with("data:")) {
+            return Err(unsupported("image data URI").into());
         }
-        let data = if let Some(uri) = uri {
-            if uri.starts_with("data:") {
-                return Err(unsupported("image data URI").into());
-            }
+        // An extension source, or a fallback source when the extension is used:
+        // the image's format matters.
+        let typed = roles & 2 != 0 || (roles & 1 != 0 && used.contains("KHR_texture_basisu"));
+        let mime = match image.mime {
+            Some(raw) if typed => Some(string(Some(raw))?),
+            _ => None,
+        };
+        // An extension source declares image/ktx2; glTF requires mimeType with bufferView.
+        if roles & 2 != 0
+            && (mime.as_deref().is_some_and(|mime| mime != "image/ktx2")
+                || (mime.is_none() && image.view.is_some()))
+        {
+            return Err(
+                invalid("KHR_texture_basisu source image is not declared image/ktx2").into(),
+            );
+        }
+        let (data, view) = if let Some(uri) = uri {
             let remaining = limits
                 .member_bytes
                 .checked_sub(resource_bytes)
@@ -1202,21 +1202,37 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             resource_bytes = resource_bytes
                 .checked_add(data.len())
                 .ok_or_else(|| limit("image resource byte overflow"))?;
-            Cow::Owned(data)
+            (Cow::Owned(data), None)
         } else {
             let view = at(&views, image.view)?;
             if accessor_views[view] {
                 return Err(invalid("bufferView mixes image data and accessor data").into());
             }
             view_roles[view] = 3;
-            Cow::Borrowed(&*views[view])
+            (Cow::Borrowed(&*views[view]), Some(view))
         };
-        // Container only: admitted bytes, no allocation, at most 32 levels.
+        // Without mimeType, a URI image is KTX2 by its identifier.
+        let ktx2 = mime.as_deref().map_or_else(
+            || data.starts_with(&ktx2::IDENTIFIER),
+            |mime| mime == "image/ktx2",
+        );
+        if typed && roles & 1 != 0 && ktx2 {
+            return Err(invalid("texture source references a KTX2 image").into());
+        }
         if roles & 2 != 0 {
-            ktx2::inspect(&data, roles & 4 != 0)?;
+            match view {
+                Some(view) => ktx2_views[view] |= if roles & 4 != 0 { 3 } else { 1 },
+                None => ktx2::inspect(&data, roles & 4 != 0)?,
+            }
             not_inspected.insert("KTX2 level data and transcoding".into());
         }
         not_inspected.insert("image decoding".into());
+    }
+    // Container only: admitted bytes, no allocation, at most 32 levels; once per view.
+    for (view, flags) in ktx2_views.into_iter().enumerate() {
+        if flags != 0 {
+            ktx2::inspect(&views[view], flags & 2 != 0)?;
+        }
     }
     let extensions: records::Extensions<'_> = optional_record(root.extensions)?;
     let schema_uri = if let Some(metadata) = extensions.metadata {

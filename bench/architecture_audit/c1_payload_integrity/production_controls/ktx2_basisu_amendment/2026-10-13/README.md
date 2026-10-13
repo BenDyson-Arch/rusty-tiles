@@ -9,12 +9,12 @@ Nothing outside this directory is modified except the CI harness entry in
 | File | Role |
 | --- | --- |
 | `ktx2_oracle.py` | Independent stdlib oracle written from the pinned texts: lists every rule a container or document breaks |
-| `generator.py` | Builds the 46 archives; each case states its intended rule and category, and the oracle must agree |
+| `generator.py` | Builds the 66 archives; each case states its intended rule and category, and the oracle must agree |
 | `runner.py` | Regenerates the archives into the run directory, checks them against `fixtures/manifest.json`, then runs the supplied CLI |
 | `mutants.py` | Oracle mutants (patched oracle copies) and production mutants (patched Rust, rebuilt, run through `runner.py`) |
 | `primary/` | Pinned texts and reference KTX2 files, hashes and sources in `pins.json` |
 | `fixtures/manifest.json` | Frozen predictions: per case the oracle violations, expected category and, for admitted cases, the full report |
-| `mutants/*.json` | Mutant reports at `aac8854`: 25/25 oracle and 16/16 production mutants flip their named control |
+| `mutants/*.json` | Mutant reports (37 oracle, 30 production), each mutant flipping its named control |
 | `real-output-gate.json` | H8-encoded, H16-packaged real crop (9 KTX2 pages) admitted with `decodedContentContainment`; refused before this change |
 | `integrity.json` | Hashes of every file above except this README, the mutant reports and the gate record |
 
@@ -37,20 +37,48 @@ DFD but `kvdByteOffset` 196, 399 bytes for a declared 435-byte file).
 
 ## Controls
 
-Admitted (9): the five valid upstream files, the encoder output, a packed 4-level UASTC, a PNG
-fallback with the extension only used, a `.ktx2` URI member without `mimeType`, and a 2D
-image whose texture no material uses.
+Admitted (13):
+- the five valid upstream files, the encoder output, and a packed 4-level UASTC;
+- a PNG fallback with the extension only used;
+- `.ktx2` and suffix-less URI members without `mimeType`;
+- a linear UASTC_RRR;
+- a 2D image, and a premultiplied image, whose texture no material uses;
+- `shared-view-heavy-kvd`: 4,000 images over one view holding an 8 MiB key/value pair. Per-image inspection makes this one time out (audit F1).
 
-Refused (37): truncated header, base level and encoder output; bad identifier; level past
-EOF; level offset 2^63; `levelCount` 0xffffffff, 0 and above the dimensions; overlapping
-levels; 6x8 dimensions; ZLIB and vendor schemes; ETC1S with Zstd; UASTC with BasisLZ;
-RGBSDA colour model; `vkFormat` 43; UASTC_RRRG; 6x4 texel block; `KTXswizzle ra01`;
-`KTXorientation ru`; a 1-byte key/value pair; `dfdTotalSize` and DFD offset mismatches;
-wrong `uncompressedByteLength`; trailing bytes; BasisLZ slice past its level and global
-length mismatch; global-data offset without data; layered image (InvalidInput for a
-material map, Unsupported otherwise); `image/png` and missing `mimeType`; `.png` URI; the
-fallback being the KTX2 image; no fallback without `extensionsRequired`; an undeclared
-extension object.
+Refused (53):
+- truncated header, base level and encoder output;
+- bad identifier;
+- level past EOF;
+- level offset 2^63;
+- `levelCount` 0xffffffff, 0, and above the dimensions;
+- overlapping levels;
+- 6x8 dimensions;
+- ZLIB and vendor schemes;
+- ETC1S with Zstd;
+- UASTC with BasisLZ;
+- RGBSDA colour model;
+- `vkFormat` 43;
+- channels UASTC_RRRG and ETC1S RGB+GGG;
+- 6x4 texel block;
+- DFD vendorId and version;
+- `KTXswizzle ra01` and `KTXorientation ru`;
+- a 1-byte and an empty-key key/value pair;
+- key/value data and global data placed late;
+- `dfdTotalSize` and DFD offset mismatches;
+- wrong `uncompressedByteLength`;
+- trailing bytes;
+- BasisLZ: slice past its level, global length mismatch, `extendedByteLength` 4, isPFrame flag, missing alpha slice;
+- global-data offset without data;
+- Red with sRGB (packed UASTC_RRR, and the upstream RRR+GGG file with sRGB);
+- premultiplied material texture;
+- layered image (InvalidInput for a material map, Unsupported otherwise);
+- non-square cubemap;
+- `image/png`, and a missing `mimeType` on a bufferView;
+- PNG bytes at a URI without `mimeType`;
+- data URIs with and without `mimeType` (Unsupported);
+- a fallback that is the KTX2 image, by declaration or by identifier;
+- no fallback without `extensionsRequired`;
+- an undeclared extension object.
 
 ## Replay
 

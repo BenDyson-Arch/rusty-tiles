@@ -37,13 +37,18 @@ C2 already counted it as texture-only (`GLTF_ALLOWLIST`), so containment is unaf
 
 T1. The extension object's `source`, when present, references an image in range.
 
-T2. That image is declared KTX2: `mimeType` is `image/ktx2`, or `mimeType` is absent and
-its `uri` ends in `.ktx2` (ASCII case-insensitive). A bufferView image without `mimeType`
-is therefore not declared KTX2.
+T2. That image is KTX2 by declaration or content, as glTF decides formats: a `mimeType`,
+when present, must be `image/ktx2`; a bufferView image must have one (glTF requires
+`mimeType` with `bufferView`); a URI image without `mimeType` needs no file-name suffix, and
+its bytes must then be a KTX2 container (K1 refuses anything else).
 
 T3. When the document uses the extension, a core `texture.source` (the fallback) may not
-reference an image declared KTX2: the extension permits `image/ktx2` only for its own
+reference a KTX2 image: one declared `image/ktx2`, or a URI image without `mimeType` whose
+bytes start with the KTX2 identifier. The extension permits `image/ktx2` only for its own
 `source`.
+
+T6. A `data:` image URI stays Unsupported ("image data URI") and is decided first, before
+any declaration rule, so a data URI is Unsupported whether or not it has a `mimeType`.
 
 T4. A texture that carries the extension but no core `source` requires the extension in
 `extensionsRequired` ("To use ... without a fallback, define KHR_texture_basisu in both
@@ -61,8 +66,9 @@ use the extension keep their verdicts: T2 and T3 run only for images that an ext
 
 ### KTX2 container rules
 
-Each image referenced by an extension `source` is read once (the existing resolver call for
-a URI, the existing view for a bufferView) and inspected as a KTX2 container. All failures
+Each KTX2 resource referenced by an extension `source` is inspected once: an external
+image after its existing (charged) resolver read, and a bufferView once after the image
+pass, however many images share it. All failures
 are InvalidInput except K2's Unsupported case.
 
 K1. The 12-byte identifier; an 80-byte header.
@@ -87,7 +93,10 @@ K7. Format pairing (extension "KTX header fields"): `colorModel` 163 (ETC1S) wit
 `supercompressionScheme` 1 (BasisLZ) and channels RGB, RGB+AAA, RRR or RRR+GGG; or
 `colorModel` 166 (UASTC) with scheme 0 or 2 and exactly one channel UASTC_RGB, _RGBA,
 _RRR or _RG. Any other model, scheme (ZLIB, vendor, reserved) or channel set is refused.
-`texelBlockDimension` is 4x4.
+`texelBlockDimension` is 4x4. Red and Red-Green textures (ETC1S RRR or RRR+GGG,
+UASTC_RRR, UASTC_RG) must not use the sRGB transfer function (2), whatever their usage. A
+texture a material uses must not set `KHR_DF_FLAG_ALPHA_PREMULTIPLIED` (no core material
+requires premultiplied alpha).
 
 K8. Key/value data starts right after the DFD (offset 0 when absent); pairs are at least 2
 bytes with a NUL-terminated key, 4-byte aligned, and sum exactly to `kvdByteLength`.
@@ -113,19 +122,43 @@ zero offset and length).
 ## Not inspected
 
 The report adds `KTX2 level data and transcoding` and keeps `image decoding`. C1 does not
-inflate Zstandard or BasisLZ data, transcode, or decode any texel. It does not check the
-extension's colour-space-by-usage rule (BT709/sRGB for colour, unspecified/linear for
-data), the premultiplied-alpha flag, the SHOULD for full mip pyramids under mipmapping
-samplers, key ordering or uniqueness, valuePadding and sgdPadding byte values, DFD blocks
-after the first, `bytesPlane` values, or fallback (PNG/JPEG) image contents.
+inflate Zstandard or BasisLZ data, transcode, or decode any texel. It does not check:
+
+- the extension's colour-space-by-usage rule (BT709/sRGB for colour data,
+  unspecified/linear for non-colour data). Only the usage-independent Red/Red-Green sRGB
+  rule is checked; KTX-Software's own `rg_reference_basis` is BT709 linear, which the
+  usage rule forbids for every usage, so enforcing it would refuse common files;
+- the premultiplied flag of textures no material uses, and extension-defined material
+  requirements;
+- the SHOULD for full mip pyramids under mipmapping samplers;
+- key/value rules other than framing, `KTXswizzle` and `KTXorientation`: key order and
+  uniqueness, UTF-8 without BOM, reserved `KTX`/`ktx` prefixes, `KTXwriterScParams`
+  requiring `KTXwriter`, `KTXanimData`/`KTXcubemapIncomplete` use, and every other
+  metadata value;
+- valuePadding, sgdPadding and mipPadding byte values;
+- DFD blocks after the first, `bytesPlane` values and sample fields other than the
+  channel id (bit offsets and lengths, positions, lower and upper; KDF 5.6.11/5.6.14);
+- endpoint, selector and table data of BasisLZ global data;
+- fallback (PNG/JPEG) image contents.
 
 ## Bounds and accounting
 
-The container owner allocates nothing and reads only bytes already admitted: external image
-bytes are charged against the member/resource allowance and `totalBytesRead` before the
-read, as before; bufferView image bytes belong to an admitted, charged view. Its work is at
-most 32 level entries, 32 ImageDescs and one step per key/value pair (at most
-`kvdByteLength / 8`), all inside the image. No new limit, counter or C2 unit is introduced.
+The container owner allocates nothing and reads only bytes already admitted: external
+image bytes are charged against the member/resource allowance and `totalBytesRead` before
+the read, as before; bufferView image bytes belong to an admitted view charged to
+`documentDecodedBytes`. Its work is linear in the bytes of the resource it inspects: the
+key/value scan reads each key/value byte once (looking for each key's NUL), plus at most 32
+level entries and 32 ImageDescs.
+
+Each resource is inspected once, so the work is charged through the bytes already counted.
+External images are read, and charged, once per image. A bufferView is inspected once after
+the image pass, with the material flag ORed over every image using it as a source, so N
+images sharing one view cost one scan, not N. An audit found the first version scanned the
+view once per image, uncharged: about 9 minutes of CPU for one small member at default
+limits. The control `shared-view-heavy-kvd` (4,000 images over one view holding an 8 MiB
+key/value pair) and a Rust control counting inspections would fail if per-image scanning
+returned. No new limit or counter is introduced.
+
 Hostile headers are refused by arithmetic on the 80-byte header and index: `levelCount`
 before the index, every range by checked u64 arithmetic, and overlapping or out-of-order
 levels by the packed-offset rule.
@@ -134,15 +167,29 @@ levels by the packed-offset rule.
 
 Independent lane:
 `bench/architecture_audit/c1_payload_integrity/production_controls/ktx2_basisu_amendment/2026-10-13/`.
-A standard-library oracle written from the pinned texts recomputes every verdict; 46
-archive controls cover upstream KTX-Software reference files (ETC1S RGB+A, ETC1S with mips,
-UASTC, UASTC+Zstd with mips, and an upstream file carrying `KTXswizzle ra01`), one real
-in-repo encoder output and packed containers, and byte-patched negatives for every rule
-above that has a single-fault form. Oracle mutants (25) and production mutants (16) each
-flip their named control. Two rules have no single-fault control because another rule
-always fires with them: the ETC1S/UASTC scheme pairing (BasisLZ requires global data, other
-schemes forbid it) and the DFD position (moving the DFD moves everything after it). The
-real-output gate validates an H8-encoded, H16-packaged crop of the real mesh with
+A standard-library oracle written from the pinned texts recomputes every verdict; 66
+archive controls (13 admitted, 53 refused) cover:
+
+- upstream KTX-Software reference files: ETC1S RGB+A, ETC1S with mips, UASTC, UASTC+Zstd
+  with mips, and an upstream file carrying `KTXswizzle ra01`;
+- one real in-repo encoder output and packed containers;
+- byte-patched single-fault negatives for each rule above, except the cases listed below.
+
+Oracle mutants (37) and production mutants (30) each flip their named control.
+
+The oracle is a parallel derivation from the same texts (the audit notes that it mirrors
+production's structure), so the independent weight rests on the pinned upstream positives.
+No third-party writer output other than KTX-Software is included.
+
+Some rules have no single-fault control, because another rule always fires with them:
+
+- the ETC1S/UASTC scheme pairing: BasisLZ requires global data, and other schemes forbid it;
+- the DFD position: moving the DFD moves everything after it;
+- a zero-length level: its descriptor or length rule also fails;
+- the level-range check: the packed-offset and trailing-byte rules also catch a level
+  past EOF.
+
+The real-output gate validates an H8-encoded, H16-packaged crop of the real mesh with
 `decodedContentContainment`.
 
 This establishes container integrity for these finite rules, not texture correctness,
