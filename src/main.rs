@@ -617,6 +617,8 @@ fn optional_components<const N: usize>(values: Vec<f64>) -> Option<[f64; N]> {
 enum Outcome {
     /// A command with its own single machine result (validate, doctor).
     Report(Value),
+    /// A validation report, written streamed: its payload rows are never materialized.
+    Validation(Box<rusty_tiles::validate::ValidationReport>),
     /// A published conversion.
     Converted(ConversionResult),
     /// Installed package with a typed receipt separate from source reports.
@@ -675,6 +677,20 @@ fn main() -> ExitCode {
                 Outcome::Report(report) => {
                     if json {
                         println!("{report}");
+                    }
+                    None
+                }
+                Outcome::Validation(report) => {
+                    if json {
+                        let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+                        let written = report
+                            .write_json(&mut out)
+                            .and_then(|()| std::io::Write::write_all(&mut out, b"\n"))
+                            .and_then(|()| std::io::Write::flush(&mut out));
+                        if let Err(error) = written {
+                            eprintln!("error: writing the validation report: {error}");
+                            return ExitCode::from(1);
+                        }
                     }
                     None
                 }
@@ -1121,7 +1137,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                     println!("Not inspected: {}", report.not_inspected.join(", "));
                 }
             }
-            Outcome::Report(serde_json::to_value(report)?)
+            Outcome::Validation(Box::new(report))
         }
         Command::Doctor(a) => {
             let report = doctor::report(&a.commands, Some(&a.cesium));

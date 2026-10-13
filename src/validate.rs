@@ -10,7 +10,9 @@ use crate::content_integrity::{
 mod containment;
 #[cfg(test)]
 mod memo_controls;
+mod rows;
 mod types;
+pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
     PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
 };
@@ -134,6 +136,39 @@ fn archive_admission_error(error: crate::archive3tz::ReadError) -> ValidationFai
         ReadError::ResourceLimit(message) => Error::ResourceLimit(message),
         ReadError::Io(error) => Error::Io(error),
         ReadError::MissingMember(name) => invalid(format!("missing archive member: {name}")),
+        ReadError::Scratch(error) => spill_failure(error),
+    }
+}
+/// The validator's own scratch failures (design §1.3 error mapping): never a verdict on
+/// the archive.
+fn spill_failure(error: crate::spill::SpillError) -> Error {
+    use crate::spill::SpillError;
+    let message = format!("validation scratch: {error}");
+    match error {
+        SpillError::Io { source, .. } => Error::Io(std::io::Error::new(source.kind(), message)),
+        SpillError::InsufficientSpace(_) => Error::Io(std::io::Error::other(message)),
+        SpillError::Overflow => Error::limit(message),
+        SpillError::CorruptRun { .. } | SpillError::Poisoned | SpillError::InvalidConfig(_) => {
+            Error::InvalidState(message)
+        }
+    }
+}
+/// One bit per catalog rank: whether a reference reached the member.
+struct Bits(Vec<u64>);
+impl Bits {
+    fn new(len: u64) -> Result<Self, Error> {
+        let words = usize::try_from(len.div_ceil(64))
+            .map_err(|_| Error::limit("archive entry count exceeds host range"))?;
+        let mut bits = Vec::new();
+        bits.try_reserve_exact(words).map_err(|_| refused())?;
+        bits.resize(words, 0);
+        Ok(Self(bits))
+    }
+    fn set(&mut self, rank: u64) {
+        self.0[(rank / 64) as usize] |= 1 << (rank % 64);
+    }
+    fn get(&self, rank: u64) -> bool {
+        self.0[(rank / 64) as usize] & (1 << (rank % 64)) != 0
     }
 }
 fn read_member(
@@ -913,8 +948,8 @@ impl SceneConsumer for StreamConsumer<'_> {
 
 struct ArchiveResources<'a> {
     archive: &'a mut Archive,
-    names: HashSet<String>,
-    used: HashSet<String>,
+    /// Members reached by a reference, by catalog rank.
+    used: Bits,
     limits: ValidationLimits,
     content_limits: PayloadLimits,
     bytes_read: u64,
@@ -942,22 +977,22 @@ impl ArchiveResources<'_> {
                     self.limits.references
                 ))
             })?;
-        if !self.names.contains(&name) {
-            return Err(invalid(format!("missing archive entry: {name}")));
+        self.mark(&name)
+    }
+    /// Records use of an existing member; a missing one is InvalidInput.
+    fn mark(&mut self, name: &str) -> Result<(), Error> {
+        match self.archive.find(name).map_err(archive_admission_error)? {
+            Some(member) => {
+                self.used.set(member.rank);
+                Ok(())
+            }
+            None => Err(invalid(format!("missing archive entry: {name}"))),
         }
-        self.used.insert(name);
-        Ok(())
     }
     /// An emitted implicit content (§2a step 10, DC-3): its reference was
     /// reserved at subtree admission, so this records use without a charge.
     fn reference_reserved(&mut self, name: &str) -> Result<(), Error> {
-        if !self.names.contains(name) {
-            return Err(invalid(format!("missing archive entry: {name}")));
-        }
-        if !self.used.contains(name) {
-            self.used.insert(name.to_owned());
-        }
-        Ok(())
+        self.mark(name)
     }
 }
 /// A metadata schema document: inline schemas are keyed by their tileset
@@ -994,7 +1029,10 @@ struct Check<'a> {
     schema: jsonschema::Validator,
     task_visits: u64,
     elements: u64,
-    payloads: HashMap<String, PayloadReport>,
+    /// Report rows of first-inspected payloads, in inspection order until the report.
+    rows: rows::RowSink<'a>,
+    /// Counts of each first-inspected payload, by its C2 URI index (repeat references).
+    payload_counts: Vec<[u64; 3]>,
     not_inspected: BTreeSet<String>,
     /// One per validation: the I1 allowances and the OD-7 subtree set.
     implicit: ImplicitLimits,
@@ -1145,8 +1183,14 @@ struct ImplicitParent {
 impl Check<'_> {
     /// The single payload classifier (H7 INV-4): every payload caller comes here.
     fn payload(&mut self, name: &str) -> Result<PayloadReport, Error> {
-        if let Some(report) = self.payloads.get(name) {
-            return Ok(report.clone());
+        if let Some(&uri) = self.c2.uri_index.get(name) {
+            let [accessors_checked, primitives_checked, vertices] = self.payload_counts[uri];
+            return Ok(PayloadReport {
+                uri: name.into(),
+                accessors_checked,
+                primitives_checked,
+                vertices,
+            });
         }
         // L0 is the caller's: every caller has already established that the
         // member exists (`Resources::reference` or the catalog lookup for the
@@ -1254,8 +1298,26 @@ impl Check<'_> {
             primitives_checked: facts.primitives_checked,
             vertices: facts.vertices,
         };
-        self.payloads.insert(name.into(), report.clone());
+        self.record_payload(&report)?;
         Ok(report)
+    }
+    /// The report row and repeat counts of a first-inspected payload, whose C2 URI facts
+    /// were just registered.
+    fn record_payload(&mut self, report: &PayloadReport) -> Result<(), Error> {
+        let member = self
+            .resources
+            .archive
+            .member(&report.uri)
+            .map_err(archive_admission_error)?;
+        self.rows.push(&report.uri, member.name_ref, report)?;
+        self.payload_counts.try_reserve(1).map_err(|_| refused())?;
+        self.payload_counts.push([
+            report.accessors_checked,
+            report.primitives_checked,
+            report.vertices,
+        ]);
+        debug_assert_eq!(self.payload_counts.len(), self.c2.uris.len());
+        Ok(())
     }
     /// Phase 2 (outcome 4): serial per-reference streaming, in traversal order.
     /// Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
@@ -2342,6 +2404,37 @@ thread_local! {
     /// Off selects the reference traversal (EM terms) on this thread.
     static MEMOIZE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
+/// Names shown in an unreferenced-entries message; the rest are counted.
+const UNREFERENCED_SHOWN: usize = 16;
+/// Closure: every member not reached by a reference, scanned by rank. The message lists
+/// the first 16 names in byte order and counts any others (A-C1-3).
+fn unreferenced(archive: &mut Archive, used: &Bits) -> Result<(), Error> {
+    let mut first = std::collections::BinaryHeap::new();
+    let mut count = 0u64;
+    for rank in 0..archive.len() {
+        if used.get(rank) {
+            continue;
+        }
+        count += 1;
+        let name = archive.name(rank).map_err(archive_admission_error)?;
+        if first.len() < UNREFERENCED_SHOWN {
+            first.push(name);
+        } else if first.peek().is_some_and(|last| name < *last) {
+            first.pop();
+            first.push(name);
+        }
+    }
+    if count == 0 {
+        return Ok(());
+    }
+    let shown = first.into_sorted_vec().join(", ");
+    let rest = count - UNREFERENCED_SHOWN.min(count as usize) as u64;
+    Err(invalid(if rest == 0 {
+        format!("unreferenced archive entries: {shown}")
+    } else {
+        format!("unreferenced archive entries: {shown} and {rest} more")
+    }))
+}
 /// One successful inspection: the report and its test-only facts.
 struct Inspection {
     report: ValidationReport,
@@ -2379,24 +2472,25 @@ fn inspect_facts(
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
     let mut bytes_read = archive.index_read_bytes();
-    let mut names = HashSet::new();
-    let mut hashes = HashMap::new();
-    for i in 0..archive.len() {
-        let member = archive.member_at(i).map_err(archive_admission_error)?;
-        let name = member.name.clone();
-        let size = member.size;
+    // The hash pass stays in central-directory order, so its first failure is unchanged.
+    // Only the `vector-build.json` digest is kept.
+    let mut vector_build = None;
+    let mut directory = archive.directory().map_err(archive_admission_error)?;
+    while let Some(member) = directory.next_entry().map_err(spill_failure)? {
+        let name = member.name;
         if name.split('/').any(|v| matches!(v, "" | "." | ".."))
             || name.starts_with('/')
             || name.contains('\\')
         {
             return Err(invalid(format!("unsafe archive path: {name}")));
         }
-        names.insert(name.clone());
         bytes_read = bytes_read
-            .checked_add(size)
+            .checked_add(member.size)
             .filter(|&n| n <= limits.total_bytes_read)
             .ok_or_else(|| Error::limit("archive hash reads exceed work limit"))?;
-        let digest = archive.hash_member(i).map_err(archive_admission_error)?;
+        let digest = archive
+            .hash_range(member.size, member.data_offset, member.crc32)
+            .map_err(archive_admission_error)?;
         let hash = format!("{:x}", sha2::digest::Output::<sha2::Sha256>::from(digest));
         let stem = Path::new(&name)
             .file_stem()
@@ -2405,9 +2499,15 @@ fn inspect_facts(
         if stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()) && stem != hash {
             return Err(invalid(format!("content checksum mismatch: {name}")));
         }
-        hashes.insert(name, hash);
+        if name == "vector-build.json" {
+            vector_build = Some(hash);
+        }
     }
-    let report = if names.contains("conversion.json") {
+    drop(directory);
+    let conversion = archive
+        .find("conversion.json")
+        .map_err(archive_admission_error)?;
+    let report = if conversion.is_some() {
         json::parse(
             &read_member(
                 &mut archive,
@@ -2423,6 +2523,17 @@ fn inspect_facts(
         Value::Null
     };
     let c2 = Containment::new(&limits);
+    let entries = archive.len();
+    let mut used = Bits::new(entries)?;
+    used.set(
+        archive
+            .member(TZ_INDEX_NAME)
+            .map_err(archive_admission_error)?
+            .rank,
+    );
+    let scratch = archive.scratch();
+    let names = archive.names();
+    let config = *archive.config();
     let mut check = Check {
         implicit: ImplicitLimits::new(limits.document_decoded_bytes, content_limits.json),
         implicit_roots: 0,
@@ -2439,8 +2550,7 @@ fn inspect_facts(
         prepared: 0,
         resources: ArchiveResources {
             archive: &mut archive,
-            names,
-            used: HashSet::from([TZ_INDEX_NAME.into()]),
+            used,
             limits,
             content_limits,
             bytes_read,
@@ -2453,7 +2563,8 @@ fn inspect_facts(
         active: HashSet::new(),
         task_visits: 0,
         elements: 0,
-        payloads: HashMap::new(),
+        rows: rows::RowSink::new(&scratch, &config)?,
+        payload_counts: Vec::new(),
         not_inspected: BTreeSet::from([
             "decodedContentBounds".into(),
             "metadataSemantics".into(),
@@ -2466,8 +2577,8 @@ fn inspect_facts(
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
         c2,
     };
-    if check.resources.names.contains("conversion.json") {
-        check.resources.used.insert("conversion.json".into());
+    if let Some(member) = conversion {
+        check.resources.used.set(member.rank);
         if let Some(name) = check.reports["geometryReports"].as_str() {
             check.resources.reference(uri("conversion.json", name)?)?;
         }
@@ -2492,7 +2603,7 @@ fn inspect_facts(
     let manifest = check.resources.read_json("tileset.json")?;
     if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
         check.resources.reference("vector-build.json".into())?;
-        if hashes.get("vector-build.json").map(String::as_str) != Some(expected) {
+        if vector_build.as_deref() != Some(expected) {
             return Err(invalid("vector build-state checksum mismatch"));
         }
     }
@@ -2503,19 +2614,7 @@ fn inspect_facts(
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
-    let mut unused: Vec<_> = check
-        .resources
-        .names
-        .difference(&check.resources.used)
-        .cloned()
-        .collect();
-    unused.sort();
-    if !unused.is_empty() {
-        return Err(invalid(format!(
-            "unreferenced archive entries: {}",
-            unused.join(", ")
-        )));
-    }
+    unreferenced(check.resources.archive, &check.resources.used)?;
     // C2 outcome precedence after C1 success: exclusions, then the precheck,
     // then streaming (Outside or allocation refusal), otherwise Contained.
     let reasons = if check.c2.exclusions != 0 {
@@ -2548,15 +2647,14 @@ fn inspect_facts(
     {
         return Err(invalid("source archive changed during inspection"));
     }
-    let mut payloads: Vec<_> = check.payloads.into_values().collect();
-    payloads.sort_by(|a, b| a.uri.cmp(&b.uri));
     let implicit = check.implicit_roots > 0;
+    let payloads = check.rows.finish(names, scratch.clone())?;
     let report = ValidationReport {
         ok: true,
         archive: path.into(),
         tiles: check.tiles as u64,
         content_references: check.contents as u64,
-        entries: check.resources.names.len() as u64,
+        entries,
         payloads,
         limits: check.resources.limits,
         checks: [

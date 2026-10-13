@@ -13,7 +13,9 @@ pub const TZ_INDEX_NAME: &str = "@3dtilesIndex1@";
 /// validator admits. A larger archive is a typed Unsupported refusal. At the
 /// ceiling the index is 24 * (N - 1) = 4,294,967,256 bytes.
 pub(crate) const MEMBER_CEILING: u64 = 178_956_970;
+mod catalog;
 mod read;
+pub(crate) use catalog::{CatalogConfig, Names};
 pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 
 #[derive(Debug, thiserror::Error)]
@@ -440,6 +442,7 @@ pub(crate) fn validate_reader_3tz(mut reader: impl Read + Seek) -> Result<(), Co
             ReadError::InvalidInput(message)
             | ReadError::Unsupported(message)
             | ReadError::ResourceLimit(message) => CodecError::invalid(message),
+            ReadError::Scratch(error) => CodecError::Io(std::io::Error::other(error)),
         })
 }
 

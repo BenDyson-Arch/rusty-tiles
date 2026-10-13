@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
 };
 
@@ -14,6 +14,30 @@ use std::{
 pub(crate) trait SpillIo: Send + Sync {
     fn create(&self, path: &Path) -> io::Result<Box<dyn Write + Send>>;
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>>;
+    /// A handle for positioned reads of a completed file (random access to sequences).
+    fn open_random(&self, path: &Path) -> io::Result<File> {
+        File::open(path)
+    }
+}
+
+/// Reads exactly `bytes.len()` bytes at `offset` without moving a shared cursor.
+pub(crate) fn read_exact_at(file: &File, mut bytes: &mut [u8], mut offset: u64) -> io::Result<()> {
+    while !bytes.is_empty() {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, bytes, offset);
+        #[cfg(windows)]
+        let read = std::os::windows::fs::FileExt::seek_read(file, bytes, offset);
+        match read {
+            Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+            Ok(count) => {
+                bytes = &mut bytes[count..];
+                offset += count as u64;
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 pub(crate) struct FileIo;
@@ -46,12 +70,23 @@ impl Accounting {
 
 /// A private scratch directory created after a successful free-space preflight. Dropping it
 /// removes every file inside; [`Scratch::close`] does the same and reports failure.
+///
+/// [`Scratch::create`] preflights and creates the directory at once. [`Scratch::deferred`]
+/// does both only when the first spill file is requested, so a consumer whose sorts and
+/// sequences stay in memory never touches the filesystem.
 pub(crate) struct Scratch {
-    dir: tempfile::TempDir,
-    volume: Volume,
+    parent: PathBuf,
+    needed: u64,
+    inspect: fn(&Path) -> Result<Volume, SpillError>,
+    created: OnceLock<Created>,
     io: Arc<dyn SpillIo>,
     accounting: Arc<Accounting>,
     next_file: AtomicU64,
+}
+
+struct Created {
+    dir: tempfile::TempDir,
+    volume: Volume,
 }
 
 impl Scratch {
@@ -75,8 +110,42 @@ impl Scratch {
         inspect: impl FnOnce(&Path) -> Result<Volume, SpillError>,
     ) -> Result<Self, SpillError> {
         let parent = parent.map_or_else(Self::default_parent, Path::to_path_buf);
+        let created = Self::materialize(&parent, needed, inspect)?;
+        let scratch = Self::deferred_with(Some(&parent), needed, io, volume::inspect_volume);
+        let _ = scratch.created.set(created);
+        Ok(scratch)
+    }
+
+    /// Records `parent` and the free-space estimate `needed` without touching the filesystem.
+    /// The preflight and the directory happen at the first spill file, if any.
+    pub(crate) fn deferred(parent: Option<&Path>, needed: u64) -> Self {
+        Self::deferred_with(parent, needed, Arc::new(FileIo), volume::inspect_volume)
+    }
+
+    pub(crate) fn deferred_with(
+        parent: Option<&Path>,
+        needed: u64,
+        io: Arc<dyn SpillIo>,
+        inspect: fn(&Path) -> Result<Volume, SpillError>,
+    ) -> Self {
+        Self {
+            parent: parent.map_or_else(Self::default_parent, Path::to_path_buf),
+            needed,
+            inspect,
+            created: OnceLock::new(),
+            io,
+            accounting: Arc::default(),
+            next_file: AtomicU64::new(0),
+        }
+    }
+
+    fn materialize(
+        parent: &Path,
+        needed: u64,
+        inspect: impl FnOnce(&Path) -> Result<Volume, SpillError>,
+    ) -> Result<Created, SpillError> {
         let volume = volume::preflight_with(
-            &parent,
+            parent,
             needed,
             SpaceRole::Scratch,
             PreflightStage::Geometry,
@@ -92,34 +161,53 @@ impl Scratch {
         })?;
         let dir = tempfile::Builder::new()
             .prefix("rusty-tiles-spill-")
-            .tempdir_in(&parent)
-            .map_err(|e| SpillError::io("create scratch directory", &parent, e))?;
-        Ok(Self {
-            dir,
-            volume,
-            io,
-            accounting: Arc::default(),
-            next_file: AtomicU64::new(0),
-        })
+            .tempdir_in(parent)
+            .map_err(|e| SpillError::io("create scratch directory", parent, e))?;
+        Ok(Created { dir, volume })
     }
 
+    fn created(&self) -> Result<&Created, SpillError> {
+        if let Some(created) = self.created.get() {
+            return Ok(created);
+        }
+        let created = Self::materialize(&self.parent, self.needed, self.inspect)?;
+        // A concurrent first spill may have won; the loser's directory is removed on drop.
+        let _ = self.created.set(created);
+        Ok(self.created.get().expect("scratch was just created"))
+    }
+
+    /// Whether the scratch directory exists (always, for [`Scratch::create`]).
+    pub(crate) fn is_created(&self) -> bool {
+        self.created.get().is_some()
+    }
+
+    /// The scratch directory, or its parent while a deferred scratch is not yet created.
     pub(crate) fn path(&self) -> &Path {
-        self.dir.path()
+        self.created
+            .get()
+            .map_or(self.parent.as_path(), |created| created.dir.path())
     }
 
     /// True when scratch is RAM (tmpfs/ramfs); reported as `scratch_memory_backed`.
+    /// False while a deferred scratch is not yet created.
     pub(crate) fn memory_backed(&self) -> bool {
-        self.volume.memory_backed
+        self.created
+            .get()
+            .is_some_and(|created| created.volume.memory_backed)
     }
 
-    /// Free bytes observed by the preflight.
+    /// Free bytes observed by the preflight (0 before a deferred scratch is created).
     pub(crate) fn available_at_start(&self) -> u64 {
-        self.volume.available_bytes
+        self.created
+            .get()
+            .map_or(0, |created| created.volume.available_bytes)
     }
 
-    /// Filesystem fragment/cluster size observed by the preflight.
+    /// Filesystem fragment/cluster size observed by the preflight (0 before creation).
     pub(crate) fn allocation_unit_bytes(&self) -> u64 {
-        self.volume.allocation_unit_bytes
+        self.created
+            .get()
+            .map_or(0, |created| created.volume.allocation_unit_bytes)
     }
 
     /// Bytes currently held by live spill files.
@@ -134,8 +222,12 @@ impl Scratch {
 
     /// Removes the directory, reporting failure rather than ignoring it as drop does.
     pub(crate) fn close(self) -> Result<(), SpillError> {
-        let path = self.dir.path().to_owned();
-        self.dir
+        let Some(created) = self.created.into_inner() else {
+            return Ok(());
+        };
+        let path = created.dir.path().to_owned();
+        created
+            .dir
             .close()
             .map_err(|e| SpillError::io("remove scratch directory", path, e))
     }
@@ -148,13 +240,15 @@ impl Scratch {
         self.io.clone()
     }
 
-    pub(super) fn new_file(&self, stem: &str) -> SpillFile {
+    /// A new file name in the scratch directory, creating a deferred scratch first.
+    pub(super) fn new_file(&self, stem: &str) -> Result<SpillFile, SpillError> {
+        let dir = self.created()?.dir.path();
         let id = self.next_file.fetch_add(1, Ordering::Relaxed);
-        SpillFile {
-            path: self.dir.path().join(format!("{stem}-{id}.spill")),
+        Ok(SpillFile {
+            path: dir.join(format!("{stem}-{id}.spill")),
             bytes: 0,
             accounting: self.accounting.clone(),
-        }
+        })
     }
 }
 

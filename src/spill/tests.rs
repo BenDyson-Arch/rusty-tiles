@@ -703,7 +703,7 @@ fn drops_remove_scratch_files_and_directory() {
 #[test]
 fn failed_removal_stays_accounted() {
     let (_parent, scratch) = new_scratch(Arc::new(FileIo));
-    let mut file = scratch.new_file("blocked");
+    let mut file = scratch.new_file("blocked").unwrap();
     // remove_file refuses a directory on every platform.
     std::fs::create_dir(file.path()).unwrap();
     file.completed(100);
@@ -712,7 +712,7 @@ fn failed_removal_stays_accounted() {
     assert_eq!(scratch.live_bytes(), 100, "still on disk, still counted");
     std::fs::remove_dir(blocked).unwrap();
 
-    let mut file = scratch.new_file("gone");
+    let mut file = scratch.new_file("gone").unwrap();
     file.completed(50);
     drop(file); // never created: NotFound counts as removed
     assert_eq!(scratch.live_bytes(), 100);
@@ -806,6 +806,55 @@ fn real_volume_preflight_and_missing_directory() {
         "an explicit scratch directory is never created"
     );
     assert_eq!(Scratch::default_parent(), std::env::temp_dir());
+}
+
+#[test]
+fn deferred_scratch_exists_only_after_the_first_spill_file() {
+    let parent = tempfile::tempdir().unwrap();
+    let config = SortConfig {
+        run_bytes: 4 * size_of::<Keyed>(),
+        fan_in: 2,
+        buffer_bytes: 64,
+        jobs: 1,
+    };
+    let records = |n: u32| {
+        (0..n).map(move |seq| Keyed {
+            key: (n - seq) as u16,
+            seq,
+        })
+    };
+    // A sort that fits one run never asks for a file: nothing is preflighted or created.
+    let scratch = Scratch::deferred(Some(parent.path()), u64::MAX);
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    sorter.extend(records(4)).unwrap();
+    let sorted: Vec<_> = sorter.finish().unwrap().map(Result::unwrap).collect();
+    assert_eq!(
+        sorted.iter().map(|r| r.seq).collect::<Vec<_>>(),
+        [3, 2, 1, 0]
+    );
+    assert!(!scratch.is_created());
+    assert_eq!(scratch.path(), parent.path());
+    assert_eq!(entries(parent.path()), 0);
+    // The first spilled run runs the deferred preflight, which refuses before creating anything.
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    assert!(matches!(
+        sorter.extend(records(5)),
+        Err(SpillError::InsufficientSpace(_))
+    ));
+    assert!(!scratch.is_created());
+    assert_eq!(entries(parent.path()), 0);
+    // With room, the directory appears at the first run and is removed on close.
+    let scratch = Scratch::deferred(Some(parent.path()), 0);
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    sorter.extend(records(9)).unwrap();
+    assert!(scratch.is_created());
+    assert_ne!(scratch.path(), parent.path());
+    let sorted: Vec<_> = sorter.finish().unwrap().map(Result::unwrap).collect();
+    assert_eq!(sorted.len(), 9);
+    assert_eq!(entries(parent.path()), 1);
+    scratch.close().unwrap();
+    assert_eq!(entries(parent.path()), 0);
+    Scratch::deferred(Some(parent.path()), 0).close().unwrap();
 }
 
 #[cfg(target_os = "linux")]
