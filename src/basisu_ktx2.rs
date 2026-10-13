@@ -149,10 +149,28 @@ pub(crate) fn encode_ktx2_mips(
     mode: Mode,
     params: Params,
 ) -> Result<Vec<u8>, JobError> {
+    encode_ktx2_mips_decoded(mips, mode, params).map(|(bytes, _)| bytes)
+}
+
+/// [`encode_ktx2_mips`], also returning every level as decoded by the
+/// mandatory verification, so callers need not decode the container again.
+pub(crate) fn encode_ktx2_mips_decoded(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<(Vec<u8>, Vec<Vec<u8>>), JobError> {
     check_mips(mips, mode, params)?;
-    let encoded = encode_mips_unverified(mips, mode, params)?;
-    verify_ktx2_mips(&encoded, mips, mode, params)?;
-    Ok(encoded)
+    let base = u64::from(mips[0].width) * u64::from(mips[0].height);
+    let chain = mips
+        .iter()
+        .map(|m| u64::from(m.width) * u64::from(m.height))
+        .sum();
+    let encoded =
+        crate::stage_timing::encode(base, chain, || encode_mips_unverified(mips, mode, params))?;
+    let (_, decoded) = crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
+        verify_levels(&encoded, mips, mode, params, true)
+    })?;
+    Ok((encoded, decoded))
 }
 
 fn check_mips(mips: &[MipLevel<'_>], mode: Mode, params: Params) -> Result<(), JobError> {
@@ -570,7 +588,18 @@ pub(crate) fn verify_ktx2_mips(
     mode: Mode,
     params: Params,
 ) -> Result<Verified, JobError> {
+    verify_levels(ktx2, mips, mode, params, false).map(|(verified, _)| verified)
+}
+
+fn verify_levels(
+    ktx2: &[u8],
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+    keep: bool,
+) -> Result<(Verified, Vec<Vec<u8>>), JobError> {
     check_mips(mips, mode, params)?;
+    let mut kept = Vec::new();
     let MipLevel {
         rgba,
         width,
@@ -663,7 +692,11 @@ pub(crate) fn verify_ktx2_mips(
         {
             let input = mips[index].rgba;
             let level_sse = sse(input, &decoded);
-            let level_block_mean = block_mean_sse(input, w, h);
+            let level_block_mean = if level == 0 {
+                block_mean
+            } else {
+                block_mean_sse(input, w, h)
+            };
             if level == 0 {
                 base_sse = level_sse;
             }
@@ -701,10 +734,16 @@ pub(crate) fn verify_ktx2_mips(
                 )));
             }
         }
+        if keep {
+            kept.push(decoded);
+        }
     }
-    Ok(Verified {
-        levels,
-        base_sse,
-        block_mean_sse: block_mean,
-    })
+    Ok((
+        Verified {
+            levels,
+            base_sse,
+            block_mean_sse: block_mean,
+        },
+        kept,
+    ))
 }

@@ -4,6 +4,14 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, process::Command};
 
+/// The `messageIncludes` tokens a refused case's message must contain (H7 legacy cases).
+fn tokens(case: &Value) -> Vec<&str> {
+    case["messageIncludes"]
+        .as_array()
+        .map(|tokens| tokens.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default()
+}
+
 #[test]
 fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c1");
@@ -26,6 +34,12 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
             Some(expected) => {
                 let failure = inspected.as_ref().expect_err(name);
                 assert_eq!(failure.category().0, expected, "{name}: {failure:?}");
+                for token in tokens(case) {
+                    assert!(
+                        failure.to_string().contains(token),
+                        "{name}: message lacks {token:?}: {failure}"
+                    );
+                }
             }
         }
         let cli = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
@@ -47,6 +61,13 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
         );
         if let Some(expected) = case["expectedKind"].as_str() {
             assert_eq!(report["error"]["code"], expected, "{name}: {report}");
+            let message = report["error"]["message"].as_str().unwrap_or_default();
+            for token in tokens(case) {
+                assert!(
+                    message.contains(token),
+                    "{name}: CLI message lacks {token:?}: {report}"
+                );
+            }
         } else {
             assert_eq!(report["ok"], true, "{name}: {report}");
             assert_eq!(

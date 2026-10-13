@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -236,6 +236,7 @@
+@@ -238,6 +238,7 @@
              if implicit:
                  if tile.get("children"):
                      raise OracleUndecided("implicit root with children at %s (I1 refuses)" % where)

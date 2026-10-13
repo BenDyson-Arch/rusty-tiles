@@ -51,16 +51,18 @@ I1_ORACLE_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "..", "implicit
 
 # The composed oracles, pinned (contract 9.A). `pins()` reports drift; the
 # self-test fails on it. Mutant copies of c2o are expected to drift.
+# H7 (legacy-content amendment, 2026-10-13) re-pinned check.py, gltf.py and
+# i1_oracle.py; the previous pins were e0209cb4…, 00afbf32… and 62fdc706….
 PINS = {
-    "c2o/check.py": "e0209cb4db3dd09049e5ce8da10ecae11454213a2a31acc9eb310df10bbdf56f",
-    "c2o/gltf.py": "00afbf3261eeabad9c3c00883dc7c21ad0dd6e05b7c8c8de934ad9caa9e825e2",
+    "c2o/check.py": "8850766e4919de66cf0a220f171ed6cf34b9a6dc49d5ddcae43df7807b174e2b",
+    "c2o/gltf.py": "fbd466e5f480b34dbe22059727aa4f9eead94dd791df2222a4323cf8e0cf40b7",
     "c2o/meshopt.py": "946cbe81bf3baedcd3c1adb6863d4fb6ff309e28defa53ad5f1b9dfa22ef21e6",
     "c2o/numbers.py": "d28df9e87fa957a1a755bdbe409a2cf1e2c4fe4f76a0cc30075ad759ff06b40c",
     "c2o/scene.py": "dd06ea0593244280cfc9a9930c8ed4aae0aa94fc830006d0c46aab014dc710c5",
     "c2o/spans.py": "dadbebe2fba7bb132b906c98557606141e16215fa3b8959fe5afc1c0c01c82bb",
     "c2o/tileset.py": "3460b08cf3cc3022bf05090770ed0b91e269a137899a55e37f7d21702021ae75",
     "c2o/volumes.py": "b9a7456247d0668aec40497e5e33b833e141035bcbfe8af22f9b9db6e528bfce",
-    "implicit_read/oracle/i1_oracle.py": "62fdc706e40c0b7e2930c1c4c23a80cd7ac861610db3029036740ba81fe5c7c0",
+    "implicit_read/oracle/i1_oracle.py": "c094171991f820dd7dd6c6f888bab19373f3daf30166ad1b020ae7e7a149d737",
 }
 
 # Slice 3 consumes C2-WB's frozen default cap (contract header: 2^29). O-explicit's

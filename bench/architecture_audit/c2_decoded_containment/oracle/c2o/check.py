@@ -15,7 +15,7 @@ import hashlib
 from fractions import Fraction
 
 from . import spans as S
-from .gltf import RESTART, Payload, PayloadError
+from .gltf import RESTART, LegacyContent, Payload, PayloadError
 from .numbers import OracleUndecided, frac_str
 from .scene import NodeInvalid, QUAT_WINDOW, Walk, admit, quaternion_excess, select_scene, selected_nodes
 from .tileset import Archive, Traversal
@@ -35,7 +35,7 @@ GLTF_ALLOWLIST = {
 
 REASONS = [
     "implicitTiling", "tilesetExtension", "tileMetadata", "upAxisOverride", "regionVolume",
-    "rotatedBox", "rtcCenter", "gltfExtension", "sceneSelection", "skin", "morphTargets",
+    "rotatedBox", "gltfExtension", "sceneSelection", "skin", "morphTargets",
     "animation", "quaternionWindow", "numericSpan", "workLimit",
 ]
 
@@ -125,8 +125,8 @@ class UriFacts:
         self.exclusions = set()
         self.c1_caveats = []
         admit(doc)  # raises NodeInvalid
-        if self.payload.rtc_center:
-            self.exclusions.add("rtcCenter")
+        # H7 removed rtcCenter: its only carrier, a b3dm feature table, is Unsupported
+        # in C1 (LegacyContent).
         used = doc.get("extensionsUsed", [])
         required = doc.get("extensionsRequired", [])
         if not isinstance(used, list) or not isinstance(required, list):
@@ -283,6 +283,11 @@ class Oracle:
             outcome = self._decide()
         except OracleUndecided as err:
             outcome = {"outcome": "Undecided", "why": err.why}
+        except LegacyContent as err:
+            # H7: C1 outcome 1. References are classified in traversal order and the
+            # traversal stops at its first defect, so this is the first failure.
+            outcome = {"outcome": "Unsupported", "phase": "C1",
+                       "facts": {"format": err.fmt, "member": err.member, "rule": err.rule, "why": str(err)}}
         self.report.update(outcome)
         return self.report
 

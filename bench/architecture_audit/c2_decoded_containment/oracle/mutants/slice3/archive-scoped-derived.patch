@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -273,6 +273,8 @@
+@@ -275,6 +275,8 @@
              del stack[level:]
              twhere = "%s.implicit[%d/%d/%d/%d]" % (where, level, rec["x"], rec["y"], rec["z"])
              vol = effective_volume(rec, root_frame.volume, twhere)

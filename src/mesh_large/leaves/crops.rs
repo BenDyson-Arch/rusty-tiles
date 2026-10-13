@@ -191,6 +191,278 @@ pub(crate) fn plan_mip_aligned(
     })
 }
 
+/// One translation-only island crop placed at `offset` inside its binding block.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Island {
+    pub crop: Crop,
+    pub offset: [u32; 2],
+}
+/// A binding's physical representation: one or more island crops packed into
+/// a `width` x `height` block, and each triangle's island. A single island at
+/// offset zero is the classic whole-bounding-box crop.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Block {
+    pub width: u32,
+    pub height: u32,
+    pub islands: Vec<Island>,
+    pub triangle_island: Vec<u32>,
+}
+impl Block {
+    pub(crate) fn single(crop: Crop, triangles: usize) -> Self {
+        Self {
+            width: crop.width,
+            height: crop.height,
+            islands: vec![Island {
+                crop,
+                offset: [0, 0],
+            }],
+            triangle_island: vec![0; triangles],
+        }
+    }
+    /// Real source-signal texels (crop interiors) carried by the block.
+    pub(crate) fn interior_texels(&self) -> u64 {
+        self.islands
+            .iter()
+            .map(|i| u64::from(i.crop.interior_width) * u64::from(i.crop.interior_height))
+            .sum()
+    }
+}
+/// Union-find with path halving; deterministic for a fixed union order.
+fn find(parent: &mut [u32], mut i: u32) -> u32 {
+    while parent[i as usize] != i {
+        parent[i as usize] = parent[parent[i as usize] as usize];
+        i = parent[i as usize];
+    }
+    i
+}
+/// Grid cells visited while clustering triangle footprints, before the cell
+/// edge doubles. Bounds clustering work for arbitrarily large UV footprints.
+const ISLAND_CELL_BUDGET: u64 = 1 << 22;
+/// Initial clustering cell edge in source texels. Footprints whose padded
+/// allocations come within one cell of each other share an island.
+const ISLAND_CELL: i64 = 8;
+/// Island crops: triangles (three UV corners each) are clustered by the
+/// overlap of their padded texel footprints on a coarse grid; each cluster
+/// becomes one crop with the same real-source halo and gutter as [`plan`],
+/// its allocation rounded up to `align` texels, and the crops are shelf-packed
+/// into one block. Whenever the packed block is not smaller than the classic
+/// whole-bounding-box crop, that crop is returned instead, so islands never
+/// increase a binding's texel area.
+pub(crate) fn plan_islands(
+    uvs: &[[f32; 2]],
+    image_width: u32,
+    image_height: u32,
+    max_edge: u32,
+    gutter: u32,
+    align: u32,
+) -> Result<Block, JobError> {
+    if uvs.is_empty() || !uvs.len().is_multiple_of(3) || align == 0 || !align.is_power_of_two() {
+        return Err(invalid(
+            "island crop requires whole triangles and POT alignment",
+        ));
+    }
+    let triangles = uvs.len() / 3;
+    let size = [f64::from(image_width), f64::from(image_height)];
+    // Per-triangle interior spans [lo, hi) with plan()'s one-texel halo.
+    let mut spans = Vec::new();
+    spans.try_reserve_exact(triangles).map_err(|_| resource())?;
+    for corners in uvs.as_chunks::<3>().0 {
+        let mut lo = [i64::MAX; 2];
+        let mut hi = [i64::MIN; 2];
+        for uv in corners {
+            for axis in 0..2 {
+                let v = f64::from(uv[axis]);
+                if !v.is_finite() {
+                    return Err(invalid("nonfinite source UV"));
+                }
+                if v.abs() > 1e6 {
+                    return Err(unsupported());
+                }
+                lo[axis] = lo[axis].min((v * size[axis]).floor() as i64 - 1);
+                hi[axis] = hi[axis].max((v * size[axis]).ceil() as i64 + 1);
+            }
+        }
+        for axis in 0..2 {
+            hi[axis] = hi[axis].max(lo[axis] + 1);
+        }
+        spans.push((lo, hi));
+    }
+    // Footprints are padded by both gutters plus alignment slack, so islands
+    // whose allocations would nearly touch are merged rather than packed apart.
+    let pad = i64::from(gutter) * 2 + i64::from(align);
+    let mut cell = ISLAND_CELL;
+    loop {
+        let mut cells = 0u64;
+        for (lo, hi) in &spans {
+            let n = |axis: usize| {
+                ((hi[axis] + pad).div_euclid(cell) - (lo[axis] - pad).div_euclid(cell) + 1) as u64
+            };
+            cells = cells.saturating_add(n(0).saturating_mul(n(1)));
+        }
+        if cells <= ISLAND_CELL_BUDGET {
+            break;
+        }
+        cell = cell.checked_mul(2).ok_or_else(resource)?;
+    }
+    let mut parent: Vec<u32> = (0..triangles as u32).collect();
+    let mut owner = std::collections::HashMap::<(i64, i64), u32>::new();
+    for (t, (lo, hi)) in spans.iter().enumerate() {
+        for cy in (lo[1] - pad).div_euclid(cell)..=(hi[1] + pad).div_euclid(cell) {
+            for cx in (lo[0] - pad).div_euclid(cell)..=(hi[0] + pad).div_euclid(cell) {
+                match owner.entry((cx, cy)) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let a = find(&mut parent, *entry.get());
+                        let b = find(&mut parent, t as u32);
+                        if a != b {
+                            // The smaller root wins: islands are keyed by
+                            // their first triangle independent of grid order.
+                            let (keep, drop) = (a.min(b), a.max(b));
+                            parent[drop as usize] = keep;
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(t as u32);
+                    }
+                }
+            }
+        }
+    }
+    drop(owner);
+    // Islands in first-triangle order with their union interior spans.
+    let mut index_of = vec![u32::MAX; triangles];
+    let mut bounds: Vec<([i64; 2], [i64; 2])> = Vec::new();
+    let mut triangle_island = Vec::new();
+    triangle_island
+        .try_reserve_exact(triangles)
+        .map_err(|_| resource())?;
+    for (t, (lo, hi)) in spans.iter().enumerate() {
+        let root = find(&mut parent, t as u32) as usize;
+        if index_of[root] == u32::MAX {
+            index_of[root] = bounds.len() as u32;
+            bounds.push((*lo, *hi));
+        }
+        let island = index_of[root];
+        let entry = &mut bounds[island as usize];
+        for axis in 0..2 {
+            entry.0[axis] = entry.0[axis].min(lo[axis]);
+            entry.1[axis] = entry.1[axis].max(hi[axis]);
+        }
+        triangle_island.push(island);
+    }
+    let round = |v: u64| v.div_ceil(u64::from(align)) * u64::from(align);
+    // One island over the union of every footprint: plan()'s classic crop,
+    // with the allocation rounded to the alignment.
+    let island = |lo: [i64; 2], hi: [i64; 2]| -> Result<Option<Crop>, JobError> {
+        let mut interior = [0u32; 2];
+        let mut extent = [0u32; 2];
+        for axis in 0..2 {
+            let span = u64::try_from(hi[axis] - lo[axis]).map_err(|_| resource())?;
+            let full = round(span + 2 * u64::from(gutter));
+            if full > u64::from(max_edge) {
+                return Ok(None);
+            }
+            extent[axis] = full as u32;
+            interior[axis] = (full - 2 * u64::from(gutter)) as u32;
+        }
+        Ok(Some(Crop {
+            origin: lo,
+            width: extent[0],
+            height: extent[1],
+            gutter,
+            interior_width: interior[0],
+            interior_height: interior[1],
+        }))
+    };
+    let union = bounds
+        .iter()
+        .fold(([i64::MAX; 2], [i64::MIN; 2]), |(lo, hi), (a, b)| {
+            (
+                [lo[0].min(a[0]), lo[1].min(a[1])],
+                [hi[0].max(b[0]), hi[1].max(b[1])],
+            )
+        });
+    let whole = island(union.0, union.1)?;
+    let fallback = |whole: Option<Crop>| {
+        whole
+            .map(|crop| Block::single(crop, triangles))
+            .ok_or_else(unsupported)
+    };
+    let mut islands = Vec::new();
+    islands
+        .try_reserve_exact(bounds.len())
+        .map_err(|_| resource())?;
+    let mut area = 0u64;
+    let mut widest = 0u64;
+    for (lo, hi) in &bounds {
+        let Some(crop) = island(*lo, *hi)? else {
+            return fallback(whole);
+        };
+        area += u64::from(crop.width) * u64::from(crop.height);
+        widest = widest.max(u64::from(crop.width));
+        islands.push(Island {
+            crop,
+            offset: [0, 0],
+        });
+    }
+    if islands.len() == 1 {
+        return fallback(whole);
+    }
+    // Shelf packing by descending height, then width, then island order, in
+    // a block about as wide as the square root of the total area.
+    let mut order: Vec<usize> = (0..islands.len()).collect();
+    order.sort_by_key(|&i| {
+        (
+            std::cmp::Reverse(islands[i].crop.height),
+            std::cmp::Reverse(islands[i].crop.width),
+            i,
+        )
+    });
+    let square = round((area as f64).sqrt().ceil() as u64);
+    let mut packed = None;
+    for limit in [square.max(widest), u64::from(max_edge)] {
+        let limit = limit.min(u64::from(max_edge));
+        let (mut x, mut y, mut row, mut width) = (0u64, 0u64, 0u64, 0u64);
+        let mut offsets = vec![[0u32; 2]; islands.len()];
+        for &i in &order {
+            let (w, h) = (
+                u64::from(islands[i].crop.width),
+                u64::from(islands[i].crop.height),
+            );
+            if x + w > limit {
+                x = 0;
+                y += row;
+                row = 0;
+            }
+            offsets[i] = [x as u32, y as u32];
+            x += w;
+            row = row.max(h);
+            width = width.max(x);
+        }
+        let height = y + row;
+        if height <= u64::from(max_edge) {
+            packed = Some((width as u32, height as u32, offsets));
+            break;
+        }
+    }
+    let Some((width, height, offsets)) = packed else {
+        return fallback(whole);
+    };
+    if let Some(crop) = &whole {
+        if u64::from(crop.width) * u64::from(crop.height) <= u64::from(width) * u64::from(height) {
+            return fallback(whole);
+        }
+    }
+    for (island, offset) in islands.iter_mut().zip(offsets) {
+        island.offset = offset;
+    }
+    Ok(Block {
+        width,
+        height,
+        islands,
+        triangle_island,
+    })
+}
+
 fn validate_crop(c: &Crop) -> Result<(), JobError> {
     let g = c.gutter.checked_mul(2).ok_or_else(resource)?;
     if c.interior_width == 0
@@ -535,6 +807,125 @@ mod tests {
                 }
             }
         }
+    }
+    /// Deterministic scattered small triangles over a `size` texture.
+    fn scattered(count: usize, size: f32, seed: u64) -> Vec<[f32; 2]> {
+        let mut state = seed;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 33) as f32) / (1u64 << 31) as f32
+        };
+        let mut uvs = Vec::new();
+        for _ in 0..count {
+            let (u, v) = (next() * 0.9 + 0.05, next() * 0.9 + 0.05);
+            let d = 3. / size;
+            uvs.extend([[u, v], [u + d, v], [u, v + d]]);
+        }
+        uvs
+    }
+    #[test]
+    fn islands_cover_every_triangle_and_never_exceed_the_whole_crop() {
+        for (count, align, gutter) in [(1, 4, 2), (40, 4, 2), (300, 1, 2), (40, 8, 8)] {
+            let uvs = scattered(count, 1024., count as u64);
+            let block = plan_islands(&uvs, 1024, 1024, 4096, gutter, align).unwrap();
+            let whole = plan(&uvs, 1024, 1024, 4096, gutter).unwrap();
+            assert!(
+                u64::from(block.width) * u64::from(block.height)
+                    <= u64::from(whole.width.next_multiple_of(align))
+                        * u64::from(whole.height.next_multiple_of(align))
+            );
+            assert_eq!(block.triangle_island.len(), count);
+            for island in &block.islands {
+                assert_eq!(island.crop.gutter, gutter);
+                assert_eq!(island.crop.width % align, 0);
+                assert_eq!(island.crop.height % align, 0);
+                assert_eq!(island.offset[0] % align, 0);
+                assert_eq!(island.offset[1] % align, 0);
+                assert!(island.offset[0] + island.crop.width <= block.width);
+                assert!(island.offset[1] + island.crop.height <= block.height);
+            }
+            // Islands never overlap inside the block.
+            for (i, a) in block.islands.iter().enumerate() {
+                for b in &block.islands[i + 1..] {
+                    let apart = a.offset[0] + a.crop.width <= b.offset[0]
+                        || b.offset[0] + b.crop.width <= a.offset[0]
+                        || a.offset[1] + a.crop.height <= b.offset[1]
+                        || b.offset[1] + b.crop.height <= a.offset[1];
+                    assert!(apart);
+                }
+            }
+            // Every corner, with both LINEAR taps, lands in its island interior.
+            for (t, corners) in uvs.as_chunks::<3>().0.iter().enumerate() {
+                let island = &block.islands[block.triangle_island[t] as usize];
+                for uv in corners {
+                    let mapped = remap_uv(
+                        *uv,
+                        1024,
+                        1024,
+                        &island.crop,
+                        island.offset,
+                        [block.width, block.height],
+                    )
+                    .unwrap();
+                    for (axis, coordinate) in mapped.into_iter().enumerate() {
+                        let edge = if axis == 0 { block.width } else { block.height };
+                        let x = f64::from(coordinate) * f64::from(edge) - 0.5;
+                        let lo = f64::from(island.offset[axis] + gutter);
+                        let interior = if axis == 0 {
+                            island.crop.interior_width
+                        } else {
+                            island.crop.interior_height
+                        };
+                        assert!(x.floor() >= lo && x.floor() + 1. < lo + f64::from(interior));
+                    }
+                }
+            }
+            if count == 1 {
+                assert_eq!(block.islands.len(), 1);
+            }
+            if count == 40 {
+                // Scattered footprints: islands are far smaller than the hull.
+                assert!(block.islands.len() > 1);
+                assert!(
+                    u64::from(block.width) * u64::from(block.height) * 8
+                        < u64::from(whole.width) * u64::from(whole.height)
+                );
+            }
+            // Deterministic for identical input.
+            assert_eq!(
+                block,
+                plan_islands(&uvs, 1024, 1024, 4096, gutter, align).unwrap()
+            );
+        }
+    }
+    #[test]
+    fn single_island_matches_classic_crop_and_refusals_are_kept() {
+        let uvs = [[0.1, 0.2], [0.4, 0.2], [0.1, 0.7]];
+        let block = plan_islands(&uvs, 64, 32, 4096, 2, 1).unwrap();
+        assert_eq!(block.islands.len(), 1);
+        assert_eq!(block.islands[0].crop, plan(&uvs, 64, 32, 4096, 2).unwrap());
+        assert_eq!(
+            plan_islands(&[[0., 0.], [1e6, 0.], [0., 1.]], 4, 4, 8, 2, 4)
+                .unwrap_err()
+                .kind(),
+            JobErrorKind::Unsupported
+        );
+        assert_eq!(
+            plan_islands(&[[f32::NAN, 0.], [0., 0.], [0., 0.]], 4, 4, 8, 2, 4)
+                .unwrap_err()
+                .kind(),
+            JobErrorKind::InvalidRequest
+        );
+        assert!(plan_islands(&uvs[..2], 64, 32, 4096, 2, 4).is_err());
+        // A hull wider than a page still fits as islands.
+        let mut spread = scattered(8, 4096., 7);
+        spread.extend([[0.0, 0.0], [0.001, 0.0], [0.0, 0.001]]);
+        spread.extend([[0.999, 0.999], [0.998, 0.999], [0.999, 0.998]]);
+        assert!(plan(&spread, 4096, 4096, 1024, 2).is_err());
+        let block = plan_islands(&spread, 4096, 4096, 1024, 2, 4).unwrap();
+        assert!(block.width <= 1024 && block.height <= 1024);
     }
     #[test]
     fn mip_aligned_page_both_edge_period_margins_and_physical_limits() {

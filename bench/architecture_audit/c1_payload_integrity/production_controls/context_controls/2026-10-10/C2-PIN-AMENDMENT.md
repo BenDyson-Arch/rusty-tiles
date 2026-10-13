@@ -66,3 +66,20 @@ C1 outcome, check or count changed; the 82-execution receipt is unchanged.
 
 `compiled_context_controls.rs` (`a142a385…`) and the uncompiled `context_controls.rs` are
 unchanged. The earlier pins remain true statements about the source they reviewed.
+
+## H7 amendment (legacy content Unsupported, 2026-10-13)
+
+The [C1 H7 amendment](../../../../../../docs/architecture/c1-legacy-content-unsupported-amendment.md)
+makes every `.b3dm` content member Unsupported before any table or embedded-GLB byte is read.
+Three of these controls target b3dm documents (`b3dm-feature-table`, `b3dm-batch-table`,
+`b3dm-embedded-glb`), so neither their equality runs nor their one-less runs reach the target
+document any more: all 18 of their executions now expect a typed Unsupported failure whose
+message starts `legacy b3dm`. The change was made by the H7 author in a labelled commit. No
+member pin, archive byte, selected limit, dominance assertion or other control changed;
+`fixtures/manifest.json` is unchanged (`47694c3d…`), and the three cases' `expectedReport`
+entries are kept as history but no longer compared.
+
+| File | Previous sha256 | Amended sha256 | Reason |
+| --- | --- | --- | --- |
+| `compiled_context_controls.rs` | `a142a385b07676102f82ce93e37d55d01e0dca99033466ab3ce42c4c8b0a8fb9` (I1 amendment) | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` | An `Outcome` (admitted, resource limit, unsupported) replaces the admitted flag; the three `b3dm-*` controls expect Unsupported |
+| `tests/payload_context_receipt.py` | `9a1eb507001fe8553d4ced0abb00303136c30fbc6967a8675335fa2fdc7ea91f` | `ffa0243acadfcc4241185b9ffabfde1b0423cbbe43bb4fc40d359534ab90b582` | The 82-execution receipt expects 35 admitted, 29 ResourceLimit and 18 Unsupported rows (was 44 and 38) and checks that exactly the b3dm controls' 18 runs are Unsupported |

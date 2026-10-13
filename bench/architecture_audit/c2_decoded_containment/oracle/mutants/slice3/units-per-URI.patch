@@ -1,6 +1,6 @@
 --- a/oracle/c2o/check.py
 +++ b/oracle/c2o/check.py
-@@ -330,7 +330,11 @@
+@@ -335,7 +335,11 @@
          self.report["precheck"] = {"totals": totals, "references": per_ref, "terms": terms}
          cap = self.limits
          level_cache = {}  # (id(levels), member) -> (levels, spans, V, rows); levels may be shared

@@ -111,6 +111,39 @@ fn exhausted(message: &'static str) -> JobError {
 fn invariant(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message)
 }
+/// Consecutive batches of image decodes whose summed charges fit `budget`,
+/// at most `workers` each; one at a time when memory is not reported. An
+/// image whose own charge exceeds the budget is a typed resource refusal.
+fn decode_batches(
+    charges: &[u64],
+    budget: Option<u64>,
+    workers: usize,
+) -> Result<Vec<std::ops::Range<usize>>, JobError> {
+    let mut batches = Vec::new();
+    let mut start = 0;
+    while start < charges.len() {
+        if budget.is_some_and(|budget| charges[start] > budget) {
+            return Err(exhausted(
+                "decoding an admitted image does not fit available memory",
+            ));
+        }
+        let mut end = start + 1;
+        let mut leased = charges[start];
+        if let Some(budget) = budget {
+            while end < charges.len()
+                && end - start < workers.max(1)
+                && leased.saturating_add(charges[end]) <= budget
+            {
+                leased += charges[end];
+                end += 1;
+            }
+        }
+        batches.push(start..end);
+        start = end;
+    }
+    Ok(batches)
+}
+
 fn add(a: u64, b: u64) -> Result<u64, JobError> {
     a.checked_add(b)
         .ok_or_else(|| exhausted("full capture byte arithmetic overflow"))
@@ -391,16 +424,65 @@ pub(crate) fn capture(
         image_info
             .try_reserve_exact(images.len())
             .map_err(|_| exhausted("image info allocation failed"))?;
+        // Every declared image is decoded once here to admit it; pixels are
+        // dropped and delivery decodes again on demand. Each decode is
+        // charged from its admitted header dimensions: the encoded snapshot
+        // plus 12 bytes per texel (decoder output and the RGBA8 copy). The
+        // budget is the declared decoder allowance plus whatever available
+        // memory capture's own resident bound leaves free. An image that
+        // cannot fit is refused; the others decode in parallel batches that
+        // fit, with cancellation observed between batches.
+        let admission = source::DecodeAdmission::LARGE_MESH;
+        let mut charges = Vec::new();
+        charges
+            .try_reserve_exact(images.len())
+            .map_err(|_| exhausted("image charge allocation failed"))?;
         for image in &images {
-            let encoded = image.reconstruct(check)?;
-            let mut decode_check = || check();
-            let (info, rgba) =
-                source::decode_image(&encoded, image.identity.mime.as_deref(), &mut decode_check)?;
-            drop(rgba);
-            drop(encoded);
-            image_info.push(info);
             check()?;
+            let encoded = image.reconstruct(check)?;
+            let info = source::probe_image_admitted(
+                &encoded,
+                image.identity.mime.as_deref(),
+                admission,
+                &mut || check(),
+            )?;
+            let texels = u64::from(info.width) * u64::from(info.height);
+            charges.push(add(mul(texels, 12)?, encoded.len() as u64)?);
         }
+        let budget = jobs.available_memory_bytes.map(|available| {
+            available
+                .saturating_sub(required_memory)
+                .saturating_add(DECODER_ALLOWANCE)
+        });
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(workers.max(1))
+            .build()
+            .map_err(|_| exhausted("image admission worker pool"))?;
+        for range in decode_batches(&charges, budget, workers)? {
+            check()?;
+            let (start, end) = (range.start, range.end);
+            let infos: Vec<Result<ImageInfo, JobError>> = pool.install(|| {
+                use rayon::prelude::*;
+                images[start..end]
+                    .par_iter()
+                    .map(|image| {
+                        let encoded = image.reconstruct(&mut || Ok(()))?;
+                        let (info, rgba) = source::decode_image_admitted(
+                            &encoded,
+                            image.identity.mime.as_deref(),
+                            admission,
+                            &mut || Ok(()),
+                        )?;
+                        drop(rgba);
+                        Ok(info)
+                    })
+                    .collect()
+            });
+            for info in infos {
+                image_info.push(info?);
+            }
+        }
+        check()?;
         let materials = source.document.materials().to_vec();
         let textures = source.document.textures().to_vec();
         let samplers = source.document.samplers().to_vec();
@@ -764,6 +846,22 @@ pub(super) mod tests {
         let input = parent.join("scene.gltf");
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         input
+    }
+    #[test]
+    fn image_decode_batches_fit_the_budget_and_refuse_oversized_images() {
+        assert_eq!(
+            decode_batches(&[4, 4, 4, 9, 1], Some(9), 8).unwrap(),
+            vec![0..2, 2..3, 3..4, 4..5]
+        );
+        assert_eq!(
+            decode_batches(&[1, 1, 1, 1], Some(100), 3).unwrap(),
+            vec![0..3, 3..4]
+        );
+        assert_eq!(decode_batches(&[5, 5], None, 8).unwrap(), vec![0..1, 1..2]);
+        assert_eq!(
+            decode_batches(&[1, 10], Some(9), 8).unwrap_err().kind(),
+            JobErrorKind::ResourceLimit
+        );
     }
     #[test]
     fn admitted_large_image_owners_survive_tree_scratch_recheck() {

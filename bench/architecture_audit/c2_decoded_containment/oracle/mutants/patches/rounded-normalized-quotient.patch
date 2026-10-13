@@ -1,6 +1,6 @@
 --- a/oracle/c2o/gltf.py
 +++ b/oracle/c2o/gltf.py
-@@ -353,7 +353,7 @@
+@@ -358,7 +358,7 @@
              scale, k = F32_SCALE, 1
          elif normalized:
              k = NORMALIZER[word]
@@ -11,7 +11,7 @@
  
 --- a/oracle/c2o/gltf.py
 +++ b/oracle/c2o/gltf.py
-@@ -365,8 +365,8 @@
+@@ -370,8 +370,8 @@
                      v = tuple(f32_scaled(b) for b in comps)
                      if None in v:
                          raise PayloadError("non-finite POSITION value in %s" % self.member)

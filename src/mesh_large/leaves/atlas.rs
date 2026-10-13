@@ -4,8 +4,9 @@ use super::super::{
     config::{Profile, TILE_BYTES},
     full::FullCaptured,
 };
+use super::schedule::{Decoded, MemoryGate, SourceCache};
 use super::{
-    crops::{self, Crop, SourceSampler},
+    crops::{self, Block, SourceSampler},
     delivery::{self, MaskDelivery},
     geometry::LatticePlan,
     mask::SurfaceSample,
@@ -13,12 +14,14 @@ use super::{
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
     source_sampler_mips::{self, SamplerCheck, SamplerSample},
 };
+use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
     gltf_source::source::{self, TextureSlot},
     JobError, JobErrorKind,
 };
+use rayon::prelude::*;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 fn error(kind: JobErrorKind, message: &str) -> JobError {
     JobError::new(kind, message)
@@ -59,7 +62,7 @@ struct Binding {
     image: usize,
     sampler: SourceSampler,
     source_mips: bool,
-    crop: Crop,
+    block: Block,
     source_size: [u32; 2],
     offset: [u32; 2],
     page: usize,
@@ -73,7 +76,110 @@ struct PagePlan {
     height: u32,
 }
 
+/// Shelf height/width of one bucket's blocks laid out with shelf width `limit`.
+fn shelf_extent(bindings: &[Binding], ids: &[usize], limit: u32) -> Option<(u32, u32)> {
+    let (mut x, mut y, mut row, mut width) = (0u64, 0u64, 0u64, 0u64);
+    for &i in ids {
+        let b = &bindings[i];
+        if u64::from(b.block.width) > u64::from(limit) {
+            return None;
+        }
+        if x + u64::from(b.block.width) > u64::from(limit) {
+            x = 0;
+            y += row;
+            row = 0;
+        }
+        x += u64::from(b.block.width);
+        row = row.max(u64::from(b.block.height));
+        width = width.max(x);
+    }
+    Some((width as u32, u32::try_from(y + row).ok()?))
+}
+
+/// Packs every island of one bucket's bindings directly into a single page,
+/// when they fit, choosing the power-of-two shelf width that minimises the
+/// page area. Bindings then sit at page offset zero and each island carries
+/// its page position. Dedicated MIP-binding pages keep their aligned crop.
+fn pack_islands(
+    bindings: &mut [Binding],
+    ids: &[usize],
+    max_edge: u32,
+    page_index: usize,
+) -> Result<Option<PagePlan>, JobError> {
+    if ids.iter().any(|&i| bindings[i].source_mips) {
+        return Ok(None);
+    }
+    let mut items = Vec::new();
+    for &b in ids {
+        for (k, island) in bindings[b].block.islands.iter().enumerate() {
+            items.push((b, k, island.crop.width, island.crop.height));
+        }
+    }
+    items.sort_by_key(|&(b, k, w, h)| (std::cmp::Reverse(h), std::cmp::Reverse(w), b, k));
+    let shelf = |limit: u32| -> Option<(u32, u32, Vec<[u32; 2]>)> {
+        let (mut x, mut y, mut row, mut width) = (0u64, 0u64, 0u64, 0u64);
+        let mut offsets = Vec::with_capacity(items.len());
+        for &(_, _, w, h) in &items {
+            let (w, h) = (u64::from(w), u64::from(h));
+            if w > u64::from(limit) {
+                return None;
+            }
+            if x + w > u64::from(limit) {
+                x = 0;
+                y += row;
+                row = 0;
+            }
+            offsets.push([x as u32, y as u32]);
+            x += w;
+            row = row.max(h);
+            width = width.max(x);
+        }
+        let height = y + row;
+        (height <= u64::from(max_edge)).then_some((width as u32, height as u32, offsets))
+    };
+    let mut best: Option<(u64, u32, u32, Vec<[u32; 2]>)> = None;
+    let mut limit = 4u32;
+    while limit <= max_edge {
+        if let Some((w, h, offsets)) = shelf(limit) {
+            let (pw, ph) = (w.max(4).next_power_of_two(), h.max(4).next_power_of_two());
+            let area = u64::from(pw) * u64::from(ph);
+            if best.as_ref().is_none_or(|b| area < b.0) {
+                best = Some((area, pw, ph, offsets));
+            }
+        }
+        limit = match limit.checked_mul(2) {
+            Some(next) => next,
+            None => break,
+        };
+    }
+    let Some((_, width, height, offsets)) = best else {
+        return Ok(None);
+    };
+    for (&(b, k, _, _), offset) in items.iter().zip(offsets) {
+        bindings[b].block.islands[k].offset = offset;
+    }
+    let first = &bindings[ids[0]];
+    let page = PagePlan {
+        bindings: ids.to_vec(),
+        slot: first.slot,
+        sampler: first.sampler,
+        source_mips: false,
+        width,
+        height,
+    };
+    for &b in ids {
+        let binding = &mut bindings[b];
+        binding.page = page_index;
+        binding.offset = [0, 0];
+        binding.block.width = width;
+        binding.block.height = height;
+    }
+    Ok(Some(page))
+}
+
 /// Stable shelves ordered by descending crop dimensions and canonical binding order.
+/// When a bucket fits one page, the shelf width is the power of two that
+/// minimises the page area; otherwise shelves span the maximum page edge.
 fn pack(
     bindings: &mut [Binding],
     max_edge: u32,
@@ -98,13 +204,36 @@ fn pack(
     }
     let mut pages = Vec::new();
     for (_, mut ids) in buckets {
+        if let Some(page) = pack_islands(bindings, &ids, max_edge, pages.len())? {
+            pages.push(page);
+            continue;
+        }
         ids.sort_by_key(|&i| {
             (
-                std::cmp::Reverse(bindings[i].crop.height),
-                std::cmp::Reverse(bindings[i].crop.width),
+                std::cmp::Reverse(bindings[i].block.height),
+                std::cmp::Reverse(bindings[i].block.width),
                 i,
             )
         });
+        let mut limit = max_edge;
+        let mut best = u64::MAX;
+        let mut candidate = 4u32;
+        while candidate <= max_edge {
+            if let Some((w, h)) = shelf_extent(bindings, &ids, candidate) {
+                if h <= max_edge {
+                    let area = u64::from(w.max(4).next_power_of_two())
+                        * u64::from(h.max(4).next_power_of_two());
+                    if area < best {
+                        best = area;
+                        limit = candidate;
+                    }
+                }
+            }
+            candidate = match candidate.checked_mul(2) {
+                Some(next) => next,
+                None => break,
+            };
+        }
         let first = &bindings[ids[0]];
         let mut page = PagePlan {
             bindings: Vec::new(),
@@ -117,12 +246,12 @@ fn pack(
         let (mut x, mut y, mut row) = (0u32, 0u32, 0u32);
         for i in ids {
             let b = &mut bindings[i];
-            if x.checked_add(b.crop.width).ok_or_else(resource)? > max_edge {
+            if x.checked_add(b.block.width).ok_or_else(resource)? > limit {
                 x = 0;
                 y = y.checked_add(row).ok_or_else(resource)?;
                 row = 0;
             }
-            if y.checked_add(b.crop.height).ok_or_else(resource)? > max_edge {
+            if y.checked_add(b.block.height).ok_or_else(resource)? > max_edge {
                 page.width = page.width.max(4).next_power_of_two();
                 page.height = page.height.max(4).next_power_of_two();
                 pages.push(page);
@@ -141,8 +270,8 @@ fn pack(
             b.page = pages.len();
             b.offset = [x, y];
             page.bindings.push(i);
-            x = x.checked_add(b.crop.width).ok_or_else(resource)?;
-            row = row.max(b.crop.height);
+            x = x.checked_add(b.block.width).ok_or_else(resource)?;
+            row = row.max(b.block.height);
             page.width = page.width.max(x);
             page.height = page.height.max(y + row);
         }
@@ -153,6 +282,19 @@ fn pack(
         }
     }
     Ok(pages)
+}
+
+/// Gutter and allocation alignment of non-mip-page island crops. Lossy pages
+/// align islands to the 4x4 codec block so no block mixes two islands. PNG
+/// pages filtered with viewer-generated mips carry eight texels of real source
+/// context around every island, aligned to eight texels, so the first three
+/// box-filtered levels of an island never read a neighbouring island.
+fn crop_padding(profile: Profile, sampler: SourceSampler) -> (u32, u32) {
+    match profile {
+        Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
+        Profile::Lossless => (2, 1),
+        _ => (2, 4),
+    }
 }
 
 fn triangles_by_primitive(
@@ -183,38 +325,64 @@ fn triangles_by_primitive(
 }
 
 fn source_image(
-    captured: &FullCaptured,
+    services: &Services<'_>,
     index: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(source::ImageInfo, Vec<u8>), JobError> {
-    let snapshot = captured.images.get(index).ok_or_else(invariant)?;
-    let encoded = snapshot.reconstruct(check)?;
-    source::decode_image(&encoded, snapshot.identity.mime.as_deref(), &mut || check())
+) -> Result<Arc<Decoded>, JobError> {
+    services.cache.get((index, 0), || {
+        let snapshot = services.captured.images.get(index).ok_or_else(invariant)?;
+        let encoded = timing::time(Stage::SourceReconstruct, || snapshot.reconstruct(check))?;
+        let (info, rgba) = timing::time(Stage::SourceDecode, || {
+            source::decode_image_admitted(
+                &encoded,
+                snapshot.identity.mime.as_deref(),
+                source::DecodeAdmission::LARGE_MESH,
+                &mut || check(),
+            )
+        })?;
+        Ok(Decoded {
+            size: [info.width, info.height],
+            rgba,
+        })
+    })
 }
 
 fn density_image(
-    captured: &FullCaptured,
+    services: &Services<'_>,
     index: usize,
     slot: TextureSlot,
     drop: u32,
-    memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<([u32; 2], Vec<u8>), JobError> {
-    let (info, rgba) = source_image(captured, index, check)?;
+) -> Result<Arc<Decoded>, JobError> {
     if drop == 0 {
-        return Ok(([info.width, info.height], rgba));
+        return source_image(services, index, check);
     }
-    let mut chain = mips::build(
-        info.width,
-        info.height,
-        rgba,
-        class(slot),
-        None,
-        usize::try_from(memory).map_err(|_| resource())?,
-    )?;
-    let index = (drop as usize).min(chain.levels.len() - 1);
-    let level = chain.levels.swap_remove(index);
-    Ok(([level.width, level.height], level.rgba))
+    let original = source_image(services, index, check)?;
+    // The density level depends on the image's class; key it by slot class.
+    let class_key = match class(slot) {
+        Class::Colour => 0,
+        Class::Normal => 1,
+        Class::Data => 2,
+    };
+    services.cache.get((index, drop * 4 + class_key), || {
+        let memory = usize::try_from(services.memory).map_err(|_| resource())?;
+        let mut chain = timing::time(Stage::DensityMips, || {
+            mips::build(
+                original.size[0],
+                original.size[1],
+                original.rgba.clone(),
+                class(slot),
+                None,
+                memory,
+            )
+        })?;
+        let index = (drop as usize).min(chain.levels.len() - 1);
+        let level = chain.levels.swap_remove(index);
+        Ok(Decoded {
+            size: [level.width, level.height],
+            rgba: level.rgba,
+        })
+    })
 }
 
 fn source_alpha(
@@ -641,10 +809,14 @@ fn layout(
                 .collect();
             let source_mips =
                 profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
-            let crop = if source_mips {
-                crops::plan_mip_aligned(&uvs, size[0], size[1], max_edge)?
+            let block = if source_mips {
+                Block::single(
+                    crops::plan_mip_aligned(&uvs, size[0], size[1], max_edge)?,
+                    p.triangles.len(),
+                )
             } else {
-                crops::plan(&uvs, size[0], size[1], max_edge, 2)?
+                let (gutter, align) = crop_padding(profile, sampler);
+                crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?
             };
             p.uvs.push(uvs);
             bindings.push(Binding {
@@ -655,7 +827,7 @@ fn layout(
                 image,
                 sampler,
                 source_mips,
-                crop,
+                block,
                 source_size: size,
                 offset: [0; 2],
                 page: 0,
@@ -665,13 +837,30 @@ fn layout(
     let plans = pack(&mut bindings, max_edge, &masked)?;
     for b in &bindings {
         let page = &plans[b.page];
-        for uv in &mut primitives[b.primitive].uvs[b.output_uv] {
+        for (corner, uv) in primitives[b.primitive].uvs[b.output_uv]
+            .iter_mut()
+            .enumerate()
+        {
+            let island = b
+                .block
+                .triangle_island
+                .get(corner / 3)
+                .and_then(|&i| b.block.islands.get(i as usize))
+                .ok_or_else(invariant)?;
+            let offset = [
+                b.offset[0]
+                    .checked_add(island.offset[0])
+                    .ok_or_else(resource)?,
+                b.offset[1]
+                    .checked_add(island.offset[1])
+                    .ok_or_else(resource)?,
+            ];
             *uv = crops::remap_uv(
                 *uv,
                 b.source_size[0],
                 b.source_size[1],
-                &b.crop,
-                b.offset,
+                &island.crop,
+                offset,
                 [page.width, page.height],
             )?;
         }
@@ -694,29 +883,324 @@ impl From<JobError> for PrepareError {
         Self::Failure(error)
     }
 }
-/// A budget overrun permits the caller's deterministic density schedule.
-/// Fidelity failures retain their cause and never trigger a density fallback.
-pub(super) fn prepare(
-    geometry: (Vec<FullTriangle>, Vec<[u8; 3]>),
+/// Shared, thread-safe delivery services for one producer run.
+pub(super) struct Services<'a> {
+    pub captured: &'a FullCaptured,
+    pub cache: &'a SourceCache,
+    pub gate: &'a MemoryGate,
+    /// Declared per-page workspace limit for internal allocation checks.
+    pub memory: u64,
+    pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+}
+
+/// Bytes leased from the memory gate for one page: page assembly, the
+/// delivery codec workspace and, for each distinct source image it reads, the
+/// decode transient (encoded snapshot, decoder output and RGBA conversion).
+/// Decoded images themselves are owned by the separately budgeted cache.
+fn page_charge(
+    page: &PagePlan,
+    bindings: &[Binding],
     captured: &FullCaptured,
+    profile: Profile,
+    drop: u32,
+) -> Result<u64, JobError> {
+    let pixels = u64::from(page.width)
+        .checked_mul(u64::from(page.height))
+        .ok_or_else(resource)?;
+    let codec = delivery::workspace_charge([page.width, page.height], profile)?;
+    let assembly = pixels.checked_mul(8).ok_or_else(resource)?;
+    let sampler = if page.source_mips {
+        // Original-source class chain, decoded levels and sampler references.
+        (128u64 << 20)
+            .checked_add(pixels.checked_mul(6).ok_or_else(resource)?)
+            .ok_or_else(resource)?
+    } else {
+        0
+    };
+    let mut decode = 0u64;
+    for &bi in &page.bindings {
+        let info = captured
+            .image_info
+            .get(bindings[bi].image)
+            .ok_or_else(invariant)?;
+        let texels = u64::from(info.width) * u64::from(info.height);
+        // Encoded bytes (<=4/texel), decoder RGB(A) output and RGBA8 copy;
+        // a density drop also builds the full-resolution class chain.
+        let per_texel = if drop > 0 { 32 } else { 12 };
+        decode = decode.max(texels.checked_mul(per_texel).ok_or_else(resource)?);
+    }
+    codec
+        .checked_add(assembly)
+        .and_then(|n| n.checked_add(sampler))
+        .and_then(|n| n.checked_add(decode))
+        .ok_or_else(resource)
+}
+
+/// Every island's source-to-page mapping: interior source origin, interior
+/// size and the page texel where that interior starts. The allocation adds
+/// `islandGutter` texels of context on each side.
+fn island_receipts(b: &Binding) -> Value {
+    Value::Array(
+        b.block
+            .islands
+            .iter()
+            .map(|island| {
+                let c = &island.crop;
+                json!([
+                    c.origin[0],
+                    c.origin[1],
+                    c.interior_width,
+                    c.interior_height,
+                    b.offset[0] + island.offset[0] + c.gutter,
+                    b.offset[1] + island.offset[1] + c.gutter
+                ])
+            })
+            .collect(),
+    )
+}
+
+struct EncodedPage {
+    delivered: delivery::Delivery,
+    binding_receipts: Vec<Value>,
+}
+
+fn encode_page(
+    services: &Services<'_>,
+    layout: &Layout,
+    page: &PagePlan,
+    page_id: usize,
     profile: Profile,
     depth: u8,
     drop: u32,
-    memory: u64,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<EncodedPage, JobError> {
+    let captured = services.captured;
+    let memory = services.memory;
+    let check = &mut || (services.check)();
+    check()?;
+    let _permit = services.gate.acquire(page_charge(
+        page,
+        &layout.bindings,
+        captured,
+        profile,
+        drop,
+    )?)?;
+    let bindings = &layout.bindings;
+    let primitives = &layout.primitives;
+    let masked = &layout.masked;
+    let mut receipts = Vec::new();
+    let delivered = if page.source_mips {
+        if page.bindings.len() != 1 {
+            return Err(invariant());
+        }
+        let b = &bindings[page.bindings[0]];
+        timing::count(Counter::CropInteriorTexels, b.block.interior_texels());
+        if b.offset != [0, 0] || b.block.islands.len() != 1 {
+            return Err(invariant());
+        }
+        let source = source_image(services, b.image, check)?;
+        let original_size = source.size;
+        let class = class(b.slot);
+        let chain = timing::time(Stage::SamplerChainBuild, || {
+            source_sampler_mips::build(
+                (&source.rgba, original_size),
+                &b.block.islands[0].crop,
+                drop,
+                class,
+                b.sampler,
+                memory,
+            )
+        })?;
+        let source_samples = sampler_samples(
+            &primitives[b.primitive],
+            b,
+            &captured.lattice,
+            depth,
+            original_size,
+            [page.width, page.height],
+        )?;
+        let material = primitives[b.primitive].triangles[0].material;
+        let mask_context = if b.slot == TextureSlot::BaseColor && masked[b.primitive] {
+            Some(
+                captured.materials[material as usize]
+                    .mask()
+                    .ok_or_else(invariant)?,
+            )
+        } else {
+            None
+        };
+        let surface = if let Some((factor, cutoff)) = mask_context {
+            samples(
+                &primitives[b.primitive],
+                b,
+                &captured.lattice,
+                depth,
+                &source.rgba,
+                original_size,
+                (factor, cutoff),
+            )?
+        } else {
+            Vec::new()
+        };
+        std::mem::drop(source);
+        let mask = mask_context.map(|(factor, cutoff)| MaskDelivery {
+            samples: &surface,
+            factor,
+            cutoff,
+            linear: b.sampler.mag_filter == 9729,
+            min_linear: matches!(b.sampler.min_filter, 9729 | 9985 | 9987),
+        });
+        let context = SamplerCheck {
+            samples: &source_samples,
+            sampler: b.sampler,
+            slot: b.slot,
+            profile,
+            density_drop: drop,
+            mask: mask.is_some(),
+        };
+        let planned = timing::time(Stage::SamplerCheckPlanned, || {
+            source_sampler_mips::check_authored(&chain, &context)
+        })?;
+        receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
+        delivery::encode_authored(&chain.page, b.slot, profile, memory, mask, |decoded| {
+            let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
+            Ok(
+                json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
+            )
+        })?
+    } else {
+        let pixels = (page.width as usize)
+            .checked_mul(page.height as usize)
+            .ok_or_else(resource)?;
+        if (pixels as u64).checked_mul(8).ok_or_else(resource)? > memory {
+            return Err(resource());
+        }
+        let mut rgba = Vec::new();
+        rgba.try_reserve_exact(pixels * 4).map_err(|_| resource())?;
+        rgba.resize(pixels * 4, 0);
+        let mut support = Vec::new();
+        support.try_reserve_exact(pixels).map_err(|_| resource())?;
+        support.resize(pixels, 0u32);
+        let mut surface = Vec::new();
+        let mut mask_context = None;
+        for &bi in &page.bindings {
+            check()?;
+            let b = &bindings[bi];
+            let source = density_image(services, b.image, b.slot, drop, check)?;
+            let size = source.size;
+            if size != b.source_size {
+                return Err(invariant());
+            }
+            timing::time(Stage::PageCut, || -> Result<(), JobError> {
+                for island in &b.block.islands {
+                    let crop = &island.crop;
+                    let [ox, oy] = [
+                        b.offset[0] + island.offset[0],
+                        b.offset[1] + island.offset[1],
+                    ];
+                    let copied =
+                        crops::copy_crop(&source.rgba, size[0], size[1], crop, b.sampler, memory)?;
+                    let row = crop.width as usize * 4;
+                    for y in 0..crop.height {
+                        let dst = ((oy + y) * page.width + ox) as usize * 4;
+                        let src = y as usize * row;
+                        rgba[dst..dst + row].copy_from_slice(&copied[src..src + row]);
+                    }
+                    for y in crop.gutter..crop.gutter + crop.interior_height {
+                        let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
+                        support[first..first + crop.interior_width as usize].fill(1);
+                    }
+                }
+                Ok(())
+            })?;
+            timing::count(Counter::CropInteriorTexels, b.block.interior_texels());
+            if b.slot == TextureSlot::BaseColor && masked[b.primitive] {
+                let id = primitives[b.primitive].triangles[0].material;
+                let (factor, cutoff) = captured.materials[id as usize]
+                    .mask()
+                    .ok_or_else(invariant)?;
+                let original = if drop == 0 {
+                    source
+                } else {
+                    source_image(services, b.image, check)?
+                };
+                surface.extend(samples(
+                    &primitives[b.primitive],
+                    b,
+                    &captured.lattice,
+                    depth,
+                    &original.rgba,
+                    original.size,
+                    (factor, cutoff),
+                )?);
+                mask_context = Some((factor, cutoff, b.sampler.mag_filter == 9729));
+            }
+            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"islandInteriorTexels":b.block.interior_texels(),"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter}}));
+        }
+        let min_linear = matches!(page.sampler.min_filter, 9729 | 9985 | 9987);
+        let mask = mask_context.map(|(factor, cutoff, linear)| MaskDelivery {
+            samples: &surface,
+            factor,
+            cutoff,
+            linear,
+            min_linear,
+        });
+        delivery::encode(
+            [page.width, page.height],
+            &rgba,
+            &support,
+            page.slot,
+            profile,
+            memory,
+            mask,
+        )?
+    };
+    timing::count(Counter::Pages, 1);
+    timing::count(
+        Counter::PageBaseTexels,
+        u64::from(page.width) * u64::from(page.height),
+    );
+    timing::count(Counter::EncodedBytes, delivered.bytes.len() as u64);
+    Ok(EncodedPage {
+        delivered,
+        binding_receipts: receipts,
+    })
+}
+
+/// A budget overrun permits the caller's deterministic density schedule.
+/// Fidelity failures retain their cause and never trigger a density fallback.
+/// Pages encode in parallel; results, receipts and the first failure are
+/// taken in page order, so output and diagnostics do not depend on jobs.
+pub(super) fn prepare(
+    geometry: (Vec<FullTriangle>, Vec<[u8; 3]>),
+    services: &Services<'_>,
+    profile: Profile,
+    depth: u8,
+    drop: u32,
 ) -> Result<(PreparedAtlas, Vec<Value>), PrepareError> {
+    let captured = services.captured;
     let resources = AtlasResources {
         materials: &captured.materials,
         textures: &captured.textures,
         samplers: &captured.samplers,
         image_info: &captured.image_info,
     };
+    let layout = timing::time(Stage::Layout, || {
+        layout(geometry, resources, profile, drop, &mut || {
+            (services.check)()
+        })
+    })?;
+    let encoded: Vec<Result<EncodedPage, JobError>> = layout
+        .pages
+        .par_iter()
+        .enumerate()
+        .map(|(page_id, page)| encode_page(services, &layout, page, page_id, profile, depth, drop))
+        .collect();
     let Layout {
         primitives,
         bindings,
-        masked,
         pages: plans,
-    } = layout(geometry, resources, profile, drop, check)?;
+        ..
+    } = layout;
     let mut atlas = PreparedAtlas {
         primitives,
         pages: Vec::new(),
@@ -725,162 +1209,12 @@ pub(super) fn prepare(
     };
     let mut receipts = Vec::new();
     let mut encoded_bytes = 0u64;
-    for (page_id, page) in plans.iter().enumerate() {
-        check()?;
-        let delivered = if page.source_mips {
-            if page.bindings.len() != 1 {
-                return Err(invariant().into());
-            }
-            let b = &bindings[page.bindings[0]];
-            if b.offset != [0, 0] {
-                return Err(invariant().into());
-            }
-            let (info, source) = source_image(captured, b.image, check)?;
-            let original_size = [info.width, info.height];
-            let class = match b.slot {
-                TextureSlot::BaseColor | TextureSlot::Emissive => Class::Colour,
-                TextureSlot::Normal => Class::Normal,
-                _ => Class::Data,
-            };
-            let chain = source_sampler_mips::build(
-                (&source, original_size),
-                &b.crop,
-                drop,
-                class,
-                b.sampler,
-                memory,
-            )?;
-            let source_samples = sampler_samples(
-                &atlas.primitives[b.primitive],
-                b,
-                &captured.lattice,
-                depth,
-                original_size,
-                [page.width, page.height],
-            )?;
-            let material = atlas.primitives[b.primitive].triangles[0].material;
-            let mask_context = if b.slot == TextureSlot::BaseColor && masked[b.primitive] {
-                Some(
-                    captured.materials[material as usize]
-                        .mask()
-                        .ok_or_else(invariant)?,
-                )
-            } else {
-                None
-            };
-            let surface = if let Some((factor, cutoff)) = mask_context {
-                samples(
-                    &atlas.primitives[b.primitive],
-                    b,
-                    &captured.lattice,
-                    depth,
-                    &source,
-                    original_size,
-                    (factor, cutoff),
-                )?
-            } else {
-                Vec::new()
-            };
-            std::mem::drop(source);
-            let mask = mask_context.map(|(factor, cutoff)| MaskDelivery {
-                samples: &surface,
-                factor,
-                cutoff,
-                linear: b.sampler.mag_filter == 9729,
-                min_linear: matches!(b.sampler.min_filter, 9729 | 9985 | 9987),
-            });
-            let context = SamplerCheck {
-                samples: &source_samples,
-                sampler: b.sampler,
-                slot: b.slot,
-                profile,
-                density_drop: drop,
-                mask: mask.is_some(),
-            };
-            let planned = source_sampler_mips::check_authored(&chain, &context)?;
-            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.crop.origin,"cropSize":[b.crop.width,b.crop.height],"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
-            delivery::encode_authored(&chain.page, b.slot, profile, memory, mask, |decoded| {
-                let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
-                Ok(
-                    json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
-                )
-            })?
-        } else {
-            let pixels = (page.width as usize)
-                .checked_mul(page.height as usize)
-                .ok_or_else(resource)?;
-            if (pixels as u64).checked_mul(8).ok_or_else(resource)? > memory {
-                return Err(resource().into());
-            }
-            let mut rgba = Vec::new();
-            rgba.try_reserve_exact(pixels * 4).map_err(|_| resource())?;
-            rgba.resize(pixels * 4, 0);
-            let mut support = Vec::new();
-            support.try_reserve_exact(pixels).map_err(|_| resource())?;
-            support.resize(pixels, 0u32);
-            let mut surface = Vec::new();
-            let mut mask_context = None;
-            for &bi in &page.bindings {
-                check()?;
-                let b = &bindings[bi];
-                let (size, source) = density_image(captured, b.image, b.slot, drop, memory, check)?;
-                if size != b.source_size {
-                    return Err(invariant().into());
-                }
-                let crop = crops::copy_crop(&source, size[0], size[1], &b.crop, b.sampler, memory)?;
-                for y in 0..b.crop.height {
-                    let dst = ((b.offset[1] + y) * page.width + b.offset[0]) as usize * 4;
-                    let src = y as usize * b.crop.width as usize * 4;
-                    rgba[dst..dst + b.crop.width as usize * 4]
-                        .copy_from_slice(&crop[src..src + b.crop.width as usize * 4]);
-                }
-                for y in b.crop.gutter..b.crop.gutter + b.crop.interior_height {
-                    for x in b.crop.gutter..b.crop.gutter + b.crop.interior_width {
-                        support[((b.offset[1] + y) * page.width + b.offset[0] + x) as usize] = 1;
-                    }
-                }
-                if b.slot == TextureSlot::BaseColor && masked[b.primitive] {
-                    let id = atlas.primitives[b.primitive].triangles[0].material;
-                    let (factor, cutoff) = captured.materials[id as usize]
-                        .mask()
-                        .ok_or_else(invariant)?;
-                    let (original_size, original) = if drop == 0 {
-                        (size, source)
-                    } else {
-                        let (info, raw) = source_image(captured, b.image, check)?;
-                        ([info.width, info.height], raw)
-                    };
-                    surface.extend(samples(
-                        &atlas.primitives[b.primitive],
-                        b,
-                        &captured.lattice,
-                        depth,
-                        &original,
-                        original_size,
-                        (factor, cutoff),
-                    )?);
-                    mask_context = Some((factor, cutoff, b.sampler.mag_filter == 9729));
-                }
-                receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.crop.origin,"cropSize":[b.crop.width,b.crop.height],"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter}}));
-            }
-            let min_linear = matches!(page.sampler.min_filter, 9729 | 9985 | 9987);
-            let mask = mask_context.map(|(factor, cutoff, linear)| MaskDelivery {
-                samples: &surface,
-                factor,
-                cutoff,
-                linear,
-                min_linear,
-            });
-            delivery::encode(
-                [page.width, page.height],
-                &rgba,
-                &support,
-                page.slot,
-                profile,
-                memory,
-                mask,
-            )?
-        };
+    for (page_id, (page, result)) in plans.iter().zip(encoded).enumerate() {
+        let EncodedPage {
+            delivered,
+            binding_receipts,
+        } = result?;
+        receipts.extend(binding_receipts);
         encoded_bytes = encoded_bytes
             .checked_add(delivered.bytes.len() as u64)
             .ok_or_else(resource)?;

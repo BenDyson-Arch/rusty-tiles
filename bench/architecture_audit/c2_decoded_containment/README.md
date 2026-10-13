@@ -29,7 +29,7 @@ nothing from the repository. It is pure Python 3 standard library.
 | Path | What it is |
 | --- | --- |
 | `oracle/c2_oracle.py` | CLI: `python3 -I oracle/c2_oracle.py ARCHIVE.3tz --json [--limit containmentSpanBits=29 ...]` |
-| `oracle/c2o/` | `numbers` (exact JSON numbers, f32/f64 to Fraction), `meshopt` (NONE-filter decoder), `gltf` (GLB/glTF/b3dm, accessors), `scene` (admission, selection, walk), `spans` (normative span definition), `volumes` (box/sphere predicates), `tileset` (3TZ, traversal, levels), `check` (precedence, domain, precheck, streaming) |
+| `oracle/c2o/` | `numbers` (exact JSON numbers, f32/f64 to Fraction), `meshopt` (NONE-filter decoder), `gltf` (GLB/glTF, accessors; legacy b3dm/i3dm/pnts/cmpt is the C1 Unsupported verdict since H7), `scene` (admission, selection, walk), `spans` (normative span definition), `volumes` (box/sphere predicates), `tileset` (3TZ, traversal, levels), `check` (precedence, domain, precheck, streaming) |
 | `oracle/self_test/` | `run.py` plus `meshopt_vectors.json` (pinned upstream golden vectors and spec examples) |
 | `oracle/mutants/` | The 12 contract implementation mutants as hashed patches against the oracle, with the fixtures each flips |
 | `witnesses/` | `generate.py` and `build.py` (fixture writer, independent of `c2o`), pinned `inputs/`, generated `fixtures/` and `report.json` |
@@ -48,11 +48,11 @@ them needs a converter built at or before develop `7fad70c`.
 
 ```sh
 python3 -I oracle/self_test/run.py            # 59 checks, exit 0
-python3 -I witnesses/generate.py --large      # 261 cases, 16 control pairs; exit 0 when all agree
+python3 -I witnesses/generate.py --large      # 261 cases, 15 control pairs (16 before H7); exit 0 when all agree
 python3 -I oracle/mutants/run.py              # 13 mutants, each must flip its named fixture
 python3 -I corpus/run.py CORPUS_DIR           # CORPUS_DIR = R's run2 directory (manifest.json + artifacts/)
 python3 -I wb/generate.py [--large]           # C2-WB class fixtures (wb/README.md)
-python3 -I wb/mutants.py                      # 14 C2-WB formula mutants, each must flip its named pair
+python3 -I wb/mutants.py                      # 14 C2-WB formula mutants (15 before H7), each must flip its named pair
 python3 -I oracle/c2_oracle.py some.3tz --json [--precheck-only] [--no-detail]
 ```
 
@@ -72,7 +72,7 @@ CPython 3.14.7.
 | --- | --- |
 | `Contained` | Outcome 5. Every drawn vertex is inside every tested volume, as an exact rational. |
 | `Outside` | Outcome 4. `facts` names the first proven escape in streaming order: `reference`, `uri`, `member`, `depth` (tree depth of the tile whose content is referenced: root 0, an external root its referencing tile's depth + 1; v3.3 (5)), `level`, `role` (`own`, `content`, `externalContent` or `ancestor`), `k` (the level index, per reading v3.2 (3)), `node`, `mesh`, `primitive` (lowest primitive index whose draw references the vertex), `accessor`, `vertex` (POSITION element index) and the exact coordinate. |
-| `NotInspected` | Outcome 2: every exclusion reason, sorted, from the frozen 15-name enum. Or outcome 3: one precheck reason, `numericSpan` or `workLimit`, with `precheckStop`. |
+| `NotInspected` | Outcome 2: every exclusion reason, sorted, from the frozen enum (15 names; 14 since H7 removed `rtcCenter`). Or outcome 3: one precheck reason, `numericSpan` or `workLimit`, with `precheckStop`. |
 | `InvalidNode` | InvalidInput for a malformed consumed scene/node record, including duplicates in `children` or a scene's `nodes` (v3.3 (8)). This is the first payload in traversal order whose records fail admission. |
 | `InvalidInput` | InvalidInput for a tileset defect met in traversal order (v3.3 (8)): a non-affine or non-finite tile `transform`, or a tileset number literal that overflows binary64. Payloads referenced earlier in traversal order are admitted first. |
 | `Undecided` | The oracle could not decide. Causes: one of its own limits ran out; the input has a format it does not model (`pnts`, `i3dm`, `cmpt`); or the data is something C1 should reject. This is **never a verdict**. |
@@ -146,7 +146,7 @@ predicate on 8,000 random cases.
   malformed node inside an implicit subtree where the oracle reports
   `implicitTiling`. Every such report carries a caveat. That expansion is
   O-implicit (Slice 0b).
-- **It does not apply RTC.** RTC is slice 2. `rtcCenter` is key presence only.
+- **It does not apply RTC.** RTC is slice 2. `rtcCenter` was key presence only; H7 removed it, since b3dm is C1 Unsupported.
 - **`E(u)`, `B(u)` and `Dec(u)` are C1 facts that the oracle models.** See
   contract question 9. The work controls are built so that every plausible
   model gives the same totals.
@@ -1090,3 +1090,24 @@ Perf evidence (`perf/`): `lane-process.json` `476c064c…`, `forest.json` `eab82
   slice-3 integration head (R, below).
 - Done (2026-10-13): the same re-run after merging develop `a4f14e6` (#183 point bounds, #185 vector
   output), with the X3-2 native test passing (R, "Re-run after merging develop").
+
+## H7: legacy content Unsupported (2026-10-13)
+
+Contract: [C2 H7 amendment](../../../docs/architecture/c2-decoded-containment-contract.md#h7-amendment-legacy-content-unsupported-2026-10-13).
+`witnesses/generate.py --large` and `wb/generate.py` (CI and `--large`) were re-run with the amended
+oracle. Every verdict change is a legacy archive becoming C1 Unsupported:
+
+- witnesses: `W01-ordered-node-U-RTC-tile-chain`, `RTC-binary-form` and `RTC-range-overrun` (bytes
+  unchanged) move from `NotInspected [rtcCenter]` to `C1Refused unsupported`; `W01-noRTC-variant`, its
+  9 ulp variants and `matrix-and-TRS` are re-emitted as GLB with unchanged verdicts (old and new hashes
+  in the contract amendment). The `RTC-added` pair retires: 261 cases, 15 pairs.
+- C2-WB: the six `json-*-b3dm*` classes and the `J-without-b3dm-batch-table` mutant retire; the 90
+  remaining rows are byte-identical in `wb/manifest.json`; 14/14 formula mutants flip their pairs.
+- Oracle: `REASONS` drops `rtcCenter`; `c2o/implicit.py` re-pins `check.py`. Self-tests: slice 1
+  106/106, slice 3 14/14; oracle mutants 13/13 (slice 1) and 15/15 (slice 3).
+
+Release parity with `C2S3_EVIDENCE_DIR` and `C2S3_FOREST_DIR` set (command above): slice-1 261/261,
+C2-WB 90/90 (matrix-size rows generated), slice-3 80/80, S3-18 sweep 181 cases (182 agreements),
+forest 34/34 and 5/5 pairs, I1 181/181, H11 controls passing; 0 disagreements, 0 skipped. W corpus
+27/27 of the artifacts present: the other 14 lived under `/tmp/rusty-tiles-i1-contract-20261011/` and
+were lost to a reboot (41/41 at the pre-reboot H7 source with the same classifier). Summaries are kept outside the tree in `~/.cache/rusty-tiles-evidence/h7-20261013/parity/`.
