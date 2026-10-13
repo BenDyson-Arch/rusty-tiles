@@ -78,3 +78,7 @@ Pass explicit two-worker options for operation-owned pools (for example vector
 that infer hardware concurrency, use a two-CPU process affinity where supported
 or another actual worker cap. Keep these local execution limits distinct from
 the product's supported configuration and resource acceptance claims.
+
+## Changelog
+
+PRs add a `changelog.d/` fragment (format in `changelog.d/README.md`) and must not edit `CHANGELOG.md` directly; fragments are assembled at release.
