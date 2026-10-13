@@ -5,8 +5,9 @@ nonauthor review, perf/memory evidence, consumer proof, CI). This slice publishe
 H1's tile tree ([H1 contract](h1-capture-tree-contract.md)) and H8's full-detail
 leaves (#187) as one Tiles 1.1 implicit forest in a `.3tz`, through the shared
 typed serializer of #191/#198 (`src/tileset_node.rs`, `src/implicit/tileset.rs`,
-`src/implicit/tileset/stream.rs`). Parents carry no content: coarse levels are
-H17. The hidden CLI entries are `mesh-leaves-to-3tz` (an H8 leaf directory to a
+`src/implicit/tileset/stream.rs`). Parents carry no content unless the leaf
+directory has H17 coarse tiles (`proxyManifest`), which are then published as
+their content ([H17 contract](h17-lod-contract.md)). The hidden CLI entries are `mesh-leaves-to-3tz` (an H8 leaf directory to a
 `.3tz`) and `mesh-large-to-3tz` (H8, then H16); public naming is frozen in
 roadmap milestone 4. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
 ([acceptance record](../../bench/architecture_audit/mesh_large_h16/README.md)).

@@ -62,7 +62,7 @@ enum Command {
         #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
         scratch_dir: Option<PathBuf>,
     },
-    /// Publish a full-detail leaf directory as a Tiles 1.1 implicit .3tz (no coarse levels yet)
+    /// Publish a leaf directory (full-detail leaves and H17 coarse tiles) as a Tiles 1.1 implicit .3tz
     #[command(hide = true, name = "mesh-leaves-to-3tz")]
     MeshLeavesTo3tz {
         /// Directory written by mesh-leaf-payloads
@@ -73,8 +73,8 @@ enum Command {
         #[command(flatten)]
         placement: RigidPlacementArgs,
     },
-    /// Leaf payloads then their hierarchy: one full-detail .3tz from a local mesh (no coarse
-    /// levels yet; `validate` does not yet admit the KTX2 leaves of the lossy profiles)
+    /// Leaf payloads, certified untextured coarse tiles, then their hierarchy: one .3tz from a
+    /// local mesh
     #[command(hide = true, name = "mesh-large-to-3tz")]
     MeshLargeTo3tz {
         #[arg(short, long)]
