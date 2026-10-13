@@ -108,7 +108,10 @@ was streamed in traversal order up to the first failure, which is the old phase 
 does not, the recorded outcome is discarded. If no reference streamed and phase 1 reserved no
 arena, an arena is reserved before Contained, as the old phase 2 did. Streamed work is charged
 before it is done, so it stays within the precheck's units (`T·V` and the rest) whether or not
-the archive ends in domain.
+the archive ends in domain. Unlike the old phase 2, an archive that later leaves the domain (an exclusion or a precheck
+stop after some references) has streamed those references for a discarded result: at most the
+units charged so far, so at most the time of a Contained archive at the same cap (measured: the
+hostile `workLimit` archives take 2.1 s instead of 0.16 s at the default cap).
 
 **VS-B-5. Per-URI facts (M7, M8).** The per-URI table, its name map and the count rows are
 replaced by a second bit per rank (inspected) and the facts record, written at the first
