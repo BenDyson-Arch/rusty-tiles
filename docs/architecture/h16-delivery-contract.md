@@ -7,6 +7,19 @@ M1 and H8 must merge before publication wiring. Four addressing/count preparatio
 tests and all-target Clippy passed. No publisher, validator, archive, viewer or
 resource acceptance is claimed by this preparation.
 
+H4's independently reviewed metadata diagnosis adds a consumer integration
+gate: Cesium 1.146 packs compatible structural properties into a texture whose
+width equals table rows, and the pinned device limit is 8192. UINT64 scalar
+properties still enter that path through a lossy GPU downcast. This does not
+limit core glTF or establish a picking failure; CPU provenance must remain exact.
+H8's maximum leaf triangle budget can exceed this consumer width. H8 owns any
+early planned/charged per-primitive feature-table partitions, including both
+source identity sets and local ID remapping. H16 must not split frozen leaves,
+change their lattice or rewrite emitted GLBs to suppress a warning. Integration
+must verify the chosen table layout and actual consumer picking/property access
+before claiming full delivery acceptance. The source-bound diagnosis/review are
+retained in `~/.cache/rusty-tiles-evidence/h4-property-budget-20261013/`.
+
 ## Ownership and retained boundaries
 
 H1 owns immutable captured tree identities, rank ranges and exact welded minimum
