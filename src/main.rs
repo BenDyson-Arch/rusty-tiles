@@ -18,7 +18,7 @@ use rusty_tiles::{
     MeshApproximation, MeshPlacement, MeshRequest, MeshResult, ModelManifestRequest,
     ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
     RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest, RasterResult,
-    Reporter, RunControl, RunEvent,
+    Reporter, RunControl, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -47,49 +47,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Produce full-detail leaf GLBs and a debug manifest (no tileset hierarchy yet)
-    #[command(hide = true, name = "mesh-leaf-payloads")]
-    MeshLeafPayloads {
-        #[arg(short, long)]
-        input: PathBuf,
-        #[arg(short, long)]
-        output: PathBuf,
-        #[arg(long, default_value = "balanced", value_parser = ["fast", "balanced", "quality", "lossless"])]
-        profile: String,
-        /// Worker count, or `auto` for the memory-aware plan.
-        #[arg(long, default_value = "auto", value_parser = parse_jobs)]
-        jobs: JobsArg,
-        #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
-        scratch_dir: Option<PathBuf>,
-    },
-    /// Publish a full-detail leaf directory as a Tiles 1.1 implicit .3tz (no coarse levels yet)
-    #[command(hide = true, name = "mesh-leaves-to-3tz")]
-    MeshLeavesTo3tz {
-        /// Directory written by mesh-leaf-payloads
-        #[arg(long)]
-        leaves: PathBuf,
-        #[arg(short, long)]
-        output: PathBuf,
-        #[command(flatten)]
-        placement: RigidPlacementArgs,
-    },
-    /// Leaf payloads then their hierarchy: one full-detail .3tz from a local mesh (no coarse
-    /// levels yet; `validate` does not yet admit the KTX2 leaves of the lossy profiles)
-    #[command(hide = true, name = "mesh-large-to-3tz")]
-    MeshLargeTo3tz {
-        #[arg(short, long)]
-        input: PathBuf,
-        #[arg(short, long)]
-        output: PathBuf,
-        #[arg(long, default_value = "balanced", value_parser = ["fast", "balanced", "quality", "lossless"])]
-        profile: String,
-        #[arg(long, default_value = "2")]
-        jobs: std::num::NonZeroUsize,
-        #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
-        scratch_dir: Option<PathBuf>,
-        #[command(flatten)]
-        placement: RigidPlacementArgs,
-    },
+    /// Stream a local metre/Y-up mesh into a Tiles 1.1 implicit .3tz (profiles provisional)
+    Mesh(TilerArgs),
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
@@ -112,10 +71,10 @@ enum Command {
     /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(ModelArchiveArgs),
-    /// GLB/glTF → spatially split .3tz (split only when over leaf budget)
+    /// Deprecated: legacy mesh converter; use mesh for local metre/Y-up input
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// Static local GLB/glTF with bounded local resources in metre/Y-up coordinates → explicit .3tz
+    /// Deprecated: old bounded local-mesh writer; use mesh for the new tiler
     #[command(name = "mesh-local-to-3tz")]
     MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
@@ -133,9 +92,7 @@ enum Command {
 impl Command {
     fn name(&self) -> &'static str {
         match self {
-            Self::MeshLeafPayloads { .. } => "mesh-leaf-payloads",
-            Self::MeshLeavesTo3tz { .. } => "mesh-leaves-to-3tz",
-            Self::MeshLargeTo3tz { .. } => "mesh-large-to-3tz",
+            Self::Mesh(_) => "mesh",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -167,6 +124,23 @@ struct IoArgs {
     /// Replace an existing output after successful conversion
     #[arg(short = 'f', long)]
     force: bool,
+}
+
+#[derive(Args)]
+struct TilerArgs {
+    #[command(flatten)]
+    io: IoArgs,
+    /// Output policy: fast, balanced, quality or lossless; constants remain provisional
+    #[arg(long, default_value = "balanced")]
+    profile: TilerProfile,
+    /// Maximum workers or auto; actual workers are capped by cores and available memory
+    #[arg(long, default_value = "auto")]
+    jobs: TilerJobs,
+    /// Owned working-data parent; publication staging remains beside the output
+    #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+    scratch_dir: Option<PathBuf>,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
 }
 
 #[derive(Args)]
@@ -613,10 +587,20 @@ struct RigidPlacementArgs {
     #[arg(long, num_args = 3, allow_hyphen_values = true)]
     anchor: Vec<f64>,
     /// Active ENU unit quaternion XYZW; requires --anchor
-    #[arg(long, num_args = 4, allow_hyphen_values = true)]
+    #[arg(
+        long = "orientationXyzw",
+        visible_alias = "orientation-xyzw",
+        num_args = 4,
+        allow_hyphen_values = true
+    )]
     orientation_xyzw: Vec<f64>,
     /// Post-node source Y-up translation metres; requires --anchor
-    #[arg(long, num_args = 3, allow_hyphen_values = true)]
+    #[arg(
+        long = "sceneOffset",
+        visible_alias = "scene-offset",
+        num_args = 3,
+        allow_hyphen_values = true
+    )]
     scene_offset: Vec<f64>,
 }
 impl RigidPlacementArgs {
@@ -655,6 +639,7 @@ enum Outcome {
     Pack(PackageResult),
     /// Published local mesh with its finalized report.
     Mesh(Box<MeshResult>),
+    Tiler(Box<TilerResult>),
     ModelArchive(Box<ModelWrapResult>),
     ModelManifest(Box<ModelManifestResult>),
     RasterDirectory(RasterDirectoryResult),
@@ -730,6 +715,7 @@ fn main() -> ExitCode {
                 )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
+                Outcome::Tiler(result) => Some((tiler_summary(&result), result.output)),
                 Outcome::ModelArchive(result) => Some((
                     model_summary(
                         &result.output,
@@ -934,6 +920,18 @@ fn mesh_summary(result: &MeshResult) -> Value {
     summary
 }
 
+fn tiler_summary(result: &TilerResult) -> Value {
+    json!({
+        "ok":true,
+        "output":result.output.to_string_lossy(),
+        "tilerReport":result.report,
+        "diagnostics":result.diagnostics,
+        "counts":{"triangles":result.report.triangles,"tiles":result.report.tiles,"leaf_tiles":result.report.leaves},
+        "conversionReport":{"archive":result.output.to_string_lossy(),"entry":"conversion.json"},
+        "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
+    })
+}
+
 fn model_summary(
     output: &Path,
     report: &rusty_tiles::ModelReport,
@@ -1046,6 +1044,16 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     .into_iter()
     .filter_map(|(key, noun)| counts[key].as_u64().map(|n| plural(n, noun)))
     .collect();
+    if command == "mesh" {
+        if let (Some(profile), Some(capture), Some(leaves)) = (
+            summary["tilerReport"]["profile"].as_str(),
+            summary["diagnostics"]["capture"]["jobs"].as_u64(),
+            summary["diagnostics"]["leaf_delivery"]["jobs"].as_u64(),
+        ) {
+            parts.push(format!("{profile} profile"));
+            parts.push(format!("workers: capture {capture}, leaves {leaves}"));
+        }
+    }
     if parts.is_empty() && output.is_file() {
         if let Ok(metadata) = output.metadata() {
             parts.push(format!("{:.1} MiB", metadata.len() as f64 / 1048576.));
@@ -1106,113 +1114,29 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     lines
 }
 
-/// `auto` (memory-aware) or an explicit positive worker count.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct JobsArg(Option<std::num::NonZeroUsize>);
-fn parse_jobs(value: &str) -> Result<JobsArg, String> {
-    if value == "auto" {
-        return Ok(JobsArg(None));
-    }
-    value
-        .parse()
-        .map(|n| JobsArg(Some(n)))
-        .map_err(|_| format!("expected `auto` or a positive integer, got `{value}`"))
-}
-
 fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
-        Command::MeshLeafPayloads {
-            input,
-            output,
-            profile,
-            jobs,
-            scratch_dir,
-        } => {
-            use rusty_tiles::{LeafOutputRequest, LeafProfile};
-            let profile = match profile.as_str() {
-                "fast" => LeafProfile::Fast,
-                "balanced" => LeafProfile::Balanced,
-                "quality" => LeafProfile::Quality,
-                _ => LeafProfile::Lossless,
-            };
-            let mut request = LeafOutputRequest::new(input, output, profile);
-            if let JobsArg(Some(jobs)) = jobs {
-                request = request.with_jobs(jobs);
-            }
-            if let Some(path) = scratch_dir {
+        Command::Mesh(a) => {
+            let mut request = TilerRequest::new(a.io.input, a.io.output)
+                .with_profile(a.profile)
+                .with_jobs(a.jobs)
+                .with_output_policy(if a.io.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let result = rusty_tiles::mesh_to_leaf_payloads(request, &RunControl::new(observer))?;
-            Outcome::Report(
-                json!({"ok":true,"output":result.output,"summary":result.report,
-                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
-            )
-        }
-        Command::MeshLeavesTo3tz {
-            leaves,
-            output,
-            placement,
-        } => {
-            let request = rusty_tiles::MeshTilesetRequest::new(leaves, output)
-                .with_placement(placement.resolve()?);
-            let observer: Option<Arc<dyn Observer>> =
-                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let result = rusty_tiles::mesh_leaves_to_3tz(request, &RunControl::new(observer))?;
-            Outcome::Report(
-                json!({"ok":true,"output":result.output,"summary":result.report,
-                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
-            )
-        }
-        Command::MeshLargeTo3tz {
-            input,
-            output,
-            profile,
-            jobs,
-            scratch_dir,
-            placement,
-        } => {
-            use rusty_tiles::{LeafOutputRequest, LeafProfile};
-            let placement = placement.resolve()?;
-            let profile = match profile.as_str() {
-                "fast" => LeafProfile::Fast,
-                "balanced" => LeafProfile::Balanced,
-                "quality" => LeafProfile::Quality,
-                _ => LeafProfile::Lossless,
-            };
-            // The leaf directory is private work next to the output (same filesystem, so the
-            // hierarchy stage hard-links its payloads), removed whatever the outcome.
-            let parent = output
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or(std::path::Path::new("."));
-            let work = tempfile::Builder::new()
-                .prefix(".tiles-leaves-")
-                .tempdir_in(parent)?;
-            let leaves = work.path().join("leaves");
-            let mut request = LeafOutputRequest::new(input, &leaves, profile).with_jobs(jobs);
-            if let Some(path) = scratch_dir {
-                request = request.with_scratch_dir(path);
-            }
-            let observer: Option<Arc<dyn Observer>> =
-                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let started = std::time::Instant::now();
-            let leaf =
-                rusty_tiles::mesh_to_leaf_payloads(request, &RunControl::new(observer.clone()))?;
-            let leaf_seconds = started.elapsed().as_secs_f64();
-            let request =
-                rusty_tiles::MeshTilesetRequest::new(&leaves, output).with_placement(placement);
-            let result = rusty_tiles::mesh_leaves_to_3tz(request, &RunControl::new(observer))?;
-            let tileset_seconds = started.elapsed().as_secs_f64() - leaf_seconds;
-            work.close()?;
-            Outcome::Report(
-                json!({"ok":true,"output":result.output,"leaves":leaf.report,"summary":result.report,
-                "seconds":{"leaves":leaf_seconds,"tileset":tileset_seconds},
-                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
-            )
+            Outcome::Tiler(Box::new(rusty_tiles::mesh_to_tileset(
+                request,
+                &RunControl::new(observer),
+            )?))
         }
         Command::Validate { input } => {
             let report = rusty_tiles::validate::inspect(
@@ -1775,28 +1699,21 @@ mod tests {
     }
 
     #[test]
-    fn mesh_leaf_payload_jobs_default_to_auto_and_accept_counts() {
+    fn mesh_jobs_default_to_auto_and_accept_maximums() {
         let parse = |extra: &[&str]| {
-            let mut args = vec![
-                "rusty-tiles",
-                "mesh-leaf-payloads",
-                "-i",
-                "a.glb",
-                "-o",
-                "out",
-            ];
+            let mut args = vec!["rusty-tiles", "mesh", "-i", "a.glb", "-o", "out"];
             args.extend_from_slice(extra);
             match Cli::try_parse_from(args).map(|cli| cli.command) {
-                Ok(Command::MeshLeafPayloads { jobs, .. }) => Ok(jobs),
+                Ok(Command::Mesh(args)) => Ok(args.jobs),
                 Ok(_) => panic!("wrong command"),
                 Err(error) => Err(error),
             }
         };
-        assert_eq!(parse(&[]).unwrap(), JobsArg(None));
-        assert_eq!(parse(&["--jobs", "auto"]).unwrap(), JobsArg(None));
+        assert_eq!(parse(&[]).unwrap(), TilerJobs::Auto);
+        assert_eq!(parse(&["--jobs", "auto"]).unwrap(), TilerJobs::Auto);
         assert_eq!(
             parse(&["--jobs", "3"]).unwrap(),
-            JobsArg(std::num::NonZeroUsize::new(3))
+            TilerJobs::Maximum(std::num::NonZeroUsize::new(3).unwrap())
         );
         assert!(parse(&["--jobs", "0"]).is_err());
         assert!(parse(&["--jobs", "many"]).is_err());

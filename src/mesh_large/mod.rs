@@ -12,11 +12,12 @@ mod full;
 mod images;
 mod input;
 mod leaves;
+mod pipeline;
 mod records;
 mod tree;
-pub use delivery::{mesh_leaves_to_3tz, MeshTilesetReport, MeshTilesetRequest, MeshTilesetResult};
-pub use leaves::producer::{
-    mesh_to_leaf_payloads, LeafOutputReport, LeafOutputRequest, LeafOutputResult, LeafProfile,
+pub use pipeline::{
+    mesh_to_tileset, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport, TilerRequest,
+    TilerResult,
 };
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
