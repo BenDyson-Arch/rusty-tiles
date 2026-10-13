@@ -307,8 +307,9 @@ impl<'a> ForestWriter<'a> {
     }
 
     /// Write the external document `name` rooted at the explicit tile `root`, and return
-    /// the link its parent document places. The name must be a new `.json` member. A refused
-    /// document removes what it created.
+    /// the link its parent document places. The name must be a new `.json` member at the
+    /// archive root (member names are written unchanged, and they resolve relative to the
+    /// document). A refused document removes what it created.
     pub(crate) fn external<X: Serialize>(
         &mut self,
         name: MemberName,
@@ -316,10 +317,17 @@ impl<'a> ForestWriter<'a> {
         checkpoint: &mut impl FnMut() -> Result<(), Error>,
     ) -> Result<(DocumentLink, ChunkOutput), Error> {
         checkpoint()?;
-        if name.as_str() == "tileset.json" || !name.is_member() || !name.as_str().ends_with(".json")
+        // Content, template and link URIs resolve relative to the document that holds them,
+        // and the forest writes them as archive-root member names: a document in a folder
+        // would make every one of them resolve inside that folder.
+        if name.as_str() == "tileset.json"
+            || !name.is_member()
+            || !name.as_str().ends_with(".json")
+            || name.as_str().contains('/')
         {
             return Err(data(format!(
-                "external document {:?} must be an archive member named *.json, not tileset.json",
+                "external document {:?} must be an archive-root member named *.json, not \
+                 tileset.json",
                 name.as_str()
             )));
         }

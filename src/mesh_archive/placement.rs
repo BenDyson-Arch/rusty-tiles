@@ -66,7 +66,7 @@ pub enum MeshPlacementReport {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct ResolvedPlacement {
+pub(crate) struct ResolvedPlacement {
     transform: [f64; 16],
     report: MeshPlacementReport,
 }
@@ -126,7 +126,7 @@ fn within_magnitude_budget(height: f64, offset: [f64; 3]) -> bool {
 }
 
 impl ResolvedPlacement {
-    pub(super) fn resolve(placement: &MeshPlacement) -> Result<Self, JobError> {
+    pub(crate) fn resolve(placement: &MeshPlacement) -> Result<Self, JobError> {
         let MeshPlacement::Wgs84 {
             anchor_degrees_metres,
             orientation_xyzw,
@@ -238,11 +238,11 @@ impl ResolvedPlacement {
         })
     }
 
-    pub(super) fn transform(&self) -> [f64; 16] {
+    pub(crate) fn transform(&self) -> [f64; 16] {
         self.transform
     }
 
-    pub(super) fn report(&self) -> MeshPlacementReport {
+    pub(crate) fn report(&self) -> MeshPlacementReport {
         self.report.clone()
     }
 

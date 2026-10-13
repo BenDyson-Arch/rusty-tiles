@@ -87,6 +87,8 @@ wherever the concrete scope has not adopted them.
 - [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 - [H1 streamed mesh capture and tree contract](h1-capture-tree-contract.md)
 - [H1 independent capture, tree and resource evidence](../../bench/architecture_audit/mesh_large_h1/README.md)
+- [H16 streamed hierarchy and 3TZ delivery contract](h16-delivery-contract.md)
+- [H16 real-mesh, scale and consumer acceptance](../../bench/architecture_audit/mesh_large_h16/README.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)

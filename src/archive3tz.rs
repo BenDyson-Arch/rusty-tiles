@@ -107,7 +107,11 @@ struct Entry<'a> {
     crc: u32,
     offset: u64,
 }
-fn local_header(writer: &mut (impl Write + Seek), name: &str, size: u32) -> std::io::Result<u64> {
+pub(crate) fn local_header(
+    writer: &mut (impl Write + Seek),
+    name: &str,
+    size: u32,
+) -> std::io::Result<u64> {
     let offset = writer.stream_position()?;
     let name_len = u16::try_from(name.len()).map_err(|_| {
         std::io::Error::new(
@@ -135,62 +139,69 @@ fn local_header(writer: &mut (impl Write + Seek), name: &str, size: u32) -> std:
     writer.write_all(name.as_bytes())?;
     Ok(offset)
 }
-fn complete_entry(writer: &mut (impl Write + Seek), offset: u64, crc: u32) -> std::io::Result<()> {
+pub(crate) fn complete_entry(
+    writer: &mut (impl Write + Seek),
+    offset: u64,
+    crc: u32,
+) -> std::io::Result<()> {
     let end = writer.stream_position()?;
     writer.seek(SeekFrom::Start(offset + 14))?;
     writer.write_all(&crc.to_le_bytes())?;
     writer.seek(SeekFrom::Start(end))?;
     Ok(())
 }
-fn central_directory<E>(
-    writer: &mut (impl Write + Seek),
-    entries: &[Entry<'_>],
-    mut checkpoint: impl FnMut() -> Result<(), E>,
-) -> Result<(), WriteFailure<E>> {
-    let start = writer.stream_position()?;
-    for entry in entries {
-        checkpoint().map_err(WriteFailure::Checkpoint)?;
-        let zip64_offset = entry.offset >= u64::from(u32::MAX);
-        let version = if zip64_offset { 45 } else { 20 };
-        let mut header = [0u8; 46];
-        put32(&mut header, 0, 0x02014b50);
-        put16(&mut header, 4, (3 << 8) | version);
-        put16(&mut header, 6, version);
-        put16(&mut header, 8, 0x0800);
-        put16(&mut header, 14, 0x0021);
-        put32(&mut header, 16, entry.crc);
-        put32(&mut header, 20, entry.size);
-        put32(&mut header, 24, entry.size);
-        put16(
-            &mut header,
-            28,
-            u16::try_from(entry.name.len()).map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "ZIP name exceeds 16-bit field",
-                )
-            })?,
-        );
-        put16(&mut header, 30, if zip64_offset { 12 } else { 0 });
-        put32(&mut header, 38, 0o100644 << 16);
-        put32(
-            &mut header,
-            42,
-            u32::try_from(entry.offset).unwrap_or(u32::MAX),
-        );
-        writer.write_all(&header)?;
-        writer.write_all(entry.name.as_bytes())?;
-        if zip64_offset {
-            let mut extra = [0u8; 12];
-            put16(&mut extra, 0, 1);
-            put16(&mut extra, 2, 8);
-            put64(&mut extra, 4, entry.offset);
-            writer.write_all(&extra)?;
-        }
+/// One central-directory file header (APPNOTE 4.3.12), with a ZIP64 extra field when the
+/// local header offset needs it.
+pub(crate) fn central_header(
+    name: &str,
+    size: u32,
+    crc: u32,
+    offset: u64,
+) -> std::io::Result<Vec<u8>> {
+    let zip64_offset = offset >= u64::from(u32::MAX);
+    let version = if zip64_offset { 45 } else { 20 };
+    let mut header = vec![0u8; 46];
+    put32(&mut header, 0, 0x02014b50);
+    put16(&mut header, 4, (3 << 8) | version);
+    put16(&mut header, 6, version);
+    put16(&mut header, 8, 0x0800);
+    put16(&mut header, 14, 0x0021);
+    put32(&mut header, 16, crc);
+    put32(&mut header, 20, size);
+    put32(&mut header, 24, size);
+    put16(
+        &mut header,
+        28,
+        u16::try_from(name.len()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "ZIP name exceeds 16-bit field",
+            )
+        })?,
+    );
+    put16(&mut header, 30, if zip64_offset { 12 } else { 0 });
+    put32(&mut header, 38, 0o100644 << 16);
+    put32(&mut header, 42, u32::try_from(offset).unwrap_or(u32::MAX));
+    header.extend_from_slice(name.as_bytes());
+    if zip64_offset {
+        let mut extra = [0u8; 12];
+        put16(&mut extra, 0, 1);
+        put16(&mut extra, 2, 8);
+        put64(&mut extra, 4, offset);
+        header.extend_from_slice(&extra);
     }
-    let end = writer.stream_position()?;
+    Ok(header)
+}
+
+/// The end records after a central directory of `count` headers spanning `start..end`:
+/// ZIP64 end record and locator when any field needs them, then the classic end record.
+pub(crate) fn end_records(
+    writer: &mut impl Write,
+    start: u64,
+    end: u64,
+    count: u64,
+) -> std::io::Result<()> {
     let size = end - start;
-    let count = entries.len() as u64;
     if count >= u64::from(u16::MAX) || size >= u64::from(u32::MAX) || start >= u64::from(u32::MAX) {
         let mut record = [0u8; 56];
         put32(&mut record, 0, 0x06064b50);
@@ -222,7 +233,34 @@ fn central_directory<E>(
         16,
         u32::try_from(start).unwrap_or(u32::MAX),
     );
-    writer.write_all(&end_record)?;
+    writer.write_all(&end_record)
+}
+
+/// The 3TZ index order of an MD5 name hash: its two little-endian u64 halves.
+pub(crate) fn index_key(hash: &[u8; 16]) -> (u64, u64) {
+    (
+        u64::from_le_bytes(hash[..8].try_into().unwrap()),
+        u64::from_le_bytes(hash[8..].try_into().unwrap()),
+    )
+}
+
+fn central_directory<E>(
+    writer: &mut (impl Write + Seek),
+    entries: &[Entry<'_>],
+    mut checkpoint: impl FnMut() -> Result<(), E>,
+) -> Result<(), WriteFailure<E>> {
+    let start = writer.stream_position()?;
+    for entry in entries {
+        checkpoint().map_err(WriteFailure::Checkpoint)?;
+        writer.write_all(&central_header(
+            entry.name,
+            entry.size,
+            entry.crc,
+            entry.offset,
+        )?)?;
+    }
+    let end = writer.stream_position()?;
+    end_records(writer, start, end, entries.len() as u64)?;
     checkpoint().map_err(WriteFailure::Checkpoint)?;
     writer.flush()?;
     Ok(())
@@ -314,12 +352,7 @@ pub(crate) fn serialize<E, W: Write + Seek>(
         });
         index.push((md5::compute(member.name.as_bytes()).0, offset));
     }
-    index.sort_by_key(|(hash, _)| {
-        (
-            u64::from_le_bytes(hash[..8].try_into().unwrap()),
-            u64::from_le_bytes(hash[8..].try_into().unwrap()),
-        )
-    });
+    index.sort_by_key(|(hash, _)| index_key(hash));
     let offset = local_header(writer, TZ_INDEX_NAME, index_size)?;
     let mut crc = crc32fast::Hasher::new();
     for (hash, offset) in index {
