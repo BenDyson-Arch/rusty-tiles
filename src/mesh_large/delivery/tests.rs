@@ -1,0 +1,974 @@
+//! H16 tests. Leaf directories are generated here with known H1 addresses (spatial octants,
+//! packed leaves, a depth-21 chain into a synthetic run hierarchy), so every expectation on
+//! slots, availability, members and bounds comes from the generator, not from the module.
+use super::{
+    plan::{tile_box, Builder, Limits, Linked, Node, Sink, LIMITS},
+    publish_with,
+    source::{glb_bounds, Aabb, Digits, LeafRow},
+    *,
+};
+use crate::validate::{inspect, ValidationRequest};
+use serde_json::{json, Value};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Read,
+};
+
+/// One generated leaf: H1 address and rank count.
+#[derive(Clone, Debug)]
+struct Spec {
+    digits: Vec<u8>,
+    cell_depth: u8,
+    last_octant: u8,
+    triangles: u64,
+}
+
+impl Spec {
+    fn path_len(&self) -> u8 {
+        self.digits.len() as u8 - self.cell_depth
+    }
+    fn packed(&self) -> bool {
+        self.path_len() == 0 && self.digits.last().is_some_and(|s| *s != self.last_octant)
+    }
+}
+
+struct Lcg(u64);
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+}
+
+/// A random spatial subtree below `digits` (depth < `max`), in H1 preorder, with packed leaves.
+fn spatial(digits: &mut Vec<u8>, max: usize, rng: &mut Lcg, out: &mut Vec<Spec>) {
+    let mut mask = rng.next() as u8;
+    if mask == 0 {
+        mask = 1 << (rng.next() % 8);
+    }
+    let chosen: Vec<u8> = (0..8).filter(|s| mask & (1 << s) != 0).collect();
+    let mut k = 0;
+    while k < chosen.len() {
+        let slot = chosen[k];
+        digits.push(slot);
+        if digits.len() < max && !rng.next().is_multiple_of(3) {
+            spatial(digits, max, rng, out);
+            k += 1;
+        } else {
+            // A leaf, sometimes packed over the next chosen octants.
+            let take = if rng.next().is_multiple_of(3) {
+                (rng.next() as usize % 3).min(chosen.len() - 1 - k)
+            } else {
+                0
+            };
+            out.push(Spec {
+                digits: digits.clone(),
+                cell_depth: digits.len() as u8,
+                last_octant: chosen[k + take],
+                triangles: 1 + rng.next() % 50,
+            });
+            k += 1 + take;
+        }
+        digits.pop();
+    }
+}
+
+/// A mixed tree: a random spatial subtree under octant 0 and, under octant 7, a chain to
+/// depth 21 whose degenerate cell holds a three-level synthetic run (70 leaves, depth 24).
+fn mixed_tree(seed: u64) -> Vec<Spec> {
+    let mut rng = Lcg(seed);
+    let mut out = Vec::new();
+    let mut digits = vec![0u8];
+    spatial(&mut digits, 7, &mut rng, &mut out);
+    let chain: Vec<u8> = std::iter::once(7)
+        .chain((1..21).map(|i| (i * 3 % 8) as u8))
+        .collect();
+    for index in 0..70u8 {
+        let mut d = chain.clone();
+        d.extend([index >> 6, (index >> 3) & 7, index & 7]);
+        out.push(Spec {
+            digits: d,
+            cell_depth: 21,
+            last_octant: index & 7,
+            triangles: 8192,
+        });
+    }
+    out
+}
+
+/// Every H1 tile address (proper prefixes of leaves, and the leaves).
+fn nodes(specs: &[Spec]) -> BTreeSet<Vec<u8>> {
+    let mut all = BTreeSet::new();
+    for spec in specs {
+        for len in 0..=spec.digits.len() {
+            all.insert(spec.digits[..len].to_vec());
+        }
+    }
+    all
+}
+
+fn axes(digits: &[u8]) -> [u32; 3] {
+    let mut out = [0u32; 3];
+    for &d in digits {
+        for (a, v) in out.iter_mut().enumerate() {
+            *v = (*v << 1) | u32::from((d >> a) & 1);
+        }
+    }
+    out
+}
+
+/// A one-triangle GLB inside the leaf's cell of a 1024 m cube (glTF y-up).
+fn glb(spec: &Spec) -> Vec<u8> {
+    let depth = spec.digits.len() as i32;
+    let size = 1024f64 / 2f64.powi(depth.min(21));
+    let a = axes(&spec.digits[..spec.digits.len().min(21)]);
+    let lo: [f64; 3] = std::array::from_fn(|i| f64::from(a[i]) * size);
+    // z-up (X, Y, Z) -> glTF (X, Z, -Y)
+    let corner = |t: [f64; 3]| [t[0] as f32, t[2] as f32, -t[1] as f32];
+    let points = [
+        corner([lo[0] + size * 0.25, lo[1] + size * 0.25, lo[2] + size * 0.5]),
+        corner([
+            lo[0] + size * 0.75,
+            lo[1] + size * 0.25,
+            lo[2] + size * 0.25,
+        ]),
+        corner([lo[0] + size * 0.5, lo[1] + size * 0.75, lo[2] + size * 0.75]),
+    ];
+    let min: Vec<f64> = (0..3)
+        .map(|i| {
+            points
+                .iter()
+                .map(|p| f64::from(p[i]))
+                .fold(f64::MAX, f64::min)
+        })
+        .collect();
+    let max: Vec<f64> = (0..3)
+        .map(|i| {
+            points
+                .iter()
+                .map(|p| f64::from(p[i]))
+                .fold(f64::MIN, f64::max)
+        })
+        .collect();
+    let bin: Vec<u8> = points
+        .iter()
+        .flatten()
+        .flat_map(|c| c.to_le_bytes())
+        .collect();
+    let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":4}]}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":min,"max":max}],
+        "bufferViews":[{"buffer":0,"byteLength":36}],"buffers":[{"byteLength":36}]});
+    let mut text = serde_json::to_vec(&doc).unwrap();
+    while !text.len().is_multiple_of(4) {
+        text.push(b' ');
+    }
+    let mut out = b"glTF".to_vec();
+    out.extend(2u32.to_le_bytes());
+    out.extend((28 + text.len() as u32 + 36).to_le_bytes());
+    out.extend((text.len() as u32).to_le_bytes());
+    out.extend(b"JSON");
+    out.extend(&text);
+    out.extend(36u32.to_le_bytes());
+    out.extend(b"BIN\0");
+    out.extend(bin);
+    out
+}
+
+fn row_json(index: usize, spec: &Spec, first: u64, bytes: &[u8]) -> Value {
+    let cell = spec.digits[..spec.cell_depth as usize]
+        .iter()
+        .fold(0u64, |acc, d| (acc << 3) | u64::from(*d));
+    let path = spec.digits[spec.cell_depth as usize..]
+        .iter()
+        .fold(0u64, |acc, d| (acc << 3) | u64::from(*d));
+    json!({"schemaVersion":1,"uri":format!("leaves/{index:012}.glb"),
+        "sha256":format!("{:x}", Sha256::digest(bytes)),"bytes":bytes.len(),
+        "first":first,"end":first + spec.triangles,"cellDepth":spec.cell_depth,"cell":cell,
+        "pathLength":spec.path_len(),"path":path,"lastOctant":spec.last_octant,
+        "depth":spec.digits.len(),"packed":spec.packed(),"geometryError":0.001})
+}
+
+/// Write an H8-shaped leaf directory.
+fn leaf_dir(parent: &Path, specs: &[Spec]) -> PathBuf {
+    let root = parent.join("leaves-dir");
+    std::fs::create_dir_all(root.join("leaves")).unwrap();
+    let mut rows = String::new();
+    let mut first = 0u64;
+    for (index, spec) in specs.iter().enumerate() {
+        let bytes = glb(spec);
+        std::fs::write(root.join(format!("leaves/{index:012}.glb")), &bytes).unwrap();
+        rows.push_str(&row_json(index, spec, first, &bytes).to_string());
+        rows.push('\n');
+        first += spec.triangles;
+    }
+    std::fs::write(root.join("leaves.jsonl"), rows).unwrap();
+    let manifest = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads",
+        "report":{"leaves":specs.len(),"triangles":first},"leafManifest":"leaves.jsonl",
+        "provenanceSchema":"rusty_tiles_large_source_v1"});
+    std::fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
+    root
+}
+
+fn run(
+    leaves: &Path,
+    output: &Path,
+    limits: Limits,
+    request: impl FnOnce(MeshTilesetRequest) -> MeshTilesetRequest,
+) -> Result<MeshTilesetReport, JobError> {
+    let request = request(MeshTilesetRequest::new(leaves, output));
+    let parent = output.parent().unwrap();
+    let mut file = File::create(output).unwrap();
+    let result = publish_with(&request, limits, &mut || Ok(()), &mut file, parent);
+    drop(file);
+    if result.is_err() {
+        std::fs::remove_file(output).unwrap();
+    }
+    result.map(|(report, _)| report)
+}
+
+/// Small limits that force external documents, levels splits and implicit roots.
+const TIGHT: Limits = Limits {
+    objects: 4,
+    records: 24,
+    levels: 3,
+};
+
+fn members(path: &Path) -> BTreeMap<String, Vec<u8>> {
+    let mut zip = zip::ZipArchive::new(File::open(path).unwrap()).unwrap();
+    let mut out = BTreeMap::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).unwrap();
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes).unwrap();
+        out.insert(entry.name().to_owned(), bytes);
+    }
+    out
+}
+
+/// An independent subtree reader: the available tiles and contents of a one-subtree,
+/// `availableLevels == subtreeLevels` OCTREE subtree, from its bitstreams.
+fn subtree_availability(bytes: &[u8], levels: u32) -> (BTreeSet<[u32; 4]>, BTreeSet<[u32; 4]>) {
+    assert_eq!(&bytes[..4], b"subt");
+    let json_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+    let bin_len = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
+    let doc: Value = serde_json::from_slice(&bytes[24..24 + json_len]).unwrap();
+    let bin_start = 24 + json_len;
+    assert_eq!(bin_start % 8, 0, "8-byte subtree framing");
+    let bin = &bytes[bin_start..bin_start + bin_len];
+    let total: u64 = (0..levels).map(|l| 1u64 << (3 * l)).sum();
+    let bits = |availability: &Value| -> Vec<bool> {
+        if let Some(constant) = availability.get("constant") {
+            return vec![constant == 1; total as usize];
+        }
+        let view = &doc["bufferViews"][availability["bitstream"].as_u64().unwrap() as usize];
+        let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        (0..total as usize)
+            .map(|i| bin[start + i / 8] >> (i % 8) & 1 == 1)
+            .collect()
+    };
+    let decode = |flags: Vec<bool>| {
+        let mut set = BTreeSet::new();
+        let mut offset = 0usize;
+        for level in 0..levels {
+            let count = 1usize << (3 * level);
+            for m in 0..count {
+                if flags[offset + m] {
+                    let (mut x, mut y, mut z) = (0u32, 0u32, 0u32);
+                    for bit in 0..level {
+                        x |= ((m >> (3 * bit)) as u32 & 1) << bit;
+                        y |= ((m >> (3 * bit + 1)) as u32 & 1) << bit;
+                        z |= ((m >> (3 * bit + 2)) as u32 & 1) << bit;
+                    }
+                    set.insert([level, x, y, z]);
+                }
+            }
+            offset += count;
+        }
+        set
+    };
+    assert_eq!(doc["childSubtreeAvailability"]["constant"], 0);
+    (
+        decode(bits(&doc["tileAvailability"])),
+        decode(bits(&doc["contentAvailability"][0])),
+    )
+}
+
+/// Walk every document from `tileset.json`, collecting explicit content members, implicit
+/// roots (key, levels) and links. Panics on an unknown member.
+struct Walk {
+    explicit: Vec<String>,
+    implicit: Vec<(String, u32, Value)>,
+    documents: usize,
+}
+
+fn walk(archive: &BTreeMap<String, Vec<u8>>) -> Walk {
+    let mut walk = Walk {
+        explicit: Vec::new(),
+        implicit: Vec::new(),
+        documents: 0,
+    };
+    let mut pending = vec!["tileset.json".to_owned()];
+    while let Some(name) = pending.pop() {
+        walk.documents += 1;
+        let doc: Value = serde_json::from_slice(&archive[&name]).unwrap();
+        let mut tiles = vec![doc["root"].clone()];
+        while let Some(tile) = tiles.pop() {
+            if let Some(tiling) = tile.get("implicitTiling") {
+                let uri = tile["content"]["uri"].as_str().unwrap();
+                let key = uri
+                    .strip_prefix("implicit-content/")
+                    .unwrap()
+                    .strip_suffix("-{level}-{x}-{y}-{z}.glb")
+                    .unwrap()
+                    .to_owned();
+                walk.implicit.push((
+                    key,
+                    tiling["subtreeLevels"].as_u64().unwrap() as u32,
+                    tile.clone(),
+                ));
+                continue;
+            }
+            if let Some(uri) = tile["content"]["uri"].as_str() {
+                if uri.ends_with(".json") {
+                    assert!(
+                        !uri.contains('/'),
+                        "external documents sit at the archive root"
+                    );
+                    pending.push(uri.to_owned());
+                } else {
+                    walk.explicit.push(uri.to_owned());
+                }
+            }
+            if let Some(children) = tile["children"].as_array() {
+                tiles.extend(children.iter().cloned());
+            }
+        }
+    }
+    walk
+}
+
+fn key(digits: &[u8], specs: &[Spec]) -> String {
+    // A tile's (first rank, depth): the first rank of its first leaf.
+    let mut first = 0u64;
+    for spec in specs {
+        if spec.digits.starts_with(digits) {
+            return format!("f{first}-d{}", digits.len());
+        }
+        first += spec.triangles;
+    }
+    unreachable!("every tile has a leaf")
+}
+
+fn heights(specs: &[Spec]) -> BTreeMap<Vec<u8>, u32> {
+    let mut out = BTreeMap::new();
+    for spec in specs {
+        for len in 0..=spec.digits.len() {
+            let h = (spec.digits.len() - len) as u32;
+            let entry = out.entry(spec.digits[..len].to_vec()).or_insert(0);
+            *entry = (*entry).max(h);
+        }
+    }
+    out
+}
+
+/// The published forest of a mixed tree (spatial, packed, synthetic depth 24) is accepted by
+/// the merged validator with decoded containment, and its roles, members, slots and
+/// availability equal what the generator's H1 addresses predict.
+#[test]
+fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
+    let work = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(11);
+    assert!(specs.iter().any(Spec::packed), "the fixture packs leaves");
+    let dir = leaf_dir(work.path(), &specs);
+    let output = work.path().join("out.3tz");
+    let report = run(&dir, &output, TIGHT, |r| r).unwrap();
+    let all = nodes(&specs);
+    let height = heights(&specs);
+    assert_eq!(report.leaves, specs.len() as u64);
+    assert_eq!(report.tiles, all.len() as u64);
+    assert_eq!(report.max_depth, 24);
+    assert_eq!(report.synthetic_leaves, 70);
+    assert!(
+        report.documents > 3,
+        "tight limits split documents: {report:?}"
+    );
+
+    // Expected roles from heights (P-IMPL S = 4).
+    let parent_height = |d: &Vec<u8>| height[&d[..d.len() - 1].to_vec()];
+    let mut explicit_leaves = BTreeSet::new();
+    let mut implicit_roots = BTreeMap::new();
+    for d in &all {
+        let h = height[d];
+        let skeleton_parent = d.is_empty() || parent_height(d) >= 4;
+        if !skeleton_parent || (d.is_empty() && h >= 4) {
+            continue;
+        }
+        if h == 0 && !d.is_empty() {
+            explicit_leaves.insert(format!("content/{}.glb", key(d, &specs)));
+        } else if h < 4 {
+            implicit_roots.insert(key(d, &specs), d.clone());
+        }
+    }
+    let archive = members(&output);
+    assert_eq!(archive.len() as u64, report.members);
+    let names: Vec<String> = {
+        let zip = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
+        zip.file_names().map(str::to_owned).collect()
+    };
+    let walk = walk(&archive);
+    assert_eq!(walk.documents as u64, report.documents);
+    assert_eq!(
+        walk.explicit.iter().cloned().collect::<BTreeSet<_>>(),
+        explicit_leaves
+    );
+    assert_eq!(walk.explicit.len(), explicit_leaves.len(), "listed once");
+    assert_eq!(
+        walk.implicit
+            .iter()
+            .map(|(k, ..)| k.clone())
+            .collect::<BTreeSet<_>>(),
+        implicit_roots.keys().cloned().collect::<BTreeSet<_>>()
+    );
+    let mut implicit_payloads = 0;
+    for (k, levels, tile) in &walk.implicit {
+        let root = &implicit_roots[k];
+        assert_eq!(*levels, height[root] + 1);
+        assert_eq!(tile["implicitTiling"]["availableLevels"], *levels);
+        // Expected availability from the H1 addresses below this root.
+        let mut tiles = BTreeSet::new();
+        let mut contents = BTreeSet::new();
+        for d in all.iter().filter(|d| d.starts_with(root)) {
+            let level = (d.len() - root.len()) as u32;
+            let a = axes(&d[root.len()..]);
+            tiles.insert([level, a[0], a[1], a[2]]);
+            if height[d] == 0 {
+                contents.insert([level, a[0], a[1], a[2]]);
+                let member = format!(
+                    "implicit-content/{k}-{level}-{}-{}-{}.glb",
+                    a[0], a[1], a[2]
+                );
+                assert!(archive.contains_key(&member), "{member}");
+                implicit_payloads += 1;
+            }
+        }
+        let subtree = &archive[&format!("subtrees/{k}-0-0-0-0.subtree")];
+        let (available, content) = subtree_availability(subtree, *levels);
+        assert_eq!(available, tiles, "tile availability of {k}");
+        assert_eq!(content, contents, "content availability of {k}");
+    }
+    // Every member is accounted for, tileset.json is first and the index last.
+    assert_eq!(names.first().unwrap(), "tileset.json");
+    assert_eq!(names.last().unwrap(), crate::TZ_INDEX_NAME);
+    assert_eq!(
+        archive.len(),
+        walk.documents + explicit_leaves.len() + implicit_payloads + walk.implicit.len() + 1
+    );
+    // The leaves are byte-identical to their H8 payloads.
+    for (index, spec) in specs.iter().enumerate() {
+        let d = &spec.digits;
+        let bytes = std::fs::read(dir.join(format!("leaves/{index:012}.glb"))).unwrap();
+        let k = key(d, &specs);
+        let explicit = format!("content/{k}.glb");
+        if let Some(found) = archive.get(&explicit) {
+            assert_eq!(found, &bytes);
+        } else {
+            assert!(archive.values().any(|v| v == &bytes));
+        }
+    }
+    // The merged validator decodes every payload and accepts containment.
+    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    assert!(
+        checked
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment"),
+        "{:?}",
+        checked.not_inspected
+    );
+    assert!(checked.content_references as u64 >= report.leaves);
+}
+
+/// Same input, different work locations and repeated runs: identical archive bytes. Default
+/// limits give a different (still valid) layout than the tight ones.
+#[test]
+fn archives_are_deterministic_across_work_locations() {
+    let work = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(23);
+    let dir = leaf_dir(work.path(), &specs);
+    let mut previous: Option<Vec<u8>> = None;
+    for location in ["a", "b/c"] {
+        let parent = work.path().join(location);
+        std::fs::create_dir_all(&parent).unwrap();
+        let output = parent.join("out.3tz");
+        run(&dir, &output, LIMITS, |r| r).unwrap();
+        let bytes = std::fs::read(&output).unwrap();
+        if let Some(prior) = &previous {
+            assert_eq!(prior, &bytes);
+        }
+        previous = Some(bytes);
+        // The staging folder is gone.
+        assert!(std::fs::read_dir(&parent).unwrap().all(|e| !e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tiles-h16-")));
+    }
+    let tight = work.path().join("tight.3tz");
+    run(&dir, &tight, TIGHT, |r| r).unwrap();
+    assert_ne!(std::fs::read(&tight).unwrap(), previous.unwrap());
+}
+
+/// The 3TZ ceiling refuses early (a leaf-count lower bound) and exactly (the planned count,
+/// index included) before anything is staged; the exact count itself is admitted.
+#[test]
+fn member_ceiling_refuses_before_staging_and_admits_the_exact_count() {
+    let work = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(5);
+    let dir = leaf_dir(work.path(), &specs);
+    let output = work.path().join("probe.3tz");
+    let exact = run(&dir, &output, TIGHT, |r| r).unwrap().members;
+    std::fs::remove_file(&output).unwrap();
+    let ok = work.path().join("ok.3tz");
+    let report = run(&dir, &ok, TIGHT, |r| r.with_member_ceiling(exact)).unwrap();
+    assert_eq!(report.members, exact);
+    for (ceiling, why) in [(exact - 1, "exactly"), (specs.len() as u64 + 1, "at least")] {
+        let refused = work.path().join("refused.3tz");
+        let error = run(&dir, &refused, TIGHT, |r| r.with_member_ceiling(ceiling)).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        assert!(error.message().contains(why), "{}", error.message());
+        assert!(error.message().contains("3TZ member ceiling"));
+        assert!(!std::fs::read_dir(work.path()).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tiles-h16-")));
+    }
+    // The production ceiling is the archive codec's.
+    assert_eq!(
+        MeshTilesetRequest::new("a", "b").member_ceiling,
+        crate::archive3tz::MEMBER_CEILING
+    );
+}
+
+/// Contiguous ranks from 0 in row order, keeping each row's triangle count.
+fn renumber(rows: &mut [Value]) {
+    let mut first = 0u64;
+    for row in rows {
+        let count = row["end"].as_u64().unwrap() - row["first"].as_u64().unwrap();
+        row["first"] = json!(first);
+        row["end"] = json!(first + count);
+        first += count;
+    }
+}
+
+/// Malformed leaf directories are typed refusals: rows out of H1 preorder, a duplicated
+/// octant, a packed leaf overlapping its next sibling, a rank gap, a tampered payload, a
+/// leaf wider than the consumer table limit, and a totals mismatch.
+#[test]
+fn malformed_leaf_directories_are_refused() {
+    let base = mixed_tree(3);
+    type Tamper = (&'static str, JobErrorKind, fn(&Path, &mut Vec<Value>));
+    let cases: [Tamper; 7] = [
+        ("preorder", JobErrorKind::InvalidInput, |_, rows| {
+            rows.swap(0, 1);
+            renumber(rows);
+        }),
+        ("octant order", JobErrorKind::InvalidInput, |_, rows| {
+            let last = rows.len() - 1;
+            rows.swap(last - 1, last);
+            renumber(rows);
+        }),
+        ("contiguous", JobErrorKind::InvalidInput, |_, rows| {
+            rows[1]["first"] = json!(rows[1]["first"].as_u64().unwrap() + 1);
+        }),
+        ("file length", JobErrorKind::InvalidInput, |dir, rows| {
+            let uri = rows[2]["uri"].as_str().unwrap().to_owned();
+            let mut bytes = std::fs::read(dir.join(&uri)).unwrap();
+            bytes.push(0);
+            std::fs::write(dir.join(uri), bytes).unwrap();
+        }),
+        (
+            "rows CesiumJS can load",
+            JobErrorKind::Unsupported,
+            |_, rows| {
+                rows[0]["end"] = json!(rows[0]["first"].as_u64().unwrap() + 8193);
+            },
+        ),
+        (
+            "manifest.json reports",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                rows.pop();
+            },
+        ),
+        (
+            "invalid H1 address",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                rows[0]["pathLength"] = json!(1);
+            },
+        ),
+    ];
+    for (why, kind, tamper) in cases {
+        let work = tempfile::tempdir().unwrap();
+        let dir = leaf_dir(work.path(), &base);
+        let text = std::fs::read_to_string(dir.join("leaves.jsonl")).unwrap();
+        let mut rows: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        tamper(&dir, &mut rows);
+        let text: String = rows.iter().map(|r| format!("{r}\n")).collect();
+        std::fs::write(dir.join("leaves.jsonl"), text).unwrap();
+        let output = work.path().join("out.3tz");
+        let error = run(&dir, &output, TIGHT, |r| r).unwrap_err();
+        assert_eq!(error.kind(), kind, "{why}: {}", error.message());
+        assert!(error.message().contains(why), "{why}: {}", error.message());
+        assert!(!output.exists());
+    }
+    // A packed leaf overlapping its next sibling: two leaves under the root, the first
+    // packed over octants 0..=3, the second at octant 2.
+    let overlap = vec![
+        Spec {
+            digits: vec![0],
+            cell_depth: 1,
+            last_octant: 3,
+            triangles: 1,
+        },
+        Spec {
+            digits: vec![2],
+            cell_depth: 1,
+            last_octant: 2,
+            triangles: 1,
+        },
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let dir = leaf_dir(work.path(), &overlap);
+    let error = run(&dir, &work.path().join("o.3tz"), TIGHT, |r| r).unwrap_err();
+    assert!(
+        error.message().contains("octant order"),
+        "{}",
+        error.message()
+    );
+}
+
+/// Root forms: a single leaf, a short tree (one implicit root at tileset.json), and the
+/// rigid placement, which is exactly the shared placement boundary's matrix on the root and
+/// nowhere else. Local output has no transform.
+#[test]
+fn root_forms_and_rigid_placement() {
+    let placement = MeshPlacement::Wgs84 {
+        anchor_degrees_metres: [133.057, -12.354, 100.],
+        orientation_xyzw: [0., 0., 0.258_819_045_102_520_74, 0.965_925_826_289_068_3],
+        scene_offset_metres: [3., 2., -1.],
+    };
+    let expected = ResolvedPlacement::resolve(&placement).unwrap().transform();
+    let single = vec![Spec {
+        digits: Vec::new(),
+        cell_depth: 0,
+        last_octant: 0,
+        triangles: 4,
+    }];
+    let short = vec![
+        Spec {
+            digits: vec![1, 2],
+            cell_depth: 2,
+            last_octant: 2,
+            triangles: 3,
+        },
+        Spec {
+            digits: vec![1, 5],
+            cell_depth: 2,
+            last_octant: 7,
+            triangles: 3,
+        },
+        Spec {
+            digits: vec![6],
+            cell_depth: 1,
+            last_octant: 6,
+            triangles: 3,
+        },
+    ];
+    for (specs, implicit) in [(single, false), (short, true)] {
+        for placed in [false, true] {
+            let work = tempfile::tempdir().unwrap();
+            let dir = leaf_dir(work.path(), &specs);
+            let output = work.path().join("out.3tz");
+            let report = run(&dir, &output, LIMITS, |r| {
+                if placed {
+                    r.with_placement(placement.clone())
+                } else {
+                    r
+                }
+            })
+            .unwrap();
+            let archive = members(&output);
+            let top: Value = serde_json::from_slice(&archive["tileset.json"]).unwrap();
+            assert_eq!(top["asset"]["version"], "1.1");
+            assert_eq!(top["root"].get("implicitTiling").is_some(), implicit);
+            assert!(
+                top["geometricError"].as_f64().unwrap()
+                    >= top["root"]["geometricError"].as_f64().unwrap()
+            );
+            match top["root"].get("transform") {
+                None => assert!(!placed),
+                Some(transform) => {
+                    assert!(placed);
+                    let values: Vec<f64> = transform
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_f64().unwrap())
+                        .collect();
+                    assert_eq!(values, expected);
+                    assert!(matches!(
+                        report.placement,
+                        MeshPlacementReport::Wgs84 { .. }
+                    ));
+                }
+            }
+            let text = String::from_utf8(archive["tileset.json"].clone()).unwrap();
+            assert_eq!(text.matches("\"transform\"").count(), usize::from(placed));
+            let checked = inspect(ValidationRequest::new(&output)).unwrap();
+            assert!(checked
+                .checks
+                .iter()
+                .any(|c| c == "decodedContentContainment"));
+        }
+    }
+}
+
+/// Planning only (nothing written): a 2^18-leaf tree with a depth-21 chain holds no more
+/// tile records at once than the fixed partition allows, the same as a 2^12-leaf tree.
+#[test]
+fn planner_memory_is_bounded_by_the_partition_not_the_tree() {
+    struct Count {
+        documents: u64,
+    }
+    impl Sink for Count {
+        fn external(&mut self, _: Node) -> Result<Linked, JobError> {
+            self.documents += 1;
+            Ok(None)
+        }
+        fn root(&mut self, _: Node) -> Result<(), JobError> {
+            Ok(())
+        }
+    }
+    fn plan(leaves: u64) -> super::plan::Shape {
+        let mut sink = Count { documents: 0 };
+        let mut builder = Builder::new(&mut sink, LIMITS);
+        for index in 0..leaves {
+            // A complete octree of 6 levels under a 14-level chain, 8 leaves per bottom cell.
+            let mut digits = Digits::ROOT;
+            for level in 0..14 {
+                digits.push((level % 8) as u8);
+            }
+            for level in (0..6).rev() {
+                digits.push(((index >> (3 * level)) & 7) as u8);
+            }
+            let bounds = Aabb {
+                lo: [index as f64, 0., 0.],
+                hi: [index as f64 + 1., 1., 1.],
+            };
+            let row = LeafRow {
+                uri: format!("leaves/{index:012}.glb"),
+                sha256: [0; 32],
+                bytes: 64,
+                first: index * 8192,
+                end: (index + 1) * 8192,
+                digits,
+                last_octant: (index & 7) as u8,
+                packed: false,
+                synthetic: 0,
+                geometry_error: 0.,
+            };
+            builder.push(row, bounds).unwrap();
+        }
+        builder.finish().unwrap()
+    }
+    let small = plan(1 << 12);
+    let large = plan(1 << 18);
+    assert_eq!(large.leaves, 1 << 18);
+    assert!(large.tiles > 1 << 18);
+    let bound = 32 * 8 * LIMITS.records;
+    assert!(large.peak_held_records <= bound, "{large:?}");
+    // 64 times the leaves, the same resident records within a handful of tiles.
+    assert!(
+        large.peak_held_records <= small.peak_held_records + 16,
+        "{small:?} {large:?}"
+    );
+}
+
+/// The H8 fixture without its texture: the same triangles, no material texture.
+fn untextured(input: &Path) -> PathBuf {
+    let mut doc: Value = serde_json::from_slice(&std::fs::read(input).unwrap()).unwrap();
+    for key in ["images", "textures", "samplers"] {
+        doc.as_object_mut().unwrap().remove(key);
+    }
+    doc["materials"][0]["pbrMetallicRoughness"]
+        .as_object_mut()
+        .unwrap()
+        .remove("baseColorTexture");
+    let output = input.with_file_name("untextured.gltf");
+    std::fs::write(&output, serde_json::to_vec(&doc).unwrap()).unwrap();
+    output
+}
+
+fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usize {
+    let mut leaves = 0;
+    for (name, bytes) in archive {
+        if !name.ends_with(".glb") {
+            continue;
+        }
+        leaves += 1;
+        let length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let doc: Value = serde_json::from_slice(&bytes[20..20 + length]).unwrap();
+        let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
+            .as_array()
+            .unwrap();
+        assert_eq!(tables.len(), 2, "{name}");
+        for table in tables {
+            assert!(table["count"].as_u64().unwrap() <= 8192, "{name}");
+        }
+    }
+    leaves
+}
+
+/// The real chain: H8 leaves (balanced, quantized positions, a synthetic run below depth
+/// 21) with jobs 1 and 2 and separate scratch, published by H16: identical archives, every
+/// property table within the consumer limit, accepted by the merged validator. The textured
+/// balanced leaves (KTX2) publish too, but the merged C1 payload profile does not admit a
+/// required `KHR_texture_basisu`, so the validator reports them Unsupported: a validator
+/// follow-up, pinned here so it is noticed when it changes.
+#[test]
+fn real_leaves_from_h8_publish_deterministically_and_validate() {
+    use crate::{LeafOutputRequest, LeafProfile};
+    use std::num::NonZeroUsize;
+    let work = tempfile::tempdir().unwrap();
+    let textured = super::super::full::tests::fixture(&work.path().join("src"), 8193);
+    let plain = untextured(&textured);
+    let placement = MeshPlacement::Wgs84 {
+        anchor_degrees_metres: [133.06, -12.32, 100.],
+        orientation_xyzw: [0., 0., 0., 1.],
+        scene_offset_metres: [0.; 3],
+    };
+    let publish = |input: &Path, jobs: usize, tag: &str| {
+        let scratch = work.path().join(format!("scratch-{tag}"));
+        std::fs::create_dir(&scratch).unwrap();
+        let leaves = work.path().join(format!("leaves-{tag}"));
+        crate::mesh_to_leaf_payloads(
+            LeafOutputRequest::new(input, &leaves, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(jobs).unwrap())
+                .with_scratch_dir(&scratch),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let output = work.path().join(format!("{tag}.3tz"));
+        let result = mesh_leaves_to_3tz(
+            MeshTilesetRequest::new(&leaves, &output).with_placement(placement.clone()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        assert_eq!(result.report.triangles, 8193);
+        assert_eq!(result.report.leaves, 2);
+        assert!(result.report.max_depth > 21);
+        output
+    };
+    let mut previous: Option<Vec<u8>> = None;
+    for jobs in [1, 2] {
+        let output = publish(&plain, jobs, &format!("plain{jobs}"));
+        let archive = members(&output);
+        assert_eq!(leaf_tables_within_consumer_limit(&archive), 2);
+        for (name, bytes) in &archive {
+            if name.ends_with(".glb") {
+                let length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+                let doc: Value = serde_json::from_slice(&bytes[20..20 + length]).unwrap();
+                assert!(doc["extensionsUsed"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("KHR_mesh_quantization")));
+            }
+        }
+        let checked = inspect(ValidationRequest::new(&output)).unwrap();
+        assert!(checked
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment"));
+        let bytes = std::fs::read(&output).unwrap();
+        if let Some(prior) = &previous {
+            assert_eq!(prior, &bytes, "jobs and scratch do not change the archive");
+        }
+        previous = Some(bytes);
+    }
+    let output = publish(&textured, 1, "textured");
+    assert_eq!(leaf_tables_within_consumer_limit(&members(&output)), 2);
+    let failure = inspect(ValidationRequest::new(&output)).unwrap_err();
+    assert!(
+        failure
+            .to_string()
+            .contains("required extension KHR_texture_basisu"),
+        "{failure}"
+    );
+}
+
+/// GLB bounds: quantized TRS nodes are bounded outward in exact arithmetic and taken to the
+/// z-up tile frame once; a rotated node is refused.
+#[test]
+fn glb_bounds_are_outward_and_z_up() {
+    let work = tempfile::tempdir().unwrap();
+    let write = |doc: Value| {
+        let mut text = serde_json::to_vec(&doc).unwrap();
+        while !text.len().is_multiple_of(4) {
+            text.push(b' ');
+        }
+        let mut out = b"glTF".to_vec();
+        out.extend(2u32.to_le_bytes());
+        out.extend((20 + text.len() as u32).to_le_bytes());
+        out.extend((text.len() as u32).to_le_bytes());
+        out.extend(b"JSON");
+        out.extend(&text);
+        let path = work.path().join("leaf.glb");
+        std::fs::write(&path, &out).unwrap();
+        (path, out.len() as u64)
+    };
+    let row = |bytes: u64| LeafRow {
+        uri: "leaves/000000000000.glb".into(),
+        sha256: [0; 32],
+        bytes,
+        first: 0,
+        end: 1,
+        digits: Digits::ROOT,
+        last_octant: 0,
+        packed: false,
+        synthetic: 0,
+        geometry_error: 0.,
+    };
+    let node = json!({"mesh":0,"translation":[0.1, -5.0, 1e7],"scale":[0.3, 0.001, 2.0]});
+    let doc = |node: Value| {
+        json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[node],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+        "accessors":[{"componentType":5123,"count":2,"type":"VEC3","min":[0,7,1],"max":[65535,9,3]}]})
+    };
+    let (path, bytes) = write(doc(node));
+    let b = glb_bounds(&path, &row(bytes)).unwrap();
+    // Exact y-up bounds: x in [0.1, 0.1 + 0.3·65535], y in [-5 + 0.007, -5 + 0.009],
+    // z in [1e7 + 2, 1e7 + 6]; z-up is (x, -z, y).
+    let exact_lo_x = 0.1f64;
+    let exact_hi_x = 0.1 + 0.3 * 65535.;
+    assert!(b.lo[0] <= exact_lo_x && b.hi[0] >= exact_hi_x - 1e-9);
+    assert!(b.lo[1] <= -(1e7 + 6.) && b.hi[1] >= -(1e7 + 2.));
+    assert!(b.lo[2] <= -5. + 0.007 + 1e-12 && b.hi[2] >= -5. + 0.009 - 1e-12);
+    let (tile, extent) = tile_box(b).unwrap();
+    for i in 0..3 {
+        assert!(extent.lo[i] <= b.lo[i] && extent.hi[i] >= b.hi[i]);
+        let c = tile.center()[i];
+        let h = (tile.lanes()[3 + 4 * i]).abs();
+        assert!(c - h <= b.lo[i] && c + h >= b.hi[i]);
+    }
+    let (path, bytes) = write(doc(json!({"mesh":0,"rotation":[0,0,0,1]})));
+    assert!(glb_bounds(&path, &row(bytes)).is_err());
+}

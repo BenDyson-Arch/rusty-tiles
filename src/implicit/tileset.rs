@@ -4501,6 +4501,84 @@ mod records_tests {
         }
     }
 
+    /// #198 follow-up: a payload staged at its final implicit member cannot also be rebased
+    /// in place. A translated implicit child whose payload sits at its own final name is
+    /// refused, and the refused document leaves the staging directory as it was; the same
+    /// child staged elsewhere is written as a new, rebased member.
+    #[test]
+    fn payload_at_its_final_member_that_needs_a_rebase_is_refused() {
+        let octree = SubdivisionScheme::Octree;
+        let template = |t: &str| UriTemplate::new(t, octree).unwrap();
+        let names = ImplicitNames::Templates {
+            contents: vec![template("implicit-content/f7-d2/{level}/{x}/{y}/{z}.glb")],
+            subtree: template("subtrees/f7-d2/{level}/{x}/{y}/{z}.subtree"),
+        };
+        let child_bytes = payload(94);
+        let record = |placement: NodePlacement, contents: Vec<ContentRef>| {
+            TileRecord::new(
+                placement,
+                TileBox::centred([4.; 3]).unwrap(),
+                GeometricError::new(1.).unwrap(),
+                Refine::Replace,
+                contents,
+                None::<Extras>,
+            )
+            .unwrap()
+        };
+        let content = |uri: &str| {
+            ContentRef::new(
+                MemberName::new(uri).unwrap(),
+                Sha256::digest(&child_bytes).into(),
+                child_bytes.len() as u64,
+                ContentKind::Glb,
+                false,
+                SourceIdentity::Aggregate,
+            )
+            .unwrap()
+        };
+        // Slot 1 is (level 1, x 1, y 0, z 0).
+        let final_child = "implicit-content/f7-d2/1/1/0/0.glb";
+        let tree = |uri: &str| {
+            let child = TileTree::new(
+                record(
+                    NodePlacement::translation([2., 0., 0.]).unwrap(),
+                    vec![content(uri)],
+                ),
+                Vec::new(),
+            );
+            TileTree::with_slots(record(NodePlacement::INHERIT, Vec::new()), vec![(1, child)])
+                .unwrap()
+        };
+        let document = TilesetDocument::root(GeometricError::new(10.).unwrap(), []);
+        let raw = BTreeMap::from([(final_child.to_owned(), child_bytes.clone())]);
+        let dir = stage(&raw);
+        let writer = ForestWriter::new(&document, dir.path(), octree).unwrap();
+        refused(
+            writer.root(
+                ForestTile::named(names.clone(), tree(final_child)),
+                &mut || Ok(()),
+            ),
+            "payload \"implicit-content/f7-d2/1/1/0/0.glb\" is staged at its final member but \
+             needs a rebase",
+        );
+        assert_eq!(files(dir.path()), raw, "nothing is written or removed");
+        // Staged elsewhere, the translation is baked into a new member.
+        let elsewhere = slot_raw(&[94]);
+        let dir = stage(&elsewhere);
+        let writer = ForestWriter::new(&document, dir.path(), octree).unwrap();
+        let (_, output) = writer
+            .root(
+                ForestTile::named(names, tree(&member(&child_bytes))),
+                &mut || Ok(()),
+            )
+            .unwrap();
+        assert_eq!(output.implicit_sources, [member(&child_bytes)]);
+        let written = files(dir.path());
+        assert_ne!(written[final_child], child_bytes, "the payload is rebased");
+        let rebase = output.tiles[1].contents[0].rebase.as_ref().unwrap();
+        assert_eq!(rebase.delta, [2., 0., 0.]);
+    }
+
     /// A refused document removes everything it created; explicit payloads are listed once
     /// across documents; a raw source that is a written member is refused.
     #[test]
@@ -4520,7 +4598,7 @@ mod records_tests {
             ForestTile::implicit(name("a/r1"), leaf(82)),
         ]);
         refused(
-            writer.external(MemberName::new("d/one.json").unwrap(), twice, none),
+            writer.external(MemberName::new("d-one.json").unwrap(), twice, none),
             "\"implicit-content/a/r1-0-0-0-0.glb\" is already written",
         );
         assert_eq!(files(dir.path()), raw);
@@ -4528,20 +4606,20 @@ mod records_tests {
         // The explicit payload of the refused document is listed by the next one, once.
         let (_, one) = writer
             .external(
-                MemberName::new("d/one.json").unwrap(),
+                MemberName::new("d-one.json").unwrap(),
                 explicit(Vec::new()),
                 none,
             )
             .unwrap();
         let (_, two) = writer
             .external(
-                MemberName::new("d/two.json").unwrap(),
+                MemberName::new("d-two.json").unwrap(),
                 explicit(Vec::new()),
                 none,
             )
             .unwrap();
-        assert_eq!(one.members, [member(&payload(80)), "d/one.json".to_owned()]);
-        assert_eq!(two.members, ["d/two.json"]);
+        assert_eq!(one.members, [member(&payload(80)), "d-one.json".to_owned()]);
+        assert_eq!(two.members, ["d-two.json"]);
         // A root whose raw source is another root's written member.
         let first = "implicit-content/b-0-0-0-0.glb";
         let bytes = payload(82);
@@ -4568,7 +4646,7 @@ mod records_tests {
             ForestTile::implicit(name("c"), TileTree::new(reread, Vec::new())),
         ]);
         refused(
-            writer.external(MemberName::new("d/three.json").unwrap(), collides, none),
+            writer.external(MemberName::new("d-three.json").unwrap(), collides, none),
             "collides with a written member",
         );
         assert_eq!(files(dir.path()), before);
@@ -4605,13 +4683,13 @@ mod records_tests {
         let mut writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
         let (link, output) = writer
             .external(
-                MemberName::new("d/two.json").unwrap(),
+                MemberName::new("d-two.json").unwrap(),
                 explicit(Vec::new()),
                 none,
             )
             .unwrap();
-        assert_eq!(output.members.last().unwrap(), "d/two.json");
-        for bad in ["d/two.json", "tileset.json", "d/three.glb"] {
+        assert_eq!(output.members.last().unwrap(), "d-two.json");
+        for bad in ["d-two.json", "tileset.json", "d-three.glb", "d/six.json"] {
             refused(
                 writer.external(MemberName::new(bad).unwrap(), explicit(Vec::new()), none),
                 bad,
@@ -4619,7 +4697,7 @@ mod records_tests {
         }
         refused(
             writer.external(
-                MemberName::new("d/four.json").unwrap(),
+                MemberName::new("d-four.json").unwrap(),
                 ForestTile::implicit(name("r4"), leaf(82)),
                 none,
             ),
@@ -4628,7 +4706,7 @@ mod records_tests {
         let children = (0..5).map(|_| explicit(Vec::new())).collect();
         refused(
             writer.external(
-                MemberName::new("d/five.json").unwrap(),
+                MemberName::new("d-five.json").unwrap(),
                 explicit(children),
                 none,
             ),
@@ -4636,7 +4714,7 @@ mod records_tests {
         );
         refused(
             writer.root(ForestTile::<Extras>::Link(link), none),
-            "d/two.json",
+            "d-two.json",
         );
         // Escaped (sibling) names are not forest members.
         let model = ContentRef::source_model(
@@ -4757,7 +4835,7 @@ mod records_tests {
                 })
                 .collect();
             let chunk = ForestTile::explicit(record(5., Vec::new()), parents);
-            let name = MemberName::new(format!("docs/d{d}.json")).unwrap();
+            let name = MemberName::new(format!("docs-d{d}.json")).unwrap();
             let (link, output) = writer.external(name, chunk, none).unwrap();
             tiles += output.tiles.len();
             roots += output.implicit_roots.len();
@@ -4782,7 +4860,7 @@ mod records_tests {
         assert_eq!(roots, 2048);
         assert_eq!(
             top["root"]["children"][7]["children"][7]["content"]["uri"],
-            "docs/d63.json"
+            "docs-d63.json"
         );
         let baseline = samples[0];
         let peak = samples.iter().copied().max().unwrap();

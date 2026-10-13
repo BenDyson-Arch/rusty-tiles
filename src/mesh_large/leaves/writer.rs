@@ -2,6 +2,7 @@
 //! before this boundary; meshopt is lossless wire compression, not approximation.
 use super::super::{
     attributes::{FullTriangle, COLOR, NORMAL, TANGENT},
+    config::CONSUMER_TABLE_ROWS,
     records::Bounds,
 };
 use super::{
@@ -286,6 +287,12 @@ pub(super) fn encode(
     })?;
     if total > 1 << 24 {
         return Err(invalid("leaf feature ID exceeds exact float integer domain").into());
+    }
+    // Both property tables have at most `total` rows (one per triangle, one per present
+    // primitive). The tree's leaf budget already bounds `total`; a wider table is a broken
+    // plan, never a silent consumer-incompatible leaf.
+    if total as u64 > CONSUMER_TABLE_ROWS {
+        return Err(invalid("leaf property table exceeds the consumer row limit").into());
     }
     // Every triangle's mandatory numeric columns are uncompressed: this lower
     // bound rejects impossible tiles BEFORE allocating geometry or compression.
@@ -874,6 +881,49 @@ mod tests {
                 .kind(),
             JobErrorKind::InvalidState
         );
+    }
+    /// H16 consumer cap: every profile's leaf budget is at most 8192 triangles, an 8192-row
+    /// leaf encodes with both tables at the cap, and an 8193-triangle plan is refused as a
+    /// broken plan (not a retryable budget) before any table is built.
+    #[test]
+    fn property_tables_stay_within_the_consumer_row_limit() {
+        for profile in [
+            Profile::Fast,
+            Profile::Balanced,
+            Profile::Quality,
+            Profile::Lossless,
+        ] {
+            assert!(
+                profile.leaf_triangles() <= CONSUMER_TABLE_ROWS,
+                "{profile:?}"
+            );
+        }
+        let sized = |count: usize| {
+            let mut input = atlas();
+            let primitive = &mut input.primitives[0];
+            primitive.triangles = (0..count)
+                .map(|i| row(i as u64, -999_999.75 + (i % 64) as f32 * 0.25, false))
+                .collect();
+            primitive.corner_depths = vec![[1; 3]; count];
+            for uv in &mut primitive.uvs {
+                *uv = vec![[0.25, 0.25]; 3 * count];
+            }
+            input
+        };
+        let at_cap = encode(&sized(8192), &plan(Profile::Balanced), 1, TILE_LIMIT).unwrap();
+        let (doc, _) = parse(&at_cap.glb);
+        let counts: Vec<u64> = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|table| table["count"].as_u64().unwrap())
+            .collect();
+        assert_eq!(counts, [1, 8192]);
+        assert!(matches!(
+            encode(&sized(8193), &plan(Profile::Balanced), 1, TILE_LIMIT),
+            Err(WriteError::Failure(error)) if error.kind() == JobErrorKind::InvalidState
+                && error.message().contains("consumer row limit")
+        ));
     }
     #[test]
     fn only_actual_member_size_errors_are_retryable_budget() {

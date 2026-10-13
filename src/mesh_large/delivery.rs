@@ -1,250 +1,621 @@
-//! H16 preparation only: bounded H1 addressing and exact generated-member budget.
-//! Test-only registered preparation pending M1/H8 integration. No publisher,
-//! serializer copy, legacy fallback or whole-tree representation is provided.
-use super::records::{Bounds, NodeKind, NodeRecord, KEY_DEPTH};
-use crate::{implicit::Coordinates, JobError, JobErrorKind};
+//! H16: H1's tile tree and H8's full-detail leaves, published as a Tiles 1.1 implicit forest
+//! in one `.3tz` through the shared typed serializer (`implicit::ForestWriter`).
+//!
+//! Input is H8's published leaf directory. Two passes stream its rows in rank order through
+//! the same [`plan::Builder`]: the first only counts (exact member count, so the 3TZ ceiling
+//! refuses before anything is staged, and the root error the root document needs); the
+//! second stages payloads by hard link at their final member names and writes one document
+//! at a time. The archive is then written from the staged members in a fixed order. See
+//! `docs/architecture/h16-delivery-contract.md`.
+mod archive;
+pub(crate) mod plan;
+pub(crate) mod source;
+#[cfg(test)]
+mod tests;
 
-fn state(message: &'static str) -> JobError {
-    JobError::new(JobErrorKind::InvalidState, message)
+use self::{
+    plan::{document_members, state, Builder, Limits, Linked, Node, Shape, Sink, LIMITS},
+    source::{LeafDirectory, LeafRow},
+};
+use super::config::MEMBER_CEILING_3TZ;
+use crate::{
+    implicit::{
+        Availability, ChunkOutput, Coordinates, ForestTile, ForestWriter, ImplicitNames,
+        SubdivisionScheme,
+    },
+    mesh_archive::{MeshPlacement, MeshPlacementReport, ResolvedPlacement},
+    runtime::Staging,
+    tileset_node::{
+        top_level_error, ContentKind, ContentRef, GeometricError, MemberName, NodePlacement,
+        Refine, SourceIdentity, TileRecord, TileTree, TilesetDocument, UriTemplate,
+    },
+    CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl, RunEvent,
+};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    path::{Path, PathBuf},
+};
+
+const OCTREE: SubdivisionScheme = SubdivisionScheme::Octree;
+
+/// Publish an H8 leaf directory as a `.3tz` tileset.
+#[derive(Clone, Debug)]
+pub struct MeshTilesetRequest {
+    leaves: PathBuf,
+    output: PathBuf,
+    placement: MeshPlacement,
+    policy: OutputPolicy,
+    member_ceiling: u64,
 }
 
-/// Logical transport address, not a spatial containment box. Synthetic run
-/// slots are appended after the spatial prefix; packed leaves use their FIRST
-/// slot. Last-octant coverage remains metadata on the original H1 record.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Address {
+impl MeshTilesetRequest {
+    /// `leaves` is a directory published by [`crate::mesh_to_leaf_payloads`].
+    pub fn new(leaves: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
+        Self {
+            leaves: leaves.into(),
+            output: output.into(),
+            placement: MeshPlacement::Local,
+            policy: OutputPolicy::CreateNew,
+            member_ceiling: MEMBER_CEILING_3TZ,
+        }
+    }
+    pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
+        self.placement = placement;
+        self
+    }
+    pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+    #[cfg(test)]
+    pub(crate) fn with_member_ceiling(mut self, ceiling: u64) -> Self {
+        self.member_ceiling = ceiling;
+        self
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshTilesetReport {
+    pub schema_version: u32,
+    pub leaves: u64,
+    pub triangles: u64,
+    pub tiles: u64,
+    pub explicit_tiles: u64,
+    pub implicit_roots: u64,
+    pub implicit_tiles: u64,
+    pub documents: u64,
+    pub max_depth: u32,
+    pub synthetic_leaves: u64,
+    pub packed_leaves: u64,
+    /// Every 3TZ member, `tileset.json` and the index included.
+    pub members: u64,
+    pub member_ceiling: u64,
+    pub archive_bytes: u64,
+    pub root_geometric_error: f64,
+    pub tileset_geometric_error: f64,
+    pub peak_held_records: u64,
+    pub placement: MeshPlacementReport,
+}
+
+#[derive(Debug)]
+pub struct MeshTilesetResult {
+    pub output: PathBuf,
+    pub report: MeshTilesetReport,
+    pub cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+/// A tile's `extras`: its H1 identity and leaf context. Rank strings keep u64 exact in JSON.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TileExtras {
+    first: String,
     depth: u32,
-    axes: [u32; 3],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end: Option<String>,
+    #[serde(rename = "lastOctant", skip_serializing_if = "Option::is_none")]
+    last_octant: Option<u8>,
+    #[serde(rename = "syntheticLevels", skip_serializing_if = "Option::is_none")]
+    synthetic_levels: Option<u8>,
 }
 
-impl Address {
-    pub(super) fn from_node(node: &NodeRecord) -> Result<Self, JobError> {
-        if node.cell_depth > KEY_DEPTH
-            || node.depth() > 31
-            || (node.path_len > 0 && node.cell_depth != KEY_DEPTH)
-            || node.cell >= (1_u64 << (3 * u32::from(node.cell_depth)))
-            || node.path >= (1_u64 << (3 * u32::from(node.path_len)))
-            || node.last_octant > 7
-            || node.last_octant < node.slot()
-            || node.first >= node.end
-            || (node.kind == NodeKind::Leaf && node.children != 0)
-            || (node.kind == NodeKind::Internal && !(1..=8).contains(&node.children))
-        {
-            return Err(state("H16 received an invalid captured node identity"));
-        }
-        let mut axes = [0_u32; 3];
-        for (length, bits) in [(node.cell_depth, node.cell), (node.path_len, node.path)] {
-            for level in (0..length).rev() {
-                let slot = (bits >> (3 * u32::from(level))) & 7;
-                for (axis, value) in axes.iter_mut().enumerate() {
-                    *value = (*value << 1) | ((slot >> axis) & 1) as u32;
-                }
-            }
-        }
-        Ok(Self {
-            depth: node.depth(),
-            axes,
-        })
-    }
+fn record(node: &Node, contents: Vec<ContentRef>) -> Result<TileRecord<TileExtras>, JobError> {
+    let leaf = node.leaf.as_deref();
+    let extras = TileExtras {
+        first: node.first.to_string(),
+        depth: node.depth,
+        end: leaf.map(|l| l.end.to_string()),
+        last_octant: leaf.filter(|l| l.packed).map(|l| l.last_octant),
+        synthetic_levels: leaf.filter(|l| l.synthetic > 0).map(|l| l.synthetic),
+    };
+    let error = GeometricError::new(node.error).map_err(|e| state(e.to_string()))?;
+    TileRecord::new(
+        NodePlacement::INHERIT,
+        node.tile,
+        error,
+        Refine::Replace,
+        contents,
+        Some(extras),
+    )
+    .map_err(|e| state(e.to_string()))
+}
 
-    pub(super) fn relative_to(self, root: Self) -> Result<Coordinates, JobError> {
-        let level = self
-            .depth
-            .checked_sub(root.depth)
-            .ok_or_else(|| state("subtree root is deeper than its tile"))?;
-        if self
-            .axes
-            .iter()
-            .zip(root.axes)
-            .any(|(value, ancestor)| value >> level != ancestor)
-        {
-            return Err(state("tile is outside its declared logical subtree root"));
+/// The content of a leaf published as `member`. Its source identities are the GLB's
+/// `source_primitive`/`source_triangle` property tables; the accounting digest binds the
+/// rank range to the payload that carries them.
+fn leaf_content(row: &LeafRow, member: String) -> Result<ContentRef, JobError> {
+    let mut digest = Sha256::new();
+    digest.update(b"rusty-tiles/h16/source-identity/v1\0");
+    digest.update(row.first.to_le_bytes());
+    digest.update(row.end.to_le_bytes());
+    digest.update(row.sha256);
+    let count = u32::try_from(row.triangles()).map_err(|_| state("leaf triangle count"))?;
+    ContentRef::new(
+        MemberName::new(member).map_err(|e| state(e.to_string()))?,
+        row.sha256,
+        row.bytes,
+        ContentKind::Glb,
+        false,
+        SourceIdentity::Features {
+            count,
+            digest: digest.finalize().into(),
+        },
+    )
+    .map_err(|e| state(e.to_string()))
+}
+
+fn morton(c: &Coordinates) -> u128 {
+    let mut index = 0u128;
+    for bit in 0..c.level {
+        for (k, axis) in [c.x, c.y, c.z].into_iter().enumerate() {
+            index |= u128::from((axis >> bit) & 1) << (3 * bit as usize + k);
         }
-        let mask = (1_u32 << level) - 1;
-        Ok(Coordinates {
-            level,
-            x: self.axes[0] & mask,
-            y: self.axes[1] & mask,
-            z: self.axes[2] & mask,
-        })
+    }
+    index
+}
+
+/// Planning: counts members and documents; nothing is written.
+#[derive(Default)]
+struct PlanSink {
+    members: u64,
+    root: Option<(f64, f64)>,
+}
+
+impl Sink for PlanSink {
+    fn external(&mut self, node: Node) -> Result<Linked, JobError> {
+        self.members += document_members(&node) + 1;
+        Ok(None)
+    }
+    fn root(&mut self, node: Node) -> Result<(), JobError> {
+        self.members += document_members(&node) + 1;
+        self.root = Some((node.error, node.tile.diagonal()));
+        Ok(())
     }
 }
 
-/// Exact basis conversion of final decoded GLB bounds, not H1 centroid cells.
-/// glTF default Y-up -> Tiles-local Z-up: (x, y, z) -> (x, -z, y).
-pub(super) fn tile_bounds(decoded: Bounds) -> Result<Bounds, JobError> {
-    if (0..3).any(|a| {
-        !decoded.min[a].is_finite()
-            || !decoded.max[a].is_finite()
-            || decoded.min[a] > decoded.max[a]
-    }) {
-        return Err(state("decoded leaf bounds are not a finite ordered box"));
+/// Run a forest-writer call with the job's cancellation as its checkpoint.
+fn forest<T>(
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    call: impl FnOnce(&mut dyn FnMut() -> Result<(), crate::Error>) -> Result<T, crate::Error>,
+) -> Result<T, JobError> {
+    let mut stopped = None;
+    let result = call(&mut || {
+        check().map_err(|error| {
+            let message = error.message().to_owned();
+            stopped = Some(error);
+            crate::Error::Message(message)
+        })
+    });
+    if let Some(error) = stopped {
+        return Err(error);
     }
-    Ok(Bounds {
-        min: [decoded.min[0], -decoded.max[2], decoded.min[1]],
-        max: [decoded.max[0], -decoded.min[2], decoded.max[1]],
+    result.map_err(|error| match error {
+        crate::Error::Io(source) => {
+            JobError::new(JobErrorKind::Io, format!("forest staging I/O: {source}"))
+        }
+        other => state(format!(
+            "the forest writer refused a planned document: {other}"
+        )),
     })
 }
 
-/// Counts from the frozen chosen layout, including all JSON documents/debug
-/// members. The index indexes these members, excluding itself. The archive
-/// member ceiling includes its one final index member, as the H1 gate does.
-#[derive(Clone, Copy, Debug)]
-pub(super) struct GeneratedMembers {
-    pub payloads: u64,
-    pub subtrees: u64,
-    pub documents: u64,
-    pub debug: u64,
+/// Publishing: stages payloads at their final names and writes each document.
+struct WriteSink<'a> {
+    writer: Option<ForestWriter<'a>>,
+    staging: &'a Path,
+    leaves: &'a LeafDirectory,
+    placement: NodePlacement,
+    names: BufWriter<File>,
+    names_path: PathBuf,
+    members: u64,
+    top: Option<serde_json::Value>,
+    check: &'a mut dyn FnMut() -> Result<(), JobError>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct MemberBudget {
-    pub indexed: u64,
-    pub total: u64,
-    pub index_bytes: u64,
-}
-impl GeneratedMembers {
-    pub(super) fn check(self) -> Result<MemberBudget, JobError> {
-        if self.documents == 0 {
-            return Err(state("delivery has no root tileset document"));
+
+impl WriteSink<'_> {
+    /// Hard-link a leaf payload into the staging directory at `member` (one copy only where
+    /// the filesystem has no hard links).
+    fn stage(&mut self, row: &LeafRow, member: &str) -> Result<(), JobError> {
+        let source = self.leaves.path(row);
+        let target = self.staging.join(member);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| JobError::io("create staging folder", parent, e))?;
         }
-        let overflow = || {
-            JobError::new(
-                JobErrorKind::ResourceLimit,
-                "delivery member arithmetic exceeds u64",
-            )
-        };
-        let indexed = self
-            .payloads
-            .checked_add(self.subtrees)
-            .and_then(|n| n.checked_add(self.documents))
-            .and_then(|n| n.checked_add(self.debug))
-            .ok_or_else(overflow)?;
-        let total = indexed.checked_add(1).ok_or_else(overflow)?;
-        if total > super::config::MEMBER_CEILING_3TZ {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                "3TZ delivery exceeds 178,956,970 total members",
+        match std::fs::hard_link(&source, &target) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(state(format!("member {member} is staged twice")))
+            }
+            Err(_) => std::fs::copy(&source, &target)
+                .map(|_| ())
+                .map_err(|e| JobError::io("copy leaf payload", &source, e)),
+        }
+    }
+
+    fn tile(&mut self, node: Node) -> Result<ForestTile<TileExtras>, JobError> {
+        if let Some(link) = node.link {
+            return link
+                .map(ForestTile::Link)
+                .ok_or_else(|| state("a planned link reached the writer"));
+        }
+        if let Some(row) = node.leaf.as_deref() {
+            let member = format!("content/f{}-d{}.glb", node.first, node.depth);
+            self.stage(row, &member)?;
+            let content = leaf_content(row, member)?;
+            return Ok(ForestTile::explicit(
+                record(&node, vec![content])?,
+                Vec::new(),
             ));
         }
-        let index_bytes = indexed.checked_mul(24).ok_or_else(overflow)?;
-        if index_bytes > u64::from(u32::MAX) {
-            return Err(state("accepted 3TZ count exceeded its index wire bound"));
+        if !node.is_skeleton() {
+            return self.implicit(node);
         }
-        Ok(MemberBudget {
-            indexed,
-            total,
-            index_bytes,
-        })
+        let own = record(&node, Vec::new())?;
+        let children = node
+            .children
+            .into_iter()
+            .map(|child| self.tile(child))
+            .collect::<Result<_, _>>()?;
+        Ok(ForestTile::explicit(own, children))
     }
-}
 
-/// Honest preparation gate. Replace with a bridge returning M1 TileRecord,
-/// ContentRef and TilesetDocument once their owning branch merges. Do not
-/// introduce local facsimiles of those types or serialize a placeholder.
-pub(super) fn publication_pending() -> JobError {
-    JobError::new(JobErrorKind::Unsupported, "H16 hierarchy publication is not wired; merged M1 typed serializer and H8 leaves are required")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn publication_is_explicitly_pending() {
-        assert_eq!(publication_pending().kind(), JobErrorKind::Unsupported);
-    }
-    fn node(cell_depth: u8, cell: u64, path_len: u8, path: u64, last_octant: u8) -> NodeRecord {
-        NodeRecord {
-            cell_depth,
-            cell,
-            path_len,
-            path,
-            last_octant,
-            kind: NodeKind::Leaf,
-            children: 0,
-            first: 0,
-            end: 1,
-            bytes: 93,
-            bounds: Bounds {
-                min: [0.; 3],
-                max: [1.; 3],
-            },
-        }
-    }
-    #[test]
-    fn packed_first_slot_and_synthetic_depth31_are_addressed() {
-        let packed = node(1, 2, 0, 0, 6);
-        assert!(packed.is_packed());
-        assert_eq!(
-            Address::from_node(&packed).unwrap(),
-            Address {
-                depth: 1,
-                axes: [0, 1, 0]
-            }
-        );
-        let synthetic = node(21, 0, 10, (1 << 30) - 1, 7);
-        let address = Address::from_node(&synthetic).unwrap();
-        assert_eq!(address.depth, 31);
-        assert_eq!(address.axes, [1023; 3]);
-        let root = Address::from_node(&node(21, 0, 0, 0, 0)).unwrap();
-        assert_eq!(
-            address.relative_to(root).unwrap(),
-            Coordinates {
-                level: 10,
-                x: 1023,
-                y: 1023,
-                z: 1023
-            }
-        );
-        assert!(address
-            .relative_to(Address {
-                depth: 21,
-                axes: [1, 0, 0]
-            })
-            .is_err());
-    }
-    #[test]
-    fn default_gltf_axis_conversion_uses_final_bounds() {
-        assert_eq!(
-            tile_bounds(Bounds {
-                min: [1., 2., 3.],
-                max: [4., 5., 6.]
-            })
-            .unwrap(),
-            Bounds {
-                min: [1., -6., 2.],
-                max: [4., -3., 5.]
-            }
-        );
-    }
-    #[test]
-    fn exact_archive_boundary_includes_index_and_overflow_is_resource() {
-        let count = super::super::config::MEMBER_CEILING_3TZ;
-        let good = GeneratedMembers {
-            payloads: count - 2,
-            subtrees: 0,
-            documents: 1,
-            debug: 0,
+    fn implicit(&mut self, node: Node) -> Result<ForestTile<TileExtras>, JobError> {
+        let key = format!("f{}-d{}", node.first, node.depth);
+        let template =
+            |pattern: String| UriTemplate::new(pattern, OCTREE).map_err(|e| state(e.to_string()));
+        let names = ImplicitNames::Templates {
+            contents: vec![template(format!(
+                "implicit-content/{key}-{{level}}-{{x}}-{{y}}-{{z}}.glb"
+            ))?],
+            subtree: template(format!(
+                "subtrees/{key}-{{level}}-{{x}}-{{y}}-{{z}}.subtree"
+            ))?,
         };
-        assert_eq!(good.check().unwrap().total, count);
-        assert_eq!(
-            GeneratedMembers {
-                payloads: count - 1,
-                ..good
-            }
-            .check()
-            .unwrap_err()
-            .kind(),
-            JobErrorKind::Unsupported
-        );
-        assert_eq!(
-            GeneratedMembers {
-                payloads: u64::MAX,
-                ..good
-            }
-            .check()
-            .unwrap_err()
-            .kind(),
-            JobErrorKind::ResourceLimit
-        );
+        let mut planned = Availability {
+            levels: node.height + 1,
+            tiles: Vec::new(),
+            contents: vec![Vec::new()],
+        };
+        let (depth, axes) = (node.depth, node.axes);
+        let tree = self.implicit_tree(node, depth, axes, &key, &mut planned)?;
+        planned.tiles.sort_by_key(|c| (c.level, morton(c)));
+        planned.contents[0].sort_by_key(|c| (c.level, morton(c)));
+        Ok(ForestTile::named(names, tree).planned(planned))
     }
+
+    /// The implicit hierarchy below `root_depth`, its planned availability taken from each
+    /// tile's H1 address rather than from the slots the writer derives it from.
+    fn implicit_tree(
+        &mut self,
+        node: Node,
+        root_depth: u32,
+        root_axes: [u32; 3],
+        key: &str,
+        planned: &mut Availability,
+    ) -> Result<TileTree<TileExtras>, JobError> {
+        let level = node.depth - root_depth;
+        if (0..3).any(|a| node.axes[a] >> level != root_axes[a]) {
+            return Err(state("an implicit tile is outside its root's address"));
+        }
+        let mask = (1u32 << level) - 1;
+        let c = Coordinates {
+            level,
+            x: node.axes[0] & mask,
+            y: node.axes[1] & mask,
+            z: node.axes[2] & mask,
+        };
+        planned.tiles.push(c);
+        if let Some(row) = node.leaf.as_deref() {
+            let member = format!(
+                "implicit-content/{key}-{}-{}-{}-{}.glb",
+                c.level, c.x, c.y, c.z
+            );
+            self.stage(row, &member)?;
+            planned.contents[0].push(c);
+            let content = leaf_content(row, member)?;
+            return Ok(TileTree::new(record(&node, vec![content])?, Vec::new()));
+        }
+        let own = record(&node, Vec::new())?;
+        let mut children = Vec::with_capacity(node.children.len());
+        for child in node.children {
+            let slot = child.slot;
+            children.push((
+                slot,
+                self.implicit_tree(child, root_depth, root_axes, key, planned)?,
+            ));
+        }
+        TileTree::with_slots(own, children).map_err(|e| state(e.to_string()))
+    }
+
+    /// Check one written document against its plan and list its members.
+    fn record(&mut self, output: ChunkOutput, expected: u64) -> Result<(), JobError> {
+        if output.members.len() as u64 != expected {
+            return Err(state(format!(
+                "a document wrote {} members; its plan counted {expected}",
+                output.members.len()
+            )));
+        }
+        if let Some(source) = output.implicit_sources.first() {
+            return Err(state(format!(
+                "payload {source} was not staged at its final member"
+            )));
+        }
+        for member in &output.members {
+            writeln!(self.names, "{member}")
+                .map_err(|e| JobError::io("write member list", &self.names_path, e))?;
+        }
+        self.members += expected;
+        Ok(())
+    }
+}
+
+impl Sink for WriteSink<'_> {
+    fn external(&mut self, node: Node) -> Result<Linked, JobError> {
+        let expected = document_members(&node) + 1;
+        let name = MemberName::new(format!("tileset-f{}-d{}.json", node.first, node.depth))
+            .map_err(|e| state(e.to_string()))?;
+        let tile = self.tile(node)?;
+        let writer = self.writer.as_mut().expect("documents precede the root");
+        let (link, output) = forest(self.check, |mut cp| writer.external(name, tile, &mut cp))?;
+        self.record(output, expected)?;
+        Ok(Some(link))
+    }
+
+    fn root(&mut self, node: Node) -> Result<(), JobError> {
+        let expected = document_members(&node);
+        let mut tile = self.tile(node)?;
+        match &mut tile {
+            ForestTile::Explicit { record, .. } => record.set_placement(self.placement),
+            ForestTile::Implicit { tree, .. } => tree.record_mut().set_placement(self.placement),
+            ForestTile::Link(_) => return Err(state("the root was written as a link")),
+        }
+        let writer = self.writer.take().expect("one root");
+        let (top, output) = forest(self.check, |mut cp| writer.root(tile, &mut cp))?;
+        self.record(output, expected)?;
+        self.top = Some(top);
+        Ok(())
+    }
+}
+
+/// The root transform: none for local output, otherwise the rigid anchor/orientation/offset
+/// placement as a rotation and translation.
+fn root_placement(placement: &ResolvedPlacement) -> Result<NodePlacement, JobError> {
+    if matches!(placement.report(), MeshPlacementReport::Local) {
+        return Ok(NodePlacement::INHERIT);
+    }
+    let t = placement.transform();
+    let axes = [[t[0], t[1], t[2]], [t[4], t[5], t[6]], [t[8], t[9], t[10]]];
+    NodePlacement::rigid(axes, [t[12], t[13], t[14]]).map_err(|e| state(e.to_string()))
+}
+
+/// The planned forest.
+struct Planned {
+    shape: Shape,
+    members: u64,
+    root_error: f64,
+    tileset_error: f64,
+}
+
+fn plan_pass(
+    leaves: &LeafDirectory,
+    limits: Limits,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Planned, JobError> {
+    let mut sink = PlanSink::default();
+    let mut builder = Builder::new(&mut sink, limits);
+    let mut triangles = 0u64;
+    for (index, item) in leaves.leaves()?.enumerate() {
+        if index % 256 == 0 {
+            check()?;
+        }
+        let (row, bounds) = item?;
+        triangles = row.end;
+        builder.push(row, bounds)?;
+    }
+    let shape = builder.finish()?;
+    if shape.leaves != leaves.totals.leaves || triangles != leaves.totals.triangles {
+        return Err(source::input(format!(
+            "leaves.jsonl holds {} leaves and {triangles} triangles; manifest.json reports {} \
+             and {}",
+            shape.leaves, leaves.totals.leaves, leaves.totals.triangles
+        )));
+    }
+    let (root_error, diagonal) = sink.root.ok_or_else(|| state("no root was planned"))?;
+    Ok(Planned {
+        shape,
+        members: sink.members,
+        root_error,
+        tileset_error: top_level_error(diagonal, root_error, 1.),
+    })
+}
+
+fn ceiling(members: u64, ceiling: u64, what: &str) -> Result<(), JobError> {
+    if members > ceiling {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!(
+                "3TZ member ceiling: {what} {members} members (tileset.json and the index \
+                 included) exceed {ceiling}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn publish(
+    request: &MeshTilesetRequest,
+    attempt_check: &mut dyn FnMut() -> Result<(), JobError>,
+    out: &mut File,
+    work_parent: &Path,
+) -> Result<(MeshTilesetReport, u64), JobError> {
+    publish_with(request, LIMITS, attempt_check, out, work_parent)
+}
+
+fn publish_with(
+    request: &MeshTilesetRequest,
+    limits: Limits,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    out: &mut File,
+    work_parent: &Path,
+) -> Result<(MeshTilesetReport, u64), JobError> {
+    let placement = ResolvedPlacement::resolve(&request.placement)?;
+    let root = root_placement(&placement)?;
+    let leaves = LeafDirectory::open(&request.leaves)?;
+    // Early: every leaf is a member, as are tileset.json and the index.
+    ceiling(
+        leaves.totals.leaves.saturating_add(2),
+        request.member_ceiling,
+        "at least",
+    )?;
+    let planned = plan_pass(&leaves, limits, check)?;
+    let members = planned.members + 1;
+    ceiling(members, request.member_ceiling, "exactly")?;
+    check()?;
+    let work = tempfile::Builder::new()
+        .prefix(".tiles-h16-")
+        .tempdir_in(work_parent)
+        .map_err(|e| JobError::io("create forest staging", work_parent, e))?;
+    let staging = work.path().join("forest");
+    std::fs::create_dir(&staging)
+        .map_err(|e| JobError::io("create forest staging", &staging, e))?;
+    let names_path = work.path().join("members.txt");
+    let names = BufWriter::new(
+        File::create(&names_path)
+            .map_err(|e| JobError::io("create member list", &names_path, e))?,
+    );
+    let document = TilesetDocument::root(
+        GeometricError::new(planned.tileset_error).map_err(|e| state(e.to_string()))?,
+        [],
+    );
+    let writer = ForestWriter::new(&document, &staging, OCTREE)
+        .map_err(|e| state(e.to_string()))?
+        .with_max_implicit_levels(plan::SKELETON_HEIGHT);
+    let mut sink = WriteSink {
+        writer: Some(writer),
+        staging: &staging,
+        leaves: &leaves,
+        placement: root,
+        names,
+        names_path: names_path.clone(),
+        members: 0,
+        top: None,
+        check,
+    };
+    let mut builder = Builder::new(&mut sink, limits);
+    for (index, item) in leaves.leaves()?.enumerate() {
+        if index % 256 == 0 {
+            (builder.sink().check)()?;
+        }
+        let (row, bounds) = item?;
+        builder.push(row, bounds)?;
+    }
+    let shape = builder.finish()?;
+    if shape != planned.shape {
+        return Err(state("the published forest differs from its plan"));
+    }
+    let WriteSink {
+        mut names,
+        members: listed,
+        top,
+        check,
+        ..
+    } = sink;
+    names
+        .flush()
+        .map_err(|e| JobError::io("write member list", &names_path, e))?;
+    drop(names);
+    if listed + 1 != planned.members {
+        return Err(state("the published member count differs from its plan"));
+    }
+    let top = top.ok_or_else(|| state("tileset.json was not written"))?;
+    let bytes = serde_json::to_vec(&top).map_err(|e| state(e.to_string()))?;
+    let tileset = staging.join("tileset.json");
+    std::fs::write(&tileset, bytes).map_err(|e| JobError::io("write tileset.json", &tileset, e))?;
+    let scratch = crate::spill::Scratch::create(
+        Some(work.path()),
+        archive::scratch_need(members).ok_or_else(|| state("archive scratch overflow"))?,
+    )?;
+    let archive_bytes = archive::write(&staging, &names_path, members - 1, &scratch, out, check)?;
+    scratch.close()?;
+    work.close()
+        .map_err(|e| JobError::io("remove forest staging", work_parent, e))?;
+    let report = MeshTilesetReport {
+        schema_version: 1,
+        leaves: shape.leaves,
+        triangles: leaves.totals.triangles,
+        tiles: shape.tiles,
+        explicit_tiles: shape.explicit_tiles,
+        implicit_roots: shape.implicit_roots,
+        implicit_tiles: shape.implicit_tiles,
+        documents: shape.documents,
+        max_depth: shape.max_depth,
+        synthetic_leaves: shape.synthetic_leaves,
+        packed_leaves: shape.packed_leaves,
+        members,
+        member_ceiling: request.member_ceiling,
+        archive_bytes,
+        root_geometric_error: planned.root_error,
+        tileset_geometric_error: planned.tileset_error,
+        peak_held_records: shape.peak_held_records,
+        placement: placement.report(),
+    };
+    Ok((report, archive_bytes))
+}
+
+/// Publish an H8 leaf directory as a Tiles 1.1 `.3tz` (hidden CLI `mesh-leaves-to-3tz`).
+pub fn mesh_leaves_to_3tz(
+    request: MeshTilesetRequest,
+    control: &RunControl,
+) -> Result<MeshTilesetResult, JobFailure> {
+    let attempt = control.begin()?;
+    let mut staging = Staging::create(&request.output, &attempt)?;
+    let parent = staging
+        .path()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let result = publish(&request, &mut || attempt.check(), staging.writer(), &parent);
+    let report = match result {
+        Ok((report, _)) => report,
+        Err(error) => return Err(staging.fail(error)),
+    };
+    if let Err(error) = attempt
+        .emit(&RunEvent::Progress {
+            phase: "mesh_tileset",
+            done: report.leaves,
+            total: Some(report.leaves),
+        })
+        .and_then(|_| attempt.close_events())
+    {
+        return Err(staging.fail(error));
+    }
+    let published = staging.seal()?.publish(&request.output, request.policy)?;
+    Ok(MeshTilesetResult {
+        output: published.output,
+        report,
+        cleanup_diagnostics: published.cleanup_diagnostics,
+    })
 }

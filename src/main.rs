@@ -61,6 +61,33 @@ enum Command {
         #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
         scratch_dir: Option<PathBuf>,
     },
+    /// Publish a full-detail leaf directory as a Tiles 1.1 implicit .3tz (no coarse levels yet)
+    #[command(hide = true, name = "mesh-leaves-to-3tz")]
+    MeshLeavesTo3tz {
+        /// Directory written by mesh-leaf-payloads
+        #[arg(long)]
+        leaves: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[command(flatten)]
+        placement: RigidPlacementArgs,
+    },
+    /// Leaf payloads then their hierarchy: one full-detail .3tz from a local mesh (no coarse levels yet)
+    #[command(hide = true, name = "mesh-large-to-3tz")]
+    MeshLargeTo3tz {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(long, default_value = "balanced", value_parser = ["fast", "balanced", "quality", "lossless"])]
+        profile: String,
+        #[arg(long, default_value = "2")]
+        jobs: std::num::NonZeroUsize,
+        #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+        scratch_dir: Option<PathBuf>,
+        #[command(flatten)]
+        placement: RigidPlacementArgs,
+    },
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
@@ -105,6 +132,8 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::MeshLeafPayloads { .. } => "mesh-leaf-payloads",
+            Self::MeshLeavesTo3tz { .. } => "mesh-leaves-to-3tz",
+            Self::MeshLargeTo3tz { .. } => "mesh-large-to-3tz",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -1086,6 +1115,68 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             let result = rusty_tiles::mesh_to_leaf_payloads(request, &RunControl::new(observer))?;
             Outcome::Report(
                 json!({"ok":true,"output":result.output,"summary":result.report,
+                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
+            )
+        }
+        Command::MeshLeavesTo3tz {
+            leaves,
+            output,
+            placement,
+        } => {
+            let request = rusty_tiles::MeshTilesetRequest::new(leaves, output)
+                .with_placement(placement.resolve()?);
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let result = rusty_tiles::mesh_leaves_to_3tz(request, &RunControl::new(observer))?;
+            Outcome::Report(
+                json!({"ok":true,"output":result.output,"summary":result.report,
+                "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
+            )
+        }
+        Command::MeshLargeTo3tz {
+            input,
+            output,
+            profile,
+            jobs,
+            scratch_dir,
+            placement,
+        } => {
+            use rusty_tiles::{LeafOutputRequest, LeafProfile};
+            let placement = placement.resolve()?;
+            let profile = match profile.as_str() {
+                "fast" => LeafProfile::Fast,
+                "balanced" => LeafProfile::Balanced,
+                "quality" => LeafProfile::Quality,
+                _ => LeafProfile::Lossless,
+            };
+            // The leaf directory is private work next to the output (same filesystem, so the
+            // hierarchy stage hard-links its payloads), removed whatever the outcome.
+            let parent = output
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            let work = tempfile::Builder::new()
+                .prefix(".tiles-leaves-")
+                .tempdir_in(parent)?;
+            let leaves = work.path().join("leaves");
+            let mut request = LeafOutputRequest::new(input, &leaves, profile).with_jobs(jobs);
+            if let Some(path) = scratch_dir {
+                request = request.with_scratch_dir(path);
+            }
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let started = std::time::Instant::now();
+            let leaf =
+                rusty_tiles::mesh_to_leaf_payloads(request, &RunControl::new(observer.clone()))?;
+            let leaf_seconds = started.elapsed().as_secs_f64();
+            let request =
+                rusty_tiles::MeshTilesetRequest::new(&leaves, output).with_placement(placement);
+            let result = rusty_tiles::mesh_leaves_to_3tz(request, &RunControl::new(observer))?;
+            let tileset_seconds = started.elapsed().as_secs_f64() - leaf_seconds;
+            work.close()?;
+            Outcome::Report(
+                json!({"ok":true,"output":result.output,"leaves":leaf.report,"summary":result.report,
+                "seconds":{"leaves":leaf_seconds,"tileset":tileset_seconds},
                 "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics)}),
             )
         }
