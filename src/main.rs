@@ -312,11 +312,11 @@ struct PointCloudArgs {
         allow_hyphen_values = true
     )]
     height_offset: Option<f64>,
-    /// Maximum points per tile
+    /// Maximum points per tile, at most 8192
     #[arg(
         long = "maxPoints",
         visible_alias = "max-points",
-        default_value_t = 50000
+        default_value_t = rusty_tiles::point_cloud::MAX_POINTS_PER_TILE
     )]
     max_points: usize,
     /// Points read per source chunk

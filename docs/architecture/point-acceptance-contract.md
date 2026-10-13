@@ -51,7 +51,8 @@ unsupported, rather than coerced into a different sentinel or interval. RGB enco
 metadata alongside the normalized display attribute.
 
 The core options default to implicit output, no additional vertex property
-attributes, 50,000 points per leaf and 100,000 records per ingestion batch. These
+attributes, 8,192 points per tile (also the maximum; see the
+CesiumJS property-table texture width in [FORMATS](../FORMATS.md#what-the-output-keeps)) and 100,000 records per ingestion batch. These
 are workload choices, not whole-job memory limits. Explicit coordinate intent is
 mandatory in Rust, CLI and Python. Python retains one `point_cloud_to_3tz` adapter
 spelling and requires the `source_crs` keyword; the two old Rust overloads and

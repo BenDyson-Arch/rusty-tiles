@@ -2398,7 +2398,7 @@
         "--sourceCrs",
         "local",
         "--maxPoints",
-        "20000"
+        "8192"
       ],
       "audit": "points",
       "expect": "success",
@@ -2661,7 +2661,7 @@
         "--sourceCrs",
         "local",
         "--maxPoints",
-        "50000"
+        "8192"
       ],
       "audit": "points",
       "expect": "success",
@@ -2680,7 +2680,7 @@
         "--heightOffset",
         "0",
         "--maxPoints",
-        "50000"
+        "8192"
       ],
       "audit": "points",
       "expect": "success",

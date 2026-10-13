@@ -114,9 +114,6 @@ impl<O: ProducerIo> Tree<'_, O> {
         }
         let center: [f64; 3] = std::array::from_fn(|i| lo[i] + extent[i] / 2.);
         let leaf = count <= self.options.max_points as u64;
-        if leaf && count > 16_777_217 {
-            return Err(Error::Data("too many exact feature IDs in one tile".into()));
-        }
         let (rows, error) = if leaf {
             (std::fs::read(path)?, 0.)
         } else {
@@ -154,7 +151,8 @@ impl<O: ProducerIo> Tree<'_, O> {
         const DEPTH_LIMIT: usize = 31;
         if depth >= DEPTH_LIMIT {
             return Err(Error::Data(format!(
-                "point partition exceeds {DEPTH_LIMIT} levels; inspect source extent or raise maxPoints"
+                "point partition exceeds {DEPTH_LIMIT} levels; inspect source extent or raise maxPoints (at most {})",
+                super::MAX_POINTS_PER_TILE
             )));
         }
         let branches = 8;
@@ -271,8 +269,11 @@ fn emit(
     operations: &mut impl ProducerIo,
 ) -> Result<(f64, [f64; 3]), Error> {
     let count = rows.len() / layout.record_len;
-    if count > 16_777_217 {
-        return Err(Error::Data("too many exact feature IDs in one tile".into()));
+    // Admission caps tiles at MAX_POINTS_PER_TILE, so 16-bit feature IDs are exact.
+    if count > super::MAX_POINTS_PER_TILE {
+        return Err(Error::Data(
+            "point tile exceeds its property-table budget".into(),
+        ));
     }
     let mut glb = MetadataGlb::new("rusty-tiles native point cloud");
     let mut positions = Vec::with_capacity(count * 12);
@@ -299,12 +300,8 @@ fn emit(
             hi[i] = hi[i].max(encoded[i]);
             positions.extend_from_slice(&encoded[i].to_le_bytes());
         }
-        if count <= 65_536 {
-            ids.extend_from_slice(&(index as u16).to_le_bytes());
-            ids.extend_from_slice(&[0, 0]);
-        } else {
-            ids.extend_from_slice(&(index as f32).to_le_bytes());
-        }
+        ids.extend_from_slice(&(index as u16).to_le_bytes());
+        ids.extend_from_slice(&[0, 0]);
         if let Some(at) = layout.rgb {
             colors.extend_from_slice(&row[RAW + at..RAW + at + 6]);
             colors.extend_from_slice(&65535_u16.to_le_bytes());
@@ -314,10 +311,9 @@ fn emit(
     let position_accessor = glb.accessor(json!({"bufferView":view,"componentType":5126,"count":count,"type":"VEC3","min":lo,"max":hi}));
     drop(positions);
     let view = glb.view(&ids);
-    if count <= 65_536 {
-        glb.document["bufferViews"][view]["byteStride"] = 4.into();
-    }
-    let feature_accessor = glb.accessor(json!({"bufferView":view,"componentType":if count <= 65_536 {5123} else {5126},"count":count,"type":"SCALAR"}));
+    glb.document["bufferViews"][view]["byteStride"] = 4.into();
+    let feature_accessor =
+        glb.accessor(json!({"bufferView":view,"componentType":5123,"count":count,"type":"SCALAR"}));
     drop(ids);
     let mut attributes = json!({"POSITION":position_accessor,"_FEATURE_ID_0":feature_accessor});
     if layout.rgb.is_some() {
