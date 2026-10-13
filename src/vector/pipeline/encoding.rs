@@ -1,5 +1,8 @@
 //! Draft vector GLBs, typed metadata, quantization and direct Rust meshopt.
 use super::*;
+use crate::tileset_node::{
+    GeometricError, NodePlacement, Refine, SourceIdentity, TileBox, TileRecord,
+};
 use crate::{
     content_integrity::FormatError,
     glb,
@@ -378,7 +381,7 @@ struct Encoded {
     before_bytes: usize,
 }
 pub(super) struct Candidate {
-    pub node: Option<Value>,
+    pub node: Option<records::VectorRecord>,
     pub reports: Vec<Value>,
     pub reason: Option<&'static str>,
     pub worker: usize,
@@ -985,7 +988,16 @@ pub(super) fn encode(
     let rounding = encoded.rounding;
     let quantization = encoded.quantization;
     let bytes = encoded.bytes;
-    let uri = format!("t/{}.glb", hash(&bytes));
+    let sources = if aggregation.is_some() {
+        SourceIdentity::Aggregate
+    } else {
+        SourceIdentity::Features {
+            count: u32::try_from(items.len())
+                .map_err(|_| data("a vector content holds more than 2^32 features"))?,
+            digest: records::identity_digest(&items)?,
+        }
+    };
+    let (content, uri) = records::content(&bytes, sources)?;
     let byte_count = bytes.len();
     let mut publication = tempfile::NamedTempFile::new_in(output.join("t"))?;
     publication.write_all(&bytes)?;
@@ -995,7 +1007,6 @@ pub(super) fn encode(
         Err(error) => return Err(error.error.into()),
     }
     drop(bytes);
-    let content = json!({"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}});
     // Implicit scene-root placement adds JSON to the content. Reserve its
     // maximum framing increase before accepting a content candidate.
     let byte_limit = options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE);
@@ -1007,25 +1018,54 @@ pub(super) fn encode(
         });
         return Ok(result);
     }
-    let mut node = json!({"extras":{"featureFragments":items.len(),"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
-        "geometryErrorMetres":error,"positionRoundingMetres":rounding,"quantizationErrorMetres":quantization,"uncompressedBytes":before_bytes,"toleranceMetres":tolerance},
-        "geometricError":if level>0 || options.quantize {error+rounding+quantization}else{0.}});
-    if let Some(summary) = aggregation {
-        node["extras"]["pointAggregation"] = summary.clone();
-        let mut report = summary;
+    let own_error = if level > 0 || options.quantize {
+        error + rounding + quantization
+    } else {
+        0.
+    };
+    let extras = records::VectorTileExtras::Content(records::Statistics {
+        feature_fragments: items.len(),
+        vertices: vertex_count,
+        primitives,
+        encoded_bytes: byte_count,
+        geometry_error_metres: error,
+        position_rounding_metres: rounding,
+        quantization_error_metres: quantization,
+        uncompressed_bytes: before_bytes,
+        tolerance_metres: tolerance,
+        point_aggregation: aggregation.clone(),
+        build_path: None,
+    });
+    if let Some(mut report) = aggregation {
         report["substitution"] = json!("pointAggregates");
         report["buildPrefix"] = json!(prefix);
         report["toleranceMetres"] = json!(tolerance);
         result.reports.push(report);
     }
-    node["content"] = content;
-    result.node = Some(node);
+    // Attach places, bounds and refines the record within its hierarchy.
+    result.node = Some(TileRecord::new(
+        NodePlacement::INHERIT,
+        TileBox::centred([0.; 3])?,
+        GeometricError::new(own_error)?,
+        Refine::Replace,
+        vec![content],
+        Some(extras),
+    )?);
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A candidate's tile object as the producer writes it.
+    fn tile_json(record: records::VectorRecord) -> Value {
+        Value::Object(
+            record
+                .explicit_object(record.bounds(), crate::tileset_node::ObjectRole::Tile)
+                .unwrap(),
+        )
+    }
 
     fn point_feature() -> Feature {
         Feature {
@@ -1606,7 +1646,7 @@ mod tests {
                 let (result, files) =
                     final_point(&base, ProducerPolicy::new(meshopt).unwrap(), &attempt);
                 let candidate = result.unwrap();
-                let node = candidate.node.unwrap();
+                let node = tile_json(candidate.node.unwrap());
                 assert_eq!(files.len(), 1);
                 let actual = files[0].len();
                 let (document, _) = read_views(&files[0]);
@@ -2003,7 +2043,7 @@ mod tests {
                 policy: ProducerPolicy::new(meshopt).unwrap(),
                 attempt: &attempt,
             };
-            let node = encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap();
+            let node = tile_json(encode(encoder, "", [0.; 3], 0).unwrap().node.unwrap());
             assert!(node.get("contents").is_none());
             let content = &node["content"];
             assert_eq!(
@@ -2662,7 +2702,7 @@ mod tests {
                 attempt: &attempt,
             };
             let candidate = encode(encoder, "", [0.; 3], 1).unwrap();
-            let node = candidate.node.expect("the parent keeps the source polygon");
+            let node = tile_json(candidate.node.expect("the parent keeps the source polygon"));
             assert_eq!(
                 node["extras"]["geometryErrorMetres"],
                 json!(0.),

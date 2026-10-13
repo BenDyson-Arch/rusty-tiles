@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 mod tileset;
 pub use tileset::expand_tileset;
+pub(crate) use tileset::write_forest_records;
 pub use tileset::{
     rebase_payload, restore_payload, write_forest, ForestOutput, RebaseRecord, TileRole,
     WrittenContent, WrittenTile,

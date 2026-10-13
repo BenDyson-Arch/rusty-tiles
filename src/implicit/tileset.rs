@@ -14,9 +14,13 @@
 //! [`restore_payload`] inverts byte for byte.
 
 use super::{invalid, Coordinates, SubdivisionScheme, Subtree, TileMetadata};
-use crate::tileset_node::{sum_error, sum_up};
+use crate::tileset_node::{
+    self, sum_error, sum_up, ContentRef, ContentTemplate, GeometricError, ImplicitTiling,
+    MemberName, ObjectRole, TileBox, TileRecord, TileTree, TilesetDocument, TilesetExtension,
+    UriTemplate,
+};
 use crate::Error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, value::RawValue, Map, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -117,7 +121,10 @@ fn data(message: impl std::fmt::Display) -> Error {
 /// One tile of H, as collected.
 struct Node {
     /// The producer's tile object without `children`; `extras` without `implicitChildIndex`.
+    /// Empty for typed records, whose objects [`Records`] emits.
     tile: Map<String, Value>,
+    /// The written `extras` object (empty when absent).
+    extras: Value,
     children: Vec<usize>,
     parent: Option<usize>,
     slot: usize,
@@ -136,6 +143,11 @@ struct Content {
     uri: String,
     suffix: String,
     header: Map<String, Value>,
+    /// Declares `3DTILES_content_gltf_vector` (typed records; the header carries it).
+    vector: bool,
+    /// The typed record's declaration, checked against the staged payload when the forest
+    /// reads it (length and sha256). `None` for the JSON entry.
+    declared: Option<ContentRef>,
 }
 
 fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
@@ -225,6 +237,8 @@ fn parse_tile(value: &Value, id: usize, root: bool) -> Result<Node, Error> {
             uri,
             suffix,
             header,
+            vector: false,
+            declared: None,
         });
     }
     let mut tile: Map<String, Value> = object
@@ -238,8 +252,10 @@ fn parse_tile(value: &Value, id: usize, root: bool) -> Result<Node, Error> {
             tile.remove("extras");
         }
     }
+    let extras = tile.get("extras").cloned().unwrap_or_else(|| json!({}));
     Ok(Node {
         tile,
+        extras,
         children: Vec::new(),
         parent: None,
         slot: 0,
@@ -254,6 +270,36 @@ fn parse_tile(value: &Value, id: usize, root: bool) -> Result<Node, Error> {
     })
 }
 
+/// Link the next preorder tile `node` (id `nodes.len()`) to its parent at `slot`, inheriting
+/// the parent's refine when the tile has none.
+fn adopt(
+    nodes: &mut [Node],
+    node: &mut Node,
+    parent: Option<usize>,
+    slot: usize,
+    scheme: SubdivisionScheme,
+) -> Result<(), Error> {
+    let id = nodes.len();
+    if let Some(parent) = parent {
+        if slot >= scheme.branches() {
+            return Err(data(format!(
+                "tile {id}: child slot {slot} is outside the {} scheme",
+                scheme.as_str()
+            )));
+        }
+        node.parent = Some(parent);
+        node.slot = slot;
+        node.level = nodes[parent].level + 1;
+        if node.refine.is_empty() {
+            node.refine = nodes[parent].refine;
+        }
+        nodes[parent].children.push(id);
+    } else if node.refine.is_empty() {
+        node.refine = "REPLACE";
+    }
+    Ok(())
+}
+
 /// Collect H in preorder (children in array order) without recursion.
 fn collect(
     root: &Value,
@@ -266,30 +312,14 @@ fn collect(
         checkpoint()?;
         let id = nodes.len();
         let mut node = parse_tile(value, id, parent.is_none())?;
-        if let Some(parent) = parent {
-            let slot = match value["extras"].get("implicitChildIndex") {
-                None => index,
-                Some(slot) => slot
-                    .as_u64()
-                    .and_then(|s| usize::try_from(s).ok())
-                    .ok_or_else(|| data(format!("tile {id} has an invalid implicitChildIndex")))?,
-            };
-            if slot >= scheme.branches() {
-                return Err(data(format!(
-                    "tile {id}: child slot {slot} is outside the {} scheme",
-                    scheme.as_str()
-                )));
-            }
-            node.parent = Some(parent);
-            node.slot = slot;
-            node.level = nodes[parent].level + 1;
-            if node.refine.is_empty() {
-                node.refine = nodes[parent].refine;
-            }
-            nodes[parent].children.push(id);
-        } else if node.refine.is_empty() {
-            node.refine = "REPLACE";
-        }
+        let slot = match (parent, value["extras"].get("implicitChildIndex")) {
+            (Some(_), Some(slot)) => slot
+                .as_u64()
+                .and_then(|s| usize::try_from(s).ok())
+                .ok_or_else(|| data(format!("tile {id} has an invalid implicitChildIndex")))?,
+            _ => index,
+        };
+        adopt(&mut nodes, &mut node, parent, slot, scheme)?;
         match value.get("children") {
             None => {}
             Some(Value::Array(children)) => {
@@ -301,6 +331,68 @@ fn collect(
         }
         nodes.push(node);
     }
+    measure(&mut nodes)?;
+    Ok(nodes)
+}
+
+/// Collect typed H in preorder. A child's slot is its index among its parent's children.
+fn collect_records<'a, X: Serialize>(
+    tree: &'a TileTree<X>,
+    scheme: SubdivisionScheme,
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
+) -> Result<(Vec<Node>, Vec<&'a TileRecord<X>>), Error> {
+    let order = tree.preorder();
+    let mut nodes: Vec<Node> = Vec::with_capacity(order.len());
+    let mut records = Vec::with_capacity(order.len());
+    for (record, parent, index) in order {
+        checkpoint()?;
+        let id = nodes.len();
+        let translation = match parent {
+            None => [0.; 3],
+            Some(_) => record.placement().child_translation().ok_or_else(|| {
+                data(format!(
+                    "tile {id}: a child transform must be a translation"
+                ))
+            })?,
+        };
+        let contents = record
+            .contents()
+            .iter()
+            .map(|content| Content {
+                uri: content.uri().as_str().to_owned(),
+                suffix: content.kind().suffix().to_owned(),
+                header: content.header(),
+                vector: content.vector(),
+                declared: Some(content.clone()),
+            })
+            .collect();
+        let mut node = Node {
+            tile: Map::new(),
+            extras: record
+                .extras_object()?
+                .map_or_else(|| json!({}), Value::Object),
+            children: Vec::new(),
+            parent: None,
+            slot: 0,
+            translation,
+            bounding_box: record.bounds().lanes(),
+            error: record.geometric_error().metres(),
+            level: 0,
+            height: 0,
+            end: id + 1,
+            refine: record.refine().as_str(),
+            contents,
+        };
+        adopt(&mut nodes, &mut node, parent, index, scheme)?;
+        nodes.push(node);
+        records.push(record);
+    }
+    measure(&mut nodes)?;
+    Ok((nodes, records))
+}
+
+/// Check the level count and child slots, and set every tile's height and subtree end.
+fn measure(nodes: &mut [Node]) -> Result<(), Error> {
     let levels = nodes.iter().map(|n| n.level).max().unwrap_or(0) + 1;
     if levels > MAX_LEVELS {
         return Err(Error::Data(format!(
@@ -326,7 +418,7 @@ fn collect(
             nodes[id].end = end;
         }
     }
-    Ok(nodes)
+    Ok(())
 }
 
 fn roles(nodes: &[Node]) -> Vec<TileRole> {
@@ -367,8 +459,10 @@ fn check_implicit_tile(id: usize, node: &Node, root: &Node, at_root: bool) -> Re
             "tile {id}: {key:?} cannot be expressed at or below an implicit root"
         )));
     }
-    if node.tile["boundingVolume"]
-        .as_object()
+    if node
+        .tile
+        .get("boundingVolume")
+        .and_then(Value::as_object)
         .is_some_and(|v| v.len() != 1)
     {
         return Err(data(format!(
@@ -429,7 +523,7 @@ fn coordinate_template(scheme: SubdivisionScheme) -> &'static str {
 }
 
 fn schema() -> Value {
-    serde_json::to_value(crate::metadata::tile_schema()).expect("tile schema serializes")
+    tileset_node::tile_schema()
 }
 
 fn set_contents(tile: &mut Map<String, Value>, mut contents: Vec<Value>) {
@@ -506,6 +600,225 @@ fn link_tile(node: &Node, name: &str) -> Map<String, Value> {
     }
     link.insert("content".into(), json!({ "uri": name }));
     link
+}
+
+/// An implicit root's content template for one slot, as the layout names it.
+struct Template {
+    uri: String,
+    header: Map<String, Value>,
+    vector: bool,
+}
+
+/// An implicit root's single-subtree tiling, as the layout names it.
+struct Tiling {
+    scheme: SubdivisionScheme,
+    levels: u32,
+    subtrees: String,
+}
+
+/// How the forest emits the JSON objects it lays out. [`Loose`] copies a producer's JSON
+/// hierarchy (the migration shim for callers not yet on typed records); [`Records`] emits
+/// every tile object and document through `tileset_node` and reads no JSON back.
+trait Emit {
+    /// A skeleton tile or explicit leaf without `children`, at the tile's (widened) bounds.
+    fn explicit(&self, id: usize, node: &Node) -> Result<Map<String, Value>, Error>;
+    /// An assembled skeleton tile as the root of an external document: no `transform`
+    /// (its link carries it) and an explicit `refine`.
+    fn document_root(
+        &self,
+        id: usize,
+        node: &Node,
+        root: Map<String, Value>,
+    ) -> Result<Map<String, Value>, Error>;
+    /// The explicit link tile to the document `name` that this skeleton tile roots.
+    fn link(&self, id: usize, node: &Node, name: &str) -> Result<Map<String, Value>, Error>;
+    /// The implicit root tile object at bounds `widened`.
+    fn implicit_root(
+        &self,
+        id: usize,
+        node: &Node,
+        widened: &[f64; 12],
+        templates: &[Template],
+        tiling: &Tiling,
+    ) -> Result<Map<String, Value>, Error>;
+    /// `tileset.json` without `root`, with `schema`.
+    fn root_head(&self) -> Result<Map<String, Value>, Error>;
+    /// An external document without `root`.
+    fn external_head(&self, error: f64, schema: bool) -> Result<Map<String, Value>, Error>;
+}
+
+/// The producer's JSON hierarchy and its other `tileset.json` members.
+struct Loose<'a> {
+    manifest: &'a Value,
+}
+
+impl Emit for Loose<'_> {
+    fn explicit(&self, _: usize, node: &Node) -> Result<Map<String, Value>, Error> {
+        Ok(node.tile.clone())
+    }
+
+    fn document_root(
+        &self,
+        _: usize,
+        node: &Node,
+        mut root: Map<String, Value>,
+    ) -> Result<Map<String, Value>, Error> {
+        root.remove("transform");
+        root.insert("refine".into(), json!(node.refine));
+        Ok(root)
+    }
+
+    fn link(&self, _: usize, node: &Node, name: &str) -> Result<Map<String, Value>, Error> {
+        Ok(link_tile(node, name))
+    }
+
+    fn implicit_root(
+        &self,
+        _: usize,
+        node: &Node,
+        widened: &[f64; 12],
+        templates: &[Template],
+        tiling: &Tiling,
+    ) -> Result<Map<String, Value>, Error> {
+        let mut object = Map::new();
+        object.insert("boundingVolume".into(), node.tile["boundingVolume"].clone());
+        if *widened != node.bounding_box {
+            set_halves(&mut object["boundingVolume"], &node.bounding_box, widened);
+        }
+        object.insert("geometricError".into(), node.tile["geometricError"].clone());
+        object.insert("refine".into(), json!(node.refine));
+        if let Some(transform) = node.tile.get("transform") {
+            object.insert("transform".into(), transform.clone());
+        }
+        set_contents(
+            &mut object,
+            templates
+                .iter()
+                .map(|template| {
+                    let mut header = template.header.clone();
+                    header.insert("uri".into(), json!(template.uri));
+                    Value::Object(header)
+                })
+                .collect(),
+        );
+        object.insert(
+            "implicitTiling".into(),
+            json!({
+                "subdivisionScheme": tiling.scheme.as_str(),
+                "subtreeLevels": tiling.levels,
+                "availableLevels": tiling.levels,
+                "subtrees": {"uri": tiling.subtrees},
+            }),
+        );
+        Ok(object)
+    }
+
+    fn root_head(&self) -> Result<Map<String, Value>, Error> {
+        let mut top: Map<String, Value> = self
+            .manifest
+            .as_object()
+            .ok_or_else(|| data("tileset must be an object"))?
+            .iter()
+            .filter(|(key, _)| key.as_str() != "root")
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        top.insert("schema".into(), schema());
+        Ok(top)
+    }
+
+    fn external_head(&self, error: f64, with_schema: bool) -> Result<Map<String, Value>, Error> {
+        let mut head = Map::new();
+        head.insert("asset".into(), self.manifest["asset"].clone());
+        head.insert("geometricError".into(), json!(error));
+        for key in ["extensionsUsed", "extensionsRequired"] {
+            if let Some(value) = self.manifest.get(key) {
+                head.insert(key.into(), value.clone());
+            }
+        }
+        if with_schema {
+            head.insert("schema".into(), schema());
+        }
+        Ok(head)
+    }
+}
+
+/// Typed H in preorder and its `tileset.json` members.
+struct Records<'a, X> {
+    records: Vec<&'a TileRecord<X>>,
+    document: &'a TilesetDocument,
+}
+
+impl<X: Serialize> Records<'_, X> {
+    fn bounds(&self, id: usize, lanes: &[f64; 12]) -> Result<TileBox, Error> {
+        self.records[id].bounds().with_half_lanes(lanes)
+    }
+}
+
+impl<X: Serialize> Emit for Records<'_, X> {
+    fn explicit(&self, id: usize, node: &Node) -> Result<Map<String, Value>, Error> {
+        self.records[id].explicit_object(&self.bounds(id, &node.bounding_box)?, ObjectRole::Tile)
+    }
+
+    fn document_root(
+        &self,
+        id: usize,
+        node: &Node,
+        mut root: Map<String, Value>,
+    ) -> Result<Map<String, Value>, Error> {
+        let mut object = self.records[id].explicit_object(
+            &self.bounds(id, &node.bounding_box)?,
+            ObjectRole::DocumentRoot,
+        )?;
+        if let Some(children) = root.remove("children") {
+            object.insert("children".into(), children);
+        }
+        Ok(object)
+    }
+
+    fn link(&self, id: usize, node: &Node, name: &str) -> Result<Map<String, Value>, Error> {
+        Ok(self.records[id].link_object(
+            &self.bounds(id, &node.bounding_box)?,
+            &MemberName::new(name)?,
+        ))
+    }
+
+    fn implicit_root(
+        &self,
+        id: usize,
+        _: &Node,
+        widened: &[f64; 12],
+        templates: &[Template],
+        tiling: &Tiling,
+    ) -> Result<Map<String, Value>, Error> {
+        let templates = templates
+            .iter()
+            .map(|t| {
+                Ok(ContentTemplate::new(
+                    UriTemplate::new(t.uri.as_str(), tiling.scheme)?,
+                    t.vector,
+                ))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let tiling = ImplicitTiling::single_subtree(
+            tiling.scheme,
+            tiling.levels,
+            UriTemplate::new(tiling.subtrees.as_str(), tiling.scheme)?,
+        )?;
+        self.records[id].implicit_root_object(&self.bounds(id, widened)?, &templates, &tiling)
+    }
+
+    fn root_head(&self) -> Result<Map<String, Value>, Error> {
+        Ok(self.document.clone().with_schema(true).head())
+    }
+
+    fn external_head(&self, error: f64, schema: bool) -> Result<Map<String, Value>, Error> {
+        let extensions = self.document.extensions_used().iter().copied();
+        Ok(
+            TilesetDocument::external(GeometricError::new(error)?, extensions)
+                .with_schema(schema)
+                .head(),
+        )
+    }
 }
 
 struct Unit {
@@ -610,32 +923,40 @@ fn pack(
     Ok((documents, linked))
 }
 
-fn assemble(
-    id: usize,
-    nodes: &[Node],
-    roles: &[TileRole],
-    pieces: &Pieces,
-    linked: &BTreeMap<usize, usize>,
-    documents: &[Document],
-) -> Map<String, Value> {
+struct Layout<'a> {
+    nodes: &'a [Node],
+    roles: &'a [TileRole],
+    pieces: &'a Pieces,
+    linked: &'a BTreeMap<usize, usize>,
+    documents: &'a [Document],
+}
+
+fn assemble(id: usize, layout: &Layout, emit: &impl Emit) -> Result<Map<String, Value>, Error> {
+    let Layout {
+        nodes,
+        roles,
+        pieces,
+        linked,
+        documents,
+    } = layout;
     let mut tile = pieces.objects[id].clone().expect("explicit tile object");
     if roles[id] == TileRole::Skeleton {
         let children = nodes[id]
             .children
             .iter()
-            .map(|&child| match (roles[child], linked.get(&child)) {
-                (TileRole::Skeleton, Some(&document)) => {
-                    Value::Object(link_tile(&nodes[child], &documents[document].name))
-                }
-                (TileRole::Skeleton, None) => {
-                    Value::Object(assemble(child, nodes, roles, pieces, linked, documents))
-                }
-                _ => Value::Object(pieces.objects[child].clone().expect("unit child object")),
+            .map(|&child| {
+                Ok(Value::Object(match (roles[child], linked.get(&child)) {
+                    (TileRole::Skeleton, Some(&document)) => {
+                        emit.link(child, &nodes[child], &documents[document].name)?
+                    }
+                    (TileRole::Skeleton, None) => assemble(child, layout, emit)?,
+                    _ => pieces.objects[child].clone().expect("unit child object"),
+                }))
             })
-            .collect();
+            .collect::<Result<_, Error>>()?;
         tile.insert("children".into(), Value::Array(children));
     }
-    tile
+    Ok(tile)
 }
 
 /// Grow an axis-aligned box's half lengths outward by `by` (z-up), keeping each lane's sign.
@@ -708,7 +1029,62 @@ pub fn write_forest(
     checkpoint: &mut impl FnMut() -> Result<(), Error>,
 ) -> Result<ForestOutput, Error> {
     checkpoint()?;
-    let mut nodes = collect(&manifest["root"], scheme, checkpoint)?;
+    let nodes = collect(&manifest["root"], scheme, checkpoint)?;
+    let (top, output) = forest(nodes, &Loose { manifest }, directory, scheme, checkpoint)?;
+    *manifest = Value::Object(top);
+    Ok(output)
+}
+
+/// Write the bounded implicit forest for a producer's typed hierarchy `tree`, whose
+/// `tileset.json` members other than `root` are `document`.
+///
+/// The layout, payloads, subtrees and documents are those [`write_forest`] writes for the
+/// same hierarchy serialized by `tileset_node`; every JSON object is emitted from the
+/// records. Returns `tileset.json` (with `schema`), which the producer serializes.
+pub(crate) fn write_forest_records<X: Serialize>(
+    tree: &TileTree<X>,
+    document: &TilesetDocument,
+    directory: &Path,
+    scheme: SubdivisionScheme,
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
+) -> Result<(Value, ForestOutput), Error> {
+    checkpoint()?;
+    if !document.is_root() {
+        return Err(data("a forest is written from tileset.json's members"));
+    }
+    // External documents copy no asset extras: the digest covers the written forest, so it
+    // is stamped afterwards, as the JSON entry's producers do.
+    if document.build_state().is_some() {
+        return Err(data(
+            "the build state is recorded after the forest is written",
+        ));
+    }
+    let (nodes, records) = collect_records(tree, scheme, checkpoint)?;
+    let vector = TilesetExtension::ContentGltfVector;
+    if !document.extensions_used().contains(&vector)
+        && records
+            .iter()
+            .any(|record| record.contents().iter().any(|c| c.vector()))
+    {
+        return Err(data(format!(
+            "vector content needs {} in extensionsUsed",
+            vector.as_str()
+        )));
+    }
+    let emit = Records { records, document };
+    let (top, output) = forest(nodes, &emit, directory, scheme, checkpoint)?;
+    Ok((Value::Object(top), output))
+}
+
+/// The forest core: lay out H, write payloads, subtrees and external documents, and return
+/// `tileset.json` with the per-tile record.
+fn forest(
+    mut nodes: Vec<Node>,
+    emit: &impl Emit,
+    directory: &Path,
+    scheme: SubdivisionScheme,
+    checkpoint: &mut impl FnMut() -> Result<(), Error>,
+) -> Result<(Map<String, Value>, ForestOutput), Error> {
     let roles = roles(&nodes);
     for (id, node) in nodes.iter().enumerate() {
         if roles[id] == TileRole::ImplicitRoot {
@@ -732,7 +1108,10 @@ pub fn write_forest(
             TileRole::Skeleton | TileRole::ExplicitLeaf => {
                 let mut contents = Vec::with_capacity(node.contents.len());
                 for content in &node.contents {
-                    let bytes = std::fs::metadata(directory.join(&content.uri))?.len();
+                    let bytes = match &content.declared {
+                        Some(declared) => declared.verify_staged(directory)?,
+                        None => std::fs::metadata(directory.join(&content.uri))?.len(),
+                    };
                     if explicit_sources.insert(content.uri.clone()) {
                         members.push(content.uri.clone());
                     }
@@ -744,14 +1123,9 @@ pub fn write_forest(
                 }
                 tiles[id] = Some(WrittenTile {
                     role: roles[id],
-                    extras: node
-                        .tile
-                        .get("extras")
-                        .cloned()
-                        .unwrap_or_else(|| json!({})),
+                    extras: node.extras.clone(),
                     contents,
                 });
-                objects[id] = Some(node.tile.clone());
             }
             TileRole::ImplicitRoot => {
                 checkpoint()?;
@@ -766,6 +1140,7 @@ pub fn write_forest(
                 };
                 let (object, subtree, reach) = root.write(
                     &nodes,
+                    emit,
                     &mut tiles,
                     &mut members,
                     &mut implicit_sources,
@@ -785,17 +1160,23 @@ pub fn write_forest(
         }
     }
     // Explicit ancestors of an implicit root contain its content at its exact place; widen
-    // them by the drift so they also contain it where it is published.
+    // them by the drift so they also contain it where it is published. Only skeleton tiles
+    // have drift: an implicit root has no implicit root below it.
     for (id, by) in drift.into_iter().enumerate() {
         let before = nodes[id].bounding_box;
         let mut after = before;
         if widen(&mut after, by) {
+            debug_assert_eq!(roles[id], TileRole::Skeleton);
             let node = &mut nodes[id];
             node.bounding_box = after;
-            set_halves(&mut node.tile["boundingVolume"], &before, &after);
-            if let Some(object) = objects[id].as_mut() {
-                set_halves(&mut object["boundingVolume"], &before, &after);
+            if let Some(volume) = node.tile.get_mut("boundingVolume") {
+                set_halves(volume, &before, &after);
             }
+        }
+    }
+    for (id, node) in nodes.iter().enumerate() {
+        if matches!(roles[id], TileRole::Skeleton | TileRole::ExplicitLeaf) {
+            objects[id] = Some(emit.explicit(id, node)?);
         }
     }
     written.extend(members.iter().cloned());
@@ -806,7 +1187,11 @@ pub fn write_forest(
             costs[id] = cost(&Value::Object(object.clone()))?;
         }
         if roles[id] == TileRole::Skeleton {
-            links[id] = cost(&Value::Object(link_tile(&nodes[id], LINK_RESERVATION)))?;
+            links[id] = cost(&Value::Object(emit.link(
+                id,
+                &nodes[id],
+                LINK_RESERVATION,
+            )?))?;
         }
     }
     let pieces = Pieces {
@@ -814,14 +1199,7 @@ pub fn write_forest(
         costs,
         links,
     };
-    let mut top: Map<String, Value> = manifest
-        .as_object()
-        .ok_or_else(|| data("tileset must be an object"))?
-        .iter()
-        .filter(|(key, _)| key.as_str() != "root")
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect();
-    top.insert("schema".into(), schema());
+    let mut top = emit.root_head()?;
     top.insert("root".into(), Value::Null);
     let mut documents = 1;
     if roles[0] == TileRole::ImplicitRoot {
@@ -832,17 +1210,9 @@ pub fn write_forest(
         check_document("tileset.json", &Value::Object(top.clone()))?;
     } else {
         let top_cost = cost(&Value::Object(top.clone()))?;
-        let mut document_top = Map::new();
-        document_top.insert("asset".into(), manifest["asset"].clone());
-        document_top.insert("geometricError".into(), json!(f64::MAX));
-        for key in ["extensionsUsed", "extensionsRequired"] {
-            if let Some(value) = manifest.get(key) {
-                document_top.insert(key.into(), value.clone());
-            }
-        }
-        document_top.insert("schema".into(), schema());
+        let mut document_top = emit.external_head(f64::MAX, true)?;
         document_top.insert("root".into(), Value::Null);
-        let reserve = cost(&Value::Object(document_top.clone()))?;
+        let reserve = cost(&Value::Object(document_top))?;
         let reserve = Cost {
             nodes: reserve.nodes.max(top_cost.nodes),
             bytes: reserve.bytes.max(top_cost.bytes),
@@ -850,27 +1220,24 @@ pub fn write_forest(
         };
         let (packed, linked) = pack(&nodes, &roles, &pieces, reserve, checkpoint)?;
         documents = packed.len();
+        let layout = Layout {
+            nodes: &nodes,
+            roles: &roles,
+            pieces: &pieces,
+            linked: &linked,
+            documents: &packed,
+        };
         for (index, document) in packed.iter().enumerate() {
             checkpoint()?;
-            let mut root = assemble(document.root, &nodes, &roles, &pieces, &linked, &packed);
+            let root = assemble(document.root, &layout, emit)?;
             if index == 0 {
                 top.insert("root".into(), Value::Object(root));
                 check_document("tileset.json", &Value::Object(top.clone()))?;
                 continue;
             }
-            root.remove("transform");
-            root.insert("refine".into(), json!(nodes[document.root].refine));
-            let mut body = Map::new();
-            body.insert("asset".into(), manifest["asset"].clone());
-            body.insert("geometricError".into(), json!(nodes[document.root].error));
-            for key in ["extensionsUsed", "extensionsRequired"] {
-                if let Some(value) = manifest.get(key) {
-                    body.insert(key.into(), value.clone());
-                }
-            }
-            if document.holds_root {
-                body.insert("schema".into(), schema());
-            }
+            let node = &nodes[document.root];
+            let root = emit.document_root(document.root, node, root)?;
+            let mut body = emit.external_head(node.error, document.holds_root)?;
             body.insert("root".into(), Value::Object(root));
             let bytes = check_document(&document.name, &Value::Object(body))?;
             std::fs::write(directory.join(&document.name), bytes)?;
@@ -887,16 +1254,18 @@ pub fn write_forest(
         }
         std::fs::remove_file(directory.join(source))?;
     }
-    *manifest = Value::Object(top);
-    Ok(ForestOutput {
-        members,
-        tiles: tiles
-            .into_iter()
-            .map(|t| t.expect("every tile is written"))
-            .collect(),
-        documents,
-        implicit_roots,
-    })
+    Ok((
+        top,
+        ForestOutput {
+            members,
+            tiles: tiles
+                .into_iter()
+                .map(|t| t.expect("every tile is written"))
+                .collect(),
+            documents,
+            implicit_roots,
+        },
+    ))
 }
 
 /// An implicit root as written: its explicit tile object, its subtree member name and its
@@ -924,6 +1293,7 @@ impl ImplicitRoot<'_> {
     fn write(
         &self,
         nodes: &[Node],
+        emit: &impl Emit,
         tiles: &mut [Option<WrittenTile>],
         members: &mut Vec<String>,
         sources: &mut BTreeSet<String>,
@@ -933,14 +1303,19 @@ impl ImplicitRoot<'_> {
         let root = &nodes[id];
         let range = id..root.end;
         // R-4: the slot list drives the templates and the content layers, in the same order.
-        let mut slots: BTreeMap<(usize, String), Map<String, Value>> = BTreeMap::new();
+        let mut slots: BTreeMap<(usize, String), (Map<String, Value>, bool)> = BTreeMap::new();
         for t in range.clone() {
             for (index, content) in nodes[t].contents.iter().enumerate() {
                 match slots.get(&(index, content.suffix.clone())) {
                     None => {
-                        slots.insert((index, content.suffix.clone()), content.header.clone());
+                        slots.insert(
+                            (index, content.suffix.clone()),
+                            (content.header.clone(), content.vector),
+                        );
                     }
-                    Some(header) if *header != content.header => {
+                    Some((header, vector))
+                        if *header != content.header || *vector != content.vector =>
+                    {
                         return Err(data(format!(
                             "tile {t}: content {index} header differs from its implicit root's \
                              slot header"
@@ -992,8 +1367,15 @@ impl ImplicitRoot<'_> {
                     .iter()
                     .position(|(i, s)| *i == index && *s == content.suffix)
                     .expect("slot list covers every content");
-                let raw = std::fs::read(self.directory.join(&content.uri))?;
-                let (bytes, record) = rebase_payload(&raw, delta)?;
+                let raw = match &content.declared {
+                    Some(declared) => declared.read_staged(self.directory)?,
+                    None => std::fs::read(self.directory.join(&content.uri))?,
+                };
+                let raw_sha256: [u8; 32] = Sha256::digest(&raw).into();
+                if let Some(declared) = &content.declared {
+                    declared.check_staged(raw.len() as u64, &raw_sha256)?;
+                }
+                let (bytes, record) = rebase_hashed(&raw, raw_sha256, delta)?;
                 for (lane, error) in own.iter_mut().zip(rebase_error(&record)?) {
                     *lane = lane.max(error);
                 }
@@ -1013,11 +1395,7 @@ impl ImplicitRoot<'_> {
                     rebase: Some(record),
                 });
             }
-            let mut extras = node
-                .tile
-                .get("extras")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            let mut extras = node.extras.clone();
             if extras.get("encodedBytes").is_some() {
                 extras["encodedBytes"] = json!(total);
             }
@@ -1079,46 +1457,25 @@ impl ImplicitRoot<'_> {
         let name = format!("subtrees/r{id}-{}.subtree", key(origin, scheme));
         std::fs::write(self.directory.join(&name), subtree.to_bytes()?)?;
         members.push(name.clone());
-        let mut object = Map::new();
-        object.insert("boundingVolume".into(), root.tile["boundingVolume"].clone());
         // V_R is the level-0 row, widened alike.
         let reach = drift[&id];
         let mut bounding_box = root.bounding_box;
-        if widen(&mut bounding_box, reach) {
-            set_halves(
-                &mut object["boundingVolume"],
-                &root.bounding_box,
-                &bounding_box,
-            );
-        }
-        object.insert("geometricError".into(), root.tile["geometricError"].clone());
-        object.insert("refine".into(), json!(root.refine));
-        if let Some(transform) = root.tile.get("transform") {
-            object.insert("transform".into(), transform.clone());
-        }
-        set_contents(
-            &mut object,
-            slots
-                .into_iter()
-                .enumerate()
-                .map(|(slot, ((_, suffix), mut header))| {
-                    header.insert(
-                        "uri".into(),
-                        json!(format!("implicit-content/r{id}-{template}-{slot}.{suffix}")),
-                    );
-                    Value::Object(header)
-                })
-                .collect(),
-        );
-        object.insert(
-            "implicitTiling".into(),
-            json!({
-                "subdivisionScheme": scheme.as_str(),
-                "subtreeLevels": root.height + 1,
-                "availableLevels": root.height + 1,
-                "subtrees": {"uri": format!("subtrees/r{id}-{template}.subtree")},
-            }),
-        );
+        widen(&mut bounding_box, reach);
+        let templates: Vec<Template> = slots
+            .into_iter()
+            .enumerate()
+            .map(|(slot, ((_, suffix), (header, vector)))| Template {
+                uri: format!("implicit-content/r{id}-{template}-{slot}.{suffix}"),
+                header,
+                vector,
+            })
+            .collect();
+        let tiling = Tiling {
+            scheme,
+            levels: root.height + 1,
+            subtrees: format!("subtrees/r{id}-{template}.subtree"),
+        };
+        let object = emit.implicit_root(id, root, &bounding_box, &templates, &tiling)?;
         Ok((object, name, reach))
     }
 }
@@ -1291,8 +1648,16 @@ fn is_zero(delta: [f64; 3]) -> bool {
 /// padded with spaces to a length congruent to the raw length modulo 8, so the chunk and the
 /// payload keep their alignment. Every other byte is unchanged.
 pub fn rebase_payload(raw: &[u8], delta: [f64; 3]) -> Result<(Vec<u8>, RebaseRecord), Error> {
+    rebase_hashed(raw, Sha256::digest(raw).into(), delta)
+}
+
+/// [`rebase_payload`] for a payload whose sha256 is already known.
+fn rebase_hashed(
+    raw: &[u8],
+    raw_sha256: [u8; 32],
+    delta: [f64; 3],
+) -> Result<(Vec<u8>, RebaseRecord), Error> {
     let fail = |message: String| Error::Data(format!("payload rebase: {message}"));
-    let raw_sha256: [u8; 32] = Sha256::digest(raw).into();
     if delta.iter().any(|v| !v.is_finite()) {
         return Err(fail("translation is not finite".into()));
     }
@@ -2313,5 +2678,1026 @@ mod expansion_budget_tests {
             &mut ExpansionBudget::new(64, 4096),
             &producer_json
         )));
+    }
+}
+
+/// The typed forest entry against the JSON entry on the same hierarchy: the vector producer's
+/// JSON forms are rebuilt here as `store.rs` and `encoding.rs` write them today, and the typed
+/// records as the producer will build them. Fixtures A, B and C are design §4's tiny vector
+/// fixtures at the record level.
+#[cfg(test)]
+mod records_tests {
+    use super::*;
+    use crate::tileset_node::{
+        enclose_children, top_level_error, translation, ContentKind, ContentRef, NodePlacement,
+        Refine, SourceIdentity,
+    };
+    use crate::vec3::{add, mul, norm, sub, Vec3};
+
+    // ---- The producer's typed extras (the vector key set) ----
+
+    #[derive(Clone, Debug, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Statistics {
+        feature_fragments: usize,
+        vertices: usize,
+        primitives: usize,
+        encoded_bytes: usize,
+        geometry_error_metres: f64,
+        position_rounding_metres: f64,
+        quantization_error_metres: f64,
+        uncompressed_bytes: usize,
+        tolerance_metres: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        point_aggregation: Option<Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        build_path: Option<String>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Routing {
+        routing: bool,
+        routing_reason: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        build_path: Option<String>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct BuildPath {
+        build_path: String,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize)]
+    #[serde(untagged)]
+    enum Extras {
+        Content(Statistics),
+        Routing(Routing),
+        Empty(BuildPath),
+    }
+
+    // ---- Fixture hierarchy ----
+
+    #[derive(Clone)]
+    enum Kind {
+        /// `tag` names the payload; `level` > 0 is a coarse candidate.
+        Content {
+            tag: u64,
+            level: u32,
+            error: f64,
+            rounding: f64,
+            tolerance: f64,
+            fragments: usize,
+            aggregation: Option<Value>,
+            /// A second, non-vector content (a `contents` array).
+            second: Option<u64>,
+        },
+        Routing {
+            reason: Option<&'static str>,
+            error: f64,
+        },
+    }
+
+    /// One tile as `Build::attach` sees it: the z-up centre and half extent of its
+    /// original points, its candidate, children and the build path `remember` records.
+    #[derive(Clone)]
+    struct Spec {
+        center: Vec3,
+        half: Vec3,
+        kind: Kind,
+        path: Option<&'static str>,
+        children: Vec<Spec>,
+    }
+
+    fn content(tag: u64, level: u32, error: f64, center: Vec3, half: Vec3) -> Spec {
+        Spec {
+            center,
+            half,
+            kind: Kind::Content {
+                tag,
+                level,
+                error,
+                rounding: 2f64.powi(-17),
+                tolerance: 0.5 * 2f64.powi(level as i32),
+                fragments: 1,
+                aggregation: None,
+                second: None,
+            },
+            path: None,
+            children: Vec::new(),
+        }
+    }
+
+    impl Spec {
+        fn with(mut self, children: Vec<Spec>) -> Self {
+            self.children = children;
+            self
+        }
+        fn path(mut self, path: &'static str) -> Self {
+            self.path = Some(path);
+            self
+        }
+    }
+
+    /// A GLB whose single scene root carries `translation` (odd tags), so non-zero rebases
+    /// change its JSON and inexact ones drift.
+    fn payload(tag: u64) -> Vec<u8> {
+        let mut node = json!({"name": format!("n{tag}")});
+        if tag % 2 == 1 {
+            node["translation"] = json!([0.5, 1.5, -2.0]);
+        }
+        let document = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[node],"buffers":[{"byteLength":8}]});
+        let mut json = serde_json::to_vec(&document).unwrap();
+        while !json.len().is_multiple_of(4) {
+            json.push(b' ');
+        }
+        let mut out = b"glTF".to_vec();
+        out.extend(2u32.to_le_bytes());
+        out.extend(((28 + json.len() + 8) as u32).to_le_bytes());
+        out.extend((json.len() as u32).to_le_bytes());
+        out.extend(b"JSON");
+        out.extend(&json);
+        out.extend(8u32.to_le_bytes());
+        out.extend(b"BIN\0");
+        out.extend(tag.to_le_bytes());
+        out
+    }
+
+    fn member(bytes: &[u8]) -> String {
+        format!("t/{:x}.glb", Sha256::digest(bytes))
+    }
+
+    /// The frame at anchor A (lon 7.4385°, lat 46.948°, h 540 m): WGS84 ECEF and ENU axes.
+    fn frame() -> (Vec3, [Vec3; 3]) {
+        let (lon, lat, h) = (7.4385f64.to_radians(), 46.948f64.to_radians(), 540.);
+        let (a, f) = (6_378_137., 1. / 298.257_223_563);
+        let e2 = f * (2. - f);
+        let n = a / (1. - e2 * lat.sin().powi(2)).sqrt();
+        let anchor = [
+            (n + h) * lat.cos() * lon.cos(),
+            (n + h) * lat.cos() * lon.sin(),
+            (n * (1. - e2) + h) * lat.sin(),
+        ];
+        let east = [-lon.sin(), lon.cos(), 0.];
+        let north = [-lat.sin() * lon.cos(), -lat.sin() * lon.sin(), lat.cos()];
+        let up = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+        (anchor, [east, north, up])
+    }
+
+    // ---- Today's JSON writers (`encoding.rs` candidate, `store.rs` attach and root) ----
+
+    fn legacy_tile(spec: &Spec, payloads: &mut BTreeMap<String, Vec<u8>>) -> (Value, Vec3, f64) {
+        let children: Vec<_> = spec
+            .children
+            .iter()
+            .map(|child| legacy_tile(child, payloads))
+            .collect();
+        let mut value = match &spec.kind {
+            Kind::Content {
+                tag,
+                level,
+                error,
+                rounding,
+                tolerance,
+                fragments,
+                aggregation,
+                second,
+            } => {
+                let bytes = payload(*tag);
+                let uri = member(&bytes);
+                let byte_count = bytes.len();
+                payloads.insert(uri.clone(), bytes);
+                let (quantization, vertex_count, primitives) = (0f64, 2 * fragments, 1);
+                let mut node = json!({"extras":{"featureFragments":fragments,"vertices":vertex_count,"primitives":primitives,"encodedBytes":byte_count,
+                    "geometryErrorMetres":error,"positionRoundingMetres":rounding,"quantizationErrorMetres":quantization,"uncompressedBytes":byte_count * 2,"toleranceMetres":tolerance},
+                    "geometricError":if *level>0 {error+rounding+quantization}else{0.}});
+                if let Some(summary) = aggregation {
+                    node["extras"]["pointAggregation"] = summary.clone();
+                }
+                node["content"] =
+                    json!({"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}});
+                if let Some(tag) = second {
+                    let bytes = payload(*tag);
+                    let plain = json!({"uri": member(&bytes)});
+                    payloads.insert(member(&bytes), bytes);
+                    node["contents"] = json!([node["content"].take(), plain]);
+                    node.as_object_mut().unwrap().remove("content");
+                }
+                node
+            }
+            Kind::Routing { reason, error } => {
+                json!({"geometricError":error,"extras":{"routing":true,"routingReason":reason}})
+            }
+        };
+        let mut half = spec.half.map(|v| v.max(0.001));
+        let mut padding = value["extras"]["positionRoundingMetres"]
+            .as_f64()
+            .unwrap_or(0.)
+            + value["extras"]["quantizationErrorMetres"]
+                .as_f64()
+                .unwrap_or(0.);
+        for child in &children {
+            padding = padding.max(child.2);
+        }
+        half = half.map(|v| v + padding);
+        let mut deltas = Vec::new();
+        let mut values = Vec::new();
+        for (mut child, center, _) in children {
+            let delta = sub(center, spec.center);
+            child["transform"] = translation(delta);
+            deltas.push(delta);
+            values.push(child);
+        }
+        let error = enclose_children(
+            &mut half,
+            value["geometricError"].as_f64().unwrap_or(0.),
+            deltas.into_iter().zip(values.iter()),
+        )
+        .unwrap();
+        value["boundingVolume"] = json!({"box":crate::tileset_node::box_json(0, half)});
+        value["refine"] = json!("REPLACE");
+        value["geometricError"] = json!(error);
+        if !values.is_empty() {
+            value["children"] = Value::Array(values);
+        }
+        if let Some(path) = spec.path {
+            value["extras"]["buildPath"] = json!(path);
+        }
+        (value, spec.center, padding)
+    }
+
+    fn legacy(spec: Option<&Spec>, placed: bool) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let mut payloads = BTreeMap::new();
+        let (anchor, axes) = frame();
+        let (mut root, center) = match spec {
+            Some(spec) => {
+                let (root, center, _) = legacy_tile(spec, &mut payloads);
+                (root, center)
+            }
+            None => (
+                json!({"boundingVolume":{"box":[0,0,0,0.001,0,0,0,0.001,0,0,0,0.001]},"geometricError":0,"refine":"REPLACE"}),
+                [0.; 3],
+            ),
+        };
+        if spec.is_none() {
+            root["extras"]["buildPath"] = json!("");
+        }
+        let anchor = (0..3).fold(anchor, |p, i| add(p, mul(axes[i], center[i])));
+        if placed {
+            root["transform"] = json!([
+                axes[0][0], axes[0][1], axes[0][2], 0, axes[1][0], axes[1][1], axes[1][2], 0,
+                axes[2][0], axes[2][1], axes[2][2], 0, anchor[0], anchor[1], anchor[2], 1
+            ]);
+        }
+        let diagonal =
+            norm(crate::tileset_node::box_half(&root["boundingVolume"]["box"]).unwrap()) * 2.;
+        let top_error = top_level_error(diagonal, root["geometricError"].as_f64().unwrap(), 2.);
+        let manifest = json!({"asset":{"version":"1.1"},"extensionsUsed":["3DTILES_content_gltf_vector"],"geometricError":top_error,"root":root});
+        (manifest, payloads)
+    }
+
+    // ---- The typed records ----
+
+    fn typed_tile(spec: &Spec) -> (TileTree<Extras>, Vec3, f64) {
+        let mut children: Vec<_> = spec.children.iter().map(typed_tile).collect();
+        let build_path = spec.path.map(str::to_owned);
+        let (contents, extras, own, padding) = match &spec.kind {
+            Kind::Content {
+                tag,
+                level,
+                error,
+                rounding,
+                tolerance,
+                fragments,
+                aggregation,
+                second,
+            } => {
+                let bytes = payload(*tag);
+                let content = ContentRef::new(
+                    MemberName::new(member(&bytes)).unwrap(),
+                    Sha256::digest(&bytes).into(),
+                    bytes.len() as u64,
+                    ContentKind::Glb,
+                    true,
+                    match aggregation {
+                        None => SourceIdentity::Features {
+                            count: *fragments as u32,
+                            digest: [*tag as u8; 32],
+                        },
+                        Some(_) => SourceIdentity::Aggregate,
+                    },
+                )
+                .unwrap();
+                let quantization = 0.;
+                let extras = Extras::Content(Statistics {
+                    feature_fragments: *fragments,
+                    vertices: 2 * fragments,
+                    primitives: 1,
+                    encoded_bytes: bytes.len(),
+                    geometry_error_metres: *error,
+                    position_rounding_metres: *rounding,
+                    quantization_error_metres: quantization,
+                    uncompressed_bytes: bytes.len() * 2,
+                    tolerance_metres: *tolerance,
+                    point_aggregation: aggregation.clone(),
+                    build_path,
+                });
+                let own = if *level > 0 {
+                    error + rounding + quantization
+                } else {
+                    0.
+                };
+                let mut contents = vec![content];
+                if let Some(tag) = second {
+                    let bytes = payload(*tag);
+                    contents.push(
+                        ContentRef::new(
+                            MemberName::new(member(&bytes)).unwrap(),
+                            Sha256::digest(&bytes).into(),
+                            bytes.len() as u64,
+                            ContentKind::Glb,
+                            false,
+                            SourceIdentity::Aggregate,
+                        )
+                        .unwrap(),
+                    );
+                }
+                (contents, extras, own, rounding + quantization)
+            }
+            Kind::Routing { reason, error } => (
+                Vec::new(),
+                Extras::Routing(Routing {
+                    routing: true,
+                    routing_reason: *reason,
+                    build_path,
+                }),
+                *error,
+                0.,
+            ),
+        };
+        let padding = children.iter().fold(padding, |p, c| p.max(c.2));
+        let mut bounds = TileBox::centred(spec.half.map(|v| v.max(0.001) + padding)).unwrap();
+        let mut error = GeometricError::new(own).unwrap();
+        for (child, center, _) in &mut children {
+            let delta = sub(*center, spec.center);
+            child
+                .record_mut()
+                .set_placement(NodePlacement::translation(delta).unwrap());
+            bounds
+                .grow_to_enclose(delta, child.record().bounds())
+                .unwrap();
+            error = error.max(child.record().geometric_error());
+        }
+        let record = TileRecord::new(
+            NodePlacement::INHERIT,
+            bounds,
+            error,
+            Refine::Replace,
+            contents,
+            Some(extras),
+        )
+        .unwrap();
+        let children = children.into_iter().map(|c| c.0).collect();
+        (TileTree::new(record, children), spec.center, padding)
+    }
+
+    fn typed(spec: Option<&Spec>, placed: bool) -> (TileTree<Extras>, TilesetDocument) {
+        let (anchor, axes) = frame();
+        let (mut tree, center) = match spec {
+            Some(spec) => {
+                let (tree, center, _) = typed_tile(spec);
+                (tree, center)
+            }
+            None => {
+                // The empty dataset's root records only its build path.
+                let record = TileRecord::empty_root(Some(Extras::Empty(BuildPath {
+                    build_path: String::new(),
+                })))
+                .unwrap();
+                (TileTree::new(record, Vec::new()), [0.; 3])
+            }
+        };
+        let anchor = (0..3).fold(anchor, |p, i| add(p, mul(axes[i], center[i])));
+        if placed {
+            tree.record_mut()
+                .set_placement(NodePlacement::rigid(axes, anchor).unwrap());
+        }
+        let root = tree.record();
+        let top = top_level_error(
+            root.bounds().diagonal(),
+            root.geometric_error().metres(),
+            2.,
+        );
+        let document = TilesetDocument::root(
+            GeometricError::new(top).unwrap(),
+            [TilesetExtension::ContentGltfVector],
+        );
+        (tree, document)
+    }
+
+    // ---- Comparison ----
+
+    fn files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
+        fn visit(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    visit(root, &path, out);
+                } else {
+                    let name = path.strip_prefix(root).unwrap().to_string_lossy();
+                    out.insert(name.replace('\\', "/"), std::fs::read(&path).unwrap());
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        visit(dir, dir, &mut out);
+        out
+    }
+
+    fn stage(payloads: &BTreeMap<String, Vec<u8>>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("t")).unwrap();
+        for (name, bytes) in payloads {
+            std::fs::write(dir.path().join(name), bytes).unwrap();
+        }
+        dir
+    }
+
+    struct Written {
+        manifest: Value,
+        h: Value,
+        output: ForestOutput,
+        files: BTreeMap<String, Vec<u8>>,
+        raw: BTreeMap<String, Vec<u8>>,
+    }
+
+    /// Write `spec` through both entries and require identical bytes everywhere: H, the
+    /// root document, every written member, and the per-tile record.
+    fn both(spec: Option<&Spec>, scheme: SubdivisionScheme) -> Written {
+        both_placed(spec, scheme, true)
+    }
+
+    /// [`both`], with the root rigidly placed or (`placed` false) without a transform.
+    fn both_placed(spec: Option<&Spec>, scheme: SubdivisionScheme, placed: bool) -> Written {
+        let (h, raw) = legacy(spec, placed);
+        let (tree, document) = typed(spec, placed);
+        let typed_h = document.to_value(tree.to_object().unwrap());
+        assert_eq!(
+            String::from_utf8(serde_json::to_vec(&typed_h).unwrap()).unwrap(),
+            String::from_utf8(serde_json::to_vec(&h).unwrap()).unwrap(),
+            "H"
+        );
+        let loose_dir = stage(&raw);
+        let mut manifest = h.clone();
+        let loose = write_forest(&mut manifest, loose_dir.path(), scheme, &mut || Ok(())).unwrap();
+        let typed_dir = stage(&raw);
+        let (top, output) =
+            write_forest_records(&tree, &document, typed_dir.path(), scheme, &mut || Ok(()))
+                .unwrap();
+        assert_eq!(
+            String::from_utf8(serde_json::to_vec(&top).unwrap()).unwrap(),
+            String::from_utf8(serde_json::to_vec(&manifest).unwrap()).unwrap(),
+            "tileset.json"
+        );
+        assert_eq!(output, loose);
+        let written = files(typed_dir.path());
+        assert_eq!(written, files(loose_dir.path()));
+        // Every implicit payload restores to its raw source, and the expansion has H's tiles.
+        for tile in &output.tiles {
+            for content in &tile.contents {
+                let published = &written[&content.member];
+                assert_eq!(content.bytes, published.len() as u64);
+                if let Some(rebase) = &content.rebase {
+                    let raw_bytes = restore_payload(published, rebase).unwrap();
+                    assert_eq!(
+                        <[u8; 32]>::from(Sha256::digest(&raw_bytes)),
+                        rebase.raw_sha256
+                    );
+                    assert!(raw.contains_key(&member(&raw_bytes)));
+                }
+            }
+        }
+        let expanded = expand_tileset(&top, |name| {
+            written
+                .get(name)
+                .cloned()
+                .ok_or_else(|| Error::Data(format!("missing {name}")))
+        })
+        .unwrap();
+        fn count(tile: &Value) -> usize {
+            1 + tile["children"]
+                .as_array()
+                .map_or(0, |c| c.iter().map(count).sum())
+        }
+        assert_eq!(count(&expanded["root"]), count(&h["root"]));
+        assert_eq!(output.tiles.len(), count(&h["root"]));
+        Written {
+            manifest: top,
+            h,
+            output,
+            files: written,
+            raw,
+        }
+    }
+
+    fn roles(output: &ForestOutput) -> Vec<TileRole> {
+        output.tiles.iter().map(|t| t.role).collect()
+    }
+
+    const R: f64 = 7.62939453125e-6; // 2^-17, the fixtures' f32 position rounding.
+
+    /// Fixture A: `pt-alpha` at the anchor and `ln-bravo` from (E 120, N −45, U 7) to
+    /// (E 180, N 60, U 3), one level of LOD: root → {point leaf, line L1 → line leaf}.
+    fn fixture_a() -> Spec {
+        let line = [150., 7.5, 5.];
+        let line_half = [30.3, 52.5, 2.];
+        content(4, 2, 0.3, [90., 7.5, 3.5], [90.3, 52.5, 3.5])
+            .with(vec![
+                content(1, 0, 0., [0.; 3], [0.; 3]).path("0"),
+                content(3, 1, 0.3, line, line_half)
+                    .with(vec![content(2, 0, 0., line, line_half)])
+                    .path("1"),
+            ])
+            .path("")
+    }
+
+    /// Fixture B: four LOD levels under the line: root (height 5) → {point leaf, L4 → L3 →
+    /// L2 → L1 → leaf}.
+    fn fixture_b() -> Spec {
+        let line = [150., 7.5, 5.];
+        let half = [31.5, 52.5, 2.];
+        let mut chain = content(12, 0, 0., line, half);
+        for (level, (tag, error)) in [(13, 0.3), (14, 0.75), (15, 1.5), (16, 3.)]
+            .into_iter()
+            .enumerate()
+        {
+            chain = content(tag, level as u32 + 1, error, line, half).with(vec![chain]);
+        }
+        content(17, 5, 3., [90., 7.5, 3.5], [91.5, 52.5, 3.5])
+            .with(vec![
+                content(11, 0, 0., [0.; 3], [0.; 3]).path("0"),
+                chain.path("1"),
+            ])
+            .path("")
+    }
+
+    /// C6: each content record's length and sha256 are checked against its staged payload
+    /// when the forest reads it, for implicit (A: every tile) and explicit-leaf (B: the
+    /// point leaf) contents alike. A missing, lengthened or altered payload is a typed
+    /// failure before `tileset.json` exists.
+    #[test]
+    fn staged_payloads_must_match_their_content_records() {
+        use crate::tileset_node::StagedContentError;
+        for spec in [fixture_a(), fixture_b()] {
+            let (tree, document) = typed(Some(&spec), true);
+            let (_, raw) = legacy(Some(&spec), true);
+            for member in raw.keys() {
+                type Tamper = (&'static str, fn(&Path));
+                let cases: [Tamper; 3] = [
+                    ("missing", |path| std::fs::remove_file(path).unwrap()),
+                    ("length", |path| {
+                        let mut bytes = std::fs::read(path).unwrap();
+                        bytes.push(0);
+                        std::fs::write(path, bytes).unwrap();
+                    }),
+                    ("digest", |path| {
+                        let mut bytes = std::fs::read(path).unwrap();
+                        *bytes.last_mut().unwrap() ^= 1;
+                        std::fs::write(path, bytes).unwrap();
+                    }),
+                ];
+                for (label, tamper) in cases {
+                    let dir = stage(&raw);
+                    tamper(&dir.path().join(member));
+                    let error = write_forest_records(
+                        &tree,
+                        &document,
+                        dir.path(),
+                        SubdivisionScheme::Quadtree,
+                        &mut || Ok(()),
+                    )
+                    .unwrap_err();
+                    let bytes = raw[member].len() as u64;
+                    let expected = match label {
+                        "missing" => StagedContentError::Missing {
+                            member: member.clone(),
+                        },
+                        "length" => StagedContentError::Length {
+                            member: member.clone(),
+                            declared: bytes,
+                            staged: bytes + 1,
+                        },
+                        _ => {
+                            let mut altered = raw[member].clone();
+                            *altered.last_mut().unwrap() ^= 1;
+                            StagedContentError::Digest {
+                                member: member.clone(),
+                                declared: Sha256::digest(&raw[member]).into(),
+                                staged: Sha256::digest(&altered).into(),
+                            }
+                        }
+                    };
+                    assert_eq!(
+                        error.to_string(),
+                        Error::from(expected).to_string(),
+                        "{label} {member}"
+                    );
+                    assert!(!dir.path().join("tileset.json").exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fixture_a_is_one_implicit_root_at_tileset_json() {
+        let a = both(Some(&fixture_a()), SubdivisionScheme::Quadtree);
+        assert_eq!(
+            roles(&a.output),
+            [
+                TileRole::ImplicitRoot,
+                TileRole::Implicit,
+                TileRole::Implicit,
+                TileRole::Implicit
+            ]
+        );
+        assert_eq!((a.output.documents, a.output.implicit_roots), (1, 1));
+        let root = &a.manifest["root"];
+        assert_eq!(
+            root["implicitTiling"],
+            json!({"subdivisionScheme":"QUADTREE","subtreeLevels":3,"availableLevels":3,
+                "subtrees":{"uri":"subtrees/r0-{level}-{x}-{y}.subtree"}})
+        );
+        assert_eq!(
+            root["content"],
+            json!({"uri":"implicit-content/r0-{level}-{x}-{y}-0.glb",
+                "extensions":{"3DTILES_content_gltf_vector":{"vector":true}}})
+        );
+        assert!(
+            root.get("extras").is_none(),
+            "implicit roots carry no extras"
+        );
+        assert_eq!(root["transform"], a.h["root"]["transform"]);
+        assert_eq!(a.manifest["schema"], tileset_node::tile_schema());
+        // Point leaf at slot 0, the line's L1 at slot 1, its leaf at slot 0 below that.
+        let members: Vec<_> = a.files.keys().map(String::as_str).collect();
+        assert_eq!(
+            members,
+            [
+                "implicit-content/r0-0-0-0-0.glb",
+                "implicit-content/r0-1-0-0-0.glb",
+                "implicit-content/r0-1-1-0-0.glb",
+                "implicit-content/r0-2-2-0-0.glb",
+                "subtrees/r0-0-0-0.subtree",
+            ]
+        );
+        // Non-zero rebase deltas at depths 1 and 2; the implicit root's is zero.
+        let deltas: Vec<_> = a
+            .output
+            .tiles
+            .iter()
+            .map(|t| t.contents[0].rebase.as_ref().unwrap().delta)
+            .collect();
+        assert_eq!(deltas[0], [0.; 3]);
+        assert_eq!(deltas[1], [-90., -7.5, -3.5]);
+        assert_eq!(deltas[2], [60., 0., 1.5]);
+        assert_eq!(deltas[3], deltas[2]);
+        // Hand-derived root half: (90.3, 52.5, 3.5) plus the f32 rounding pad, grown on x by
+        // the line L1 (60 + its half, rounded up) and on z by the point's 1 mm floor.
+        let half = &a.h["root"]["boundingVolume"]["box"];
+        assert_eq!(
+            [half[3].as_f64(), half[7].as_f64(), half[11].as_f64()],
+            [
+                Some(sum_up(60., 30.3 + R)),
+                Some(52.5 + R),
+                Some(sum_up(3.5, 0.001 + R))
+            ]
+        );
+        assert_eq!(sum_up(60., 30.3 + R), (90.3 + R).next_up());
+        // Implicit tiles keep their statistics in the subtree row, with the published bytes.
+        let line_leaf = &a.output.tiles[3];
+        assert_eq!(
+            line_leaf.extras["encodedBytes"],
+            json!(line_leaf.contents[0].bytes)
+        );
+        assert_eq!(line_leaf.extras["toleranceMetres"], json!(0.5));
+    }
+
+    #[test]
+    fn fixture_b_crosses_the_subtree_boundary_under_a_skeleton() {
+        let b = both(Some(&fixture_b()), SubdivisionScheme::Quadtree);
+        assert_eq!(
+            roles(&b.output),
+            [
+                TileRole::Skeleton,
+                TileRole::ExplicitLeaf,
+                TileRole::Skeleton,
+                TileRole::ImplicitRoot,
+                TileRole::Implicit,
+                TileRole::Implicit,
+                TileRole::Implicit
+            ]
+        );
+        let root = &b.manifest["root"];
+        assert_eq!(b.manifest["schema"], tileset_node::tile_schema());
+        let point = &root["children"][0];
+        let point_uri = point["content"]["uri"].as_str().unwrap();
+        assert!(
+            point_uri.starts_with("t/"),
+            "explicit leaves publish in place"
+        );
+        assert_eq!(point["extras"]["buildPath"], "0");
+        let l4 = &root["children"][1];
+        assert_eq!(l4["transform"], json!(translation([60., 0., 1.5])));
+        let l3 = &l4["children"][0];
+        assert_eq!(
+            l3["transform"].to_string(),
+            "[1,0,0,0,0,1,0,0,0,0,1,0,0.0,0.0,0.0,1]"
+        );
+        assert_eq!(
+            l3["implicitTiling"],
+            json!({"subdivisionScheme":"QUADTREE","subtreeLevels":4,"availableLevels":4,
+                "subtrees":{"uri":"subtrees/r3-{level}-{x}-{y}.subtree"}})
+        );
+        assert_eq!(
+            l3["content"]["uri"],
+            "implicit-content/r3-{level}-{x}-{y}-0.glb"
+        );
+        let implicit: Vec<_> = b
+            .files
+            .keys()
+            .filter(|name| !name.starts_with("t/"))
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            implicit,
+            [
+                "implicit-content/r3-0-0-0-0.glb",
+                "implicit-content/r3-1-0-0-0.glb",
+                "implicit-content/r3-2-0-0-0.glb",
+                "implicit-content/r3-3-0-0-0.glb",
+                "subtrees/r3-0-0-0.subtree",
+            ]
+        );
+        // δ = 0 along the LOD chain: the rebased payloads are byte copies, and raw sources
+        // only implicit tiles referenced are deleted; explicit payloads stay.
+        for tile in &b.output.tiles[3..] {
+            let content = &tile.contents[0];
+            assert_eq!(content.rebase.as_ref().unwrap().delta, [0.; 3]);
+            assert!(b.raw.contains_key(&member(&b.files[&content.member])));
+        }
+        let kept: Vec<_> = b.files.keys().filter(|n| n.starts_with("t/")).collect();
+        assert_eq!(
+            kept.len(),
+            3,
+            "root, point leaf and L4 payloads stay in place"
+        );
+        assert_eq!(b.output.documents, 1);
+    }
+
+    #[test]
+    fn fixture_c_links_an_external_document() {
+        // A 17-tile LOD chain: the skeleton is deeper than DOC_LEVELS, so it links.
+        let line = [10_000., -2_000., 30.];
+        let half = [12_000., 9_000., 40.];
+        let mut chain = content(100, 0, 0., line, half);
+        for level in 1..=16u32 {
+            let error = 0.3 * 2f64.powi(level as i32 - 1);
+            chain = content(100 + level as u64, level, error, line, half).with(vec![chain]);
+        }
+        let c = both(Some(&chain.path("")), SubdivisionScheme::Quadtree);
+        assert_eq!(c.output.documents, 2);
+        assert!(c.files.contains_key("tileset-d1.json"));
+        let document: Value = serde_json::from_slice(&c.files["tileset-d1.json"]).unwrap();
+        assert!(document["root"].get("transform").is_none());
+        assert_eq!(document["root"]["refine"], "REPLACE");
+        assert_eq!(document["asset"], json!({"version":"1.1"}));
+        assert_eq!(
+            document["extensionsUsed"],
+            json!(["3DTILES_content_gltf_vector"])
+        );
+        assert_eq!(document["schema"], tileset_node::tile_schema());
+        let mut tile = &c.manifest["root"];
+        while tile["content"]["uri"] != "tileset-d1.json" {
+            tile = &tile["children"][0];
+        }
+        assert_eq!(
+            tile.as_object().unwrap().keys().collect::<Vec<_>>(),
+            [
+                "boundingVolume",
+                "content",
+                "geometricError",
+                "refine",
+                "transform"
+            ]
+        );
+    }
+
+    #[test]
+    fn drift_widens_explicit_ancestors_identically() {
+        // Centres a tenth of a metre apart near the origin, with translated payloads: the
+        // payloads' scene-root sums (0.5 + 0.1) and the δ sums round, so the implicit root
+        // and its skeleton ancestors grow outward.
+        let half = [2., 1., 0.5];
+        let mut chain = content(21, 0, 0., [0.6, 0., 0.], half);
+        for (i, (tag, x)) in [(23u64, 0.3), (25, 0.1), (27, 0.), (29, 0.)]
+            .into_iter()
+            .enumerate()
+        {
+            chain = content(tag, i as u32 + 1, 0.3 * (i + 1) as f64, [x, 0., 0.], half)
+                .with(vec![chain]);
+        }
+        let spec = content(31, 5, 3., [0.05, 0., 0.], [3., 2., 1.])
+            .with(vec![content(33, 0, 0., [1.5, 1., 0.5], [0.; 3]), chain]);
+        let d = both(Some(&spec), SubdivisionScheme::Quadtree);
+        assert_eq!(roles(&d.output)[3], TileRole::ImplicitRoot);
+        let x_half = |tile: &Value| tile["boundingVolume"]["box"][3].as_f64().unwrap();
+        let (root, h) = (&d.manifest["root"], &d.h["root"]);
+        let (l4, l3) = (&root["children"][1], &root["children"][1]["children"][0]);
+        let (h4, h3) = (&h["children"][1], &h["children"][1]["children"][0]);
+        assert!(x_half(l3) > x_half(h3), "the implicit root grows");
+        assert!(x_half(l4) > x_half(h4), "its skeleton parent grows");
+        assert!(x_half(root) >= x_half(h));
+    }
+
+    #[test]
+    fn routing_aggregates_octrees_and_the_empty_root_match() {
+        // Routing tiles (null and named reasons) and an aggregate content.
+        let mut aggregate = content(41, 1, 0.5, [5., 5., 1.], [5., 5., 1.]);
+        if let Kind::Content { aggregation, .. } = &mut aggregate.kind {
+            *aggregation = Some(json!({"layers":{"pts":{"voxels":3}},"pointsAggregated":12}));
+        }
+        let routing = |reason, children| Spec {
+            center: [3., -4., 0.5],
+            half: [8., 9., 1.5],
+            kind: Kind::Routing {
+                reason,
+                error: 12.5,
+            },
+            path: Some(""),
+            children,
+        };
+        let spec = routing(
+            Some("bytes"),
+            vec![
+                aggregate
+                    .clone()
+                    .with(vec![content(42, 0, 0., [5., 5., 1.], [5., 5., 1.])]),
+                Spec {
+                    path: Some("1"),
+                    ..routing(None, vec![content(43, 0, 0., [-2., -8., 0.], [1., 1., 0.])])
+                },
+            ],
+        );
+        for scheme in [SubdivisionScheme::Quadtree, SubdivisionScheme::Octree] {
+            let r = both(Some(&spec), scheme);
+            assert_eq!(r.output.tiles[0].extras["routingReason"], "bytes");
+            assert_eq!(r.output.tiles[3].extras["routingReason"], Value::Null);
+            assert!(r.output.tiles[0].contents.is_empty());
+            assert_eq!(
+                r.output.tiles[1].extras["pointAggregation"]["pointsAggregated"],
+                12
+            );
+        }
+        let o = both(Some(&fixture_a()), SubdivisionScheme::Octree);
+        assert_eq!(
+            o.manifest["root"]["content"]["uri"],
+            "implicit-content/r0-{level}-{x}-{y}-{z}-0.glb"
+        );
+        // The empty dataset: the structural integer error survives the forest.
+        let empty = both(None, SubdivisionScheme::Quadtree);
+        assert_eq!(empty.manifest["root"]["geometricError"].to_string(), "0");
+        assert_eq!(roles(&empty.output), [TileRole::ImplicitRoot]);
+    }
+
+    #[test]
+    fn drifting_links_mixed_slots_and_unplaced_roots_match() {
+        // A 17-tile chain a tenth of a metre apart near the origin, with translated payloads
+        // and a second plain content per coarse tile: widened skeleton tiles, a widened link
+        // and external-document root, two content slots (one without the vector marker).
+        let half = [2., 1., 0.5];
+        let mut chain = content(300, 0, 0., [0.; 3], half);
+        for level in 1..=16u32 {
+            let x = 0.1 * level as f64;
+            chain = content(
+                301 + 2 * level as u64,
+                level,
+                0.1 * level as f64,
+                [x, 0., 0.],
+                half,
+            )
+            .with(vec![chain]);
+            if let Kind::Content { second, .. } = &mut chain.kind {
+                *second = Some(1001 + 2 * level as u64);
+            }
+        }
+        let chain = chain.path("");
+        for placed in [true, false] {
+            let w = both_placed(Some(&chain), SubdivisionScheme::Quadtree, placed);
+            assert_eq!(w.output.documents, 2);
+            assert_eq!(w.manifest["root"].get("transform").is_some(), placed);
+            let mut tile = &w.manifest["root"];
+            let mut h = &w.h["root"];
+            while tile["content"]["uri"] != "tileset-d1.json" {
+                assert_eq!(tile["contents"].as_array().unwrap().len(), 2);
+                assert_eq!(tile["contents"][1].as_object().unwrap().len(), 1);
+                tile = &tile["children"][0];
+                h = &h["children"][0];
+            }
+            let x_half = |t: &Value| t["boundingVolume"]["box"][3].as_f64().unwrap();
+            assert!(
+                x_half(tile) > x_half(h),
+                "the link grows with its subtree's drift"
+            );
+            let document: Value = serde_json::from_slice(&w.files["tileset-d1.json"]).unwrap();
+            assert_eq!(x_half(&document["root"]), x_half(tile));
+            let mut tile = &document["root"];
+            while tile.get("implicitTiling").is_none() {
+                tile = &tile["children"][0];
+            }
+            let slots = tile["contents"].as_array().unwrap();
+            assert_eq!(slots.len(), 2);
+            assert!(slots[1].get("extensions").is_none());
+        }
+    }
+
+    #[test]
+    fn typed_refusals_match_or_precede_the_json_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let none = &mut || Ok(());
+        let quad = SubdivisionScheme::Quadtree;
+        let refused = |result: Result<(Value, ForestOutput), Error>| match result {
+            Err(Error::Data(message)) => message,
+            other => panic!("expected a typed data error, got {other:?}"),
+        };
+        // 33 levels: the same refusal as the JSON entry.
+        let mut chain = content(200, 0, 0., [0.; 3], [1.; 3]);
+        for level in 1..33u32 {
+            chain = content(200 + level as u64, level, 0.1, [0.; 3], [1.; 3]).with(vec![chain]);
+        }
+        let (mut h, _) = legacy(Some(&chain), true);
+        let loose = write_forest(&mut h, dir.path(), quad, none).unwrap_err();
+        let (tree, document) = typed(Some(&chain), true);
+        let typed_message = refused(write_forest_records(
+            &tree,
+            &document,
+            dir.path(),
+            quad,
+            none,
+        ));
+        assert_eq!(typed_message, loose.to_string());
+        // A rigid child placement is not a translation.
+        let (mut tree, document) = typed(Some(&fixture_a()), true);
+        let (_, axes) = frame();
+        tree.children_mut()[0]
+            .record_mut()
+            .set_placement(NodePlacement::rigid(axes, [0.; 3]).unwrap());
+        assert!(refused(write_forest_records(
+            &tree,
+            &document,
+            dir.path(),
+            quad,
+            none
+        ))
+        .contains("a child transform must be a translation"));
+        // Vector content needs the declared extension; only tileset.json roots a forest.
+        let (tree, document) = typed(Some(&fixture_a()), true);
+        let undeclared = TilesetDocument::root(document.geometric_error(), []);
+        assert!(refused(write_forest_records(
+            &tree,
+            &undeclared,
+            dir.path(),
+            quad,
+            none
+        ))
+        .contains("extensionsUsed"));
+        let external = TilesetDocument::external(
+            document.geometric_error(),
+            [TilesetExtension::ContentGltfVector],
+        );
+        assert!(refused(write_forest_records(
+            &tree,
+            &external,
+            dir.path(),
+            quad,
+            none
+        ))
+        .contains("tileset.json"));
+        let stamped = document.clone().with_build_state([1; 32]).unwrap();
+        assert!(refused(write_forest_records(
+            &tree,
+            &stamped,
+            dir.path(),
+            quad,
+            none
+        ))
+        .contains("build state"));
+        // A cancelled checkpoint stops before anything is written.
+        let cancelled = write_forest_records(&tree, &document, dir.path(), quad, &mut || {
+            Err(Error::Message("cancelled".into()))
+        });
+        assert!(matches!(cancelled, Err(Error::Message(_))));
+        assert!(files(dir.path()).is_empty());
     }
 }
