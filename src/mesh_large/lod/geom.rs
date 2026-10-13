@@ -571,12 +571,15 @@ pub(crate) struct Limits {
 
 impl Limits {
     pub(crate) fn for_sizes(x: usize, y: usize) -> Self {
+        // Calibrated on a 1M-triangle synthetic terrain and a real 1.3M-triangle crop
+        // (evidence h17-20261013/synth): smaller target caps miss the best target and leave
+        // bounds several times the true distance; more work buys little.
         Self {
             face_cap: 64,
-            patch_cap: 16,
+            patch_cap: 64,
             depth: 6,
             patches: 4096,
-            work: 512 * (x as u64 + y as u64).max(1),
+            work: 128 * (x as u64 + y as u64).max(1),
             tau: 1.25,
         }
     }

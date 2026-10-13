@@ -16,7 +16,7 @@ use crate::{spill::Sequence, JobError};
 /// Source triangles per proxy -> source chunk.
 pub(crate) const CHUNK: usize = 1 << 16;
 /// Target evaluations per direct query.
-const CAP: u32 = 8;
+const CAP: u32 = 64;
 /// Source triangles per parallel source -> proxy block.
 const BLOCK: u64 = 1 << 18;
 
@@ -146,7 +146,7 @@ pub(crate) fn direct(
         }
         let bvh = Bvh::new(&chunk);
         for (face, best) in proxy.iter().zip(faces.iter_mut()) {
-            if let Some((k, _)) = bvh.best_target(face, CAP / 2, &mut evals) {
+            if let Some((k, _)) = bvh.best_target(face, CAP, &mut evals) {
                 *best = best.min(ar.patch(face, bvh.tri(k), 0.));
             }
         }
