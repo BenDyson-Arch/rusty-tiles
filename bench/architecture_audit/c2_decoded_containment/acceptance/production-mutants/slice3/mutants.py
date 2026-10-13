@@ -26,7 +26,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
 import mutants as slice1  # noqa: E402
 
 V = "src/validate.rs"
-LOCK = "/home/bend/.cache/rusty-tiles-cargo.lock"
+LOCK = os.environ.get("C2M_LOCK", "/home/bend/.cache/rusty-tiles-cargo.lock")
+# Build/run placement, overridable for a parallel lane (H11): target dir, CPUs, jobs, extra tests.
+TARGET = os.environ.get("C2M_TARGET", "/home/bend/.cache/rt-target-a")
+CPUS = os.environ.get("C2M_CPUS", "0-3")
+JOBS = os.environ.get("C2M_JOBS", "2")
+EXTRA_TESTS = os.environ.get("C2M_EXTRA_TESTS", "").split()
 TILE_FACT = (
     "            let index = self.c2.tile(TileFact {\n"
     "                transform: None,\n"
@@ -169,8 +174,8 @@ def run(name, out, evidence, forest):
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):
         os.remove(os.path.join(out, f))
-    env = dict(os.environ, CARGO_BUILD_JOBS="2", RUST_TEST_THREADS="2",
-               CARGO_TARGET_DIR="/home/bend/.cache/rt-target-a",
+    env = dict(os.environ, CARGO_BUILD_JOBS=JOBS, RUST_TEST_THREADS="2",
+               CARGO_TARGET_DIR=TARGET, C2H11_PARITY_OUT=f"{out}/h11.json",
                C2_PARITY_OUT=f"{out}/c2.json", C2WB_PARITY_OUT=f"{out}/c2wb.json",
                C2S3_PARITY_OUT=f"{out}/s3.json", C2S3_SWEEP_OUT=f"{out}/sweep.json",
                C2S3_FOREST_OUT=f"{out}/forest.json", I1_PARITY_OUT=f"{out}/i1.json",
@@ -179,8 +184,8 @@ def run(name, out, evidence, forest):
         env["C2S3_EVIDENCE_DIR"] = evidence
     if forest:
         env["C2S3_FOREST_DIR"] = forest
-    cmd = ["flock", LOCK, "nice", "-n", "10", "taskset", "-c", "0-3", "cargo", "test", "--locked", "--release",
-           "--lib", "--", "c2_oracle_parity", "i1_oracle_parity"]
+    cmd = ["flock", LOCK, "nice", "-n", "10", "taskset", "-c", CPUS, "cargo", "test", "--locked", "--release",
+           "--lib", "--", "c2_oracle_parity", "i1_oracle_parity"] + EXTRA_TESTS
     p = subprocess.run(cmd, capture_output=True, text=True, env=env)
     with open(f"{out}/test.log", "w") as fh:
         fh.write(p.stdout + p.stderr)
@@ -191,7 +196,7 @@ def run(name, out, evidence, forest):
             t, status = line[5:].split(" ... ", 1)
             tests[t] = status.strip()
     flipped = {}
-    for f in ("c2", "c2wb", "s3", "sweep", "forest", "i1", "i1-corpus"):
+    for f in ("c2", "c2wb", "s3", "sweep", "forest", "i1", "i1-corpus", "h11"):
         path = f"{out}/{f}.json"
         if not os.path.exists(path):
             continue
@@ -241,7 +246,9 @@ def main(argv):
             # Re-run of a slice-1 mutant: it must still flip, and slice-3 flips are recorded.
             caught = res["compiled"] and bool(every)
         else:
-            caught = res["compiled"] and m["paired"] in every
+            # A paired unit test (H11 work-bound mutants) counts when that test fails.
+            caught = res["compiled"] and (m["paired"] in every
+                                          or any(t.endswith(m["paired"]) for t in failed))
         row = {"row": m.get("row") or m.get("what"), "paired": m["paired"],
                "patchSha256": hashlib.sha256(patch.encode()).hexdigest() if m["edits"] else None,
                "compiled": res["compiled"], "failedTests": failed, "flippedCount": len(every),

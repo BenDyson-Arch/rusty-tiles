@@ -4,6 +4,7 @@
 //! Raster and elevation source decoding require the native-geospatial build.
 
 mod archive3tz;
+mod basisu_ktx2;
 pub mod bbox;
 mod content_integrity;
 mod crs;
@@ -54,6 +55,9 @@ pub use mesh_archive::{
     MeshApproximationReport, MeshCertificateReport, MeshPlacement, MeshPlacementReport, MeshReport,
     MeshRequest, MeshResult, ModelManifestRequest, ModelManifestResult, ModelReport,
     ModelWrapRequest, ModelWrapResult,
+};
+pub use mesh_large::{
+    mesh_to_leaf_payloads, LeafOutputReport, LeafOutputRequest, LeafOutputResult, LeafProfile,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{
@@ -110,3 +114,7 @@ mod c2_oracle_parity;
 #[cfg(test)]
 #[path = "../bench/architecture_audit/implicit_read/acceptance/oracle_parity.rs"]
 mod i1_oracle_parity;
+
+#[cfg(test)]
+#[path = "../bench/architecture_audit/mesh_large_h8/decode_ktx.rs"]
+mod h8_ktx_artifact_decoder;

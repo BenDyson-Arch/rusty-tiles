@@ -727,7 +727,7 @@ fn model_to_manifest(
 
 /// Tile local or grid-free georeferenced LAS/LAZ point clouds.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=50_000, chunk_points=100_000, metadata_attributes=false, callback=None))]
+#[pyo3(signature = (input, output, *, source_crs, force=false, height_offset=None, max_points=8192, chunk_points=100_000, metadata_attributes=false, callback=None))]
 #[allow(clippy::too_many_arguments)]
 fn point_cloud_to_3tz(
     py: Python<'_>,

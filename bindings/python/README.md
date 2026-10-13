@@ -61,7 +61,7 @@ results with required reports and cleanup diagnostics, as described below.
 | `mesh_to_3tz(input, output, ...)` | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
-| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=50000`, `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
+| `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
 | `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |

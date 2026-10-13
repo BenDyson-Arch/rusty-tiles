@@ -42,3 +42,12 @@ re-run with the release parity test (the three `--large` controls absent; clean 
 | --- | --- | --- | --- |
 | `precheck-depth-cap-off-by-one` (`>=` at the `containmentNodeDepth` check) | `02c8ce35612542979e8afa91f1437705ebec248b0de6c7711017b253ca8b2b52` | 1 | `work-containmentNodeDepth-at-sum` flips |
 | `reverse-tile-order` (level `l` takes the root-side transform) | `cbf818dc63dad775739c715add462c23d21f9bdce017c7faea56da0b4b2dd1a9` | 19, plus `wb/` `terms-parent-step` and `terms-parent-sphere-step` | `W01-noRTC-variant` flips |
+
+## H11 corner fast path (2026-10-13)
+
+`h11/mutants.py` drives nine fast-path mutants through `slice3/mutants.py` (same edits-and-parity
+loop), each paired with an oracle-decided `h11/` control or, for the work bound, with
+`corner_walks_stay_within_the_credit_bound`. The slice-3 driver's lock, target directory, CPUs, jobs
+and extra test filters can be set with `C2M_LOCK`, `C2M_TARGET`, `C2M_CPUS`, `C2M_JOBS` and
+`C2M_EXTRA_TESTS`; a paired unit test counts as caught when it fails. Results: the H11 section of
+`../../README.md`.

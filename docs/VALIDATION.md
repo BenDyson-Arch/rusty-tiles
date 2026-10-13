@@ -144,6 +144,15 @@ document, 128 MiB per member, 1 GiB source archive and total stored member bytes
 payload elements, 128 MiB decoded views per document, 128 levels of hierarchy
 depth, and 2 GiB explicit member-hash and payload/document read work including
 repeated reads and constructor index reads.
+Each placement of a shared external tileset is charged its full visits,
+references and document bytes, as if it were read and walked again. In fact each
+external-tileset document is parsed and checked once. Later placements re-check
+only what depends on the placement: the root's bounds and geometric error against
+the referencing tile, the depth limits, and decoded containment through that
+placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
+physical reads. Verdicts, messages and report counts are the same as a full
+re-walk ([memo amendment](architecture/c1-external-tileset-memo-amendment.md)).
+
 The 3TZ index is not a payload member: it is admitted at exactly 24 bytes per
 other member, as the central-directory count fixes it, and read in 64 KiB chunks.
 The 178,956,970-member 3TZ ceiling, which producers also enforce, is a format

@@ -1,5 +1,5 @@
 diff --git a/src/validate.rs b/src/validate.rs
-index 65ae7e6..77cb64e 100644
+index 88ee84a..26e3d7d 100644
 --- a/src/validate.rs
 +++ b/src/validate.rs
 @@ -692,7 +692,10 @@ impl Containment {

@@ -94,7 +94,7 @@ Grid-free globe placement works in the default build. CRS selection automaticall
 | --- | --- | --- | --- |
 | `--sourceCrs` | `--source-crs` | required | `local`, `header`, or a 2D horizontal CRS such as `EPSG:32632` |
 | `--heightOffset` | `--height-offset` | none | Metres added to source Z to give ellipsoidal height. Required for geospatial input. |
-| `--maxPoints` | `--max-points` | `50000` | Maximum points per tile, at least 1 |
+| `--maxPoints` | `--max-points` | `8192` | Maximum points per tile, from 1 to 8192. Each point is one row of the tile's property table, and CesiumJS 1.146 cannot build the GPU metadata texture of a table wider than the WebGL maximum texture size (8192 on the pinned target) |
 | `--metadataAttributes` | `--metadata-attributes` | off | Also expose `vertex_classification`, `vertex_intensity` and `vertex_return_number` as property attributes |
 | `--chunkPoints` | `--chunk-points` | `100000` | Points read per source chunk, at least 1 |
 
@@ -418,6 +418,14 @@ records proof limits, including a potentially loose certificate and no general
 appearance guarantee. The
 [bounded evidence](../bench/architecture_audit/mesh_approximation_f1d2/README.md)
 records independent decoding, public consumer queries and separate review.
+
+Known limitation: each leaf has one `source_triangle` property table with a row
+per leaf triangle. CesiumJS 1.146 cannot build the GPU texture of a property
+table wider than the WebGL maximum texture size (8192 on the pinned target), so with `--leaf-triangles` above 8192 it warns
+`Cannot create a texture for the property table "undefined"` and metadata
+styling through the GPU fails on those leaves; the table itself stays
+complete. Keep `--leaf-triangles` at or below 8192 when styling by
+metadata. This writer is retired with the new mesh tiler rather than changed.
 
 ## Machine output
 

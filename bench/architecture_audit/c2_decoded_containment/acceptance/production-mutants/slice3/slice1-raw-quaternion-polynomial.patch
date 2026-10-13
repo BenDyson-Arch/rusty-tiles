@@ -1,5 +1,5 @@
 diff --git a/src/validate/containment.rs b/src/validate/containment.rs
-index fb78a6c..7cecc11 100644
+index e59fa24..05df7a2 100644
 --- a/src/validate/containment.rs
 +++ b/src/validate/containment.rs
 @@ -578,9 +578,7 @@ fn trs_local(a: &mut Arena, t: [f64; 3], q: [f64; 4], sc: [f64; 3]) -> bool {
