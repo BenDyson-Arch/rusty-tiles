@@ -427,11 +427,18 @@ def generate(directory):
     container_case('zip_local_offset_sentinel',bytes(raw),'invalid_input','Central directory local offset is ZIP64 sentinel without required ZIP64 extra field.')
     raw=(directory/'triangle.3tz').read_bytes(); end=raw.rindex(b'PK\x05\x06')
     size,offset=struct.unpack_from('<II',raw,end+12)
-    record=struct.pack('<4sQ2H2I4Q',b'PK\x06\x06',44,45,45,0,0,2**64-1,2**64-1,size,offset)
     locator=struct.pack('<4sIQI',b'PK\x06\x07',0,end,1)
     ending=struct.pack('<4s4H2IH',b'PK\x05\x06',0,0,65535,65535,0xffffffff,0xffffffff,0)
-    container_case('zip64_count_max',raw[:end]+record+locator+ending,'resource_limit',
-                   'ZIP64 claims u64MAX entries; admission must reject before directory allocation.')
+    ceiling=178956970  # 3TZ member ceiling: a format rule that precedes engineering limits.
+    for name,count,kind,fact in [
+            ('zip64_count_max',2**64-1,'unsupported',
+             'ZIP64 claims u64MAX entries, above the 3TZ member ceiling; refused before limits and directory allocation.'),
+            ('zip64_count_above_ceiling',ceiling+1,'unsupported',
+             'ZIP64 claims 178,956,971 entries, one above the 3TZ member ceiling; refused before limits and directory allocation.'),
+            ('zip64_count_at_ceiling',ceiling,'resource_limit',
+             'ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it and the 524,288 default entry limit refuses it.')]:
+        record=struct.pack('<4sQ2H2I4Q',b'PK\x06\x06',44,45,45,0,0,count,count,size,offset)
+        container_case(name,raw[:end]+record+locator+ending,kind,fact)
     zip_files = {'tileset.json': json.dumps(tileset).encode(), 'tile.glb': good}
     for field in ['crc', 'compressed_size', 'uncompressed_size']:
         container_case('zip_local_' + field + '_mismatch',
