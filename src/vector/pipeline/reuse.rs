@@ -20,6 +20,10 @@ struct Record {
     padding: f64,
     fragments: usize,
     cut: Option<Cut>,
+    /// Quantized builds, on the root: the signature of the input rows before
+    /// the survey (their fingerprints without grid steps).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    survey: Option<String>,
 }
 /// How to recover one raw payload that the archive publishes only rebased under
 /// `implicit-content/` (design §4.7). Keyed by the raw sha256 in `vector-build.json`.
@@ -471,9 +475,37 @@ impl Reuse {
                 padding: node.padding,
                 fragments: node.fragments,
                 cut: self.cuts.get(path).cloned(),
+                survey: None,
             },
         );
         Ok(())
+    }
+    /// Restores `path` as the previous quantized build published it when its
+    /// input rows match those that build surveyed: the same rows give the same
+    /// survey, grid and contents.
+    pub fn restore_surveyed(
+        &mut self,
+        path: &str,
+        survey: &str,
+        counters: &mut Counters,
+        current_fragments: usize,
+        max_tiles: usize,
+    ) -> Result<Option<Node>, Error> {
+        let Some(signature) = self
+            .old
+            .get(path)
+            .filter(|r| r.survey.as_deref() == Some(survey))
+            .map(|r| r.signature.clone())
+        else {
+            return Ok(None);
+        };
+        self.restore(path, &signature, counters, current_fragments, max_tiles)
+    }
+    /// Records the pre-survey signature of a quantized build's input.
+    pub fn remember_survey(&mut self, path: &str, survey: String) {
+        if let Some(record) = self.records.get_mut(path) {
+            record.survey = Some(survey);
+        }
     }
     /// Record build state and publish only referenced raw payloads. `tree` is the
     /// producer's hierarchy H (the forest's input); `manifest` is `tileset.json` as the
@@ -703,6 +735,7 @@ mod codec_reuse_tests {
                 padding: 0.,
                 fragments: 1,
                 cut: None,
+                survey: None,
             },
         );
         same.nodes.insert(
@@ -760,6 +793,7 @@ mod codec_reuse_tests {
                 padding: 0.,
                 fragments: 1,
                 cut: None,
+                survey: None,
             },
         );
         reuse.nodes.insert(

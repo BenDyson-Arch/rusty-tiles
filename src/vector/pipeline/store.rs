@@ -413,7 +413,9 @@ fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Erro
     }
     Ok(())
 }
-fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
+/// A row's reuse fingerprint: its data, which vertices are locked and, once
+/// a quantized build has surveyed them, its shared vertices' exponents.
+fn fingerprint(db: &Connection, id: i64, value: &str, grid: bool) -> Result<(), Error> {
     let feature: Feature = serde_json::from_str(value)?;
     let points: Vec<_> = feature.geometry.points().collect();
     let mut mask = vec![0; points.len().div_ceil(8)];
@@ -433,6 +435,29 @@ fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     hasher.update(mask);
+    if grid {
+        let mut exponents = db
+            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez,fl,al FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
+            .map_err(sql)?;
+        for p in &points {
+            let p = encoding::cell(**p);
+            let held: Vec<(i64, String, u32, [i32; 3], bool, bool)> = exponents
+                .query_map(params![p[0], p[1], p[2]], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        [r.get(3)?, r.get(4)?, r.get(5)?],
+                        r.get(6)?,
+                        r.get(7)?,
+                    ))
+                })
+                .map_err(sql)?
+                .collect::<Result<_, _>>()
+                .map_err(sql)?;
+            hasher.update(serde_json::to_vec(&held)?);
+        }
+    }
     db.execute(
         "UPDATE features SET fingerprint=?1 WHERE id=?2",
         params![format!("{:x}", hasher.finalize()), id],
@@ -440,6 +465,182 @@ fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
     .map_err(sql)?;
     Ok(())
 }
+/// Whether tile `a` (prefix, level) is an ancestor of tile `b`: a partition
+/// node is above every tile under its prefix, and an LOD chain's coarser
+/// levels are above its finer ones at the same prefix.
+fn ancestor(a: &(String, u32), b: &(String, u32)) -> bool {
+    b.0.starts_with(&a.0) && (b.0.len() > a.0.len() || b.1 < a.1)
+}
+
+/// The survey's record of shared vertices (`holders`: per vertex cell and
+/// kind, each tile holding it and that tile's own u16 and float32
+/// exponents) and the resolved grid (`grid`: each holder's snapping
+/// exponents, whether the tile stores float32, and whether no other tile
+/// that can render with it holds the vertex).
+const GRID_TABLES: &str = "CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fx INTEGER,fy INTEGER,fz INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;";
+
+type Tile = (String, u32);
+
+/// Calls `visit` with each shared vertex (cell and kind) and its holders'
+/// co-rendering groups: holders that can render together (neither is the
+/// other's ancestor) are joined, transitively.
+fn vertex_groups(
+    db: &Connection,
+    mut visit: impl FnMut([i64; 4], Vec<Vec<Tile>>) -> Result<(), Error>,
+) -> Result<(), Error> {
+    fn groups(held: &[Tile]) -> Vec<Vec<Tile>> {
+        let n = held.len();
+        let mut group: Vec<usize> = (0..n).collect();
+        fn root(group: &mut [usize], mut i: usize) -> usize {
+            while group[i] != i {
+                group[i] = group[group[i]];
+                i = group[i];
+            }
+            i
+        }
+        for a in 0..n {
+            for b in a + 1..n {
+                if !ancestor(&held[a], &held[b]) && !ancestor(&held[b], &held[a]) {
+                    let (ra, rb) = (root(&mut group, a), root(&mut group, b));
+                    group[ra] = rb;
+                }
+            }
+        }
+        let mut out: BTreeMap<usize, Vec<Tile>> = BTreeMap::new();
+        for (i, tile) in held.iter().enumerate() {
+            out.entry(root(&mut group, i))
+                .or_default()
+                .push(tile.clone());
+        }
+        out.into_values().collect()
+    }
+    let mut stmt = db
+        .prepare(
+            "SELECT cx,cy,cz,kind,prefix,level FROM holders ORDER BY cx,cy,cz,kind,prefix,level",
+        )
+        .map_err(sql)?;
+    let mut rows = stmt.query([]).map_err(sql)?;
+    let mut current: Option<[i64; 4]> = None;
+    let mut held: Vec<Tile> = Vec::new();
+    while let Some(r) = rows.next().map_err(sql)? {
+        let p: [i64; 4] = [
+            r.get(0).map_err(sql)?,
+            r.get(1).map_err(sql)?,
+            r.get(2).map_err(sql)?,
+            r.get(3).map_err(sql)?,
+        ];
+        if let Some(c) = current.filter(|c| *c != p) {
+            visit(c, groups(&held))?;
+            held.clear();
+        }
+        current = Some(p);
+        held.push((r.get(4).map_err(sql)?, r.get(5).map_err(sql)?));
+    }
+    if let Some(c) = current {
+        visit(c, groups(&held))?;
+    }
+    Ok(())
+}
+
+/// Resolves the survey into `grid`. Each co-rendering group of a shared
+/// vertex must decode it to one point, a multiple of every member's step.
+/// A tile whose own u16 step is coarser, on any axis, than another member's
+/// in any of its groups stores float32 (2^8 times finer); the u16 members of
+/// a group then share one step. Each group snaps at the largest step its
+/// members can hold, per axis: the u16 members' own, or a float32 member's.
+fn resolve_grid(db: &Connection) -> Result<(), Error> {
+    let mut own: BTreeMap<Tile, encoding::OwnExponents> = BTreeMap::new();
+    {
+        let mut stmt = db
+            .prepare("SELECT DISTINCT prefix,level,ex,ey,ez,fx,fy,fz FROM holders")
+            .map_err(sql)?;
+        let mut rows = stmt.query([]).map_err(sql)?;
+        while let Some(r) = rows.next().map_err(sql)? {
+            let get = |i: usize| r.get::<_, i32>(i).map_err(sql);
+            let exponents = encoding::OwnExponents {
+                u16: [get(2)?, get(3)?, get(4)?],
+                float: [get(5)?, get(6)?, get(7)?],
+            };
+            // One encoding per tile: its rows agree on its exponents.
+            if own
+                .insert((r.get(0).map_err(sql)?, r.get(1).map_err(sql)?), exponents)
+                .is_some_and(|other| other != exponents)
+            {
+                return Err(data(
+                    "quantization survey recorded two exponents for one tile",
+                ));
+            }
+        }
+    }
+    let mut float: BTreeSet<Tile> = BTreeSet::new();
+    vertex_groups(db, |_, groups| {
+        for group in groups {
+            for tile in &group {
+                let e = own[tile].u16;
+                if group
+                    .iter()
+                    .any(|other| (0..3).any(|i| own[other].u16[i] < e[i]))
+                {
+                    float.insert(tile.clone());
+                }
+            }
+        }
+        Ok(())
+    })?;
+    db.execute_batch("BEGIN;").map_err(sql)?;
+    {
+        let mut insert = db
+            .prepare_cached(
+                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez,fl,al) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            )
+            .map_err(sql)?;
+        vertex_groups(db, |p, groups| {
+            for group in groups {
+                let finest = |tile: &Tile| match float.contains(tile) {
+                    true => own[tile].float,
+                    false => own[tile].u16,
+                };
+                let e: [i32; 3] = std::array::from_fn(|i| {
+                    group
+                        .iter()
+                        .map(|t| finest(t)[i])
+                        .max()
+                        .expect("a group has a member")
+                });
+                for tile in &group {
+                    insert
+                        .execute(params![
+                            p[0],
+                            p[1],
+                            p[2],
+                            p[3],
+                            tile.0,
+                            tile.1,
+                            e[0],
+                            e[1],
+                            e[2],
+                            float.contains(tile),
+                            group.len() == 1
+                        ])
+                        .map_err(sql)?;
+                }
+            }
+            Ok(())
+        })?;
+    }
+    db.execute_batch("COMMIT;").map_err(sql)?;
+    Ok(())
+}
+
+/// The refusals the final pass replays for `levels` of one tile, from the
+/// survey's: a refused level stays refused, and a refused full-detail leaf
+/// (level 0) refuses its coarse levels too, as they never joined the
+/// hierarchy.
+fn replayed(levels: &[u32], survey: &[Option<&'static str>]) -> Vec<Option<&'static str>> {
+    let leaf = levels.iter().position(|l| *l == 0).and_then(|i| survey[i]);
+    survey.iter().map(|refusal| refusal.or(leaf)).collect()
+}
+
 struct Stats {
     count: usize,
     vertices: usize,
@@ -463,6 +664,11 @@ struct Build<'a> {
     reuse: Reuse,
     workers: BTreeSet<usize>,
     partition_seconds: f64,
+    /// The pass of a quantized build (see `encoding::lattice`).
+    pass: encoding::GridPass,
+    /// Survey outcome of every candidate, by (prefix, level): accepted, or
+    /// its reason. The final pass replays it, so the hierarchy is the same.
+    outcomes: BTreeMap<(String, u32), Option<&'static str>>,
 }
 impl Build<'_> {
     fn stats(&self, prefix: &str) -> Result<Stats, Error> {
@@ -483,16 +689,60 @@ impl Build<'_> {
             output: self.output,
             policy: self.policy,
             attempt: self.attempt,
+            pass: self.pass,
         };
+        // The final pass does not re-encode what the survey refused.
+        let refusals: Vec<Option<&'static str>> = levels
+            .iter()
+            .map(|level| match self.pass {
+                encoding::GridPass::Final => self
+                    .outcomes
+                    .get(&(prefix.to_string(), *level))
+                    .copied()
+                    .flatten(),
+                _ => None,
+            })
+            .collect();
+        let refusals = replayed(levels, &refusals);
+        let refused = |level: &u32| refusals[levels.iter().position(|l| l == level).unwrap()];
+        let todo: Vec<u32> = levels
+            .iter()
+            .filter(|level| refused(level).is_none())
+            .copied()
+            .collect();
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
-            levels
-                .par_iter()
+            todo.par_iter()
                 .map(|level| encoding::encode(encoder, prefix, center, *level))
                 .collect()
         });
-        let values = values.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let mut encoded = values
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter();
         self.workers
-            .extend(values.iter().map(|candidate| candidate.worker));
+            .extend(encoded.as_slice().iter().map(|candidate| candidate.worker));
+        let mut values = Vec::with_capacity(levels.len());
+        for level in levels {
+            let candidate = match refused(level) {
+                Some(reason) => Candidate {
+                    node: None,
+                    reports: Vec::new(),
+                    reason: Some(reason),
+                    worker: 0,
+                    survey: None,
+                },
+                None => encoded.next().expect("one encoding per unrefused level"),
+            };
+            if self.pass == encoding::GridPass::Survey {
+                let outcome = if candidate.node.is_some() {
+                    None
+                } else {
+                    Some(candidate.reason.unwrap_or("refused"))
+                };
+                self.outcomes.insert((prefix.to_string(), *level), outcome);
+            }
+            values.push(candidate);
+        }
         Ok(values)
     }
     fn consume(
@@ -500,8 +750,38 @@ impl Build<'_> {
         candidate: Candidate,
     ) -> Result<(Option<VectorRecord>, Option<&'static str>), Error> {
         if candidate.node.is_some() {
-            for report in candidate.reports {
-                self.reports.write(report)?;
+            if self.pass == encoding::GridPass::Survey {
+                // Each shared vertex records the tiles that hold it and their
+                // exponents; reports are written by the final pass.
+                if let Some(survey) = &candidate.survey {
+                    self.db.execute_batch("SAVEPOINT holders;").map_err(sql)?;
+                    let mut insert = self.db.prepare_cached("INSERT OR REPLACE INTO holders(cx,cy,cz,kind,prefix,level,ex,ey,ez,fx,fy,fz) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)").map_err(sql)?;
+                    let (e, f) = (survey.exponent.u16, survey.exponent.float);
+                    for (p, kind) in &survey.shared {
+                        insert
+                            .execute(params![
+                                p[0],
+                                p[1],
+                                p[2],
+                                *kind as i64,
+                                survey.prefix,
+                                survey.level,
+                                e[0],
+                                e[1],
+                                e[2],
+                                f[0],
+                                f[1],
+                                f[2]
+                            ])
+                            .map_err(sql)?;
+                    }
+                    drop(insert);
+                    self.db.execute_batch("RELEASE holders;").map_err(sql)?;
+                }
+            } else {
+                for report in candidate.reports {
+                    self.reports.write(report)?;
+                }
             }
         }
         Ok((candidate.node, candidate.reason))
@@ -581,6 +861,10 @@ impl Build<'_> {
         self.attempt
             .check()
             .map_err(|error| Error::Job(self.attempt.fail(error)))?;
+        if self.pass == encoding::GridPass::Survey {
+            // The survey encodes everything: reused payloads report no exponents.
+            return self.build_uncached(prefix, depth);
+        }
         let signature = self.reuse.signature(self.db, prefix)?;
         let n = self.stats(prefix)?.count;
         if let Some(node) = self.reuse.restore(
@@ -689,69 +973,72 @@ impl Build<'_> {
                 .map_err(sql)?;
             for row in rows {
                 let (id, value) = row.map_err(sql)?;
-                fingerprint(self.db, id, &value)?;
+                fingerprint(self.db, id, &value, false)?;
             }
             return self.build_uncached(prefix, depth + 1);
         }
-        let started = Instant::now();
-        let median = |db: &Connection| -> Result<Cut, Error> {
-            let span = sub(stats.hi, stats.lo);
-            let mut index = 0;
-            for i in 1..3 {
-                if span[i] > span[index] {
-                    index = i;
+        // The final pass of a quantized build reuses the survey's partition.
+        if self.pass != encoding::GridPass::Final {
+            let started = Instant::now();
+            let median = |db: &Connection| -> Result<Cut, Error> {
+                let span = sub(stats.hi, stats.lo);
+                let mut index = 0;
+                for i in 1..3 {
+                    if span[i] > span[index] {
+                        index = i;
+                    }
                 }
+                let axis = ["x", "y", "z"][index];
+                db.query_row(&format!("SELECT {axis},sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY {axis},sortkey,id LIMIT 1 OFFSET ?3"),params![prefix,format!("{prefix}~"),(stats.count/2-1) as i64],|r|Ok(Cut{axis:axis.into(),value:r.get(0)?,key:r.get(1)?,id:r.get(2)?})).map_err(sql)
+            };
+            let mut cut = self
+                .reuse
+                .cuts
+                .get(prefix)
+                .cloned()
+                .map(Ok)
+                .unwrap_or_else(|| median(self.db))?;
+            if !matches!(cut.axis.as_str(), "x" | "y" | "z") || !cut.value.is_finite() {
+                return Err(data("invalid previous spatial partition axis"));
             }
-            let axis = ["x", "y", "z"][index];
-            db.query_row(&format!("SELECT {axis},sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY {axis},sortkey,id LIMIT 1 OFFSET ?3"),params![prefix,format!("{prefix}~"),(stats.count/2-1) as i64],|r|Ok(Cut{axis:axis.into(),value:r.get(0)?,key:r.get(1)?,id:r.get(2)?})).map_err(sql)
-        };
-        let mut cut = self
-            .reuse
-            .cuts
-            .get(prefix)
-            .cloned()
-            .map(Ok)
-            .unwrap_or_else(|| median(self.db))?;
-        if !matches!(cut.axis.as_str(), "x" | "y" | "z") || !cut.value.is_finite() {
-            return Err(data("invalid previous spatial partition axis"));
+            let condition = |cut: &Cut| {
+                format!(
+                    "({}< ?2 OR ({}= ?2 AND (sortkey< ?3 OR (sortkey= ?3 AND id<= ?4))))",
+                    cut.axis, cut.axis
+                )
+            };
+            let left: usize = self
+                .db
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM features WHERE path=?1 AND {}",
+                        condition(&cut)
+                    ),
+                    params![prefix, cut.value, cut.key, cut.id],
+                    |r| Ok(r.get::<_, i64>(0)? as usize),
+                )
+                .map_err(sql)?;
+            if left == 0 || left == stats.count {
+                cut = median(self.db)?;
+            }
+            self.db
+                .execute(
+                    &format!(
+                        "UPDATE features SET path=?5 WHERE path=?1 AND {}",
+                        condition(&cut)
+                    ),
+                    params![prefix, cut.value, cut.key, cut.id, format!("{prefix}0")],
+                )
+                .map_err(sql)?;
+            self.db
+                .execute(
+                    "UPDATE features SET path=?1 WHERE path=?2",
+                    params![format!("{prefix}1"), prefix],
+                )
+                .map_err(sql)?;
+            self.reuse.cuts.insert(prefix.into(), cut);
+            self.partition_seconds += started.elapsed().as_secs_f64();
         }
-        let condition = |cut: &Cut| {
-            format!(
-                "({}< ?2 OR ({}= ?2 AND (sortkey< ?3 OR (sortkey= ?3 AND id<= ?4))))",
-                cut.axis, cut.axis
-            )
-        };
-        let left: usize = self
-            .db
-            .query_row(
-                &format!(
-                    "SELECT COUNT(*) FROM features WHERE path=?1 AND {}",
-                    condition(&cut)
-                ),
-                params![prefix, cut.value, cut.key, cut.id],
-                |r| Ok(r.get::<_, i64>(0)? as usize),
-            )
-            .map_err(sql)?;
-        if left == 0 || left == stats.count {
-            cut = median(self.db)?;
-        }
-        self.db
-            .execute(
-                &format!(
-                    "UPDATE features SET path=?5 WHERE path=?1 AND {}",
-                    condition(&cut)
-                ),
-                params![prefix, cut.value, cut.key, cut.id, format!("{prefix}0")],
-            )
-            .map_err(sql)?;
-        self.db
-            .execute(
-                "UPDATE features SET path=?1 WHERE path=?2",
-                params![format!("{prefix}1"), prefix],
-            )
-            .map_err(sql)?;
-        self.reuse.cuts.insert(prefix.into(), cut);
-        self.partition_seconds += started.elapsed().as_secs_f64();
         let mut children = Vec::new();
         for suffix in ["0", "1"] {
             let path = format!("{prefix}{suffix}");
@@ -916,7 +1203,7 @@ pub(super) fn convert(
         .map_err(sql)?
     {
         let (id, value) = row.map_err(sql)?;
-        fingerprint(&db, id, &value)?;
+        fingerprint(&db, id, &value, false)?;
     }
     drop(stmt);
     db.execute_batch("COMMIT;").map_err(sql)?;
@@ -925,6 +1212,8 @@ pub(super) fn convert(
         .num_threads(options.jobs)
         .build()
         .map_err(|e| Error::Environment(format!("cannot start vector workers: {e}")))?;
+    // The survey pass of a quantized build publishes into scratch.
+    let survey_output = scratch.path().join("survey");
     let mut build = Build {
         attempt,
         db: &db,
@@ -941,10 +1230,77 @@ pub(super) fn convert(
         reuse,
         workers: BTreeSet::new(),
         partition_seconds,
+        pass: encoding::GridPass::Single,
+        outcomes: BTreeMap::new(),
     };
     let encoding_started = Instant::now();
     let before_partition = build.partition_seconds;
-    let root = if build.counters.features > 0 {
+    // A quantized build also keys its whole input by the rows' fingerprints
+    // before the survey: unchanged input restores the previous build's
+    // hierarchy, grid and contents as they are, without surveying or
+    // encoding. (Changed input surveys everything; the final pass still
+    // reuses unchanged subtrees.)
+    let mut surveyed = None;
+    let mut restored = None;
+    if options.quantize && build.counters.features > 0 {
+        let unchanged = build.reuse.signature(&db, "")?;
+        let rows = build.stats("")?.count;
+        restored = build.reuse.restore_surveyed(
+            "",
+            &unchanged,
+            &mut build.counters,
+            rows,
+            options.max_tiles,
+        )?;
+        surveyed = Some(unchanged);
+    }
+    if restored.is_none() && options.quantize && build.counters.features > 0 {
+        // Survey: build the hierarchy with every content on its own range and
+        // record, per shared vertex, the largest exponent of the tiles holding
+        // it. Splits and partitions it makes are kept; tiles are rebuilt.
+        db.execute_batch(GRID_TABLES).map_err(sql)?;
+        std::fs::create_dir_all(survey_output.join("t"))?;
+        let before = build.counters.clone();
+        build.pass = encoding::GridPass::Survey;
+        build.output = &survey_output;
+        drop(build.build("", 0)?);
+        for (counter, value) in [
+            (&mut build.counters.tiles, before.tiles),
+            (&mut build.counters.leaf_tiles, before.leaf_tiles),
+            (&mut build.counters.routing_tiles, before.routing_tiles),
+            (
+                &mut build.counters.maximum_tile_vertices,
+                before.maximum_tile_vertices,
+            ),
+            (
+                &mut build.counters.maximum_tile_bytes,
+                before.maximum_tile_bytes,
+            ),
+        ] {
+            *counter = value;
+        }
+        std::fs::remove_dir_all(&survey_output)?;
+        resolve_grid(&db)?;
+        // Reuse keys a subtree by its rows' shared-vertex exponents too.
+        db.execute_batch("BEGIN;").map_err(sql)?;
+        let mut stmt = db
+            .prepare("SELECT id,data FROM features ORDER BY id")
+            .map_err(sql)?;
+        for row in stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(sql)?
+        {
+            let (id, value) = row.map_err(sql)?;
+            fingerprint(&db, id, &value, true)?;
+        }
+        drop(stmt);
+        db.execute_batch("COMMIT;").map_err(sql)?;
+        build.pass = encoding::GridPass::Final;
+        build.output = output;
+    }
+    let root = if let Some(node) = restored {
+        node
+    } else if build.counters.features > 0 {
         build.build("", 0)?
     } else {
         let mut node = Node {
@@ -959,6 +1315,9 @@ pub(super) fn convert(
             .remember("", build.reuse.signature(&db, "")?, &mut node)?;
         node
     };
+    if let Some(surveyed) = surveyed {
+        build.reuse.remember_survey("", surveyed);
+    }
     // Identity accounting: every source fragment is in exactly one full-detail leaf.
     let held = records::leaf_fragments(&root.tree)?;
     if held != build.counters.fragments {
@@ -1643,5 +2002,209 @@ mod countries_fragment_tests {
             expected,
             "fragmentation must not introduce internal meridian outlines"
         );
+    }
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    /// Four tiles hold one fill vertex: two sibling leaves, a coarse leaf
+    /// elsewhere and an LOD ancestor of the siblings. All are joined (the
+    /// coarse leaf renders with each), yet the vertex snaps at the finest
+    /// leaf's own step, not the coarse leaf's: every tile coarser than it
+    /// stores float32. An ancestor and its descendant are never joined, and
+    /// line copies group apart from fill copies.
+    #[test]
+    fn grid_groups_keep_the_finest_tile_on_its_own_step() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        let tiles = [
+            ("00", 0, [3, 3, 3]),
+            ("01", 0, [4, 3, 3]),
+            ("1", 0, [6, 6, 6]),
+            ("0", 2, [5, 5, 5]),
+        ];
+        let hold = |cell: i64, kind: i64, tile: usize| {
+            let (prefix, level, e) = tiles[tile];
+            db.execute(
+                "INSERT INTO holders VALUES(?1,0,0,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params![
+                    cell,
+                    kind,
+                    prefix,
+                    level,
+                    e[0],
+                    e[1],
+                    e[2],
+                    e[0] - 8,
+                    e[1] - 8,
+                    e[2] - 8
+                ],
+            )
+            .unwrap();
+        };
+        for tile in 0..4 {
+            hold(1, 0, tile);
+        }
+        hold(2, 0, 0);
+        hold(2, 0, 3);
+        hold(3, 1, 0);
+        hold(3, 1, 1);
+        resolve_grid(&db).unwrap();
+        let row = |cell: i64, kind: i64, prefix: &str, level: u32| -> ([i32; 3], bool) {
+            db.query_row(
+                "SELECT ex,ey,ez,fl FROM grid WHERE cx=?1 AND kind=?2 AND prefix=?3 AND level=?4",
+                params![cell, kind, prefix, level],
+                |r| Ok(([r.get(0)?, r.get(1)?, r.get(2)?], r.get(3)?)),
+            )
+            .unwrap()
+        };
+        for (prefix, level, float) in [
+            ("00", 0, false),
+            ("01", 0, true),
+            ("1", 0, true),
+            ("0", 2, true),
+        ] {
+            assert_eq!(row(1, 0, prefix, level), ([3, 3, 3], float), "{prefix}");
+        }
+        assert_eq!(row(2, 0, "00", 0), ([3, 3, 3], false));
+        // Only an ancestor shares vertex 2: no copy it must agree with.
+        let alone = |cell: i64| -> Vec<bool> {
+            db.prepare("SELECT al FROM grid WHERE cx=?1 ORDER BY prefix")
+                .unwrap()
+                .query_map([cell], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(alone(2), [true, true]);
+        assert_eq!(alone(1), [false; 4]);
+        assert_eq!(row(2, 0, "0", 2), ([-3, -3, -3], true));
+        assert_eq!(row(3, 1, "01", 0), ([3, 3, 3], true));
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM grid", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            8
+        );
+    }
+
+    /// The survey's g > E case: a float32 member's finest step can be
+    /// coarser than a u16 member's own. The group snaps there, and the u16
+    /// tile stays u16.
+    #[test]
+    fn grid_group_snaps_at_a_coarser_float32_members_step() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        for (prefix, u16, float) in [
+            ("0", [0, 0, 0], [-8, -8, -8]),
+            ("1", [12, 1, 1], [4, -7, -7]),
+        ] {
+            db.execute(
+                "INSERT INTO holders VALUES(1,0,0,0,?1,0,?2,?3,?4,?5,?6,?7)",
+                params![prefix, u16[0], u16[1], u16[2], float[0], float[1], float[2]],
+            )
+            .unwrap();
+        }
+        resolve_grid(&db).unwrap();
+        let rows: Vec<(String, [i32; 3], bool)> = db
+            .prepare("SELECT prefix,ex,ey,ez,fl FROM grid ORDER BY prefix")
+            .unwrap()
+            .query_map([], |r| {
+                Ok((r.get(0)?, [r.get(1)?, r.get(2)?, r.get(3)?], r.get(4)?))
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            [
+                ("0".into(), [4, 0, 0], false),
+                ("1".into(), [4, 0, 0], true)
+            ]
+        );
+    }
+
+    /// A tile recorded with two different exponents is a broken survey.
+    #[test]
+    fn conflicting_survey_exponents_are_an_error() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        for (cell, e) in [(1, 3), (2, 4)] {
+            db.execute(
+                "INSERT INTO holders VALUES(?1,0,0,0,'0',0,?2,?2,?2,-5,-5,-5)",
+                params![cell, e],
+            )
+            .unwrap();
+        }
+        assert!(resolve_grid(&db).is_err());
+    }
+
+    /// The final pass replays the survey's refusals; a refused leaf takes
+    /// its coarse levels with it.
+    #[test]
+    fn refused_leaves_discard_their_coarse_levels_on_replay() {
+        assert_eq!(
+            replayed(&[0, 1, 2], &[Some("vertices"), None, None]),
+            [Some("vertices"); 3]
+        );
+        assert_eq!(
+            replayed(&[0, 1, 2], &[None, Some("parentFeatures"), None]),
+            [None, Some("parentFeatures"), None]
+        );
+        assert_eq!(replayed(&[4], &[None]), [None]);
+        assert_eq!(replayed(&[4], &[Some("bytes")]), [Some("bytes")]);
+    }
+
+    /// Reuse fingerprints change when a row's shared vertex changes storage
+    /// or exponents, so a reused subtree is re-encoded.
+    #[test]
+    fn storage_and_exponent_changes_invalidate_reuse_fingerprints() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE features(id INTEGER PRIMARY KEY,data TEXT,fingerprint TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);",
+        )
+        .unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        let ring = vec![[0., 0., 0.], [10.5, 0., 0.], [10.5, 0., 7.25], [0., 0., 0.]];
+        let feature = Feature {
+            properties: BTreeMap::from([("_source_id".into(), json!("f"))]),
+            geometry: Geometry::Polygon(vec![ring.clone()]),
+            intrinsic: None,
+            surface_fragment: false,
+            fragment_path: String::new(),
+        };
+        let value = serde_json::to_string(&feature).unwrap();
+        db.execute("INSERT INTO features(id,data) VALUES(1,?1)", [&value])
+            .unwrap();
+        for p in &ring[..3] {
+            db.execute(
+                "INSERT INTO vertices VALUES(?1,?2,?3,1)",
+                params![p[0], p[1], p[2]],
+            )
+            .unwrap();
+        }
+        let c = encoding::cell(ring[1]);
+        db.execute(
+            "INSERT INTO grid VALUES(?1,?2,?3,0,'0',0,2,2,2,0,0)",
+            params![c[0], c[1], c[2]],
+        )
+        .unwrap();
+        let print = |db: &Connection| -> String {
+            fingerprint(db, 1, &value, true).unwrap();
+            db.query_row("SELECT fingerprint FROM features WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        let u16 = print(&db);
+        db.execute("UPDATE grid SET fl=1", []).unwrap();
+        let float = print(&db);
+        assert_ne!(u16, float, "storage flip");
+        db.execute("UPDATE grid SET ex=3", []).unwrap();
+        let exponent = print(&db);
+        assert_ne!(float, exponent, "exponent change");
+        db.execute("UPDATE grid SET al=1", []).unwrap();
+        assert_ne!(exponent, print(&db), "partners gone");
     }
 }
