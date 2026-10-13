@@ -12,10 +12,11 @@
 //!
 //! Proxies are untextured: flat material factors, smooth normals. Texture baking is H13.
 mod certify;
-mod codec;
+pub(in crate::mesh_large) mod codec;
 mod geom;
+pub(in crate::mesh_large) mod handoff;
 pub(crate) mod incidence;
-mod mesh;
+pub(in crate::mesh_large) mod mesh;
 #[cfg(test)]
 mod tests;
 
@@ -46,10 +47,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Proxy face target `P` per tile. Above `2P` after simplification a tile is reported over
-/// budget; above `4P` it is Unsupported. (Property tables stay within CesiumJS's 8192 rows
-/// whatever the face count: each glTF primitive holds at most 8192 triangles.)
+/// Proxy face cap `P` per tile (PROVISIONAL). Simplification aims at `P - P/16`, the relaxed
+/// pass runs above `P`, and fills never take a proxy above `P`, so a proxy normally fits one
+/// 8192-row `proxy_source` table (CesiumJS resolves picks through one table per model).
+/// Tiles still above `P` are reported (`splitProvenanceTiles`); above `2P` over budget;
+/// above `4P` Unsupported. Every property table stays within 8192 rows regardless.
 pub(crate) const TARGET_FACES: usize = 8192;
+/// Simplification stops at `P - P / FILL_HEADROOM` faces so accepted fills fit under `P`.
+const FILL_HEADROOM: usize = 16;
 /// Most vertices of a fillable hole loop.
 const FILL_LOOP: usize = 64;
 
@@ -75,6 +80,9 @@ fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     x ^ (x >> 31)
 }
+/// Seed of the topology-cache binding over a tile's forced seam vertices.
+const FORCED_BINDING: u64 = 0x4831_3746_4f52_4345;
+
 pub(crate) fn key_hash(key: Key) -> u64 {
     mix(mix(u64::from(key[0]) | (u64::from(key[1]) << 32)) ^ u64::from(key[2]))
 }
@@ -245,7 +253,9 @@ impl Record for SeamEdge {
     }
     fn decode(b: &[u8]) -> Self {
         let k = |i: usize| -> [u32; 3] {
-            std::array::from_fn(|a| u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap()))
+            std::array::from_fn(|a| {
+                u32::from_le_bytes(b[i + 4 * a..i + 4 * a + 4].try_into().unwrap())
+            })
         };
         Self {
             lo: k(0),
@@ -279,10 +289,77 @@ impl Record for ForcedKey {
     }
     fn decode(b: &[u8]) -> Self {
         Self {
-            key: std::array::from_fn(|i| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())),
+            key: std::array::from_fn(|i| {
+                u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())
+            }),
             first: u64::from_le_bytes(b[12..20].try_into().unwrap()),
         }
     }
+}
+
+/// A maximal run of consecutive source ranks `[start, end)` of one source primitive: the
+/// bake handoff's donor-range index (built once, read per tile by binary search).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct DonorRun {
+    start: u64,
+    end: u64,
+    key: (u32, u32, u32),
+}
+impl Record for DonorRun {
+    const SIZE: usize = 28;
+    fn encode(&self, out: &mut [u8]) {
+        out[..8].copy_from_slice(&self.start.to_le_bytes());
+        out[8..16].copy_from_slice(&self.end.to_le_bytes());
+        out[16..20].copy_from_slice(&self.key.0.to_le_bytes());
+        out[20..24].copy_from_slice(&self.key.1.to_le_bytes());
+        out[24..28].copy_from_slice(&self.key.2.to_le_bytes());
+    }
+    fn decode(b: &[u8]) -> Self {
+        let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        Self {
+            start: u64::from_le_bytes(b[..8].try_into().unwrap()),
+            end: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            key: (u(16), u(20), u(24)),
+        }
+    }
+}
+
+/// The run-length index of source primitives over ranks (one pass, cancellable).
+fn donor_runs(
+    scratch: &Scratch,
+    source: &Sequence<LodSource>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Sequence<DonorRun>, JobError> {
+    let mut out =
+        crate::spill::SequenceWriter::<DonorRun>::new(scratch, "lod-donor-runs", 1 << 16)?;
+    let mut run: Option<DonorRun> = None;
+    for (rank, s) in (0u64..).zip(source.reader()?) {
+        let key = s?.primitive_key();
+        if rank.is_multiple_of(1 << 16) {
+            check()?;
+        }
+        match &mut run {
+            Some(r) if r.key == key => r.end = rank + 1,
+            _ => {
+                if let Some(r) = run.take() {
+                    out.push(&r)?;
+                }
+                run = Some(DonorRun {
+                    start: rank,
+                    end: rank + 1,
+                    key,
+                });
+            }
+        }
+    }
+    if let Some(r) = run {
+        out.push(&r)?;
+    }
+    Ok(out.finish()?)
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
 }
 
 /// What the LOD stage reports into the leaf manifest.
@@ -293,6 +370,13 @@ pub(crate) struct LodReport {
     pub proxies: u64,
     pub proxy_faces: u64,
     pub proxy_bytes: u64,
+    /// After a bake pass: the certified untextured proxies' bytes (`proxy_bytes` is then
+    /// the published, baked total). Absent without a baker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub untextured_proxy_bytes: Option<u64>,
+    /// Bytes of frozen bake-handoff packets written (absent without a baker).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub handoff_bytes: u64,
     pub target_faces: u64,
     pub max_proxy_faces: u64,
     pub retention: Vec<u8>,
@@ -303,6 +387,8 @@ pub(crate) struct LodReport {
     pub fills: u64,
     pub fills_rejected_bound: u64,
     pub fills_rejected_topology: u64,
+    /// Fills left open because they would take the proxy above the 8192-face cap.
+    pub fills_rejected_budget: u64,
     pub forced_collapses: u64,
     pub forced_unchecked: u64,
     pub direct_to_used: u64,
@@ -347,8 +433,15 @@ pub(crate) struct LodReport {
 /// A child reference while listing a depth.
 #[derive(Clone, Copy, Debug)]
 enum Child {
-    Leaf { node: NodeRecord, index: u64, error: f64 },
-    Proxy { node: NodeRecord },
+    Leaf {
+        node: NodeRecord,
+        index: u64,
+        error: f64,
+        density_drop: u32,
+    },
+    Proxy {
+        node: NodeRecord,
+    },
 }
 impl Child {
     fn node(&self) -> &NodeRecord {
@@ -380,11 +473,20 @@ struct Ctx<'a> {
     source: &'a Sequence<LodSource>,
     lattice: &'a LatticePlan,
     materials: &'a [Value],
+    /// Per material, the index of the first equal flat material: proxy faces sort by it so
+    /// one glTF primitive carries every source primitive of one flat material.
+    material_rank: &'a [u32],
     retention: &'a [u8],
     target: usize,
     mutation: Mutation,
     ar: Arith,
     check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    /// The bake handoff sink, when a bake pass will consume the tiles.
+    handoff: Option<&'a handoff::HandoffSink>,
+    /// Source-primitive runs over ranks (present with `handoff`).
+    donor_runs: Option<&'a Sequence<DonorRun>>,
+    profile: String,
+    lattice_sha256: String,
 }
 
 fn slot_of(node: &NodeRecord) -> u8 {
@@ -401,7 +503,12 @@ fn sidecar_path(dir: &Path, node: &NodeRecord) -> PathBuf {
 
 /// Decoded position of a source vertex at `depth` (exactly what any tile publishing it at
 /// that depth decodes).
-fn decode_vertex(lattice: &LatticePlan, key: Key, ell: u8, depth: u32) -> Result<[f32; 3], JobError> {
+fn decode_vertex(
+    lattice: &LatticePlan,
+    key: Key,
+    ell: u8,
+    depth: u32,
+) -> Result<[f32; 3], JobError> {
     let p = key.map(f32::from_bits);
     Ok(lattice.encode(&[p, p, p], &[ell; 3], depth)?.decoded[0])
 }
@@ -452,7 +559,8 @@ impl Sidecar {
             b.extend_from_slice(&f.label.to_le_bytes());
         }
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| JobError::io("create LOD sidecar folder", parent, e))?;
         }
         fs::write(path, &b).map_err(|e| JobError::io("write LOD sidecar", path, e))?;
         Ok(b.len() as u64)
@@ -584,7 +692,9 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
                     .filter(|&ell| {
                         ctx.lattice
                             .encode(&[s.positions[c]; 3], &[ell; 3], depth)
-                            .is_ok_and(|e| e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits))
+                            .is_ok_and(|e| {
+                                e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits)
+                            })
                     })
                     .collect();
                 return Err(state(format!(
@@ -639,10 +749,9 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
     let mut tris = Vec::with_capacity(sidecar.faces.len());
     for (face, published) in sidecar.faces.iter().zip(&decoded.faces) {
         let mut expected = [[0f32; 3]; 3];
-        for c in 0..3 {
-            let v = face.v[c];
+        for (slot, &v) in expected.iter_mut().zip(&face.v) {
             let (key, info) = sidecar.vertices[v as usize];
-            expected[c] = match cache.get(&v) {
+            *slot = match cache.get(&v) {
                 Some(p) => *p,
                 None => {
                     let p = decode_vertex(ctx.lattice, key, info.ell, depth)?;
@@ -652,13 +761,20 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
             };
         }
         if !codec::same_face(&expected, &published.p) {
-            return Err(state("proxy GLB bytes decode differently from their sidecar"));
+            return Err(state(
+                "proxy GLB bytes decode differently from their sidecar",
+            ));
         }
         let (label, _) = sidecar.labels[face.label as usize];
-        if published.feature(&decoded.tables, "source_primitive").map(|f| f.0) != Some(face.label) {
+        if published
+            .feature(&decoded.tables, "source_primitive")
+            .map(|f| f.0)
+            != Some(face.label)
+        {
             return Err(state("proxy feature ID differs from its sidecar label"));
         }
-        // Provenance from the published per-triangle table.
+        // Provenance: node, mesh and primitive from the face's set-0 row, the source
+        // triangle from its per-triangle `proxy_source` row (fills carry no triangle).
         let (row, table) = published
             .feature(&decoded.tables, "proxy_source")
             .ok_or_else(|| state("proxy triangle without a proxy_source feature ID"))?;
@@ -670,15 +786,20 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
                 .copied()
                 .ok_or_else(|| state("proxy_source table without its row"))
         };
+        let triangle = if column("fill")? != 0 {
+            u64::MAX
+        } else {
+            column("triangle_index")?
+        };
         faces.push(KeyFace {
             keys: face.v.map(|v| sidecar.vertices[v as usize].0),
             info: face.v.map(|v| sidecar.vertices[v as usize].1),
             label,
             origin: Origin {
-                node: column("node_index")? as u32,
-                mesh: column("mesh_index")? as u32,
-                primitive: column("primitive_index")? as u32,
-                triangle: column("triangle_index")?,
+                node: label.key.0,
+                mesh: label.key.1,
+                primitive: label.key.2,
+                triangle,
             },
         });
         tris.push(tri_of(&published.p));
@@ -706,6 +827,7 @@ struct Outcome {
     fill_candidates: u64,
     fills_rejected_bound: u64,
     fills_rejected_topology: u64,
+    fills_rejected_budget: u64,
     forced: u64,
     forced_unchecked: u64,
     sidecar_bytes: u64,
@@ -718,12 +840,16 @@ struct Outcome {
     forced_keys: Vec<Key>,
     failed_keys: Vec<Key>,
     over_budget: bool,
+    handoff_bytes: u64,
 }
 
-/// Faces of a mesh grouped by label (stable), the GLB face order.
-fn by_label(faces: &[Face]) -> Vec<Face> {
+/// Faces of a mesh grouped by flat material, then label (stable): the GLB face order.
+fn by_label(faces: &[Face], mesh: &KeyMesh, rank: &[u32]) -> Vec<Face> {
     let mut out = faces.to_vec();
-    out.sort_by_key(|f| f.label);
+    out.sort_by_key(|f| {
+        let material = mesh.labels[f.label as usize].material as usize;
+        (rank.get(material).copied().unwrap_or(u32::MAX), f.label)
+    });
     out
 }
 
@@ -787,7 +913,9 @@ fn process(
     let mut children = Vec::with_capacity(job.children.len());
     for child in &job.children {
         children.push(match child {
-            Child::Leaf { node, index, error } => load_leaf(ctx, node, *index, *error)?,
+            Child::Leaf {
+                node, index, error, ..
+            } => load_leaf(ctx, node, *index, *error)?,
             Child::Proxy { node } => load_proxy(ctx, node)?,
         });
     }
@@ -888,6 +1016,7 @@ fn process(
     let k = ctx.retention.get(d as usize).copied().unwrap_or(0);
     let mut locked = vec![false; mesh.vertices.len()];
     let mut forced = Vec::new();
+    let mut stalled = Vec::new();
     for (i, v) in mesh.vertices.iter().enumerate() {
         if !v.info.cut(d) {
             continue;
@@ -898,10 +1027,24 @@ fn process(
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
             && node.first == 0
             && d >= 1
-            && key_hash(v.key) % 3 == 0
+            && key_hash(v.key).is_multiple_of(3)
             && !v.info.special
         {
             keep = false;
+        }
+        // Stress (test-only): the first tile of each depth cannot remove a third of its
+        // forced seam vertices, as if every collapse were invalid; seam consensus must keep
+        // them in every tile sharing them (the neighbours re-run).
+        if !keep
+            && ctx.mutation == Mutation::ForcedFailures
+            && node.first == 0
+            && d >= 1
+            && key_hash(v.key).is_multiple_of(3)
+            && !v.info.special
+        {
+            locked[i] = true;
+            stalled.push(v.key);
+            continue;
         }
         if keep {
             locked[i] = true;
@@ -916,7 +1059,24 @@ fn process(
         .sidecars
         .join(format!("topo-d{d}"))
         .join(format!("f{}.bin", node.first));
-    let cached = if full { read_topology(&cache)? } else { None };
+    // The cache is bound to the forced set, so a keep set that changed since the cached run
+    // cannot silently reuse stale faces.
+    let binding = forced.iter().fold(FORCED_BINDING, |h, &i| {
+        mix(h ^ key_hash(mesh.vertices[i as usize].key))
+    });
+    // The finishing pass publishes exactly the topology the seam audit checked: its cache
+    // must exist and match the tile's forced set under the final keep set.
+    let cached = if full {
+        Some(read_topology(&cache, binding)?.ok_or_else(|| {
+            state(format!(
+                "coarse tile f{}-d{d}: the finishing pass has no audited topology for its \
+                 forced seam set (a seam-consensus re-run was missed)",
+                node.first
+            ))
+        })?)
+    } else {
+        None
+    };
     let (s_faces, report, relaxed) = match cached {
         Some(c) => c,
         None => {
@@ -929,20 +1089,32 @@ fn process(
                     .collect(),
                 mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
             );
-            out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-            out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-            // At most P faces, and at least a halving of the children (single-child chains
-            // and small subtrees still coarsen level by level).
-            let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
+            out.forced_keys = forced
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .collect();
+            out.failed_keys = failed
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].key)
+                .chain(stalled.iter().copied())
+                .collect();
+            // At most P - P/16 faces (the rest is headroom for hole fills under the P cap),
+            // and at least a halving of the children (single-child chains and small
+            // subtrees still coarsen level by level).
+            let target = (ctx.target - ctx.target / FILL_HEADROOM)
+                .min(kept_faces.len().div_ceil(2))
+                .max(1);
             simplifier.simplify(target);
-            let relaxed = simplifier.live_faces() > 2 * ctx.target;
+            // Above the face cap the relaxed pass runs, so the proxy fits one 8192-row
+            // provenance table (CesiumJS resolves picks through one table per model).
+            let relaxed = simplifier.live_faces() > ctx.target;
             if relaxed {
                 simplifier.relax();
                 simplifier.simplify(target);
             }
             let (s_faces, report) = simplifier.finish();
             if !full {
-                write_topology(&cache, &s_faces, &report, relaxed)?;
+                write_topology(&cache, binding, &s_faces, &report, relaxed)?;
             }
             (s_faces, report, relaxed)
         }
@@ -964,7 +1136,10 @@ fn process(
         ));
     }
     if s_faces.is_empty() {
-        return Err(state(format!("coarse tile f{}-d{d} simplified to nothing", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d} simplified to nothing",
+            node.first
+        )));
     }
     if !full {
         // Topology pass: the seam edges are all the depth audit needs (fills never touch a
@@ -991,9 +1166,15 @@ fn process(
 
     // Encode the unfilled proxy, decode its bytes, certify.
     lap(&mut phases[2]);
-    let s_order = by_label(&s_faces);
+    let s_order = by_label(&s_faces, &mesh, ctx.material_rank);
     let flat_records: Vec<RecordTable> = Vec::new();
-    let unfilled = codec::encode(&primitives(&mesh, &s_order, &key_faces), ctx.materials, ctx.lattice, d, &flat_records)?;
+    let unfilled = codec::encode(
+        &primitives(&mesh, &s_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &flat_records,
+    )?;
     let s_dec = codec::decode(&unfilled.glb)?;
     if s_dec.faces.len() != unfilled.faces.len()
         || !s_dec
@@ -1002,7 +1183,9 @@ fn process(
             .zip(&unfilled.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     lap(&mut phases[7]);
     let s_tris: Vec<Tri> = s_dec.faces.iter().map(|f| tri_of(&f.p)).collect();
@@ -1032,7 +1215,12 @@ fn process(
     } else {
         t_tris.clone()
     };
-    let t_s = geom::directed(ar, &t_measured, &s_bvh, Limits::for_sizes(t_measured.len(), s_tris.len()));
+    let t_s = geom::directed(
+        ar,
+        &t_measured,
+        &s_bvh,
+        Limits::for_sizes(t_measured.len(), s_tris.len()),
+    );
     lap(&mut phases[9]);
     let composed_to = up_add(ar, s_t.bound, child_to);
     let composed_from = up_add(ar, child_from, t_s.bound);
@@ -1047,7 +1235,10 @@ fn process(
         BTreeSet::new()
     };
     let skip = |s: &LodSource| {
-        skip_removed && s.positions.iter().all(|p| removed_keys.contains(&incidence::weld(*p)))
+        skip_removed
+            && s.positions
+                .iter()
+                .all(|p| removed_keys.contains(&incidence::weld(*p)))
     };
     let lo = node.bounds.min.map(f64::from);
     let hi = node.bounds.max.map(f64::from);
@@ -1057,7 +1248,17 @@ fn process(
     let work = 256 * (s_tris.len() as u64 + t_tris.len() as u64);
     lap(&mut phases[3]);
     let direct = certify::direct(
-        ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, !leaf_parent, &skip,
+        ar,
+        ctx.source,
+        node.first,
+        node.end,
+        lo,
+        hi,
+        &s_tris,
+        &s_bvh,
+        work,
+        !leaf_parent,
+        &skip,
         ctx.check,
     )?;
     let direct_to = direct.proxy_to_source.unwrap_or(f64::INFINITY);
@@ -1068,7 +1269,10 @@ fn process(
     out.direct_from_used = direct_from < composed_from;
     let open = to.max(from);
     if !open.is_finite() {
-        return Err(state(format!("coarse tile f{}-d{d}: certificate is not finite", node.first)));
+        return Err(state(format!(
+            "coarse tile f{}-d{d}: certificate is not finite",
+            node.first
+        )));
     }
 
     lap(&mut phases[4]);
@@ -1116,10 +1320,13 @@ fn process(
     }
 
     // Fills: simple interior loops, accepted only within the certified error.
-    let crack_as_hole = ctx.mutation == Mutation::CrackAsHole;
+    let any_loop = matches!(
+        ctx.mutation,
+        Mutation::CrackAsHole | Mutation::FillAcrossSeams
+    );
     let loops = mesh::border_loops(
         &s_order,
-        |v| crack_as_hole || !mesh.vertices[v as usize].info.cut(d),
+        |v| any_loop || !mesh.vertices[v as usize].info.cut(d),
         FILL_LOOP,
     );
     let mut edges: BTreeSet<(u32, u32)> = BTreeSet::new();
@@ -1132,8 +1339,8 @@ fn process(
     let decoded_of: BTreeMap<u32, [f32; 3]> = {
         let mut m = BTreeMap::new();
         for (f, dec) in s_order.iter().zip(&unfilled.faces) {
-            for c in 0..3 {
-                m.insert(f.v[c], dec[c]);
+            for (v, p) in f.v.iter().zip(dec) {
+                m.insert(*v, *p);
             }
         }
         m
@@ -1169,15 +1376,39 @@ fn process(
             out.fills_rejected_topology += 1;
             continue;
         }
+        // A fill never takes the proxy above the face cap (one provenance table per model).
+        if s_order.len() + fill_faces.len() + fan.len() > ctx.target.max(s_order.len()) {
+            out.fills_rejected_budget += 1;
+            continue;
+        }
         let tris: Vec<Tri> = fan_tris.iter().map(tri_of).collect();
         let bvh = label_bvh
             .entry(l.label)
             .or_insert_with(|| Bvh::new(&t_by_label[&l.label]));
         let h = geom::directed(ar, &tris, bvh, Limits::for_sizes(tris.len(), bvh.len()));
         let bound = up_add(ar, h.bound, label_child[&l.label]);
-        if !(bound <= open) {
+        // NaN-safe: a bound that is not at most `open` is rejected.
+        if bound
+            .partial_cmp(&open)
+            .is_none_or(|o| o == std::cmp::Ordering::Greater)
+        {
             out.fills_rejected_bound += 1;
             continue;
+        }
+        // Border-hole rule, checked again on the accepted loop: a fill never closes a loop
+        // through a seam (cut) vertex, so it cannot cap a tile's own seam perimeter or a
+        // hole a seam cuts (the C3 control relabels a crack on purpose and is audited).
+        if ctx.mutation != Mutation::CrackAsHole
+            && l.vertices.iter().any(|&v| {
+                let c2 = mesh.vertices[v as usize].info.c2;
+                c2 != NEVER && u32::from(c2) <= d
+            })
+        {
+            return Err(state(format!(
+                "coarse tile f{}-d{d}: a fill loop passes through a seam vertex (border-hole \
+                 rule)",
+                node.first
+            )));
         }
         to_filled = to_filled.max(bound);
         let e = label_error.entry(l.label).or_insert(0.);
@@ -1194,9 +1425,22 @@ fn process(
                 mask |= 1 << slot;
             }
         }
-        fill_rows.push((l.label, min_key, l.vertices.len() as u32, fan.len() as u32, bound, mask));
+        // Fill faces carry their record index as `u32::MAX - index` (never a T face id).
+        let fill_id = u32::MAX - fill_rows.len() as u32;
+        fill_rows.push((
+            l.label,
+            min_key,
+            l.vertices.len() as u32,
+            fan.len() as u32,
+            bound,
+            mask,
+        ));
         for t in fan {
-            fill_faces.push(Face { v: t, label: l.label, id: u32::MAX });
+            fill_faces.push(Face {
+                v: t,
+                label: l.label,
+                id: fill_id,
+            });
         }
     }
     let raw = to_filled.max(from);
@@ -1209,7 +1453,7 @@ fn process(
     // Final encoding with fills and records; decode and compare once more.
     let mut all = s_order.clone();
     all.extend_from_slice(&fill_faces);
-    let final_order = by_label(&all);
+    let final_order = by_label(&all, &mesh, ctx.material_rank);
     let label_rows = |rows: &[(u32, Key, u32, u8)], reason: u64| -> Vec<[u64; 9]> {
         rows.iter()
             .map(|(label, key, faces, mask)| {
@@ -1229,7 +1473,8 @@ fn process(
             .collect()
     };
     let mut v_rows = label_rows(&vanished_rows, 0);
-    let lost_rows: Vec<(u32, Key, u32, u8)> = lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
+    let lost_rows: Vec<(u32, Key, u32, u8)> =
+        lost.iter().map(|(l, (n, k, m))| (*l, *k, *n, *m)).collect();
     v_rows.extend(label_rows(&lost_rows, 1));
     let mut records = Vec::new();
     if !v_rows.is_empty() {
@@ -1255,21 +1500,67 @@ fn process(
         records.push(RecordTable {
             class: "lod_filled",
             columns: vec![
-                ("node_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).0)).collect()),
-                ("mesh_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).1)).collect()),
-                ("primitive_index", "UINT32", fill_rows.iter().map(|r| u64::from(l(r).2)).collect()),
-                ("loop_x", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[0])).collect()),
-                ("loop_y", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[1])).collect()),
-                ("loop_z", "UINT32", fill_rows.iter().map(|r| u64::from(r.1[2])).collect()),
-                ("loop_vertices", "UINT32", fill_rows.iter().map(|r| u64::from(r.2)).collect()),
-                ("fan_faces", "UINT32", fill_rows.iter().map(|r| u64::from(r.3)).collect()),
-                ("bound", "FLOAT64", fill_rows.iter().map(|r| r.4.to_bits()).collect()),
-                ("reopen_children", "UINT8", fill_rows.iter().map(|r| u64::from(r.5)).collect()),
+                (
+                    "node_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).0)).collect(),
+                ),
+                (
+                    "mesh_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).1)).collect(),
+                ),
+                (
+                    "primitive_index",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(l(r).2)).collect(),
+                ),
+                (
+                    "loop_x",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[0])).collect(),
+                ),
+                (
+                    "loop_y",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[1])).collect(),
+                ),
+                (
+                    "loop_z",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.1[2])).collect(),
+                ),
+                (
+                    "loop_vertices",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.2)).collect(),
+                ),
+                (
+                    "fan_faces",
+                    "UINT32",
+                    fill_rows.iter().map(|r| u64::from(r.3)).collect(),
+                ),
+                (
+                    "bound",
+                    "FLOAT64",
+                    fill_rows.iter().map(|r| r.4.to_bits()).collect(),
+                ),
+                (
+                    "reopen_children",
+                    "UINT8",
+                    fill_rows.iter().map(|r| u64::from(r.5)).collect(),
+                ),
                 ("depth", "UINT8", vec![u64::from(d); fill_rows.len()]),
             ],
         });
     }
-    let encoded = codec::encode(&primitives(&mesh, &final_order, &key_faces), ctx.materials, ctx.lattice, d, &records)?;
+    let encoded = codec::encode(
+        &primitives(&mesh, &final_order, &key_faces),
+        ctx.materials,
+        ctx.lattice,
+        d,
+        &records,
+    )?;
     let check = codec::decode(&encoded.glb)?;
     if check.faces.len() != encoded.faces.len()
         || !check
@@ -1278,7 +1569,9 @@ fn process(
             .zip(&encoded.faces)
             .all(|(a, b)| codec::same_face(&a.p, b))
     {
-        return Err(state("final proxy bytes decode differently from the encoder's lattice"));
+        return Err(state(
+            "final proxy bytes decode differently from the encoder's lattice",
+        ));
     }
     // Every certified face is in the published bytes (fills added, nothing else changed).
     {
@@ -1295,10 +1588,30 @@ fn process(
         published_faces.sort_unstable();
         certified.sort_unstable();
         if published_faces != certified {
-            return Err(state("published proxy faces differ from the certified faces"));
+            return Err(state(
+                "published proxy faces differ from the certified faces",
+            ));
         }
     }
 
+    if let Some(sink) = ctx.handoff {
+        let packet = frozen_packet(
+            ctx,
+            job,
+            &mesh,
+            &key_faces,
+            &final_order,
+            &check,
+            &encoded.glb,
+            &label_error,
+            &fill_rows,
+            &v_rows,
+            published,
+            to_filled,
+            from,
+        )?;
+        out.handoff_bytes = sink.write(&packet, ctx.check)?;
+    }
     // Sidecar (key space, GLB face order) and the published member.
     let mut used: BTreeMap<u32, u32> = BTreeMap::new();
     let mut vertices = Vec::new();
@@ -1307,7 +1620,10 @@ fn process(
     let mut sidecar_faces = Vec::with_capacity(final_order.len());
     for f in &final_order {
         let label = *labels_used.entry(f.label).or_insert_with(|| {
-            labels.push((mesh.labels[f.label as usize], label_error.get(&f.label).copied().unwrap_or(published)));
+            labels.push((
+                mesh.labels[f.label as usize],
+                label_error.get(&f.label).copied().unwrap_or(published),
+            ));
             (labels.len() - 1) as u32
         });
         let v = f.v.map(|v| {
@@ -1368,15 +1684,292 @@ fn process(
     Ok(out)
 }
 
+/// The frozen bake packet of a finished tile, from its key-space mesh (original weld keys,
+/// lineage, fills) and its DECODED published bytes (raw POSITION words, TRS, features,
+/// tables). Faces are paired by published order and must decode bit-identically.
+#[allow(clippy::too_many_arguments)]
+fn frozen_packet(
+    ctx: &Ctx,
+    job: &Job,
+    mesh: &KeyMesh,
+    key_faces: &[KeyFace],
+    faces: &[Face],
+    published: &codec::Decoded,
+    glb: &[u8],
+    label_error: &BTreeMap<u32, f64>,
+    fill_rows: &[(u32, Key, u32, u32, f64, u8)],
+    v_rows: &[[u64; 9]],
+    geometric_error: f64,
+    proxy_to_source: f64,
+    source_to_proxy: f64,
+) -> Result<handoff::FrozenNode, JobError> {
+    use handoff::*;
+    let node = &job.node;
+    if published.faces.len() != faces.len() {
+        return Err(state(
+            "frozen packet: published faces differ from the tile's faces",
+        ));
+    }
+    // Source primitives in published order (the source_primitive rows).
+    let mut order: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut primitives: Vec<FrozenPrimitive> = Vec::new();
+    for f in faces {
+        if let std::collections::btree_map::Entry::Vacant(slot) = order.entry(f.label) {
+            let l = mesh.labels[f.label as usize];
+            slot.insert(primitives.len() as u32);
+            primitives.push(FrozenPrimitive {
+                node: l.key.0,
+                mesh: l.key.1,
+                primitive: l.key.2,
+                expanded_ordinal: l.expanded_ordinal,
+                material: l.material,
+                row: primitives.len() as u32,
+                error: label_error
+                    .get(&f.label)
+                    .copied()
+                    .unwrap_or(geometric_error),
+                donor_ranges: Vec::new(),
+            });
+        }
+    }
+    let by_key: BTreeMap<(u32, u32, u32), u32> = primitives
+        .iter()
+        .enumerate()
+        .map(|(i, p)| ((p.node, p.mesh, p.primitive), i as u32))
+        .collect();
+    // Donor ranges from the run index: binary search for the first run reaching past
+    // `first`, then the runs overlapping `[first, end)` only (cost O(log R + runs in range),
+    // cancellable), each clipped to the tile.
+    let runs = ctx
+        .donor_runs
+        .ok_or_else(|| state("bake handoff without its donor-run index"))?;
+    let run_at = |i: u64| -> Result<DonorRun, JobError> {
+        runs.range(i, i + 1, DonorRun::SIZE)?
+            .next()
+            .ok_or_else(|| state("donor-run index ends early"))?
+            .map_err(JobError::from)
+    };
+    let (mut lo, mut hi) = (0u64, runs.len());
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if run_at(mid)?.end <= node.first {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (k, run) in (0u64..).zip(runs.range(lo, runs.len(), 1 << 16)?) {
+        let run = run?;
+        if run.start >= node.end {
+            break;
+        }
+        if k.is_multiple_of(1 << 12) {
+            (ctx.check)()?;
+        }
+        if let Some(&i) = by_key.get(&run.key) {
+            let piece = run.start.max(node.first)..run.end.min(node.end);
+            let ranges = &mut primitives[i as usize].donor_ranges;
+            match ranges.last_mut() {
+                Some(r) if r.end == piece.start => r.end = piece.end,
+                _ => ranges.push(piece),
+            }
+        }
+    }
+    let fill_base = u32::MAX - fill_rows.len() as u32;
+    let mut frozen_faces = Vec::with_capacity(faces.len());
+    for (f, d) in faces.iter().zip(&published.faces) {
+        let source = order[&f.label];
+        let fill = (f.id > fill_base).then(|| u32::MAX - f.id);
+        let origin = match key_faces.get(f.id as usize) {
+            Some(k) if fill.is_none() => k.origin,
+            _ => {
+                let p = &primitives[source as usize];
+                Origin {
+                    node: p.node,
+                    mesh: p.mesh,
+                    primitive: p.primitive,
+                    triangle: u64::MAX,
+                }
+            }
+        };
+        let corners = std::array::from_fn(|c| {
+            let v = mesh.vertices[f.v[c] as usize];
+            handoff::FrozenCorner {
+                raw: d.raw[c],
+                decoded: d.p[c].map(f32::to_bits),
+                weld: v.key,
+                ell: v.info.ell,
+            }
+        });
+        frozen_faces.push(FrozenFace {
+            gltf: d.primitive,
+            source,
+            corners,
+            origin,
+            fill,
+            features: d
+                .features
+                .iter()
+                .map(|(id, table)| (*id, table.map(|t| t as u32)))
+                .collect(),
+        });
+    }
+    // Every frozen corner decodes to the certified position of its weld key at this depth.
+    let mut seen: BTreeMap<Key, [u32; 3]> = BTreeMap::new();
+    for f in &frozen_faces {
+        for c in &f.corners {
+            let expected = match seen.get(&c.weld) {
+                Some(p) => *p,
+                None => {
+                    let p =
+                        decode_vertex(ctx.lattice, c.weld, c.ell, node.depth())?.map(f32::to_bits);
+                    seen.insert(c.weld, p);
+                    p
+                }
+            };
+            if expected != c.decoded {
+                return Err(state(
+                    "frozen packet: a published corner is not its weld key's lattice point",
+                ));
+            }
+        }
+    }
+    let mut gltf = Vec::with_capacity(published.primitives.len());
+    let mut start = 0u32;
+    for (i, p) in published.primitives.iter().enumerate() {
+        let end = start
+            + frozen_faces[start as usize..]
+                .iter()
+                .take_while(|f| f.gltf == i as u32)
+                .count() as u32;
+        let run = &frozen_faces[start as usize..end as usize];
+        let (Some(first), Some(last)) = (run.first(), run.last()) else {
+            return Err(state("frozen packet: an empty glTF primitive"));
+        };
+        gltf.push(FrozenGltfPrimitive {
+            node: p.node,
+            mesh: p.mesh,
+            index: p.index,
+            sources: first.source..last.source + 1,
+            material: p.material,
+            translation: p.translation,
+            scale: p.scale,
+            quantized: p.quantized,
+            feature_ids: p.feature_ids.clone(),
+            faces: start..end,
+        });
+        start = end;
+    }
+    let fills = fill_rows
+        .iter()
+        .map(|r| FrozenFill {
+            source: order[&r.0],
+            loop_key: r.1,
+            loop_vertices: r.2,
+            fan_faces: r.3,
+            bound: r.4,
+            reopen_children: r.5,
+        })
+        .collect();
+    let vanished = v_rows
+        .iter()
+        .map(|r| FrozenVanished {
+            node: r[0] as u32,
+            mesh: r[1] as u32,
+            primitive: r[2] as u32,
+            component_key: [r[3] as u32, r[4] as u32, r[5] as u32],
+            faces: r[6] as u32,
+            reopen_children: r[7] as u8,
+            reason: r[8] as u8,
+        })
+        .collect();
+    let children = job
+        .children
+        .iter()
+        .map(|c| {
+            let n = c.node();
+            FrozenChild {
+                first: n.first,
+                end: n.end,
+                depth: n.depth(),
+                slot: n.slot(),
+                leaf: match c {
+                    Child::Leaf {
+                        index,
+                        density_drop,
+                        ..
+                    } => Some(LeafChild {
+                        index: *index,
+                        density_drop: *density_drop,
+                    }),
+                    Child::Proxy { .. } => None,
+                },
+            }
+        })
+        .collect();
+    let tables = published
+        .tables
+        .iter()
+        .map(|t| FrozenTable {
+            class: t.class.clone(),
+            count: t.count as u64,
+            columns: t
+                .columns
+                .iter()
+                .map(|(name, values)| {
+                    (
+                        name.clone(),
+                        t.components.get(name).cloned().unwrap_or_default(),
+                        values.clone(),
+                    )
+                })
+                .collect(),
+        })
+        .collect();
+    Ok(FrozenNode {
+        identity: NodeIdentity {
+            cell_depth: node.cell_depth,
+            cell: node.cell,
+            path_len: node.path_len,
+            path: node.path,
+            last_octant: node.last_octant,
+            depth: node.depth(),
+            first: node.first,
+            end: node.end,
+        },
+        profile: ctx.profile.clone(),
+        geometric_error,
+        proxy_to_source,
+        source_to_proxy,
+        lattice_sha256: ctx.lattice_sha256.clone(),
+        glb_sha256: Sha256::digest(glb).into(),
+        glb_bytes: glb.len() as u64,
+        primitives,
+        gltf,
+        faces: frozen_faces,
+        fills,
+        vanished,
+        children,
+        tables,
+    })
+}
+
 /// Cache of a tile's simplified faces (scratch), written by its latest topology run.
 fn write_topology(
     path: &Path,
+    binding: u64,
     faces: &[Face],
     report: &mesh::SimplifyReport,
     relaxed: bool,
 ) -> Result<(), JobError> {
     let mut b = Vec::with_capacity(faces.len() * 20 + 64);
-    for v in [report.forced, report.forced_unchecked, report.collapses, report.input_faces] {
+    for v in [
+        binding,
+        report.forced,
+        report.forced_unchecked,
+        report.collapses,
+        report.input_faces,
+    ] {
         b.extend_from_slice(&v.to_le_bytes());
     }
     b.push(u8::from(relaxed));
@@ -1387,12 +1980,17 @@ fn write_topology(
         }
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| JobError::io("create LOD topology cache", parent, e))?;
     }
     fs::write(path, b).map_err(|e| JobError::io("write LOD topology cache", path, e))
 }
 
-fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport, bool)>, JobError> {
+/// The cached run, or None when there is none or it was computed for another forced set.
+fn read_topology(
+    path: &Path,
+    binding: u64,
+) -> Result<Option<(Vec<Face>, mesh::SimplifyReport, bool)>, JobError> {
     let b = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -1400,24 +1998,29 @@ fn read_topology(path: &Path) -> Result<Option<(Vec<Face>, mesh::SimplifyReport,
     };
     let bad = || state("LOD topology cache is corrupt");
     let u64_at = |i: usize| -> Result<u64, JobError> {
-        Ok(u64::from_le_bytes(b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap()))
+        Ok(u64::from_le_bytes(
+            b.get(i..i + 8).ok_or_else(bad)?.try_into().unwrap(),
+        ))
     };
+    if u64_at(0)? != binding {
+        return Ok(None);
+    }
     let report = mesh::SimplifyReport {
-        forced: u64_at(0)?,
-        forced_unchecked: u64_at(8)?,
-        collapses: u64_at(16)?,
-        input_faces: u64_at(24)?,
+        forced: u64_at(8)?,
+        forced_unchecked: u64_at(16)?,
+        collapses: u64_at(24)?,
+        input_faces: u64_at(32)?,
         ..Default::default()
     };
-    let relaxed = *b.get(32).ok_or_else(bad)? != 0;
-    let n = u64_at(33)? as usize;
-    if b.len() != 41 + 20 * n {
+    let relaxed = *b.get(40).ok_or_else(bad)? != 0;
+    let n = u64_at(41)? as usize;
+    if b.len() != 49 + 20 * n {
         return Err(bad());
     }
     let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
     let faces = (0..n)
         .map(|k| {
-            let o = 41 + 20 * k;
+            let o = 49 + 20 * k;
             Face {
                 v: [u(o), u(o + 4), u(o + 8)],
                 label: u(o + 12),
@@ -1581,17 +2184,20 @@ fn audit(
 struct LeafFact {
     first: u64,
     error_bits: u64,
+    density_drop: u32,
 }
 impl Record for LeafFact {
-    const SIZE: usize = 16;
+    const SIZE: usize = 20;
     fn encode(&self, out: &mut [u8]) {
         out[..8].copy_from_slice(&self.first.to_le_bytes());
-        out[8..].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[8..16].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[16..].copy_from_slice(&self.density_drop.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
         Self {
             first: u64::from_le_bytes(b[..8].try_into().unwrap()),
-            error_bits: u64::from_le_bytes(b[8..].try_into().unwrap()),
+            error_bits: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            density_drop: u32::from_le_bytes(b[16..20].try_into().unwrap()),
         }
     }
 }
@@ -1605,6 +2211,8 @@ pub(crate) struct LodInput<'a> {
     pub mutation: Mutation,
     /// Proxy face target `P` ([`TARGET_FACES`] in production).
     pub target: usize,
+    /// Write one frozen packet per final tile for the bake pass (H13).
+    pub handoff: Option<&'a handoff::HandoffSink>,
 }
 
 /// Build, certify and write every coarse tile; returns the report. Writes `proxies/` and
@@ -1631,23 +2239,32 @@ pub(crate) fn produce(
     let recomputed = LatticePlan::new(captured.lattice.profile(), captured.scan.bounds, &extents)?;
     let frozen = serde_json::to_vec(&captured.lattice).map_err(|e| state(e.to_string()))?;
     if serde_json::to_vec(&recomputed).map_err(|e| state(e.to_string()))? != frozen {
-        return Err(state("the frozen H8 lattice differs from its recomputation"));
+        return Err(state(
+            "the frozen H8 lattice differs from its recomputation",
+        ));
     }
     report.lattice_sha256 = hex(Sha256::digest(&frozen));
     let proxies_dir = input.stage.join("proxies");
-    fs::create_dir_all(&proxies_dir).map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
+    fs::create_dir_all(&proxies_dir)
+        .map_err(|e| JobError::io("create proxy folder", &proxies_dir, e))?;
     // Leaf facts in leaf order.
     let leaf_facts = {
         let path = input.stage.join("leaves.jsonl");
         let text = fs::File::open(&path).map_err(|e| JobError::io("read leaf rows", &path, e))?;
-        let mut writer = crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
+        let mut writer =
+            crate::spill::SequenceWriter::<LeafFact>::new(input.scratch, "lod-leaves", 1 << 16)?;
         for line in std::io::BufRead::lines(std::io::BufReader::new(text)) {
             let line = line.map_err(|e| JobError::io("read leaf rows", &path, e))?;
             let row: Value = serde_json::from_str(&line).map_err(|e| state(e.to_string()))?;
-            let error = row["geometryError"].as_f64().ok_or_else(|| state("leaf row without error"))?;
+            let error = row["geometryError"]
+                .as_f64()
+                .ok_or_else(|| state("leaf row without error"))?;
             writer.push(&LeafFact {
-                first: row["first"].as_u64().ok_or_else(|| state("leaf row without first"))?,
+                first: row["first"]
+                    .as_u64()
+                    .ok_or_else(|| state("leaf row without first"))?,
                 error_bits: error.to_bits(),
+                density_drop: row["densityDrop"].as_u64().unwrap_or(0) as u32,
             })?;
         }
         writer.finish()?
@@ -1672,7 +2289,8 @@ pub(crate) fn produce(
     }
     crate::spill::preflight(
         input.scratch.path(),
-        incidence::scratch_need(captured.scan.triangles).ok_or_else(|| resource("LOD scratch overflow"))?,
+        incidence::scratch_need(captured.scan.triangles)
+            .ok_or_else(|| resource("LOD scratch overflow"))?,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
@@ -1686,20 +2304,51 @@ pub(crate) fn produce(
         check,
     )?;
     report.prepass_seconds = prepass.elapsed().as_secs_f64();
-    let materials: Vec<Value> = captured.materials.iter().map(|m| m.flat_proxy()).collect();
+    // Flat proxy materials without names, so equal flat materials share a glTF primitive.
+    let materials: Vec<Value> = captured
+        .materials
+        .iter()
+        .map(|m| {
+            let mut value = m.flat_proxy();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("name");
+            }
+            value
+        })
+        .collect();
+    let material_rank: Vec<u32> = (0..materials.len())
+        .map(|i| {
+            materials
+                .iter()
+                .position(|m| *m == materials[i])
+                .unwrap_or(i) as u32
+        })
+        .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
+    let runs = match input.handoff {
+        Some(_) => Some(donor_runs(input.scratch, &source, check)?),
+        None => None,
+    };
     let ctx = Ctx {
         stage: input.stage,
         sidecars: &sidecars,
         source: &source,
         lattice: &captured.lattice,
         materials: &materials,
+        material_rank: &material_rank,
         retention: &report.retention.clone(),
         target: input.target,
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
         check,
+        handoff: input.handoff,
+        donor_runs: runs.as_ref(),
+        profile: serde_json::to_value(captured.lattice.profile())
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default(),
+        lattice_sha256: report.lattice_sha256.clone(),
     };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(input.jobs.max(1))
@@ -1751,7 +2400,10 @@ pub(crate) fn produce(
                 }
                 let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
                     use rayon::prelude::*;
-                    window.par_iter().map(|job| process(&ctx, job, &keep, finishing)).collect()
+                    window
+                        .par_iter()
+                        .map(|job| process(&ctx, job, &keep, finishing))
+                        .collect()
                 });
                 for (job, outcome) in window.iter().zip(outcomes) {
                     let mut o = outcome?;
@@ -1768,7 +2420,10 @@ pub(crate) fn produce(
                     }
                     if round == 0 {
                         for key in std::mem::take(&mut o.forced_keys) {
-                            forced_log.push(&ForcedKey { key, first: job.node.first })?;
+                            forced_log.push(&ForcedKey {
+                                key,
+                                first: job.node.first,
+                            })?;
                         }
                     }
                     failed.extend(std::mem::take(&mut o.failed_keys));
@@ -1795,6 +2450,7 @@ pub(crate) fn produce(
                                 node: n,
                                 index: leaf_index,
                                 error: f64::from_bits(fact.error_bits),
+                                density_drop: fact.density_drop,
                             });
                         }
                     }
@@ -1805,7 +2461,14 @@ pub(crate) fn produce(
                     if let Some(job) = current.take() {
                         window.push(job);
                         if window.len() >= window_size {
-                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+                            run(
+                                &mut window,
+                                &mut seam_log,
+                                &mut forced_log,
+                                &mut done,
+                                &mut failed,
+                                &mut report.tile_runs,
+                            )?;
                         }
                     }
                 }
@@ -1823,9 +2486,18 @@ pub(crate) fn produce(
             if let Some(job) = current.take() {
                 window.push(job);
             }
-            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+            run(
+                &mut window,
+                &mut seam_log,
+                &mut forced_log,
+                &mut done,
+                &mut failed,
+                &mut report.tile_runs,
+            )?;
             if finishing {
-                break final_counts.take().ok_or_else(|| state("finished without an audit"))?;
+                break final_counts
+                    .take()
+                    .ok_or_else(|| state("finished without an audit"))?;
             }
             // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
             // seam edge without a partner keeps every seam vertex its tile removed. Kept
@@ -1836,7 +2508,11 @@ pub(crate) fn produce(
             if contested.is_empty() {
                 let log = std::mem::replace(
                     &mut seam_log,
-                    crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?,
+                    crate::spill::SequenceWriter::<SeamEdge>::new(
+                        input.scratch,
+                        "lod-seams",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 let mut sorter = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
@@ -1864,7 +2540,11 @@ pub(crate) fn produce(
                     .collect();
                 let log = std::mem::replace(
                     &mut forced_log,
-                    crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                    crate::spill::SequenceWriter::<ForcedKey>::new(
+                        input.scratch,
+                        "lod-forced",
+                        1 << 16,
+                    )?,
                 )
                 .finish()?;
                 for f in log.reader()? {
@@ -1898,7 +2578,11 @@ pub(crate) fn produce(
             report.seam_kept_extra += contested.len() as u64;
             let log = std::mem::replace(
                 &mut forced_log,
-                crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                crate::spill::SequenceWriter::<ForcedKey>::new(
+                    input.scratch,
+                    "lod-forced",
+                    1 << 16,
+                )?,
             )
             .finish()?;
             let mut rerun = BTreeSet::new();
@@ -1919,7 +2603,9 @@ pub(crate) fn produce(
         drop(seam_log);
         let mut written = 0u64;
         for Done(o) in done.into_values() {
-            let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
+            let row = o
+                .row
+                .ok_or_else(|| state("a coarse tile produced no row"))?;
             report.proxies += 1;
             report.proxy_faces += u64::from(row.faces);
             report.max_proxy_faces = report.max_proxy_faces.max(u64::from(row.faces));
@@ -1932,6 +2618,8 @@ pub(crate) fn produce(
             report.fills += u64::from(row.filled);
             report.fills_rejected_bound += o.fills_rejected_bound;
             report.fills_rejected_topology += o.fills_rejected_topology;
+            report.fills_rejected_budget += o.fills_rejected_budget;
+            report.handoff_bytes += o.handoff_bytes;
             report.forced_collapses += o.forced;
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);
@@ -1957,17 +2645,20 @@ pub(crate) fn produce(
         report.seam_relabelled += counts.relabelled;
         let topo_dir = sidecars.join(format!("topo-d{d}"));
         if topo_dir.exists() {
-            fs::remove_dir_all(&topo_dir).map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
+            fs::remove_dir_all(&topo_dir)
+                .map_err(|e| JobError::io("remove LOD topology cache", &topo_dir, e))?;
         }
         let child_dir = sidecars.join(format!("d{}", d + 1));
         if child_dir.exists() {
-            fs::remove_dir_all(&child_dir).map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
+            fs::remove_dir_all(&child_dir)
+                .map_err(|e| JobError::io("remove LOD sidecars", &child_dir, e))?;
             sidecar_live -= sidecar_bytes.remove(&(d + 1)).unwrap_or(0);
         }
     }
     let _ = fs::remove_dir_all(&sidecars);
     // Rows in postorder (end ascending, deeper first): H16's tile-closing order.
-    let file = fs::File::create(&rows_path).map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
+    let file = fs::File::create(&rows_path)
+        .map_err(|e| JobError::io("create proxy rows", &rows_path, e))?;
     let mut writer = BufWriter::new(file);
     for row in rows.finish()? {
         let r = row?;
@@ -1995,4 +2686,3 @@ pub(crate) fn produce(
     report.seconds = started.elapsed().as_secs_f64();
     Ok(report)
 }
-

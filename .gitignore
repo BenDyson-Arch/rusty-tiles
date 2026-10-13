@@ -13,3 +13,6 @@ __pycache__/
 !/bench/perf_lane/*.cjs
 !/bench/perf_lane/README.md
 !/bench/perf_lane/REPORT.md
+!/bench/perf_lane/FLYTHROUGH.md
+!/bench/perf_lane/flythrough.json
+!/bench/perf_lane/recipes/

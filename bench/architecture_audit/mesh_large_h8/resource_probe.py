@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Root-launched H8 Linux RSS/scratch receipt for the actual production CLI.
+"""Root-launched mesh Linux RSS/scratch receipt for the actual production CLI.
 
 No fixture generation/copying. Input and binary hashing is streamed. wait4 gives
 child high-water RSS (including the small inherited launcher floor); periodic
@@ -17,6 +17,7 @@ import stat
 import sys
 import tempfile
 import time
+import zipfile
 
 
 def digest(path):
@@ -91,6 +92,7 @@ def main():
         args.scratch = args.scratch.resolve()
         source_root = (args.input_root or args.input.parent).resolve(strict=True)
         require(source_root.is_dir() and inside(args.input, source_root), "input must belong to source-only inventory root")
+        require(args.output.suffix.lower() == ".3tz", "output must be a .3tz archive")
         require(not args.output.exists(), "output must be fresh, CreateNew producer policy")
         require(not inside(args.output, source_root) and not inside(args.scratch, source_root)
                 and not inside(args.receipt, source_root), "output/scratch/receipt must be outside immutable input tree")
@@ -109,7 +111,7 @@ def main():
         args.output.parent.mkdir(parents=True, exist_ok=True)
         siblings_before = {p.name for p in args.output.parent.iterdir()}
         command = ["/usr/bin/taskset", "-c", "0-3", "/usr/bin/nice", "-n", "10", str(args.binary),
-                   "--json", "mesh-leaf-payloads", "--input", str(args.input), "--output", str(args.output),
+                   "--json", "mesh", "--input", str(args.input), "--output", str(args.output),
                    "--profile", args.profile, "--jobs", str(args.jobs), "--scratch-dir", str(private)]
         env = dict(os.environ, PATH="", RAYON_NUM_THREADS="2", RUST_TEST_THREADS="2")
         stdout_path = args.receipt.with_suffix(".stdout.log")
@@ -154,7 +156,7 @@ def main():
         # D1 CreateNew uses this staging namespace. Other evidence workers can
         # write unrelated reports into the same cache while this run executes.
         new_siblings = [name for name in added_siblings
-                        if name.startswith((".tiles-dir-", ".tiles-previous-"))]
+                        if name.startswith((".tiles-dir-", ".tiles-previous-", ".tiles-stage-", ".tiles-mesh-"))]
         result["concurrent_unrelated_siblings"] = [name for name in added_siblings
                                                    if name not in new_siblings]
         result["new_unpublished_siblings"] = new_siblings
@@ -164,44 +166,46 @@ def main():
         require(result["binary_unchanged"] and result["inputs_unchanged"], "binary/source changed during measurement")
         require(not result["scratch_remaining_before_runner_cleanup"], "producer left owned scratch entries")
         require(not new_siblings, "producer left unpublished sibling stage/lock entries")
-        require(args.output.is_dir(), "successful CLI did not publish output directory")
+        require(args.output.is_file(), "successful CLI did not publish .3tz")
         cli_report = json.loads(stdout_path.read_text())
         require(cli_report.get("ok") is True, "exit0 CLI result does not claim success")
-        resources = json.loads((args.output/"resources.json").read_text())
-        manifest = json.loads((args.output/"manifest.json").read_text())
-        result.update({"cli_result": cli_report, "producer_manifest": manifest, "resources": resources})
+        resources = cli_report["diagnostics"]
+        report = cli_report["tilerReport"]
         capture = resources["capture"]
-        declared_rss = max(capture["memory"]["bound_bytes"], resources["declaredStage2MemoryBytes"])
-        tmpfs = capture["scratch"]["need_bytes"] if capture["scratch_memory_backed"] else 0
-        result.update({"declared_serial_rss_bound_bytes": declared_rss,
-                       "memory_backed_scratch_separate_bytes": tmpfs,
-                       "rss_within_declared_bound": result["peak_rss_bytes_wait4"] <= declared_rss,
-                       "logical_scratch_within_bound": capture["scratch_logical_peak_bytes"] <= capture["scratch"]["logical_need_bytes"],
-                       "sampled_physical_scratch_within_bound": peak["physical_bytes"] <= capture["scratch"]["need_bytes"]})
-        require(result["rss_within_declared_bound"], "RSS exceeds max(serial capture,stage2) declared bound")
-        require(result["logical_scratch_within_bound"] and result["sampled_physical_scratch_within_bound"], "scratch exceeds declared allowance")
-        artifacts = inventory(args.output)
-        volatile = {name: value for name, value in artifacts.items() if name == "resources.json"}
-        stable = {name: value for name, value in artifacts.items() if name != "resources.json"}
-        members = {name: value for name, value in stable.items() if name.startswith("leaves/") and name.endswith(".glb")}
-        report = manifest["report"]
-        result.update({"stable_artifacts": stable, "volatile_artifacts": volatile,
+        declared_rss = max(capture["memory_bound_bytes"], resources["leaf_delivery"]["memory_bound_bytes"])
+        tmpfs = capture["scratch_need_bytes"] if capture["scratch_memory_backed"] else 0
+        result.update({"cli_result": cli_report, "resources": resources,
+                       "declared_serial_capture_leaf_rss_bound_bytes": declared_rss,
+                       "memory_backed_capture_scratch_separate_bytes": tmpfs,
+                       "rss_within_capture_leaf_declared_bound": result["peak_rss_bytes_wait4"] <= declared_rss,
+                       "capture_logical_scratch_within_bound": capture["scratch_logical_peak_bytes"] <= capture["scratch_logical_need_bytes"]})
+        # The unified operation also owns leaf/forest/archive intermediates. H1's
+        # declared scratch bound covers capture only, so do not compare the
+        # whole observed private tree to it or claim a complete memory proof.
+        result["measurement_limits"].append("serial capture/leaf RSS comparison excludes a separately certified archive-stage bound; observed scratch includes unpublished leaf/forest/archive work and is not compared to capture-only allowance")
+        require(result["capture_logical_scratch_within_bound"], "capture scratch exceeds declared allowance")
+        stable = {}
+        with zipfile.ZipFile(args.output) as archive:
+            require(json.loads(archive.read("conversion.json")) == report,
+                    "archive conversion.json differs from returned semantic report")
+            for info in archive.infolist():
+                h = hashlib.sha256()
+                with archive.open(info) as member:
+                    while block := member.read(1 << 20):
+                        h.update(block)
+                stable[info.filename] = {"bytes": info.file_size, "sha256": h.hexdigest()}
+        require(len(stable) == report["members"], "archive member count differs from report")
+        require(not any(name in stable for name in ("resources.json", "manifest.json", "leaves.jsonl")),
+                "private diagnostic members leaked into archive")
+        members = {name: value for name, value in stable.items() if name.endswith(".glb")}
+        result.update({"stable_artifacts": stable, "archive_sha256": digest(args.output),
                        "stable_artifact_inventory_sha256": hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
                        "members": {"count": len(members), "total_bytes": sum(x["bytes"] for x in members.values()),
                                    "maximum_bytes": max((x["bytes"] for x in members.values()), default=0)},
                        "reported_triangles": report["triangles"]})
-        require(len(members) == report["leaves"], "published membercount differs from report")
-        require(result["members"]["total_bytes"] == report["glb_bytes"], "published memberbytes differ from report")
-        require(result["members"]["maximum_bytes"] <= 96 << 20, "member exceeds96MiB")
-        manifest_members = 0
-        with (args.output/"leaves.jsonl").open() as lines:
-            for line in lines:
-                entry = json.loads(line)
-                actual = members.get(entry["uri"])
-                require(actual is not None and actual["bytes"] == entry["bytes"]
-                        and actual["sha256"] == entry["sha256"], "leafmanifest byte/hash differs from actual member")
-                manifest_members += 1
-        require(manifest_members == len(members), "leafmanifest rowcount differs from actual members")
+        require(len(members) == report["leaves"], "published member count differs from full-detail report")
+        require(result["members"]["total_bytes"] == report["glb_bytes"], "published member bytes differ from report")
+        require(result["members"]["maximum_bytes"] <= 96 << 20, "member exceeds 96MiB")
         if args.expected_triangles is not None:
             require(report["triangles"] == args.expected_triangles, "reported trianglecount differs from explicit expected input")
         result["passed"] = True

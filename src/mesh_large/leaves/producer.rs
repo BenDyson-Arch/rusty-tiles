@@ -32,7 +32,7 @@ use std::{
     },
 };
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LeafProfile {
     Fast,
@@ -59,6 +59,7 @@ pub struct LeafOutputRequest {
     scratch_dir: Option<PathBuf>,
     lod_mutation: super::super::lod::Mutation,
     lod_target: usize,
+    baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -74,6 +75,7 @@ impl LeafOutputRequest {
             scratch_dir: None,
             lod_mutation: super::super::lod::Mutation::None,
             lod_target: super::super::lod::TARGET_FACES,
+            baker: None,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -88,6 +90,15 @@ impl LeafOutputRequest {
     #[cfg(test)]
     pub(crate) fn with_lod_mutation(mut self, mutation: super::super::lod::Mutation) -> Self {
         self.lod_mutation = mutation;
+        self
+    }
+    /// Bake the coarse tiles' appearance (H13) after they are certified. Without a baker
+    /// the proxies stay untextured.
+    pub(in crate::mesh_large) fn with_baker(
+        mut self,
+        baker: std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>,
+    ) -> Self {
+        self.baker = Some(baker);
         self
     }
     /// Test fixtures: a smaller coarse-tile face target, so small inputs get deep LOD.
@@ -142,7 +153,7 @@ fn hex(bytes: impl AsRef<[u8]>) -> String {
 /// sources live in a separately budgeted cache; in-flight leaves own their
 /// geometry closure and encoded members up to the tile budget each.
 #[derive(Clone, Copy, Debug, Serialize)]
-struct StagePlan {
+pub(crate) struct StagePlan {
     /// Per-page limit for internal allocation checks (largest page lease).
     page_bytes: u64,
     gate_bytes: u64,
@@ -153,10 +164,11 @@ struct StagePlan {
     jobs: u64,
     jobs_limited_by: &'static str,
     available_bytes: Option<u64>,
+    bound_bytes: u64,
 }
 /// Bytes reserved for the runtime, allocator slack and the output writer.
 const STAGE_RESERVE: u64 = 256 << 20;
-fn stage_plan(
+pub(crate) fn stage_plan(
     profile: Profile,
     captured: &full::FullCaptured,
     requested: Jobs,
@@ -246,19 +258,13 @@ fn stage_plan(
                 .ok_or_else(|| resource("window"))?,
         )
         .ok_or_else(|| resource("per-job overflow"))?;
-    let (jobs, limited_by) = match requested {
-        Jobs::Fixed(n) => (n.get() as u64, "request"),
-        Jobs::Auto => match usable.map(|u| {
-            u.saturating_sub(cache_bytes)
-                .saturating_sub(page_bytes)
-                .saturating_sub(2 * leaf_owned)
-                / per_job.max(1)
-        }) {
-            Some(0) => (1, "floor"),
-            Some(n) if n < cores => (n, "memory"),
-            _ => (cores, "cores"),
-        },
-    };
+    let fixed = cache_bytes
+        .checked_add(page_bytes)
+        .and_then(|n| n.checked_add(2 * leaf_owned))
+        .ok_or_else(|| resource("leaf fixed memory overflow"))?;
+    let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
+    let jobs = plan.jobs;
+    let limited_by = plan.limited_by;
     let window = jobs
         .checked_mul(4)
         .and_then(|n| n.checked_add(2))
@@ -276,7 +282,14 @@ fn stage_plan(
             "one leaf job cannot fit available memory including owned scratch",
         ));
     }
+    let bound_bytes = global_bytes
+        .checked_add(STAGE_RESERVE)
+        .and_then(|n| n.checked_add(cache_bytes))
+        .and_then(|n| n.checked_add(gate_bytes))
+        .and_then(|n| n.checked_add(leaves))
+        .ok_or_else(|| resource("leaf declared memory overflow"))?;
     Ok(StagePlan {
+        bound_bytes,
         page_bytes,
         gate_bytes,
         cache_bytes,
@@ -406,6 +419,7 @@ fn encode_leaf(
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
@@ -421,16 +435,22 @@ fn encode_leaf(
                     config.profile,
                     node.depth() as u8,
                     density_drop,
+                    index,
                 ),
                 |atlas| {
-                    timing::time(Stage::GlbWrite, || {
+                    let leaf = timing::time(Stage::GlbWrite, || {
                         writer::encode(
                             atlas,
                             &captured.lattice,
                             node.depth() as u8,
                             config.tile_bytes(),
                         )
-                    })
+                    })?;
+                    // Only the accepted density attempt reaches here.
+                    if let Some(store) = preencode {
+                        store.write_leaf(index, density_drop, atlas)?;
+                    }
+                    Ok(leaf)
                 },
             )
         },
@@ -456,7 +476,8 @@ fn encode_leaf(
 /// of one leaf also run in parallel), and written strictly in leaf order, so
 /// every member, manifest row and the first reported failure are independent
 /// of the worker count.
-fn produce(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn produce(
     path: &Path,
     captured: &full::FullCaptured,
     config: &TreeConfig,
@@ -464,8 +485,32 @@ fn produce(
     profile: LeafProfile,
     mutation: super::super::lod::Mutation,
     target: usize,
+    baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<LeafOutputReport, JobError> {
+) -> Result<LeafStageOutput, JobError> {
+    use super::super::{bake_pass, lod::handoff::HandoffSink};
+    // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
+    // tile packets.
+    let bake_dir = captured.scratch.path().join("bake");
+    // One allowance for both stores: half the scratch volume's free space, measured before
+    // the leaves are written (a failed probe is an error, never an allowance of zero). Both
+    // stores fill during H8 and H17 and drain only as the baker consumes them.
+    let (preencode, handoff) = match baker {
+        Some(_) => {
+            let volume = crate::spill::inspect_volume(captured.scratch.path())?;
+            let budget = std::sync::Arc::new(super::super::lod::handoff::ScratchBudget::new(
+                volume.available_bytes / 2,
+            ));
+            (
+                Some(bake_pass::PreencodeStore::new(
+                    bake_dir.join("preencode"),
+                    budget.clone(),
+                )?),
+                Some(HandoffSink::new(bake_dir.join("handoff"), budget)?),
+            )
+        }
+        None => (None, None),
+    };
     let leaves = path.join("leaves");
     fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
     let manifest_path = path.join("leaves.jsonl");
@@ -513,7 +558,9 @@ fn produce(
         gate: &gate,
         memory: stage.page_bytes,
         check: &leaf_check,
+        preencode: preencode.as_ref(),
     };
+    let preencode_ref = preencode.as_ref();
     let mut nodes = captured.tree.nodes.reader()?;
     let result = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Done = Result<(LeafEncoded, LeafInput), JobError>;
@@ -559,7 +606,14 @@ fn produce(
                         // writer never waits for a result that cannot come.
                         let encoded =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                encode_leaf(&input, services, config, leaves_dir, index)
+                                encode_leaf(
+                                    &input,
+                                    services,
+                                    config,
+                                    leaves_dir,
+                                    index,
+                                    preencode_ref,
+                                )
                             }))
                             .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
                         // The receiver outlives every task of this scope.
@@ -601,7 +655,7 @@ fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
-    let lod = timing::time(Stage::Lod, || {
+    let mut lod = timing::time(Stage::Lod, || {
         super::super::lod::produce(
             super::super::lod::LodInput {
                 stage: path,
@@ -611,12 +665,39 @@ fn produce(
                 jobs: stage.jobs as usize,
                 mutation,
                 target,
+                handoff: handoff.as_ref(),
             },
             check,
         )
     })?;
     report.proxies = lod.proxies;
     report.proxy_bytes = lod.proxy_bytes;
+    // The bake hook: capture and staging are still live here.
+    if let (Some(baker), Some(handoff), Some(preencode)) = (baker, &handoff, &preencode) {
+        let pass = bake_pass::BakePass::new(
+            captured,
+            config.profile,
+            config.tile_bytes(),
+            stage.jobs as usize,
+            path,
+            handoff,
+            preencode,
+            check,
+        );
+        baker.bake(&pass)?;
+        // The manifest reports the published (baked) proxy bytes, and keeps the certified
+        // untextured figure beside them.
+        let baked = pass.finish()?;
+        lod.untextured_proxy_bytes = Some(lod.proxy_bytes);
+        lod.proxy_bytes = baked;
+        report.proxy_bytes = baked;
+    }
+    drop(handoff);
+    drop(preencode);
+    if bake_dir.exists() {
+        fs::remove_dir_all(&bake_dir)
+            .map_err(|e| JobError::io("remove bake scratch", &bake_dir, e))?;
+    }
     let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","lod":lod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
     write_file(
         &path.join("manifest.json"),
@@ -635,7 +716,48 @@ fn produce(
     timing::finish(
         json!({"profile":profile,"leaves":report.leaves,"triangles":report.triangles,"glbBytes":report.glb_bytes,"sourceImages":captured.image_info.len(),"sourceTexels":source_texels,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()}),
     );
-    Ok(report)
+    let stats = cache.stats();
+    Ok(LeafStageOutput {
+        report,
+        diagnostics: LeafStageDiagnostics {
+            memory_bound_bytes: stage.bound_bytes,
+            jobs: stage.jobs,
+            jobs_limited_by: stage.jobs_limited_by,
+            available_bytes: stage.available_bytes,
+            page_bytes: stage.page_bytes,
+            gate_bytes: stage.gate_bytes,
+            cache_bytes: stage.cache_bytes,
+            global_bytes: stage.global_bytes,
+            leaf_bytes: stage.leaf_bytes,
+            window: stage.window,
+            page_gate_peak_bytes: gate.peak(),
+            cache_peak_resident_bytes: stats.peak_resident_bytes,
+            cache_hits: stats.hits,
+            cache_misses: stats.misses,
+        },
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LeafStageDiagnostics {
+    pub memory_bound_bytes: u64,
+    pub jobs: u64,
+    pub jobs_limited_by: &'static str,
+    pub available_bytes: Option<u64>,
+    pub page_bytes: u64,
+    pub gate_bytes: u64,
+    pub cache_bytes: u64,
+    pub global_bytes: u64,
+    pub leaf_bytes: u64,
+    pub window: u64,
+    pub page_gate_peak_bytes: u64,
+    pub cache_peak_resident_bytes: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+}
+pub(crate) struct LeafStageOutput {
+    pub report: LeafOutputReport,
+    pub diagnostics: LeafStageDiagnostics,
 }
 
 fn write_leaf(
@@ -728,12 +850,13 @@ pub fn mesh_to_leaf_payloads(
         request.profile,
         request.lod_mutation,
         request.lod_target,
+        request.baker.as_deref(),
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();
     let cleanup = captured.close();
     let report = match result {
-        Ok(report) => report,
+        Ok(output) => output.report,
         Err(error) => {
             let mut failed = stage.fail(error);
             if let Err(error) = cleanup {

@@ -1,4 +1,5 @@
 //! Public contract for bounded read-only archive inspection.
+use super::rows::PayloadRows;
 use serde::Serialize;
 use std::{io, path::PathBuf};
 #[derive(Clone, Debug)]
@@ -123,5 +124,70 @@ pub struct ValidationReport {
     pub checks: Vec<String>,
     pub not_inspected: Vec<String>,
     pub limits: ValidationLimits,
-    pub payloads: Vec<PayloadReport>,
+    /// One row per inspected payload URI, in URI byte order, read on demand.
+    pub payloads: PayloadRows,
+    /// Present only when the catalog or the payload rows spilled to scratch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scratch: Option<ScratchReport>,
+}
+/// The validation's scratch use, reported whenever any spill file was written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScratchReport {
+    /// The scratch directory is RAM (tmpfs or ramfs): the spill was held in memory. This
+    /// happens only when no disk-backed candidate was available or fitted.
+    pub memory_backed: bool,
+    /// Largest number of bytes held in scratch files at once.
+    pub peak_bytes: u64,
+}
+impl ValidationReport {
+    /// The serialized report without its `payloads` member: a small JSON object.
+    pub fn summary_json(&self) -> serde_json::Result<serde_json::Value> {
+        let mut value = serde_json::json!({
+            "ok": self.ok,
+            "archive": self.archive,
+            "tiles": self.tiles,
+            "contentReferences": self.content_references,
+            "entries": self.entries,
+            "checks": self.checks,
+            "notInspected": self.not_inspected,
+        });
+        value["limits"] = serde_json::to_value(&self.limits)?;
+        if let Some(scratch) = self.scratch {
+            value["scratch"] = serde_json::to_value(scratch)?;
+        }
+        Ok(value)
+    }
+    /// Writes the report as compact JSON, byte-identical to the `Display` of
+    /// `serde_json::to_value(self)` (keys in sorted order), streaming the payload rows
+    /// one at a time instead of materializing them.
+    pub fn write_json(&self, out: &mut impl io::Write) -> io::Result<()> {
+        let mut summary = self.summary_json()?;
+        let Some(object) = summary.as_object_mut() else {
+            unreachable!("the summary is an object");
+        };
+        object.insert("payloads".into(), serde_json::Value::Null);
+        out.write_all(b"{")?;
+        for (index, (key, value)) in object.iter().enumerate() {
+            if index > 0 {
+                out.write_all(b",")?;
+            }
+            serde_json::to_writer(&mut *out, key)?;
+            out.write_all(b":")?;
+            if key == "payloads" {
+                out.write_all(b"[")?;
+                for (row, report) in self.payloads.iter().enumerate() {
+                    if row > 0 {
+                        out.write_all(b",")?;
+                    }
+                    let report = report.map_err(io::Error::other)?;
+                    serde_json::to_writer(&mut *out, &serde_json::to_value(report)?)?;
+                }
+                out.write_all(b"]")?;
+            } else {
+                serde_json::to_writer(&mut *out, value)?;
+            }
+        }
+        out.write_all(b"}")
+    }
 }
