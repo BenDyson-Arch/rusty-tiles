@@ -54,6 +54,19 @@ an unused placeholder or GLB buffer zero without a BIN chunk. The optional fallb
 marker has the same buffer-role restrictions whether actual bytes are provided or not.
 Application-owned `extras` and extension-owned JSON remain opaque to the generic
 extension-declaration walk.
+`KHR_texture_basisu` ([KhronosGroup/glTF `1bde276f`](https://github.com/KhronosGroup/glTF/blob/1bde276f7a173876e24c0f403a14dd827dc7912b/extensions/2.0/Khronos/KHR_texture_basisu/README.md))
+may be required. The image its `source` references must be declared `image/ktx2` (or have a
+`.ktx2` URI and no `mimeType`), a core fallback `source` may not be a KTX2 image, and a
+texture without a fallback requires the extension in `extensionsRequired`. Each such image is
+checked as a KTX 2.0 (v2.0.4) container only: identifier and header, 2D type (non-2D is
+invalid for material maps and unsupported otherwise), `VK_FORMAT_UNDEFINED`, dimensions that
+are multiples of 4, a `levelCount` the dimensions allow, ETC1S with BasisLZ or UASTC with no
+or Zstandard supercompression and the extension's channel sets, the DFD basic block,
+key/value framing with `KTXswizzle` `rgba` and `KTXorientation` `rd`, BasisLZ global data and
+image descriptors, and every level packed inside the image with lengths that agree with its
+size. Level data is never inflated, transcoded or decoded; the report lists
+`KTX2 level data and transcoding` and `image decoding`. See the
+[KTX2 amendment](architecture/c1-ktx2-basisu-amendment.md).
 C1 also inspects the experimental `KHR_mesh_primitive_restart` draft at
 [CesiumGS/glTF revision `9811e8407d4533500cfc6b10e3bc408345035a6f`](https://github.com/CesiumGS/glTF/blob/9811e8407d4533500cfc6b10e3bc408345035a6f/extensions/2.0/Khronos/KHR_mesh_primitive_restart/README.md).
 Its admitted draw mode is indexed LINE_STRIP: the maximum unsigned component

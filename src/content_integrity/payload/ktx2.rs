@@ -92,12 +92,9 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
     // floor(log2(max(width, height))) + 1 levels exist.
     let max_levels = 32 - width.max(height).leading_zeros();
     if level_count == 0 || level_count > max_levels {
-        return Err(invalid("KTX2 levelCount is inconsistent with the dimensions"));
-    }
-    if !matches!(scheme, NONE | BASIS_LZ | ZSTD) {
-        return Err(invalid(format!(
-            "KTX2 supercompressionScheme {scheme} is not allowed by KHR_texture_basisu"
-        )));
+        return Err(invalid(
+            "KTX2 levelCount is inconsistent with the dimensions",
+        ));
     }
     let levels = u64::from(level_count);
     let index_end = HEADER + LEVEL * levels;
@@ -122,7 +119,9 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
         || (block - 24) % 16 != 0
         || 4 + block > dfd_length
     {
-        return Err(invalid("KTX2 DFD is not one Khronos basic block, version 2"));
+        return Err(invalid(
+            "KTX2 DFD is not one Khronos basic block, version 2",
+        ));
     }
     let samples = (block - 24) / 16;
     // channelType is the low nibble of each sample's fourth byte; 0xFF marks
@@ -140,18 +139,24 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
     match model {
         MODEL_ETC1S => {
             if scheme != BASIS_LZ {
-                return Err(invalid("ETC1S KTX2 must use BasisLZ supercompression"));
+                return Err(invalid(format!(
+                    "ETC1S KTX2 must use BasisLZ supercompression, not scheme {scheme}"
+                )));
             }
             if !matches!(
                 (samples, channels),
                 (1, [0 | 3, 0xFF]) | (2, [0, 15]) | (2, [3, 4])
             ) {
-                return Err(invalid("ETC1S KTX2 DFD channels are not RGB, RGBA, R or RG"));
+                return Err(invalid(
+                    "ETC1S KTX2 DFD channels are not RGB, RGBA, R or RG",
+                ));
             }
         }
         MODEL_UASTC => {
-            if scheme == BASIS_LZ {
-                return Err(invalid("UASTC KTX2 must use no or Zstandard supercompression"));
+            if !matches!(scheme, NONE | ZSTD) {
+                return Err(invalid(format!(
+                    "UASTC KTX2 must use no or Zstandard supercompression, not scheme {scheme}"
+                )));
             }
             if !matches!((samples, channels), (1, [0 | 3 | 4 | 6, 0xFF])) {
                 return Err(invalid("UASTC KTX2 DFD channel is not RGB, RGBA, R or RG"));
@@ -171,7 +176,9 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
     let (kvd_offset, kvd_length) = (u64::from(field(11)?), u64::from(field(12)?));
     if kvd_length == 0 {
         if kvd_offset != 0 {
-            return Err(invalid("KTX2 kvdByteOffset must be 0 without key/value data"));
+            return Err(invalid(
+                "KTX2 kvdByteOffset must be 0 without key/value data",
+            ));
         }
     } else {
         if kvd_offset != end {
@@ -232,7 +239,9 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
             long(bytes, entry + 16)?,
         );
         if offset != align_up(cursor, alignment)? {
-            return Err(invalid(format!("KTX2 level {p} is not at its packed offset")));
+            return Err(invalid(format!(
+                "KTX2 level {p} is not at its packed offset"
+            )));
         }
         if length == 0 {
             return Err(invalid(format!("KTX2 level {p} is empty")));
@@ -241,12 +250,14 @@ pub(super) fn inspect(bytes: &[u8], material: bool) -> FormatResult<()> {
         let blocks = |size: u32| u64::from((size >> p).max(1).div_ceil(4));
         let uastc = u128::from(blocks(width)) * u128::from(blocks(height)) * 16;
         let agrees = match scheme {
+            BASIS_LZ => inflated == 0,
             NONE => u128::from(length) == uastc && u128::from(inflated) == uastc,
-            ZSTD => u128::from(inflated) == uastc,
-            _ => inflated == 0,
+            _ => u128::from(inflated) == uastc,
         };
         if !agrees {
-            return Err(invalid(format!("KTX2 level {p} byte lengths disagree with its size")));
+            return Err(invalid(format!(
+                "KTX2 level {p} byte lengths disagree with its size"
+            )));
         }
         level_lengths[p as usize] = length;
     }

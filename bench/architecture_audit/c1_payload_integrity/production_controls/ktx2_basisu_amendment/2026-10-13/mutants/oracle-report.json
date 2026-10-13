@@ -1,0 +1,316 @@
+{
+  "kind": "oracle",
+  "oracleSha256": "b690ed4bd16e05504994ac998d1ed34d94d4335828e2f80ba1c8fe5f81a254df",
+  "manifestSha256": "5c562a78e540143ad46c4633ce299fddfc499ce7b0091e10fef9ebbfd37405d9",
+  "mutants": [
+    {
+      "mutant": "skip-identifier",
+      "namedCase": "bad-identifier",
+      "flipped": [
+        "bad-identifier"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if raw[:12] != IDENTIFIER:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "skip-2d",
+      "namedCase": "non-2d-no-material",
+      "flipped": [
+        "non-2d-material",
+        "non-2d-no-material"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if depth or layers or faces != 1:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "non-2d-always-unsupported",
+      "namedCase": "non-2d-material",
+      "flipped": [
+        "non-2d-material"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "INVALID if material else UNSUPPORTED",
+        "new": "UNSUPPORTED"
+      }
+    },
+    {
+      "mutant": "skip-vkformat",
+      "namedCase": "vk-format-defined",
+      "flipped": [
+        "vk-format-defined"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if vk != 0 or type_size != 1:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "skip-multiple-of-4",
+      "namedCase": "not-multiple-of-4",
+      "flipped": [
+        "not-multiple-of-4"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if width % 4 or height % 4:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "level-count-plus-one",
+      "namedCase": "level-count-over-dimensions",
+      "flipped": [
+        "level-count-over-dimensions"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "level_count - 1 > max(width, height).bit_length() - 1",
+        "new": "level_count - 2 > max(width, height).bit_length() - 1"
+      }
+    },
+    {
+      "mutant": "allow-zlib",
+      "namedCase": "uastc-zlib-scheme",
+      "flipped": [
+        "uastc-zlib-scheme"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if scheme not in (0, 1, 2):",
+        "new": "if scheme not in (0, 1, 2, 3):"
+      }
+    },
+    {
+      "mutant": "allow-rrrg",
+      "namedCase": "uastc-rrrg-channel",
+      "flipped": [
+        "uastc-rrrg-channel"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "channels not in ((0,), (3,), (4,), (6,))",
+        "new": "channels not in ((0,), (3,), (4,), (5,), (6,))"
+      }
+    },
+    {
+      "mutant": "any-color-model",
+      "namedCase": "not-basis-color-model",
+      "flipped": [
+        "not-basis-color-model"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "        bad('color-model')",
+        "new": "        pass"
+      }
+    },
+    {
+      "mutant": "any-texel-block",
+      "namedCase": "texel-block-6x4",
+      "flipped": [
+        "texel-block-6x4"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if dfd[16:20] != bytes([3, 3, 0, 0]):",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "skip-dfd-size",
+      "namedCase": "dfd-total-size",
+      "flipped": [
+        "dfd-total-size"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if u32(dfd, 0) != dfd_length or dfd_length % 4:",
+        "new": "if dfd_length % 4:"
+      }
+    },
+    {
+      "mutant": "skip-kvd-metadata",
+      "namedCase": "orientation-ru",
+      "flipped": [
+        "etc1s-swizzle-upstream",
+        "orientation-ru"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "                bad('kvd-metadata')",
+        "new": "                pass"
+      }
+    },
+    {
+      "mutant": "skip-kvd-framing",
+      "namedCase": "kvd-pair-length",
+      "flipped": [
+        "kvd-pair-length"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "        found.append((category, rule))\n",
+        "new": "        if rule != 'kvd-pairs':\n            found.append((category, rule))\n"
+      }
+    },
+    {
+      "mutant": "global-offset-ignored",
+      "namedCase": "global-data-for-uastc",
+      "flipped": [
+        "global-data-for-uastc"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if sgd_offset != 0 or scheme == 1:",
+        "new": "if scheme == 1:"
+      }
+    },
+    {
+      "mutant": "scheme-0-unaligned",
+      "namedCase": "uastc-none-upstream",
+      "flipped": [
+        "external-ktx2-uri",
+        "non-material-2d",
+        "uastc-none-packed-mips",
+        "uastc-none-upstream"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "alignment = 16 if scheme == 0 else 1",
+        "new": "alignment = 1"
+      }
+    },
+    {
+      "mutant": "skip-level-offset",
+      "namedCase": "overlapping-levels",
+      "flipped": [
+        "overlapping-levels"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if offset != align(cursor, alignment):",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "skip-zstd-length",
+      "namedCase": "uncompressed-length",
+      "flipped": [
+        "uncompressed-length"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "(scheme == 2 and inflated != 16 * blocks)",
+        "new": "(scheme == 2 and False)"
+      }
+    },
+    {
+      "mutant": "allow-trailing",
+      "namedCase": "trailing-bytes",
+      "flipped": [
+        "trailing-bytes"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "        bad('trailing-bytes')",
+        "new": "        pass"
+      }
+    },
+    {
+      "mutant": "skip-basislz-length",
+      "namedCase": "basislz-global-length",
+      "flipped": [
+        "basislz-global-length"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "or extended:\n            return found + [(INVALID, 'basislz-length')]",
+        "new": "and False:\n            return found + [(INVALID, 'basislz-length')]"
+      }
+    },
+    {
+      "mutant": "skip-image-descriptor",
+      "namedCase": "basislz-slice-past-level",
+      "flipped": [
+        "basislz-slice-past-level"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "                bad('image-descriptor')",
+        "new": "                pass"
+      }
+    },
+    {
+      "mutant": "skip-mime",
+      "namedCase": "mime-png",
+      "flipped": [
+        "mime-missing-buffer-view",
+        "mime-png",
+        "uri-png-suffix"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if index in basisu_sources and not ktx2:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "mime-only",
+      "namedCase": "external-ktx2-uri",
+      "flipped": [
+        "external-ktx2-uri"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "        return image['mimeType'] == 'image/ktx2'\n    return image.get('uri', '').lower().endswith('.ktx2')",
+        "new": "        return image['mimeType'] == 'image/ktx2'\n    return False"
+      }
+    },
+    {
+      "mutant": "fallback-may-be-ktx2",
+      "namedCase": "fallback-is-ktx2",
+      "flipped": [
+        "fallback-is-ktx2"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if index in core_sources and ktx2 and EXT in used:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "fallback-not-required",
+      "namedCase": "no-fallback-not-required",
+      "flipped": [
+        "no-fallback-not-required"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if 'source' not in texture and EXT not in required:",
+        "new": "if False:"
+      }
+    },
+    {
+      "mutant": "skip-declaration",
+      "namedCase": "undeclared-extension",
+      "flipped": [
+        "undeclared-extension"
+      ],
+      "pass_": true,
+      "patch": {
+        "old": "if EXT not in used:",
+        "new": "if False:"
+      }
+    }
+  ],
+  "passes": 25,
+  "failures": 0
+}

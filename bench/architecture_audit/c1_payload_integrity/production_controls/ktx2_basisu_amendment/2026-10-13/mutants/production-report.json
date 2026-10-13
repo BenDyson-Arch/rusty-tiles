@@ -1,0 +1,252 @@
+{
+  "kind": "production",
+  "sourceCommit": "f759ef3f984130085535e5e6a52af9ce19f41ec7",
+  "sourceRestored": false,
+  "mutants": [
+    {
+      "mutant": "skip-identifier",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if bytes.get(..12) != Some(&IDENTIFIER[..]) {",
+      "new": "if bytes.len() < 12 {",
+      "namedCase": "bad-identifier",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "bad-identifier"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "non-2d-always-unsupported",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "return Err(if material {",
+      "new": "return Err(if material && false {",
+      "namedCase": "non-2d-material",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "non-2d-material"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-multiple-of-4",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if width % 4 != 0 || height % 4 != 0 {",
+      "new": "if false {",
+      "namedCase": "not-multiple-of-4",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "not-multiple-of-4"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "level-count-plus-one",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "level_count > max_levels",
+      "new": "level_count > max_levels + 1",
+      "namedCase": "level-count-over-dimensions",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "level-count-over-dimensions"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-zlib",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if !matches!(scheme, NONE | ZSTD) {",
+      "new": "if !matches!(scheme, NONE | ZSTD | 3) {",
+      "namedCase": "uastc-zlib-scheme",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "uastc-zlib-scheme"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "scheme-0-unaligned",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "let alignment = if scheme == NONE { UASTC_BLOCK } else { 1 };",
+      "new": "let alignment = 1;",
+      "namedCase": "uastc-none-upstream",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "external-ktx2-uri",
+        "non-material-2d",
+        "uastc-none-packed-mips",
+        "uastc-none-upstream"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-level-offset",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if offset != align_up(cursor, alignment)? {",
+      "new": "if offset < align_up(0, alignment)? {",
+      "namedCase": "overlapping-levels",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "overlapping-levels"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "allow-trailing",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if cursor != bytes.len() as u64 {",
+      "new": "if cursor > bytes.len() as u64 {",
+      "namedCase": "trailing-bytes",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "trailing-bytes"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-zstd-length",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "_ => u128::from(inflated) == uastc,",
+      "new": "_ => true,",
+      "namedCase": "uncompressed-length",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "uncompressed-length"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-image-descriptor",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if flags != 0 || rgb_length == 0 || rgb_offset + rgb_length > *length || !alpha_ok {",
+      "new": "if flags != 0 || rgb_length == 0 || !alpha_ok {",
+      "namedCase": "basislz-slice-past-level",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "basislz-slice-past-level"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-kvd-metadata",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "|| (key == b\"KTXorientation\" && value != b\"rd\")",
+      "new": "",
+      "namedCase": "orientation-ru",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "orientation-ru"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "any-texel-block",
+      "file": "src/content_integrity/payload/ktx2.rs",
+      "old": "if dfd[16..20] != [3, 3, 0, 0] {",
+      "new": "if dfd[17..20] != [3, 0, 0] {",
+      "namedCase": "texel-block-6x4",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "texel-block-6x4"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-mime",
+      "file": "src/content_integrity/payload.rs",
+      "old": "if roles & 2 != 0 && !ktx2 {",
+      "new": "if roles & 2 != 0 && false {",
+      "namedCase": "mime-png",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "mime-missing-buffer-view",
+        "mime-png",
+        "uri-png-suffix"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "fallback-may-be-ktx2",
+      "file": "src/content_integrity/payload.rs",
+      "old": "if roles & 1 != 0 && ktx2 {",
+      "new": "if roles & 1 != 0 && false {",
+      "namedCase": "fallback-is-ktx2",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "fallback-is-ktx2"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "fallback-not-required",
+      "file": "src/content_integrity/payload.rs",
+      "old": "if !fallback && !required.contains(\"KHR_texture_basisu\") {",
+      "new": "if !fallback && false {",
+      "namedCase": "no-fallback-not-required",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "no-fallback-not-required"
+      ],
+      "pass_": true
+    },
+    {
+      "mutant": "skip-container",
+      "file": "src/content_integrity/payload.rs",
+      "old": "ktx2::inspect(&data, roles & 4 != 0)?;",
+      "new": "let _ = ktx2::inspect;",
+      "namedCase": "truncated-base-level",
+      "built": true,
+      "buildStderrTail": "",
+      "failedCases": [
+        "bad-identifier",
+        "basislz-global-length",
+        "basislz-slice-past-level",
+        "dfd-misplaced",
+        "dfd-total-size",
+        "etc1s-swizzle-upstream",
+        "etc1s-zstd-scheme",
+        "global-data-for-uastc",
+        "hostile-level-count",
+        "hostile-level-offset",
+        "kvd-pair-length",
+        "level-count-over-dimensions",
+        "level-count-zero",
+        "level-past-eof",
+        "non-2d-material",
+        "non-2d-no-material",
+        "not-basis-color-model",
+        "not-multiple-of-4",
+        "orientation-ru",
+        "overlapping-levels",
+        "texel-block-6x4",
+        "trailing-bytes",
+        "truncated-base-level",
+        "truncated-encoder-output",
+        "truncated-header",
+        "uastc-basislz-scheme",
+        "uastc-rrrg-channel",
+        "uastc-vendor-scheme",
+        "uastc-zlib-scheme",
+        "uncompressed-length",
+        "vk-format-defined"
+      ],
+      "pass_": true
+    }
+  ],
+  "passes": 16,
+  "failures": 0
+}

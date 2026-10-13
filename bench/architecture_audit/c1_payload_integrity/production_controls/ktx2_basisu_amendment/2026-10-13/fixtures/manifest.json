@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "status": "Predictions frozen before target execution; not execution evidence",
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
-  "generatorSha256": "c5cc6c71a1551e66a18130f6f4834686abb941a063baff4d8ffd2a5f683752ad",
-  "oracleSha256": "0a3f66702376b9042357f3fb161b3d8b791967f3c54e1beeeafc70e0aa8a1ecf",
+  "generatorSha256": "42dd0c911a9a46974610bdc025874563177e32907d499121aecc878858ccf5ad",
+  "oracleSha256": "b690ed4bd16e05504994ac998d1ed34d94d4335828e2f80ba1c8fe5f81a254df",
   "runnerSha256": "ddcabf58c2d991a606d65ac6ae7ff4d4b4bef4f410ab058651169bbc78ca24d5",
   "referencePins": {
     "files": [
@@ -1159,6 +1159,28 @@
       "memberSha256": {
         "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
         "tile.glb": "4853d8415859c936c4fc92b47eae36a8220bef0932b503722589469d57bc580c"
+      }
+    },
+    {
+      "name": "texel-block-6x4",
+      "path": "texel-block-6x4/input.3tz",
+      "source": "cyan DFD texelBlockDimension0 5",
+      "intendedRule": "texel-block",
+      "oracleViolations": [
+        "texel-block"
+      ],
+      "oracleCategory": "invalid_input",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "ktx2Sha256": [
+        "c36eb82450fcd98bd4d4b0a4778686e2eddc48d5739b18d935966c17b1056249"
+      ],
+      "sha256": "b2041d6c61a7d9a796dc9f6eeb96c84010a1cdccf118f35186d27b2cbe6ceb14",
+      "bytes": 5697,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "cb6381a3c0f37316eb79351da52017ef79506a6827318b5a2fb72a95df45b4f7"
       }
     },
     {

@@ -2441,4 +2441,6 @@ mod tests {
 #[cfg(test)]
 mod controls;
 #[cfg(test)]
+mod ktx2_controls;
+#[cfg(test)]
 mod meshopt_header_controls;

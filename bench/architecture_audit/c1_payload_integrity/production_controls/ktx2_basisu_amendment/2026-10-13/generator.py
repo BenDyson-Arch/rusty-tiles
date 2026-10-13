@@ -179,6 +179,8 @@ def cases():
         ('uastc-basislz-scheme', 'H8 leaf scheme 1', 'model-scheme', I, single(put32(leaf, 44, 1))),
         ('not-basis-color-model', 'cyan DFD colorModel RGBSDA', 'color-model', I,
          single(cyan[:dfd(cyan) + 12] + b'\x01' + cyan[dfd(cyan) + 13:])),
+        ('texel-block-6x4', 'cyan DFD texelBlockDimension0 5', 'texel-block', I,
+         single(cyan[:dfd(cyan) + 16] + b'\x05' + cyan[dfd(cyan) + 17:])),
         ('vk-format-defined', 'cyan vkFormat 43', 'vkformat', I, single(put32(cyan, 12, 43))),
         ('uastc-rrrg-channel', 'cyan channel UASTC_RRRG', 'channels', I,
          single(cyan[:dfd(cyan) + 31] + b'\x05' + cyan[dfd(cyan) + 32:])),

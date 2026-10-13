@@ -125,7 +125,7 @@ def ktx2_violations(raw, material):
             if n < 2 or len(pair) != n or b'\0' not in pair or pair[0] == 0:
                 bad('kvd-pairs')
                 break
-            key, value = pair.split(b'\0', 1)
+            key, _, value = pair.partition(b'\0')
             if value.endswith(b'\0'):
                 value = value[:-1]
             if (key == b'KTXswizzle' and value != b'rgba') or (key == b'KTXorientation' and value != b'rd'):
