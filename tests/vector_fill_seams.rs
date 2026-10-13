@@ -237,6 +237,12 @@ fn assert_seams_agree(archive: &Path) -> (usize, usize) {
         "{archive:?}: {floats} of {} contents float32",
         contents.len()
     );
+    assert!(
+        contents
+            .iter()
+            .any(|c| c.step.is_none() && !c.lines.is_empty()),
+        "{archive:?}: float32 contents with line strips"
+    );
     (seams, mixed)
 }
 

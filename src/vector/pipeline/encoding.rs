@@ -386,8 +386,10 @@ fn bridge_len(
 /// own step is coarser, on any axis, than that of a tile it can render
 /// together with and shares a vertex with stores float32 lattice values
 /// ([`Storage::Float32`], 2^24 steps, so 2^8 times finer). The u16 tiles
-/// of a group then all have the same step, which the group snaps at, and
-/// each keeps its own precision.
+/// of a group then all have the same step, which the group snaps at, so
+/// each keeps its own step unless a float32 member's finest step is coarser
+/// still (more than 2^8 times coarser than the u16 tile): the group then
+/// snaps there, and the measured bound includes it.
 ///
 /// The tile's other vertices keep its own finest step. Deriving the range
 /// per payload instead rounds a shared vertex differently on each side of a
@@ -934,26 +936,31 @@ fn emit_source(
                             .collect(),
                     ),
                     // Exact: an integer below 2^24 times a power of two
-                    // no smaller than 2^MIN_EXPONENT.
-                    Storage::Float32 => Codes::Float32(
-                        offsets
-                            .map(|points| {
-                                points
-                                    .map(|k| {
-                                        std::array::from_fn(|i| {
-                                            let value = k[i] as f64 * step[i];
-                                            assert!(
-                                                k[i] <= Storage::Float32.window()
-                                                    && f64::from(value as f32) == value,
-                                                "lattice value exact in float32"
-                                            );
-                                            value as f32
-                                        })
-                                    })
-                                    .collect()
-                            })
-                            .collect(),
-                    ),
+                    // no smaller than 2^MIN_EXPONENT. Checked all the same:
+                    // a value that float32 rounds would open the seam.
+                    Storage::Float32 => {
+                        let mut values = Vec::new();
+                        for points in offsets {
+                            let mut accessor = Vec::new();
+                            for k in points {
+                                let mut value = [0f32; 3];
+                                for i in 0..3 {
+                                    let exact = k[i] as f64 * step[i];
+                                    if k[i] > Storage::Float32.window()
+                                        || f64::from(exact as f32) != exact
+                                    {
+                                        return Err(FeatureFailure::reject(
+                                            "lattice position not exact in float32",
+                                        ));
+                                    }
+                                    value[i] = exact as f32;
+                                }
+                                accessor.push(value);
+                            }
+                            values.push(accessor);
+                        }
+                        Codes::Float32(values)
+                    }
                 };
                 let scale = match storage {
                     Storage::U16 => step.map(|s| s * 65535.),
@@ -2389,6 +2396,164 @@ mod tests {
                 "per-payload ranges crack"
             );
         }
+    }
+
+    /// The final pass reads each shared vertex's step and the tile's storage
+    /// from `grid`. Without rows the tile keeps its own range and reports
+    /// the unrecorded vertices. With float32 rows, its fill and line strip
+    /// positions are float32 lattice values (no node scale, no strip-end
+    /// padding): shared vertices exactly on their recorded step, every
+    /// vertex within the bound.
+    #[test]
+    fn final_pass_reads_grid_storage_and_reports_unrecorded_vertices() {
+        let ring = vec![
+            [0., 0., 0.],
+            [1000.3, 0., 0.],
+            [1000.3, 0., 700.7],
+            [0., 0., 0.],
+        ];
+        let mut fill = point_feature();
+        fill.properties.insert("_source_id".into(), json!("f"));
+        fill.geometry = Geometry::Polygon(vec![ring.clone()]);
+        let mut line = point_feature();
+        line.properties.insert("_source_id".into(), json!("l"));
+        line.geometry = Geometry::LineString(vec![ring[0], [400.1, 0., 900.9], ring[2]]);
+        let root = tempfile::tempdir().unwrap();
+        let spool = root.path().join("features.sqlite");
+        let db = rusqlite::Connection::open(&spool).unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER);").unwrap();
+        for (id, feature) in [(1, &fill), (2, &line)] {
+            db.execute(
+                "INSERT INTO features VALUES(?1,'',?2)",
+                rusqlite::params![id, serde_json::to_string(feature).unwrap()],
+            )
+            .unwrap();
+        }
+        for p in [ring[0], ring[1], ring[2], [400.1, 0., 900.9]] {
+            let shared = p != [400.1, 0., 900.9];
+            db.execute(
+                "INSERT INTO vertices VALUES(?1,?2,?3,?4)",
+                rusqlite::params![p[0], p[1], p[2], shared],
+            )
+            .unwrap();
+        }
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let options = VectorOptions {
+            quantize: true,
+            ..VectorOptions::default()
+        };
+        let schemas = BTreeMap::new();
+        let center = [500., 0., 450.];
+        let encode_tile = || {
+            let t = root.path().join("t");
+            let _ = std::fs::remove_dir_all(&t);
+            std::fs::create_dir(&t).unwrap();
+            let encoder = Encoder {
+                spool: &spool,
+                pass: GridPass::Final,
+                max_features: 4,
+                repair: false,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+                policy: ProducerPolicy::new(false).unwrap(),
+                attempt: &attempt,
+            };
+            let candidate = encode(encoder, "", center, 0).unwrap();
+            let files: Vec<_> = std::fs::read_dir(&t).unwrap().collect();
+            assert_eq!(files.len(), 1);
+            let bytes = std::fs::read(files[0].as_ref().unwrap().path()).unwrap();
+            (candidate, bytes)
+        };
+        // Shared (cell, kind): three fill corners and the line's two ends.
+        let (candidate, _) = encode_tile();
+        let unrecorded: Vec<_> = candidate
+            .reports
+            .iter()
+            .filter(|r| r["quantizationGrid"] == "unrecorded")
+            .collect();
+        assert_eq!(unrecorded.len(), 1, "{:?}", candidate.reports);
+        assert_eq!(unrecorded[0]["vertices"], 5);
+        // Every shared copy recorded on a 1/16 m step, stored as float32.
+        let e = -4;
+        for (p, kind) in [
+            (ring[0], Kind::Fill),
+            (ring[1], Kind::Fill),
+            (ring[2], Kind::Fill),
+            (ring[0], Kind::Line),
+            (ring[2], Kind::Line),
+        ] {
+            let c = cell(p);
+            db.execute(
+                "INSERT INTO grid VALUES(?1,?2,?3,?4,'',0,?5,?5,?5,1)",
+                rusqlite::params![c[0], c[1], c[2], kind as i64, e],
+            )
+            .unwrap();
+        }
+        let (candidate, bytes) = encode_tile();
+        assert!(
+            candidate
+                .reports
+                .iter()
+                .all(|r| r.get("quantizationGrid").is_none()),
+            "{:?}",
+            candidate.reports
+        );
+        let error = candidate
+            .node
+            .as_ref()
+            .unwrap()
+            .extras()
+            .and_then(records::VectorTileExtras::statistics)
+            .unwrap()
+            .quantization_error_metres;
+        let (document, views) = read_views(&bytes);
+        assert!(!document["extensionsUsed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("KHR_mesh_quantization")));
+        let node = &document["nodes"][0];
+        assert!(node.get("scale").is_none());
+        let t: Point = std::array::from_fn(|i| node["translation"][i].as_f64().unwrap());
+        let mut modes = Vec::new();
+        for primitive in document["meshes"][0]["primitives"].as_array().unwrap() {
+            modes.push(primitive["mode"].as_u64().unwrap());
+            let position = &document["accessors"]
+                [primitive["attributes"]["POSITION"].as_u64().unwrap() as usize];
+            assert_eq!(position["componentType"], 5126);
+            let data = &views[position["bufferView"].as_u64().unwrap() as usize];
+            let (vertices, _) = data.as_chunks::<12>();
+            let decoded: Vec<Point> = vertices
+                .iter()
+                .map(|v| {
+                    std::array::from_fn(|i| {
+                        let q = f32::from_le_bytes(v[i * 4..i * 4 + 4].try_into().unwrap());
+                        center[i] + t[i] + f64::from(q)
+                    })
+                })
+                .collect();
+            for p in [ring[0], ring[1], ring[2]] {
+                if primitive["mode"] == 3 && p == ring[1] {
+                    continue;
+                }
+                let snapped = p.map(|v| lattice_index(v, e) as f64 * 2f64.powi(e));
+                assert!(
+                    decoded.iter().any(|d| norm(sub(*d, snapped)) < 1e-9),
+                    "{p:?} not at {snapped:?}"
+                );
+            }
+            for d in &decoded {
+                let near = ring
+                    .iter()
+                    .chain([&[400.1, 0., 900.9]])
+                    .map(|p| norm(sub(*d, *p)))
+                    .fold(f64::MAX, f64::min);
+                assert!(near <= error, "{near} > {error}");
+            }
+        }
+        modes.sort();
+        assert_eq!(modes, [3, 4], "fill and line strip in one float32 content");
     }
 
     /// The u16 window holds every strip end's mirror `2c - n`: a two-point

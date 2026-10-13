@@ -555,13 +555,19 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
         let mut rows = stmt.query([]).map_err(sql)?;
         while let Some(r) = rows.next().map_err(sql)? {
             let get = |i: usize| r.get::<_, i32>(i).map_err(sql);
-            own.insert(
-                (r.get(0).map_err(sql)?, r.get(1).map_err(sql)?),
-                encoding::OwnExponents {
-                    u16: [get(2)?, get(3)?, get(4)?],
-                    float: [get(5)?, get(6)?, get(7)?],
-                },
-            );
+            let exponents = encoding::OwnExponents {
+                u16: [get(2)?, get(3)?, get(4)?],
+                float: [get(5)?, get(6)?, get(7)?],
+            };
+            // One encoding per tile: its rows agree on its exponents.
+            if own
+                .insert((r.get(0).map_err(sql)?, r.get(1).map_err(sql)?), exponents)
+                .is_some_and(|other| other != exponents)
+            {
+                return Err(data(
+                    "quantization survey recorded two exponents for one tile",
+                ));
+            }
         }
     }
     let mut float: BTreeSet<Tile> = BTreeSet::new();
@@ -621,6 +627,15 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
     }
     db.execute_batch("COMMIT;").map_err(sql)?;
     Ok(())
+}
+
+/// The refusals the final pass replays for `levels` of one tile, from the
+/// survey's: a refused level stays refused, and a refused full-detail leaf
+/// (level 0) refuses its coarse levels too, as they never joined the
+/// hierarchy.
+fn replayed(levels: &[u32], survey: &[Option<&'static str>]) -> Vec<Option<&'static str>> {
+    let leaf = levels.iter().position(|l| *l == 0).and_then(|i| survey[i]);
+    survey.iter().map(|refusal| refusal.or(leaf)).collect()
 }
 
 struct Stats {
@@ -685,14 +700,8 @@ impl Build<'_> {
                 _ => None,
             })
             .collect();
-        // A refused full-detail leaf discards its coarse levels too.
-        let leaf_refused = levels
-            .iter()
-            .position(|l| *l == 0)
-            .and_then(|i| refusals[i]);
-        let refused = |level: &u32| {
-            refusals[levels.iter().position(|l| l == level).unwrap()].or(leaf_refused)
-        };
+        let refusals = replayed(levels, &refusals);
+        let refused = |level: &u32| refusals[levels.iter().position(|l| l == level).unwrap()];
         let todo: Vec<u32> = levels
             .iter()
             .filter(|level| refused(level).is_none())
@@ -2040,5 +2049,121 @@ mod grid_tests {
                 .unwrap(),
             8
         );
+    }
+
+    /// The survey's g > E case: a float32 member's finest step can be
+    /// coarser than a u16 member's own. The group snaps there, and the u16
+    /// tile stays u16.
+    #[test]
+    fn grid_group_snaps_at_a_coarser_float32_members_step() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        for (prefix, u16, float) in [
+            ("0", [0, 0, 0], [-8, -8, -8]),
+            ("1", [12, 1, 1], [4, -7, -7]),
+        ] {
+            db.execute(
+                "INSERT INTO holders VALUES(1,0,0,0,?1,0,?2,?3,?4,?5,?6,?7)",
+                params![prefix, u16[0], u16[1], u16[2], float[0], float[1], float[2]],
+            )
+            .unwrap();
+        }
+        resolve_grid(&db).unwrap();
+        let rows: Vec<(String, [i32; 3], bool)> = db
+            .prepare("SELECT prefix,ex,ey,ez,fl FROM grid ORDER BY prefix")
+            .unwrap()
+            .query_map([], |r| {
+                Ok((r.get(0)?, [r.get(1)?, r.get(2)?, r.get(3)?], r.get(4)?))
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            [
+                ("0".into(), [4, 0, 0], false),
+                ("1".into(), [4, 0, 0], true)
+            ]
+        );
+    }
+
+    /// A tile recorded with two different exponents is a broken survey.
+    #[test]
+    fn conflicting_survey_exponents_are_an_error() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        for (cell, e) in [(1, 3), (2, 4)] {
+            db.execute(
+                "INSERT INTO holders VALUES(?1,0,0,0,'0',0,?2,?2,?2,-5,-5,-5)",
+                params![cell, e],
+            )
+            .unwrap();
+        }
+        assert!(resolve_grid(&db).is_err());
+    }
+
+    /// The final pass replays the survey's refusals; a refused leaf takes
+    /// its coarse levels with it.
+    #[test]
+    fn refused_leaves_discard_their_coarse_levels_on_replay() {
+        assert_eq!(
+            replayed(&[0, 1, 2], &[Some("vertices"), None, None]),
+            [Some("vertices"); 3]
+        );
+        assert_eq!(
+            replayed(&[0, 1, 2], &[None, Some("parentFeatures"), None]),
+            [None, Some("parentFeatures"), None]
+        );
+        assert_eq!(replayed(&[4], &[None]), [None]);
+        assert_eq!(replayed(&[4], &[Some("bytes")]), [Some("bytes")]);
+    }
+
+    /// Reuse fingerprints change when a row's shared vertex changes storage
+    /// or exponents, so a reused subtree is re-encoded.
+    #[test]
+    fn storage_and_exponent_changes_invalidate_reuse_fingerprints() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE features(id INTEGER PRIMARY KEY,data TEXT,fingerprint TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);",
+        )
+        .unwrap();
+        db.execute_batch(GRID_TABLES).unwrap();
+        let ring = vec![[0., 0., 0.], [10.5, 0., 0.], [10.5, 0., 7.25], [0., 0., 0.]];
+        let feature = Feature {
+            properties: BTreeMap::from([("_source_id".into(), json!("f"))]),
+            geometry: Geometry::Polygon(vec![ring.clone()]),
+            intrinsic: None,
+            surface_fragment: false,
+            fragment_path: String::new(),
+        };
+        let value = serde_json::to_string(&feature).unwrap();
+        db.execute("INSERT INTO features(id,data) VALUES(1,?1)", [&value])
+            .unwrap();
+        for p in &ring[..3] {
+            db.execute(
+                "INSERT INTO vertices VALUES(?1,?2,?3,1)",
+                params![p[0], p[1], p[2]],
+            )
+            .unwrap();
+        }
+        let c = encoding::cell(ring[1]);
+        db.execute(
+            "INSERT INTO grid VALUES(?1,?2,?3,0,'0',0,2,2,2,0)",
+            params![c[0], c[1], c[2]],
+        )
+        .unwrap();
+        let print = |db: &Connection| -> String {
+            fingerprint(db, 1, &value, true).unwrap();
+            db.query_row("SELECT fingerprint FROM features WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        let u16 = print(&db);
+        db.execute("UPDATE grid SET fl=1", []).unwrap();
+        let float = print(&db);
+        assert_ne!(u16, float, "storage flip");
+        db.execute("UPDATE grid SET ex=3", []).unwrap();
+        assert_ne!(float, print(&db), "exponent change");
     }
 }
