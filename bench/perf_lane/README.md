@@ -267,6 +267,12 @@ case overruns its budget, its process group is killed and the case fails with
   under `requestCapDiagnostic` (in `REPORT.md`, `## Request cap
   diagnostic`). That is a measurement of the cap's effect. It is never
   gated.
+- `--tileset-options 'NAME={"skipLevelOfDetail":true}'` passes extra
+  `Cesium3DTileset` options to one case, and records them in its `spec`.
+  It is a viewer setting and never gated. Terrain is REPLACE, so by default a
+  fully refined load fetches every ancestor (419 requests, 0.87-1.03 s for the
+  289-leaf `terrain` case). With `skipLevelOfDetail`: 300 requests, 0.73-0.75 s,
+  pixel-identical screenshots, and the default camera unchanged (2 requests).
 - `requests`: server-side counts and bytes per category. The categories are
   `manifest` (.json), `subtree`, `content` (glb/b3dm/pnts/i3dm/cmpt) and
   `imagery` (png/jpg/webp). `duplicateRequests` counts repeated paths.
