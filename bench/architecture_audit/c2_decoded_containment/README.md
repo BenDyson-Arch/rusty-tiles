@@ -36,7 +36,7 @@ nothing from the repository. It is pure Python 3 standard library.
 | `controls/` | `manifest.json` with base/mutated fixture pairs, hashes and expected verdicts; `fixtures/`. `large/` is generated, not committed |
 | `corpus/` | `run.py` and `manifest.json`: the oracle outcome for each artifact of R's producer corpus |
 | `wb/` | C2-WB (O-WB): the calibration-matrix class fixtures, per-term identities, chain-bit controls, the independent hand formula and the formula mutants. See [wb/README.md](wb/README.md) |
-| `h11/` | H11 corner fast path: `generate.py` (fixtures through `witnesses/build.py`, verdicts from the unmodified oracle), `fixtures/` (14) and `report.json`. See [H11](#h11-corner-fast-path-2026-10-13) |
+| `h11/` | H11 corner fast path: `generate.py` (fixtures through `witnesses/build.py`, verdicts from the unmodified oracle), `fixtures/` (16) and `report.json`. See [H11](#h11-corner-fast-path-2026-10-13) |
 
 ## Replay
 
@@ -988,11 +988,13 @@ Plan with invariants V1–V8 and the soundness argument, written before the code
 first measurements: `~/.cache/rusty-tiles-evidence/h11-20261013/plan.md`. Bulk evidence is in that
 directory.
 
-**Controls (`h11/`).** `python3 -I h11/generate.py` writes 7 pairs with the witness builder and records
+**Controls (`h11/`).** `python3 -I h11/generate.py` writes 8 pairs with the witness builder and records
 the unmodified oracle's report for each; `--check` re-derives hashes and outcomes. Production must agree
-(`production_matches_every_h11_fast_path_control`, 14/14). Every pair targets fast-path mutants: an
+(`production_matches_every_h11_fast_path_control`, 16/16). Every pair targets fast-path mutants: an
 off-diagonal sphere escape (`h11-sphere-offdiagonal`), a rotated node over a box chain
-(`h11-rotated-box`), a unique maximum one f32 ulp past the face as the last vertex
+(`h11-rotated-box`), a rotated external-root tile `transform` over axis-aligned boxes with an identity
+composite, escaping the external content volume at an off-diagonal corner (`h11-rotated-tile-step`, audit
+F1: only the tile-step clause of the diagonal rule catches it), a unique maximum one f32 ulp past the face as the last vertex
 (`h11-ulp-last-vertex`), a u16 maximum (`h11-u16-maximum`), viewless zero words under declared bounds
 inside the volume (`h11-declared-bounds`), an escape in the third chunk (`h11-third-chunk`) and an
 all-inconclusive but contained sphere (`h11-inconclusive-sphere`).
@@ -1000,7 +1002,20 @@ all-inconclusive but contained sphere (`h11-inconclusive-sphere`).
 **Parity** (release lib tests, `--large` C2, C2-WB and I1 fixtures generated, `C2S3_EVIDENCE_DIR` and
 `C2S3_FOREST_DIR` set as in the slice-3 record): slice-1 261/261, C2-WB 102/102, slice-3 80/80, S3-18 sweep 181 cases (182 agreements with the two
 `references` pairs, R5 injection-only), forest 34/34 and 5/5 pairs, I1 181/181, W corpus 41/41, H11 14/14;
-0 disagreements, 0 skipped (head `e8d626d`, clean row of the H11 mutant run).
+0 disagreements, 0 skipped (head `e8d626d`, clean row of the H11 mutant run). After the audit fixes
+(16 H11 controls), with the command below: slice-1 261/261, slice-3 80/80, forest 34/34 and 5/5 pairs,
+H11 16/16, C2-WB, sweep and I1 passing; 0 disagreements, 0 skipped.
+
+Without the two directory variables the slice-3 evidence rows and the forest witnesses are listed as
+skipped and the run still passes (in about 0.4 s), so the documented command sets both. From the
+repository root, after the `--large` generators (`witnesses/generate.py` and `wb/generate.py` here,
+`../implicit_read/witnesses/generate.py` for I1):
+
+```sh
+C2S3_EVIDENCE_DIR=/home/bend/.cache/c2s3-evidence/slice3 \
+C2S3_FOREST_DIR=/home/bend/.cache/c2s3-evidence/forest-2d85208 \
+  cargo test --locked --release --lib -- c2_oracle_parity i1_oracle_parity
+```
 
 **Production mutants** (`acceptance/production-mutants/h11/mutants.py`, release, paired control or
 test):
@@ -1008,6 +1023,7 @@ test):
 | Mutant | Paired | Also flips |
 | --- | --- | --- |
 | two diagonal corners regardless of the chain | `h11-sphere-offdiagonal.mutated` | `h11-rotated-box.mutated`; `walk_marked_equals_the_per_vertex_walk` |
+| diagonal rule ignores the tile steps (audit F1; `ignore-tile-step`) | `h11-rotated-tile-step.mutated` | `diagonal_corners_only_for_axis_aligned_box_chains` (run by hand after the audit, not in the report below) |
 | inward corner (one f32 ulp / one integer step) | `h11-ulp-last-vertex.mutated` | `h11-u16-maximum.mutated`, 8 slice-3 controls |
 | skipped fallback | `h11-sphere-offdiagonal.mutated` | 6 more H11 controls, 9 slice-3 controls, 4 unit tests |
 | trust declared accessor min/max (4 files) | `h11-declared-bounds.mutated` | `declared_accessor_bounds_cannot_hide_an_escape` |
@@ -1015,6 +1031,10 @@ test):
 | inconclusive test reports the first marked vertex | `h11-inconclusive-sphere.base` | 6 more H11 controls, 4 slice-3 controls, 4 unit tests |
 | corner credit ignored | `corner_walks_stay_within_the_credit_bound` | — (performance only) |
 | chunk offset ignored | `h11-third-chunk.mutated` | — |
+
+The non-finite fallback (`raw_box`'s FLOAT check, audit F2) is unreachable through an archive, since C1
+refuses non-finite words; `non_finite_words_take_the_per_vertex_walk` injects Inf, -Inf and NaN words and
+fails (a corner-walk fault instead of the earlier Outside) when the check is removed.
 
 The clean tree flips nothing. Report (evidence): `mutants/h11-report-final.json`, sha256
 `32f4ae2460feacdeb4ddcdd771b4804dc866c7a23dae2006c424ca88a628126f`.

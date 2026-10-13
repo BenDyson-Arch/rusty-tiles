@@ -1506,6 +1506,274 @@
    "expected": {
     "outcome": "Contained"
    },
+   "file": "h11/fixtures/h11-rotated-tile-step.base.3tz",
+   "id": "h11-rotated-tile-step.base",
+   "note": "external root transform: a 3-4-5 turn about tile Z over axis-aligned boxes (identity composite); external content box half-lengths (1, 0.25, 1); tile vertex 300 at (0.5, 0.5, 0) maps to Y' = 0.7 while the raw diagonal corners map to |Y'| = 0.1",
+   "oracle": {
+    "archive": "h11/fixtures/h11-rotated-tile-step.base.3tz",
+    "c1Caveats": [],
+    "caveats": [],
+    "limits": {
+     "containmentBytesRead": 2147483648,
+     "containmentDecodedBytes": 2147483648,
+     "containmentNodeDepth": 64,
+     "containmentSpanBits": 4096,
+     "containmentWorkUnits": 536870912
+    },
+    "observations": [],
+    "oracle": "rusty-tiles C2 O-explicit oracle",
+    "oracleLimits": {
+     "maxMemberBytes": 1073741824,
+     "maxTiles": 1000000,
+     "maxVertexLevelTests": 200000000
+    },
+    "outcome": "Contained",
+    "payloads": [
+     {
+      "B": 6704,
+      "Dec": 0,
+      "E": 1560,
+      "Idx": 520,
+      "J": 42,
+      "Nodes": 1,
+      "Prim": 1,
+      "Res": 0,
+      "T": 520,
+      "exclusions": [],
+      "instances": 1,
+      "kind": "glb",
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "nodeStepSpans": {},
+      "sInst": 0,
+      "sPos": 277,
+      "skippedNodeVisits": 1
+     }
+    ],
+    "precheck": {
+     "references": [
+      {
+       "V": 158,
+       "bytes": 6704,
+       "decoded": 0,
+       "levelOps": [
+        [
+         25,
+         1,
+         0,
+         1,
+         0,
+         50
+        ],
+        [
+         36,
+         0,
+         1,
+         2,
+         0,
+         108
+        ]
+       ],
+       "levelSpans": [
+        277,
+        331
+       ],
+       "levels": 2,
+       "maxNodeDepth": 1,
+       "member": "a.glb",
+       "reference": 0,
+       "referenceUnits": 8548,
+       "sInst": 0,
+       "units": 92789,
+       "vertexUnits": 82160
+      }
+     ],
+     "terms": {
+      "1152": 1152,
+      "160Res": 0,
+      "16J": 672,
+      "4Prim": 4,
+      "8levels": 16,
+      "B": 6704,
+      "Dec": 0,
+      "E": 1560,
+      "Idx": 520,
+      "Nodes": 1,
+      "vertex": 82160
+     },
+     "totals": {
+      "bytes": 6704,
+      "decoded": 0,
+      "maxNodeDepth": 1,
+      "units": 92789
+     }
+    },
+    "references": 1,
+    "sha256": "bd9ed34b5cfaa9fabd3d5fb08baa5b13a1814b7238f376cb6561d86756b854ab"
+   },
+   "pair": "h11-rotated-tile-step",
+   "sha256": "bd9ed34b5cfaa9fabd3d5fb08baa5b13a1814b7238f376cb6561d86756b854ab",
+   "side": "base",
+   "targets": [
+    "ignore-tile-step",
+    "two-diagonal-corners",
+    "skip-fallback"
+   ]
+  },
+  {
+   "expected": {
+    "facts": {
+     "depth": 1,
+     "level": 1,
+     "node": 0,
+     "role": "externalContent"
+    },
+    "outcome": "Outside"
+   },
+   "file": "h11/fixtures/h11-rotated-tile-step.mutated.3tz",
+   "id": "h11-rotated-tile-step.mutated",
+   "note": "external root transform: a 3-4-5 turn about tile Z over axis-aligned boxes (identity composite); external content box half-lengths (1, 0.25, 1); tile vertex 300 at (0.5, 0.5, 0) maps to Y' = 0.7 while the raw diagonal corners map to |Y'| = 0.1",
+   "oracle": {
+    "archive": "h11/fixtures/h11-rotated-tile-step.mutated.3tz",
+    "c1Caveats": [],
+    "caveats": [],
+    "facts": {
+     "accessor": 0,
+     "contentAt": "ext.json:root.content[0]",
+     "coordinate": [
+      "-1801439850948199/18014398509481984",
+      "12610078956637389/18014398509481984",
+      "0"
+     ],
+     "coordinateApprox": [
+      -0.10000000000000003,
+      0.7,
+      0.0
+     ],
+     "depth": 1,
+     "k": 1,
+     "level": 1,
+     "member": "a.glb",
+     "mesh": 0,
+     "node": 0,
+     "primitive": 0,
+     "reference": 0,
+     "role": "externalContent",
+     "uri": "a.glb",
+     "vertex": 300,
+     "volumeAt": "tileset.json:root.content[0]"
+    },
+    "limits": {
+     "containmentBytesRead": 2147483648,
+     "containmentDecodedBytes": 2147483648,
+     "containmentNodeDepth": 64,
+     "containmentSpanBits": 4096,
+     "containmentWorkUnits": 536870912
+    },
+    "observations": [],
+    "oracle": "rusty-tiles C2 O-explicit oracle",
+    "oracleLimits": {
+     "maxMemberBytes": 1073741824,
+     "maxTiles": 1000000,
+     "maxVertexLevelTests": 200000000
+    },
+    "outcome": "Outside",
+    "payloads": [
+     {
+      "B": 6704,
+      "Dec": 0,
+      "E": 1560,
+      "Idx": 520,
+      "J": 42,
+      "Nodes": 1,
+      "Prim": 1,
+      "Res": 0,
+      "T": 520,
+      "exclusions": [],
+      "instances": 1,
+      "kind": "glb",
+      "maxNodeDepth": 1,
+      "member": "a.glb",
+      "nodeStepSpans": {},
+      "sInst": 0,
+      "sPos": 277,
+      "skippedNodeVisits": 1
+     }
+    ],
+    "precheck": {
+     "references": [
+      {
+       "V": 158,
+       "bytes": 6704,
+       "decoded": 0,
+       "levelOps": [
+        [
+         25,
+         1,
+         0,
+         1,
+         0,
+         50
+        ],
+        [
+         36,
+         0,
+         1,
+         2,
+         0,
+         108
+        ]
+       ],
+       "levelSpans": [
+        277,
+        331
+       ],
+       "levels": 2,
+       "maxNodeDepth": 1,
+       "member": "a.glb",
+       "reference": 0,
+       "referenceUnits": 8548,
+       "sInst": 0,
+       "units": 92789,
+       "vertexUnits": 82160
+      }
+     ],
+     "terms": {
+      "1152": 1152,
+      "160Res": 0,
+      "16J": 672,
+      "4Prim": 4,
+      "8levels": 16,
+      "B": 6704,
+      "Dec": 0,
+      "E": 1560,
+      "Idx": 520,
+      "Nodes": 1,
+      "vertex": 82160
+     },
+     "totals": {
+      "bytes": 6704,
+      "decoded": 0,
+      "maxNodeDepth": 1,
+      "units": 92789
+     }
+    },
+    "references": 1,
+    "sha256": "6205a0cd54569b8cf92cccac350d754718c2b67c2c0455f405ace74b009bed59"
+   },
+   "pair": "h11-rotated-tile-step",
+   "sha256": "6205a0cd54569b8cf92cccac350d754718c2b67c2c0455f405ace74b009bed59",
+   "side": "mutated",
+   "targets": [
+    "ignore-tile-step",
+    "two-diagonal-corners",
+    "skip-fallback"
+   ]
+  },
+  {
+   "expected": {
+    "outcome": "Contained"
+   },
    "file": "h11/fixtures/h11-inconclusive-sphere.base.3tz",
    "id": "h11-inconclusive-sphere.base",
    "note": "520 axis points on the unit sphere (every corner test inconclusive, all contained); vertex 300 moved one f32 ulp outward",

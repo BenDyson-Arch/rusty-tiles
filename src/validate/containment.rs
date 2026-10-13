@@ -2584,4 +2584,47 @@ mod tests {
         );
         assert!(!arena.fault());
     }
+
+    #[test]
+    fn non_finite_words_take_the_per_vertex_walk() {
+        // C1 refuses non-finite FLOAT words, so no archive reaches this; the raw words are injected.
+        // Vertex 5 is Outside in X and a later vertex is not finite: the per-vertex walk reports
+        // vertex 5 before it meets the non-finite word. A raw box holding that word would put it in
+        // a corner, and that corner's walk would fault (an InvalidState) instead.
+        let n = Normalization::None(Word::F32);
+        let cube = [level(None, &[(Role::Own, bx([0.0; 3], [1.0; 3]))])];
+        let bitmap = bitmap_of(200, |_| true);
+        let mut arena = arena_with(4096, &[]);
+        for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            for at in [10, 199] {
+                let mut words: Vec<RawVertex> = (0..200)
+                    .map(|v| RawVertex::F32([(v % 9) as f32 / 16.0, (v % 7) as f32 / -16.0, 0.0]))
+                    .collect();
+                words[5] = RawVertex::F32([2.0, 0.0, 0.0]);
+                words[at] = RawVertex::F32([0.0, bad, 0.0]);
+                let want = Some((
+                    5,
+                    Verdict::Outside {
+                        role: Role::Own,
+                        level: 0,
+                    },
+                ));
+                assert_eq!(
+                    per_vertex(&mut arena, n, &cube, &bitmap, |v| words[v]),
+                    want
+                );
+                let mut credit = rich();
+                let got = walk_marked(&mut arena, n, &cube, &bitmap, &mut credit, |v| words[v]);
+                assert!(!arena.fault(), "{bad} at {at}");
+                assert_eq!(got, want, "{bad} at {at}");
+                // No corner test ran: the chunk fell back before any corner walk (a NaN would
+                // otherwise drop out of the box's comparisons and leave a finite, wrong box).
+                assert_eq!(credit.tests, 0, "{bad} at {at}");
+                assert!(
+                    raw_box(&bitmap, 0, &|v| words[v]).is_none(),
+                    "{bad} at {at}"
+                );
+            }
+        }
+    }
 }

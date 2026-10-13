@@ -994,7 +994,12 @@ tested row is a function of one coordinate, so its extremes over the box are its
 diagonal corners, and box rows are tested independently. Corner walks use the same exact arithmetic, so
 no rounding is involved. Corners are raw words of the accessor's type and the span bound uses the type's
 fixed worst-case pair, so they fit the arena; a corner faults only where a vertex would (`W ≤ 0` is
-vertex-independent; non-finite words are refused by C1).
+vertex-independent; non-finite words are refused by C1, and a non-finite word in a chunk sends it to
+the per-vertex walk without a corner test). This fault equivalence relies on excluded volumes never
+being streamed: a region or rotated box breaches inside the walk only after the earlier volumes pass,
+so a corner could fault where the per-vertex walk returns an earlier Outside. Any exclusion
+suppresses streaming (outcome precedence: exclusions before the precheck and the stream), so no
+such volume reaches a corner walk; a change that streams past an exclusion must revisit this step.
 
 **Work.** Charges are unchanged and admission reads nothing new. After every reference, the walks
 performed are at most the marked vertices so far plus `⌊ΣT(u)/64⌋` over the references so far, and each
@@ -1003,8 +1008,8 @@ marked vertex is read at most twice. So "at most 24 limb multiplications per ver
 calibrations; the H11 record re-measures an all-inconclusive adversary
 ([acceptance](../../bench/architecture_audit/c2_decoded_containment/README.md#h11-corner-fast-path-2026-10-13)).
 
-**Acceptance.** Production equals the oracle on every existing suite and on 14 new oracle-decided H11
-controls (`h11/`); eight H11 production mutants (two diagonal corners regardless, inward-rounded corners,
-skipped fallback, trusted declared bounds, a box missing the last vertex, first-vertex report on an
-inconclusive test, ignored credit, ignored chunk offset) each flip their paired control or test, and the
-slice-1 and slice-3 mutant matrix still flips.
+**Acceptance.** Production equals the oracle on every existing suite and on 16 new oracle-decided H11
+controls (`h11/`); nine H11 production mutants (two diagonal corners regardless, tile steps ignored by
+the diagonal rule, inward-rounded corners, skipped fallback, trusted declared bounds, a box missing the
+last vertex, first-vertex report on an inconclusive test, ignored credit, ignored chunk offset) each flip
+their paired control or test, and the slice-1 and slice-3 mutant matrix still flips.

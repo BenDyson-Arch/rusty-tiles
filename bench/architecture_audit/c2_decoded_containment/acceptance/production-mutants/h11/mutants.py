@@ -21,6 +21,7 @@ os.environ.setdefault("C2M_EXTRA_TESTS", " ".join([
     "validate::containment::tests::walk_marked_equals_the_per_vertex_walk",
     "validate::containment::tests::diagonal_corners_only_for_axis_aligned_box_chains",
     "validate::containment::tests::signed_clamp_and_first_outside_survive_the_fast_path",
+    "validate::containment::tests::non_finite_words_take_the_per_vertex_walk",
     "validate::containment_controls::declared_accessor_bounds_cannot_hide_an_escape",
 ]))
 _spec = importlib.util.spec_from_file_location(
@@ -59,6 +60,14 @@ H11 = [
     {"name": "two-diagonal-corners", "paired": "h11-sphere-offdiagonal.mutated",
      "row": "Wrong corner math: always test only the all-lo and all-hi corners (no axis-aligned/box condition)",
      "edits": [(C, "    let diagonal = diagonal_suffices(arena, levels);\n", "    let diagonal = true;\n")]},
+    {"name": "ignore-tile-step", "paired": "h11-rotated-tile-step.mutated",
+     "row": "Wrong corner math: the diagonal rule ignores the tile steps (a rotated tile transform over boxes "
+            "tests two corners)",
+     "edits": [(C, "            let step = level.to_parent.filter(|_| l > 0).is_none_or(|t| {\n"
+                   "                (0..3).all(|r| (0..3).filter(|&c| t[4 * c + r] != 0.0).count() <= 1)\n"
+                   "            });\n"
+                   "            step && level\n",
+                "            level\n")]},
     {"name": "inward-corner", "paired": "h11-ulp-last-vertex.mutated",
      "row": "Inward rounding: each varying raw-box bound moves one f32 ulp / one integer step inward",
      "edits": [(C, "    extent\n}\n/// Whether every tested quantity",

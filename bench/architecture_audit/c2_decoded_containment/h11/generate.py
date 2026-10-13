@@ -161,6 +161,37 @@ def pairs():
                 archive(cube, payload(late_in, 5121, True)),
                 archive(cube, payload(late_out, 5121, True))))
 
+    # Audit F1: the tile-step clause of the diagonal rule. The composite is the identity and every
+    # volume is an axis-aligned box, so only the external root's tile `transform` (a 3-4-5 turn about
+    # tile Z: X' = 0.6X - 0.8Y, Y' = 0.8X + 0.6Y) makes the chain non-diagonal. The escape is from the
+    # external content volume (level 1), which C1's hierarchy check does not relate to the external
+    # root's box. The base points lie on tile X = -Y, the raw diagonal; the mutated vertex 300 at
+    # tile (0.5, 0.5, 0) is an off-diagonal corner and maps to Y' = 0.7 against a half-length 0.25,
+    # while both raw diagonal corners map to |Y'| = 0.1.
+    turn = [0.6, 0.8, 0, 0, -0.8, 0.6, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+    r = lcg(29)
+    diagonal = []
+    for _ in range(520):
+        t = (next(r) % 65 - 32) / 64
+        diagonal.append([t, -t, (next(r) % 33 - 16) / 64])
+    diagonal[100] = [-0.5, 0.5, -0.25]
+    diagonal[200] = [0.5, -0.5, 0.25]
+    off = [p[:] for p in diagonal]
+    off[300] = [0.5, 0.5, 0.0]
+
+    def stepped(points):
+        outer = B.tile(box([0, 0, 0], [2, 2, 2]), content="ext.json",
+                       content_volume=box([0, 0, 0], [1, 0.25, 1]))
+        inner = B.tile(unit, content="a.glb", transform=turn)
+        return [("tileset.json", B.json_bytes(B.tileset(outer))),
+                ("ext.json", B.json_bytes(B.tileset(inner))),
+                ("a.glb", payload([gltf(p) for p in points]))]
+    out.append(("h11-rotated-tile-step", ["ignore-tile-step", "two-diagonal-corners", "skip-fallback"],
+                "external root transform: a 3-4-5 turn about tile Z over axis-aligned boxes (identity composite); "
+                "external content box half-lengths (1, 0.25, 1); tile vertex 300 at (0.5, 0.5, 0) maps to "
+                "Y' = 0.7 while the raw diagonal corners map to |Y'| = 0.1",
+                stepped(diagonal), stepped(off)))
+
     # F6 and the inconclusive-but-contained path: axis points on the unit sphere, corners outside.
     axes = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
     ring = [axes[i % 6] for i in range(520)]

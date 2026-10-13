@@ -744,8 +744,8 @@ fn slice3_precheck_only_arm() {
 // ---- H11: corner fast-path controls (oracle-decided, `h11/generate.py`) ----
 
 /// Every H11 fixture against the oracle report recorded beside it. The pairs are built so that a
-/// broken fast path (wrong corners, inward corners, skipped fallback, declared bounds, chunk offset,
-/// first-vertex report) flips them; production must agree on every one, including the first
+/// broken fast path (wrong corners, an ignored tile step, inward corners, skipped fallback, declared
+/// bounds, chunk offset, first-vertex report) flips them; production must agree on every one, including the first
 /// escaping vertex.
 #[test]
 fn production_matches_every_h11_fast_path_control() {
@@ -768,7 +768,7 @@ fn production_matches_every_h11_fast_path_control() {
         std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
     }
     assert!(
-        disagree.is_empty() && agree == 14,
+        disagree.is_empty() && agree == 16,
         "{}",
         serde_json::to_string_pretty(&summary).unwrap()
     );

@@ -45,7 +45,7 @@ re-run with the release parity test (the three `--large` controls absent; clean 
 
 ## H11 corner fast path (2026-10-13)
 
-`h11/mutants.py` drives eight fast-path mutants through `slice3/mutants.py` (same edits-and-parity
+`h11/mutants.py` drives nine fast-path mutants through `slice3/mutants.py` (same edits-and-parity
 loop), each paired with an oracle-decided `h11/` control or, for the work bound, with
 `corner_walks_stay_within_the_credit_bound`. The slice-3 driver's lock, target directory, CPUs, jobs
 and extra test filters can be set with `C2M_LOCK`, `C2M_TARGET`, `C2M_CPUS`, `C2M_JOBS` and
