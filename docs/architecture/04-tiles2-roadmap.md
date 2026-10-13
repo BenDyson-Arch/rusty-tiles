@@ -166,6 +166,33 @@ Preserve the following agreed large-mesh requirements:
   drops. `lossless` preserves its agreed texel-exact leaf requirement and typed
   refusal where a page cannot fit. Profile constants remain provisional until
   the final acceptance milestone.
+- The profiles are provisional until LOD (H17) and texture baking (H13) exist.
+  That covers texture resolution caps, encoder effort and leaf size, including
+  the current 8192-triangle cap that Cesium per-triangle picking needs. They get
+  one unified design during milestone-4 acceptance, using real-mesh
+  measurements. Data point: the full-resolution 10M-triangle photogrammetry mesh
+  took 35.5 min with `balanced`, peaked at 12.4 GiB and produced an 8.1 GB
+  archive. Basis encoding dominates and scales with texel count. Planned leaf-size
+  comparison, measured with HLOD: 8192-triangle leaves against 32k-triangle
+  leaves split into per-primitive property tables of 8192 rows or fewer.
+
+Annotation readiness. Leaves keep exact per-triangle source provenance so that a
+future, post-0.4 lightweight "annotate" pass can add attributes to parts of 3D
+polygons and regions on an existing tileset without re-tiling. Triangle-aligned
+annotations become an extra `EXT_mesh_features` feature-ID set plus a property
+table. Boundaries that cut through triangles become feature ID textures,
+following Cesium's photogrammetry-classification pattern. 0.4 keeps this
+possible by requiring:
+
+- an extensible number of feature-ID sets;
+- provenance kept in leaves and proxies;
+- an ID/class texture class in texture baking: nearest sampling, mips that never
+  blend IDs, ID-safe or lossless encoding, and a defined no-feature value in
+  gutters.
+
+CesiumJS 1.146 support: feature ID textures and property tables have mature
+picking and styling. Property textures work in custom shaders since 1.92.
+Property-texture picking via `scene.pickMetadata` is experimental since 1.122.
 
 The earlier v6.1 design supplies the detailed algorithms, constants and tests as
 planning inputs. Preserve its requirements unless a recorded decision explicitly
