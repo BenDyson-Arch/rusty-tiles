@@ -526,23 +526,6 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
     let bytes = fs::read(&path).map_err(|e| JobError::io("read leaf for LOD", &path, e))?;
     let decoded = codec::decode(&bytes)?;
     drop(bytes);
-    let table = decoded
-        .tables
-        .iter()
-        .find(|t| t.class == "source_triangle")
-        .ok_or_else(|| state("leaf without a source_triangle table"))?;
-    let column = |name: &str| {
-        table
-            .columns
-            .get(name)
-            .ok_or_else(|| state(format!("leaf source_triangle table without {name}")))
-    };
-    let (nodes, meshes, prims, tris) = (
-        column("node_index")?,
-        column("mesh_index")?,
-        column("primitive_index")?,
-        column("triangle_index")?,
-    );
     let mut by_provenance: BTreeMap<(u32, u32, u32, u64), LodSource> = BTreeMap::new();
     for s in ctx.source.range(node.first, node.end, 1 << 16)? {
         let s = s?;
@@ -561,18 +544,24 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
     let mut tris_out = Vec::with_capacity(decoded.faces.len());
     let mut labels = BTreeMap::new();
     for face in &decoded.faces {
-        let row = face
+        // Each face's own source_triangle table (a leaf may hold several, one per glTF
+        // primitive, each within the consumer row limit).
+        let (row, table) = face
             .feature(&decoded.tables, "source_triangle")
-            .ok_or_else(|| state("leaf triangle without a source_triangle feature ID"))?
-            .0 as usize;
-        if row >= table.count {
-            return Err(state("leaf feature ID outside its source_triangle table"));
-        }
+            .ok_or_else(|| state("leaf triangle without a source_triangle feature ID"))?;
+        let columns = &decoded.tables[table].columns;
+        let column = |name: &str| -> Result<u64, JobError> {
+            columns
+                .get(name)
+                .and_then(|c| c.get(row as usize))
+                .copied()
+                .ok_or_else(|| state("leaf feature ID outside its source_triangle table"))
+        };
         let provenance = (
-            nodes[row] as u32,
-            meshes[row] as u32,
-            prims[row] as u32,
-            tris[row],
+            column("node_index")? as u32,
+            column("mesh_index")? as u32,
+            column("primitive_index")? as u32,
+            column("triangle_index")?,
         );
         let s = by_provenance
             .get(&provenance)
