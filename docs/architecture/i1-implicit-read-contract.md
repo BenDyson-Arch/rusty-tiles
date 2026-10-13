@@ -405,7 +405,7 @@ R7.
   4. **JSON detection.** If the last segment of the normalized template ends in `.json` (ASCII case-insensitive),
      the template is **Unsupported** (content templates only). This covers `x.json/.`, `x.json/`,
      `x.json/{…}/..` and `.JSON//./` (DC-2).
-  4b. **Legacy detection (H7, PROPOSED).** Next, if that last segment ends in `.b3dm`, `.i3dm`, `.pnts`
+  4b. **Legacy detection (H7).** Next, if that last segment ends in `.b3dm`, `.i3dm`, `.pnts`
      or `.cmpt` (ASCII case-insensitive), the content template is **Unsupported**
      (`implicit: unsupported legacy FMT content template in <document member>`), with no subtree read.
      The same DC-2 forms apply (`x.cmpt/.`, `x.b3dm/{…}/..`). The subtree template is exempt. See the
@@ -601,8 +601,8 @@ mismatch; emitted contents ≠ reserved `E` at subtree completion.
   - `implicitTiling` fields, scheme, levels;
   - volume kind, root shape;
   - templates, each in slot order and then the subtree template, through §3 steps 1–6: raw syntax, escape guard,
-    normalization, JSON detection (content templates only), legacy detection (content templates only; H7,
-    PROPOSED), variable survival, then the length cap. A JSON or legacy verdict is Unsupported here, with no
+    normalization, JSON detection (content templates only), legacy detection (content templates only; H7),
+    variable survival, then the length cap. A JSON or legacy verdict is Unsupported here, with no
     subtree read;
   - template header `metadata` classes (classification, DC-5).
 - **Per subtree:** §1 steps 1–5, then §2a steps 1–11 (including the step 10 reservation), then §5 (class
@@ -666,7 +666,7 @@ entry at `l − 1` as its parent (RC-21).
 2. **RC-12b. `Derived` tiles.** A `Derived` cell at `l ≥ 1` has no `VolumeFacts`. Under C2's I3
    (all or nothing), slice 3 must either:
    - add a frozen-enum delta: a new `Reason`, for example `derivedImplicitVolume`
-     (`validate.rs:369`, the C2 contract's 15-name enum); or
+     (`validate.rs`, the C2 contract's frozen enum; 14 names since H7); or
    - add an exact `Cell` predicate (its own contract delta).
 
    "Stop setting `implicitTiling` and register references" alone is **not** sufficient.

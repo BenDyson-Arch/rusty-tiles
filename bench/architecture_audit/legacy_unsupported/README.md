@@ -1,4 +1,4 @@
-# H7 controls: legacy 3D Tiles 1.0 content is Unsupported (PROPOSED)
+# H7 controls: legacy 3D Tiles 1.0 content is Unsupported
 
 These are the sensitive controls for the
 [C1 H7 amendment](../../../docs/architecture/c1-legacy-content-unsupported-amendment.md). Under
@@ -47,9 +47,10 @@ use only the Python standard library, with no repository import and no producer.
   - legacy words in a directory name, in the stem and in the JSON (substring mutants);
   - unknown `.bin` and `.vctr` suffixes, which keep the generic message.
 
-The oracles do not model three C1-only paths: the content-volume check, `conversion.json` and
-`rustyTilesSourceContents`. For those cases `c2OracleOutcome` records what the oracle decides
-from its own scope. The production verdict is the CLI expectation.
+The C2 and implicit oracles do not model three C1-only paths: the content-volume check,
+`conversion.json` and `rustyTilesSourceContents`. For those cases `c2OracleOutcome` records
+what the oracle decides from its own scope. The C1 corpus oracle
+(`tests/c1_validation_oracle.py`) covers these paths with its own `legacy_*` controls.
 
 ## Results recorded on 2026-10-13
 
@@ -61,6 +62,13 @@ These results come from origin/develop 87b7078 and the debug CLI.
   Unsupported by the generic suffix rule.
 - `check.py --oracle`: 36/36. The pre-H7 oracle differs on 26 cases.
 - `oracle_mutants.py`: the unmutated copy passes, and all 11 mutants are killed.
+
+With the H7 production change (debug CLI):
+
+- `check.py --binary`: 36/36, including every `messageIncludes` token.
+- `check.py --oracle` and `--regenerate`: 36/36, fixtures byte-identical.
+- The 22 production mutants of the plan (PM1-PM22) each fail at least one of these controls,
+  a C1 corpus control or a Rust control; the clean tree fails none.
 
 Bulk receipts are kept outside git in `~/.cache/rusty-tiles-evidence/h7-20261013/`. That
 directory also holds the plan, which includes the production mutant list PM1-PM22.

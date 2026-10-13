@@ -13,8 +13,8 @@ the end. Its preparation, reviews and decision log are retained
 nothing about RTC, regions, rotated boxes, deformation, rendered extent, memory or release
 readiness. Implicit archives are covered since the
 [slice-3 amendment](#c2-slice-3-amendment-implicit-archives-2026-10-12) (except derived cells).
-The [H7 amendment](#h7-amendment-legacy-content-unsupported-proposed-2026-10-13) (PROPOSED) removes
-b3dm from the domain: legacy content is a C1 Unsupported outcome and `rtcCenter` is never reported.
+The [H7 amendment](#h7-amendment-legacy-content-unsupported-2026-10-13) removes b3dm from the
+domain: legacy content is a C1 Unsupported outcome, and the reason `rtcCenter` is removed.
 
 
 ## Claim
@@ -98,7 +98,7 @@ admitted glTF/b3dm JSON, before any C2 position streaming.
 | `upAxisOverride` | Tileset `asset.gltfUpAxis` is present and is not `"Y"` |
 | `regionVolume` | Any tile or content volume tested for any reference is a `region` |
 | `rotatedBox` | Any tested box has half-axes that are not a signed permutation (see Volumes) |
-| `rtcCenter` | A b3dm feature-table JSON contains the key `RTC_CENTER`, in any form or with any value |
+| ~~`rtcCenter`~~ (removed by the [H7 amendment](#h7-amendment-legacy-content-unsupported-2026-10-13)) | ~~A b3dm feature-table JSON contains the key `RTC_CENTER`, in any form or with any value~~ |
 | `gltfExtension` | A glTF `extensionsUsed` entry is not on the glTF allowlist. This includes `CESIUM_RTC` and `EXT_mesh_gpu_instancing` |
 | `sceneSelection` | `scene` is absent and `scenes` is absent, empty, or has more than one entry |
 | `skin` | A selected node has `skin` |
@@ -1016,10 +1016,9 @@ the diagonal rule, inward-rounded corners, skipped fallback, trusted declared bo
 last vertex, first-vertex report on an inconclusive test, ignored credit, ignored chunk offset) each flip
 their paired control or test, and the slice-1 and slice-3 mutant matrix still flips.
 
-## H7 amendment (legacy content Unsupported, PROPOSED 2026-10-13)
+## H7 amendment (legacy content Unsupported, 2026-10-13)
 
-**Status: PROPOSED.** This takes effect with the H7 production change; until then the text
-above describes `develop`. Rule and invariants:
+**Status: in effect** with the H7 production change. Rule and invariants:
 [C1 amendment H7](c1-legacy-content-unsupported-amendment.md). The claim, the span definition,
 the predicates and the C2-WB formula's structure are unchanged.
 
@@ -1029,9 +1028,14 @@ the predicates and the C2-WB formula's structure are unchanged.
    pnts or cmpt payload never reaches C2. C1 reports it as Unsupported (outcome 1 of R8: C1
    outcomes, first failure in traversal order), whether it is detected by member suffix,
    by its first four bytes or by an implicit content template.
-2. **`rtcCenter`.** The reason keeps its position in the frozen 15-name enum but is reserved:
-   its only carrier, a b3dm feature table, is no longer admitted, so it is never reported.
-   The `gltfExtension` row (`CESIUM_RTC`) is unchanged.
+2. **`rtcCenter` removed.** Its only carrier, a b3dm feature table, is no longer admitted, so
+   the reason is deleted from the enum, which now has **14 names** in this order:
+   `derivedImplicitVolume`, `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
+   `regionVolume`, `rotatedBox`, `gltfExtension`, `sceneSelection`, `skin`, `morphTargets`,
+   `animation`, `quaternionWindow`, `numericSpan`, `workLimit`. Every reference above to the
+   "frozen 15-name enum" reads as this 14-name enum. `decodedContentBounds.rtcCenter` is no
+   longer a possible `notInspected` entry (a breaking report change; see the CHANGELOG). The
+   `gltfExtension` row (`CESIUM_RTC`) is unchanged.
 3. **C2-WB `J(u)`.** It counts the glTF JSON or GLB JSON chunk only. The "also inside a b3dm"
    clause and the b3dm feature- and batch-table terms are deleted. `B(u)`, `Dec(u)`,
    `Res(u)` and `Prim(u)` are unchanged.
@@ -1050,12 +1054,29 @@ the predicates and the C2-WB formula's structure are unchanged.
 - **XH7-2.** Success, or any C2 outcome, of an archive that holds legacy content becomes
   Unsupported.
 
-**Evidence to regenerate with the production change.** These are kept as committed now, and
-all 20 legacy archives among them are Unsupported under the amended oracle:
+**Evidence regenerated with the production change.** Every verdict change below is a legacy
+archive becoming Unsupported; no other verdict changed.
 
-- witnesses: `W01-ordered-node-U-RTC-tile-chain`, `RTC-binary-form` and `RTC-range-overrun`
-  retire. `W01-noRTC-variant` (with its 9 ulp variants) and `matrix-and-TRS` are re-emitted as
-  GLB;
-- controls: the `RTC-added` pair retires;
-- C2-WB: the six `json-*-b3dm*` classes and the mutant `J-without-b3dm-batch-table` retire.
-  Their GLB twins remain.
+- **Witnesses** (`witnesses/generate.py --large`, 261 cases, 261 agree):
+  `W01-ordered-node-U-RTC-tile-chain`, `RTC-binary-form` and `RTC-range-overrun` keep their
+  b3dm bytes (sha256 `24c478cd…`, `0d1acb3e…`, `dc3dfdcc…`, unchanged) and move from
+  `NotInspected [rtcCenter]` to C1 Unsupported (`expected: C1Refused unsupported`, oracle
+  `Unsupported`). `W01-noRTC-variant`, its 9 ulp variants and `matrix-and-TRS` are re-emitted
+  as `w.glb` with the same glTF, tile chain and volumes; their verdicts (Contained, Outside
+  with the same depth, level, role, node and coordinate, InvalidNode) are unchanged and only
+  the member name in the oracle facts changes. Old and new hashes:
+
+  | Fixture | Old sha256 | New sha256 |
+  | --- | --- | --- |
+  | `W01-noRTC-variant` | `ab38ca0b…` | `1a8752d9…` |
+  | `~ulp-L0-content-r0` / `r1` / `r2` | `26492464…` / `08ffd7ac…` / `04051a90…` | `c743643d…` / `9ebbc395…` / `d46db43e…` |
+  | `~ulp-L0-own-r0` / `r1` / `r2` | `6cca1cef…` / `996e359f…` / `72918921…` | `abcd2ed0…` / `427aef16…` / `7bbd4f06…` |
+  | `~ulp-L1-ancestor-r0` / `r1` / `r2` | `902e6e48…` / `a3169e1a…` / `778b5d1b…` | `5add57e2…` / `922acb8e…` / `c453588b…` |
+  | `matrix-and-TRS` | `8e8ae7ac…` | `62be5191…` |
+
+- **Controls:** the `RTC-added` pair retires (its mutated side is legacy content); 15 pairs
+  remain, all agreeing. No other pair changed.
+- **C2-WB:** the six `json-*-b3dm*` classes (CI and matrix size) and the mutant
+  `J-without-b3dm-batch-table` retire; 90 fixture rows remain (102 before), every surviving row
+  is byte-identical in `wb/manifest.json`, and the 14 remaining formula mutants flip their pairs.
+  The GLB twins keep the JSON-node cost covered.

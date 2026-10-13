@@ -9,11 +9,6 @@ option or subprocess fallback.
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
 
-> **PROPOSED (H7).** This takes effect with the H7 production change. Until then,
-> modern b3dm version 1 is still admitted: its 28-byte header, table framing, JSON,
-> required BATCH_LENGTH and embedded GLB are inspected, and its feature/batch table
-> meaning is not.
-
 Legacy 3D Tiles 1.0 content (b3dm, i3dm, pnts and cmpt) is Unsupported, never
 InvalidInput, and is never partially inspected. A payload counts as legacy in
 two cases:
@@ -21,7 +16,8 @@ two cases:
 - its archive member name ends in `.b3dm`, `.i3dm`, `.pnts` or `.cmpt` (ASCII,
   case-insensitive). This is decided before the payload is read;
 - its first four bytes are one of those magics, for example b3dm bytes in a `.glb`
-  member.
+  or `.bin` member. The magic decides under any suffix; only those four bytes of
+  the existing read are examined.
 
 An implicit content template whose normalized last segment has one of those
 suffixes is Unsupported at root admission, and no subtree is read. Nothing after
@@ -131,10 +127,9 @@ validation stay within about 7.9 s on an E-core (about 4.4 s on a P-core) at the
 Classes outside that matrix, other hosts, debug builds and C1's own inspection time are not
 covered. Archives over the cap are reported as `workLimit`. The
 frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling`), `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
-`regionVolume`, `rotatedBox`, `rtcCenter`, `gltfExtension`, `sceneSelection`, `skin`,
-`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. `rtcCenter`
-is reserved (PROPOSED, H7): its only carrier, a b3dm feature table, is Unsupported, so
-it is never reported. Neither report success nor a matching
+`regionVolume`, `rotatedBox`, `gltfExtension`, `sceneSelection`, `skin`,
+`morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. H7 removed
+`rtcCenter`: its only carrier, a b3dm feature table, is Unsupported. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. A required unsupported
 feature prevents success; an external validator run separately owns its own

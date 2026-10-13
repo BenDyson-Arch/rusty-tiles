@@ -1,10 +1,9 @@
 # C1 amendment H7: legacy 3D Tiles 1.0 content is Unsupported
 
-**Status: PROPOSED (2026-10-13).** This amendment describes the validator after the H7
-production change, which has not landed. Until it does, `develop` still admits modern b3dm v1
-as the C1 contract describes. The independent oracles and controls already encode this
-amendment (see Acceptance). This note records no acceptance; the nonauthor audit is still
-pending.
+**Status: in effect (2026-10-13).** The H7 production change implements this amendment.
+Legacy 3D Tiles 1.0 content is no longer admitted; modern b3dm v1 framing, as the C1 contract
+describes it, is no longer inspected. The coordinator's nonauthor audit is recorded with the
+pull request.
 
 It amends [c1-payload-integrity-contract.md](c1-payload-integrity-contract.md). That file stays
 byte-identical (sha256 `3cb5ad341a73cdda77a9dd4a1925cf9800af6e37e49b902eb6db0c4f0c3ee1e3`)
@@ -24,22 +23,26 @@ InvalidInput, and never inspects it partially. All producers already emit only G
 `rustyTilesSourceContents` and `conversion.json` `retainedContentUris`. It applies these steps
 in order:
 
-1. **L0, existence.** It looks the member up in the archive catalog. No content bytes are
-   read. A missing member is InvalidInput, as before.
+1. **L0, existence.** Every caller has already established that the member exists, before
+   `Check::payload`: explicit content, `rustyTilesSourceContents` and `retainedContentUris`
+   through the reference check ("missing archive entry"), implicit content through the
+   catalog lookup for the tile byte count. No content bytes are read. A missing member is
+   InvalidInput, as before.
 2. **L1, suffix.** It takes the final suffix of the resolved member name (`rsplit_once('.')`
    on the whole name) and lowercases it as ASCII. If the suffix is `b3dm`, `i3dm`, `pnts` or
    `cmpt`, the payload is **Unsupported**:
    `legacy FMT content is unsupported (glTF 2.0 content only): NAME`. No byte of the member is
    read for payload inspection.
-3. **Other suffixes.** Any suffix other than `glb` or `gltf` is Unsupported with the unchanged
-   message "payload format outside GLB/local glTF 2.0". This check now also runs before the
-   read.
-4. **Read.** The existing bounded member read runs unchanged.
-5. **L2, magic.** If the first four bytes are `b3dm`, `i3dm`, `pnts` or `cmpt`, the payload is
+3. **Read.** The existing bounded member read runs unchanged.
+4. **L2, magic.** If the first four bytes are `b3dm`, `i3dm`, `pnts` or `cmpt`, the payload is
    **Unsupported**:
    `legacy FMT content is unsupported (glTF 2.0 content only): NAME starts with FMT magic`.
    Only those four bytes are examined. Valid glTF cannot match: a GLB starts with `glTF`, and
-   a glTF JSON document cannot start with these bytes.
+   a glTF JSON document cannot start with these bytes. Magic wins over every non-legacy
+   suffix, including `.glb`, `.gltf` and unknown suffixes such as `.bin`.
+5. **Other suffixes.** Any remaining suffix other than `glb` or `gltf` is Unsupported with the
+   unchanged message "payload format outside GLB/local glTF 2.0". It stays after the read, as
+   before, so that L2 can name legacy bytes under an unknown suffix.
 6. **Inspection.** Ordinary GLB or glTF inspection follows, unchanged.
 
 **T, implicit content templates.** This step belongs to I1 root admission and amends
@@ -73,6 +76,17 @@ subtree template is exempt.
   Implicit T runs at root admission. C2 runs only after C1 succeeds, so a legacy verdict
   beats every `notInspected` reason and every Outside.
 
+## Report changes
+
+- The C2 reason `rtcCenter` (`decodedContentBounds.rtcCenter`) is removed. Its only carrier, a
+  b3dm feature table, is never admitted, so the frozen enum has 14 names (C2 contract, H7
+  amendment). The `CESIUM_RTC` glTF extension keeps reporting `gltfExtension`.
+- C2-WB `J(u)` counts the glTF JSON or GLB JSON chunk only; the b3dm table terms are gone.
+- Work accounting: a legacy verdict fails the validation in C1, so no C2 reference, unit or
+  `UriFacts` row is recorded. For a legacy-suffix member the payload re-read (and its share of
+  `total_bytes_read`) no longer happens, which can only lower that counter. Every other
+  counter is unchanged.
+
 ## Superseded C1 text
 
 The C1 contract's references to modern b3dm v1 framing are superseded for validation:
@@ -96,16 +110,28 @@ The JSON admission rules, limits and outcome categories are otherwise unchanged.
 | X-H7-3 | success | Unsupported | single-node `convert-to-implicit` archives whose `retainedContentUris`, or tilesets whose `rustyTilesSourceContents`, name b3dm |
 | X-H7-4 | Unsupported (generic message) | Unsupported (legacy message) | `.i3dm`, `.pnts` and `.cmpt` content |
 
-## Acceptance (independent side, this pass)
+## Acceptance
 
+- **Production.** `Check::payload` (`src/validate.rs`) is the single classifier for the four
+  callers; `payload::legacy_suffix` and `payload::legacy_magic` (`src/content_integrity/payload.rs`)
+  implement L1 and L2, and `Template::normalize` step 4b (`src/content_integrity/implicit.rs`)
+  implements T. `PayloadKind::B3dm`, `unwrap_b3dm`, `records::FeatureTable`,
+  `ContentExclusions::rtc_center` and the b3dm `notInspected` label are deleted.
 - **Controls.** [bench/architecture_audit/legacy_unsupported](../../bench/architecture_audit/legacy_unsupported/README.md)
   holds 36 generated controls (44.6 KB) with declared H7 and pre-H7 expectations, a CLI and
-  oracle checker, and 11 oracle mutants (all killed).
+  oracle checker, and 11 oracle mutants (all killed). The production CLI passes 36/36.
 - **C2 oracle and O-implicit.** Both oracles classify legacy content as Unsupported (C1 and I1
   phases respectively).
 - **C1 corpus oracle.** `tests/c1_validation_oracle.py` expects `unsupported` for its 10 b3dm
-  controls and adds 8 legacy controls.
-
-The production change must also pass the production mutants PM1-PM22 listed in the H7 plan,
-which is kept outside the repository at
-`~/.cache/rusty-tiles-evidence/h7-20261013/plan.md`.
+  controls, has 8 legacy-format controls, and 13 controls for the C1-only paths: legacy magic
+  under `.bin`, a `.b3dm` holding a GLB, a missing `.b3dm`, the content-volume check before
+  classification, `retainedContentUris` (present and missing), `rustyTilesSourceContents`,
+  three implicit content templates, b3dm bytes under a `.glb` template, and the exempt
+  subtree template (with an implicit baseline). Legacy cases also check message tokens.
+- **Frozen payload corpus.** The 12 b3dm controls of the corrected-205 bundle expect
+  `unsupported` through the additive
+  [legacy-unsupported amendment](../../bench/architecture_audit/c1_payload_integrity/production_controls/legacy_unsupported_amendment/2026-10-13/README.md);
+  the three b3dm compiled context controls expect Unsupported for all 18 runs
+  ([C2-PIN-AMENDMENT](../../bench/architecture_audit/c1_payload_integrity/production_controls/context_controls/2026-10-10/C2-PIN-AMENDMENT.md)).
+- **Production mutants.** The 22 production mutants of the H7 plan each flip a committed
+  control and the clean tree flips none; the record is in the pull request.
