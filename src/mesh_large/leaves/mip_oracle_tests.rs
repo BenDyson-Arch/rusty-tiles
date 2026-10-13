@@ -366,11 +366,11 @@ fn normal_cancellation_chooses_source_contributor_not_neutral_vector() {
     assert_ne!(&chain.levels[1].rgba[..3], &[128, 128, 255]);
 }
 
-/// Root runs this only after integrating the new #163 caller-level seam.
-/// Floors are fixed before execution; failures remain acceptance failures.
+/// Historical abandoned ETC colour/MASK recipe: retains the original
+/// 16 floor violations for diagnosis; this is not the current production gate.
 #[test]
-#[ignore = "root-owned native independent every-profile semantic-mip decode gate"]
-fn every_profile_class_delivered_mip_meets_independent_reference_floors() {
+#[ignore = "historical abandoned ETC colour/MASK policy diagnostic: 16 retained failures; not the current production gate"]
+fn historical_abandoned_policy_reports_retained_floor_violations() {
     use crate::basisu_ktx2::{encode_ktx2_mips, MipLevel, Mode, Params, Transfer};
     let mut violations: Vec<String> = Vec::new();
     for profile in ["fast", "balanced", "quality"] {
@@ -715,7 +715,6 @@ fn opaque_saturated_checker() -> Vec<u8> {
         .collect()
 }
 #[test]
-#[ignore = "root-owned explicit color UASTC policy probe; baseline ETC failure retained"]
 fn policy_probe_a_colour_uastc_keeps_saturated_checker_floors() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let truth = reference(8, 8, opaque_saturated_checker(), Class::Colour, None);
@@ -738,7 +737,6 @@ fn policy_probe_a_colour_uastc_keeps_saturated_checker_floors() {
     }
 }
 #[test]
-#[ignore = "root-owned scalar-R grayscale representation probe; original R truth retained"]
 fn policy_probe_b_scalar_r_grayscale_preserves_original_r() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let original: Vec<u8> = (0..64)
@@ -778,7 +776,6 @@ fn policy_probe_b_scalar_r_grayscale_preserves_original_r() {
     }
 }
 #[test]
-#[ignore = "root-owned explicit nonbase MASK alpha quantization guard probe; baseline failures retained"]
 fn policy_probe_c_mask_one_lsb_guard_preserves_fixed_gates() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let mask = Mask {
@@ -833,7 +830,6 @@ fn policy_probe_c_mask_one_lsb_guard_preserves_fixed_gates() {
 }
 
 #[test]
-#[ignore = "root-owned effort 0/1/2 opaque color gate; unchanged fixed profile floors"]
 fn policy_probe_d_all_profile_efforts_opaque_colour() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let truth = reference(8, 8, opaque_saturated_checker(), Class::Colour, None);
@@ -882,7 +878,6 @@ fn passing_alpha_guard(truth: &[Image], mask: Mask) -> Vec<Image> {
     prepared
 }
 #[test]
-#[ignore = "root-owned base near-threshold MASK guard gate against literal source truth"]
 fn policy_probe_e_base_near_threshold_mask_guard() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let mask = Mask {
@@ -961,7 +956,6 @@ fn sampled_context_coverage(
     passing as f64 / contexts.len() as f64
 }
 #[test]
-#[ignore = "root-owned variable COLOR alpha separate-context positive guard gate"]
 fn policy_probe_f_variable_color_alpha_separate_contexts() {
     use crate::basisu_ktx2::{Mode, Transfer};
     let mask = Mask {
@@ -1057,5 +1051,229 @@ fn policy_probe_g_coupled_color_alpha_guard_limitation() {
                 "counterexample must establish pre-encode policy limitation"
             );
         }
+    }
+}
+
+// A bounded large witness uses the independent overlap integrator on each
+// disjoint 2x2 cell. POT cells partition the image exactly; this avoids its
+// intentionally quadratic all-image scan without importing production helpers.
+fn bounded_pot_reference(edge: usize, pixels: Vec<u8>, class: Class) -> Vec<Image> {
+    let mut base = Image {
+        w: edge,
+        h: edge,
+        pixels,
+    };
+    if class == Class::Normal {
+        for p in base.pixels.as_chunks_mut::<4>().0 {
+            let unit = direction(vector(p));
+            for c in 0..3 {
+                p[c] = quantize((unit[c] + 1.) / 2.);
+            }
+        }
+    }
+    let mut levels = vec![base];
+    while levels.last().unwrap().w > 1 {
+        let previous = levels.last().unwrap();
+        let edge = previous.w / 2;
+        let mut pixels = Vec::with_capacity(edge * edge * 4);
+        for y in 0..edge {
+            for x in 0..edge {
+                let mut cell = Vec::with_capacity(16);
+                for dy in 0..2 {
+                    for dx in 0..2 {
+                        let offset = ((2 * y + dy) * previous.w + 2 * x + dx) * 4;
+                        cell.extend_from_slice(&previous.pixels[offset..offset + 4]);
+                    }
+                }
+                let integrated = reference(2, 2, cell, class, None);
+                pixels.extend_from_slice(&integrated[1].pixels);
+            }
+        }
+        levels.push(Image {
+            w: edge,
+            h: edge,
+            pixels,
+        });
+    }
+    levels
+}
+
+#[test]
+fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
+    use crate::{gltf_source::source::TextureSlot, mesh_large::config::Profile};
+    for slot in [
+        TextureSlot::BaseColor,
+        TextureSlot::Emissive,
+        TextureSlot::Occlusion,
+        TextureSlot::MetallicRoughness,
+        TextureSlot::Normal,
+    ] {
+        let class = match slot {
+            TextureSlot::BaseColor | TextureSlot::Emissive => Class::Colour,
+            TextureSlot::Normal => Class::Normal,
+            _ => Class::Data,
+        };
+        let pixels: Vec<_> = (0..128 * 128)
+            .flat_map(|i| {
+                let (x, y) = (i % 128, i / 128);
+                match class {
+                    Class::Colour => {
+                        if (x + y) % 2 == 0 {
+                            [0, 255, 0, 255]
+                        } else {
+                            [255, 0, 255, 255]
+                        }
+                    }
+                    Class::Data => [
+                        if x % 2 == 0 { 0 } else { 255 },
+                        (100 + (x / 16) % 8) as u8,
+                        (140 + (y / 16) % 8) as u8,
+                        255,
+                    ],
+                    Class::Normal => {
+                        if (x / 4 + y / 8) % 2 == 0 {
+                            [218, 128, 218, 255]
+                        } else {
+                            [37, 128, 218, 255]
+                        }
+                    }
+                }
+            })
+            .collect();
+        let truth = bounded_pot_reference(128, pixels.clone(), class);
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            let output = super::delivery::encode(
+                [128, 128],
+                &pixels,
+                &vec![1; 128 * 128],
+                slot,
+                profile,
+                128 * 1024 * 1024,
+                None,
+            )
+            .unwrap();
+            let decoder = basisu::Transcoder::new(&output.bytes).unwrap();
+            assert_eq!(decoder.level_count() as usize, truth.len());
+            for (mip, expected) in truth.iter().enumerate() {
+                let actual = decoder
+                    .transcode(
+                        mip as u32,
+                        basisu::TargetFormat::Rgba32,
+                        basisu::DecodeFlags::NONE,
+                    )
+                    .unwrap();
+                for channel in 0..4 {
+                    if (slot == TextureSlot::Occlusion && matches!(channel, 1 | 2))
+                        || (slot == TextureSlot::MetallicRoughness && channel == 0)
+                    {
+                        continue;
+                    }
+                    let (psnr, max) = probe_channel(expected, &actual, channel);
+                    let (floor, cap) = if channel == 3 {
+                        (
+                            if profile == Profile::Quality {
+                                34.
+                            } else {
+                                30.
+                            },
+                            match profile {
+                                Profile::Fast => 80,
+                                Profile::Balanced => 64,
+                                _ => 32,
+                            },
+                        )
+                    } else if class == Class::Colour {
+                        (
+                            if profile == Profile::Quality {
+                                34.
+                            } else {
+                                22.
+                            },
+                            match profile {
+                                Profile::Fast => 56,
+                                Profile::Balanced => 32,
+                                _ => 24,
+                            },
+                        )
+                    } else if class == Class::Normal {
+                        (30., 112)
+                    } else if slot == TextureSlot::Occlusion {
+                        (30., if profile == Profile::Quality { 8 } else { 80 })
+                    } else {
+                        (30., 32)
+                    };
+                    assert!(
+                        psnr >= floor && max <= cap,
+                        "{slot:?}/{profile:?}/mip{mip}/channel{channel}: PSNR{psnr},max{max}"
+                    );
+                }
+                if class == Class::Normal {
+                    let mut lengths = Vec::new();
+                    let mut angles = Vec::new();
+                    for (a, b) in actual
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .zip(expected.pixels.as_chunks::<4>().0)
+                    {
+                        let raw = vector(a);
+                        lengths.push((length(raw) - 1.).abs());
+                        let (a, b) = (direction(raw), direction(vector(b)));
+                        angles.push(
+                            a.iter()
+                                .zip(b)
+                                .map(|(x, y)| x * y)
+                                .sum::<f64>()
+                                .clamp(-1., 1.)
+                                .acos()
+                                .to_degrees(),
+                        );
+                    }
+                    angles.sort_by(f64::total_cmp);
+                    let mean = lengths.iter().sum::<f64>() / lengths.len() as f64;
+                    let max = lengths.iter().copied().fold(0., f64::max);
+                    let (mean_cap, max_cap) = match profile {
+                        Profile::Fast => (0.08, 0.20),
+                        Profile::Balanced => (0.05, 0.15),
+                        _ => (0.03, 0.10),
+                    };
+                    assert!(mean <= mean_cap && max <= max_cap);
+                    assert!(angles.iter().sum::<f64>() / angles.len() as f64 <= 3.);
+                    assert!(angles[(angles.len() * 99).div_ceil(100) - 1] <= 12.);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn independent_data_filter_control_rejects_colour_transfer() {
+    // The large MR witness has bounded low variance to meet the unchanged
+    // codec floors. This separate full-range control pins linear data math;
+    // interpreting its meaningful G/B channels as colour must fail.
+    let source = vec![
+        0, 0, 255, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 255, 0, 255,
+    ];
+    let data = bounded_pot_reference(2, source.clone(), Class::Data);
+    let wrong = bounded_pot_reference(2, source.clone(), Class::Colour);
+    // Sparse pages require >=4 on each axis. Repeat the same 2x2 cell
+    // into a 4x4 page; every first-mip footprint has the identical truth.
+    let page: Vec<u8> = (0..16)
+        .flat_map(|i| {
+            let offset = ((i / 4 % 2) * 2 + i % 2) * 4;
+            source[offset..offset + 4].iter().copied()
+        })
+        .collect();
+    let production = super::sparse_mips::build(4, 4, &page, &[1; 16], Class::Data, 1024 * 1024)
+        .unwrap();
+    for pixel in production.levels[1].rgba.as_chunks::<4>().0 {
+        assert_eq!(&pixel[1..3], &[128, 128]);
+        assert_eq!(pixel.as_slice(), data[1].pixels.as_slice());
+    }
+    assert_eq!(&data[1].pixels[1..3], &[128, 128]);
+    assert_eq!(&wrong[1].pixels[1..3], &[188, 188]);
+    for channel in [1, 2] {
+        let (psnr, max) = probe_channel(&data[1], &wrong[1].pixels, channel);
+        assert!(psnr < 30. && max > 32);
     }
 }

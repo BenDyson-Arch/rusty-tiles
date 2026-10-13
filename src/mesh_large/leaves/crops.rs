@@ -58,7 +58,9 @@ pub(crate) fn resolve(value: Option<&Value>) -> Result<SourceSampler, JobError> 
     Ok(SourceSampler {
         wrap_s: field("wrapS", 10497, &[10497, 33648, 33071])?,
         wrap_t: field("wrapT", 10497, &[10497, 33648, 33071])?,
-        min_filter: field("minFilter", 9729, &[9728, 9729, 9984, 9985, 9986, 9987])?,
+        // Resolve an unspecified minification policy to authored mip sampling,
+        // rather than pinning a particular consumer's non-mip default.
+        min_filter: field("minFilter", 9987, &[9728, 9729, 9984, 9985, 9986, 9987])?,
         mag_filter: field("magFilter", 9729, &[9728, 9729])?,
     })
 }
@@ -372,7 +374,14 @@ mod tests {
     #[test]
     fn sampler_defaults_and_literal_filters() {
         let s = resolve(None).unwrap();
-        assert_eq!((s.min_filter, s.mag_filter, s.wrap_s), (9729, 9729, 10497));
+        assert_eq!((s.min_filter, s.mag_filter, s.wrap_s), (9987, 9729, 10497));
+        assert_eq!(resolve(Some(&serde_json::json!({}))).unwrap(), s);
+        assert_eq!(
+            resolve(Some(&serde_json::json!({"minFilter":9729})))
+                .unwrap()
+                .min_filter,
+            9729
+        );
         let s = resolve(Some(
             &serde_json::json!({"minFilter":9987,"magFilter":9728,"wrapS":33648}),
         ))

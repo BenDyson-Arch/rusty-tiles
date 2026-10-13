@@ -379,7 +379,7 @@ mod tests {
             "buffers":[{"uri":"never-read.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],
             "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
                 {"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],
-            "images":[{"uri":"never-read.png"}],"textures":[{"source":0}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+            "images":[{"uri":"never-read.png"}],"textures":[{"source":0,"sampler":0}],"samplers":[{"minFilter":9729}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
         let document = Document::parse(&serde_json::to_vec(&doc).unwrap(), || Ok(())).unwrap();
         let info = [ImageInfo {
             mime_type: "image/png",

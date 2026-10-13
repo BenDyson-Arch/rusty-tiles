@@ -4,8 +4,8 @@ H8 produces actual full-detail GLBs through the in-process ML1 encoder. The
 hidden `mesh-leaf-payloads` command and exported `mesh_to_leaf_payloads` Rust API
 publish leaf payloads, decoded bounds/error certificates, source picking metadata
 and diagnostic manifests. The bounded producer acceptance below is complete;
-implicit hierarchy/archive assembly is a later integration slice. The caller-mip
-API on #163 remains coordinated with this first real caller. The user owns CI
+implicit hierarchy/archive assembly is a later integration slice. The branch includes the caller-mip API commits from #163. The coordinator
+plans to merge #187 alone and close #163 as superseded. The user owns CI
 monitoring and merges.
 
 The final producer source is commit `b81dd9430039f00a5595ddb65e11cb688dbad10e`.
@@ -97,3 +97,20 @@ are in their respective `tiler-lod-design-20261013/` and
 LOD approximation or proxy baking. Future hierarchy integration must use actual
 decoded content bounds through the metadata override contract, rather than
 centroid assignment cells. No permanent viewer is installed.
+
+The independent #187 review found missing ordinary-CI regression controls. The
+review-fix candidate adds off-lattice decoded seam checks, typed fidelity-versus-
+budget retry checks, five-slot KTX DFD checks and a nonignored current-production
+128x128 per-class/profile/every-level codec gate. Passing policy probes now run
+in CI; the abandoned 16-violation policy is explicitly a historical diagnostic.
+The focused suite passes and executed seam, fidelity-retry and colour-transfer
+mutants fail their ordinary tests. Final-source checks after rebasing remain
+pending; the producer-acceptance manifest above describes the prior baseline.
+
+An unspecified source minFilter now resolves to explicit LINEAR_MIPMAP_LINEAR
+(9987), so conforming viewers use authored chains. Explicit source filters remain
+unchanged. This is a producer policy, not a claimed glTF default. For lossless
+PNG, viewer-generated coarse mips can also blend neighbouring packed crops:
+level-zero exactness does not prevent this distant minification bleed. The
+nonconstant 128x128 codec witness extends current-CI coverage; nonconstant D2
+and NPOT end-to-end artifacts remain a milestone-4 gate.

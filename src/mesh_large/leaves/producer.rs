@@ -172,6 +172,29 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
         .and_then(|_| file.sync_all())
         .map_err(|e| JobError::io("write leaf member", path, e))
 }
+/// Retry only the physical member budget, never fidelity or other failures.
+fn encode_with_density_budget<T>(
+    profile: Profile,
+    initial_drop: u32,
+    mut encode: impl FnMut(u32) -> Result<T, atlas::PrepareError>,
+) -> Result<(T, u32, Vec<serde_json::Value>), JobError> {
+    let mut density_drop = initial_drop;
+    let mut reasons = Vec::new();
+    loop {
+        match encode(density_drop) {
+            Ok(encoded) => return Ok((encoded, density_drop, reasons)),
+            Err(atlas::PrepareError::Budget(error))
+                if profile != Profile::Lossless && density_drop < 12 =>
+            {
+                reasons.push(json!({"densityDrop":density_drop,"reason":error.to_string()}));
+                density_drop += 1;
+            }
+            Err(atlas::PrepareError::Budget(error) | atlas::PrepareError::Failure(error)) => {
+                return Err(error);
+            }
+        }
+    }
+}
 fn produce(
     path: &Path,
     captured: &full::FullCaptured,
@@ -252,41 +275,35 @@ fn produce(
         {
             return Err(invariant("leaf payload plan differs from frozen tree"));
         }
-        let mut density_drop = u32::from(plan.density_drop);
-        let mut density_reasons = Vec::new();
-        let (encoded, appearance) = loop {
-            check()?;
-            let attempt = atlas::prepare(
-                (records.clone(), corner_depths.clone()),
-                captured,
-                config.profile,
-                node.depth() as u8,
-                density_drop,
-                memory,
-                check,
-            )
-            .and_then(|(atlas, receipt)| {
-                writer::encode(&atlas, &captured.lattice, node.depth() as u8, TILE_BYTES)
+        let ((encoded, appearance), density_drop, density_reasons) = encode_with_density_budget(
+            config.profile,
+            u32::from(plan.density_drop),
+            |density_drop| {
+                check().map_err(atlas::PrepareError::from)?;
+                atlas::prepare(
+                    (records.clone(), corner_depths.clone()),
+                    captured,
+                    config.profile,
+                    node.depth() as u8,
+                    density_drop,
+                    memory,
+                    check,
+                )
+                .and_then(|(atlas, receipt)| {
+                    writer::encode(
+                        &atlas,
+                        &captured.lattice,
+                        node.depth() as u8,
+                        config.tile_bytes(),
+                    )
                     .map_err(|error| match error {
                         writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
                         writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
                     })
                     .map(|leaf| (leaf, receipt))
-            });
-            match attempt {
-                Ok(leaf) => break leaf,
-                Err(atlas::PrepareError::Budget(e))
-                    if config.profile != Profile::Lossless && density_drop < 12 =>
-                {
-                    density_reasons
-                        .push(json!({"densityDrop":density_drop,"reason":e.to_string()}));
-                    density_drop += 1;
-                }
-                Err(atlas::PrepareError::Budget(e) | atlas::PrepareError::Failure(e)) => {
-                    return Err(e)
-                }
-            }
-        };
+                })
+            },
+        )?;
         let name = format!("{:012}.glb", report.leaves);
         let member = leaves.join(&name);
         write_file(&member, &encoded.glb)?;
@@ -425,6 +442,54 @@ pub fn mesh_to_leaf_payloads(
 mod tests {
     use super::*;
     #[test]
+    fn fidelity_failure_never_retries_but_physical_budget_advances_density() {
+        let mut attempts = Vec::new();
+        let error = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+            attempts.push(drop);
+            if drop == 2 {
+                Err(atlas::PrepareError::Failure(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "forced MASK fidelity residual",
+                )))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        assert_eq!(attempts, [2]);
+
+        attempts.clear();
+        let (_, drop, reasons) = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+            attempts.push(drop);
+            if drop == 2 {
+                Err(atlas::PrepareError::Budget(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "physical GLB byte budget",
+                )))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap();
+        assert_eq!(attempts, [2, 3]);
+        assert_eq!(drop, 3);
+        assert_eq!(reasons.len(), 1);
+        assert_eq!(reasons[0]["densityDrop"], 2);
+        for (profile, initial) in [(Profile::Lossless, 0), (Profile::Balanced, 12)] {
+            attempts.clear();
+            let result = encode_with_density_budget::<()>(profile, initial, |drop| {
+                attempts.push(drop);
+                Err(atlas::PrepareError::Budget(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "physical GLB byte budget",
+                )))
+            });
+            assert!(result.is_err());
+            assert_eq!(attempts, [initial]);
+        }
+    }
+    #[test]
     fn real_leaf_output_all_profiles_and_exact_member_limit() {
         let work = tempfile::tempdir().unwrap();
         let input = full::tests::fixture(work.path(), 2);
@@ -454,6 +519,15 @@ mod tests {
                 u32::from_le_bytes(leaf[8..12].try_into().unwrap()) as usize,
                 leaf.len()
             );
+            let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+            let document: serde_json::Value =
+                serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+            for sampler in document["samplers"].as_array().unwrap() {
+                assert_eq!(
+                    sampler["minFilter"], 9987,
+                    "unspecified source minification uses authored mips"
+                );
+            }
         }
     }
     #[test]

@@ -15,6 +15,8 @@ pub(crate) enum Class {
     Data,
 }
 #[derive(Clone, Copy, Debug)]
+/// Historical uniform-image coverage reference for tests. Production MASK
+/// coverage belongs to `mask.rs`, including geometry and original vertex alpha.
 pub(crate) struct Mask {
     pub factor: f64,
     pub cutoff: f64,

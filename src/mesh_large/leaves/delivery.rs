@@ -603,6 +603,19 @@ mod tests {
                     assert_eq!(out.mip_count, 1);
                     continue;
                 }
+                // KTX2 DFD starts at the little-endian header offset 48.
+                // The transfer byte is format metadata, independent of pixels.
+                let dfd = u32::from_le_bytes(out.bytes[48..52].try_into().unwrap()) as usize;
+                let transfer = out.bytes[dfd + 14];
+                assert_eq!(
+                    transfer,
+                    if matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive) {
+                        2
+                    } else {
+                        1
+                    },
+                    "wrong KTX transfer for {slot:?}/{profile:?}"
+                );
                 let independent = basisu::Transcoder::new(&out.bytes).unwrap();
                 assert_eq!(independent.level_count(), 4);
                 assert_eq!(out.mip_count, 4);

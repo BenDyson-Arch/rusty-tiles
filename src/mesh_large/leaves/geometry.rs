@@ -367,6 +367,56 @@ mod tests {
         assert_eq!(b.decoded.len(), 3); // Degenerate support/corner identity retained.
     }
     #[test]
+    fn off_lattice_shared_corners_use_shallowest_incidence_in_decoded_bytes() {
+        let bounds = Bounds {
+            min: [-1.0; 3],
+            max: [1.0; 3],
+        };
+        let mut extents = vec![0.001; 32];
+        extents[0] = 2.0;
+        extents[3] = 0.25;
+        extents[9] = 0.01;
+        let points = [[-0.00137, 0.00271, -0.00319]; 3];
+        for profile in [Profile::Fast, Profile::Balanced] {
+            let plan = LatticePlan::new(profile, bounds, &extents).unwrap();
+            let shallow = plan.encode(&points, &[3; 3], 3).unwrap();
+            // Mixed-depth, packed, and synthetic-depth consumers share the same
+            // off-lattice source corner and its shallowest incident depth.
+            for depth in [9, 21, 31] {
+                assert!(plan.steps[3] > plan.steps[depth as usize]);
+                let shared = plan.encode(&points, &[3; 3], depth).unwrap();
+                let local = plan.encode(&points, &[depth as u8; 3], depth).unwrap();
+                let decoded_bytes = |encoded: &EncodedPositions| match &encoded.storage {
+                    PositionStorage::Quantized {
+                        codes,
+                        translation,
+                        scale,
+                    } => codes
+                        .iter()
+                        .flat_map(|corner| {
+                            (0..3).flat_map(move |axis| {
+                                let raw = corner[axis].to_le_bytes();
+                                let value = u16::from_le_bytes(raw);
+                                let decoded = (f64::from(value) * f64::from(*scale)
+                                    + f64::from(translation[axis]))
+                                    as f32;
+                                decoded.to_le_bytes()
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                    _ => panic!("quantized profile required"),
+                };
+                assert_eq!(decoded_bytes(&shared), decoded_bytes(&shallow));
+                assert_ne!(decoded_bytes(&shared), decoded_bytes(&local));
+                // A proxy shallower than all incident leaves must snap on its
+                // own coarser lattice, rather than on the leaf's lattice.
+                let proxy = plan.encode(&points, &[depth as u8; 3], 3).unwrap();
+                assert_eq!(decoded_bytes(&proxy), decoded_bytes(&shallow));
+                assert_ne!(decoded_bytes(&proxy), decoded_bytes(&local));
+            }
+        }
+    }
+    #[test]
     fn alternate_exact_translations_same_rounded_sum_and_fma() {
         for q in [(1_i64 << 30) + 1, -(1_i64 << 30) + 3, (1_i64 << 38) - 40000] {
             let scale = 2_f32.powi(-20);
