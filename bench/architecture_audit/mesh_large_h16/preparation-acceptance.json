@@ -1,0 +1,27 @@
+{
+  "scope": "Test-only H16 delivery preparation; no publication acceptance",
+  "base": "beedaec11337c752659eeaacbe1ce44fdbddce60",
+  "source": {
+    "docs/architecture/h16-delivery-contract.md": "a5b20ed526adf6ec5a6a0a42248ad074fe0f1f575be82787883e9b54e270d21f",
+    "src/mesh_large/delivery.rs": "c85c103b7d824be555d192f25108ac8e9dd1f9a0cf13a69dcf1ef66fd29b021f",
+    "src/mesh_large/mod.rs": "8b93ccde609198c5af0601d8e5ec0cc812995a4eafb9855db4f7ede61f25a4f8"
+  },
+  "evidence_root": "/home/bend/.cache/rusty-tiles-evidence/h16-delivery-20261013",
+  "evidence": {
+    "preparation-final-tests.log": "938c1f5c703e013233bb22100338ebed2439d2b248a8e17d6674c6f49383e807",
+    "preparation-clippy.log": "6fd91d81c73781bc581b1507eac7390a435cf91c80cb003e5612f8ab8ee55421",
+    "preparation-final-nonauthor-review.json": "ab183d24a23f48dab0d87ddc364dd6dee93582823d15d96b7ffec865fe4bc8f2"
+  },
+  "checks": {
+    "preparation_tests": "4 passed, 0 failed",
+    "all_target_clippy": "passed, warnings denied",
+    "final_nonauthor_review": "GO for test-only preparation"
+  },
+  "remaining_gates": [
+    "Merged M1 typed serializer and H8 producer",
+    "Bounded hierarchy/document/archive streaming and deterministic publication",
+    "Independent final-byte containment and C2 validation",
+    "Actual Chromium traversal, refinement and two-source picking",
+    "Resource, cleanup and cancellation acceptance"
+  ]
+}

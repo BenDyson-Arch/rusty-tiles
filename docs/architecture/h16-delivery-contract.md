@@ -1,9 +1,11 @@
 # H16 streamed hierarchy and 3TZ delivery preparation
 
-Status: design and test-only registered addressing/count preparation, not a publisher. Base
-`origin/develop` is `0fe2e83`; M1 examined at `656e37f`, including core `5ffdc61`.
-M1 and H8 must merge before publication wiring. No build, validator, archive,
-viewer or resource acceptance is claimed by this preparation.
+Status: design and test-only registered addressing/count preparation, not a publisher.
+The initial inspection used `origin/develop` `0fe2e83`; preparation is now
+based on `beedaec`. M1 was examined at `656e37f`, including core `5ffdc61`.
+M1 and H8 must merge before publication wiring. Four addressing/count preparation
+tests and all-target Clippy passed. No publisher, validator, archive, viewer or
+resource acceptance is claimed by this preparation.
 
 ## Ownership and retained boundaries
 
@@ -191,8 +193,8 @@ native codec workspace remains provisional until its measured acceptance.
 ## Independent acceptance and commit sequence
 
 First commit: this contract and test-only registered preparation, after a fresh nonauthor
-design/source review. No PR or publication yet. After M1/H8 merge: register the
-module and add the actual typed bridge, bounded planner/chunk/document emitter
+design/source review. Publication remains gated. After M1/H8 merge: enable the
+module for production and add the actual typed bridge, bounded planner/chunk/document emitter
 and spilled archive writer in reviewed bounded commits; coordinator owns builds.
 Do not cherry-pick or fork M1 types to simulate satisfying the dependency.
 
