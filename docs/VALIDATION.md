@@ -1,10 +1,12 @@
 # Bounded archive and payload inspection
 
 C1 implements read-only inspection of self-contained 3TZ archives. Rust uses
-`validate::inspect(ValidationRequest::new(path))`; CLI uses `validate PATH`;
-Python uses `validate(path)`. Rust returns a typed `ValidationReport`, which
+`validate::inspect(ValidationRequest::new(path))` (or `inspect_with(request, &RunControl)`
+for cancellation and progress); CLI uses `validate PATH [--maxVolume KEY=N]...
+[--scratchDir DIR]`; Python uses `validate(path, *, lazy_payloads=False, max_volume=None,
+scratch_dir=None, callback=None)`. Rust returns a typed `ValidationReport`, which
 adapters serialize without adding domain decisions. There is no external-tool
-option or subprocess fallback.
+option or subprocess fallback. The limits are described under "Limits" below.
 
 Supported payloads are GLB 2.0 and archive-local glTF 2.0. Unavailable versions
 or legacy interpretations do not receive an opaque successful pass.
@@ -132,18 +134,20 @@ when the whole archive is in domain. Otherwise `notInspected` lists
 message names the member, tile depth, volume, node, mesh, primitive and vertex; for implicit
 content, `depth` is the root's depth plus the level, and `ancestor:k` counts implicit levels,
 then the root, then explicit ancestors. C2 runs only after C1 succeeds. Its own caps
-(`containmentSpanBits`, `containmentWorkUnits`, `containmentBytesRead`,
-`containmentDecodedBytes`, `containmentNodeDepth`; defaults 4096 bits, 2^29 units, 2 GiB,
-2 GiB and 64) yield `notInspected`, never ResourceLimit. Units are charged per operation
+(`containmentSpanBits` 4096 bits and `containmentNodeDepth` 64, fixed; and the budgets
+`containmentWorkUnits` max(2^29, 128·S) units, `containmentBytesRead` max(2 GiB, 4·S) and
+`containmentDecodedBytes` max(2 GiB, 16·S), with S the archive's stored member bytes) yield
+`notInspected`, never ResourceLimit. Units are charged per operation
 (per volume test and transform step at each level, per node, index, element, re-read and
 re-decoded byte, JSON value node, external resource, instance primitive and reference); the
-formula is in the C2 contract's work bound (C2-WB amendment). The default cap is set from a
+formula is in the C2 contract's work bound (C2-WB amendment). The unit budget is set from a
 measured class matrix, not a proof: on the measurement host (Intel i7-12700KF, Linux, release
 build) every class in the C2-WB matrix cost at most 14.65 ns per unit on an E-core and 8.10 ns
 on a P-core (median of 7 clean A/B runs per class), so the precheck and streaming of one
-validation stay within about 7.9 s on an E-core (about 4.4 s on a P-core) at the default cap.
+validation stay within about 7.9 s plus 1,875 s per stored GB on an E-core (about 4.4 s plus
+1,037 s per stored GB on a P-core) at the default budget.
 Classes outside that matrix, other hosts, debug builds and C1's own inspection time are not
-covered. Archives over the cap are reported as `workLimit`. The
+covered. Archives over the budget are reported as `workLimit`. The
 frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling`), `tilesetExtension`, `tileMetadata`, `upAxisOverride`,
 `regionVolume`, `rotatedBox`, `gltfExtension`, `sceneSelection`, `skin`,
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. H7 removed
@@ -162,8 +166,8 @@ coverage and provenance.
 ZIP admission uses one selected central-directory catalog for index validation,
 member lookup, CRC verification and exact stored-range reads. The catalog holds one
 fixed-width row per member in `@3dtilesIndex1@` MD5 order and the names in a log. It
-stays in memory up to 96 MiB (every archive within the default entry and directory
-limits); a larger catalog moves to a scratch directory, created at its first spilled
+stays in memory up to 96 MiB (every archive of at most 524,288 entries and a 32 MiB
+directory); a larger catalog moves to a scratch directory, created at its first spilled
 file, so resident memory does not grow with the entry count except for one bit per
 member (21.3 MiB at the member ceiling). Scratch goes to the first disk-backed
 directory with room among `$TMPDIR`, the user cache directory (`rusty-tiles/scratch`)
@@ -172,6 +176,12 @@ else is available, and the report's `scratch.memoryBacked` then says so. The ind
 unreferenced members are reported as the first 16 names in byte order and a count. A
 failure of the validator's own scratch storage is `io`, `resource_limit` or
 `invalid_state` with the prefix "validation scratch:", never a verdict on the archive.
+`--scratchDir DIR` (Python `scratch_dir`) puts the scratch inside exactly `DIR`, which must
+exist (otherwise the request is refused as `usage` before the archive is opened); a
+memory-backed `DIR` is used and labelled. The report-less `validate_3tz` facade never puts
+its catalog in RAM: with only memory-backed candidates it is refused as `environment`
+(exit 4, Rust `Error::Scratch(ScratchRefusal::MemoryBackedOnly)`); set `TMPDIR` to a
+disk-backed directory.
 The report's `payloads` rows are read on demand: the CLI streams them, and Python's
 `validate(input, lazy_payloads=True)` returns them as a lazy read-only sequence (by
 default they are a list). See the
@@ -194,24 +204,45 @@ Nonregular inputs are Unsupported; POSIX FIFO admission does not wait for a
 writer. Underlying archive read/seek errors retain their I/O causes, while actual
 premature byte exhaustion is InvalidInput.
 
-Per-item ceilings are 8 MiB JSON with depth 64, 131,072 JSON value nodes per
-document, 128 MiB per member, 4 million accessor elements per payload, 128 MiB
-decoded views per document (which also holds an implicit subtree path's members,
-external buffers and availability index tables), 128 levels of hierarchy depth and
-256 MiB of tileset documents held at once on the external-tileset path (raw bytes
-plus 128 bytes per JSON value node, `liveDocumentBytes`; enforced, listed in
-`limits` from VS-C). Volume ceilings are 1 GiB source archive and total stored
-member bytes, 32 MiB central directory and 524,288 archive entries. The seven
-amplification budgets scale with S, the archive's admitted stored member bytes,
-and today's values are their floors: at least 262,144 and S/8 hierarchy visits,
-1,048,576 and S/8 references, 2 GiB and 4·S explicit member-hash and
-payload/document read work (repeated reads and constructor index reads included),
-16 million and 16·S total payload elements, and for decoded containment 2^29 and
-128·S work units, 2 GiB and 4·S re-read bytes and 2 GiB and 16·S decoded bytes. An
-archive with S up to 1 MB keeps exactly the floors; the report's `limits` shows
-the values in effect. S is fixed before any budgeted work and every byte of it is
-hashed, so a budget cannot grow from what traversal finds
-([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
+## Limits
+
+Every key of the report's `limits` belongs to one of three classes
+([limits amendment](architecture/validator-limits-amendment.md)). S, the report's
+`storedBytes`, is the sum of the stored sizes of every central-directory member (the 3TZ
+index included), fixed when the catalog is admitted.
+
+- **Per-item format limits** are fixed and cannot be changed: 8 MiB JSON (`jsonBytes`) with
+  depth 64, 131,072 JSON value nodes per document (`documentItems`), 128 MiB per member
+  (`memberBytes`), 4 million accessor elements per payload, 128 MiB decoded views per
+  document (which also holds an implicit subtree path's members, external buffers and
+  availability index tables), 128 levels of hierarchy depth, 256 MiB of tileset documents
+  held at once on the external-tileset path (raw bytes plus 128 bytes per JSON value node,
+  `liveDocumentBytes`) and the C2 span and node-depth limits.
+- **Volume caps** (`sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`,
+  `archiveStoredBytes`) are opt-in and `null` unless set. Without them the archive is bounded
+  by the file and the format: the 3TZ member ceiling (Unsupported), at least 46 directory
+  bytes per entry, a directory inside the file, and disjoint member extents inside the file.
+- **Amplification budgets** are `max(floor, ⌊S·p/q⌋)`: `hierarchyVisits` max(262,144, S/8),
+  `references` max(1,048,576, S/8), `totalBytesRead` max(2 GiB, 4·S) (explicit member-hash
+  and payload/document reads, including repeated reads and constructor index reads),
+  `totalPayloadElements` max(16 million, 16·S) and the three C2 budgets above. Archives up to
+  1 MB of stored bytes have exactly the floors. The report's `limitDerivation` gives each
+  budget's floor, its ratio `perStoredByte` and its `source` (`floor`, `scaled` or
+  `explicit`); `storedBytes`, `limits` and `limitDerivation` depend only on S and the
+  request's overrides. S is fixed before any budgeted work and every byte of it is hashed, so
+  a budget cannot grow from what traversal finds
+  ([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
+
+`--maxVolume KEY=N` (repeatable; `--max-volume`), Python `max_volume={KEY: N}` and Rust
+`ValidationRequest::max_volume(LimitKey, N)` set a volume cap or replace a budget. Values may
+be below the defaults (a stricter profile for untrusted input); per-item limits cannot be
+given. An unknown or per-item key, a value that is not a decimal integer below 2^64, or a
+repeated key is refused as `usage` (Python `InvalidRequestError`) before the input is opened.
+A refused charge of a cap or budget is `resource_limit` whose message ends with
+`(limit KEY=VALUE, SOURCE)` (`SOURCE` is `floor`, `scaled`, `explicit` or `cap`); the CLI
+error carries `"limit": {"limit", "value", "observed", "derivation"}`, Python
+`ResourceLimitError.limit` the same dict, and Rust `ValidationFailure::exceeded()`.
+
 Each placement of a shared external tileset is charged its full visits,
 references and document bytes, as if it were read and walked again. In fact each
 external-tileset document is parsed and checked once, while its summaries fit
@@ -228,13 +259,13 @@ The 178,956,970-member 3TZ ceiling, which producers also enforce, is a format
 rule rather than a limit: a larger declared count is Unsupported before the entry
 limit and before any directory allocation. At the ceiling the index is
 4,294,967,256 bytes.
-Implicit availability scans count toward the same `total_bytes_read` work
+Implicit availability scans count toward the same `totalBytesRead` work
 counter; an archive whose reads and scans together exceed it is refused with
 "availability scan exceeds total_bytes_read work limit".
 Separately bounded ZIP envelope/tail/header reads are outside that member-work
 counter. These admission limits
-are engineering bounds, not a total-process RSS promise. No request option
-bypasses them. The serialized `limits` describe the values in effect for the archive.
+are engineering bounds, not a total-process RSS promise. The serialized `limits` are the
+effective values of the validation.
 Validation memory does not grow with tiles, references or payloads: the traversal
 keeps only its current path, per-payload facts go to scratch once they exceed
 100 MiB, and summaries of shared external tilesets are capped at 64 MiB.
@@ -243,9 +274,8 @@ The entry, visit, reference, central-directory, value-node, member and decoded
 ceilings are sized for default (implicit) vector output at its 100,000-tile
 `--maxTiles` default: measured pre-forest archives use about 2.4-2.5 entries, 1.2-1.3
 presentation nodes (hierarchy visits under I1), one `tileset.json` value node and 920 `vector-build.json`
-bytes per tile. Content volume is bounded separately. An archive over 1 GiB,
-2 GiB of reads or 16 million payload elements is refused at any tile count, so
-dense vector content can reach those ceilings well below 100,000 tiles.
+bytes per tile. Content volume is bounded separately; the budgets grow with the archive's
+stored bytes, so dense content is not refused for its size alone.
 Explicit vector archives, written by the `--explicit` mode removed in 0.4.0,
 keep their whole hierarchy in one `tileset.json` of about 50.5 value nodes per
 tile. They reach the 131,072 value-node ceiling at about 2,595 tiles. Measured costs at these ceilings are recorded in
@@ -257,10 +287,16 @@ JSON value nodes, payload bytes and view bytes) still states the earlier
 supersede it; the meanings are unchanged.
 
 Rust failures are `ValidationFailure::{InvalidInput, Unsupported, ResourceLimit,
-Io, InvalidState}`. CLI JSON codes are respectively `invalid_input`, `unsupported`,
-`resource_limit`, `io` and `invalid_state`; exit codes are 3, 2, 3, 1 and 1. Python maps
-them to `DataError`, `UnsupportedError`, `ResourceLimitError`, `TilesIOError` and
-`TilesError`. `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+Io, Scratch, InvalidRequest, Cancelled, Observer, InvalidState}`. CLI JSON codes are
+respectively `invalid_input`, `unsupported`, `resource_limit`, `io`, `io` (or `environment`
+for memory-backed-only scratch), `usage`, `cancelled`, `observer_failure` and
+`invalid_state`; exit codes are 3, 2, 3, 1, 1 (or 4), 2, 1, 1 and 1. Python maps them to
+`DataError`, `UnsupportedError`, `ResourceLimitError`, `TilesIOError` (or
+`EnvironmentError`), `InvalidRequestError`, `CancelledError`, `ObserverError` (a callback's
+own exception, including `KeyboardInterrupt`, propagates unchanged) and `TilesError`.
+Cancellation (`inspect_with`'s control, a Python callback or Ctrl-C) is checked before each
+hashed member, traversal task and implicit tile; progress events have the phases
+`validate.hash`, `validate.traverse` and `validate.rows` (CLI `--progress json`). `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
 capacity fault); it is never a verdict about the archive.
 No job/publication failure wrapper is used for this read-only operation.
 

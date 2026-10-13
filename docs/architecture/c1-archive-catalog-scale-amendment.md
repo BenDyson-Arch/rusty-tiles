@@ -195,4 +195,4 @@ The JSON report keeps its shape, key order and row order.
 
 - The bitmap is `N/8` bytes, bounded by the format ceiling, not O(1) (design OQ-1).
 - Whole-validation RSS is not flat in N until VS-B bounds the traversal facts.
-- The scratch label and `--scratch-dir` are VS-C's.
+- The scratch label and `--scratch-dir` are VS-C's. Closed by VS-C ([limits amendment](validator-limits-amendment.md) VS-C-5, VS-C-7): `--scratchDir`/`--scratch-dir` and Python `scratch_dir` exist, and the `validate_3tz` refusal is the typed `environment` refusal `ScratchRefusal::MemoryBackedOnly`.

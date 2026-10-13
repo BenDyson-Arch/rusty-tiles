@@ -77,6 +77,9 @@ pub(crate) enum SpillError {
     },
     #[error(transparent)]
     InsufficientSpace(InsufficientSpace),
+    /// Every candidate is memory-backed (tmpfs) and RAM scratch is not allowed (VS-C-5 T1).
+    #[error("every scratch candidate is memory-backed (tmpfs), which would hold the spill in RAM: {}; set TMPDIR to a disk-backed directory", .candidates.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", "))]
+    MemoryBackedOnly { candidates: Vec<PathBuf> },
     #[error("spill run is corrupt: {detail} ({})", path.display())]
     CorruptRun { path: PathBuf, detail: String },
     #[error("invalid spill configuration: {0}")]
@@ -111,6 +114,10 @@ impl From<SpillError> for JobError {
                 &cause.path.clone(),
                 cause,
             ),
+            SpillError::MemoryBackedOnly { ref candidates } => {
+                let path = candidates.first().cloned().unwrap_or_default();
+                JobError::with_cause_at(JobErrorKind::Io, error.to_string(), &path, error)
+            }
             SpillError::InvalidConfig(_) => {
                 JobError::new(JobErrorKind::InvalidRequest, error.to_string())
             }

@@ -1103,10 +1103,21 @@
     {
       "name": "zip64_count_at_ceiling",
       "path": "zip64_count_at_ceiling.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it, no entry cap is set by default (VS-C), and the count needs more directory bytes than the directory has.",
+      "sha256": "0fb5b4d97cd321340224bda578fa07bdc9417fd13dee4318fc1dbbc65dca0fda"
+    },
+    {
+      "name": "zip64_count_at_ceiling_capped",
+      "path": "zip64_count_at_ceiling.3tz",
       "expectedKind": "resource_limit",
       "exitCode": 3,
-      "analyticFact": "ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it and the 524,288 default entry limit refuses it.",
-      "sha256": "0fb5b4d97cd321340224bda578fa07bdc9417fd13dee4318fc1dbbc65dca0fda"
+      "analyticFact": "The zip64_count_at_ceiling bytes with --maxVolume archiveEntries=524288: the opt-in entry cap refuses before the directory length check.",
+      "sha256": "0fb5b4d97cd321340224bda578fa07bdc9417fd13dee4318fc1dbbc65dca0fda",
+      "maxVolume": {
+        "archiveEntries": 524288
+      }
     },
     {
       "name": "zip_local_crc_mismatch",

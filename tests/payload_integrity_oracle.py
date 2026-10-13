@@ -33,15 +33,16 @@ def main():
     # reports; the validator-caps bundles stay as history.
     # H7 legacy-content amendment (2026-10-13): the 12 b3dm controls of corrected-205
     # expect Unsupported; polygon-sensitive-5 holds no legacy content and keeps its bundle.
-    amendment = controls / 'c2wb_cap_amendment/2026-10-12'
-    legacy = controls / 'legacy_unsupported_amendment/2026-10-13'
+    # VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null volume caps and
+    # liveDocumentBytes in admitted reports; the H7 and C2-WB bundles stay as history.
+    amendment = controls / 'vs_c_limits_amendment/2026-10-14'
     bundles = [
-        ('corrected205', legacy / 'corrected-205-legacy-fixtures.tar.gz',
-         '7fe07fd1341d8fdbc743be9cb7cd0b1fa063731b5678621d652e799ad0101b8d',
-         'f4ce9c7bd60e7788ca9ec7d6af5c7edf20f08e2c2cc8f25ced32a2d2c9a01815', 205),
-        ('polygon5', amendment / 'polygon-sensitive-5-c2wb-fixtures.tar.gz',
-         'd64eaf9ade5bb7b3dd5d73a5b2398a12083c2bc3ae948a3a250a07139971b25f',
-         '2d5d56c03526d50ecc864da16ae744ffa44efaa10e683c9fa4f7bdd40cda6ef8', 5),
+        ('corrected205', amendment / 'corrected-205-vsc-fixtures.tar.gz',
+         '229e97f7ce0e81b59cef5079106e47fec09320b4cdd63314098f4d845f4ca5e0',
+         '3f248b5ed05d1b814dcbea71be6445066cabdaca0870345b21d446ed0c74e6ca', 205),
+        ('polygon5', amendment / 'polygon-sensitive-5-vsc-fixtures.tar.gz',
+         'f363386d920356499c823a9ded616e945061feb66f049cd5c600797b675478dc',
+         'd0197d8501786535556ce806ec58523ba65d6a7a5a4ffdde176959f762827e67', 5),
     ]
     phases = {}
     status = 1

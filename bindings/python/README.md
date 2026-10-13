@@ -64,7 +64,7 @@ results with required reports and cleanup diagnostics, as described below.
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
 | `vector_to_3tz(input, output, ...)` | See vector options below; accepts GeoJSON and GeoPackage; returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; returns `PackageResult` |
-| `validate(input)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps and limits |
+| `validate(input, *, lazy_payloads=False, max_volume=None, scratch_dir=None, callback=None)` | Returns the bounded [validation report](../../docs/VALIDATION.md), including completed checks, inspection gaps, `storedBytes`, the effective `limits` and their `limitDerivation`. `max_volume` maps limit keys to ints (opt-in volume caps such as `sourceArchiveBytes`, or replaced budgets such as `hierarchyVisits`); a bad key or value raises `InvalidRequestError` before any I/O. `scratch_dir` places scratch in an existing directory. `callback` receives progress events; raising from it, or Ctrl-C, stops the validation. A limit refusal's `ResourceLimitError.limit` is `{"limit", "value", "observed", "derivation"}` |
 
 For legacy `mesh_to_3tz`, `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
 `rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh

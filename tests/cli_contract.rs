@@ -319,6 +319,56 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_typed_outcom
     }
 }
 
+/// VS-C K7: every malformed `--maxVolume` or `--scratchDir` is a usage error (exit 2, JSON
+/// `usage`) raised before the input is opened: the input here does not exist, so an `io`
+/// outcome would show that it was.
+#[test]
+fn validate_limit_flags_are_usage_errors_before_any_input_io() {
+    let work = tempfile::tempdir().unwrap();
+    let missing = work.path().join("absent.3tz");
+    let no_dir = work.path().join("no-such-dir");
+    let no_dir = no_dir.to_str().unwrap();
+    for flags in [
+        vec!["--maxVolume", "unknownKey=1"],
+        vec!["--maxVolume", "jsonBytes=1"],
+        vec!["--maxVolume", "liveDocumentBytes=1"],
+        vec!["--maxVolume", "references=-1"],
+        vec!["--maxVolume", "references=+1"],
+        vec!["--maxVolume", "references=1e3"],
+        vec!["--maxVolume", "references=1_000"],
+        vec!["--maxVolume", "references=18446744073709551616"],
+        vec!["--maxVolume", "references"],
+        vec![
+            "--maxVolume",
+            "references=1",
+            "--max-volume",
+            "references=2",
+        ],
+        vec!["--scratchDir", no_dir],
+        vec!["--scratch-dir", no_dir],
+    ] {
+        let output = Command::new(bin())
+            .args(["--json", "validate"])
+            .arg(&missing)
+            .args(&flags)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{flags:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(error["error"]["code"], "usage", "{flags:?} {error}");
+    }
+    // The largest value and both spellings are accepted: the input is then opened.
+    let output = Command::new(bin())
+        .args(["--json", "validate"])
+        .arg(&missing)
+        .args(["--max-volume", "references=18446744073709551615"])
+        .args(["--scratch-dir", work.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let error: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(error["error"]["code"], "io", "{error}");
+}
+
 /// Explicit vector and point-cloud output retired in 0.4.0 (H6): `--explicit`
 /// is an unknown argument, refused as a usage error before any input or output
 /// work, and no longer advertised in help.

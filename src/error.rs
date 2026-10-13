@@ -17,6 +17,10 @@ pub enum Error {
     #[error("{0}")]
     Environment(String),
 
+    /// The validator's or archive reader's scratch was refused (VS-C-5 T1).
+    #[error("archive catalog scratch: {0}")]
+    Scratch(crate::validate::ScratchRefusal),
+
     #[error("{0}")]
     Data(String),
 
@@ -66,6 +70,7 @@ impl Error {
                 ("resource_limit", 1)
             }
             Self::Environment(_) => ("environment", 4),
+            Self::Scratch(refusal) => refusal.category(),
             Self::OutputExists(_) => ("output_conflict", 5),
             Self::Io(_) => ("io", 1),
             Self::NotImplemented { .. } => ("usage", 2),
@@ -89,6 +94,7 @@ impl From<crate::archive3tz::CodecError> for Error {
             CodecError::Zip(error) => Self::Zip(error),
             CodecError::Invalid(message) => Self::Message(message),
             CodecError::MissingManifest => Self::MissingTilesetJson,
+            CodecError::Scratch(refusal) => Self::Scratch(refusal),
             CodecError::SourceChanged(path) => {
                 Self::Data(format!("source changed while packing: {}", path.display()))
             }

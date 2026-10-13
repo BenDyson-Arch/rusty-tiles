@@ -227,6 +227,12 @@ fn scratch_failures_map_to_io_resource_limit_and_invalid_state() {
             }),
             "io",
         ),
+        (
+            SpillError::MemoryBackedOnly {
+                candidates: vec![path.clone()],
+            },
+            "environment",
+        ),
         (SpillError::Overflow, "resource_limit"),
         (
             SpillError::CorruptRun {
@@ -251,7 +257,7 @@ fn scratch_failures_map_to_io_resource_limit_and_invalid_state() {
         &path,
         std::io::Error::from(std::io::ErrorKind::StorageFull),
     )) {
-        Error::Io(error) => error.kind(),
+        Error::Scratch(ScratchRefusal::Io(error)) => error.kind(),
         other => panic!("{other:?}"),
     };
     assert_eq!(kind, std::io::ErrorKind::StorageFull);
