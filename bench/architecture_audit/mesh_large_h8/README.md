@@ -147,3 +147,9 @@ exact. Planned per-primitive/table partitions and actual property/picking checks
 belong to the follow-up. This is a forward compatibility risk, rather than a new
 executed H8 browser failure. H16 must consume frozen leaves without late splits
 or lattice changes.
+
+## Throughput and real-data calibration
+
+The throughput slice (island crops, parallel delivery, robust decoded-image
+gates calibrated on the real photogrammetry mesh) is recorded in
+[throughput.md](throughput.md).
