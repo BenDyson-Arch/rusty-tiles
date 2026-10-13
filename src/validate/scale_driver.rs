@@ -18,6 +18,8 @@ fn drive() {
         archive_stored_bytes: u64::MAX,
         ..ValidationLimits::default()
     };
+    // The test-only seams would hold one record per tile and per payload.
+    SEAMS.with(|seams| seams.set(false));
     let start = std::time::Instant::now();
     let result = inspect_facts(ValidationRequest::new(&path), Budgets::Scaled(limits))
         .map(|inspection| inspection.report);
