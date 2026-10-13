@@ -734,4 +734,55 @@ mod codec_reuse_tests {
             .is_none());
         assert_eq!((same.reused_subtrees, counters.tiles), before);
     }
+
+    /// A record written by an earlier partial reuse can count a restored leaf's split feature
+    /// as one row. Restore must take the fragment total from the stored leaves, correct the
+    /// build counter by the difference, and carry it on the node so `remember` records it.
+    #[test]
+    fn restore_counts_stored_leaf_fragments_and_remembers_them() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("t")).unwrap();
+        let glb = b"leaf payload".to_vec();
+        let uri = format!("t/{}.glb", hash(&glb));
+        let archive_path = root.path().join("previous.3tz");
+        let mut zip = zip::ZipWriter::new(File::create(&archive_path).unwrap());
+        zip.start_file(&uri, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut zip, &glb).unwrap();
+        zip.finish().unwrap();
+        let mut reuse = Reuse::new(root.path(), &VectorOptions::default()).unwrap();
+        reuse.previous = Some(archive_path);
+        reuse.old.insert(
+            "".into(),
+            Record {
+                signature: "signature".into(),
+                center: [0.; 3],
+                padding: 0.,
+                fragments: 1,
+                cut: None,
+            },
+        );
+        reuse.nodes.insert(
+            "".into(),
+            json!({"boundingVolume":{"box":[0,0,0,1.0,0,0,0,1.0,0,0,0,1.0]},"refine":"REPLACE",
+                "geometricError":0.0,
+                "content":{"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}},
+                "extras":{"featureFragments":5,"vertices":9,"primitives":1,"encodedBytes":1234,
+                    "geometryErrorMetres":0.3,"positionRoundingMetres":0.00001,
+                    "quantizationErrorMetres":0.0,"uncompressedBytes":2000,"toleranceMetres":0.0}}),
+        );
+        let start = 10;
+        let mut counters = Counters {
+            fragments: start,
+            ..Counters::default()
+        };
+        let mut node = reuse
+            .restore("", "signature", &mut counters, 1, 8)
+            .unwrap()
+            .expect("the unchanged subtree is restored");
+        assert_eq!(node.fragments, 5);
+        assert_eq!(counters.fragments, start + 4);
+        reuse.remember("", "signature".into(), &mut node).unwrap();
+        assert_eq!(reuse.records[""].fragments, 5);
+    }
 }
