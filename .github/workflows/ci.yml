@@ -99,6 +99,7 @@ jobs:
           node --version
           python3 -I bench/perf_lane/test_report.py
           python3 -I bench/perf_lane/test_cesium.py
+          python3 -I bench/perf_lane/test_flythrough.py
       - name: Check the crate package size and third-party notices
         run: |
           cargo package --locked --no-verify

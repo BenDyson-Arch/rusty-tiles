@@ -3,6 +3,8 @@ pub(super) mod atlas;
 mod crops;
 mod delivery;
 pub(super) mod geometry;
+#[allow(dead_code)] // Requested by H13 baking and the future annotate pass.
+pub(crate) mod id_texture;
 mod mask;
 mod mips;
 pub(super) mod planning;
