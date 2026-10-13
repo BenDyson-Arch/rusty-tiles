@@ -1175,7 +1175,7 @@ mod tests {
         validate::{inspect, ValidationRequest},
         RunControl,
     };
-    use std::{num::NonZeroUsize, sync::Arc, sync::Mutex};
+    use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, sync::Mutex};
 
     /// A textured wavy grid over two primitives (shared seam), enough for several leaves.
     fn fixture(dir: &Path, g: usize) -> PathBuf {
@@ -1197,6 +1197,10 @@ mod tests {
             let mut idx = Vec::new();
             for i in i0..i1 {
                 for j in 0..g {
+                    // Single-quad holes, small enough to be filled at coarse depths.
+                    if i % 17 == 5 && j % 13 == 7 {
+                        continue;
+                    }
                     let v = |a: usize, c: usize| ((a - i0) * w + c) as u32;
                     idx.extend([
                         v(i, j),
@@ -1288,11 +1292,108 @@ mod tests {
         }
     }
 
+    /// Independent packet check against the untextured member it was frozen from and the
+    /// captured source: published face order, raw and decoded corners, feature IDs and
+    /// tables, source primitive and origin from the member's own tables, fill marking, and
+    /// donor ranges by brute force over the source ranks.
+    fn check_packet(pass: &BakePass<'_>, frozen: &FrozenNode) -> Result<(), String> {
+        let id = &frozen.identity;
+        let path = pass
+            .stage
+            .join(format!("proxies/f{}-d{}.glb", id.first, id.depth));
+        let d = codec::decode(&fs::read(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        if d.faces.len() != frozen.faces.len() {
+            return Err("face count".into());
+        }
+        let column = |table: usize, name: &str, row: u32| -> Result<u64, String> {
+            d.tables[table]
+                .columns
+                .get(name)
+                .and_then(|c| c.get(row as usize))
+                .copied()
+                .ok_or_else(|| format!("column {name}"))
+        };
+        for (k, (g, f)) in d.faces.iter().zip(&frozen.faces).enumerate() {
+            let features: Vec<(u32, Option<u32>)> = g
+                .features
+                .iter()
+                .map(|(v, t)| (*v, t.map(|t| t as u32)))
+                .collect();
+            if g.raw != f.corners.map(|c| c.raw)
+                || g.p.map(|q| q.map(f32::to_bits)) != f.corners.map(|c| c.decoded)
+                || features != f.features
+                || g.primitive != f.gltf
+            {
+                return Err(format!(
+                    "face {k} differs from the published member (order)"
+                ));
+            }
+            let (row0, t0) = g.feature(&d.tables, "source_primitive").ok_or("set 0")?;
+            let (row1, t1) = g.feature(&d.tables, "proxy_source").ok_or("set 1")?;
+            let p = &frozen.primitives[f.source as usize];
+            let source = (
+                column(t0, "node_index", row0)? as u32,
+                column(t0, "mesh_index", row0)? as u32,
+                column(t0, "primitive_index", row0)? as u32,
+            );
+            let fill = column(t1, "fill", row1)? != 0;
+            let triangle = if fill {
+                u64::MAX
+            } else {
+                column(t1, "triangle_index", row1)?
+            };
+            if source != (p.node, p.mesh, p.primitive)
+                || (f.origin.node, f.origin.mesh, f.origin.primitive) != source
+                || f.origin.triangle != triangle
+                || f.fill.is_some() != fill
+            {
+                return Err(format!(
+                    "face {k} provenance differs from the member's tables"
+                ));
+            }
+            if let Some(i) = f.fill {
+                let r = frozen.fills.get(i as usize).ok_or("fill record")?;
+                if r.source != f.source
+                    || r.bound
+                        .partial_cmp(&frozen.geometric_error)
+                        .is_none_or(|o| o.is_gt())
+                {
+                    return Err(format!("face {k} fill record"));
+                }
+            }
+        }
+        // Donor ranges: the maximal runs of each primitive's source ranks in the tile.
+        for p in &frozen.primitives {
+            let mut runs: Vec<std::ops::Range<u64>> = Vec::new();
+            let triangles = pass
+                .captured
+                .triangles
+                .range(id.first, id.end, 1 << 16)
+                .map_err(|e| e.to_string())?;
+            for (rank, t) in (id.first..).zip(triangles) {
+                let t = t.map_err(|e| e.to_string())?.triangle.source;
+                if (t.node, t.mesh, t.primitive) == (p.node, p.mesh, p.primitive) {
+                    match runs.last_mut() {
+                        Some(r) if r.end == rank => r.end = rank + 1,
+                        _ => runs.push(rank..rank + 1),
+                    }
+                }
+            }
+            if runs != p.donor_ranges {
+                return Err("donor ranges differ from the source ranks".into());
+            }
+        }
+        Ok(())
+    }
+
     /// A test baker: postorder, reads every packet and child appearance, assembles and
     /// commits a flat textured member, records what it saw.
     #[derive(Debug, Default)]
     struct FlatBaker {
         seen: Mutex<Vec<String>>,
+        fills: Mutex<usize>,
+        last: Mutex<Option<Vec<u8>>>,
     }
     impl ProxyBaker for FlatBaker {
         fn bake(&self, pass: &BakePass<'_>) -> Result<(), JobError> {
@@ -1330,6 +1431,8 @@ mod tests {
                         }
                     }
                 }
+                check_packet(pass, &frozen).unwrap();
+                *self.fills.lock().unwrap() += frozen.fills.len();
                 let prepared = flat(&frozen);
                 // The physical budget path: a tiny budget reports the actual size.
                 match assemble(&frozen, &prepared, 64)? {
@@ -1346,12 +1449,26 @@ mod tests {
                     assert_eq!(d.origin, f.origin);
                     assert_eq!(d.decoded, f.corners.map(|c| c.decoded));
                 }
-                // Commit accepts only a verified Fit for this very tile.
+                // Commit accepts only a verified Fit for this very tile, whose bytes decode
+                // to its frozen faces.
                 let budget = Assembly::PhysicalBudget { actual_bytes: 1 };
                 assert!(pass.commit(&frozen, &budget).is_err());
                 let mut other = frozen.clone();
                 other.identity.first += 1;
                 assert!(pass.commit(&other, &fit).is_err());
+                if let (Some(previous), Assembly::Fit { verified, .. }) =
+                    (self.last.lock().unwrap().as_ref(), &fit)
+                {
+                    let foreign = Assembly::Fit {
+                        glb: previous.clone(),
+                        decoded: Vec::new(),
+                        verified: verified.clone(),
+                    };
+                    assert!(pass.commit(&frozen, &foreign).is_err());
+                }
+                if let Assembly::Fit { glb, .. } = &fit {
+                    *self.last.lock().unwrap() = Some(glb.clone());
+                }
                 pass.commit(&frozen, &fit)?;
                 pass.preencode.write_proxy(first, depth, b"pages")?;
                 pass.release(first, depth)?;
@@ -1365,15 +1482,16 @@ mod tests {
         }
     }
 
-    fn faces_of(glb: &[u8]) -> Vec<[[u32; 3]; 3]> {
-        let mut f: Vec<_> = codec::decode(glb)
+    /// Raw and decoded corners per face, in published order (order-sensitive).
+    type Corners = [[u32; 3]; 3];
+
+    fn faces_of(glb: &[u8]) -> Vec<(Corners, Corners)> {
+        codec::decode(glb)
             .unwrap()
             .faces
             .iter()
-            .map(|f| f.p.map(|p| p.map(f32::to_bits)))
-            .collect();
-        f.sort_unstable();
-        f
+            .map(|f| (f.raw, f.p.map(|p| p.map(f32::to_bits))))
+            .collect()
     }
 
     /// The handoff end to end on real H8 + H17 output: packets are complete and consistent,
@@ -1405,6 +1523,20 @@ mod tests {
         let baker = Arc::new(FlatBaker::default());
         let baked = run("baked", Some(baker.clone()));
         let seen = baker.seen.lock().unwrap().clone();
+        assert!(
+            *baker.fills.lock().unwrap() > 0,
+            "the fixture's holes give fill faces in some packet"
+        );
+        // The manifest reports the published (baked) bytes and keeps the untextured figure.
+        let manifest = |dir: &Path| -> Value {
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+        };
+        let (plain_lod, baked_lod) = (
+            manifest(&plain)["lod"].clone(),
+            manifest(&baked)["lod"].clone(),
+        );
+        assert_eq!(baked_lod["untexturedProxyBytes"], plain_lod["proxyBytes"]);
+        assert!(plain_lod.get("untexturedProxyBytes").is_none());
         let rows: Vec<Value> = fs::read_to_string(baked.join("proxies.jsonl"))
             .unwrap()
             .lines()
@@ -1421,6 +1553,12 @@ mod tests {
             .lines()
             .map(|l| serde_json::from_str(l).unwrap())
             .collect();
+        assert_eq!(
+            baked_lod["proxyBytes"].as_u64().unwrap(),
+            rows.iter()
+                .map(|r| r["bytes"].as_u64().unwrap())
+                .sum::<u64>()
+        );
         for (b, p) in rows.iter().zip(&plain_rows) {
             assert_eq!(
                 b["geometricError"], p["geometricError"],
@@ -1471,6 +1609,48 @@ mod tests {
                 let frozen = pass.frozen(first, depth)?;
                 // Packet round trip.
                 assert_eq!(FrozenNode::decode(&frozen.encode()?)?, frozen);
+                // Sink corruption controls: the independent packet check refuses each.
+                let filled = pass
+                    .nodes()?
+                    .map(|n| n.and_then(|(f, d)| pass.frozen(f, d)))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .find(|n| !n.fills.is_empty())
+                    .expect("a packet with fills");
+                check_packet(pass, &frozen).unwrap();
+                check_packet(pass, &filled).unwrap();
+                let plain = frozen.faces.iter().position(|f| f.fill.is_none()).unwrap();
+                let mut corrupt = Vec::new();
+                let mut c = frozen.clone();
+                c.faces.swap(0, 1);
+                corrupt.push(("face order", c));
+                let mut c = frozen.clone();
+                c.faces[0].features[1].0 ^= 1;
+                corrupt.push(("feature", c));
+                let mut c = frozen.clone();
+                c.faces[plain].origin.triangle ^= 1;
+                corrupt.push(("origin", c));
+                let mut c = frozen.clone();
+                let r = &mut c.primitives[0].donor_ranges[0];
+                if r.end - r.start > 1 {
+                    r.end -= 1;
+                } else {
+                    r.end += 1;
+                }
+                corrupt.push(("donor ranges", c));
+                let mut c = filled.clone();
+                let unfilled = c.faces.iter().position(|f| f.fill.is_none()).unwrap();
+                c.faces[unfilled].fill = Some(0);
+                corrupt.push(("fill marker", c));
+                let mut c = filled.clone();
+                c.fills[0].bound = c.geometric_error * 2. + 1.;
+                corrupt.push(("fill bound", c));
+                for (what, c) in &corrupt {
+                    assert!(
+                        check_packet(pass, c).is_err(),
+                        "{what} corruption not caught"
+                    );
+                }
                 for f in &frozen.faces {
                     assert!(!frozen.donor_ranges(f).is_empty());
                 }
@@ -1514,6 +1694,68 @@ mod tests {
                 let mut table = frozen.clone();
                 table.tables[0].columns[0].2[0] ^= 1;
                 assert!(verify(&table, &good, &glb).is_err());
+                // One mutant per remaining verify branch.
+                let mut frozen_mutants: Vec<(&str, FrozenNode)> = Vec::new();
+                let mut m = frozen.clone();
+                m.faces[0].features[1].0 ^= 1;
+                frozen_mutants.push(("feature value", m));
+                let mut m = frozen.clone();
+                m.faces[0].features[0].1 = Some(99);
+                frozen_mutants.push(("table link", m));
+                let mut m = frozen.clone();
+                if m.gltf[0].quantized {
+                    m.gltf[0].translation[0] ^= 1;
+                } else {
+                    m.gltf[0].scale[0] ^= 1;
+                }
+                frozen_mutants.push(("TRS", m));
+                let mut m = frozen.clone();
+                let component = &mut m.tables[0].columns[0].1;
+                *component = if component == "UINT64" {
+                    "UINT32"
+                } else {
+                    "UINT64"
+                }
+                .into();
+                frozen_mutants.push(("component type", m));
+                let mut m = frozen.clone();
+                m.tables[0].columns.last_mut().unwrap().2[0] ^= 1;
+                frozen_mutants.push(("last column", m));
+                let mut m = frozen.clone();
+                m.primitives[0].material ^= 1;
+                frozen_mutants.push(("source material", m));
+                let mut m = frozen.clone();
+                m.faces[plain].origin.triangle ^= 1;
+                frozen_mutants.push(("origin", m));
+                for (what, m) in &frozen_mutants {
+                    assert!(
+                        verify(m, &good, &glb).is_err(),
+                        "{what} mismatch not caught"
+                    );
+                }
+                let mut prepared_mutants: Vec<(&str, PreparedNode)> = Vec::new();
+                let mut m = good.clone();
+                m.primitives[0]
+                    .extra_feature_ids
+                    .push(json!({"featureCount":1,"texture":{"index":0},"label":"extra"}));
+                prepared_mutants.push(("feature-ID declaration", m));
+                let mut m = good.clone();
+                let n = &mut m.primitives[0].normals.as_mut().unwrap()[0][0];
+                *n = f32::from_bits(n.to_bits() ^ 1);
+                prepared_mutants.push(("NORMAL bits", m));
+                let mut m = good.clone();
+                m.primitives[0].tangents =
+                    Some(vec![[1., 0., 0., 1.]; good.primitives[0].faces.len() * 3]);
+                prepared_mutants.push(("TANGENT", m));
+                let mut m = good.clone();
+                m.primitives[0].material = None;
+                prepared_mutants.push(("material binding", m));
+                for (what, m) in &prepared_mutants {
+                    assert!(
+                        verify(&frozen, m, &glb).is_err(),
+                        "{what} mismatch not caught"
+                    );
+                }
                 *self.checked.lock().unwrap() = true;
                 // Leave every tile untextured.
                 for node in pass.nodes()? {
@@ -1524,14 +1766,51 @@ mod tests {
             }
         }
         let probe = Arc::new(Probe::default());
-        mesh_to_leaf_payloads(
-            LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
+        let request = |out: &str| {
+            LeafOutputRequest::new(&input, work.path().join(out), LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(1).unwrap())
                 .with_lod_target(1024)
-                .with_baker(probe.clone()),
+        };
+        mesh_to_leaf_payloads(
+            request("out").with_baker(probe.clone()),
             &RunControl::default(),
         )
         .unwrap();
         assert!(*probe.checked.lock().unwrap());
+        // With the handoff wired but nothing committed, every published byte equals a run
+        // without a baker (the manifest only adds the bake fields).
+        mesh_to_leaf_payloads(request("plain"), &RunControl::default()).unwrap();
+        let files = |dir: &Path| -> BTreeMap<String, Vec<u8>> {
+            let mut out = BTreeMap::new();
+            for sub in ["", "leaves", "proxies"] {
+                for e in fs::read_dir(dir.join(sub)).unwrap() {
+                    let path = e.unwrap().path();
+                    let name = path
+                        .strip_prefix(dir)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned();
+                    if path.is_file() && name != "resources.json" && name != "manifest.json" {
+                        out.insert(name, fs::read(&path).unwrap());
+                    }
+                }
+            }
+            out
+        };
+        assert!(
+            files(&work.path().join("out")) == files(&work.path().join("plain")),
+            "the handoff wiring changed published bytes"
+        );
+        let manifest = |dir: &str| -> Value {
+            let mut m: Value = serde_json::from_slice(
+                &fs::read(work.path().join(dir).join("manifest.json")).unwrap(),
+            )
+            .unwrap();
+            let lod = m["lod"].as_object_mut().unwrap();
+            lod.remove("untexturedProxyBytes");
+            lod.remove("handoffBytes");
+            m
+        };
+        assert_eq!(manifest("out"), manifest("plain"));
     }
 }
