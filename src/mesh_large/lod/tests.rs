@@ -1002,3 +1002,52 @@ fn control_fill_across_seams_is_caught() {
         refused.error.message()
     );
 }
+
+/// Every published file of a leaf directory except the timing record, hashed in name order.
+fn tree_digest(dir: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    fn walk(dir: &Path, root: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, root, out);
+            } else {
+                let name = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                if name != "resources.json" {
+                    out.push((name, fs::read(&path).unwrap()));
+                }
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(dir, dir, &mut files);
+    files.sort();
+    let mut hash = Sha256::new();
+    for (name, bytes) in &files {
+        hash.update(name.as_bytes());
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(bytes);
+    }
+    hash.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The no-baker output is pinned: leaves, proxies, rows and manifest of the terrain run are
+/// byte-identical to the H17 branch without the bake handoff (golden taken there).
+#[test]
+fn no_baker_output_matches_the_pre_handoff_golden() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = leaves(&input, &work.path().join("leaves"), 2, Mutation::None, 1024).unwrap();
+    let digest = tree_digest(&dir);
+    eprintln!("no-baker digest {digest}");
+    assert_eq!(digest, NO_BAKER_GOLDEN);
+}
+
+/// `tree_digest` of the terrain run at `ml/h17-lod` 0d70f08 (before the bake handoff).
+/// Regenerate it only for an intended change of the LOD or leaf output.
+const NO_BAKER_GOLDEN: &str = "db0251d0ecf2b1ddb915d5d20a35f1f98a30512536a6673c5876b55426aeb7df";
