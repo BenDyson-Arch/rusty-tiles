@@ -413,7 +413,9 @@ fn insert_row(db: &Connection, feature: &Feature, path: &str) -> Result<(), Erro
     }
     Ok(())
 }
-fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
+/// A row's reuse fingerprint: its data, which vertices are locked and, once
+/// a quantized build has surveyed them, its shared vertices' exponents.
+fn fingerprint(db: &Connection, id: i64, value: &str, grid: bool) -> Result<(), Error> {
     let feature: Feature = serde_json::from_str(value)?;
     let points: Vec<_> = feature.geometry.points().collect();
     let mut mask = vec![0; points.len().div_ceil(8)];
@@ -433,6 +435,27 @@ fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     hasher.update(mask);
+    if grid {
+        let mut exponents = db
+            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
+            .map_err(sql)?;
+        for p in &points {
+            let p = encoding::cell(**p);
+            let held: Vec<(i64, String, u32, [i32; 3])> = exponents
+                .query_map(params![p[0], p[1], p[2]], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        [r.get(3)?, r.get(4)?, r.get(5)?],
+                    ))
+                })
+                .map_err(sql)?
+                .collect::<Result<_, _>>()
+                .map_err(sql)?;
+            hasher.update(serde_json::to_vec(&held)?);
+        }
+    }
     db.execute(
         "UPDATE features SET fingerprint=?1 WHERE id=?2",
         params![format!("{:x}", hasher.finalize()), id],
@@ -440,6 +463,102 @@ fn fingerprint(db: &Connection, id: i64, value: &str) -> Result<(), Error> {
     .map_err(sql)?;
     Ok(())
 }
+/// Whether tile `a` (prefix, level) is an ancestor of tile `b`: a partition
+/// node is above every tile under its prefix, and an LOD chain's coarser
+/// levels are above its finer ones at the same prefix.
+fn ancestor(a: &(String, u32), b: &(String, u32)) -> bool {
+    b.0.starts_with(&a.0) && (b.0.len() > a.0.len() || b.1 < a.1)
+}
+
+/// Per shared vertex and kind (fill or line), join the surveyed tiles holding it that can render
+/// together (neither is the other's ancestor) and give each joined group the
+/// largest exponent among its tiles, per axis, in `grid`.
+fn resolve_grid(db: &Connection) -> Result<(), Error> {
+    type Holder = ((String, u32), [i32; 3]);
+    fn flush(
+        insert: &mut rusqlite::CachedStatement<'_>,
+        p: [i64; 4],
+        held: &[Holder],
+    ) -> Result<(), Error> {
+        let n = held.len();
+        let mut group: Vec<usize> = (0..n).collect();
+        fn root(group: &mut [usize], mut i: usize) -> usize {
+            while group[i] != i {
+                group[i] = group[group[i]];
+                i = group[i];
+            }
+            i
+        }
+        for a in 0..n {
+            for b in a + 1..n {
+                if !ancestor(&held[a].0, &held[b].0) && !ancestor(&held[b].0, &held[a].0) {
+                    let (ra, rb) = (root(&mut group, a), root(&mut group, b));
+                    group[ra] = rb;
+                }
+            }
+        }
+        let mut exponent: BTreeMap<usize, [i32; 3]> = BTreeMap::new();
+        for (i, (_, e)) in held.iter().enumerate() {
+            let r = root(&mut group, i);
+            let max = exponent.entry(r).or_insert(*e);
+            for axis in 0..3 {
+                max[axis] = max[axis].max(e[axis]);
+            }
+        }
+        for (i, ((prefix, level), _)) in held.iter().enumerate() {
+            let e = exponent[&root(&mut group, i)];
+            insert
+                .execute(params![
+                    p[0], p[1], p[2], p[3], prefix, level, e[0], e[1], e[2]
+                ])
+                .map_err(sql)?;
+        }
+        Ok(())
+    }
+    db.execute_batch("BEGIN;").map_err(sql)?;
+    {
+        let mut insert = db
+            .prepare_cached(
+                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            )
+            .map_err(sql)?;
+        let mut stmt = db
+            .prepare(
+                "SELECT cx,cy,cz,kind,prefix,level,ex,ey,ez FROM holders ORDER BY cx,cy,cz,kind,prefix,level",
+            )
+            .map_err(sql)?;
+        let mut rows = stmt.query([]).map_err(sql)?;
+        let mut current: Option<[i64; 4]> = None;
+        let mut held: Vec<Holder> = Vec::new();
+        while let Some(r) = rows.next().map_err(sql)? {
+            let p: [i64; 4] = [
+                r.get(0).map_err(sql)?,
+                r.get(1).map_err(sql)?,
+                r.get(2).map_err(sql)?,
+                r.get(3).map_err(sql)?,
+            ];
+            if current.is_some_and(|c| c != p) {
+                flush(&mut insert, current.unwrap(), &held)?;
+                held.clear();
+            }
+            current = Some(p);
+            held.push((
+                (r.get(4).map_err(sql)?, r.get(5).map_err(sql)?),
+                [
+                    r.get(6).map_err(sql)?,
+                    r.get(7).map_err(sql)?,
+                    r.get(8).map_err(sql)?,
+                ],
+            ));
+        }
+        if let Some(c) = current {
+            flush(&mut insert, c, &held)?;
+        }
+    }
+    db.execute_batch("COMMIT;").map_err(sql)?;
+    Ok(())
+}
+
 struct Stats {
     count: usize,
     vertices: usize,
@@ -463,7 +582,11 @@ struct Build<'a> {
     reuse: Reuse,
     workers: BTreeSet<usize>,
     partition_seconds: f64,
-    grid: encoding::QuantizationGrid,
+    /// The pass of a quantized build (see `encoding::lattice`).
+    pass: encoding::GridPass,
+    /// Survey outcome of every candidate, by (prefix, level): accepted, or
+    /// its reason. The final pass replays it, so the hierarchy is the same.
+    outcomes: BTreeMap<(String, u32), Option<&'static str>>,
 }
 impl Build<'_> {
     fn stats(&self, prefix: &str) -> Result<Stats, Error> {
@@ -484,17 +607,59 @@ impl Build<'_> {
             output: self.output,
             policy: self.policy,
             attempt: self.attempt,
-            grid: &self.grid,
+            pass: self.pass,
         };
+        // The final pass does not re-encode what the survey refused.
+        let refusals: Vec<Option<&'static str>> = levels
+            .iter()
+            .map(|level| match self.pass {
+                encoding::GridPass::Final => self
+                    .outcomes
+                    .get(&(prefix.to_string(), *level))
+                    .copied()
+                    .flatten(),
+                _ => None,
+            })
+            .collect();
+        let refused = |level: &u32| refusals[levels.iter().position(|l| l == level).unwrap()];
+        let todo: Vec<u32> = levels
+            .iter()
+            .filter(|level| refused(level).is_none())
+            .copied()
+            .collect();
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
-            levels
-                .par_iter()
+            todo.par_iter()
                 .map(|level| encoding::encode(encoder, prefix, center, *level))
                 .collect()
         });
-        let values = values.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let mut encoded = values
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter();
         self.workers
-            .extend(values.iter().map(|candidate| candidate.worker));
+            .extend(encoded.as_slice().iter().map(|candidate| candidate.worker));
+        let mut values = Vec::with_capacity(levels.len());
+        for level in levels {
+            let candidate = match refused(level) {
+                Some(reason) => Candidate {
+                    node: None,
+                    reports: Vec::new(),
+                    reason: Some(reason),
+                    worker: 0,
+                    survey: None,
+                },
+                None => encoded.next().expect("one encoding per unrefused level"),
+            };
+            if self.pass == encoding::GridPass::Survey {
+                let outcome = if candidate.node.is_some() {
+                    None
+                } else {
+                    Some(candidate.reason.unwrap_or("refused"))
+                };
+                self.outcomes.insert((prefix.to_string(), *level), outcome);
+            }
+            values.push(candidate);
+        }
         Ok(values)
     }
     fn consume(
@@ -502,8 +667,32 @@ impl Build<'_> {
         candidate: Candidate,
     ) -> Result<(Option<VectorRecord>, Option<&'static str>), Error> {
         if candidate.node.is_some() {
-            for report in candidate.reports {
-                self.reports.write(report)?;
+            if self.pass == encoding::GridPass::Survey {
+                // Each shared vertex records the tiles that hold it and their
+                // exponents; reports are written by the final pass.
+                if let Some(survey) = &candidate.survey {
+                    let mut insert = self.db.prepare_cached("INSERT OR REPLACE INTO holders(cx,cy,cz,kind,prefix,level,ex,ey,ez) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)").map_err(sql)?;
+                    let e = survey.exponent;
+                    for (p, kind) in &survey.shared {
+                        insert
+                            .execute(params![
+                                p[0],
+                                p[1],
+                                p[2],
+                                *kind as i64,
+                                survey.prefix,
+                                survey.level,
+                                e[0],
+                                e[1],
+                                e[2]
+                            ])
+                            .map_err(sql)?;
+                    }
+                }
+            } else {
+                for report in candidate.reports {
+                    self.reports.write(report)?;
+                }
             }
         }
         Ok((candidate.node, candidate.reason))
@@ -583,6 +772,10 @@ impl Build<'_> {
         self.attempt
             .check()
             .map_err(|error| Error::Job(self.attempt.fail(error)))?;
+        if self.pass == encoding::GridPass::Survey {
+            // The survey encodes everything: reused payloads report no exponents.
+            return self.build_uncached(prefix, depth);
+        }
         let signature = self.reuse.signature(self.db, prefix)?;
         let n = self.stats(prefix)?.count;
         if let Some(node) = self.reuse.restore(
@@ -691,69 +884,72 @@ impl Build<'_> {
                 .map_err(sql)?;
             for row in rows {
                 let (id, value) = row.map_err(sql)?;
-                fingerprint(self.db, id, &value)?;
+                fingerprint(self.db, id, &value, false)?;
             }
             return self.build_uncached(prefix, depth + 1);
         }
-        let started = Instant::now();
-        let median = |db: &Connection| -> Result<Cut, Error> {
-            let span = sub(stats.hi, stats.lo);
-            let mut index = 0;
-            for i in 1..3 {
-                if span[i] > span[index] {
-                    index = i;
+        // The final pass of a quantized build reuses the survey's partition.
+        if self.pass != encoding::GridPass::Final {
+            let started = Instant::now();
+            let median = |db: &Connection| -> Result<Cut, Error> {
+                let span = sub(stats.hi, stats.lo);
+                let mut index = 0;
+                for i in 1..3 {
+                    if span[i] > span[index] {
+                        index = i;
+                    }
                 }
+                let axis = ["x", "y", "z"][index];
+                db.query_row(&format!("SELECT {axis},sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY {axis},sortkey,id LIMIT 1 OFFSET ?3"),params![prefix,format!("{prefix}~"),(stats.count/2-1) as i64],|r|Ok(Cut{axis:axis.into(),value:r.get(0)?,key:r.get(1)?,id:r.get(2)?})).map_err(sql)
+            };
+            let mut cut = self
+                .reuse
+                .cuts
+                .get(prefix)
+                .cloned()
+                .map(Ok)
+                .unwrap_or_else(|| median(self.db))?;
+            if !matches!(cut.axis.as_str(), "x" | "y" | "z") || !cut.value.is_finite() {
+                return Err(data("invalid previous spatial partition axis"));
             }
-            let axis = ["x", "y", "z"][index];
-            db.query_row(&format!("SELECT {axis},sortkey,id FROM features WHERE path>=?1 AND path<?2 ORDER BY {axis},sortkey,id LIMIT 1 OFFSET ?3"),params![prefix,format!("{prefix}~"),(stats.count/2-1) as i64],|r|Ok(Cut{axis:axis.into(),value:r.get(0)?,key:r.get(1)?,id:r.get(2)?})).map_err(sql)
-        };
-        let mut cut = self
-            .reuse
-            .cuts
-            .get(prefix)
-            .cloned()
-            .map(Ok)
-            .unwrap_or_else(|| median(self.db))?;
-        if !matches!(cut.axis.as_str(), "x" | "y" | "z") || !cut.value.is_finite() {
-            return Err(data("invalid previous spatial partition axis"));
+            let condition = |cut: &Cut| {
+                format!(
+                    "({}< ?2 OR ({}= ?2 AND (sortkey< ?3 OR (sortkey= ?3 AND id<= ?4))))",
+                    cut.axis, cut.axis
+                )
+            };
+            let left: usize = self
+                .db
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM features WHERE path=?1 AND {}",
+                        condition(&cut)
+                    ),
+                    params![prefix, cut.value, cut.key, cut.id],
+                    |r| Ok(r.get::<_, i64>(0)? as usize),
+                )
+                .map_err(sql)?;
+            if left == 0 || left == stats.count {
+                cut = median(self.db)?;
+            }
+            self.db
+                .execute(
+                    &format!(
+                        "UPDATE features SET path=?5 WHERE path=?1 AND {}",
+                        condition(&cut)
+                    ),
+                    params![prefix, cut.value, cut.key, cut.id, format!("{prefix}0")],
+                )
+                .map_err(sql)?;
+            self.db
+                .execute(
+                    "UPDATE features SET path=?1 WHERE path=?2",
+                    params![format!("{prefix}1"), prefix],
+                )
+                .map_err(sql)?;
+            self.reuse.cuts.insert(prefix.into(), cut);
+            self.partition_seconds += started.elapsed().as_secs_f64();
         }
-        let condition = |cut: &Cut| {
-            format!(
-                "({}< ?2 OR ({}= ?2 AND (sortkey< ?3 OR (sortkey= ?3 AND id<= ?4))))",
-                cut.axis, cut.axis
-            )
-        };
-        let left: usize = self
-            .db
-            .query_row(
-                &format!(
-                    "SELECT COUNT(*) FROM features WHERE path=?1 AND {}",
-                    condition(&cut)
-                ),
-                params![prefix, cut.value, cut.key, cut.id],
-                |r| Ok(r.get::<_, i64>(0)? as usize),
-            )
-            .map_err(sql)?;
-        if left == 0 || left == stats.count {
-            cut = median(self.db)?;
-        }
-        self.db
-            .execute(
-                &format!(
-                    "UPDATE features SET path=?5 WHERE path=?1 AND {}",
-                    condition(&cut)
-                ),
-                params![prefix, cut.value, cut.key, cut.id, format!("{prefix}0")],
-            )
-            .map_err(sql)?;
-        self.db
-            .execute(
-                "UPDATE features SET path=?1 WHERE path=?2",
-                params![format!("{prefix}1"), prefix],
-            )
-            .map_err(sql)?;
-        self.reuse.cuts.insert(prefix.into(), cut);
-        self.partition_seconds += started.elapsed().as_secs_f64();
         let mut children = Vec::new();
         for suffix in ["0", "1"] {
             let path = format!("{prefix}{suffix}");
@@ -902,10 +1098,8 @@ pub(super) fn convert(
         }
         *reader.frame_mut() = Some(Frame::local([0.; 3]));
     }
-    // The one quantization grid of this build, fixed before any candidate.
-    let grid = encoding::QuantizationGrid::for_spool(&db)?;
     let mut reuse = reuse;
-    reuse.configure(max_features, repair, ambiguous, options, &reader, &grid)?;
+    reuse.configure(max_features, repair, ambiguous, options, &reader)?;
     counters.fragments = db
         .query_row("SELECT COUNT(*) FROM features", [], |r| {
             Ok(r.get::<_, i64>(0)? as usize)
@@ -920,7 +1114,7 @@ pub(super) fn convert(
         .map_err(sql)?
     {
         let (id, value) = row.map_err(sql)?;
-        fingerprint(&db, id, &value)?;
+        fingerprint(&db, id, &value, false)?;
     }
     drop(stmt);
     db.execute_batch("COMMIT;").map_err(sql)?;
@@ -929,6 +1123,8 @@ pub(super) fn convert(
         .num_threads(options.jobs)
         .build()
         .map_err(|e| Error::Environment(format!("cannot start vector workers: {e}")))?;
+    // The survey pass of a quantized build publishes into scratch.
+    let survey_output = scratch.path().join("survey");
     let mut build = Build {
         attempt,
         db: &db,
@@ -945,10 +1141,56 @@ pub(super) fn convert(
         reuse,
         workers: BTreeSet::new(),
         partition_seconds,
-        grid,
+        pass: encoding::GridPass::Single,
+        outcomes: BTreeMap::new(),
     };
     let encoding_started = Instant::now();
     let before_partition = build.partition_seconds;
+    if options.quantize && build.counters.features > 0 {
+        // Survey: build the hierarchy with every content on its own range and
+        // record, per shared vertex, the largest exponent of the tiles holding
+        // it. Splits and partitions it makes are kept; tiles are rebuilt.
+        db.execute_batch("CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;")
+            .map_err(sql)?;
+        std::fs::create_dir_all(survey_output.join("t"))?;
+        let before = build.counters.clone();
+        build.pass = encoding::GridPass::Survey;
+        build.output = &survey_output;
+        drop(build.build("", 0)?);
+        for (counter, value) in [
+            (&mut build.counters.tiles, before.tiles),
+            (&mut build.counters.leaf_tiles, before.leaf_tiles),
+            (&mut build.counters.routing_tiles, before.routing_tiles),
+            (
+                &mut build.counters.maximum_tile_vertices,
+                before.maximum_tile_vertices,
+            ),
+            (
+                &mut build.counters.maximum_tile_bytes,
+                before.maximum_tile_bytes,
+            ),
+        ] {
+            *counter = value;
+        }
+        std::fs::remove_dir_all(&survey_output)?;
+        resolve_grid(&db)?;
+        // Reuse keys a subtree by its rows' shared-vertex exponents too.
+        db.execute_batch("BEGIN;").map_err(sql)?;
+        let mut stmt = db
+            .prepare("SELECT id,data FROM features ORDER BY id")
+            .map_err(sql)?;
+        for row in stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(sql)?
+        {
+            let (id, value) = row.map_err(sql)?;
+            fingerprint(&db, id, &value, true)?;
+        }
+        drop(stmt);
+        db.execute_batch("COMMIT;").map_err(sql)?;
+        build.pass = encoding::GridPass::Final;
+        build.output = output;
+    }
     let root = if build.counters.features > 0 {
         build.build("", 0)?
     } else {

@@ -2,10 +2,11 @@
 //!
 //! Each published content is decoded as a client does (meshopt vertex
 //! stream, normalized u16, node translation and scale, implicit-root
-//! translations) into the tileset root frame. Wherever two contents put fill
-//! vertices within one lattice step of each other, they must be the same
-//! point: a vertex shared across a seam decodes identically on both sides.
-//! Deriving the quantization range per payload (the defect) fails this.
+//! translations) into the tileset root frame. Wherever two contents that can
+//! render together (neither is the other's ancestor) put fill vertices within
+//! one lattice step of each other, they must be the same point: a vertex
+//! shared across a seam decodes identically on both sides. Deriving the
+//! quantization range per payload (the defect) fails this.
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -75,6 +76,8 @@ fn implicit_roots(
 
 struct Content {
     name: String,
+    /// Implicit root, level, x, y (quadtree).
+    tile: (String, usize, u64, u64),
     depth: usize,
     step: [f64; 3],
     fills: Vec<[f64; 3]>,
@@ -152,6 +155,12 @@ fn contents(archive: &Path) -> Vec<Content> {
         }
         if !fills.is_empty() {
             out.push(Content {
+                tile: (
+                    fields[0].to_string(),
+                    level,
+                    fields[2].parse().unwrap(),
+                    fields[3].parse().unwrap(),
+                ),
                 name,
                 depth: root_depth + level,
                 step: scale.map(|s| s / 65535.),
@@ -160,6 +169,16 @@ fn contents(archive: &Path) -> Vec<Content> {
         }
     }
     out
+}
+
+/// Whether one content's tile is an ancestor of the other's (REPLACE
+/// refinement never draws both, so their copies need not agree).
+fn nested(a: &Content, b: &Content) -> bool {
+    let above = |p: &Content, c: &Content| {
+        let ((rp, lp, xp, yp), (rc, lc, xc, yc)) = (&p.tile, &c.tile);
+        rp == rc && lp < lc && xc >> (lc - lp) == *xp && yc >> (lc - lp) == *yp
+    };
+    above(a, b) || above(b, a)
 }
 
 /// Fill vertices of different contents within one lattice step on every
@@ -199,7 +218,10 @@ fn assert_seams_agree(archive: &Path) -> (usize, usize) {
                     };
                     for (a, p) in points {
                         for (b, q) in others {
-                            if a == b || (other == *key && a > b) {
+                            if a == b
+                                || (other == *key && a > b)
+                                || nested(&contents[*a], &contents[*b])
+                            {
                                 continue;
                             }
                             let near = (0..3).all(|i| (p[i] - q[i]).abs() < step[i] * 0.999);
@@ -389,9 +411,9 @@ fn block(holes: bool) {
 }
 
 /// Source-vertex oracle (local frame only): every fill vertex of every
-/// content decodes to a source vertex snapped, ties to even, to a lattice
-/// point; a vertex spooled in more than one row to the build lattice recorded
-/// in the build state, exactly, wherever it is rendered.
+/// content is keyed by its nearest source vertex. All copies of a vertex
+/// spooled in more than one row, in contents that can render together,
+/// decode to exactly one point within a lattice step of the source.
 fn assert_source_vertices_snapped(archive: &Path, sources: &[([f64; 3], bool)]) {
     let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
     let state: Value = serde_json::from_slice(&member(&mut zip, "vector-build.json")).unwrap();
@@ -403,14 +425,6 @@ fn assert_source_vertices_snapped(archive: &Path, sources: &[([f64; 3], bool)]) 
         state["frame"],
         json!([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
     );
-    let exponents: Vec<i32> = (0..3)
-        .map(|i| {
-            state["config"]["quantizationGrid"]["exponents"][i]
-                .as_i64()
-                .unwrap() as i32
-        })
-        .collect();
-    assert_eq!(exponents[0], -1, "0.5 m lattice across the 30 km block");
     // Root translation = anchor + root center (z-up); positions are relative
     // to that center in glTF y-up.
     let t: Vec<f64> = (12..15)
@@ -421,40 +435,55 @@ fn assert_source_vertices_snapped(archive: &Path, sources: &[([f64; 3], bool)]) 
         let d = [p[0] - anchor[0], p[1] - anchor[1], p[2] - anchor[2]];
         [d[0], d[2], -d[1]]
     };
-    let snap = |f: [f64; 3]| -> [f64; 3] {
-        std::array::from_fn(|i| {
-            let step = 2f64.powi(exponents[i]);
-            (f[i] / step).round_ties_even() * step
-        })
-    };
+    let framed: Vec<[f64; 3]> = sources.iter().map(|(p, _)| frame(p)).collect();
     let ties = sources
         .iter()
         .filter(|(p, shared)| *shared && ((frame(p)[0] / 0.5).fract().abs() - 0.5).abs() < 1e-6)
         .count();
     assert!(ties > 50, "near-tie shared source vertices: {ties}");
-    let max_step = 2f64.powi(*exponents.iter().max().unwrap());
-    let (mut exact, mut own) = (0, 0);
-    for content in contents(archive) {
+    let contents = contents(archive);
+    // Source index -> (content, decoded copy).
+    let mut copies: BTreeMap<usize, Vec<(usize, [f64; 3])>> = BTreeMap::new();
+    // A shared vertex snaps at the coarsest step of the tiles it joins.
+    let step = contents.iter().flat_map(|c| c.step).fold(0., f64::max);
+    for (c, content) in contents.iter().enumerate() {
         for p in &content.fills {
             let p: [f64; 3] = std::array::from_fn(|i| p[i] + center[i]);
             let gap = |s: &[f64; 3]| (0..3).map(|i| (s[i] - p[i]).abs()).fold(0., f64::max);
-            let (source, shared) = sources
+            let (index, source) = framed
                 .iter()
-                .min_by(|a, b| gap(&frame(&a.0)).total_cmp(&gap(&frame(&b.0))))
+                .enumerate()
+                .min_by(|a, b| gap(a.1).total_cmp(&gap(b.1)))
                 .unwrap();
-            if *shared {
-                let expected = snap(frame(source));
+            assert!(
+                gap(source) <= step,
+                "{}: {p:?} far from {source:?}",
+                content.name
+            );
+            copies.entry(index).or_default().push((c, p));
+        }
+    }
+    let mut compared = 0;
+    for (index, held) in &copies {
+        if !sources[*index].1 {
+            continue;
+        }
+        for (i, (a, p)) in held.iter().enumerate() {
+            for (b, q) in &held[i + 1..] {
+                if a == b || nested(&contents[*a], &contents[*b]) {
+                    continue;
+                }
+                let gap = (0..3).map(|k| (p[k] - q[k]).abs()).fold(0., f64::max);
                 assert!(
-                    gap(&expected) < 1e-6,
-                    "{}: {p:?} is not its snapped source {expected:?}",
-                    content.name
+                    gap < 1e-6,
+                    "{} vs {}: shared vertex {:?} decodes to {p:?} and {q:?}",
+                    contents[*a].name,
+                    contents[*b].name,
+                    framed[*index]
                 );
-                exact += 1;
-            } else {
-                assert!(gap(&frame(source)) <= max_step, "{}: {p:?}", content.name);
-                own += 1;
+                compared += 1;
             }
         }
     }
-    assert!(exact > 1000, "{exact} shared, {own} own");
+    assert!(compared > 200, "shared copies compared: {compared}");
 }
