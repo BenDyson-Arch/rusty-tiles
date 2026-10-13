@@ -3,12 +3,14 @@
 H8 produces actual full-detail GLBs through the in-process ML1 encoder. The
 hidden `mesh-leaf-payloads` command and exported `mesh_to_leaf_payloads` Rust API
 publish leaf payloads, decoded bounds/error certificates, source picking metadata
-and diagnostic manifests. The bounded producer acceptance below is complete;
-implicit hierarchy/archive assembly is a later integration slice. The branch includes the caller-mip API commits from #163. The coordinator
+and diagnostic manifests. The recorded baseline establishes the bounded producer
+acceptance below; reviewed fixes are recorded separately at the end. Implicit
+hierarchy/archive assembly is a later integration slice. The branch includes
+the caller-mip API commits from #163. The coordinator
 plans to merge #187 alone and close #163 as superseded. The user owns CI
 monitoring and merges.
 
-The final producer source is commit `b81dd9430039f00a5595ddb65e11cb688dbad10e`.
+The accepted baseline producer source is commit `b81dd9430039f00a5595ddb65e11cb688dbad10e`.
 [producer-acceptance.json](producer-acceptance.json) binds its exact source and
 binary identities, independent reviews, executed artifacts, controls and limits.
 Bulk receipts live at `~/.cache/rusty-tiles-evidence/h8-leaves-20261013/`; the
@@ -76,8 +78,15 @@ path determinism controls pass.
 Actual compressed GPU payloads pass stored and fractional-LOD checks with the
 matching sRGB colour target; maximum meaningful error is two for fast/balanced
 and one for quality on these fixtures. Their KTX colour DFDs correctly specify
-sRGB. The pinned Cesium consumer chooses UNORM ASTC while ignoring the DFD
-transfer function, so its high-contrast linear-light colour filtering fails.
+sRGB. The pinned Cesium consumer chooses UNORM while ignoring the DFD transfer
+function, so its high-contrast linear-light colour filtering fails. H19 reproduced
+this on ASTC, BC7 and ETC2; a generic uncompressed KTX2 path also fails in a
+diagnostic outside the legal Basis glTF binding. Matching sRGB targets remove the
+measured texture-sampling error. A full material fix must coordinate hardware
+transfer with Cesium's existing post-sample decode to avoid double conversion.
+The draft investigation is retained at
+`~/.cache/rusty-tiles-evidence/h19-cesium-srgb-scope-20261013/report.md`, SHA-256
+`4ca7085ed6317de75709283d0eb9b9ea96640df4353b3705d1734ce4595d89c0`.
 That compatibility failure is retained; no producer compensation or relaxed
 floor was added. Numeric source picking and normalized reflected-source model
 checks pass separately. No general renderer, geographic RTC, continuous normal
@@ -104,8 +113,23 @@ budget retry checks, five-slot KTX DFD checks and a nonignored current-productio
 128x128 per-class/profile/every-level codec gate. Passing policy probes now run
 in CI; the abandoned 16-violation policy is explicitly a historical diagnostic.
 The focused suite passes and executed seam, fidelity-retry and colour-transfer
-mutants fail their ordinary tests. Final-source checks after rebasing remain
-pending; the producer-acceptance manifest above describes the prior baseline.
+mutants fail their ordinary tests.
+[review-fixes-acceptance.json](review-fixes-acceptance.json) binds these fixes,
+executed source `87cfb9b`, equivalent rebased source `efd084c`, and their exact
+receipts. The rebase onto `820256b` adds only upstream bench files; all 264
+recorded compiled source files retain identical hashes.
+
+The native library suite passes 830 tests; both all-target Clippy configurations
+pass. The full portable invocation records 762 passes and one spill VmHWM
+assertion failure. That same test passes in isolation without a source or
+threshold change; the failed invocation remains preserved. This is not reported
+as an entirely green portable run. The installed wheel and checksum-pinned
+official Blender 4.5.14 each pass 46 API tests. Licence notices pass. The new
+binary reproduces all fifteen accepted explicit-filter artifacts with complete
+GLB byte identity; a fresh authored-omission witness emits minFilter9987 and is
+byte-identical to its accepted explicit9987 counterpart. The old scale/resource
+runs remain the separate producer baseline and were not repeated with this
+review-fix binary.
 
 An unspecified source minFilter now resolves to explicit LINEAR_MIPMAP_LINEAR
 (9987), so conforming viewers use authored chains. Explicit source filters remain
@@ -114,3 +138,12 @@ PNG, viewer-generated coarse mips can also blend neighbouring packed crops:
 level-zero exactness does not prevent this distant minification bleed. The
 nonconstant 128x128 codec witness extends current-CI coverage; nonconstant D2
 and NPOT end-to-end artifacts remain a milestone-4 gate.
+
+H4's source-bound metadata diagnosis identifies a separate consumer integration
+gate: Cesium's structural-property texture width equals table rows and can exceed
+the pinned device's 8192 limit at H8's maximum leaf size. UINT64 scalar columns
+still use that GPU path through downcasting; CPU source provenance must remain
+exact. Planned per-primitive/table partitions and actual property/picking checks
+belong to the follow-up. This is a forward compatibility risk, rather than a new
+executed H8 browser failure. H16 must consume frozen leaves without late splits
+or lattice changes.
