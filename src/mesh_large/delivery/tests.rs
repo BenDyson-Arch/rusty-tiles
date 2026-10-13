@@ -936,9 +936,8 @@ fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usi
 /// The real chain: H8 leaves (balanced, quantized positions, a synthetic run below depth
 /// 21) with jobs 1 and 2 and separate scratch, published by H16: identical archives, every
 /// property table within the consumer limit, accepted by the merged validator. The textured
-/// balanced leaves (KTX2) publish too, but the merged C1 payload profile does not admit a
-/// required `KHR_texture_basisu`, so the validator reports them Unsupported: a validator
-/// follow-up, pinned here so it is noticed when it changes.
+/// balanced leaves (KTX2, required `KHR_texture_basisu`) publish too and validate with
+/// containment, their KTX2 containers checked by C1.
 #[test]
 fn real_leaves_from_h8_publish_deterministically_and_validate() {
     use crate::{LeafOutputRequest, LeafProfile};
@@ -1001,13 +1000,15 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
     }
     let output = publish(&textured, 1, "textured");
     assert_eq!(leaf_tables_within_consumer_limit(&members(&output)), 2);
-    let failure = inspect(ValidationRequest::new(&output)).unwrap_err();
-    assert!(
-        failure
-            .to_string()
-            .contains("required extension KHR_texture_basisu"),
-        "{failure}"
-    );
+    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    assert!(checked
+        .checks
+        .iter()
+        .any(|c| c == "decodedContentContainment"));
+    assert!(checked
+        .not_inspected
+        .iter()
+        .any(|c| c == "KTX2 level data and transcoding"));
 }
 
 /// GLB bounds: quantized TRS nodes are bounded outward in exact arithmetic and taken to the
