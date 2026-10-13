@@ -56,8 +56,9 @@ enum Command {
         output: PathBuf,
         #[arg(long, default_value = "balanced", value_parser = ["fast", "balanced", "quality", "lossless"])]
         profile: String,
-        #[arg(long, default_value = "2")]
-        jobs: std::num::NonZeroUsize,
+        /// Worker count, or `auto` for the memory-aware plan.
+        #[arg(long, default_value = "auto", value_parser = parse_jobs)]
+        jobs: JobsArg,
         #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
         scratch_dir: Option<PathBuf>,
     },
@@ -1089,6 +1090,19 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     lines
 }
 
+/// `auto` (memory-aware) or an explicit positive worker count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct JobsArg(Option<std::num::NonZeroUsize>);
+fn parse_jobs(value: &str) -> Result<JobsArg, String> {
+    if value == "auto" {
+        return Ok(JobsArg(None));
+    }
+    value
+        .parse()
+        .map(|n| JobsArg(Some(n)))
+        .map_err(|_| format!("expected `auto` or a positive integer, got `{value}`"))
+}
+
 fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
@@ -1107,7 +1121,10 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 "quality" => LeafProfile::Quality,
                 _ => LeafProfile::Lossless,
             };
-            let mut request = LeafOutputRequest::new(input, output, profile).with_jobs(jobs);
+            let mut request = LeafOutputRequest::new(input, output, profile);
+            if let JobsArg(Some(jobs)) = jobs {
+                request = request.with_jobs(jobs);
+            }
             if let Some(path) = scratch_dir {
                 request = request.with_scratch_dir(path);
             }
@@ -1739,6 +1756,34 @@ mod tests {
             "auto"
         ])
         .is_err());
+    }
+
+    #[test]
+    fn mesh_leaf_payload_jobs_default_to_auto_and_accept_counts() {
+        let parse = |extra: &[&str]| {
+            let mut args = vec![
+                "rusty-tiles",
+                "mesh-leaf-payloads",
+                "-i",
+                "a.glb",
+                "-o",
+                "out",
+            ];
+            args.extend_from_slice(extra);
+            match Cli::try_parse_from(args).map(|cli| cli.command) {
+                Ok(Command::MeshLeafPayloads { jobs, .. }) => Ok(jobs),
+                Ok(_) => panic!("wrong command"),
+                Err(error) => Err(error),
+            }
+        };
+        assert_eq!(parse(&[]).unwrap(), JobsArg(None));
+        assert_eq!(parse(&["--jobs", "auto"]).unwrap(), JobsArg(None));
+        assert_eq!(
+            parse(&["--jobs", "3"]).unwrap(),
+            JobsArg(std::num::NonZeroUsize::new(3))
+        );
+        assert!(parse(&["--jobs", "0"]).is_err());
+        assert!(parse(&["--jobs", "many"]).is_err());
     }
 
     #[test]
