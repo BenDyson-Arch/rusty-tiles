@@ -62,7 +62,10 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    removed it. After a round without such failures the frontier audit (stage 9)
    runs; an unmatched seam edge adds its tile's removed seam vertices to the keep
    set the same way. Keeping a vertex on every sharing tile always agrees, so the
-   rounds converge (at most 16; otherwise `InvalidState`, never a hole).
+   rounds converge (at most 16; otherwise `InvalidState`, never a hole). Rounds run
+   stages 2-6 only; once the depth agrees, one finishing pass certifies, fills,
+   encodes and writes every tile with the final keep set (fills never touch a seam
+   vertex, so the audited seam edges are the published ones).
 6. **Simplification.** Half-edge collapse (QEM, strict cost order with key
    ties) onto existing source vertices to `P = 8192` faces: labels preserved, no
    primitive loses its last face, no vertex is orphaned, link and fold checks,

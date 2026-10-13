@@ -773,7 +773,12 @@ fn primitives(mesh: &KeyMesh, faces: &[Face], origins: &[KeyFace]) -> Vec<ProxyP
     out
 }
 
-fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, JobError> {
+fn process(
+    ctx: &Ctx,
+    job: &Job,
+    keep_extra: &BTreeSet<Key>,
+    full: bool,
+) -> Result<Outcome, JobError> {
     (ctx.check)()?;
     let mut clock = std::time::Instant::now();
     let node = &job.node;
@@ -944,6 +949,14 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     }
     if s_faces.is_empty() {
         return Err(state(format!("coarse tile f{}-d{d} simplified to nothing", node.first)));
+    }
+    if !full {
+        // Topology pass: the seam edges are all the depth audit needs (fills never touch a
+        // seam vertex, so the finishing pass publishes the same seam edges).
+        out.seams = seam_edges(ctx, &mesh, &s_faces, node.first, d)?;
+        lap(&mut phases[2]);
+        out.phases = phases;
+        return Ok(out);
     }
     // Accounting: every label of T is present in S or recorded as vanished.
     let present: BTreeSet<u32> = s_faces.iter().map(|f| f.label).collect();
@@ -1270,37 +1283,6 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
         }
     }
 
-    // Seam edges for the depth audit: border edges with both endpoints cut.
-    let mut count: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    for f in &final_order {
-        for k in 0..3 {
-            let (a, b) = (f.v[k], f.v[(k + 1) % 3]);
-            if a != b {
-                *count.entry((a.min(b), a.max(b))).or_default() += 1;
-            }
-        }
-    }
-    for ((a, b), n) in count {
-        let (va, vb) = (mesh.vertices[a as usize], mesh.vertices[b as usize]);
-        if n != 1 || !va.info.cut(d) || !vb.info.cut(d) {
-            continue;
-        }
-        let (lo, hi) = if va.key <= vb.key { (va, vb) } else { (vb, va) };
-        let dec = |v: &mesh::Vertex| -> Result<[u32; 3], JobError> {
-            Ok(decode_vertex(ctx.lattice, v.key, v.info.ell, d)?.map(f32::to_bits))
-        };
-        out.seams.push(SeamEdge {
-            lo: lo.key,
-            hi: hi.key,
-            owner: node.first,
-            owner_depth: d as u8,
-            lo_dec: dec(&lo)?,
-            hi_dec: dec(&hi)?,
-            special: lo.info.special && hi.info.special,
-            round: 0,
-        });
-    }
-
     // Sidecar (key space, GLB face order) and the published member.
     let mut used: BTreeMap<u32, u32> = BTreeMap::new();
     let mut vertices = Vec::new();
@@ -1367,6 +1349,47 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     });
     lap(&mut phases[6]);
     out.phases = phases;
+    Ok(out)
+}
+
+/// Border edges of a depth-`d` proxy with both endpoints seam vertices, for the audit.
+fn seam_edges(
+    ctx: &Ctx,
+    mesh: &KeyMesh,
+    faces: &[Face],
+    owner: u64,
+    d: u32,
+) -> Result<Vec<SeamEdge>, JobError> {
+    let mut count: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    for f in faces {
+        for k in 0..3 {
+            let (a, b) = (f.v[k], f.v[(k + 1) % 3]);
+            if a != b {
+                *count.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for ((a, b), n) in count {
+        let (va, vb) = (mesh.vertices[a as usize], mesh.vertices[b as usize]);
+        if n != 1 || !va.info.cut(d) || !vb.info.cut(d) {
+            continue;
+        }
+        let (lo, hi) = if va.key <= vb.key { (va, vb) } else { (vb, va) };
+        let dec = |v: &mesh::Vertex| -> Result<[u32; 3], JobError> {
+            Ok(decode_vertex(ctx.lattice, v.key, v.info.ell, d)?.map(f32::to_bits))
+        };
+        out.push(SeamEdge {
+            lo: lo.key,
+            hi: hi.key,
+            owner,
+            owner_depth: d as u8,
+            lo_dec: dec(&lo)?,
+            hi_dec: dec(&hi)?,
+            special: lo.info.special && hi.info.special,
+            round: 0,
+        });
+    }
     Ok(out)
 }
 
@@ -1626,6 +1649,11 @@ pub(crate) fn produce(
         let relabel = input.mutation == Mutation::CrackAsHole;
         let mut round = 0u8;
         let mut selected: Option<BTreeSet<u64>> = None;
+        // Rounds run the topology pass only (children, islands, seams, simplification, seam
+        // edges); once the depth agrees, one finishing pass certifies, fills, encodes and
+        // writes every tile with the final keep set.
+        let mut finishing = false;
+        let mut final_counts: Option<AuditCounts> = None;
         let counts = loop {
             // List this depth's internal tiles (all, or the re-run selection) and their
             // children from the preorder stream, and process them in windows.
@@ -1647,10 +1675,17 @@ pub(crate) fn produce(
                 }
                 let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
                     use rayon::prelude::*;
-                    window.par_iter().map(|job| process(&ctx, job, &keep)).collect()
+                    window.par_iter().map(|job| process(&ctx, job, &keep, finishing)).collect()
                 });
                 for (job, outcome) in window.iter().zip(outcomes) {
                     let mut o = outcome?;
+                    if finishing {
+                        if !o.failed_keys.is_empty() {
+                            return Err(state("a finishing tile disagreed with its topology pass"));
+                        }
+                        done.insert(job.node.first, Done(o));
+                        continue;
+                    }
                     for mut e in std::mem::take(&mut o.seams) {
                         e.round = round;
                         seam_log.push(&e)?;
@@ -1662,7 +1697,6 @@ pub(crate) fn produce(
                     }
                     failed.extend(std::mem::take(&mut o.failed_keys));
                     *runs += 1;
-                    done.insert(job.node.first, Done(o));
                 }
                 window.clear();
                 Ok(())
@@ -1676,7 +1710,7 @@ pub(crate) fn produce(
                     if fact.first != n.first {
                         return Err(state("leaf facts out of tree order"));
                     }
-                    if round == 0 && n.depth() <= d {
+                    if round == 0 && !finishing && n.depth() <= d {
                         leaf_seams(&source, &captured.lattice, &n, d, &mut seam_log)?;
                     }
                     if n.depth() == d + 1 {
@@ -1714,6 +1748,9 @@ pub(crate) fn produce(
                 window.push(job);
             }
             run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed, &mut report.tile_runs)?;
+            if finishing {
+                break final_counts.take().ok_or_else(|| state("finished without an audit"))?;
+            }
             // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
             // seam edge without a partner keeps every seam vertex its tile removed. Kept
             // vertices are kept by every tile sharing them (each re-runs), which always
@@ -1738,7 +1775,10 @@ pub(crate) fn produce(
                 let counts = audit(sorter.finish()?, d, relabel)?;
                 report.audit_seconds += audit_started.elapsed().as_secs_f64();
                 if counts.unmatched.is_empty() {
-                    break counts;
+                    final_counts = Some(counts);
+                    finishing = true;
+                    selected = None;
+                    continue;
                 }
                 let owners: BTreeSet<u64> = counts
                     .unmatched
