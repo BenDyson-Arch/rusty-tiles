@@ -297,6 +297,67 @@ impl Record for ForcedKey {
     }
 }
 
+/// A maximal run of consecutive source ranks `[start, end)` of one source primitive: the
+/// bake handoff's donor-range index (built once, read per tile by binary search).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct DonorRun {
+    start: u64,
+    end: u64,
+    key: (u32, u32, u32),
+}
+impl Record for DonorRun {
+    const SIZE: usize = 28;
+    fn encode(&self, out: &mut [u8]) {
+        out[..8].copy_from_slice(&self.start.to_le_bytes());
+        out[8..16].copy_from_slice(&self.end.to_le_bytes());
+        out[16..20].copy_from_slice(&self.key.0.to_le_bytes());
+        out[20..24].copy_from_slice(&self.key.1.to_le_bytes());
+        out[24..28].copy_from_slice(&self.key.2.to_le_bytes());
+    }
+    fn decode(b: &[u8]) -> Self {
+        let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        Self {
+            start: u64::from_le_bytes(b[..8].try_into().unwrap()),
+            end: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            key: (u(16), u(20), u(24)),
+        }
+    }
+}
+
+/// The run-length index of source primitives over ranks (one pass, cancellable).
+fn donor_runs(
+    scratch: &Scratch,
+    source: &Sequence<LodSource>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Sequence<DonorRun>, JobError> {
+    let mut out =
+        crate::spill::SequenceWriter::<DonorRun>::new(scratch, "lod-donor-runs", 1 << 16)?;
+    let mut run: Option<DonorRun> = None;
+    for (rank, s) in (0u64..).zip(source.reader()?) {
+        let key = s?.primitive_key();
+        if rank.is_multiple_of(1 << 16) {
+            check()?;
+        }
+        match &mut run {
+            Some(r) if r.key == key => r.end = rank + 1,
+            _ => {
+                if let Some(r) = run.take() {
+                    out.push(&r)?;
+                }
+                run = Some(DonorRun {
+                    start: rank,
+                    end: rank + 1,
+                    key,
+                });
+            }
+        }
+    }
+    if let Some(r) = run {
+        out.push(&r)?;
+    }
+    Ok(out.finish()?)
+}
+
 /// What the LOD stage reports into the leaf manifest.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -411,6 +472,8 @@ struct Ctx<'a> {
     check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
     /// The bake handoff sink, when a bake pass will consume the tiles.
     handoff: Option<&'a handoff::HandoffSink>,
+    /// Source-primitive runs over ranks (present with `handoff`).
+    donor_runs: Option<&'a Sequence<DonorRun>>,
     profile: String,
     lattice_sha256: String,
 }
@@ -1663,13 +1726,41 @@ fn frozen_packet(
         .enumerate()
         .map(|(i, p)| ((p.node, p.mesh, p.primitive), i as u32))
         .collect();
-    for (rank, s) in (node.first..).zip(ctx.source.range(node.first, node.end, 1 << 16)?) {
-        let s = s?;
-        if let Some(&i) = by_key.get(&s.primitive_key()) {
+    // Donor ranges from the run index: binary search for the first run reaching past
+    // `first`, then the runs overlapping `[first, end)` only (cost O(log R + runs in range),
+    // cancellable), each clipped to the tile.
+    let runs = ctx
+        .donor_runs
+        .ok_or_else(|| state("bake handoff without its donor-run index"))?;
+    let run_at = |i: u64| -> Result<DonorRun, JobError> {
+        runs.range(i, i + 1, DonorRun::SIZE)?
+            .next()
+            .ok_or_else(|| state("donor-run index ends early"))?
+            .map_err(JobError::from)
+    };
+    let (mut lo, mut hi) = (0u64, runs.len());
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if run_at(mid)?.end <= node.first {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (k, run) in (0u64..).zip(runs.range(lo, runs.len(), 1 << 16)?) {
+        let run = run?;
+        if run.start >= node.end {
+            break;
+        }
+        if k.is_multiple_of(1 << 12) {
+            (ctx.check)()?;
+        }
+        if let Some(&i) = by_key.get(&run.key) {
+            let piece = run.start.max(node.first)..run.end.min(node.end);
             let ranges = &mut primitives[i as usize].donor_ranges;
             match ranges.last_mut() {
-                Some(r) if r.end == rank => r.end = rank + 1,
-                _ => ranges.push(rank..rank + 1),
+                Some(r) if r.end == piece.start => r.end = piece.end,
+                _ => ranges.push(piece),
             }
         }
     }
@@ -2224,6 +2315,10 @@ pub(crate) fn produce(
         .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
+    let runs = match input.handoff {
+        Some(_) => Some(donor_runs(input.scratch, &source, check)?),
+        None => None,
+    };
     let ctx = Ctx {
         stage: input.stage,
         sidecars: &sidecars,
@@ -2237,6 +2332,7 @@ pub(crate) fn produce(
         ar: Arith::new(input.mutation),
         check,
         handoff: input.handoff,
+        donor_runs: runs.as_ref(),
         profile: serde_json::to_value(captured.lattice.profile())
             .ok()
             .and_then(|v| v.as_str().map(str::to_owned))
