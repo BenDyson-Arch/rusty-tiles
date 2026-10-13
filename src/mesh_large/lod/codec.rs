@@ -24,6 +24,9 @@ pub(crate) struct DecodedFace {
     pub raw: [[u32; 3]; 3],
     /// The decoded glTF primitive this face belongs to (index into `Decoded::primitives`).
     pub primitive: u32,
+    /// Every feature-ID set has the same value at the face's three corners (`features`
+    /// holds corner 0's).
+    pub uniform_features: bool,
 }
 
 /// One decoded glTF primitive: its scene node TRS bits and declared feature-ID sets.
@@ -352,6 +355,9 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
                     features: sets.iter().map(|(v, table)| (v[t[0]], *table)).collect(),
                     raw: [raw[t[0]], raw[t[1]], raw[t[2]]],
                     primitive: primitive_slot,
+                    uniform_features: sets
+                        .iter()
+                        .all(|(v, _)| v[t[0]] == v[t[1]] && v[t[1]] == v[t[2]]),
                 });
             }
         }

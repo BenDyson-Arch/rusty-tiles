@@ -17,7 +17,7 @@ use super::{
     leaves::prepared::{PreencodeLevel, PreencodePage, PreparedAtlas},
     lod::{
         codec,
-        handoff::{FrozenNode, HandoffSink},
+        handoff::{FrozenNode, HandoffSink, ScratchBudget},
         mesh::Origin,
     },
 };
@@ -76,15 +76,200 @@ pub(in crate::mesh_large) struct LeafPreencode {
 
 #[derive(Serialize, Deserialize)]
 struct LeafHead {
+    /// The accepted density attempt (its page files are kept).
+    drop: u32,
+    /// Page metadata (pixel buffers live in the page files).
     pages: Vec<PreencodePage>,
     primitives: Vec<LeafPrimitivePreencode>,
     textures: Vec<Value>,
     samplers: Vec<Value>,
 }
 
-impl LeafPreencode {
-    fn from_atlas(atlas: &PreparedAtlas) -> Self {
-        Self {
+const PAGE_MAGIC: &[u8; 8] = b"H17PAG\x01\0";
+const LEAF_MAGIC: &[u8; 8] = b"H17PRE\x02\0";
+
+/// A page's pixel bytes: every level's RGBA, then the support mask as u32 LE.
+fn page_pixel_bytes(page: &PreencodePage) -> u64 {
+    page.levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>()
+        + page.support.as_ref().map_or(0, |s| 4 * s.len() as u64)
+}
+
+/// Metadata of a page: its pixel buffers emptied (`support` stays `Some` when present).
+fn page_metadata(page: &PreencodePage) -> PreencodePage {
+    PreencodePage {
+        page: page.page,
+        slot: page.slot.clone(),
+        class: page.class.clone(),
+        width: page.width,
+        height: page.height,
+        levels: page
+            .levels
+            .iter()
+            .map(|l| PreencodeLevel {
+                width: l.width,
+                height: l.height,
+                rgba: Vec::new(),
+            })
+            .collect(),
+        support: page.support.as_ref().map(|_| Vec::new()),
+        min_filter: page.min_filter,
+        mag_filter: page.mag_filter,
+        density_drop: page.density_drop,
+        source_mips: page.source_mips,
+    }
+}
+
+/// Fill a page's metadata with the pixel bytes of its page file.
+fn read_page_pixels(mut page: PreencodePage, b: &[u8]) -> Result<PreencodePage, JobError> {
+    let bad = || state("retained pre-encode page is corrupt");
+    if b.get(..8) != Some(PAGE_MAGIC) {
+        return Err(bad());
+    }
+    let mut at = 8usize;
+    let mut take = |len: usize| -> Result<&[u8], JobError> {
+        let end = at.checked_add(len).ok_or_else(bad)?;
+        let bytes = b.get(at..end).ok_or_else(bad)?;
+        at = end;
+        Ok(bytes)
+    };
+    for l in &mut page.levels {
+        let len = (l.width as usize)
+            .checked_mul(l.height as usize)
+            .and_then(|x| x.checked_mul(4))
+            .ok_or_else(bad)?;
+        l.rgba = take(len)?.to_vec();
+    }
+    if page.support.is_some() {
+        let len = (page.width as usize)
+            .checked_mul(page.height as usize)
+            .and_then(|x| x.checked_mul(4))
+            .ok_or_else(bad)?;
+        page.support = Some(
+            take(len)?
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c))
+                .collect(),
+        );
+    }
+    if at != b.len() {
+        return Err(bad());
+    }
+    Ok(page)
+}
+
+/// Owned scratch for pre-encode appearance: accepted leaf packets (written by H8 while
+/// encoding) and bake-produced proxy packets (opaque to the root), each kept until its
+/// parent has consumed it. Every byte is charged against `limit`.
+pub(in crate::mesh_large) struct PreencodeStore {
+    dir: PathBuf,
+    budget: std::sync::Arc<ScratchBudget>,
+    live: AtomicU64,
+    peak: AtomicU64,
+    /// Per in-flight leaf, the `(drop, page)` files written by its density attempts; the
+    /// accepted attempt's are kept by [`PreencodeStore::write_leaf`], the others removed.
+    attempts: std::sync::Mutex<std::collections::BTreeMap<u64, Vec<(u32, u32)>>>,
+}
+
+impl PreencodeStore {
+    pub(in crate::mesh_large) fn new(
+        dir: PathBuf,
+        budget: std::sync::Arc<ScratchBudget>,
+    ) -> Result<Self, JobError> {
+        fs::create_dir_all(&dir).map_err(|e| JobError::io("create pre-encode store", &dir, e))?;
+        Ok(Self {
+            dir,
+            budget,
+            live: AtomicU64::new(0),
+            peak: AtomicU64::new(0),
+            attempts: Default::default(),
+        })
+    }
+    fn charge(&self, size: u64) -> Result<(), JobError> {
+        self.budget.charge(size, "retained pre-encode appearance")?;
+        let live = self.live.fetch_add(size, Ordering::Relaxed) + size;
+        self.peak.fetch_max(live, Ordering::Relaxed);
+        Ok(())
+    }
+    fn put(&self, path: &Path, bytes: &[u8]) -> Result<(), JobError> {
+        self.charge(bytes.len() as u64)?;
+        crate::spill::preflight(
+            &self.dir,
+            bytes.len() as u64,
+            crate::spill::SpaceRole::Scratch,
+            crate::spill::PreflightStage::Texture,
+        )?;
+        fs::write(path, bytes).map_err(|e| JobError::io("write pre-encode store", path, e))
+    }
+    fn remove(&self, path: &Path) -> Result<(), JobError> {
+        let size = fs::metadata(path)
+            .map_err(|e| JobError::io("inspect pre-encode store", path, e))?
+            .len();
+        fs::remove_file(path).map_err(|e| JobError::io("remove pre-encode store", path, e))?;
+        self.live.fetch_sub(size, Ordering::Relaxed);
+        self.budget.refund(size);
+        Ok(())
+    }
+    fn leaf_path(&self, index: u64) -> PathBuf {
+        self.dir.join(format!("leaf-{index:012}.pre"))
+    }
+    fn page_path(&self, index: u64, drop: u32, page: u32) -> PathBuf {
+        self.dir
+            .join(format!("leaf-{index:012}-d{drop}-p{page}.pag"))
+    }
+    fn proxy_path(&self, first: u64, depth: u32) -> PathBuf {
+        self.dir.join(format!("proxy-f{first}-d{depth}.pre"))
+    }
+    /// Spill one encoded page's pre-encode pixels while the page's memory lease is held
+    /// (no copy: streamed from `page`); returns its metadata for the leaf's atlas. Called
+    /// by H8 for every page of every density attempt of leaf `index`.
+    pub(in crate::mesh_large) fn write_page(
+        &self,
+        index: u64,
+        drop: u32,
+        page: &PreencodePage,
+    ) -> Result<PreencodePage, JobError> {
+        let path = self.page_path(index, drop, page.page);
+        let size = 8 + page_pixel_bytes(page);
+        self.charge(size)?;
+        crate::spill::preflight(
+            &self.dir,
+            size,
+            crate::spill::SpaceRole::Scratch,
+            crate::spill::PreflightStage::Texture,
+        )?;
+        let io = |e| JobError::io("write pre-encode page", &path, e);
+        let mut out = std::io::BufWriter::new(fs::File::create(&path).map_err(io)?);
+        out.write_all(PAGE_MAGIC).map_err(io)?;
+        for l in &page.levels {
+            out.write_all(&l.rgba).map_err(io)?;
+        }
+        if let Some(support) = &page.support {
+            for v in support {
+                out.write_all(&v.to_le_bytes()).map_err(io)?;
+            }
+        }
+        out.flush().map_err(io)?;
+        self.attempts
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .entry(index)
+            .or_default()
+            .push((drop, page.page));
+        Ok(page_metadata(page))
+    }
+    /// Record a leaf's ACCEPTED density attempt: its head (page metadata, primitives,
+    /// textures, samplers; no pixels) is written, the attempt's page files are kept and every
+    /// other attempt's page files are removed.
+    pub(in crate::mesh_large) fn write_leaf(
+        &self,
+        index: u64,
+        drop: u32,
+        atlas: &PreparedAtlas,
+    ) -> Result<(), JobError> {
+        let head = serde_json::to_vec(&LeafHead {
+            drop,
             pages: atlas.preencode.clone(),
             primitives: atlas
                 .primitives
@@ -105,159 +290,74 @@ impl LeafPreencode {
                 .collect(),
             textures: atlas.textures.clone(),
             samplers: atlas.samplers.clone(),
-        }
-    }
-
-    /// Page texels are written raw after a JSON head (no text-encoded pixels).
-    fn encode(&self) -> Result<Vec<u8>, JobError> {
-        let mut pages = self.pages.clone();
-        let mut blob: Vec<u8> = Vec::new();
-        for p in &mut pages {
-            for l in &mut p.levels {
-                blob.extend_from_slice(&std::mem::take(&mut l.rgba));
-            }
-            if let Some(support) = &mut p.support {
-                for v in std::mem::take(support) {
-                    blob.extend_from_slice(&v.to_le_bytes());
-                }
-            }
-        }
-        let head = serde_json::to_vec(&LeafHead {
-            pages,
-            primitives: self.primitives.clone(),
-            textures: self.textures.clone(),
-            samplers: self.samplers.clone(),
         })
         .map_err(|e| state(e.to_string()))?;
-        let mut out = Vec::with_capacity(16 + head.len() + blob.len());
-        out.extend_from_slice(b"H17PRE\x01\0");
-        out.extend_from_slice(&(head.len() as u64).to_le_bytes());
-        out.extend_from_slice(&head);
-        out.extend_from_slice(&blob);
-        Ok(out)
+        let mut bytes = Vec::with_capacity(16 + head.len());
+        bytes.extend_from_slice(LEAF_MAGIC);
+        bytes.extend_from_slice(&(head.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&head);
+        self.put(&self.leaf_path(index), &bytes)?;
+        let attempts = self
+            .attempts
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&index)
+            .unwrap_or_default();
+        let kept: std::collections::BTreeSet<u32> =
+            atlas.preencode.iter().map(|p| p.page).collect();
+        for (d, page) in attempts {
+            if d != drop {
+                self.remove(&self.page_path(index, d, page))?;
+            } else if !kept.contains(&page) {
+                return Err(state("a retained page is not in its accepted leaf"));
+            }
+        }
+        for page in &kept {
+            if !self.page_path(index, drop, *page).exists() {
+                return Err(state("an accepted leaf page was not retained"));
+            }
+        }
+        Ok(())
     }
-
-    fn decode(b: &[u8]) -> Result<Self, JobError> {
+    pub(in crate::mesh_large) fn read_leaf(&self, index: u64) -> Result<LeafPreencode, JobError> {
+        let path = self.leaf_path(index);
+        let b = fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))?;
         let bad = || state("retained pre-encode packet is corrupt");
-        if b.get(..8) != Some(b"H17PRE\x01\0") {
+        if b.get(..8) != Some(LEAF_MAGIC) {
             return Err(bad());
         }
         let n = u64::from_le_bytes(b.get(8..16).ok_or_else(bad)?.try_into().unwrap()) as usize;
-        let mut head: LeafHead =
-            serde_json::from_slice(b.get(16..16 + n).ok_or_else(bad)?).map_err(|_| bad())?;
-        let mut at = 16 + n;
-        for p in &mut head.pages {
-            for l in &mut p.levels {
-                let len = (l.width as usize)
-                    .checked_mul(l.height as usize)
-                    .and_then(|x| x.checked_mul(4))
-                    .ok_or_else(bad)?;
-                l.rgba = b.get(at..at + len).ok_or_else(bad)?.to_vec();
-                at += len;
-            }
-            if p.support.is_some() {
-                let len = p.width as usize * p.height as usize;
-                let raw = b.get(at..at + 4 * len).ok_or_else(bad)?;
-                p.support = Some(
-                    raw.as_chunks::<4>()
-                        .0
-                        .iter()
-                        .map(|c| u32::from_le_bytes(*c))
-                        .collect(),
-                );
-                at += 4 * len;
-            }
-        }
-        if at != b.len() {
+        if 16usize.checked_add(n) != Some(b.len()) {
             return Err(bad());
         }
-        Ok(Self {
-            pages: head.pages,
+        let head: LeafHead = serde_json::from_slice(&b[16..]).map_err(|_| bad())?;
+        let mut pages = Vec::with_capacity(head.pages.len());
+        for page in head.pages {
+            let path = self.page_path(index, head.drop, page.page);
+            let bytes =
+                fs::read(&path).map_err(|e| JobError::io("read pre-encode page", &path, e))?;
+            pages.push(read_page_pixels(page, &bytes)?);
+        }
+        Ok(LeafPreencode {
+            pages,
             primitives: head.primitives,
             textures: head.textures,
             samplers: head.samplers,
         })
     }
-}
-
-/// Owned scratch for pre-encode appearance: accepted leaf packets (written by H8 while
-/// encoding) and bake-produced proxy packets (opaque to the root), each kept until its
-/// parent has consumed it. Every byte is charged against `limit`.
-pub(in crate::mesh_large) struct PreencodeStore {
-    dir: PathBuf,
-    limit: u64,
-    live: AtomicU64,
-    peak: AtomicU64,
-}
-
-impl PreencodeStore {
-    pub(in crate::mesh_large) fn new(dir: PathBuf, limit: u64) -> Result<Self, JobError> {
-        fs::create_dir_all(&dir).map_err(|e| JobError::io("create pre-encode store", &dir, e))?;
-        Ok(Self {
-            dir,
-            limit,
-            live: AtomicU64::new(0),
-            peak: AtomicU64::new(0),
-        })
-    }
-    fn charge(&self, size: u64) -> Result<(), JobError> {
-        let live = self.live.fetch_add(size, Ordering::Relaxed) + size;
-        if live > self.limit {
-            self.live.fetch_sub(size, Ordering::Relaxed);
-            return Err(JobError::new(
-                JobErrorKind::ResourceLimit,
-                format!(
-                    "retained pre-encode appearance exceeds its {} byte allowance",
-                    self.limit
-                ),
-            ));
-        }
-        self.peak.fetch_max(live, Ordering::Relaxed);
-        Ok(())
-    }
-    fn put(&self, path: &Path, bytes: &[u8]) -> Result<(), JobError> {
-        self.charge(bytes.len() as u64)?;
-        crate::spill::preflight(
-            &self.dir,
-            bytes.len() as u64,
-            crate::spill::SpaceRole::Scratch,
-            crate::spill::PreflightStage::Texture,
-        )?;
-        fs::write(path, bytes).map_err(|e| JobError::io("write pre-encode store", path, e))
-    }
-    fn remove(&self, path: &Path) -> Result<(), JobError> {
-        let size = fs::metadata(path)
-            .map_err(|e| JobError::io("inspect pre-encode store", path, e))?
-            .len();
-        fs::remove_file(path).map_err(|e| JobError::io("remove pre-encode store", path, e))?;
-        self.live.fetch_sub(size, Ordering::Relaxed);
-        Ok(())
-    }
-    fn leaf_path(&self, index: u64) -> PathBuf {
-        self.dir.join(format!("leaf-{index:012}.pre"))
-    }
-    fn proxy_path(&self, first: u64, depth: u32) -> PathBuf {
-        self.dir.join(format!("proxy-f{first}-d{depth}.pre"))
-    }
-    /// Record a leaf's accepted pages (called once, for the accepted density attempt).
-    pub(in crate::mesh_large) fn write_leaf(
-        &self,
-        index: u64,
-        atlas: &PreparedAtlas,
-    ) -> Result<(), JobError> {
-        self.put(
-            &self.leaf_path(index),
-            &LeafPreencode::from_atlas(atlas).encode()?,
-        )
-    }
-    pub(in crate::mesh_large) fn read_leaf(&self, index: u64) -> Result<LeafPreencode, JobError> {
-        let path = self.leaf_path(index);
-        LeafPreencode::decode(
-            &fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))?,
-        )
-    }
     pub(in crate::mesh_large) fn release_leaf(&self, index: u64) -> Result<(), JobError> {
-        self.remove(&self.leaf_path(index))
+        let path = self.leaf_path(index);
+        let b = fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))?;
+        let n = b
+            .get(8..16)
+            .map(|x| u64::from_le_bytes(x.try_into().unwrap()) as usize)
+            .ok_or_else(|| state("retained pre-encode packet is corrupt"))?;
+        let head: LeafHead = serde_json::from_slice(b.get(16..16 + n).unwrap_or_default())
+            .map_err(|_| state("retained pre-encode packet is corrupt"))?;
+        for page in &head.pages {
+            self.remove(&self.page_path(index, head.drop, page.page))?;
+        }
+        self.remove(&path)
     }
     /// A bake-produced proxy packet (pages + source support), opaque to the root.
     pub(in crate::mesh_large) fn write_proxy(
@@ -336,7 +436,10 @@ pub(in crate::mesh_large) struct PreparedNode {
     pub images: Vec<PreparedImage>,
 }
 
-/// The decoded identity of one face of an assembled member, read back from its bytes.
+/// The decoded identity of one face of an assembled member, read back from its bytes:
+/// geometry from POSITION, `source`/`material` from its `source_primitive` row (set 0) and
+/// `origin` from that row plus its `proxy_source` row (set 1), each checked against the
+/// frozen packet.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::mesh_large) struct FaceIdentity {
     /// Frozen face index.
@@ -899,17 +1002,58 @@ fn verify(
             .iter()
             .map(|(id, t)| (*id, t.map(|t| t as u32)))
             .collect();
-        if features != face.features {
+        if features != face.features || !d.uniform_features {
             return Err(bad("feature ID or table link"));
         }
+        // Source primitive, material and source triangle as the member itself encodes them:
+        // the set-0 `source_primitive` row and the set-1 `proxy_source` row.
+        let row = |label: &str| -> Result<(&codec::Table, usize), JobError> {
+            let (row, table) = d
+                .feature(&decoded.tables, label)
+                .ok_or_else(|| bad(label))?;
+            Ok((&decoded.tables[table], row as usize))
+        };
+        let column = |(t, r): (&codec::Table, usize), name: &str| -> Result<u64, JobError> {
+            t.columns
+                .get(name)
+                .and_then(|c| c.get(r))
+                .copied()
+                .ok_or_else(|| bad(name))
+        };
+        let primitive = row("source_primitive")?;
+        let source = (
+            column(primitive, "node_index")? as u32,
+            column(primitive, "mesh_index")? as u32,
+            column(primitive, "primitive_index")? as u32,
+            column(primitive, "expanded_ordinal")?,
+        );
+        let material = column(primitive, "material_index")? as u32;
+        let triangle_row = row("proxy_source")?;
+        let triangle = if column(triangle_row, "fill")? != 0 {
+            u64::MAX
+        } else {
+            column(triangle_row, "triangle_index")?
+        };
+        let origin = Origin {
+            node: source.0,
+            mesh: source.1,
+            primitive: source.2,
+            triangle,
+        };
         let s = &frozen.primitives[face.source as usize];
+        if source != (s.node, s.mesh, s.primitive, s.expanded_ordinal)
+            || material != s.material
+            || origin != face.origin
+        {
+            return Err(bad("source primitive, material or origin"));
+        }
         identities.push(FaceIdentity {
             face: f,
             raw: d.raw,
             decoded: d.p.map(|q| q.map(f32::to_bits)),
-            origin: face.origin,
-            source: (s.node, s.mesh, s.primitive, s.expanded_ordinal),
-            material: s.material,
+            origin,
+            source,
+            material,
             features,
         });
     }
