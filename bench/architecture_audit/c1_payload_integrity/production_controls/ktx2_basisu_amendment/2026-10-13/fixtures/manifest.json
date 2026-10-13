@@ -4,7 +4,7 @@
   "rule": "C1 KHR_texture_basisu / KTX2 container amendment (2026-10-13)",
   "generatorSha256": "dd15678267c730208e33fa67a2174d3e16cd3464088a8b6d0d8a136c7610255f",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
-  "runnerSha256": "8bf5cf005e6cc27bbb1887672553e5c34397c1b87cfcbe5e3617b6dc68db5498",
+  "runnerSha256": "f24e93891571822dac3980ae175b16593053fee29b6d4ed61463357e1aaf4fda",
   "referencePins": {
     "files": [
       {
@@ -117,8 +117,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -126,14 +126,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -142,7 +143,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 1441,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd"
@@ -198,8 +261,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -207,14 +270,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -223,7 +287,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 1729,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "267b18c4badb42fb9739ef42b5e5cd9c2d95872e55ae298a82000fb402c33958"
@@ -279,8 +405,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -288,14 +414,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -304,7 +431,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 5377,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
@@ -360,8 +549,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -369,14 +558,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -385,7 +575,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 64181,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "e8dc335cc59f1ef969808f3394aab3bc945833b4e32e3781baa4e7e8e0d987f5"
@@ -441,8 +693,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -450,14 +702,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -466,7 +719,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 34897,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "d33fbcbb6676acc4d59c23ae28bfd4651d69d911a514f63a3bbb4e273d3c020b"
@@ -522,8 +837,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -531,14 +846,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -547,7 +863,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 1425,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "a474412a267bd9ab8c3558fb2a6b7bce4367ea09026bc3cbcf3aa50ab5a26c94"
@@ -603,8 +981,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -612,14 +990,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -628,7 +1007,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 1557,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fc21f2c39480383c7943733a18c5a543e89ecb7f035e9f97d501982a4948c8dd",
@@ -685,8 +1126,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -694,14 +1135,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -710,7 +1152,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 5329,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
@@ -767,8 +1271,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -776,14 +1280,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -792,7 +1297,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 5329,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"
@@ -849,8 +1416,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -858,14 +1425,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -874,7 +1442,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 1249,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "ef5cdf97044a8e8ffe8e56ac21b7d4732ff7b563805c82a2ac38f34f3398a9f9"
@@ -930,8 +1560,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -939,14 +1569,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -955,7 +1586,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 5321,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "61bf2f0d1bf6a28c5191fc275859a6c460d25a655b867e42d2a7f3637a4a8e1d"
@@ -1011,8 +1704,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 1096073,
@@ -1020,14 +1713,15 @@
           "references": 1096073,
           "totalPayloadElements": 140297360,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 1122378880,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -1036,7 +1730,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 8768585,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "scaled"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "scaled"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "scaled"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "scaled"
+            }
+          }
+        }
       },
       "imageSha256": [
         "effc0d8523ce4511113c22ab471361dd1565bcac8bc3820ae601fbf2085b0967"
@@ -1092,8 +1848,8 @@
           "jsonBytes": 8388608,
           "jsonDepth": 64,
           "memberBytes": 134217728,
-          "archiveStoredBytes": 1073741824,
-          "archiveEntries": 524288,
+          "archiveStoredBytes": null,
+          "archiveEntries": null,
           "accessorElements": 4000000,
           "documentDecodedBytes": 134217728,
           "hierarchyVisits": 262144,
@@ -1101,14 +1857,15 @@
           "references": 1048576,
           "totalPayloadElements": 16000000,
           "totalBytesRead": 2147483648,
-          "sourceArchiveBytes": 1073741824,
-          "centralDirectoryBytes": 33554432,
+          "sourceArchiveBytes": null,
+          "centralDirectoryBytes": null,
           "documentItems": 131072,
           "containmentSpanBits": 4096,
           "containmentWorkUnits": 536870912,
           "containmentBytesRead": 2147483648,
           "containmentDecodedBytes": 2147483648,
-          "containmentNodeDepth": 64
+          "containmentNodeDepth": 64,
+          "liveDocumentBytes": 268435456
         },
         "payloads": [
           {
@@ -1117,7 +1874,69 @@
             "primitivesChecked": 1,
             "vertices": 3
           }
-        ]
+        ],
+        "storedBytes": 5321,
+        "limitDerivation": {
+          "model": 1,
+          "budgets": {
+            "containmentBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentDecodedBytes": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            },
+            "containmentWorkUnits": {
+              "floor": 536870912,
+              "perStoredByte": [
+                128,
+                1
+              ],
+              "source": "floor"
+            },
+            "hierarchyVisits": {
+              "floor": 262144,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "references": {
+              "floor": 1048576,
+              "perStoredByte": [
+                1,
+                8
+              ],
+              "source": "floor"
+            },
+            "totalBytesRead": {
+              "floor": 2147483648,
+              "perStoredByte": [
+                4,
+                1
+              ],
+              "source": "floor"
+            },
+            "totalPayloadElements": {
+              "floor": 16000000,
+              "perStoredByte": [
+                16,
+                1
+              ],
+              "source": "floor"
+            }
+          }
+        }
       },
       "imageSha256": [
         "fdca34518a64017fc7c8e266c1fcb92f85cc5f2fb13605ea6c816455c4921c94"

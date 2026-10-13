@@ -1,0 +1,56 @@
+{
+  "record": "VS-C limits amendment of the C1 payload-control expectations (additive; inputs unchanged).",
+  "model": 1,
+  "bundles": [
+    {
+      "input": "legacy_unsupported_amendment/2026-10-13/corrected-205-legacy-fixtures.tar.gz",
+      "inputSha256": "7fe07fd1341d8fdbc743be9cb7cd0b1fa063731b5678621d652e799ad0101b8d",
+      "inputManifestSha256": "f4ce9c7bd60e7788ca9ec7d6af5c7edf20f08e2c2cc8f25ced32a2d2c9a01815",
+      "amended": "corrected-205-vsc-fixtures.tar.gz",
+      "amendedSha256": "229e97f7ce0e81b59cef5079106e47fec09320b4cdd63314098f4d845f4ca5e0",
+      "amendedManifestSha256": "3f248b5ed05d1b814dcbea71be6445066cabdaca0870345b21d446ed0c74e6ca",
+      "cases": 205,
+      "admittedAmended": 73,
+      "refusedUnchanged": 132,
+      "scaledBudgets": []
+    },
+    {
+      "input": "c2wb_cap_amendment/2026-10-12/polygon-sensitive-5-c2wb-fixtures.tar.gz",
+      "inputSha256": "d64eaf9ade5bb7b3dd5d73a5b2398a12083c2bc3ae948a3a250a07139971b25f",
+      "inputManifestSha256": "2d5d56c03526d50ecc864da16ae744ffa44efaa10e683c9fa4f7bdd40cda6ef8",
+      "amended": "polygon-sensitive-5-vsc-fixtures.tar.gz",
+      "amendedSha256": "f363386d920356499c823a9ded616e945061feb66f049cd5c600797b675478dc",
+      "amendedManifestSha256": "d0197d8501786535556ce806ec58523ba65d6a7a5a4ffdde176959f762827e67",
+      "cases": 5,
+      "admittedAmended": 1,
+      "refusedUnchanged": 4,
+      "scaledBudgets": []
+    }
+  ],
+  "lanes": [
+    {
+      "input": "c2wb_cap_amendment/2026-10-12/stride_controls",
+      "inputManifestSha256": "83ca40eb831ad802e1ce1fbbfb1b4ede45905761c305dd91821c8b58bd08d345",
+      "inputIntegritySha256": "e648bf40e2c8bfb9961efdf3c9d400907f9d68d75581bf91e093551e70605050",
+      "amended": "vs_c_limits_amendment/2026-10-14/stride_controls",
+      "amendedManifestSha256": "38d693ea276bbf9941738ab5ea21589442373daf8161fec4798475dcbd9abe07",
+      "cases": 6,
+      "admittedAmended": 4,
+      "refusedUnchanged": 2,
+      "scaledBudgets": []
+    },
+    {
+      "input": "meshopt_header_amendment/2026-10-12",
+      "inputManifestSha256": "2f6e19333e9966df112bbbfa94c30550b327b60d55e7d937155acb6c046f7adf",
+      "inputIntegritySha256": "d24a7b9f26a76cda5d2a29652a653fc45871a50b3a6c3743d685cff53173f679",
+      "amended": "vs_c_limits_amendment/2026-10-14/meshopt_header",
+      "amendedManifestSha256": "22ff1456dba290926fc770ce624f9dbc8c6371c831b7622f2a32e4c4b70b24e9",
+      "cases": 9,
+      "admittedAmended": 3,
+      "refusedUnchanged": 6,
+      "scaledBudgets": []
+    }
+  ],
+  "parent1": "stride_parent_control/2026-10-10: no admitted case; its one refusal message ('meshopt and bufferView stride disagree') is not a limit refusal; unchanged",
+  "ktx2": "ktx2_basisu_amendment/2026-10-13 is amended in place (--ktx2), as VS-B did; see README"
+}

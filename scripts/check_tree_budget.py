@@ -20,7 +20,11 @@ FILE_LIMIT = 1_000_000
 # schema keyword, controls and the I1 oracle amendment's fixtures) and the H23 payload-replay
 # controls brought the tree to 21,774,787 bytes, past 21,600,000 (VS-A alone was 717 bytes
 # over). New budget: that size plus about 0.6% headroom for VS-C and VS-D sources.
-BUDGETS = {"": 21_900_000, "bench/": 11_800_000}
+# Raised 2026-10-14 (VS-C): the additive C1 bundle amendment for the limits surface
+# (production_controls/vs_c_limits_amendment, two re-packed fixture bundles and two lane
+# manifests, about 195 KB) and the VS-C oracle, controls and mutant driver brought the tree to
+# about 22.15 MB and bench/ to about 11.92 MB. New budgets: about 1% headroom for VS-D.
+BUDGETS = {"": 22_400_000, "bench/": 12_100_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the
 # compiled include closure plus licences, 10,852,575 bytes, about 1.1x of headroom
