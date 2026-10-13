@@ -1190,7 +1190,7 @@ mod tests {
             for i in i0..=i1 {
                 for j in 0..=g {
                     let (x, z) = (i as f32 * 0.5, j as f32 * 0.5);
-                    pos.push([x, (x / 3.).sin() * (z / 4.).cos(), z]);
+                    pos.push([x, 3. * (x / 3.).sin() * (z / 4.).cos(), z]);
                     uv.push([i as f32 / g as f32, j as f32 / g as f32]);
                 }
             }
@@ -1500,7 +1500,7 @@ mod tests {
     #[test]
     fn bake_pass_hands_off_frozen_tiles_and_commits_complete_members() {
         let work = tempfile::tempdir().unwrap();
-        let input = fixture(&work.path().join("src"), 140);
+        let input = fixture(&work.path().join("src"), 64);
         let run = |name: &str, baker: Option<Arc<FlatBaker>>| {
             let out = work.path().join(name);
             let scratch = work.path().join(format!("{name}-scratch"));
@@ -1508,7 +1508,8 @@ mod tests {
             let mut request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(2).unwrap())
                 .with_scratch_dir(&scratch)
-                .with_lod_target(1024);
+                .with_lod_target(256)
+                .with_leaf_triangles(1024);
             if let Some(b) = baker {
                 request = request.with_baker(b);
             }
@@ -1525,7 +1526,8 @@ mod tests {
         let seen = baker.seen.lock().unwrap().clone();
         assert!(
             *baker.fills.lock().unwrap() > 0,
-            "the fixture's holes give fill faces in some packet"
+            "the fixture's holes give fill faces in some packet: {}",
+            String::from_utf8_lossy(&fs::read(baked.join("manifest.json")).unwrap())
         );
         // The manifest reports the published (baked) bytes and keeps the untextured figure.
         let manifest = |dir: &Path| -> Value {
@@ -1598,7 +1600,7 @@ mod tests {
     #[test]
     fn adapter_refuses_incomplete_or_mismatched_members() {
         let work = tempfile::tempdir().unwrap();
-        let input = fixture(&work.path().join("src"), 140);
+        let input = fixture(&work.path().join("src"), 64);
         #[derive(Debug, Default)]
         struct Probe {
             checked: Mutex<bool>,
@@ -1769,7 +1771,8 @@ mod tests {
         let request = |out: &str| {
             LeafOutputRequest::new(&input, work.path().join(out), LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(1).unwrap())
-                .with_lod_target(1024)
+                .with_lod_target(256)
+                .with_leaf_triangles(1024)
         };
         mesh_to_leaf_payloads(
             request("out").with_baker(probe.clone()),
@@ -1780,20 +1783,18 @@ mod tests {
         // With the handoff wired but nothing committed, every published byte equals a run
         // without a baker (the manifest only adds the bake fields).
         mesh_to_leaf_payloads(request("plain"), &RunControl::default()).unwrap();
+        // Every published file, found through the row manifests (no directory listing, no
+        // OS path separators in the keys).
         let files = |dir: &Path| -> BTreeMap<String, Vec<u8>> {
             let mut out = BTreeMap::new();
-            for sub in ["", "leaves", "proxies"] {
-                for e in fs::read_dir(dir.join(sub)).unwrap() {
-                    let path = e.unwrap().path();
-                    let name = path
-                        .strip_prefix(dir)
-                        .unwrap()
-                        .to_string_lossy()
-                        .into_owned();
-                    if path.is_file() && name != "resources.json" && name != "manifest.json" {
-                        out.insert(name, fs::read(&path).unwrap());
-                    }
+            for rows in ["leaves.jsonl", "proxies.jsonl"] {
+                let text = fs::read_to_string(dir.join(rows)).unwrap();
+                for line in text.lines() {
+                    let row: Value = serde_json::from_str(line).unwrap();
+                    let uri = row["uri"].as_str().unwrap().to_owned();
+                    out.insert(uri.clone(), fs::read(dir.join(&uri)).unwrap());
                 }
+                out.insert(rows.to_owned(), text.into_bytes());
             }
             out
         };

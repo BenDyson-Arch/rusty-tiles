@@ -60,6 +60,8 @@ pub struct LeafOutputRequest {
     lod_mutation: super::super::lod::Mutation,
     lod_target: usize,
     baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
+    #[cfg(test)]
+    leaf_triangles: Option<u64>,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -76,6 +78,8 @@ impl LeafOutputRequest {
             lod_mutation: super::super::lod::Mutation::None,
             lod_target: super::super::lod::TARGET_FACES,
             baker: None,
+            #[cfg(test)]
+            leaf_triangles: None,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -105,6 +109,12 @@ impl LeafOutputRequest {
     #[cfg(test)]
     pub(crate) fn with_lod_target(mut self, target: usize) -> Self {
         self.lod_target = target;
+        self
+    }
+    /// Test fixtures: smaller leaves, so small inputs get several leaves and coarse levels.
+    #[cfg(test)]
+    pub(crate) fn with_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
+        self.leaf_triangles = Some(leaf_triangles);
         self
     }
 }
@@ -814,6 +824,10 @@ pub fn mesh_to_leaf_payloads(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs;
     config.scratch_dir = request.scratch_dir;
+    #[cfg(test)]
+    if let Some(leaf_triangles) = request.leaf_triangles {
+        config = config.with_leaf_triangles(leaf_triangles);
+    }
     let captured = match timing::time(Stage::Capture, || {
         full::capture(&request.input, &config, &mut || attempt.check())
     }) {
