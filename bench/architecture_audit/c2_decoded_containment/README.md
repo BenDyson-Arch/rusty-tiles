@@ -998,20 +998,37 @@ inside the volume (`h11-declared-bounds`), an escape in the third chunk (`h11-th
 all-inconclusive but contained sphere (`h11-inconclusive-sphere`).
 
 **Parity** (release lib tests, `--large` C2, C2-WB and I1 fixtures generated, `C2S3_EVIDENCE_DIR` and
-`C2S3_FOREST_DIR` set as in the slice-3 record): PARITY_ROW.
+`C2S3_FOREST_DIR` set as in the slice-3 record): slice-1 261/261, C2-WB 102/102, slice-3 80/80, S3-18 sweep 181 cases (182 agreements with the two
+`references` pairs, R5 injection-only), forest 34/34 and 5/5 pairs, I1 181/181, W corpus 41/41, H11 14/14;
+0 disagreements, 0 skipped (head `e8d626d`, clean row of the H11 mutant run).
 
 **Production mutants** (`acceptance/production-mutants/h11/mutants.py`, release, paired control or
 test):
 
 | Mutant | Paired | Also flips |
 | --- | --- | --- |
-H11_MUTANT_ROWS
+| two diagonal corners regardless of the chain | `h11-sphere-offdiagonal.mutated` | `h11-rotated-box.mutated`; `walk_marked_equals_the_per_vertex_walk` |
+| inward corner (one f32 ulp / one integer step) | `h11-ulp-last-vertex.mutated` | `h11-u16-maximum.mutated`, 8 slice-3 controls |
+| skipped fallback | `h11-sphere-offdiagonal.mutated` | 6 more H11 controls, 9 slice-3 controls, 4 unit tests |
+| trust declared accessor min/max (4 files) | `h11-declared-bounds.mutated` | `declared_accessor_bounds_cannot_hide_an_escape` |
+| raw box misses the chunk's last vertex | `h11-ulp-last-vertex.mutated` | `walk_marked_equals_the_per_vertex_walk` |
+| inconclusive test reports the first marked vertex | `h11-inconclusive-sphere.base` | 6 more H11 controls, 4 slice-3 controls, 4 unit tests |
+| corner credit ignored | `corner_walks_stay_within_the_credit_bound` | — (performance only) |
+| chunk offset ignored | `h11-third-chunk.mutated` | — |
+
+The clean tree flips nothing. Report (evidence): `mutants/h11-report-final.json`, sha256
+`32f4ae2460feacdeb4ddcdd771b4804dc866c7a23dae2006c424ca88a628126f`.
 
 The 36-row slice-1/slice-3 matrix (`slice3/mutants.py`, placement now overridable with `C2M_*`):
-S3_MATRIX_ROW
+36/36 at the H11 head (`2e25864` source): every slice-3 mutant flips its paired control, all 19 slice-1
+mutants flip cases, and every mutant flips exactly the same non-H11 case set as at `f661e4e`; the clean
+tree flips nothing. Three slice-1 mutants also flip H11 controls (`add-1e-6-slack`, `omit-U`,
+`double-U`). Report (evidence): `mutants/s3-report.json`, sha256 `5d69d63fc5a1aee0473bfe4991327e6e875dad9a8719995367e49c303e15b0bc`.
 
-**Performance** (release `native-geospatial`, develop `7fad70c` vs H11; best wall of 5 clean runs on a
-quiet P-core, peak RSS within ±1 MiB everywhere):
+**Performance** (release `native-geospatial`, develop `7fad70c` vs H11 `2e25864`, same validator source as the
+head; forest and adversaries: best wall of 5 clean runs on a quiet P-core (`perf_validate.py`, pairs
+from 4–7 and 12–15); lane: `process.py --repeat 5 --cpus 14,15`, ABBA; peak RSS within ±1 MiB
+everywhere, outputs and verdicts identical):
 
 | Archive | develop s | H11 s | before slice 3 s |
 | --- | --- | --- | --- |
@@ -1026,10 +1043,14 @@ quiet P-core, peak RSS within ±1 MiB everywhere):
 | Adversary A1 (1.2M axis points on the unit sphere, every test inconclusive) | 0.370 | 0.370 | |
 | Adversary A2 (3,000 payloads of 9–20 such points; the credit binds) | 0.147 | 0.148 | |
 
-Every other forest archive and twin moves by at most 0.01 s. On mf2-lod3 the exact walk falls to 8.8% of
+Every other forest archive improves (W1 0.074 → 0.051, W1-explicit 0.124 → 0.054, W6 0.056 → 0.045) or
+moves by at most 0.01 s. On mf2-lod3 the exact walk falls to 8.8% of
 samples; what remains of the slice-3 growth is the phase-2 C1 re-inspection (stream step 1), outside H11.
 The adversaries (and their `gltfUpAxis` twins, unchanged) show no measurable cost when every corner test
 fails. The value-identical hoist of per-accessor constants was not done (plan amendment 3).
+
+Perf evidence (`perf/`): `lane-process.json` `476c064c…`, `forest.json` `eab8266d…`, `adversary.json`
+`89a464ea…` (adversary generator `adversary/make.py`).
 
 ## What remains
 
