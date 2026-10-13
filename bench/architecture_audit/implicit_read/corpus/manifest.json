@@ -3,7 +3,7 @@
   {
    "expected": "Accepted",
    "id": "W2.f2238cd",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "W2 (428 tiles, 234 subtrees; visits 431)",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -14,7 +14,7 @@
    "limits": {
     "hierarchy_visits": 431
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "R1",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -25,7 +25,7 @@
    "limits": {
     "hierarchy_visits": 430
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "R1",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -36,7 +36,7 @@
    "limits": {
     "document_decoded_bytes": 190944
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "R2b lower bound (DC-8; R confirms C1's threshold by execution)",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -47,7 +47,7 @@
    "limits": {
     "document_decoded_bytes": 246583
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "R2b upper bound (cumulative 246,584 - 1)",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -58,7 +58,7 @@
    "limits": {
     "document_decoded_bytes": 190943
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "production": "ResourceLimit (C1 payload view budget; outside the oracle)",
    "ref": "R2b below C1's view budget",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
@@ -70,7 +70,7 @@
    "limits": {
     "document_decoded_bytes": 23864
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "production": "ResourceLimit (C1)",
    "ref": "live-path cap = W2 maximum live sum 23,864 (C1 alone refuses first in production)",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
@@ -82,7 +82,7 @@
    "limits": {
     "document_decoded_bytes": 23863
    },
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-perf-2000.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-perf-2000.3tz",
    "ref": "live-path cap - 1",
    "sha256": "964e714f5f36f3b926f0af5f82150083c3e3c7ee28a70ceb6920f554630ed2b8",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -90,7 +90,7 @@
   {
    "expected": "Unsupported",
    "id": "W3u.f2238cd",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/pc-deep.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/pc-deep.3tz",
    "ref": "W3u (chunked point default, JSON template)",
    "sha256": "162db1e400c79179850dbd8914c5a19e5843bb0f3c0697288fcbc1baaf0779ab",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -98,15 +98,16 @@
   {
    "expected": "Unsupported",
    "id": "W5u.f2238cd",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/vec-perf.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/vec-perf.3tz",
    "ref": "W5u (vector default on perf input, JSON template)",
-   "sha256": "3fae0acad95f78ac6a9f1ff5b8d66a395071eb8f216b2d896f6425181ffb9148",
-   "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
+   "sha256": "d3415b764baf0b0c597e51cf87a73d482a7cc2c13a1c3a0b39a6cbfae905ac54",
+   "source": "regenerate.py with producer f2238cd; re-pinned 2026-10-13 (was 3fae0aca...): the bytes embed PROJ in vector-build.json and PROJ 9.8.1 -> 9.9.0 landed that day; verdict is the JSON-template refusal, unchanged",
+   "verdictOnly": true
   },
   {
    "expected": "Unsupported",
    "id": "W9u.coordinator.octree-none",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/octree-none.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/octree-none.3tz",
    "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
    "sha256": "ec03367bd6f60c238119e09d6dab9559efc3294d45f3d306d7234ac1409cb186",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -114,7 +115,7 @@
   {
    "expected": "Unsupported",
    "id": "W9u.coordinator.octree-rename-class",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/octree-rename-class.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/octree-rename-class.3tz",
    "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
    "sha256": "8207c53993c7d2c12441f1b3eca5b7e1600b5332291cb538f452d5f514cfae61",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -122,7 +123,7 @@
   {
    "expected": "Unsupported",
    "id": "W9u.coordinator.quadtree-none",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/quadtree-none.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/quadtree-none.3tz",
    "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
    "sha256": "95555c703170dc0b3a0c478800d029098e35f1f5a91434b5585f0f92132ab8fe",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"
@@ -130,7 +131,7 @@
   {
    "expected": "Unsupported",
    "id": "W9u.coordinator.quadtree-rename-class",
-   "path": "/tmp/rusty-tiles-i1-contract-20261011/samples/a2fix/quadtree-rename-class.3tz",
+   "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/a2fix/quadtree-rename-class.3tz",
    "ref": "W9u (coordinator's convert of the #151 fixture, schema.id corrected)",
    "sha256": "2fbaffdc639f495b35896238782cba45d7414c26c474e41cf3711fb275500415",
    "source": "coordinator sample (contract probes/receipt.json), producer f2238cd, pre-P layout"

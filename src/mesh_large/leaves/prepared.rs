@@ -8,6 +8,9 @@ pub(super) struct PreparedPrimitive {
     /// Dense output TEXCOORD streams, each in exact triangle/corner order.
     pub uvs: Vec<Vec<[f32; 2]>>,
     pub material: Option<Value>,
+    /// Further `EXT_mesh_features.featureIds` entries after the two source
+    /// attribute sets, e.g. ID textures from `id_texture`; any count.
+    pub feature_id_textures: Vec<Value>,
 }
 pub(super) struct PreparedPage {
     pub bytes: Vec<u8>,

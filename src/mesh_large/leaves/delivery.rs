@@ -1,4 +1,6 @@
 //! Explicit profile delivery. PNG is raw level0; KTX owns a complete class chain.
+//! ID pages ([`Class::Id`]) are PNG-only in every profile: one exact PNG per
+//! authored level ([`encode_id_chain`]); Basis ETC1S/UASTC are refused.
 use super::{
     mips::{self, Class},
     sparse_mips,
@@ -198,6 +200,13 @@ pub(super) fn channel_gate(
         Class::Normal => legacy(30., 112),
         Class::Data if slot == TextureSlot::Occlusion => legacy(30., if quality { 8 } else { 80 }),
         Class::Data => legacy(30., 32),
+        // Defensive: IDs admit no error at all.
+        Class::Id => ChannelGate {
+            psnr: f64::INFINITY,
+            p999: None,
+            block_rmse: None,
+            max: Some(0),
+        },
     }
 }
 pub(super) fn check_level(
@@ -313,12 +322,18 @@ pub(super) fn check_level(
 }
 
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
+/// Quality is excluded on purpose: its occlusion gate (p99.9 <= 8, against 80
+/// elsewhere) is far tighter than ETC1S can meet, so Quality keeps UASTC.
 pub(super) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
     slot == TextureSlot::Occlusion && profile != Profile::Quality
 }
 /// Encoder mode and parameters of one slot and lossy profile.
 pub(super) fn codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
     let scalar = scalar_occlusion(slot, profile);
+    // Quality's effort of 2 is deliberately not pinned by a test: lowering it
+    // only changes encoder time and size, while every output is still held to
+    // the per-profile decoded-image floors in `check_level`, which are the
+    // contract. Mutating 2 to 0 therefore survives on purpose.
     let effort = match profile {
         Profile::Fast => 0,
         Profile::Balanced => 1,
@@ -461,6 +476,13 @@ pub(super) fn encode_authored(
         return Err(error(
             JobErrorKind::InvalidState,
             "PNG cannot carry an authored mip chain",
+        ));
+    }
+    if chain.class == Class::Id {
+        // Basis block codecs (ETC1S, UASTC) are lossy and blend IDs.
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "ID texture pages are lossless PNG only; Basis KTX2 refused",
         ));
     }
     let base = chain.levels.first().ok_or_else(resource)?;
@@ -663,6 +685,84 @@ pub(super) fn encode_authored(
     })
 }
 
+/// One exact PNG per authored ID level. Level 0 is the delivered texture
+/// (sampled NEAREST, no runtime mips); coarser levels are ID-safe pages for
+/// coarse proxies. Every level is decoded independently and must equal the
+/// authored bytes; `validate` then sees each decoded level.
+#[derive(Debug)]
+pub(super) struct IdDelivery {
+    /// PNG bytes per level, level 0 first.
+    pub levels: Vec<Vec<u8>>,
+    pub receipts: Vec<Value>,
+}
+pub(super) fn encode_id_chain(
+    chain: &sparse_mips::Chain,
+    memory_limit: u64,
+    mut validate: impl FnMut(usize, &mips::Level) -> Result<Value, JobError>,
+) -> Result<IdDelivery, JobError> {
+    if chain.class != Class::Id {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "ID delivery requires an ID-class chain",
+        ));
+    }
+    let base = chain.levels.first().ok_or_else(resource)?;
+    let charge = workspace_charge([base.width, base.height], Profile::Lossless)?;
+    if charge > memory_limit {
+        return Err(resource());
+    }
+    let mut levels = Vec::new();
+    levels
+        .try_reserve_exact(chain.levels.len())
+        .map_err(|_| resource())?;
+    let mut receipts = Vec::new();
+    receipts
+        .try_reserve_exact(chain.levels.len() + 1)
+        .map_err(|_| resource())?;
+    for (index, level) in chain.levels.iter().enumerate() {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(level.rgba.len().checked_mul(2).ok_or_else(resource)?)
+            .map_err(|_| resource())?;
+        timing::time(Stage::PngEncode, || {
+            image::codecs::png::PngEncoder::new(&mut bytes).write_image(
+                &level.rgba,
+                level.width,
+                level.height,
+                image::ExtendedColorType::Rgba8,
+            )
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("ID PNG encode {e}")))?;
+        let decoded = timing::time(Stage::PngVerify, || {
+            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        })
+        .map_err(|e| error(JobErrorKind::InvalidState, format!("ID PNG verify {e}")))?
+        .into_rgba8();
+        timing::count(
+            Counter::EncodedChainTexels,
+            u64::from(level.width) * u64::from(level.height),
+        );
+        let decoded = mips::Level {
+            width: decoded.width(),
+            height: decoded.height(),
+            rgba: decoded.into_raw(),
+        };
+        if decoded.width != level.width
+            || decoded.height != level.height
+            || decoded.rgba != level.rgba
+        {
+            return Err(error(
+                JobErrorKind::InvalidState,
+                format!("ID PNG level {index} changed authored IDs"),
+            ));
+        }
+        receipts.push(validate(index, &decoded)?);
+        levels.push(bytes);
+    }
+    receipts.push(json!({"profile":"id","encoding":"png","levels_exact":true,"charged_bytes":charge,"caller_levels":chain.levels.len()}));
+    Ok(IdDelivery { levels, receipts })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -780,6 +880,43 @@ mod tests {
                     w = (w / 2).max(1);
                     h = (h / 2).max(1);
                 }
+            }
+        }
+    }
+    /// Occlusion is scalar ETC1S in fast/balanced and UASTC in quality; every
+    /// other slot is UASTC. Read from the KTX2 DFD colour model of the output
+    /// itself (basic block word 2, byte 0): 163 is ETC1S, 166 is UASTC.
+    #[test]
+    fn occlusion_is_scalar_etc1s_except_in_quality() {
+        const ETC1S: u8 = 163;
+        const UASTC: u8 = 166;
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            for slot in [TextureSlot::Occlusion, TextureSlot::MetallicRoughness] {
+                let out = encode(
+                    [8, 8],
+                    &[90, 90, 90, 255].repeat(64),
+                    &[1; 64],
+                    slot,
+                    profile,
+                    128 * 1024 * 1024,
+                    None,
+                )
+                .unwrap();
+                let dfd = u32::from_le_bytes(out.bytes[48..52].try_into().unwrap()) as usize;
+                let scalar = matches!(
+                    (slot, profile),
+                    (TextureSlot::Occlusion, Profile::Fast | Profile::Balanced)
+                );
+                assert_eq!(
+                    out.bytes[dfd + 12],
+                    if scalar { ETC1S } else { UASTC },
+                    "{slot:?}/{profile:?} codec"
+                );
+                assert_eq!(
+                    out.receipts.last().unwrap()["scalar_rrr"],
+                    scalar,
+                    "{slot:?}/{profile:?} receipt"
+                );
             }
         }
     }
