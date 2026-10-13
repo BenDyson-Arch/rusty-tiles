@@ -2,6 +2,7 @@
 use super::{json, FormatError, PayloadError, PayloadLimits};
 use serde_json::value::RawValue;
 use std::{borrow::Cow, collections::BTreeSet};
+mod ktx2;
 mod numbers;
 mod records;
 pub(crate) mod scene;
@@ -422,6 +423,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         "EXT_meshopt_compression",
         "KHR_materials_unlit",
         "KHR_mesh_primitive_restart",
+        "KHR_texture_basisu",
     ];
     for ext in &required {
         if !used.contains(ext) {
@@ -1098,14 +1100,90 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             );
         }
     }
-    let images = array::<records::Image<'_>>(root.images, slots)?;
-    let image_count = images.len();
-    for image in images {
+    // Texture and material references precede image resource reads; they
+    // give each image its roles. KHR_texture_basisu: a `source` image may be
+    // KTX2, a core (fallback) `source` image may not, and a texture without a
+    // fallback requires the extension.
+    let image_docs = array::<records::Image<'_>>(root.images, slots)?;
+    let image_count = image_docs.len();
+    let textures = array::<&RawValue>(root.textures, slots)?;
+    let texture_count = textures.len();
+    let samplers = array::<&RawValue>(root.samplers, slots)?;
+    let mut texture_ktx2 = allocation(texture_count, None::<usize>)?;
+    // Per image: 1 core source, 2 KTX2 source, 4 KTX2 source of a material texture.
+    let mut image_roles = allocation(image_count, 0u8)?;
+    for (index, texture) in textures.into_iter().enumerate() {
+        let texture: records::Texture<'_> = uninspected_record(Some(texture))?;
+        let fallback = texture.source.is_some();
+        if let Some(source) = texture.source {
+            image_roles[reference_count(image_count, Some(source))?] |= 1;
+        }
+        if let Some(sampler) = texture.sampler {
+            at(&samplers, Some(sampler))?;
+        }
+        let extensions: records::Extensions<'_> = optional_record(texture.extensions)?;
+        if let Some(basisu) = extensions.basisu {
+            let basisu: records::Basisu<'_> = record(Some(basisu))?;
+            if let Some(source) = basisu.source {
+                let image = reference_count(image_count, Some(source))?;
+                image_roles[image] |= 2;
+                texture_ktx2[index] = Some(image);
+            }
+            if !fallback && !required.contains("KHR_texture_basisu") {
+                return Err(invalid(
+                    "KHR_texture_basisu without a fallback source must be in extensionsRequired",
+                )
+                .into());
+            }
+        }
+    }
+    drop(samplers);
+    for material in materials {
+        // Preserve the existing fixed five material texture-info roles; null is absent.
+        let material: records::Material<'_> = uninspected_record(Some(material))?;
+        let pbr: records::Pbr<'_> = uninspected_record(material.pbr)?;
+        for info in [
+            pbr.base,
+            pbr.metallic,
+            material.normal,
+            material.occlusion,
+            material.emissive,
+        ] {
+            if info.is_some() && !records::is_null(info) {
+                let info: records::TextureInfo<'_> = record(info)?;
+                if let Some(image) = texture_ktx2[reference_count(texture_count, info.index)?] {
+                    image_roles[image] |= 4;
+                }
+            }
+        }
+    }
+    drop(texture_ktx2);
+    for (image, roles) in image_docs.into_iter().zip(image_roles) {
         if image.uri.is_some() && image.view.is_some() {
             return Err(invalid("image has URI and bufferView").into());
         }
-        if let Some(raw) = image.uri {
-            let uri = string(Some(raw))?;
+        let uri = image.uri.map(|raw| string(Some(raw))).transpose()?;
+        if roles & 2 != 0 || (roles & 1 != 0 && used.contains("KHR_texture_basisu")) {
+            // A URI image without mimeType is KTX2 by its `.ktx2` suffix.
+            let ktx2 = match (image.mime, &uri) {
+                (Some(mime), _) => string(Some(mime))? == "image/ktx2",
+                (None, Some(uri)) => uri
+                    .len()
+                    .checked_sub(5)
+                    .and_then(|at| uri.get(at..))
+                    .is_some_and(|suffix| suffix.eq_ignore_ascii_case(".ktx2")),
+                (None, None) => false,
+            };
+            if roles & 2 != 0 && !ktx2 {
+                return Err(
+                    invalid("KHR_texture_basisu source image is not declared image/ktx2").into(),
+                );
+            }
+            if roles & 1 != 0 && ktx2 {
+                return Err(invalid("texture source references a KTX2 image").into());
+            }
+        }
+        let data = if let Some(uri) = uri {
             if uri.starts_with("data:") {
                 return Err(unsupported("image data URI").into());
             }
@@ -1124,44 +1202,21 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             resource_bytes = resource_bytes
                 .checked_add(data.len())
                 .ok_or_else(|| limit("image resource byte overflow"))?;
+            Cow::Owned(data)
         } else {
             let view = at(&views, image.view)?;
             if accessor_views[view] {
                 return Err(invalid("bufferView mixes image data and accessor data").into());
             }
             view_roles[view] = 3;
+            Cow::Borrowed(&*views[view])
+        };
+        // Container only: admitted bytes, no allocation, at most 32 levels.
+        if roles & 2 != 0 {
+            ktx2::inspect(&data, roles & 4 != 0)?;
+            not_inspected.insert("KTX2 level data and transcoding".into());
         }
         not_inspected.insert("image decoding".into());
-    }
-    let textures = array::<&RawValue>(root.textures, slots)?;
-    let texture_count = textures.len();
-    let samplers = array::<&RawValue>(root.samplers, slots)?;
-    for texture in textures {
-        let texture: records::Texture<'_> = uninspected_record(Some(texture))?;
-        if let Some(source) = texture.source {
-            reference_count(image_count, Some(source))?;
-        }
-        if let Some(sampler) = texture.sampler {
-            at(&samplers, Some(sampler))?;
-        }
-    }
-    drop(samplers);
-    for material in materials {
-        // Preserve the existing fixed five material texture-info roles; null is absent.
-        let material: records::Material<'_> = uninspected_record(Some(material))?;
-        let pbr: records::Pbr<'_> = uninspected_record(material.pbr)?;
-        for info in [
-            pbr.base,
-            pbr.metallic,
-            material.normal,
-            material.occlusion,
-            material.emissive,
-        ] {
-            if info.is_some() && !records::is_null(info) {
-                let info: records::TextureInfo<'_> = record(info)?;
-                reference_count(texture_count, info.index)?;
-            }
-        }
     }
     let extensions: records::Extensions<'_> = optional_record(root.extensions)?;
     let schema_uri = if let Some(metadata) = extensions.metadata {
