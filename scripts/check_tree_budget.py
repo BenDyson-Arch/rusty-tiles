@@ -16,7 +16,11 @@ FILE_LIMIT = 1_000_000
 # About 1.25x the tracked sizes after evidence moved out (2026-10-12, on develop
 # e29cd19, live validator tooling kept): tree 17,243,688 bytes, bench/ 9,423,400.
 # The tree budget excludes vendor/, which has its own allowance (below).
-BUDGETS = {"": 21_600_000, "bench/": 11_800_000}
+# Raised 2026-10-14 to tree 24,000,000 and bench/ 12,500,000, after a trim moved
+# 12 generated result files (about 618 KB) out to the evidence cache
+# (bench/MOVED_EVIDENCE.md). The remaining growth is real code and live oracles
+# for the large-mesh tiler and validator-scale work, which CI and tests read.
+BUDGETS = {"": 24_000_000, "bench/": 12_500_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the
 # compiled include closure plus licences, 10,852,575 bytes, about 1.1x of headroom
