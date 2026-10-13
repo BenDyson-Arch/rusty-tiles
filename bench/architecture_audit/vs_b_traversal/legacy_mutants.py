@@ -33,7 +33,9 @@ STALE = {
     "em:nested-placement-unrecorded", "c2:h11/trust-declared-bounds",
     # These two apply textually but name the removed tile arena (they do not compile).
     "c2:reverse-tile-order", "c2:slice3/R-transform-before-V_R",
-    "c2:slice3/external-content-at-R-level",
+    "c2:slice3/external-content-at-R-level", "c2:slice3/slice1-reverse-tile-order",
+    # Develop's H7 moved this check into a shared suffix helper.
+    "i1:case-sensitive-suffix",
 }
 PORTS = [
     # H11: the corner test trusts the declared accessor bounds of viewless accessors.
@@ -92,6 +94,9 @@ PORTS = [
         "            let index = self.c2.tile(TileFact {\n                transform: None,"),
         (V, "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: None,",
          "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: moved,")]),
+    ("port:i1:case-sensitive-suffix", [("src/content_integrity/implicit.rs",
+        "        ends_with_suffix(self.static_tail(), \"json\")",
+        "        { let tail = self.static_tail(); tail.len() >= 5 && &tail[tail.len() - 5..] == b\".json\" }")]),
     ("port:c2:skip-ancestors", [(V, "                    Some((Role::Ancestor(level), volume)),",
                                  "                    None,")]),
     ("port:c2:skip-content-volume", [(V, "                volumes: [Some((Role::Own, own)), content, None],",
