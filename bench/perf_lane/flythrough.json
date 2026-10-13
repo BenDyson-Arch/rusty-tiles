@@ -1,0 +1,54 @@
+{
+  "comment": "Camera paths and constrained profiles for flythrough.py. A pose is {heading, pitch} in degrees and {range, east, north, up} in multiples of the root bounding sphere radius r; east/north/up offset the look-at target from the sphere centre in its local east-north-up frame. The camera range is max(range * r, 5 m). Paths replay in frames at a fixed step (1/fps simulated seconds per frame), never in wall time.",
+  "fps": 60,
+  "holdSeconds": 20,
+  "paths": {
+    "orbit-far": {
+      "description": "One full orbit at 2.5 r, 10 s of frames",
+      "segments": [
+        {"waypoint": "start", "pose": {"heading": 0, "pitch": -40, "range": 2.5}},
+        {"frames": 600, "to": {"heading": 360}},
+        {"waypoint": "end"}
+      ]
+    },
+    "approach": {
+      "description": "Overview at 4 r down to a close view at 0.15 r, eased, 7 s of frames",
+      "segments": [
+        {"waypoint": "overview", "pose": {"heading": -45, "pitch": -50, "range": 4}},
+        {"frames": 420, "ease": "smooth", "to": {"heading": -20, "pitch": -35, "range": 0.15, "east": 0.15, "north": 0.1}},
+        {"waypoint": "close"}
+      ]
+    },
+    "fast-pan": {
+      "description": "Lateral pan across 1.2 r at 0.5 r range in 1.5 s",
+      "segments": [
+        {"waypoint": "west", "pose": {"heading": 0, "pitch": -45, "range": 0.5, "east": -0.6}},
+        {"frames": 90, "to": {"east": 0.6}},
+        {"waypoint": "east"}
+      ]
+    },
+    "close-crawl": {
+      "description": "Slow diagonal crawl at 0.12 r range, 15 s of frames",
+      "segments": [
+        {"waypoint": "sw", "pose": {"heading": 30, "pitch": -35, "range": 0.12, "east": -0.35, "north": -0.2}},
+        {"frames": 900, "to": {"east": 0.35, "north": 0.2}},
+        {"waypoint": "ne"}
+      ]
+    },
+    "snap-teleport": {
+      "description": "Instant cuts between distant views, each held until full quality (streaming stress)",
+      "segments": [
+        {"waypoint": "overview", "pose": {"heading": 0, "pitch": -45, "range": 3}},
+        {"waypoint": "ne-close", "pose": {"heading": 20, "pitch": -40, "range": 0.1, "east": 0.5, "north": 0.5}},
+        {"waypoint": "sw-close", "pose": {"heading": 200, "pitch": -40, "range": 0.1, "east": -0.5, "north": -0.5}},
+        {"waypoint": "centre-close", "pose": {"heading": 90, "pitch": -60, "range": 0.08}},
+        {"waypoint": "overview-again", "pose": {"heading": 0, "pitch": -45, "range": 3}}
+      ]
+    }
+  },
+  "profiles": {
+    "native": {"description": "The GPU browser as is"},
+    "cpu4x": {"description": "Chrome CPU throttling 4x (Emulation.setCPUThrottlingRate, page main thread)", "cpuThrottlingRate": 4},
+    "lowcache": {"description": "Tileset cache trimmed to 8 MiB with no overflow headroom", "tilesetOptions": {"cacheBytes": 8388608, "maximumCacheOverflowBytes": 0}}
+  }
+}

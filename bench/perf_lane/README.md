@@ -401,12 +401,126 @@ and `baseline-cesium.json`.
 | `r2-cesium-inset-bounds.json` | The same outputs with `--inset 1/1024px`. All load and pass the hole probes, and their captures are pixel-identical. |
 | `aligned-bounds-exact.json`, `aligned-bounds-inset.json` | The R2 bounds isolation above (`aligned_bounds.py`) |
 
+## Flythroughs
+
+`flythrough.py` profiles interaction, not just the first load. It flies
+deterministic camera paths over tilesets in the same GPU Chromium and records
+per-frame metrics. Its purpose is to tune tiling recipes. It is a report and
+never a gate.
+
+```sh
+python3 -I bench/perf_lane/flythrough.py --bin RUSTY_TILES \
+  --recipes bench/perf_lane/recipes/terrain-skiplod.json --recipes bench/perf_lane/recipes/vector.json \
+  [--paths orbit-far,approach] [--profiles native,cpu4x,lowcache] [--repeats 3] [--only NAME,...] \
+  [--evidence ~/.cache/rusty-tiles-evidence/perf/flythrough-YYYYMMDD] [--commit-report bench/perf_lane/FLYTHROUGH.md]
+python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-render without running
+```
+
+- **Recipes** (`recipes/*.json`). A recipe is a named set of conversion
+  arguments plus viewer options. One file is one set on one dataset, and
+  only recipes in the same set are compared. `convert` is the CLI argument
+  list. Its placeholders are `{corpus}` (the perf-lane corpus, generated
+  under `--work`), `{repo}` and `{out}` (or `{out}.3tz`). `output` names an
+  existing tileset instead. `like` copies an earlier recipe and then
+  overrides it, merging viewer options. `viewer` accepts `tilesetOptions`,
+  `maximumScreenSpaceError` and `scheduler`. Each distinct argument list is
+  converted once, with the same environment as `process.py`, and is reused
+  while the binary's sha256 and the arguments are unchanged.
+- **Paths** (`flythrough.json`). Poses are relative to the root bounding
+  sphere: heading and pitch in degrees, and range plus an east/north/up
+  target offset in multiples of its radius r, in the sphere centre's
+  east-north-up frame. So one path works for any dataset. A path is a list
+  of segments. A waypoint holds the camera at a pose, cutting there
+  instantly if it gives one. A motion segment spans N frames to a target
+  pose, easing linearly or with smoothstep, and interpolates range
+  geometrically. Cesium's render loop is off. Every `requestAnimationFrame`
+  sets the next pose and the simulated clock (frame / fps), then renders
+  once. The camera therefore replays identically on every run at any frame
+  rate. Only streaming varies. At a waypoint, frames render until full
+  quality (`tilesLoaded`, nothing pending or processing and no in-flight
+  request, held for 250 ms: the finish rule above) or `holdSeconds`, and
+  then the canvas is captured. The paths are:
+  - `orbit-far`: 600 frames around at 2.5 r;
+  - `approach`: 4 r to 0.15 r, eased, 420 frames;
+  - `fast-pan`: 1.2 r lateral at 0.5 r in 90 frames;
+  - `close-crawl`: 900 frames diagonal at 0.12 r;
+  - `snap-teleport`: five cuts, each held until full quality.
+- **Per frame**:
+  - the presented-frame interval (rAF timestamps), the CPU time of
+    `viewer.render()`, and GPU time from `EXT_disjoint_timer_query_webgl2`
+    where exposed;
+  - tileset statistics: visited, selected, commands, content-ready, pending
+    and processing;
+  - draw calls and triangles, from wrappers on Cesium's WebGL draw calls;
+  - geometry and texture bytes and `totalMemoryUsageInBytes`;
+  - tile loads, evictions (`tileUnload`) and reloads of evicted tiles;
+  - requests and bytes (resource timing on `/data/`);
+  - tiles added to and removed from the selection;
+  - the largest selected-tile SSE and the memory-adjusted SSE.
+
+  A frame after a screenshot is marked `gap` and gives no interval.
+- **Per run** (`flythrough_report.summarize`):
+  - frame-interval p50, p95 and p99 over all frames, and p95 over motion
+    frames only;
+  - hitches, the intervals over 33 ms and over 100 ms;
+  - CPU and GPU percentiles;
+  - time to first render (first frame with tileset commands, from
+    `fromUrl`), and time to full quality per waypoint and summed;
+  - peak GPU memory;
+  - churn;
+  - total requests and MiB, and the peak requests and MiB per 1 s window;
+  - LOD pops and SSE jumps. A pop is a frame whose selection changes by at
+    least max(4 tiles, 50% of the previous selection). An SSE jump is a
+    frame whose largest selected SSE moves by at least 2x and 8 px.
+
+  Percentiles interpolate linearly (NumPy's default).
+- **Profiles** (`flythrough.json`, never compared with each other):
+  - `native`: the browser as is;
+  - `cpu4x`: `Emulation.setCPUThrottlingRate` 4 over CDP, applied after
+    Cesium.js loads;
+  - `lowcache`: `cacheBytes` 8 MiB and `maximumCacheOverflowBytes` 0.
+    Profile tileset options override the recipe's.
+- **Repeats and noise.** `--repeats N` runs every recipe × path × profile N
+  times and rotates the recipe order each repeat. Every run holds the
+  browser lock, so do not wrap it in `flock` on that lock. While each run
+  executes, the host is sampled for:
+  - the PSI stall share of cpu, memory and io over the run;
+  - the lowest MemAvailable;
+  - mean CPU busy;
+  - the load average;
+  - `nvidia-smi` GPU utilisation just before the run (another process).
+
+  A run is noisy at cpu PSI ≥ 25%, memory PSI ≥ 2%, io PSI ≥ 10%,
+  MemAvailable < 4 GiB or another process's GPU use ≥ 30%. Aggregates are
+  medians over the clean runs when at least two are clean. Otherwise they
+  use every run and say so. A metric is marked `~` (unstable) when its
+  repeats spread beyond max(10% of the median, a floor of 1 ms, 0.05 s,
+  0.25 MiB or 2 counts).
+- **Output.** `--evidence` (default
+  `~/.cache/rusty-tiles-evidence/perf/flythrough-<date>/`) holds:
+  - `runs/<recipe>.<path>.<profile>.r<N>.json.gz`, the per-frame columns,
+    waypoints, host samples and console;
+  - `screenshots/` (repeat 1 at each waypoint);
+  - `flythrough.json` (the artifact: runs, summaries, aggregates and
+    screenshot digests);
+  - `FLYTHROUGH.md` with the images.
+
+  `--commit-report` writes the image-free copy that goes into git, with
+  screenshot digests and an `identical` column. Runs that error are listed
+  under Failures, and the script exits 1. A renderer change, or mixed
+  renderer classes, also stops the comparison.
+
+`python3 -I bench/perf_lane/test_flythrough.py` unit-tests path expansion,
+recipe parsing, percentile, hitch, rate and pop math, noise classification and
+aggregation.
+
 ## Not covered
 
-- Frame rate after load, other GPUs and drivers, and real network latency
-  (the server is local).
-- Interaction at finer zoom: 3D cases are checked at one framing, raster cases
-  at the overview plus the `--hole` and corner views.
+- Other GPUs and drivers, and real network latency (the server is local).
+  Frame rate after load is covered only by `flythrough.py`, and only for
+  tilesets.
+- Interaction at finer zoom outside `flythrough.py`: 3D cases are checked at
+  one framing, raster cases at the overview plus the `--hole` and corner views.
 - Aggregate process-tree memory.
 - Rendering of 3D content: only load, errors and requests are checked, with no
   render probe.
