@@ -1,7 +1,7 @@
 {
   "kind": "oracle",
   "oracleSha256": "767113e56e3e24e96798da02791bb2140394e3ef69e307bf6c45687759884b44",
-  "manifestSha256": "4b8bc7d57749de1934cb5c568e6dd255a92a2e616d99c2623b8cb08d2575437a",
+  "manifestSha256": "becc7500d38e941cd02c4a65306b9a6d3767b4252d2a08ec88bf640168f30e16",
   "mutants": [
     {
       "mutant": "skip-identifier",
@@ -296,10 +296,11 @@
     },
     {
       "mutant": "data-uri-not-first",
-      "namedCase": "data-uri-no-mime",
+      "namedCase": "data-uri-png-mime",
       "flipped": [
         "data-uri-ktx2-mime",
-        "data-uri-no-mime"
+        "data-uri-no-mime",
+        "data-uri-png-mime"
       ],
       "pass_": true,
       "patch": {

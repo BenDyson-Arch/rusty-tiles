@@ -1,7 +1,7 @@
 {
   "scope": "Real-output gate: an H8-encoded, H16-packaged crop of the real 10M-triangle mesh validates with containment.",
-  "sourceCommit": "aac8854950a5f9cd70dc0588083361d2bac20c40",
-  "validatorBinarySha256": "3ae5f6d9f64e85ad78a26df7df9ea2ad39cd61de2ad67001a5d1b8413a9b1345",
+  "sourceCommit": "0693ea1",
+  "validatorBinarySha256": "c029bbecdac8b5a1358a5bbab26f289cbc79c6f8321dcbd32ad492f5e5c5dbab",
   "producer": {
     "h8": {
       "binary": "rt-v8 (ml/h8-throughput 1eff758)",
@@ -67,6 +67,6 @@
     "exitCode": 2,
     "ok": false
   },
-  "bulkEvidence": "~/.cache/rusty-tiles-evidence/ktx2-validate-20261013/ (real/, runs/aac8854/)",
+  "bulkEvidence": "~/.cache/rusty-tiles-evidence/ktx2-validate-20261013/ (real/, runs/0693ea1/)",
   "limits": "The balanced profile leaves of #199 exceed H16's 8,192-triangle leaf cap, so the quality profile (smaller leaves) is used; all pages are UASTC+Zstd, so ETC1S is covered by upstream references only."
 }

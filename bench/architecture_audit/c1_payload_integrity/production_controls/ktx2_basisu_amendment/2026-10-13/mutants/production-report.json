@@ -1,6 +1,6 @@
 {
   "kind": "production",
-  "sourceCommit": "e27f66b93934a7a66afe8f12205c58824e0c49ea",
+  "sourceCommit": "0693ea19acb94bfa2d38c6425756e480ff68447f",
   "sourceSha256": {
     "/home/bend/.cache/rt-wt/ktx2val/src/archive3tz/read.rs": "53b4c098f4ce2120f6b01bc49753b087a1188ed646355420c8f777f64a906b03",
     "/home/bend/.cache/rt-wt/ktx2val/src/archive3tz.rs": "ae0c3b96c1d79de6eb27d8c550f308488b00e93aef9fec279473dfbda0d0cf58",
@@ -18,7 +18,7 @@
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/meshopt.rs": "01c6e87fe4f02ac86972f1148f299393035b5320fb410b8e7a7710e09a5f32b1",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/numbers.rs": "d9df98565ac36231b537e6e3d7116e21485ec5a36b3cad64f4770b1ccb905dc7",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/controls.rs": "8b81a3f19e14348e849fc56a12a9ea35bb108600ebab26141a8b1efbb81e06b4",
-    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2.rs": "07049fee05f20e0e107f922f01900d3108f28574b2f285b2748b3b7b2610258e",
+    "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2.rs": "95e52c63c882256e0aa0f98c841ccbe5de26cdd2a98a7f1fa9541f68d10cedac",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/ktx2_controls.rs": "15d944110595f21b3d2a95ae5b3aa77a34eb4774f7442e493a20093c54ae46b1",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/meshopt_header_controls.rs": "f7251699f86ee210d6fb448567348ab907935e299e0f19811da7c1993d2f1548",
     "/home/bend/.cache/rt-wt/ktx2val/src/content_integrity/payload/numbers.rs": "d0267c1d32551ecad6f89343560e88b31572637539bba5782d5bffd1c204ef42",
@@ -373,11 +373,13 @@
       "file": "src/content_integrity/payload.rs",
       "old": "if uri.as_deref().is_some_and(|uri| uri.starts_with(\"data:\")) {",
       "new": "if false {",
-      "namedCase": "data-uri-no-mime",
+      "namedCase": "data-uri-png-mime",
       "built": true,
       "buildStderrTail": "",
-      "failedCases": [],
-      "pass_": false
+      "failedCases": [
+        "data-uri-png-mime"
+      ],
+      "pass_": true
     },
     {
       "mutant": "per-image-inspection",
@@ -440,8 +442,10 @@
       "namedCase": "kvd-misplaced",
       "built": true,
       "buildStderrTail": "",
-      "failedCases": [],
-      "pass_": false
+      "failedCases": [
+        "kvd-misplaced"
+      ],
+      "pass_": true
     },
     {
       "mutant": "allow-empty-key",
@@ -604,6 +608,6 @@
       "pass_": true
     }
   ],
-  "passes": 28,
-  "failures": 2
+  "passes": 30,
+  "failures": 0
 }
