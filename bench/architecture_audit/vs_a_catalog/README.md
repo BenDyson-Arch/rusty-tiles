@@ -136,3 +136,42 @@ SIGSEGV aborted its first build).
 - `spill::tests::spill_memory_is_flat_in_input_size` fails on this host on develop
   `957d252` as well as on this branch (VmHWM growth 11.3-11.6 MiB against an 11 MiB
   allowance in a debug build); it is not changed here.
+
+## Audit fixes (`85f5c16` and later)
+
+The nonauthor audit (`~/.cache/rusty-tiles-evidence/vs-a-20261013/audit.md`) was
+GO-with-fixes. Changes:
+
+- **F1:** `validate::rows::tests::deeper_passes_order_rows_whose_log_order_is_not_uri_order`
+  (a log in shuffled, reversed order, ties at depths 1 and 2, names ending on a chunk
+  boundary, both profiles) and
+  `catalog_controls::payload_rows_follow_uri_order_when_the_directory_does_not` (a
+  hand-built 3TZ with the central directory in reverse URI order). The audit's surviving
+  mutant is `rows-tie-previous` in `mutants.py`.
+- **F2:** the duplicate scan reads names only inside an equal-key run.
+- **F3:** each MSD pass reads only the 64-byte chunk it orders, so a name of length ℓ
+  costs O(ℓ) in all.
+- **F5 (scratch placement):** the first disk-backed candidate with room among `$TMPDIR`,
+  the user cache directory (`rusty-tiles/scratch`) and the system temporary directory.
+  Memory-backed candidates are skipped. When only those exist, `validate` uses one and
+  reports `scratch.memoryBacked: true`; `validate_3tz` refuses. The report's `scratch`
+  member appears whenever anything spilled. A run with `TMPDIR` unset created
+  `~/.cache/rusty-tiles/scratch` and left it empty afterwards.
+- **F4:** the bitmap at the ceiling is 21.3 MiB.
+- **F6:** the later passes and the placed rows of the report sort use the 24 MiB side
+  runs; the contract's memory table states the report-time total.
+- **F7:** `catalog_controls::scratch_failures_map_to_io_resource_limit_and_invalid_state`,
+  `spill::tests::disk_placement_skips_memory_backed_candidates_and_reports_a_last_resort`
+  and the Python lazy-sequence assertions in `test_api.py`
+  (`test_validate_reports_decoded_containment…`). The changelog names the
+  `==`/`json.dumps` breaks.
+- **Audit 5:** the alignment of `payload_counts` with the C2 URI facts is a hard
+  `InvalidState` check.
+- **Flaky test:** `spill_memory_is_flat_in_input_size` now uses the sorter's declared
+  `memory_bound` as its allowance, and compares growth over each child's own baseline
+  for flatness. It passed 8 of 8 runs.
+
+At `85f5c16`, release parity (`c2_oracle_parity`, `i1_oracle_parity`, `validate::`,
+`archive3tz::`, `spill::`) passed 182/182 in the resident profile and 182/182 in the
+forced-spill profile (`parity/audit/`). The Python containment and implicit tests pass
+against a release extension built from `85f5c16`.
