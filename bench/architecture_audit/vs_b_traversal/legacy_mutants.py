@@ -30,9 +30,68 @@ STALE = {
     "c2:slice3/merge-I0-into-R", "c2:slice3/slice1-reuse-URI-cache-for-verdicts",
     "c2:slice3/slice1-skip-external-root-transform", "c2:slice3/units-per-URI",
     "i1:drop-repeated-subtree-check", "em:replay-without-references",
-    "em:nested-placement-unrecorded",
+    "em:nested-placement-unrecorded", "c2:h11/trust-declared-bounds",
+    # These two apply textually but name the removed tile arena (they do not compile).
+    "c2:reverse-tile-order", "c2:slice3/R-transform-before-V_R",
+    "c2:slice3/external-content-at-R-level",
 }
 PORTS = [
+    # H11: the corner test trusts the declared accessor bounds of viewless accessors.
+    ("port:c2:h11/trust-declared-bounds", [
+        ("src/content_integrity/payload.rs",
+         "            parsed.min = min;\n            parsed.max = max;\n        }\n",
+         "            parsed.min = min;\n            parsed.max = max;\n        }\n"
+         "        if view.is_none() {\n"
+         "            for (bound, out) in [(a.min, &mut parsed.min), (a.max, &mut parsed.max)] {\n"
+         "                if let Some(bound) = bound {\n"
+         "                    let declared = array::<&RawValue>(Some(bound), slots)?;\n"
+         "                    for (raw, o) in declared.iter().zip(out.iter_mut()) {\n"
+         "                        *o = serde_json::from_str::<f64>(raw.get()).unwrap_or(*o);\n"
+         "                    }\n                }\n            }\n        }\n"),
+        ("src/content_integrity/payload/scene.rs",
+         "    pub(crate) fn positions(&self) -> &[usize] {\n        self.positions\n    }\n",
+         "    pub(crate) fn positions(&self) -> &[usize] {\n        self.positions\n    }\n"
+         "    pub(crate) fn extent(&self, accessor: usize) -> ([f64; 3], [f64; 3]) {\n"
+         "        let a = &self.draws.accessors[accessor];\n"
+         "        (std::array::from_fn(|c| a.min.get(c).copied().unwrap_or(f64::NAN)),\n"
+         "         std::array::from_fn(|c| a.max.get(c).copied().unwrap_or(f64::NAN)))\n    }\n"),
+        (V, "containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {\n"
+            "                    raw_vertex(instance.vertex(accessor, v))\n                });",
+         "containment::walk_marked_declared(self.arena, n, self.levels, bitmap, self.credit, |v| {\n"
+         "                    raw_vertex(instance.vertex(accessor, v))\n                }, {\n"
+         "                    let (lo, hi) = instance.extent(accessor);\n"
+         "                    let word = |p: [f64; 3]| match instance.format(accessor) {\n"
+         "                        PositionFormat::F32 => RawVertex::F32(p.map(|x| x as f32)),\n"
+         "                        _ => RawVertex::Int(p.map(|x| x as i32)),\n                    };\n"
+         "                    Some((word(lo), word(hi)))\n                });"),
+        ("src/validate/containment.rs",
+         "    vertex: impl Fn(usize) -> RawVertex,\n) -> Option<(usize, Verdict)> {\n    let diagonal = diagonal_suffices(arena, levels);",
+         "    vertex: impl Fn(usize) -> RawVertex,\n) -> Option<(usize, Verdict)> {\n"
+         "    walk_marked_declared(arena, n, levels, bitmap, credit, vertex, None)\n}\n"
+         "#[allow(clippy::too_many_arguments)]\n"
+         "pub(crate) fn walk_marked_declared(\n    arena: &mut Arena,\n    n: Normalization,\n"
+         "    levels: &[LevelFacts],\n    bitmap: &[u64],\n    credit: &mut Credit,\n"
+         "    vertex: impl Fn(usize) -> RawVertex,\n    declared: Option<(RawVertex, RawVertex)>,\n"
+         ") -> Option<(usize, Verdict)> {\n    let diagonal = diagonal_suffices(arena, levels);"),
+        ("src/validate/containment.rs", "            .then(|| raw_box(words, first, &vertex))",
+         "            .then(|| declared.or_else(|| raw_box(words, first, &vertex)))"),
+    ]),
+    ("port:c2:reverse-tile-order", [(V, "            try_push(&mut self.levels, fact)?;\n            current = parent;\n        }\n        Ok(())",
+        "            try_push(&mut self.levels, fact)?;\n            current = parent;\n        }\n"
+        "        let mut path = Vec::new();\n        let mut at = Some(tile);\n"
+        "        while let Some(t) = at {\n            path.push(self.path[t].transform);\n"
+        "            at = self.path[t].parent;\n        }\n        path.reverse();\n"
+        "        for (l, level) in self.levels.iter_mut().enumerate().skip(1) {\n"
+        "            level.to_parent = path[l - 1];\n        }\n        Ok(())")]),
+    ("port:c2:slice3/R-transform-before-V_R", [(V, "            let index = self.c2.tile(TileFact {\n                transform: None,",
+        "            let moved = if level == 0 { self.c2.path[r.tile].transform.take() } else { None };\n"
+        "            let index = self.c2.tile(TileFact {\n                transform: moved,")]),
+    ("port:c2:slice3/external-content-at-R-level", [(V,
+        "            let index = self.c2.tile(TileFact {\n                transform: None,",
+        "            let moved = if level == 0 { self.c2.path[r.tile].external.take() } else { None };\n"
+        "            let index = self.c2.tile(TileFact {\n                transform: None,"),
+        (V, "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: None,",
+         "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: moved,")]),
     ("port:c2:skip-ancestors", [(V, "                    Some((Role::Ancestor(level), volume)),",
                                  "                    None,")]),
     ("port:c2:skip-content-volume", [(V, "                volumes: [Some((Role::Own, own)), content, None],",
