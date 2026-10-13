@@ -85,13 +85,13 @@ PORTS = [
         "            at = self.path[t].parent;\n        }\n        path.reverse();\n"
         "        for (l, level) in self.levels.iter_mut().enumerate().skip(1) {\n"
         "            level.to_parent = path[l - 1];\n        }\n        Ok(())")]),
-    ("port:c2:slice3/R-transform-before-V_R", [(V, "            let index = self.c2.tile(TileFact {\n                transform: None,",
+    ("port:c2:slice3/R-transform-before-V_R", [(V, "            let index = self.path_tile(TileFact {\n                transform: None,",
         "            let moved = if level == 0 { self.c2.path[r.tile].transform.take() } else { None };\n"
-        "            let index = self.c2.tile(TileFact {\n                transform: moved,")]),
+        "            let index = self.path_tile(TileFact {\n                transform: moved,")]),
     ("port:c2:slice3/external-content-at-R-level", [(V,
-        "            let index = self.c2.tile(TileFact {\n                transform: None,",
+        "            let index = self.path_tile(TileFact {\n                transform: None,",
         "            let moved = if level == 0 { self.c2.path[r.tile].external.take() } else { None };\n"
-        "            let index = self.c2.tile(TileFact {\n                transform: None,"),
+        "            let index = self.path_tile(TileFact {\n                transform: None,"),
         (V, "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: None,",
          "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: moved,")]),
     ("port:i1:case-sensitive-suffix", [("src/content_integrity/implicit.rs",
@@ -104,9 +104,9 @@ PORTS = [
     ("port:c2:skip-external-root-transform", [(V, "                to_parent: child.transform,",
                                                "                to_parent: child.transform.filter(|_| child.external.is_none()),")]),
     # One stream per URI: later references to an already streamed URI are not streamed.
-    ("port:c2:reuse-URI-cache-for-verdicts", [(V, "        self.c2.stream.started = true;\n",
-                                               "        self.c2.stream.started = true;\n"
-                                               "        if self.repeat_seen(rank) {\n            return Ok(());\n        }\n")]),
+    ("port:c2:reuse-URI-cache-for-verdicts", [(V, "                self.c2.build_levels(tile, content)?;\n                let stored = self.facts.get(rank)?;",
+                                               "                if self.repeat_seen(rank) {\n                    return Ok(());\n                }\n"
+                                               "                self.c2.build_levels(tile, content)?;\n                let stored = self.facts.get(rank)?;")]),
     ("port:c2:test-undrawn-vertices", [(V, "            instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));",
                                         "            (0..instance.count(accessor)).for_each(|v| bitmap[v / 64] |= 1 << (v % 64));")]),
     ("port:c2:slice3/depth-is-chain-length-minus-1", [(V, "                parent: Some(parent_tile),\n                depth,\n",
@@ -131,15 +131,15 @@ PORTS = [
                                               "            if false && self.subtrees.get(member.rank) {")]),
     ("port:em:replay-without-references", [(V, "                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;",
                                             "                    let _ = (tile, content, rank, stored);")]),
-    ("port:em:nested-placement-unrecorded", [(V, "                (Some(summary), Some(parent)) => self.record(Event::Place(Box::new(Placement {",
-                                              "                (Some(summary), Some(parent)) if false => self.record(Event::Place(Box::new(Placement {")]),
+    ("port:em:nested-placement-unrecorded", [(V, "                (Some(summary), Some(parent)) => {",
+                                              "                (Some(summary), Some(parent)) if false => {")]),
 ]
 # `units-per-URI` needs a helper on Check: whether this rank was referenced before.
-HELPER = (V, "    /// One C2 reference: registration and precheck step and, while in domain, its inline",
+HELPER = (V, "    /// One C2 reference: registration and precheck step; a reference whose step passed is",
           "    fn repeat_seen(&mut self, rank: u64) -> bool {\n"
           "        thread_local!(static SEEN: std::cell::RefCell<std::collections::HashSet<u64>> = Default::default());\n"
           "        SEEN.with(|s| !s.borrow_mut().insert(rank))\n    }\n"
-          "    /// One C2 reference: registration and precheck step and, while in domain, its inline")
+          "    /// One C2 reference: registration and precheck step; a reference whose step passed is")
 H23 = [
     ("h23:omit-member-check", [(PAYLOAD, "    if replay.is_some_and(|admission| member_digest(kind, bytes) != admission.member) {\n"
                                 "        return Err(invalid(\"source archive changed during inspection\").into());\n    }\n", "")]),
