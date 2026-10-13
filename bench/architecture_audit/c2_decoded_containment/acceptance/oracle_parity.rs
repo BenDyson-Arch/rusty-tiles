@@ -740,3 +740,36 @@ fn slice3_precheck_only_arm() {
     }
     println!("{}", production(Path::new(&file), l));
 }
+
+// ---- H11: corner fast-path controls (oracle-decided, `h11/generate.py`) ----
+
+/// Every H11 fixture against the oracle report recorded beside it. The pairs are built so that a
+/// broken fast path (wrong corners, an ignored tile step, inward corners, skipped fallback, declared
+/// bounds, chunk offset, first-vertex report) flips them; production must agree on every one, including the first
+/// escaping vertex.
+#[test]
+fn production_matches_every_h11_fast_path_control() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
+    let report: Value =
+        serde_json::from_slice(&std::fs::read(root.join("h11/report.json")).unwrap()).unwrap();
+    let (mut agree, mut disagree) = (0, Vec::new());
+    let rows = report["rows"].as_array().unwrap();
+    for row in rows {
+        let file = root.join(row["file"].as_str().unwrap());
+        let got = production(&file, ValidationLimits::default());
+        if agrees(&row["expected"], &row["oracle"], &got) {
+            agree += 1;
+        } else {
+            disagree.push(json!({"id": row["id"], "expected": row["expected"], "production": got}));
+        }
+    }
+    let summary = json!({"cases": rows.len(), "agree": agree, "disagree": disagree});
+    if let Some(out) = std::env::var_os("C2H11_PARITY_OUT") {
+        std::fs::write(out, serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
+    }
+    assert!(
+        disagree.is_empty() && agree == 16,
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap()
+    );
+}

@@ -93,6 +93,10 @@ jobs:
           node --version
           python3 -I bench/perf_lane/test_report.py
           python3 -I bench/perf_lane/test_cesium.py
+      - name: Check the crate package size and third-party notices
+        run: |
+          cargo package --locked --no-verify
+          python3 scripts/third_party_notices.py check --max-bytes 10000000 target/package/rusty-tiles-*.crate
       - name: Test native build
         shell: bash
         run: |
@@ -275,6 +279,57 @@ jobs:
           key: portable-${{ matrix.target }}
       - name: Test the portable release CLI
         run: cargo test --locked --target "$RELEASE_TARGET"
+      - name: Report vendored KTX2 encoder digests and round trips
+        run: cargo test --locked --target "$RELEASE_TARGET" --lib basisu_ktx2 -- --nocapture --test-threads=1
+
+  encoder-link:
+    name: KTX2 encoder link (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add "$RELEASE_TARGET"
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: encoder-link-${{ matrix.target }}
+      - name: Check stdio isolation and measure encoder link size
+        run: |
+          mkdir -p "$RUNNER_TEMP/encoder-link"
+          scripts/basisu_link_check.sh "$RELEASE_TARGET" "$RUNNER_TEMP/encoder-link/$RELEASE_TARGET.json"
+          { echo '```json'; cat "$RUNNER_TEMP/encoder-link/$RELEASE_TARGET.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain encoder link evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: encoder-link-${{ matrix.target }}
+          path: ${{ runner.temp }}/encoder-link/*.json
+          if-no-files-found: error
 
   native-geospatial:
     name: Native geospatial (GDAL ${{ matrix.gdal }})
