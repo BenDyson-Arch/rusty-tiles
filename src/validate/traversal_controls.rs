@@ -114,7 +114,7 @@ struct Outcome {
     units: u64,
     counters: [u64; 3],
 }
-fn inspect_in(path: &Path, budgets: Budgets, mode: Mode) -> (Outcome, u64) {
+fn inspect_in(path: &Path, budgets: Budgets, mode: Mode) -> (Outcome, u64, usize) {
     DEFERRED_STREAM.with(|d| d.set(mode.deferred));
     MEMOIZE.with(|m| m.set(mode.memoize));
     MEMO_BUDGET.with(|b| b.set(mode.memo_budget));
@@ -136,6 +136,7 @@ fn inspect_in(path: &Path, budgets: Budgets, mode: Mode) -> (Outcome, u64) {
                     counters: inspection.counters,
                 },
                 inspection.prepared,
+                inspection.memo_peak,
             )
         }
         Err(error) => (
@@ -144,6 +145,7 @@ fn inspect_in(path: &Path, budgets: Budgets, mode: Mode) -> (Outcome, u64) {
                 units: 0,
                 counters: [0; 3],
             },
+            0,
             0,
         ),
     }
@@ -450,14 +452,19 @@ fn an_exhausted_memo_falls_back_to_the_reference_traversal() {
         let files = generator.archive();
         let (_work, path) = package(&files);
         let limits = Budgets::Absolute(ValidationLimits::default());
-        let (full, prepared) = inspect_in(&path, limits.clone(), INLINE);
+        let (full, prepared, peak) = inspect_in(&path, limits.clone(), INLINE);
+        assert!(peak <= MEMO_BYTES);
         for budget in [0, size_of::<Event>(), 8 * size_of::<Event>(), 4096] {
             let mode = Mode {
                 memo_budget: Some(budget),
                 ..INLINE
             };
-            let (bounded, bounded_prepared) = inspect_in(&path, limits.clone(), mode);
+            let (bounded, bounded_prepared, bounded_peak) = inspect_in(&path, limits.clone(), mode);
             assert_eq!(bounded, full, "budget {budget}");
+            assert!(
+                bounded_peak <= budget,
+                "memo held {bounded_peak} over {budget}"
+            );
             if full.result.starts_with('{') {
                 assert!(bounded_prepared >= prepared, "budget {budget}");
                 fell_back += usize::from(bounded_prepared > prepared);
@@ -692,4 +699,28 @@ fn duplicate_children_fail_with_the_schema_library_message() {
         outcome.result,
         format!("invalid_input: tileset schema: {expected}")
     );
+}
+
+#[test]
+fn a_replayed_document_composes_its_own_tiles_under_each_placement() {
+    // One shared document (root and child) placed twice; the second placement is replayed.
+    // Only the second placement's referencing content volume is a rotated box, so only the
+    // replayed root carries the `rotatedBox` chain bit, which its child must inherit.
+    let mut root = tile(50., 5.);
+    root["children"] = json!([with_content(tile(40., 4.), "p.glb")]);
+    let shared = doc(root);
+    let mut top = tile(100., 10.);
+    let mut a = tile(90., 9.);
+    a["content"] = json!({"uri":"d.json","boundingVolume":boxed([0.; 3], 60.)});
+    let mut b = tile(90., 9.);
+    b["content"] = json!({"uri":"d.json","boundingVolume":
+        {"box":[0,0,0, 30,30,0, -30,30,0, 0,0,40]}});
+    top["children"] = json!([a, b]);
+    let files = files(vec![
+        ("tileset.json", doc(top)),
+        ("d.json", shared),
+        ("p.glb", point(1.)),
+    ]);
+    let outcome = agreed(&files, &ValidationLimits::default());
+    assert_eq!(reasons(&outcome), ["rotatedBox"], "{outcome:?}");
 }
