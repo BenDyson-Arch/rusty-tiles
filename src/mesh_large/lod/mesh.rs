@@ -255,6 +255,9 @@ pub(crate) struct Simplifier {
     /// After the strict pass cannot reach `2P`: topology-locked (non-seam) vertices may
     /// collapse too, and a primitive may lose its last faces (recorded as removed).
     relaxed: bool,
+    /// Seam vertices not on the source boundary: true-boundary decimation must not reach
+    /// them (their border edges stay seam edges, which the depth audit then checks exactly).
+    seam: Vec<bool>,
     pub report: SimplifyReport,
 }
 
@@ -289,6 +292,7 @@ impl Simplifier {
                 counts
             },
             relaxed: false,
+            seam: Vec::new(),
             report: SimplifyReport {
                 input_faces: faces.len() as u64,
                 ..Default::default()
@@ -561,8 +565,13 @@ impl Simplifier {
                 .filter(|(_, l)| l.len() == 1)
                 .map(|(w, _)| *w)
                 .collect();
+            // Only a vertex inside one seam chain (exactly two border edges, the same two on
+            // both sides) has a side-independent removal: either collapse gives the chain
+            // edge between its neighbours. A pinch where the boundary touches itself is kept.
             if targets.is_empty() {
                 targets = ring.keys().copied().collect();
+            } else if targets.len() != 2 {
+                targets.clear();
             }
             match targets.iter().copied().find(|&v| self.valid(u, v, &ring)) {
                 Some(v) => {
@@ -603,6 +612,9 @@ impl Simplifier {
                     continue;
                 }
             }
+            if self.boundary_reaches_seam(v, &ring) {
+                continue;
+            }
             heap.push(Reverse((Cost(self.cost(u, v)), u, v, self.stamp[u as usize])));
         }
     }
@@ -635,7 +647,7 @@ impl Simplifier {
                 Role::Chain(a, b) if v != a && v != b => continue,
                 _ => {}
             }
-            if !self.valid(u, v, &ring) {
+            if self.boundary_reaches_seam(v, &ring) || !self.valid(u, v, &ring) {
                 continue;
             }
             self.apply(u, v);
@@ -645,6 +657,15 @@ impl Simplifier {
                 self.push(&mut heap, w);
             }
         }
+    }
+
+    pub(crate) fn set_seam(&mut self, seam: Vec<bool>) {
+        self.seam = seam;
+    }
+
+    /// A border vertex may not collapse onto a non-boundary seam vertex.
+    fn boundary_reaches_seam(&self, v: u32, ring_u: &BTreeMap<u32, Vec<u32>>) -> bool {
+        self.seam.get(v as usize).copied().unwrap_or(false) && ring_u.values().any(|l| l.len() == 1)
     }
 
     pub(crate) fn live_faces(&self) -> usize {

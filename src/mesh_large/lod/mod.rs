@@ -878,14 +878,15 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
             continue;
         }
         let mut keep = kept(&v.info, v.key, d, k) || keep_extra.contains(&v.key);
-        // Control: the first tile of each depth keeps a third of the seam vertices its
-        // neighbours remove.
+        // Control: the first tile of each depth removes a third of the seam vertices every
+        // other tile keeps, ignoring the keep set (a crack consensus cannot heal).
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
             && node.first == 0
             && d >= 1
             && key_hash(v.key) % 3 == 0
+            && !v.info.special
         {
-            keep = true;
+            keep = false;
         }
         if keep {
             locked[i] = true;
@@ -896,6 +897,12 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     lap(&mut phases[1]);
     let mut simplifier = Simplifier::new(&mesh, &kept_faces, locked);
     let failed = simplifier.force(&forced);
+    simplifier.set_seam(
+        mesh.vertices
+            .iter()
+            .map(|v| v.info.cut(d) && !v.info.special)
+            .collect(),
+    );
     out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     simplifier.simplify(ctx.target);
@@ -1356,7 +1363,7 @@ fn leaf_seams(
     lattice: &LatticePlan,
     leaf: &NodeRecord,
     d: u32,
-    out: &mut ExternalSorter<SeamEdge>,
+    out: &mut crate::spill::SequenceWriter<SeamEdge>,
 ) -> Result<u64, JobError> {
     let mut count: BTreeMap<(Key, Key), u32> = BTreeMap::new();
     let mut info: BTreeMap<Key, VertexInfo> = BTreeMap::new();
@@ -1380,7 +1387,7 @@ fn leaf_seams(
         let dec = |k: Key, i: VertexInfo| -> Result<[u32; 3], JobError> {
             Ok(decode_vertex(lattice, k, i.ell, leaf.depth())?.map(f32::to_bits))
         };
-        out.push(SeamEdge {
+        out.push(&SeamEdge {
             lo: a,
             hi: b,
             owner: leaf.first,
@@ -1401,6 +1408,8 @@ struct AuditCounts {
     matched: u64,
     boundary: u64,
     relabelled: u64,
+    /// Proxy tiles with an edge no other frontier tile has, and one such edge.
+    unmatched: BTreeMap<(u64, u8), (Key, Key)>,
 }
 
 fn audit(
@@ -1431,15 +1440,10 @@ fn audit(
         } else if relabel {
             counts.relabelled += 1;
         } else {
-            let p = |k: Key| k.map(f32::from_bits);
-            return Err(state(format!(
-                "depth {d} seam: edge {:?}-{:?} of tile f{}-d{} has no partner tile (crack); a \
-                 crack is never published as a hole",
-                p(first.lo),
-                p(first.hi),
-                first.owner,
-                first.owner_depth
-            )));
+            counts
+                .unmatched
+                .entry((first.owner, first.owner_depth))
+                .or_insert((first.lo, first.hi));
         }
         group.clear();
         Ok(())
@@ -1595,7 +1599,8 @@ pub(crate) fn produce(
     let mut sidecar_bytes: BTreeMap<u32, u64> = BTreeMap::new();
     for d in (0..=deepest as u32).rev() {
         check()?;
-        let mut seams = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
+        let mut seam_log =
+            crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?;
         let mut forced_log =
             crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?;
         let mut done: BTreeMap<u64, Done> = BTreeMap::new();
@@ -1603,11 +1608,12 @@ pub(crate) fn produce(
         let mut latest: BTreeMap<(u64, u8), u8> = BTreeMap::new();
         let mut failed: BTreeSet<Key> = BTreeSet::new();
         let window_size = 4 * input.jobs.max(1);
+        let relabel = input.mutation == Mutation::CrackAsHole;
         let mut round = 0u8;
         let mut selected: Option<BTreeSet<u64>> = None;
-        loop {
+        let counts = loop {
             // List this depth's internal tiles (all, or the re-run selection) and their
-            // children from the preorder stream.
+            // children from the preorder stream, and process them in windows.
             let mut nodes = captured.tree.nodes.reader()?;
             let mut leaves = leaf_facts.reader()?;
             let mut leaf_index = 0u64;
@@ -1615,10 +1621,10 @@ pub(crate) fn produce(
             let mut current: Option<Job> = None;
             let wanted = |n: &NodeRecord| selected.as_ref().is_none_or(|s| s.contains(&n.first));
             let run = |window: &mut Vec<Job>,
-                           seams: &mut ExternalSorter<SeamEdge>,
-                           forced_log: &mut crate::spill::SequenceWriter<ForcedKey>,
-                           done: &mut BTreeMap<u64, Done>,
-                           failed: &mut BTreeSet<Key>|
+                       seam_log: &mut crate::spill::SequenceWriter<SeamEdge>,
+                       forced_log: &mut crate::spill::SequenceWriter<ForcedKey>,
+                       done: &mut BTreeMap<u64, Done>,
+                       failed: &mut BTreeSet<Key>|
              -> Result<(), JobError> {
                 if window.is_empty() {
                     return Ok(());
@@ -1631,7 +1637,7 @@ pub(crate) fn produce(
                     let mut o = outcome?;
                     for mut e in std::mem::take(&mut o.seams) {
                         e.round = round;
-                        seams.push(e)?;
+                        seam_log.push(&e)?;
                     }
                     if round == 0 {
                         for key in std::mem::take(&mut o.forced_keys) {
@@ -1654,7 +1660,7 @@ pub(crate) fn produce(
                         return Err(state("leaf facts out of tree order"));
                     }
                     if round == 0 && n.depth() <= d {
-                        leaf_seams(&source, &captured.lattice, &n, d, &mut seams)?;
+                        leaf_seams(&source, &captured.lattice, &n, d, &mut seam_log)?;
                     }
                     if n.depth() == d + 1 {
                         if let Some(job) = current.as_mut() {
@@ -1668,13 +1674,15 @@ pub(crate) fn produce(
                     leaf_index += 1;
                     continue;
                 }
-                if n.depth() == d {
+                if n.depth() <= d {
                     if let Some(job) = current.take() {
                         window.push(job);
                         if window.len() >= window_size {
-                            run(&mut window, &mut seams, &mut forced_log, &mut done, &mut failed)?;
+                            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed)?;
                         }
                     }
+                }
+                if n.depth() == d {
                     current = wanted(&n).then(|| Job {
                         node: n,
                         children: Vec::new(),
@@ -1683,34 +1691,78 @@ pub(crate) fn produce(
                     if let Some(job) = current.as_mut() {
                         job.children.push(Child::Proxy { node: n });
                     }
-                } else if n.depth() < d {
-                    if let Some(job) = current.take() {
-                        window.push(job);
-                    }
                 }
             }
             if let Some(job) = current.take() {
                 window.push(job);
             }
-            run(&mut window, &mut seams, &mut forced_log, &mut done, &mut failed)?;
-            if failed.is_empty() {
-                break;
+            run(&mut window, &mut seam_log, &mut forced_log, &mut done, &mut failed)?;
+            // Seam consensus. A tile that cannot remove a seam vertex validly keeps it; a
+            // seam edge without a partner keeps every seam vertex its tile removed. Kept
+            // vertices are kept by every tile sharing them (each re-runs), which always
+            // agrees, so this converges unless a tile ignores the keep set.
+            let mut contested = std::mem::take(&mut failed);
+            let mut audited = None;
+            if contested.is_empty() {
+                let log = std::mem::replace(
+                    &mut seam_log,
+                    crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?,
+                )
+                .finish()?;
+                let mut sorter = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
+                for e in log.reader()? {
+                    let e = e?;
+                    seam_log.push(&e)?;
+                    if latest.get(&(e.owner, e.owner_depth)).copied().unwrap_or(0) == e.round {
+                        sorter.push(e)?;
+                    }
+                }
+                let audit_started = std::time::Instant::now();
+                let counts = audit(sorter.finish()?, d, relabel)?;
+                report.audit_seconds += audit_started.elapsed().as_secs_f64();
+                if counts.unmatched.is_empty() {
+                    break counts;
+                }
+                let owners: BTreeSet<u64> = counts
+                    .unmatched
+                    .keys()
+                    .filter(|(_, depth)| u32::from(*depth) == d)
+                    .map(|(first, _)| *first)
+                    .collect();
+                let log = std::mem::replace(
+                    &mut forced_log,
+                    crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+                )
+                .finish()?;
+                for f in log.reader()? {
+                    let f = f?;
+                    if owners.contains(&f.first) && !keep.contains(&f.key) {
+                        contested.insert(f.key);
+                    }
+                    forced_log.push(&f)?;
+                }
+                audited = Some(counts);
             }
-            // Seam consensus: keep every vertex some tile could not remove, and re-run
-            // every tile that was removing it, until no tile fails.
+            if contested.is_empty() || round >= 16 {
+                let counts = audited.unwrap_or_default();
+                let p = |k: Key| k.map(f32::from_bits);
+                let ((first, depth), (lo, hi)) = counts
+                    .unmatched
+                    .iter()
+                    .next()
+                    .map(|(k, v)| (*k, *v))
+                    .unwrap_or(((0, 0), ([0; 3], [0; 3])));
+                return Err(state(format!(
+                    "depth {d} seam: edge {:?}-{:?} of tile f{first}-d{depth} has no partner \
+                     tile and seam consensus cannot resolve it (crack); a crack is never \
+                     published as a hole",
+                    p(lo),
+                    p(hi)
+                )));
+            }
             round += 1;
-            if round > 16 {
-                return Err(JobError::new(
-                    JobErrorKind::Unsupported,
-                    format!(
-                        "depth {d}: seam vertex consensus did not converge in 16 rounds ({} \
-                         vertices still contested)",
-                        failed.len()
-                    ),
-                ));
-            }
             report.seam_rounds += 1;
-            report.seam_kept_extra += failed.len() as u64;
+            report.seam_kept_extra += contested.len() as u64;
             let log = std::mem::replace(
                 &mut forced_log,
                 crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
@@ -1719,7 +1771,7 @@ pub(crate) fn produce(
             let mut rerun = BTreeSet::new();
             for f in log.reader()? {
                 let f = f?;
-                if failed.contains(&f.key) {
+                if contested.contains(&f.key) {
                     rerun.insert(f.first);
                 }
                 forced_log.push(&f)?;
@@ -1727,10 +1779,11 @@ pub(crate) fn produce(
             for first in &rerun {
                 latest.insert((*first, d as u8), round);
             }
-            keep.append(&mut failed);
+            keep.append(&mut contested);
             selected = Some(rerun);
-        }
+        };
         drop(forced_log);
+        drop(seam_log);
         let mut written = 0u64;
         for Done(o) in done.into_values() {
             let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
@@ -1763,14 +1816,6 @@ pub(crate) fn produce(
         sidecar_bytes.insert(d, written);
         sidecar_live += written;
         report.sidecar_peak_bytes = report.sidecar_peak_bytes.max(sidecar_live);
-        // Audit this depth's frontier seams (each tile's latest round), then drop the
-        // children's sidecars.
-        let relabel = input.mutation == Mutation::CrackAsHole;
-        let audit_started = std::time::Instant::now();
-        let current_round = |e: &SeamEdge| latest.get(&(e.owner, e.owner_depth)).copied().unwrap_or(0) == e.round;
-        let edges = seams.finish()?.filter(|e| e.as_ref().map_or(true, current_round));
-        let counts = audit(edges, d, relabel)?;
-        report.audit_seconds += audit_started.elapsed().as_secs_f64();
         report.seam_edges += counts.edges;
         report.seam_matched += counts.matched;
         report.seam_unmatched_boundary += counts.boundary;

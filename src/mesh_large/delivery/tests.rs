@@ -906,19 +906,26 @@ fn untextured(input: &Path) -> PathBuf {
     output
 }
 
+/// Every payload's property tables are within the consumer limit; returns the number of
+/// leaves (two tables: source_primitive and source_triangle). H17 proxies (a
+/// source_primitive table, a proxy_source table per glTF primitive and record tables) are
+/// checked for the limit too but not counted.
 fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usize {
     let mut leaves = 0;
     for (name, bytes) in archive {
         if !name.ends_with(".glb") {
             continue;
         }
-        leaves += 1;
         let length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
         let doc: Value = serde_json::from_slice(&bytes[20..20 + length]).unwrap();
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
             .unwrap();
-        assert_eq!(tables.len(), 2, "{name}");
+        let proxy = tables.iter().any(|t| t["class"] == "proxy_source");
+        if !proxy {
+            leaves += 1;
+            assert_eq!(tables.len(), 2, "{name}");
+        }
         for table in tables {
             assert!(table["count"].as_u64().unwrap() <= 8192, "{name}");
         }

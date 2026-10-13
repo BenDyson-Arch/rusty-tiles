@@ -289,7 +289,7 @@ impl WriteSink<'_> {
             std::fs::read(&source).map_err(|e| JobError::io("read leaf payload", &source, e))?;
         if bytes.len() as u64 != length || <[u8; 32]>::from(Sha256::digest(&bytes)) != sha256 {
             return Err(source::input(format!(
-                "payload {uri}: bytes differ from its manifest row (length or SHA-256)"
+                "{uri}: payload bytes differ from its manifest row (length or SHA-256)"
             )));
         }
         drop(bytes);
