@@ -34,8 +34,11 @@ def main():
     # one-less runs are admitted, because implicit tile extras are opaque.
     opaque = [r for r in rows if r['independentContextControl'] == 'nested-metadata-extras']
     assert len(opaque) == 6 and all(r['outcome'] == 'admitted' for r in opaque)
-    assert sum(r['outcome'] == 'admitted' for r in rows) == 44
-    assert sum(r['outcome'] == 'resource_limit' for r in rows) == 38
+    # H7 amendment: the three b3dm controls' 18 runs are legacy Unsupported.
+    legacy = [r for r in rows if r['independentContextControl'].startswith('b3dm-')]
+    assert len(legacy) == 18 and all(r['outcome'] == 'unsupported' for r in legacy)
+    assert sum(r['outcome'] == 'admitted' for r in rows) == 35
+    assert sum(r['outcome'] == 'resource_limit' for r in rows) == 29
     assert all(r['readOnly'] for r in rows)
     unit = Path(re.search(r'Running unittests src/lib.rs \(([^)]+)\)', raw)[1])
     if not unit.is_absolute():

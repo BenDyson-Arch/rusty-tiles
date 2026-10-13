@@ -355,6 +355,155 @@
       "sha256": "69c1aaefab53628a0bfa9986d80c87cd0eaf61fb21ac4cbfe10a8243d9229783"
     },
     {
+      "name": "legacy_unknown_suffix_b3dm_magic",
+      "path": "legacy_unknown_suffix_b3dm_magic.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .bin member whose first four bytes are b3dm: legacy magic wins over the unknown-suffix rule.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "tile.bin",
+        "magic"
+      ],
+      "sha256": "2f22f90e9b2b9f0de9b11e7c0bd52afdeda40f630c7fb8087b8b073566da24cc"
+    },
+    {
+      "name": "legacy_b3dm_suffix_holding_glb",
+      "path": "legacy_b3dm_suffix_holding_glb.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .b3dm member holding a valid GLB: the suffix decides before any byte is read.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "tile.b3dm"
+      ],
+      "sha256": "4791af779a8cf9cb788d35a5ef13f4667131abbdffd3087c0f5831414dcd15cd"
+    },
+    {
+      "name": "legacy_b3dm_missing_member",
+      "path": "legacy_b3dm_missing_member.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The referenced .b3dm member is absent: the archive lookup precedes the suffix rule.",
+      "messageIncludes": [
+        "tile.b3dm"
+      ],
+      "sha256": "09c3c854be1124b37721cc281214a702b975b1c1da24834a4e84b3be61173070"
+    },
+    {
+      "name": "legacy_b3dm_content_volume_escape",
+      "path": "legacy_b3dm_content_volume_escape.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The content boundingVolume (half-axes 4000) escapes the tile box (2000); that tile-level check precedes payload classification.",
+      "messageIncludes": [
+        "content bounds"
+      ],
+      "sha256": "26291e9214de9c9ab048482349a809db733b0a739f3d431e0494d47c718dc858"
+    },
+    {
+      "name": "legacy_retained_b3dm",
+      "path": "legacy_retained_b3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A retained original named only by conversion.json retainedContentUris is classified like tileset content.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "orig.b3dm"
+      ],
+      "sha256": "91fd46ab8fa3598705f844b142b043870ade465f432872ff8d0a61c2624f7822"
+    },
+    {
+      "name": "legacy_retained_missing_b3dm",
+      "path": "legacy_retained_missing_b3dm.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "A retained .b3dm that is absent stays a missing archive member.",
+      "messageIncludes": [
+        "orig.b3dm"
+      ],
+      "sha256": "8b2740dd30ce4023c779212b081bcd7f57249a58e30d1d77209d3c4b831dd94c"
+    },
+    {
+      "name": "legacy_implicit_glb_baseline",
+      "path": "legacy_implicit_glb_baseline.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Baseline implicit root: one available tile whose content is the baseline GLB.",
+      "messageIncludes": [],
+      "sha256": "2ce3c7b31560b25fa68acf8575b80f999b98df3e71edde77e74025f5f05fa3a8"
+    },
+    {
+      "name": "legacy_source_contents_b3dm",
+      "path": "legacy_source_contents_b3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A raw source payload named by tileset extras rustyTilesSourceContents is classified like tileset content.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "raw/a.b3dm"
+      ],
+      "sha256": "d3676ecf6be06e07e4e2fe34fb0db49a19047238ffd6dda6297f474fadcd54a4"
+    },
+    {
+      "name": "legacy_implicit_template_b3dm",
+      "path": "legacy_implicit_template_b3dm.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Content template c/{level}/{x}/{y}.b3dm ends in a legacy suffix after normalization: Unsupported at root admission. The subtree member is absent, so any subtree read would be invalid_input.",
+      "messageIncludes": [
+        "implicit: unsupported legacy b3dm",
+        "tileset.json"
+      ],
+      "sha256": "6bc07889b3fb6b03d1ba36c03d72db04ec3fbc511c0572b22977e8d2f478596f"
+    },
+    {
+      "name": "legacy_implicit_template_pnts",
+      "path": "legacy_implicit_template_pnts.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Content template c/{level}/{x}/{y}.PNTS ends in a legacy suffix after normalization: Unsupported at root admission. The subtree member is absent, so any subtree read would be invalid_input.",
+      "messageIncludes": [
+        "implicit: unsupported legacy pnts",
+        "tileset.json"
+      ],
+      "sha256": "850d140c9c66bddb86d0a2e17fbc38152dd89cdc527656324c05c851277c15d9"
+    },
+    {
+      "name": "legacy_implicit_template_cmpt",
+      "path": "legacy_implicit_template_cmpt.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Content template c/{level}/{x}/{y}.cmpt/. ends in a legacy suffix after normalization: Unsupported at root admission. The subtree member is absent, so any subtree read would be invalid_input.",
+      "messageIncludes": [
+        "implicit: unsupported legacy cmpt",
+        "tileset.json"
+      ],
+      "sha256": "a821ee65f80c326f9a6f17c9d34a22161f6c8a78b0d23a3f4bb9fd5f4fc4f406"
+    },
+    {
+      "name": "legacy_implicit_glb_template_b3dm_bytes",
+      "path": "legacy_implicit_glb_template_b3dm_bytes.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "An implicit content emitted under a .glb template whose bytes are b3dm: Unsupported by magic.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "c/0/0/0.glb",
+        "magic"
+      ],
+      "sha256": "287c2a15ea0fe5a4536250c8e410a2d0c07255a766886d2440dca2b326cd67e7"
+    },
+    {
+      "name": "legacy_subtree_template_suffix",
+      "path": "legacy_subtree_template_suffix.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "A subtree template ending in .b3dm is not content: legacy detection applies to content templates only.",
+      "messageIncludes": [],
+      "sha256": "95b2f29edd09ea116bc3cd7a57cc40c8f1100f8188f7e593f37a9a94fbc6f996"
+    },
+    {
       "name": "meshopt_none_golden",
       "path": "meshopt_none_golden.3tz",
       "expectedKind": null,

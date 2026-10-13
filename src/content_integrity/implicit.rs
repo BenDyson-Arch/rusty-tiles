@@ -455,9 +455,17 @@ pub(crate) struct Template {
 /// Normalized templates longer than this are Unsupported (DC-1).
 const TEMPLATE_CAP: usize = 1024;
 
+/// `text` ends in `.` followed by `suffix`, ASCII case-insensitively.
+fn ends_with_suffix(text: &[u8], suffix: &str) -> bool {
+    text.len() > suffix.len()
+        && text[text.len() - suffix.len() - 1] == b'.'
+        && text[text.len() - suffix.len()..].eq_ignore_ascii_case(suffix.as_bytes())
+}
+
 impl Template {
     /// §3 steps 1–6, first failure wins. `json` names the document for a
-    /// content template's JSON verdict; it is `None` for the subtree template.
+    /// content template's JSON or legacy verdict; it is `None` for the subtree
+    /// template.
     fn normalize(
         raw: &str,
         base: &str,
@@ -514,6 +522,12 @@ impl Template {
             if normalized.last_segment_is_json() {
                 return Err(unsupported(format!(
                     "external tileset content template in {document}"
+                )));
+            }
+            // 4b. Legacy detection (H7): a 3D Tiles 1.0 content suffix.
+            if let Some(format) = normalized.last_segment_legacy() {
+                return Err(unsupported(format!(
+                    "legacy {format} content template in {document}"
                 )));
             }
         }
@@ -665,14 +679,26 @@ impl Normalized {
             + self.segments.len().saturating_sub(1)
     }
 
-    fn last_segment_is_json(&self) -> bool {
+    /// The literal text after the last variable of the last normalized segment.
+    fn static_tail(&self) -> &[u8] {
         let Some(&(start, vars)) = self.segments.last() else {
-            return false;
+            return &[];
         };
-        // Digits can never complete ".json": only the static tail counts.
         let tail = self.vars[vars..].last().map_or(start, |(at, _)| *at);
-        let tail = &self.text[tail..];
-        tail.len() >= 5 && tail[tail.len() - 5..].eq_ignore_ascii_case(b".json")
+        &self.text[tail..]
+    }
+
+    fn last_segment_is_json(&self) -> bool {
+        // Digits can never complete ".json": only the static tail counts.
+        ends_with_suffix(self.static_tail(), "json")
+    }
+
+    /// The lowercase legacy format named by the static tail's suffix, if any.
+    fn last_segment_legacy(&self) -> Option<&'static str> {
+        let tail = self.static_tail();
+        crate::content_integrity::payload::LEGACY_FORMATS
+            .into_iter()
+            .find(|format| ends_with_suffix(tail, format))
     }
 
     fn into_template(self) -> Result<Template, FormatError> {
@@ -1196,6 +1222,52 @@ mod tests {
             None,
         );
         assert!(subtree.is_ok());
+    }
+
+    /// R-3: H7 step 4b, on the normalized last segment of content templates only.
+    #[test]
+    fn legacy_detection_on_the_normalized_last_segment() {
+        for (raw, format) in [
+            ("c/{level}-{x}-{y}-{z}.b3dm", "b3dm"),
+            ("c/{level}-{x}-{y}-{z}.B3DM", "b3dm"),
+            ("c/{level}-{x}-{y}-{z}.i3dm", "i3dm"),
+            ("c/{level}-{x}-{y}-{z}.pnts/.", "pnts"),
+            ("c/{level}-{x}-{y}-{z}.cmpt/", "cmpt"),
+            ("c/x.b3dm/{level}-{x}-{y}-{z}/..", "b3dm"),
+            ("c/{level}-{x}-{y}-{z}.b3%64m", "b3dm"),
+            ("c/{level}-{x}-{y}-{z}.PnTs//./", "pnts"),
+        ] {
+            // The whole message, so a doubled prefix or a wrong token fails.
+            match octree(raw) {
+                Err(FormatError::Unsupported(message)) => assert_eq!(
+                    message,
+                    format!(
+                        "implicit: unsupported legacy {format} content template in tiles/tileset.json"
+                    ),
+                    "{raw}"
+                ),
+                other => panic!("{raw}: {other:?}"),
+            }
+        }
+        // JSON detection keeps step 4; variables, non-last segments and other
+        // suffixes are not legacy.
+        assert_unsupported(octree("c/{level}-{x}-{y}-{z}.json"), "external tileset");
+        for raw in [
+            "c/{level}-{x}-{y}-{z}.b3dm{x}",
+            "c/{level}.b3dm/{x}-{y}-{z}.glb",
+            "c/{level}-{x}-{y}-{z}b3dm",
+            "c/{level}-{x}-{y}-{z}.b3dmx",
+            "c/{level}-{x}-{y}-{z}.vctr",
+        ] {
+            assert!(octree(raw).is_ok(), "{raw}");
+        }
+        // Subtree templates are not content templates.
+        for raw in ["s/{level}/{x}/{y}.b3dm", "s/{level}/{x}/{y}.cmpt/."] {
+            assert!(
+                Template::normalize(raw, "tileset.json", Scheme::Quadtree, None).is_ok(),
+                "{raw}"
+            );
+        }
     }
 
     #[test]

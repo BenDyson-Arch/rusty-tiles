@@ -83,7 +83,17 @@ fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn execution(case: &Value, fact: &str, limits: ValidationLimits, admitted: bool) {
+/// H7 amendment: legacy b3dm content is Unsupported before any table or embedded
+/// GLB byte is interpreted, so neither the equality nor the one-less run reaches
+/// the target document.
+#[derive(Clone, Copy, PartialEq)]
+enum Outcome {
+    Admitted,
+    ResourceLimit,
+    Unsupported,
+}
+
+fn execution(case: &Value, fact: &str, limits: ValidationLimits, outcome: Outcome) {
     let path = path_for(case);
     let before = std::fs::read(&path).unwrap();
     assert_eq!(hash(&before), case["sha256"].as_str().unwrap());
@@ -95,7 +105,7 @@ fn execution(case: &Value, fact: &str, limits: ValidationLimits, admitted: bool)
         "real C1 modified immutable archive"
     );
     let mut actual_report_hash = Value::Null;
-    if admitted {
+    if outcome == Outcome::Admitted {
         let report = result.unwrap_or_else(|error| {
             panic!("{} {fact} exact equality refused: {error:?}", case["name"])
         });
@@ -109,11 +119,18 @@ fn execution(case: &Value, fact: &str, limits: ValidationLimits, admitted: bool)
             case["name"]
         );
         actual_report_hash = json!(hash(&serde_json::to_vec(&actual).unwrap()));
-    } else {
+    } else if outcome == Outcome::ResourceLimit {
         let error = result.unwrap_err();
         assert!(
             matches!(error, ValidationFailure::ResourceLimit(_)),
             "{} {fact} expected typed ResourceLimit, observed {error:?}",
+            case["name"]
+        );
+    } else {
+        let error = result.unwrap_err();
+        assert!(
+            matches!(&error, ValidationFailure::Unsupported(m) if m.starts_with("legacy b3dm ")),
+            "{} {fact} expected legacy b3dm Unsupported, observed {error:?}",
             case["name"]
         );
     }
@@ -121,7 +138,11 @@ fn execution(case: &Value, fact: &str, limits: ValidationLimits, admitted: bool)
         "{}",
         json!({
             "independentContextControl": case["name"], "fact": fact,
-            "outcome": if admitted { "admitted" } else { "resource_limit" },
+            "outcome": match outcome {
+                Outcome::Admitted => "admitted",
+                Outcome::ResourceLimit => "resource_limit",
+                Outcome::Unsupported => "unsupported",
+            },
             "archiveSha256": case["sha256"], "readOnly": true,
             "selectedLimits": selected, "actualReportSha256": actual_report_hash
         })
@@ -159,7 +180,15 @@ fn context(name: &str) {
             // nested extras string and its one-less runs are admitted. The
             // equality runs and every other control keep their expectations.
             let opaque = name == "nested-metadata-extras";
-            execution(&case, fact, limits, admitted || opaque);
+            // H7 amendment: the three b3dm controls are legacy content.
+            let outcome = if name.starts_with("b3dm-") {
+                Outcome::Unsupported
+            } else if admitted || opaque {
+                Outcome::Admitted
+            } else {
+                Outcome::ResourceLimit
+            };
+            execution(&case, fact, limits, outcome);
         }
     }
 }
@@ -219,7 +248,12 @@ fn actual_c1_aggregate_cache_and_shared_accessor_components() {
         for admitted in [true, false] {
             let mut limits = selected_limits();
             limits.total_payload_elements = equality - u64::from(!admitted);
-            execution(&case, "totalPayloadElements", limits, admitted);
+            let outcome = if admitted {
+                Outcome::Admitted
+            } else {
+                Outcome::ResourceLimit
+            };
+            execution(&case, "totalPayloadElements", limits, outcome);
         }
     }
 }
