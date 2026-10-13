@@ -411,6 +411,7 @@ pub(crate) fn build(
     triangles: SortedStream<'_, TriangleRecord>,
     config: &TreeConfig,
     jobs: usize,
+    retained_allowance_bytes: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<TreeOutput, JobError> {
     check()?;
@@ -541,7 +542,15 @@ pub(crate) fn build(
         scratch.allocation_unit_bytes(),
     )
     .ok_or_else(|| JobError::new(JobErrorKind::ResourceLimit, "H1 scratch bound exceeds u64"))?;
-    super::config::preflight_remaining(scratch, need)?;
+    // The shared Scratch may also retain records owned by a caller (H8 images/full capture).
+    // Ordinary H1 callers pass zero; the caller resolves its complete extra allowance once.
+    let global_need = need.checked_add(retained_allowance_bytes).ok_or_else(|| {
+        JobError::new(
+            JobErrorKind::ResourceLimit,
+            "shared tree scratch bound exceeds u64",
+        )
+    })?;
+    super::config::preflight_remaining(scratch, global_need)?;
     let weld_depths = vertex_depths(scratch, &triangles, &nodes, config, jobs, check)?;
     stats.welded_vertices = weld_depths.len();
     check()?;
@@ -658,6 +667,7 @@ mod tests {
             sorter.finish().unwrap(),
             config,
             jobs,
+            0,
             &mut || Ok(()),
         )
         .unwrap();
@@ -769,9 +779,14 @@ mod tests {
         let scratch = Scratch::create(None, 0).unwrap();
         let mut sorter = ExternalSorter::new(&scratch, config.sorter(1)).unwrap();
         sorter.extend((0..9).map(|id| triangle(0, id))).unwrap();
-        let err = match build(&scratch, sorter.finish().unwrap(), &config, 1, &mut || {
-            Ok(())
-        }) {
+        let err = match build(
+            &scratch,
+            sorter.finish().unwrap(),
+            &config,
+            1,
+            0,
+            &mut || Ok(()),
+        ) {
             Ok(_) => panic!("expected refusal"),
             Err(err) => err,
         };

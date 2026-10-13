@@ -156,7 +156,7 @@ Every tile is checked against its actual encoded vertices and bytes. Each tile h
 | Tiles in the hierarchy, `--max-tiles` | 100,000 |
 | Coordinates in one source feature, `--max-source-vertices` | 1,000,000 |
 
-Indivisible geometry that exceeds a budget fails. An oversized tile is never published silently. Coincident features with the same source ID still go to separate leaves.
+Indivisible geometry that exceeds a budget fails. An oversized tile is never published silently. The tileset is written from typed tile records. Before `tileset.json` is written, every content's staged payload must still have the length and SHA-256 its record declares, and the full-detail leaves must hold every source fragment exactly once; otherwise the conversion fails and nothing is published. Coincident features with the same source ID still go to separate leaves.
 
 Large features are split to fit:
 
@@ -289,6 +289,7 @@ Archives written before the bounded implicit forest layout are not reuse baselin
 - `vector-build.json` stores partition decisions, the original local frame and the producer hierarchy (`explicitRoot`) that the forest was written from. Deleting the first feature does not move unchanged content.
 - `vector-build.json` holds one `payloads` entry per distinct raw payload that any implicit tile publishes, keyed by its SHA-256: the first such `implicit-content/` member in tile preorder, its translation, and the exact raw root-node text and JSON length (empty text and length 0 for a byte copy). Raw payloads that an explicit tile also publishes in place have an entry too. Reuse restores each raw payload exactly from its entry, otherwise from `t/<sha256>`, then lays out the new archive.
 - Every recovered payload must match its SHA-256 name. An altered member or record fails with `previous content checksum failed` or `invalid previous payload record`, and nothing is published.
+- `explicitRoot` is read strictly: only the tile members, number forms, content extension and `t/<sha256>.glb` names this producer writes are accepted. Anything else fails with "previous vector hierarchy: …; run a fresh conversion without reuseTileset".
 - `conversion.json.reuse` reports reused subtrees, tiles and contents, and newly encoded contents.
 
 Reuse identifies features by source id; give GeoJSON features a top-level `id`, or use GeoPackage, so insertions and deletions do not renumber later features.
