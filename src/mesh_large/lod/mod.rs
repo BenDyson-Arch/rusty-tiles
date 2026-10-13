@@ -1640,9 +1640,9 @@ fn frozen_packet(
     let mut order: BTreeMap<u32, u32> = BTreeMap::new();
     let mut primitives: Vec<FrozenPrimitive> = Vec::new();
     for f in faces {
-        if !order.contains_key(&f.label) {
+        if let std::collections::btree_map::Entry::Vacant(slot) = order.entry(f.label) {
             let l = mesh.labels[f.label as usize];
-            order.insert(f.label, primitives.len() as u32);
+            slot.insert(primitives.len() as u32);
             primitives.push(FrozenPrimitive {
                 node: l.key.0,
                 mesh: l.key.1,
@@ -1663,8 +1663,7 @@ fn frozen_packet(
         .enumerate()
         .map(|(i, p)| ((p.node, p.mesh, p.primitive), i as u32))
         .collect();
-    let mut rank = node.first;
-    for s in ctx.source.range(node.first, node.end, 1 << 16)? {
+    for (rank, s) in (node.first..).zip(ctx.source.range(node.first, node.end, 1 << 16)?) {
         let s = s?;
         if let Some(&i) = by_key.get(&s.primitive_key()) {
             let ranges = &mut primitives[i as usize].donor_ranges;
@@ -1673,7 +1672,6 @@ fn frozen_packet(
                 _ => ranges.push(rank..rank + 1),
             }
         }
-        rank += 1;
     }
     let fill_base = u32::MAX - fill_rows.len() as u32;
     let mut frozen_faces = Vec::with_capacity(faces.len());

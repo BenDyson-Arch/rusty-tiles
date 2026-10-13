@@ -159,8 +159,10 @@ impl LeafPreencode {
                 let len = p.width as usize * p.height as usize;
                 let raw = b.get(at..at + 4 * len).ok_or_else(bad)?;
                 p.support = Some(
-                    raw.chunks_exact(4)
-                        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+                    raw.as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|c| u32::from_le_bytes(*c))
                         .collect(),
                 );
                 at += 4 * len;

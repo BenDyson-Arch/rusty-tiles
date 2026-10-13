@@ -954,10 +954,7 @@ pub(crate) fn readback(bytes: &[u8]) -> Result<Readback, JobError> {
                     name.clone(),
                     values
                         .iter()
-                        .flat_map(|e| {
-                            e.chunks_exact(4)
-                                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
-                        })
+                        .flat_map(|e| e.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)))
                         .collect(),
                 );
             }
