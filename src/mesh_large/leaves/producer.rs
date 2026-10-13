@@ -216,21 +216,37 @@ fn stage_plan(
         None => total_source.min(largest_source * 8 * 4),
     };
     // Workers share one page-workspace gate, which must admit the largest
-    // page; each worker adds one in-flight leaf to a window of jobs + 2.
+    // page. A running leaf owns its closure and encoded pages; a finished
+    // leaf waiting for the ordered writer keeps only its closure and receipts
+    // (its member is already written), so the window is four leaves per
+    // worker and absorbs slow leaves without idling the others.
+    let per_job = leaf_bytes
+        .checked_add(
+            leaf_owned
+                .checked_mul(4)
+                .ok_or_else(|| resource("window"))?,
+        )
+        .ok_or_else(|| resource("per-job overflow"))?;
     let (jobs, limited_by) = match requested {
         Jobs::Fixed(n) => (n.get() as u64, "request"),
         Jobs::Auto => match usable.map(|u| {
-            (u.saturating_sub(cache_bytes).saturating_sub(page_bytes) / leaf_bytes.max(1))
-                .saturating_sub(2)
+            u.saturating_sub(cache_bytes)
+                .saturating_sub(page_bytes)
+                .saturating_sub(2 * leaf_owned)
+                / per_job.max(1)
         }) {
             Some(0) => (1, "floor"),
             Some(n) if n < cores => (n, "memory"),
             _ => (cores, "cores"),
         },
     };
-    let window = jobs.checked_add(2).ok_or_else(|| resource("window"))?;
-    let leaves = window
+    let window = jobs
+        .checked_mul(4)
+        .and_then(|n| n.checked_add(2))
+        .ok_or_else(|| resource("window"))?;
+    let leaves = jobs
         .checked_mul(leaf_bytes)
+        .and_then(|n| n.checked_add(window.checked_mul(leaf_owned)?))
         .ok_or_else(|| resource("leaf window overflow"))?;
     let gate_bytes = match usable {
         Some(u) => u.saturating_sub(cache_bytes).saturating_sub(leaves),
@@ -289,8 +305,14 @@ struct LeafInput {
     records: Vec<FullTriangle>,
     corner_depths: Vec<[u8; 3]>,
 }
+/// A leaf whose member is already written by its worker; only its identity
+/// and receipts travel to the ordered manifest writer.
 struct LeafEncoded {
-    glb: writer::EncodedLeaf,
+    name: String,
+    sha256: String,
+    bytes: u64,
+    bounds: super::super::records::Bounds,
+    geometry_error: f64,
     appearance: Vec<serde_json::Value>,
     density_drop: u32,
     density_reasons: Vec<serde_json::Value>,
@@ -347,6 +369,8 @@ fn encode_leaf(
     input: &LeafInput,
     services: &atlas::Services<'_>,
     config: &TreeConfig,
+    leaves: &Path,
+    index: u64,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
@@ -379,8 +403,17 @@ fn encode_leaf(
             })
         },
     )?;
+    // Members are named by frozen leaf order, so workers write them in
+    // parallel; the manifest row is still appended strictly in order.
+    let name = format!("{index:012}.glb");
+    let member = leaves.join(&name);
+    timing::time(Stage::MemberWrite, || write_file(&member, &glb.glb))?;
     Ok(LeafEncoded {
-        glb,
+        name,
+        sha256: hex(Sha256::digest(&glb.glb)),
+        bytes: glb.glb.len() as u64,
+        bounds: glb.bounds,
+        geometry_error: glb.geometry_error,
         appearance,
         density_drop,
         density_reasons,
@@ -484,12 +517,13 @@ fn produce(
                     let index = spawned;
                     let sender = sender.clone();
                     let services = &services;
+                    let leaves_dir = leaves.as_path();
                     scope.spawn(move |_| {
                         // A panicking worker still reports, so the ordered
                         // writer never waits for a result that cannot come.
                         let encoded =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                encode_leaf(&input, services, config)
+                                encode_leaf(&input, services, config, leaves_dir, index)
                             }))
                             .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
                         // The receiver outlives every task of this scope.
@@ -506,14 +540,7 @@ fn produce(
                 pending.insert(index, encoded);
                 while let Some(encoded) = pending.remove(&written) {
                     let (encoded, input) = encoded?;
-                    write_leaf(
-                        &leaves,
-                        &mut manifest,
-                        &manifest_path,
-                        &mut report,
-                        &input,
-                        encoded,
-                    )?;
+                    write_leaf(&mut manifest, &manifest_path, &mut report, &input, encoded)?;
                     written += 1;
                 }
             }
@@ -560,7 +587,6 @@ fn produce(
 }
 
 fn write_leaf(
-    leaves: &Path,
     manifest: &mut BufWriter<File>,
     manifest_path: &Path,
     report: &mut LeafOutputReport,
@@ -570,22 +596,25 @@ fn write_leaf(
     let node = &input.node;
     let plan = &input.plan;
     let LeafEncoded {
-        glb: encoded,
+        name,
+        sha256,
+        bytes,
+        bounds,
+        geometry_error,
         appearance,
         density_drop,
         density_reasons,
     } = encoded;
-    let name = format!("{:012}.glb", report.leaves);
-    let member = leaves.join(&name);
-    timing::time(Stage::MemberWrite, || write_file(&member, &encoded.glb))?;
+    if name != format!("{:012}.glb", report.leaves) {
+        return Err(invariant("leaf member order differs from manifest order"));
+    }
     timing::count(Counter::Leaves, 1);
-    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":hex(Sha256::digest(&encoded.glb)),"bytes":encoded.glb.len(),"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":encoded.bounds.min.map(f64::from),"max":encoded.bounds.max.map(f64::from)},"geometryError":encoded.geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"plannedFootprint":{"densityDrop":plan.density_drop,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"plannedFootprint":{"densityDrop":plan.density_drop,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
     serde_json::to_writer(&mut *manifest, &receipt)
         .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
     manifest
         .write_all(b"\n")
         .map_err(|e| JobError::io("write leaf manifest", manifest_path, e))?;
-    let bytes = encoded.glb.len() as u64;
     report.triangles = report
         .triangles
         .checked_add(node.triangles())
@@ -596,7 +625,7 @@ fn write_leaf(
         .checked_add(bytes)
         .ok_or_else(|| resource("leaf output size overflow"))?;
     report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
-    report.maximum_geometry_error = report.maximum_geometry_error.max(encoded.geometry_error);
+    report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
     Ok(())
 }
