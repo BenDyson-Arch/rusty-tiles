@@ -1245,6 +1245,10 @@ struct Check<'a> {
     /// Per-URI C2 facts in first-inspection order, for the work-facts seam.
     #[cfg(test)]
     uri_work: Vec<(String, UriFacts)>,
+    /// Whether the two per-tile and per-URI test seams above collect (off in the scale
+    /// driver, whose memory they would grow).
+    #[cfg(test)]
+    seams: bool,
     /// The reference traversal of VS-B-4 (controls only): references whose precheck step
     /// passed, with their level chains, streamed after traversal as the old phase 2 did.
     #[cfg(test)]
@@ -1544,7 +1548,9 @@ impl Check<'_> {
         };
         self.facts.insert(rank, &stored, &self.scratch)?;
         #[cfg(test)]
-        try_push(&mut self.uri_work, (name.to_owned(), uri_facts))?;
+        if self.seams {
+            try_push(&mut self.uri_work, (name.to_owned(), uri_facts))?;
+        }
         self.elements = self
             .resources
             .budget(LimitKey::TotalPayloadElements)
@@ -2586,20 +2592,22 @@ impl Check<'_> {
                 self.tile_budgets(bytes, vertices)?;
             }
             #[cfg(test)]
-            try_push(
-                &mut self.implicit_facts,
-                ImplicitTileFact {
-                    doc: r.base.clone(),
-                    level: tile.level,
-                    coords: tile.coords,
-                    depth,
-                    parent_level: tile.level.checked_sub(1),
-                    volume: tile.volume,
-                    error: tile.error,
-                    refine: r.refine,
-                    contents: tile.contents,
-                },
-            )?;
+            if self.seams {
+                try_push(
+                    &mut self.implicit_facts,
+                    ImplicitTileFact {
+                        doc: r.base.clone(),
+                        level: tile.level,
+                        coords: tile.coords,
+                        depth,
+                        parent_level: tile.level.checked_sub(1),
+                        volume: tile.volume,
+                        error: tile.error,
+                        refine: r.refine,
+                        contents: tile.contents,
+                    },
+                )?;
+            }
         }
         walk.finish().map_err(|e| implicit_error(e.widen()))
     }
@@ -2868,6 +2876,8 @@ thread_local! {
     static MEMOIZE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     /// A memo budget other than `MEMO_BYTES` on this thread (VS-B-6 controls).
     static MEMO_BUDGET: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// Off stops the test seams (implicit tile facts, per-URI work facts) on this thread.
+    pub(crate) static SEAMS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     /// On selects the reference traversal of VS-B-4 (phase 2 after traversal) on this thread.
     static DEFERRED_STREAM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -3043,6 +3053,8 @@ fn inspect_run(
         implicit_facts: Vec::new(),
         #[cfg(test)]
         uri_work: Vec::new(),
+        #[cfg(test)]
+        seams: SEAMS.with(std::cell::Cell::get),
         #[cfg(test)]
         deferred: DEFERRED_STREAM.with(std::cell::Cell::get).then(Vec::new),
         memo: HashMap::new(),
