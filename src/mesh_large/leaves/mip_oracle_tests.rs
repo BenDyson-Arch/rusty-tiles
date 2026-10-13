@@ -1264,8 +1264,8 @@ fn independent_data_filter_control_rejects_colour_transfer() {
             source[offset..offset + 4].iter().copied()
         })
         .collect();
-    let production = super::sparse_mips::build(4, 4, &page, &[1; 16], Class::Data, 1024 * 1024)
-        .unwrap();
+    let production =
+        super::sparse_mips::build(4, 4, &page, &[1; 16], Class::Data, 1024 * 1024).unwrap();
     for pixel in production.levels[1].rgba.as_chunks::<4>().0 {
         assert_eq!(&pixel[1..3], &[128, 128]);
         assert_eq!(pixel.as_slice(), data[1].pixels.as_slice());
