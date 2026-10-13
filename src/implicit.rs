@@ -17,10 +17,16 @@ use std::collections::BTreeMap;
 
 mod tileset;
 pub use tileset::expand_tileset;
+// The streamed forest's interface, for the large-mesh tiler's delivery (H16).
 pub(crate) use tileset::write_forest_records;
 pub use tileset::{
     rebase_payload, restore_payload, write_forest, ForestOutput, RebaseRecord, TileRole,
     WrittenContent, WrittenTile,
+};
+#[allow(unused_imports)]
+pub(crate) use tileset::{
+    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, ImplicitNames, RootName,
+    DOC_BYTES, DOC_DEPTH, DOC_NODES, MAX_LEVELS,
 };
 
 type Bits = BitVec<u8, Lsb0>;
@@ -210,6 +216,14 @@ impl Subtree {
         }
         self.metadata.insert(index, metadata);
         Ok(())
+    }
+
+    /// The available tile count and the available content count over every slot.
+    pub(crate) fn available(&self) -> (usize, usize) {
+        (
+            self.tiles.count_ones(),
+            self.contents.iter().map(|bits| bits.count_ones()).sum(),
+        )
     }
 
     fn validate(&self) -> Result<(), Error> {

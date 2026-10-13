@@ -8,10 +8,14 @@ use super::{
 use crate::{
     archive3tz::{self, WriteFailure},
     runtime::{Attempt, Staging},
+    tileset_node::{
+        ContentKind, ContentRef, GeometricError, MemberName, NodePlacement, ObjectRole, Refine,
+        TileBox, TileRecord, TilesetDocument,
+    },
     CleanupDiagnostic, JobError, JobErrorKind, JobFailure, OutputPolicy, RunControl, RunEvent,
 };
 use serde::Serialize;
-use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 
 const MAX_EMITTED_PAYLOAD: u64 = 64 * 1024 * 1024;
@@ -275,24 +279,70 @@ fn prepare_report(
     })
 }
 
-fn manifest(report: &ModelReport, content_uri: &str) -> Result<Vec<u8>, JobError> {
-    serde_json::to_vec(&json!({
-        "asset": {"version": "1.1"},
-        "geometricError": report.tileset_geometric_error_metres,
-        "root": {
-            "boundingVolume": {"box": report.bounding_box},
-            "geometricError": report.root_geometric_error_metres,
-            "refine": "REPLACE",
-            "transform": report.root_transform,
-            "content": {"uri": content_uri}
-        }
-    }))
-    .map_err(|error| {
+/// The unchanged source model `bytes` as the root content named `uri`.
+fn source_content(uri: MemberName, bytes: &[u8]) -> Result<ContentRef, crate::Error> {
+    ContentRef::source_model(
+        uri,
+        Sha256::digest(bytes).into(),
+        bytes.len() as u64,
+        ContentKind::of(bytes),
+    )
+}
+
+/// `tileset.json` through the shared typed records: one full-detail root holding the
+/// unchanged model. Each written value is the report's own: the box and transform are
+/// rebuilt from their typed records and must equal the report bit for bit. The typed
+/// records write the structural constants (the axis-aligned box's six zero lanes, the
+/// transform's last row) as the JSON integers `0` and `1` (the M1 number-form contract);
+/// every other byte is the former `serde_json::json!` manifest's.
+fn manifest(
+    report: &ModelReport,
+    content: impl FnOnce() -> Result<ContentRef, crate::Error>,
+) -> Result<Vec<u8>, JobError> {
+    let failed = |error: crate::Error| {
         invalid(
             JobErrorKind::InvalidState,
             format!("serialize prepared model manifest: {error}"),
         )
-    })
+    };
+    let b = report.bounding_box;
+    let t = report.root_transform;
+    let bounds = TileBox::offset([b[0], b[1], b[2]], [b[3], b[7], b[11]]).map_err(failed)?;
+    let placement = NodePlacement::rigid(
+        [[t[0], t[1], t[2]], [t[4], t[5], t[6]], [t[8], t[9], t[10]]],
+        [t[12], t[13], t[14]],
+    )
+    .map_err(failed)?;
+    let same = |typed: &[f64], report: &[f64]| {
+        typed.len() == report.len()
+            && typed
+                .iter()
+                .zip(report)
+                .all(|(a, b)| a.to_bits() == b.to_bits())
+    };
+    if !same(&bounds.lanes(), &b) || !placement.matrix().is_some_and(|m| same(&m, &t)) {
+        return Err(invalid(
+            JobErrorKind::InvalidState,
+            "prepared model box or transform is not an axis-aligned box and rigid placement",
+        ));
+    }
+    let record = TileRecord::<()>::new(
+        placement,
+        bounds,
+        GeometricError::new(report.root_geometric_error_metres).map_err(failed)?,
+        Refine::Replace,
+        vec![content().map_err(failed)?],
+        None,
+    )
+    .map_err(failed)?;
+    let document = TilesetDocument::root(
+        GeometricError::new(report.tileset_geometric_error_metres).map_err(failed)?,
+        [],
+    );
+    let root = record
+        .explicit_object(record.bounds(), ObjectRole::Tile)
+        .map_err(failed)?;
+    serde_json::to_vec(&document.to_value(root)).map_err(|error| failed(error.into()))
 }
 
 pub fn model_to_archive(
@@ -328,7 +378,9 @@ fn model_to_archive_with_operations(
         } else {
             "model/source.gltf"
         };
-        let manifest = manifest(&report, content)?;
+        let manifest = manifest(&report, || {
+            source_content(MemberName::new(content)?, snapshot.root_bytes())
+        })?;
         let report_bytes = serde_json::to_vec(&report).map_err(|error| {
             invalid(
                 JobErrorKind::InvalidState,
@@ -484,7 +536,9 @@ fn model_to_manifest_with_operations(
         // Manifest output does not need a synthetic model member or alias-copy
         // byte ceiling; it references the source's admitted directory in place.
         let report = prepare_report(&snapshot, &placement, "manifest", 0, 0, &attempt)?;
-        let bytes = manifest(&report, &content_uri)?;
+        let bytes = manifest(&report, || {
+            source_content(MemberName::escaped(content_uri)?, snapshot.root_bytes())
+        })?;
         serde_json::to_vec(&report).map_err(|error| {
             invalid(
                 JobErrorKind::InvalidState,

@@ -23,7 +23,12 @@ source/destination aliases once. The placement owner resolves Local/Wgs84 once
 before source I/O, following F1c1. A pure source evaluation establishes bounds
 for the unchanged node hierarchy. The wrapper owns member inventory, required
 report and its private materialization workspace. Pure manifest serialization
-consumes prepared bounds, a prepared content URI and a resolved root transform.
+consumes prepared bounds, a prepared content URI and a resolved root transform,
+and emits them through the shared typed Tiles 1.1 records (`tileset_node`, M1):
+an offset `TileBox`, a rigid `NodePlacement` and a source-model `ContentRef`, each
+checked bit for bit against the report. The records write the structural
+constants (the box's six zero lanes and the transform's last row) as JSON
+integers `0` and `1`; every other byte is unchanged.
 One F0 Attempt owns events, cancellation, sealing and completed-file publication.
 There is no call to public package or a second RunControl within this run.
 
