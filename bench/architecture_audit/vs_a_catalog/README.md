@@ -175,3 +175,8 @@ At `85f5c16`, release parity (`c2_oracle_parity`, `i1_oracle_parity`, `validate:
 `archive3tz::`, `spill::`) passed 182/182 in the resident profile and 182/182 in the
 forced-spill profile (`parity/audit/`). The Python containment and implicit tests pass
 against a release extension built from `85f5c16`.
+
+Audit mutants (`mutants-audit/report.json`, sha256 `19ebcfe5…`, lock A, `-j 2`):
+`clean` failed nothing; `rows-tie-previous` (the audit's survivor), `rows-run-start`,
+`scratch-ram-silent`, `scratch-report-dropped`, `page-cache-stale` and
+`json-row-separator` were each caught.
