@@ -27,17 +27,19 @@ async function fly(spec) {
   const fetch_ = window.fetch;
   window.fetch = (...args) => { inflight++; return fetch_(...args).finally(() => inflight--); };
   if (spec.scheduler) Object.assign(C.RequestScheduler, spec.scheduler);
-  // Requests and bytes per frame: resource timing entries for the served data, attributed to the frame
-  // in which the observer delivered them.
+  // Requests and bytes per frame: resource timing entries for the served data. After each render the
+  // observer's buffer is drained synchronously (takeRecords), so an entry counts toward the first frame
+  // rendered after its response completed; entries still buffered at the end go to the last frame.
   performance.setResourceTimingBufferSize(1000000);
   let resources = [];
-  new PerformanceObserver(list => {
-    for (const entry of list.getEntries()) if (entry.name.includes('/data/')) resources.push(entry);
-  }).observe({type: 'resource'});
+  const keep = entries => { for (const entry of entries) if (entry.name.includes('/data/')) resources.push(entry); };
+  const observer = new PerformanceObserver(list => keep(list.getEntries()));
+  observer.observe({type: 'resource'});
   const viewer = new C.Viewer('view', {globe: false, baseLayer: false, skyBox: false, skyAtmosphere: false,
     geocoder: false, baseLayerPicker: false, animation: false, timeline: false, sceneModePicker: false,
     navigationHelpButton: false, homeButton: false, fullscreenButton: false, selectionIndicator: false, infoBox: false,
-    useDefaultRenderLoop: false, contextOptions: {webgl: {preserveDrawingBuffer: true}}});
+    // Only capture runs keep the drawing buffer (for toDataURL); timed runs render as a viewer would.
+    useDefaultRenderLoop: false, contextOptions: {webgl: {preserveDrawingBuffer: Boolean(spec.screenshots)}}});
   const scene = viewer.scene, camera = viewer.camera, scheduler = C.RequestScheduler;
   viewer.clock.shouldAnimate = false;
   scene.postProcessStages.fxaa.enabled = false;
@@ -101,11 +103,20 @@ async function fly(spec) {
     const s = tiles.statistics;
     return tiles.tilesLoaded && allTilesLoaded > 0 && s.numberOfPendingRequests === 0 && s.numberOfTilesProcessing === 0 && idle();
   };
+  // The disjoint flag is read once per poll: when set, every query pending at that moment is unreliable
+  // and is dropped (its frames keep gpu null); otherwise available results are read in order.
+  let gpuDisjoint = 0;
   const pollGpu = () => {
+    if (gl.getParameter(timer.GPU_DISJOINT_EXT)) {
+      gpuDisjoint += gpuPending.length;
+      for (const [query] of gpuPending) gl.deleteQuery(query);
+      gpuPending.length = 0;
+      return;
+    }
     while (gpuPending.length) {
       const [query, index] = gpuPending[0];
       if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) break;
-      if (!gl.getParameter(timer.GPU_DISJOINT_EXT)) columns.gpu[index] = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
+      columns.gpu[index] = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
       gl.deleteQuery(query); gpuPending.shift();
     }
   };
@@ -133,6 +144,7 @@ async function fly(spec) {
     }
     const removed = previous.size - (current.size - added);
     previous = current;
+    keep(observer.takeRecords());
     const arrived = resources; resources = [];
     if (firstRender === null && s.numberOfCommands > 0) firstRender = performance.now();
     const ready = fullQuality();
@@ -174,10 +186,17 @@ async function fly(spec) {
   }
   // Let late timer queries resolve (a few frames at the last pose; not recorded).
   for (let i = 0; timer && gpuPending.length && i < 10; i++) { await new Promise(requestAnimationFrame); pollGpu(); }
+  keep(observer.takeRecords());
+  observer.disconnect();
+  const last = columns.t.length - 1;
+  if (last >= 0 && resources.length) {
+    columns.requests[last] += resources.length;
+    columns.requestBytes[last] += resources.reduce((sum, e) => sum + (e.encodedBodySize || e.transferSize || 0), 0);
+  }
   return {loaded: !failures.length, failures, version: C.VERSION, canvas: [scene.canvas.width, scene.canvas.height],
     fromUrlSeconds, firstRenderSeconds: firstRender === null ? null : (firstRender - start) / 1000,
     totalSeconds: (performance.now() - start) / 1000, rootBoundingSphereRadius: sphere.radius,
-    gpuTimer: timer ? 'EXT_disjoint_timer_query_webgl2' : null, heap: performance.memory ? performance.memory.usedJSHeapSize : null,
+    gpuTimer: timer ? 'EXT_disjoint_timer_query_webgl2' : null, gpuDisjointDropped: gpuDisjoint, heap: performance.memory ? performance.memory.usedJSHeapSize : null,
     scheduler: {throttleRequests: scheduler.throttleRequests, maximumRequests: scheduler.maximumRequests,
       maximumRequestsPerServer: scheduler.maximumRequestsPerServer},
     waypoints, frames: columns};

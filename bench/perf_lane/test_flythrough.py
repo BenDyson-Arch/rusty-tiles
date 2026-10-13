@@ -32,10 +32,18 @@ class Paths(unittest.TestCase):
         quarter = fly.expand_path('p', path({'waypoint': 'a', 'pose': {}}, {'frames': 4, 'to': {'east': 1}, 'ease': 'smooth'}))
         self.assertAlmostEqual(quarter[1]['pose'][3], 0.15625)  # 3t^2 - 2t^3 at 0.25
 
-    def test_waypoint_pose_is_a_cut_and_keeps_unset_keys(self):
-        steps = fly.expand_path('p', path({'waypoint': 'a', 'pose': {'heading': 10, 'range': 3}},
+    def test_waypoint_pose_is_an_absolute_cut(self):
+        steps = fly.expand_path('p', path({'waypoint': 'a', 'pose': {'heading': 10, 'range': 2, 'north': 0.4}},
+                                          {'frames': 2, 'to': {'east': 1}},
                                           {'waypoint': 'b', 'pose': {'east': 0.5}}))
-        self.assertEqual(steps[1], dict(pose=[10, -45, 3, 0.5, 0, 0], waypoint='b'))
+        # unset keys take DEFAULT_POSE, not the pose the camera arrived with
+        self.assertEqual(steps[-1], dict(pose=[0, -45, 3, 0.5, 0, 0], waypoint='b'))
+        self.assertEqual(steps[2]['pose'], [10, -45, 2, 1, 0.4, 0])  # a motion 'to' keeps the current pose
+
+    def test_teleport_returns_to_the_same_overview(self):
+        steps = {s['waypoint']: s['pose'] for s in fly.load_config()['expanded']['snap-teleport']}
+        self.assertEqual(steps['overview-again'], steps['overview'])
+        self.assertEqual(steps['centre-close'][3:], [0, 0, 0])  # not left at the sw-close offset
 
     def test_deterministic(self):
         config = fly.load_config()
@@ -68,6 +76,13 @@ class Paths(unittest.TestCase):
     def test_run_order_rotates_recipes(self):
         order = fly.run_order(['a', 'b', 'c'], ['p'], ['native'], 3)
         self.assertEqual([o[3] for o in order], ['a', 'b', 'c', 'b', 'c', 'a', 'c', 'a', 'b'])
+        self.assertEqual([o[0] for o in order], [1, 1, 1, 2, 2, 2, 3, 3, 3])
+
+    def test_capture_runs_are_separate_and_first(self):
+        order = fly.run_order(['a', 'b'], ['p'], ['native', 'cpu4x'], 1, capture_profiles=['native'])
+        self.assertEqual(order[:2], [(0, 'native', 'p', 'a'), (0, 'native', 'p', 'b')])
+        self.assertEqual(sum(o[0] == 0 for o in order), 2)
+        self.assertEqual(len(order), 6)
 
 
 class Recipes(unittest.TestCase):
@@ -83,6 +98,13 @@ class Recipes(unittest.TestCase):
         self.assertEqual(b['viewer'], {'tilesetOptions': {'x': 1, 'skipLevelOfDetail': True}, 'maximumScreenSpaceError': 8})
         self.assertEqual(a['viewer']['tilesetOptions'], {'x': 1})  # the base is not mutated
         self.assertEqual(fly.conversion_key(a['convert']), fly.conversion_key(b['convert']))  # converted once
+
+    def test_like_merges_scheduler(self):
+        parsed = fly.parse_recipes(self.doc(
+            {'name': 'a', 'convert': ['x', '{out}'], 'viewer': {'scheduler': {'maximumRequests': 10}}},
+            {'name': 'b', 'like': 'a', 'viewer': {'scheduler': {'throttleRequests': False}}}))
+        self.assertEqual(parsed['recipes'][1]['viewer']['scheduler'], {'maximumRequests': 10, 'throttleRequests': False})
+        self.assertEqual(parsed['recipes'][0]['viewer']['scheduler'], {'maximumRequests': 10})
 
     def test_output_instead_of_convert(self):
         parsed = fly.parse_recipes(self.doc({'name': 'a', 'output': '/x/y.3tz'}))
@@ -140,11 +162,16 @@ class Stats(unittest.TestCase):
         self.assertEqual(rep.percentile([3, None, 1], 50), 2)
         self.assertAlmostEqual(rep.percentile(list(range(1, 101)), 99), 99.01)
 
-    def test_intervals_skip_gaps_and_holds(self):
-        times, gaps, holds = [0, 16, 32, 132, 148], [0, 0, 0, 1, 0], [1, 1, 0, 0, 0]
-        self.assertEqual(rep.intervals(times, gaps), [16, 16, 16])
-        self.assertEqual(rep.intervals(times, gaps, holds, motion_only=True), [16, 16])
+    def test_intervals_follow_the_mask(self):
+        times = [0, 16, 32, 132, 148]
         self.assertEqual(rep.intervals(times), [16, 16, 100, 16])
+        self.assertEqual(rep.intervals(times, [1, 1, 0, 0, 1]), [16, 16])
+
+    def test_basis_is_motion_else_hold_without_cuts(self):
+        frames = dict(t=[0] * 5, hold=[1, 1, 0, 0, 1], gap=[0, 0, 0, 1, 0])
+        self.assertEqual(rep.basis(frames, [dict(frame=0), dict(frame=4)]), ('motion', [False, False, True, False, False]))
+        teleport = dict(t=[0] * 6, hold=[1] * 6, gap=[0, 0, 0, 1, 0, 0])
+        self.assertEqual(rep.basis(teleport, [dict(frame=0), dict(frame=3)]), ('hold', [False, True, True, False, True, True]))
 
     def test_hitches_are_strictly_above(self):
         values = [16.7, 33, 33.1, 100, 100.5]
@@ -165,9 +192,11 @@ class Stats(unittest.TestCase):
         # frame 1: churn 2 < 5; frame 2: 4 < 5; frame 3: 22 >= max(4, 6); frame 5: 28 >= 15
         self.assertEqual(rep.pops(selected, added, removed), 2)
         self.assertEqual(rep.pops([0, 5], [0, 5], [0, 0]), 0)  # nothing selected before: first selection is not a pop
+        self.assertEqual(rep.pops(selected, added, removed, [1, 1, 1, 0, 1, 1]), 1)  # frame 3 masked out
 
     def test_sse_jumps(self):
         self.assertEqual(rep.sse_jumps([20, 18, 6, 6, 0, 30, 14, 4]), 3)  # 18->6, 30->14, 14->4; 0 is no selection
+        self.assertEqual(rep.sse_jumps([20, 18, 6, 6, 0, 30, 14, 4], [1, 1, 0, 1, 1, 1, 1, 0]), 1)  # only 30->14
 
     def summary_run(self):
         return dict(firstRenderSeconds=0.5,
@@ -183,16 +212,45 @@ class Stats(unittest.TestCase):
     def test_summarize(self):
         s = rep.summarize(self.summary_run())
         self.assertEqual(s['frames'], 5)
-        self.assertEqual(s['motionFrames'], 3)
-        self.assertEqual(s['hitches33'], 1)
+        self.assertEqual((s['frameBasis'], s['basisFrames']), ('motion', 3))
+        self.assertEqual(s['hitches33'], 1)  # motion intervals 16, 16, 50
         self.assertEqual(s['frameP50Ms'], 16)
+        self.assertEqual(s['allHitches33'], 1)  # plus the 16 ms hold frame at the end
+        self.assertEqual(s['cpuP50Ms'], 1)  # the 5 ms first (hold) frame is outside the basis
         self.assertAlmostEqual(s['fullQualitySeconds'], 0.5)
-        self.assertEqual(s['gpuTimedFrames'], 3)
+        self.assertEqual(s['gpuTimedFrames'], 3)  # motion frames 1-3 all timed
         self.assertEqual((s['loads'], s['evictions'], s['requests']), (2, 1, 2))
         self.assertEqual(s['peakRequestsPerSecond'], 2)
         run = self.summary_run(); run['waypoints'][1]['reached'] = False
         self.assertIsNone(rep.summarize(run)['fullQualitySeconds'])
         self.assertEqual(rep.summarize(run)['unreachedWaypoints'], 1)
+
+
+    def test_render_keeps_profiles_apart_and_marks_captures(self):
+        summary = rep.summarize(self.summary_run())
+        host = dict(wallSeconds=10, psiStart={}, psiEnd={}, memAvailableMinGiB=30, gpuUtilStart=0, cpuBusyMean=0.1, loadAverage=1)
+        facts, noise = rep.host_noise(host)
+        runs = [dict(id=f'r.p.{profile}.r{i}', recipe='r', set='s', path='p', profile=profile, repeat=i, capture=i == 0,
+                     hostFacts=facts, noise=noise, problems=[], summary=summary) for profile in ('native', 'cpu4x') for i in (0, 1, 2)]
+        aggregates = {f'r|p|{profile}': dict(rep.aggregate([summary, summary], [False, False]),
+                                              waypoints={'a': dict(median=0.4, n=2, of=2, unreached=0)})
+                      for profile in ('native', 'cpu4x')}
+        artifact = dict(generated='now', runs=runs, aggregates=aggregates,
+                        screenshots={'r|p|native|a': dict(file='screenshots/x.png', sha256='ab' * 32)},
+                        environment=dict(evidence='/e', commit='c', binary=dict(version='v', sha256='0' * 64), renderer='GPU',
+                                         rendererClass='gpu', browserVersion='b', browser=dict(mode='cdp'), viewport=[1024, 768],
+                                         devicePixelRatio=1, cesium='1.146.0', fps=60, medianIntervalMs=16.7, gpuTimer=None,
+                                         repeats=2, settleMs=250, holdSeconds=10, captureProfiles=['native']),
+                        paths={'p': dict(description='d', motionFrames=3, waypoints=['a', 'b'])},
+                        profiles={'native': {'description': 'n'}, 'cpu4x': {'cpuThrottlingRate': 4}},
+                        recipes=[dict(set='s', name='r', convert=['x'], viewer={}, output=dict(bytes=1, files=1))])
+        text = rep.render(artifact, pathlib.Path('/e'), pathlib.Path('/e/FLYTHROUGH.md'))
+        self.assertIn('## s: native', text)
+        self.assertIn('## s: cpu4x', text)
+        self.assertIn('| p | r | motion | 16.0 / ', text)
+        self.assertIn('| 2/2 (2 clean) |', text)
+        self.assertIn('| native | 2 | 0 |', text)  # capture runs are not counted as timed runs
+        self.assertIn('`abababab', text)
 
 
 class Noise(unittest.TestCase):
@@ -217,11 +275,17 @@ class Noise(unittest.TestCase):
         self.assertEqual((out['runs'], out['clean'], out['usedNoisy']), (3, 2, False))
         self.assertEqual(out['metrics']['frameP95Ms']['median'], 17.25)
         self.assertTrue(out['metrics']['frameP95Ms']['stable'])
+        self.assertEqual((out['metrics']['frameP95Ms']['n'], out['metrics']['frameP95Ms']['of']), (2, 2))
         out = rep.aggregate(summaries, [False, True, True])  # one clean run: use all, and say so
         self.assertTrue(out['usedNoisy'])
         self.assertEqual(out['metrics']['frameP95Ms']['median'], 17.5)
         self.assertFalse(out['metrics']['frameP95Ms']['stable'])  # 23 ms spread > max(1.75, 1)
         self.assertTrue(out['metrics']['requests']['stable'])  # 2 <= count floor
+
+    def test_single_value_has_unknown_stability(self):
+        out = rep.aggregate([dict(fullQualitySeconds=None, requests=3), dict(fullQualitySeconds=1.0, requests=3)], [False, False])
+        self.assertEqual(out['metrics']['fullQualitySeconds'], dict(median=1.0, min=1.0, max=1.0, n=1, of=2, stable=None))
+        self.assertTrue(out['metrics']['requests']['stable'])
 
     def test_floors(self):
         self.assertEqual(rep.floor_for('frameP95Ms'), 1.0)

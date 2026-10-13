@@ -29,14 +29,15 @@ VIEWER_KEYS = {'tilesetOptions': dict, 'maximumScreenSpaceError': (int, float), 
 SCHEDULER_KEYS = {'throttleRequests', 'maximumRequestsPerServer', 'maximumRequests'}
 PROFILE_KEYS = {'description', 'cpuThrottlingRate', 'tilesetOptions'}
 CONVERT_ENV = dict(PATH='', HOME=os.environ.get('HOME', '/'), RAYON_NUM_THREADS='2', PROJ_NETWORK='OFF', LC_ALL='C')
+GPU_SETTLE_SECONDS = 1.5
 EVIDENCE = pathlib.Path.home() / '.cache/rusty-tiles-evidence/perf'
 
 
 # ---- recipes ----
 
 def parse_recipes(document, source='recipes'):
-    """Validate one recipe set and resolve 'like' (copy another recipe, then override; viewer options and
-    tilesetOptions merge). Returns {set, dataset, description, recipes:[{name, convert|output, viewer}]}."""
+    """Validate one recipe set and resolve 'like' (copy another recipe, then override; viewer options,
+    tilesetOptions and scheduler merge). Returns {set, dataset, description, recipes:[{name, convert|output, viewer}]}."""
     def fail(message): raise ValueError(f'{source}: {message}')
     if not isinstance(document, dict): fail('expected a JSON object')
     unknown = set(document) - {'set', 'dataset', 'description', 'recipes'}
@@ -81,8 +82,8 @@ def parse_recipes(document, source='recipes'):
             fail(f'recipe {name!r}: maximumScreenSpaceError must be >= 0')
         if set(viewer.get('scheduler', {})) - SCHEDULER_KEYS: fail(f'recipe {name!r}: unknown scheduler keys')
         merged = dict(recipe['viewer'], **viewer)
-        if 'tilesetOptions' in viewer:
-            merged['tilesetOptions'] = dict(recipe['viewer'].get('tilesetOptions', {}), **viewer['tilesetOptions'])
+        for key in ('tilesetOptions', 'scheduler'):  # nested options merge with the base's
+            if key in viewer: merged[key] = dict(recipe['viewer'].get(key, {}), **viewer[key])
         recipe['viewer'] = merged
         resolved[name] = recipe
     return dict(set=set_name, dataset=document['dataset'], description=document.get('description', ''),
@@ -124,10 +125,10 @@ def check_pose(pose, where):
 
 def expand_path(name, path):
     """Steps of one path: [{'pose': [heading, pitch, range, east, north, up]}, ...], with 'waypoint' on hold
-    steps. A motion segment of N frames emits N steps ending at its 'to' pose; heading, pitch and offsets are
-    interpolated linearly in the eased parameter and range geometrically (constant zoom rate). A waypoint
-    with a pose cuts there instantly. The first segment must be a waypoint with a pose; unset pose keys
-    take DEFAULT_POSE."""
+    steps. A motion segment of N frames emits N steps ending at its 'to' pose, whose unset keys keep the current
+    pose; heading, pitch and offsets are interpolated linearly in the eased parameter and range
+    geometrically (constant zoom rate). A waypoint with a pose cuts there instantly; that pose is absolute,
+    its unset keys taking DEFAULT_POSE. The first segment must be a waypoint with a pose."""
     segments = path.get('segments')
     if not isinstance(segments, list) or not segments: raise ValueError(f'path {name}: segments must be a non-empty list')
     first = segments[0]
@@ -145,7 +146,7 @@ def expand_path(name, path):
             names.add(label)
             if 'pose' in segment:
                 check_pose(segment['pose'], where)
-                current = dict(DEFAULT_POSE if index == 0 else current, **segment['pose'])
+                current = dict(DEFAULT_POSE, **segment['pose'])  # absolute: unset keys are defaults
             steps.append(dict(pose=as_list(current), waypoint=label))
             continue
         if set(segment) - {'frames', 'to', 'ease'}: raise ValueError(f'{where}: a motion takes frames, to and ease')
@@ -173,15 +174,17 @@ def load_config(path=CONFIG):
     return config
 
 
-def run_order(recipes, paths, profiles, repeats):
-    """(repeat, profile, path, recipe) in run order: recipes rotate by one per repeat so no recipe always
-    runs first, and every repeat of a profile completes before the next repeat."""
-    order = []
+def run_order(recipes, paths, profiles, repeats, capture_profiles=()):
+    """(repeat, profile, path, recipe) in run order. Untimed screenshot runs (repeat 0) for capture_profiles
+    come first; then timed repeats 1..N, recipes rotating by one per repeat so no recipe always runs
+    first, every repeat of a profile completing before the next repeat."""
+    order = [(0, profile, path, recipe) for profile in profiles if profile in capture_profiles
+             for path in paths for recipe in recipes]
     for repeat in range(repeats):
         rotated = recipes[repeat % len(recipes):] + recipes[:repeat % len(recipes)]
         for profile in profiles:
             for path in paths:
-                for recipe in rotated: order.append((repeat, profile, path, recipe))
+                for recipe in rotated: order.append((repeat + 1, profile, path, recipe))
     return order
 
 
@@ -222,6 +225,7 @@ def gpu_util():
 class HostSampler:
     """Samples host load while one run executes: PSI totals at both ends, CPU busy and MemAvailable every 0.5 s."""
     def __enter__(self):
+        time.sleep(GPU_SETTLE_SECONDS)  # let the previous run's browser work drain off the GPU
         self.util, self.gpu_memory = gpu_util()
         self.psi, self.start, self.stop = read_psi(), time.monotonic(), threading.Event()
         self.busy, self.memory = [], [mem_available_gib()]
@@ -297,7 +301,8 @@ def main():
     parser.add_argument('--hold-seconds', type=float, help='waypoint hold limit (default from the config)')
     parser.add_argument('--timeout', type=float, default=120, help='seconds per bounded browser step')
     parser.add_argument('--settle-ms', type=float, default=cesium.SETTLE_MS)
-    parser.add_argument('--screenshots', choices=['first', 'none'], default='first', help='waypoint captures on repeat 1')
+    parser.add_argument('--screenshots', default='native', help='comma-separated profiles that get one extra, untimed '
+                        'run per recipe and path capturing each waypoint (default native; "none" for no captures)')
     parser.add_argument('--cpus', default='0,1', help='CPU affinity of this driver and of conversions')
     parser.add_argument('--cdp-url', default=cesium.CDP_URL)
     parser.add_argument('--launch', action='store_true')
@@ -366,21 +371,24 @@ def main():
     server = cesium.serve(mounts, args.cesium.resolve(), log)
     browser = cesium.browser_spec(args)
     hold_seconds = args.hold_seconds or config['holdSeconds']
-    order = run_order([r['name'] for r in recipes], paths, profiles, args.repeats)
+    capture = [] if args.screenshots == 'none' else args.screenshots.split(',')
+    for name in capture:
+        if name not in profiles: parser.error(f'--screenshots {name!r} is not a selected profile')
+    order = run_order([r['name'] for r in recipes], paths, profiles, args.repeats, capture)
     by_name = {r['name']: r for r in recipes}
     runs, screenshots = [], {}
     try:
         for number, (repeat, profile_name, path, name) in enumerate(order, 1):
             recipe, profile = by_name[name], config['profiles'][profile_name]
             steps = config['expanded'][path]
-            run_id = f'{name}.{path}.{profile_name}.r{repeat + 1}'
+            run_id = f'{name}.{path}.{profile_name}.' + (f'r{repeat}' if repeat else 'capture')
             viewer = recipe['viewer']
             spec = dict(url=f'/data/{name}/tileset.json', steps=steps, fps=config['fps'], holdMs=hold_seconds * 1000,
                         settleMs=args.settle_ms, stepMs=int(args.timeout * 1000), browser=browser,
                         maximumScreenSpaceError=viewer.get('maximumScreenSpaceError', 16),
                         tilesetOptions=dict(viewer.get('tilesetOptions', {}), **profile.get('tilesetOptions', {})),
                         cpuThrottlingRate=profile.get('cpuThrottlingRate', 1),
-                        screenshots=args.screenshots == 'first' and repeat == 0)
+                        screenshots=repeat == 0)
             if viewer.get('scheduler'): spec['scheduler'] = viewer['scheduler']
             spec_file = work / 'specs' / f'{run_id}.json'; spec_file.write_text(json.dumps(spec))
             waypoints = sum(1 for s in steps if 'waypoint' in s)
@@ -401,7 +409,7 @@ def main():
                     shot = pathlib.Path(waypoint['screenshot'])
                     screenshots[f'{name}|{path}|{profile_name}|{waypoint["name"]}'] = dict(
                         file=str(shot.relative_to(evidence)), sha256=hashlib.sha256(shot.read_bytes()).hexdigest())
-            runs.append(dict(id=run_id, recipe=name, set=recipe['set'], path=path, profile=profile_name, repeat=repeat + 1,
+            runs.append(dict(id=run_id, recipe=name, set=recipe['set'], path=path, profile=profile_name, repeat=repeat, capture=repeat == 0,
                              host=host, hostFacts=facts, noise=noise, problems=found, summary=summary,
                              waypoints=[{k: w.get(k) for k in ('name', 'reached', 'fullQualitySeconds', 'holdFrames')}
                                         for w in result.get('waypoints', [])],
@@ -419,27 +427,30 @@ def main():
         for path in paths:
             for profile_name in profiles:
                 group = [r for r in runs if (r['recipe'], r['path'], r['profile']) == (recipe['name'], path, profile_name)
-                         and r['summary'] and not r['problems']]
+                         and r['summary'] and not r['problems'] and not r['capture']]
                 if not group: continue
                 entry = flythrough_report.aggregate([r['summary'] for r in group], [bool(r['noise']) for r in group])
                 used = [r for r in group if not r['noise']] if entry['clean'] >= 2 else group
                 entry['waypoints'] = {}
                 for label in [w['name'] for w in group[0]['waypoints']]:
                     values = [w['fullQualitySeconds'] for r in used for w in r['waypoints'] if w['name'] == label and w['reached']]
-                    entry['waypoints'][label] = dict(median=statistics.median(values) if values else None,
+                    entry['waypoints'][label] = dict(median=statistics.median(values) if values else None, n=len(values), of=len(used),
                                                      unreached=sum(1 for r in used for w in r['waypoints']
                                                                    if w['name'] == label and not w['reached']))
                 aggregates[f"{recipe['name']}|{path}|{profile_name}"] = entry
-    classes = {r['rendererClass'] for r in runs if r['rendererClass'] != 'unknown'}
-    if len(classes) > 1: raise SystemExit(f'flythrough: runs used several renderer classes {classes}; not comparable')
-    intervals = [v for r in runs if r['summary'] for v in [r['summary'].get('frameP50Ms')] if v is not None and r['profile'] == 'native']
+    # A run whose renderer differs from the preflight's is a problem (problems()) and is left out of every
+    # aggregate, so one artifact never mixes renderer classes; the classes seen are recorded.
+    classes = sorted({r['rendererClass'] for r in runs})
+    intervals = [v for r in runs if r['summary'] and not r['capture'] and r['profile'] == 'native'
+                 for v in [r['summary'].get('allFrameP50Ms')] if v is not None]
     artifact = dict(
         generated=datetime.datetime.now().isoformat(timespec='seconds'),
         environment=dict(evidence=str(evidence), commit=git_commit(), binary=binary, renderer=renderer['renderer'],
-                         rendererClass=renderer['rendererClass'], browserVersion=renderer['browserVersion'], browser=browser,
+                         rendererClass=renderer['rendererClass'], rendererClassesSeen=classes, browserVersion=renderer['browserVersion'], browser=browser,
                          viewport=renderer.get('viewport'), devicePixelRatio=renderer.get('devicePixelRatio'),
                          cesium=json.loads((args.cesium.resolve().parents[1] / 'package.json').read_text())['version'],
                          fps=config['fps'], holdSeconds=hold_seconds, settleMs=args.settle_ms, repeats=args.repeats,
+                         captureProfiles=capture,
                          medianIntervalMs=statistics.median(intervals) if intervals else None,
                          gpuTimer=next((r['gpuTimer'] for r in runs if r.get('gpuTimer')), None),
                          thresholds=dict(hitchMs=flythrough_report.HITCH_MS, popMinTiles=flythrough_report.POP_MIN_TILES,

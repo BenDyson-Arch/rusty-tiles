@@ -39,15 +39,20 @@ def percentile(values, q):
     return data[low] + (data[high] - data[low]) * (position - low)
 
 
-def intervals(times, gaps=None, holds=None, motion_only=False):
-    """Frame intervals in ms between consecutive presented frames. A frame flagged in gaps (harness work
-    such as a screenshot before it) contributes no interval; motion_only keeps only non-hold frames."""
-    found = []
-    for i in range(1, len(times)):
-        if gaps and gaps[i]: continue
-        if motion_only and holds and holds[i]: continue
-        found.append(times[i] - times[i - 1])
-    return found
+def basis(frames, waypoints):
+    """('motion' or 'hold', per-frame mask) for the headline metrics. Motion frames (hold == 0) when the path
+    has any; otherwise (snap-teleport) hold frames, without the first frame of each waypoint, which is the
+    cut itself. A gap frame (harness work such as a screenshot before it) is never in the basis."""
+    n = len(frames['t'])
+    holds, gaps = frames.get('hold') or [0] * n, frames.get('gap') or [0] * n
+    if any(not h for h in holds): return 'motion', [not h and not g for h, g in zip(holds, gaps)]
+    cuts = {w['frame'] for w in waypoints}
+    return 'hold', [i not in cuts and not g for i, g in enumerate(gaps)]
+
+
+def intervals(times, mask=None):
+    """Presented-frame intervals in ms: frame i contributes times[i] - times[i - 1] when mask[i] holds."""
+    return [times[i] - times[i - 1] for i in range(1, len(times)) if mask is None or mask[i]]
 
 
 def hitches(values, threshold):
@@ -65,39 +70,49 @@ def peak_rate(times, counts, window_ms=RATE_WINDOW_MS):
     return best * 1000 / window_ms
 
 
-def pops(selected, added, removed):
-    """Frames whose selected-tile set changed by at least POP_MIN_TILES and POP_FRACTION of the previous one."""
+def pops(selected, added, removed, mask=None):
+    """Frames (in mask) whose selected-tile set changed by at least POP_MIN_TILES and POP_FRACTION of the
+    previous one."""
     found = 0
     for i in range(1, len(selected)):
+        if mask is not None and not mask[i]: continue
         churn = added[i] + removed[i]
         if selected[i - 1] > 0 and churn >= max(POP_MIN_TILES, POP_FRACTION * selected[i - 1]): found += 1
     return found
 
 
-def sse_jumps(values):
-    """Frames where the largest selected-tile screen-space error moved by SSE_JUMP_RATIO and SSE_JUMP_PX."""
+def sse_jumps(values, mask=None):
+    """Frames (in mask) where the largest selected-tile screen-space error moved from the previous frame by
+    SSE_JUMP_RATIO and SSE_JUMP_PX."""
     found = 0
-    for a, b in zip(values, values[1:]):
+    for i in range(1, len(values)):
+        if mask is not None and not mask[i]: continue
+        a, b = values[i - 1], values[i]
         if not a or not b: continue
         if max(a, b) / min(a, b) >= SSE_JUMP_RATIO and abs(a - b) >= SSE_JUMP_PX: found += 1
     return found
 
 
 def summarize(run):
-    """Scalar metrics of one run from its per-frame columns and waypoints."""
+    """Scalar metrics of one run. Frame, CPU and GPU times, hitches, pops and SSE jumps use the headline
+    basis (motion frames, or hold frames for a path without motion); allFrame* use every non-gap frame."""
     f, waypoints = run['frames'], run.get('waypoints', [])
     times = f['t']
-    frame = intervals(times, f.get('gap'))
-    motion = intervals(times, f.get('gap'), f.get('hold'), motion_only=True)
+    kind, mask = basis(f, waypoints)
+    every = [not g for g in (f.get('gap') or [0] * len(times))]
+    frame, whole = intervals(times, mask), intervals(times, every)
+    pick = lambda column: [v for v, keep in zip(f.get(column) or [], mask) if keep and v is not None]
     reached = [w for w in waypoints if w.get('reached')]
     full = [w['fullQualitySeconds'] for w in reached]
     memory = [(g or 0) + (t or 0) for g, t in zip(f['geometryBytes'], f['textureBytes'])]
-    gpu = [v for v in f.get('gpu', []) if v is not None]
-    out = dict(frames=len(times), motionFrames=sum(1 for h in f.get('hold', []) if not h),
+    cpu, gpu = pick('cpu'), pick('gpu')
+    out = dict(frames=len(times), frameBasis=kind, basisFrames=sum(mask),
                frameP50Ms=percentile(frame, 50), frameP95Ms=percentile(frame, 95), frameP99Ms=percentile(frame, 99),
-               frameMaxMs=max(frame) if frame else None, motionFrameP95Ms=percentile(motion, 95),
+               frameMaxMs=max(frame) if frame else None,
                hitches33=hitches(frame, HITCH_MS[0]), hitches100=hitches(frame, HITCH_MS[1]),
-               cpuP50Ms=percentile(f['cpu'], 50), cpuP95Ms=percentile(f['cpu'], 95),
+               allFrameP50Ms=percentile(whole, 50), allFrameP95Ms=percentile(whole, 95), allFrameP99Ms=percentile(whole, 99),
+               allHitches33=hitches(whole, HITCH_MS[0]), allHitches100=hitches(whole, HITCH_MS[1]),
+               cpuP50Ms=percentile(cpu, 50), cpuP95Ms=percentile(cpu, 95),
                gpuP50Ms=percentile(gpu, 50), gpuP95Ms=percentile(gpu, 95), gpuTimedFrames=len(gpu),
                firstRenderSeconds=run.get('firstRenderSeconds'),
                fullQualitySeconds=sum(full) if len(reached) == len(waypoints) else None,
@@ -112,7 +127,7 @@ def summarize(run):
                requests=sum(f['requests']), requestMiB=sum(f['requestBytes']) / MIB,
                peakRequestsPerSecond=peak_rate(times, f['requests']),
                peakMiBPerSecond=peak_rate(times, f['requestBytes']) / MIB,
-               lodPops=pops(f['selected'], f['selAdded'], f['selRemoved']), sseJumps=sse_jumps(f['maxSse']),
+               lodPops=pops(f['selected'], f['selAdded'], f['selRemoved'], mask), sseJumps=sse_jumps(f['maxSse'], mask),
                minMemoryAdjustedSse=min((v for v in f.get('memorySse', []) if v is not None), default=None),
                wallSeconds=(times[-1] - times[0]) / 1000 if len(times) > 1 else 0)
     return out
@@ -150,17 +165,19 @@ def floor_for(metric):
 
 
 def aggregate(summaries, noisy):
-    """{metric: {median, min, max, n, stable}} over the clean runs when at least two are clean, else all;
-    plus 'runs', 'clean' and 'usedNoisy'."""
+    """{metric: {median, min, max, n, of, stable}} over the clean runs when at least two are clean, else all;
+    plus 'runs', 'clean', 'used' and 'usedNoisy'. n is how many of the `of` runs used had a value; stable is
+    None (unknown) with fewer than two values."""
     clean = [s for s, bad in zip(summaries, noisy) if not bad]
     used = clean if len(clean) >= 2 else summaries
-    out = dict(runs=len(summaries), clean=len(clean), usedNoisy=used is summaries and len(clean) < len(summaries), metrics={})
+    out = dict(runs=len(summaries), clean=len(clean), used=len(used), frameBasis=(summaries[0] if summaries else {}).get('frameBasis'),
+               usedNoisy=used is summaries and len(clean) < len(summaries), metrics={})
     for metric in summaries[0] if summaries else []:
-        values = [s[metric] for s in used if s.get(metric) is not None]
+        values = [s[metric] for s in used if isinstance(s.get(metric), (int, float)) and not isinstance(s.get(metric), bool)]
         if not values: out['metrics'][metric] = None; continue
         median, low, high = statistics.median(values), min(values), max(values)
-        out['metrics'][metric] = dict(median=median, min=low, max=high, n=len(values),
-                                      stable=high - low <= max(STABLE_SPREAD * abs(median), floor_for(metric)))
+        stable = None if len(values) < 2 else high - low <= max(STABLE_SPREAD * abs(median), floor_for(metric))
+        out['metrics'][metric] = dict(median=median, min=low, max=high, n=len(values), of=len(used), stable=stable)
     return out
 
 
@@ -177,12 +194,15 @@ def cell(aggregated, metric, digits=1, spread=False):
     if not entry: return 'n/a'
     text = fmt(entry['median'], digits)
     if spread and entry['n'] > 1: text += f" ({fmt(entry['min'], digits)}-{fmt(entry['max'], digits)})"
-    return text + ('' if entry['stable'] else ' ~')
+    if entry['n'] != entry['of']: text += f" [{entry['n']}/{entry['of']}]"  # runs with a value / runs used
+    return text + {True: '', False: ' ~', None: ' ?'}[entry['stable']]
 
 
 COLUMNS = [  # header, metric, digits, show range
+    ('basis', 'basis', 0, False),
     ('frame p50/p95/p99 ms', ('frameP50Ms', 'frameP95Ms', 'frameP99Ms'), 1, False),
     ('hitch >33/>100', ('hitches33', 'hitches100'), 0, False),
+    ('all frames p95 / >33', ('allFrameP95Ms', 'allHitches33'), 1, False),
     ('cpu p95 ms', ('cpuP95Ms',), 1, False),
     ('gpu p95 ms', ('gpuP95Ms',), 2, False),
     ('first render s', ('firstRenderSeconds',), 2, False),
@@ -195,7 +215,7 @@ COLUMNS = [  # header, metric, digits, show range
     ('GPU MiB peak', ('gpuMemoryPeakMiB',), 1, False),
     ('load/evict/reload', ('loads', 'evictions', 'reloads'), 0, False),
     ('pops / SSE jumps', ('lodPops', 'sseJumps'), 0, False),
-    ('runs (clean)', None, 0, False),
+    ('runs used/total (clean)', None, 0, False),
 ]
 
 
@@ -203,7 +223,9 @@ def row(aggregated):
     cells = []
     for _, metrics, digits, spread in COLUMNS:
         if metrics is None:
-            cells.append(f"{aggregated['runs']} ({aggregated['clean']}{', noisy used' if aggregated['usedNoisy'] else ''})"); continue
+            cells.append(f"{aggregated['used']}/{aggregated['runs']} ({aggregated['clean']} clean"
+                         f"{', noisy used' if aggregated['usedNoisy'] else ''})"); continue
+        if metrics == 'basis': cells.append(aggregated.get('frameBasis') or 'n/a'); continue
         cells.append(' / '.join(cell(aggregated, m, digits, spread) for m in metrics))
     return cells
 
@@ -236,9 +258,15 @@ def render(artifact, directory, output, images=False):
            f"- Repeats: {env['repeats']}, order rotated per repeat. Waypoints hold until full quality (finish rule, "
            f"{env['settleMs']:g} ms) or {env['holdSeconds']:g} s.",
            '- Never compare across profiles or renderer classes: each table holds one recipe set, one profile and one renderer.',
-           f"- Cells are medians over clean runs (all runs when fewer than two are clean); `~` marks a metric whose "
-           f"repeats spread beyond max({STABLE_SPREAD:.0%} of the median, floor). Frame times are presented-frame "
-           f"intervals (rAF); hitches are intervals over {HITCH_MS[0]} and {HITCH_MS[1]} ms.", '']
+           f"- Cells are medians over clean timed runs (all timed runs when fewer than two are clean); `[k/N]` means only "
+           f"k of the N runs used had a value; `~` marks a metric whose repeats spread beyond max({STABLE_SPREAD:.0%} of "
+           "the median, floor) and `?` one with fewer than two values. Frame times are presented-frame intervals (rAF); "
+           f"hitches are intervals over {HITCH_MS[0]} and {HITCH_MS[1]} ms.",
+           '- Basis: frame, CPU and GPU times, hitches, LOD pops and SSE jumps count motion frames only (`motion`); a '
+           'path without motion (snap-teleport) counts its hold frames except each cut (`hold`). `all frames` adds the '
+           'holds. Frames after a screenshot are never counted.',
+           f"- Screenshots come from one extra, untimed run per recipe and path in profiles {env.get('captureProfiles')}; "
+           'timed runs capture nothing and render without preserveDrawingBuffer.', '']
     out += ['## Paths', '', table(['path', 'motion frames', 'waypoints', 'description'],
                                   [[name, p['motionFrames'], ', '.join(p['waypoints']), p['description']]
                                    for name, p in artifact['paths'].items()]), '']
@@ -269,11 +297,12 @@ def render(artifact, directory, output, images=False):
                         entry = groups.get(f'{recipe}|{path}|{profile}')
                         values = (entry or {}).get('waypoints', {}).get(waypoint)
                         cells.append('n/a' if not values else
-                                     f"{fmt(values['median'], 2)}" + (f" ({values['unreached']} unreached)" if values['unreached'] else ''))
+                                     f"{fmt(values['median'], 2)}" + (f" [{values['n']}/{values['of']}]" if values['n'] != values['of'] else '')
+                                     + (f" ({values['unreached']} unreached)" if values['unreached'] else ''))
                     wrows.append([path, waypoint, *cells])
             out += [f'Time to full quality per waypoint (s, median), {set_name}, {profile}:', '',
                     table(['path', 'waypoint', *recipes], wrows), '']
-    out += ['## Screenshots', '', 'Canvas captures at full quality, first repeat of each recipe, path and profile.', '']
+    out += ['## Screenshots', '', 'Canvas captures at full quality, from the untimed capture run of each recipe, path and profile.', '']
     shots = artifact.get('screenshots', {})
     for set_name in dict.fromkeys(r['set'] for r in artifact['recipes']):
         recipes = [r['name'] for r in artifact['recipes'] if r['set'] == set_name]
@@ -300,7 +329,8 @@ def render(artifact, directory, output, images=False):
             f"before the run (another process) and mean CPU busy. Noisy when: {', '.join(f'{k} {v:g}' for k, v in NOISE.items())} "
             '(MemAvailable below, others at or above).', '']
     by_profile = {}
-    for run in runs: by_profile.setdefault(run['profile'], []).append(run)
+    timed = [r for r in runs if not r.get('capture')]
+    for run in timed: by_profile.setdefault(run['profile'], []).append(run)
     rows = []
     for profile, items in by_profile.items():
         facts = [r['hostFacts'] for r in items]
@@ -310,7 +340,7 @@ def render(artifact, directory, output, images=False):
                      fmt(med('gpuUtilStart'), 0), f"{med('cpuBusyMean'):.0%}"])
     out += [table(['profile', 'runs', 'noisy', 'cpu PSI (median)', 'mem PSI', 'io PSI', 'min MemAvail GiB', 'GPU util % (median)',
                    'CPU busy (median)'], rows), '']
-    noisy = [r for r in runs if r['noise']]
+    noisy = [r for r in timed if r['noise']]
     if noisy:
         out += ['Noisy runs:', ''] + [f"- `{r['id']}`: {'; '.join(r['noise'])}" for r in noisy[:40]]
         if len(noisy) > 40: out.append(f'- ... and {len(noisy) - 40} more (see flythrough.json)')
@@ -325,9 +355,10 @@ def render(artifact, directory, output, images=False):
         for metric in STABILITY_METRICS:
             m = entry['metrics'].get(metric)
             if not m: cells.append('n/a'); continue
+            if m['stable'] is None: cells.append('?'); continue
             share = (m['max'] - m['min']) / abs(m['median']) if m['median'] else 0.0
             cells.append(f"{share:.0%}" + ('' if m['stable'] else ' ~'))
-            unstable += not m['stable']
+            unstable += m['stable'] is False
         rows.append([recipe, path, profile, entry['runs'], *cells])
     out += [f'{unstable} unstable metric cells of {len(rows) * len(STABILITY_METRICS)}.', '',
             table(['recipe', 'path', 'profile', 'runs', *STABILITY_METRICS], rows), '']
