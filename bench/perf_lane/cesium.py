@@ -284,6 +284,10 @@ def main():
                         'RequestScheduler.throttleRequests=false and record the per-frame request cap\'s effect (not gated)')
     parser.add_argument('--check-renderer', action='store_true', help='print the preflight renderer facts and exit; '
                         f'exit {ENVIRONMENT_EXIT} unless the renderer matches the mode')
+    parser.add_argument('--tileset-options', action='append', default=[], metavar='NAME=JSON',
+                        help='extra Cesium3DTileset options for one tileset case, e.g. '
+                        '\'terrain={"skipLevelOfDetail":true}\'; a viewer setting, recorded in the case spec and never '
+                        'changing the output. Repeat per case')
     parser.add_argument('--maximum-sse', type=float, default=16, help='3D Tiles maximumScreenSpaceError (default 16). '
                         'Any other value is a report-only probe, such as 1 for near-full refinement: baseline '
                         'comparisons are recorded as advisory and do not fail the run')
@@ -309,6 +313,13 @@ def main():
     if not timing_comparable:
         print(f"cesium: --baseline used a {baseline_report['environment'].get('rendererClass', 'software')} renderer; "
               'its timings are not compared', file=sys.stderr)
+    tileset_options = {}
+    for item in args.tileset_options:
+        name, _, text = item.partition('=')
+        try: options = json.loads(text)
+        except ValueError: options = None
+        if not isinstance(options, dict): parser.error(f'--tileset-options {item!r}: expected NAME={{JSON object}}')
+        tileset_options[name] = options
     mounts, plans = {}, []
     for item in args.cases:
         name, _, path = item.partition('=')
@@ -337,6 +348,7 @@ def main():
         for name, kind, identity, directory in plans:
             spec = dict(base_spec, kind=kind, url=f'/data/{name}/' + ('' if kind == 'raster' else 'tileset.json'))
             if kind == 'tileset': spec['maximumScreenSpaceError'] = args.maximum_sse
+            if kind == 'tileset' and name in tileset_options: spec['tilesetOptions'] = tileset_options[name]
             if kind == 'raster' and args.inset:
                 spec['insetDegrees'] = inset_degrees(args.inset, json.loads((directory / 'tilejson.json').read_text())['maxzoom'])
             if kind == 'raster' and args.hole:

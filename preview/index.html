@@ -93,6 +93,8 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     const bounds = report.bounds.map(C.Math.toRadians);
     const terrain = window.terrain = await C.Cesium3DTileset.fromUrl(config.terrain, {
       maximumScreenSpaceError: 8, enableCollision: true,
+      // REPLACE pyramid: load only tiles that can be drawn, not every ancestor.
+      skipLevelOfDetail: true,
     });
     viewer.scene.primitives.add(terrain);
     terrain.tileFailed.addEventListener(fail);

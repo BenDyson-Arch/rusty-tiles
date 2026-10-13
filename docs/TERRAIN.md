@@ -142,12 +142,24 @@ The tested consumer is **CesiumJS 1.146.0**. Load the output as a
 ```js
 const terrain = await Cesium.Cesium3DTileset.fromUrl("terrain/tileset.json", {
   enableCollision: true,
+  skipLevelOfDetail: true,
 });
 viewer.scene.primitives.add(terrain);
 terrain.imageryLayers.addImageryProvider(imageryProvider);
 const heights = await viewer.scene.sampleHeightMostDetailed(cartographicPositions);
 const clamped = await viewer.scene.clampToHeightMostDetailed(cartesianPositions);
 ```
+
+Set `skipLevelOfDetail: true` for terrain, as the preview does. The levels use
+REPLACE refinement, so by default Cesium loads every ancestor of a tile it
+draws. With skipping it loads only tiles that can be drawn. Fully refined
+(`maximumScreenSpaceError: 0`) on the 1025x1025 perf-lane DEM (289 leaves),
+that is 300 requests instead of 419, 6.6 MB instead of 8.8 MB, and 0.73 s
+instead of 0.87-1.03 s on a GPU. The final frame is pixel-identical, and the
+geometric errors and what each view finally selects are unchanged. Leave
+`immediatelyLoadDesiredLevelOfDetail` off: it saved only one more request and
+shows holes until the finest tiles arrive. In a default overview the tileset
+loads 2 requests and 13 KB either way.
 
 `sampleHeightMostDetailed` and `clampToHeightMostDetailed` traverse to the
 full-detail leaves, so their answers do not depend on the view. Downward rays
