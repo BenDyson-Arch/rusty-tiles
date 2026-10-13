@@ -176,6 +176,8 @@ fn cluster() -> Vec<Mesh> {
 struct Glb {
     faces: Vec<[[f32; 3]; 3]>,
     features: Vec<[u32; 2]>,
+    /// Property table of each face's second feature-ID set.
+    second_table: Vec<usize>,
     tables: Vec<(String, BTreeMap<String, Vec<u64>>)>,
 }
 
@@ -261,6 +263,9 @@ fn read_glb(bytes: &[u8]) -> Glb {
             })
         };
         let (f0, f1) = (feature("_FEATURE_ID_0"), feature("_FEATURE_ID_1"));
+        let second = prim["extensions"]["EXT_mesh_features"]["featureIds"][1]["propertyTable"]
+            .as_u64()
+            .map_or(usize::MAX, |t| t as usize);
         let index: Vec<usize> = match prim.get("indices") {
             Some(i) => {
                 let (e, ct) = elements(i.as_u64().unwrap() as usize);
@@ -273,6 +278,7 @@ fn read_glb(bytes: &[u8]) -> Glb {
         for t in index.chunks(3) {
             out.faces.push([points[t[0]], points[t[1]], points[t[2]]]);
             out.features.push([f0[t[0]], f1[t[0]]]);
+            out.second_table.push(second);
         }
     }
     let meta = &doc["extensions"]["EXT_structural_metadata"];
@@ -368,6 +374,7 @@ struct Audit {
     matched_edges: usize,
     fills: usize,
     vanished: usize,
+    fill_faces: usize,
     max_depth: u64,
 }
 
@@ -413,6 +420,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
         error: f64,
         faces: Vec<[[f32; 3]; 3]>,
         source: Vec<Tri>,
+        provenance: Vec<(u64, u64)>,
         present: BTreeSet<(u64, u64, u64)>,
         vanished: Vec<(u64, u64, u64)>,
         fills: Vec<([u64; 3], f64)>,
@@ -430,6 +438,11 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .iter()
             .map(|f| source_tri(t["mesh_index"][f[1] as usize] as usize, t["triangle_index"][f[1] as usize] as usize))
             .collect();
+        let provenance = g
+            .features
+            .iter()
+            .map(|f| (t["mesh_index"][f[1] as usize], t["triangle_index"][f[1] as usize]))
+            .collect();
         tiles.push(Tile {
             first: r["first"].as_u64().unwrap(),
             end: r["end"].as_u64().unwrap(),
@@ -438,6 +451,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             present: primitives(&g),
             faces: g.faces,
             source: source_tris,
+            provenance,
             vanished: vec![],
             fills: vec![],
         });
@@ -451,6 +465,25 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .filter(|l| l.first >= first && l.end <= end)
             .flat_map(|l| l.source.iter().copied())
             .collect();
+        // Provenance: every proxy triangle names a source triangle of its own primitive in
+        // the tile's range, or is a fill.
+        let in_range: BTreeSet<(u64, u64)> = tiles[..leaf_count]
+            .iter()
+            .filter(|l| l.first >= first && l.end <= end)
+            .flat_map(|l| l.provenance.iter().copied())
+            .collect();
+        let present_rows = &g.tables.iter().find(|t| t.0 == "source_primitive").unwrap().1;
+        for (f, table) in g.features.iter().zip(&g.second_table) {
+            let (class, t) = &g.tables[*table];
+            assert_eq!(class, "proxy_source");
+            let row = f[1] as usize;
+            assert_eq!(t["mesh_index"][row], present_rows["mesh_index"][f[0] as usize], "provenance primitive");
+            if t["fill"][row] == 0 {
+                assert!(in_range.contains(&(t["mesh_index"][row], t["triangle_index"][row])), "provenance outside the tile");
+            } else {
+                audit.fill_faces += 1;
+            }
+        }
         let mut vanished = vec![];
         let mut fills = vec![];
         for (class, t) in &g.tables {
@@ -472,6 +505,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             present: primitives(&g),
             faces: g.faces,
             source,
+            provenance: vec![],
             vanished,
             fills,
         });

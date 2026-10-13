@@ -31,6 +31,18 @@ pub(crate) struct Vertex {
 pub(crate) struct Face {
     pub v: [u32; 3],
     pub label: u32,
+    /// Index of the input face this one descends from (collapses keep it); `u32::MAX` for
+    /// a fill face.
+    pub id: u32,
+}
+
+/// The source triangle a face descends from (`triangle == u64::MAX` for a fill).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub(crate) struct Origin {
+    pub node: u32,
+    pub mesh: u32,
+    pub primitive: u32,
+    pub triangle: u64,
 }
 
 /// Indexed key-space geometry; `vertices` sorted by key, `labels` sorted.
@@ -47,6 +59,7 @@ pub(crate) struct KeyFace {
     pub keys: [Key; 3],
     pub info: [VertexInfo; 3],
     pub label: Label,
+    pub origin: Origin,
 }
 
 impl KeyMesh {
@@ -65,9 +78,11 @@ impl KeyMesh {
         let label = |l: &Label| labels.binary_search(l).unwrap() as u32;
         let faces = faces
             .iter()
-            .map(|f| Face {
+            .enumerate()
+            .map(|(i, f)| Face {
                 v: [vertex(&f.keys[0]), vertex(&f.keys[1]), vertex(&f.keys[2])],
                 label: label(&f.label),
+                id: i as u32,
             })
             .collect();
         Self {
@@ -752,6 +767,7 @@ mod tests {
                         keys: t.map(|k| p(quad[k].0, quad[k].1)),
                         info: t.map(|k| info(quad[k].0, quad[k].1)),
                         label,
+                        origin: Origin::default(),
                     });
                 }
             }
@@ -855,7 +871,7 @@ mod tests {
         assert_eq!(loops[0].vertices.len(), 4);
         let mut closed = mesh.faces.clone();
         for t in fan(&loops[0]) {
-            closed.push(Face { v: t, label: 0 });
+            closed.push(Face { v: t, label: 0, id: u32::MAX });
         }
         // Every interior edge now has two faces with opposite directions.
         let mut directed: BTreeMap<(u32, u32), i32> = BTreeMap::new();

@@ -25,7 +25,7 @@ use self::{
     codec::{ProxyPrimitive, RecordTable},
     geom::{Arith, Bvh, Limits, Tri},
     incidence::{LodSource, VertexInfo, NEVER},
-    mesh::{Face, Key, KeyFace, KeyMesh, Label, Simplifier},
+    mesh::{Face, Key, KeyFace, KeyMesh, Label, Origin, Simplifier},
 };
 use super::{
     full::FullCaptured,
@@ -500,6 +500,7 @@ impl Sidecar {
             faces.push(Face {
                 v: [u(&s[0..4]), u(&s[4..8]), u(&s[8..12])],
                 label: u(&s[12..16]),
+                id: 0,
             });
         }
         Ok(Self {
@@ -556,7 +557,10 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
     let mut tris_out = Vec::with_capacity(decoded.faces.len());
     let mut labels = BTreeMap::new();
     for face in &decoded.faces {
-        let row = face.features[1] as usize;
+        let row = face
+            .feature(&decoded.tables, "source_triangle")
+            .ok_or_else(|| state("leaf triangle without a source_triangle feature ID"))?
+            .0 as usize;
         if row >= table.count {
             return Err(state("leaf feature ID outside its source_triangle table"));
         }
@@ -592,6 +596,12 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
             keys: s.positions.map(incidence::weld),
             info: s.info,
             label,
+            origin: Origin {
+                node: s.node,
+                mesh: s.mesh,
+                primitive: s.primitive,
+                triangle: s.triangle,
+            },
         });
         tris_out.push(tri_of(&face.p));
     }
@@ -636,13 +646,31 @@ fn load_proxy(ctx: &Ctx, node: &NodeRecord) -> Result<ChildGeom, JobError> {
             return Err(state("proxy GLB bytes decode differently from their sidecar"));
         }
         let (label, _) = sidecar.labels[face.label as usize];
-        if published.features[0] != face.label {
+        if published.feature(&decoded.tables, "source_primitive").map(|f| f.0) != Some(face.label) {
             return Err(state("proxy feature ID differs from its sidecar label"));
         }
+        // Provenance from the published per-triangle table.
+        let (row, table) = published
+            .feature(&decoded.tables, "proxy_source")
+            .ok_or_else(|| state("proxy triangle without a proxy_source feature ID"))?;
+        let columns = &decoded.tables[table].columns;
+        let column = |name: &str| -> Result<u64, JobError> {
+            columns
+                .get(name)
+                .and_then(|c| c.get(row as usize))
+                .copied()
+                .ok_or_else(|| state("proxy_source table without its row"))
+        };
         faces.push(KeyFace {
             keys: face.v.map(|v| sidecar.vertices[v as usize].0),
             info: face.v.map(|v| sidecar.vertices[v as usize].1),
             label,
+            origin: Origin {
+                node: column("node_index")? as u32,
+                mesh: column("mesh_index")? as u32,
+                primitive: column("primitive_index")? as u32,
+                triangle: column("triangle_index")?,
+            },
         });
         tris.push(tri_of(&published.p));
     }
@@ -690,7 +718,7 @@ fn by_label(faces: &[Face]) -> Vec<Face> {
 }
 
 /// Build the per-primitive proxy geometry for `faces` (already label-grouped).
-fn primitives(mesh: &KeyMesh, faces: &[Face]) -> Vec<ProxyPrimitive> {
+fn primitives(mesh: &KeyMesh, faces: &[Face], origins: &[KeyFace]) -> Vec<ProxyPrimitive> {
     let mut out: Vec<ProxyPrimitive> = Vec::new();
     let mut local: BTreeMap<u32, u32> = BTreeMap::new();
     let mut current = u32::MAX;
@@ -706,9 +734,22 @@ fn primitives(mesh: &KeyMesh, faces: &[Face]) -> Vec<ProxyPrimitive> {
                 positions: Vec::new(),
                 ell: Vec::new(),
                 faces: Vec::new(),
+                origins: Vec::new(),
             });
         }
         let p = out.last_mut().unwrap();
+        p.origins.push(match origins.get(f.id as usize) {
+            Some(k) => k.origin,
+            None => {
+                let l = mesh.labels[f.label as usize].key;
+                Origin {
+                    node: l.0,
+                    mesh: l.1,
+                    primitive: l.2,
+                    triangle: u64::MAX,
+                }
+            }
+        });
         let tri = f.v.map(|v| {
             *local.entry(v).or_insert_with(|| {
                 let vertex = mesh.vertices[v as usize];
@@ -901,7 +942,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     lap(&mut phases[2]);
     let s_order = by_label(&s_faces);
     let flat_records: Vec<RecordTable> = Vec::new();
-    let unfilled = codec::encode(&primitives(&mesh, &s_order), ctx.materials, ctx.lattice, d, &flat_records)?;
+    let unfilled = codec::encode(&primitives(&mesh, &s_order, &key_faces), ctx.materials, ctx.lattice, d, &flat_records)?;
     let s_dec = codec::decode(&unfilled.glb)?;
     if s_dec.faces.len() != unfilled.faces.len()
         || !s_dec
@@ -1104,7 +1145,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
         }
         fill_rows.push((l.label, min_key, l.vertices.len() as u32, fan.len() as u32, bound, mask));
         for t in fan {
-            fill_faces.push(Face { v: t, label: l.label });
+            fill_faces.push(Face { v: t, label: l.label, id: u32::MAX });
         }
     }
     let raw = to_filled.max(from);
@@ -1177,7 +1218,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
             ],
         });
     }
-    let encoded = codec::encode(&primitives(&mesh, &final_order), ctx.materials, ctx.lattice, d, &records)?;
+    let encoded = codec::encode(&primitives(&mesh, &final_order, &key_faces), ctx.materials, ctx.lattice, d, &records)?;
     let check = codec::decode(&encoded.glb)?;
     if check.faces.len() != encoded.faces.len()
         || !check
@@ -1256,7 +1297,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
                 (vertices.len() - 1) as u32
             })
         });
-        sidecar_faces.push(Face { v, label });
+        sidecar_faces.push(Face { v, label, id: 0 });
     }
     out.sidecar_bytes = Sidecar {
         to: to_filled,
