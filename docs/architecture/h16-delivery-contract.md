@@ -210,9 +210,9 @@ its staging and publishes nothing.
 ## Validator acceptance and limits
 
 The merged validator (C2 slice 3 with the H11 fast path) accepts the output with
-`decodedContentContainment` for untextured and PNG (`lossless`) leaves, on the
-synthetic mixed trees (packed leaves, depth-24 synthetic runs, external
-documents) and on real H8 leaves. Two limits are recorded, not fixed here
+`decodedContentContainment` for untextured leaves, on the synthetic mixed trees
+(packed leaves, depth-24 synthetic runs, external documents) and on real H8
+leaves. PNG (`lossless`) leaves are not recorded as validated. Two limits are recorded, not fixed here
 (validator changes need the full process):
 
 - **KTX2 leaves.** H8's lossy profiles emit KTX2 textures and correctly list
@@ -220,10 +220,12 @@ documents) and on real H8 leaves. Two limits are recorded, not fixed here
   admits only four required extensions, so the validator refuses such archives
   as `Unsupported` ("required extension KHR_texture_basisu"). A test pins this.
   Admitting it is a validator follow-up.
-- **Scale.** Validating archives of 2^22 tiles or more (milestone 4's delivery
-  gate) needs the validator-scale slices (VS-A to VS-D: catalog, traversal/C2,
-  limits, scale acceptance). Today's entry, visit and work caps refuse such
-  archives; H16's own planning streams them.
+- **Scale.** The validator's fixed limits refuse far smaller archives than H16
+  writes: its 1 GiB archive-byte limit refuses the real mesh's 2,806 tiles at
+  1.40 GB, and its 2^18 hierarchy-visit limit refuses a 299,603-tile synthetic
+  forest. Validating these, and milestone 4's 2^22-tile delivery gate, needs the
+  validator-scale slices (VS-A to VS-D: catalog, traversal/C2, limits, scale
+  acceptance). H16's own planning streams them.
 
 ## Acceptance
 

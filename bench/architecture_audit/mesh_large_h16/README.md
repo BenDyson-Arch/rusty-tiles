@@ -65,8 +65,10 @@ Peak held records stay flat. The residual RSS growth is the index sorter's
 in-memory run (capped at 16 MiB) and the serializer's name per explicit leaf and
 document. The 2.1 M-member ZIP64 archive reads back with Python's `zipfile`; its
 index is sorted, holds `24·(N-1)` bytes, and 20,001 sampled offsets match
-(`synth/l7-index-check.json`). Archives of 2^22 tiles or more need the
-validator-scale slices before they can be validated.
+(`synth/l7-index-check.json`). The measured validator limits are its 1 GiB of
+archive bytes (the real mesh's 2,806 tiles at 1.40 GB are refused) and 2^18
+hierarchy visits (refused at 299,603 tiles); validating at these sizes needs the
+validator-scale slices.
 
 Nonauthor review (sonnet, fresh): GO-with-changes; its required changes (an
 honest acceptance record, a same-length tamper test after staging begins with

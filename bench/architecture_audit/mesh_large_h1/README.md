@@ -132,3 +132,8 @@ source stability ends when a real tiler consumer arrives. The geometry planning
 charge does not bound future encoded textured member size. Available-memory,
 RSS and stopped-allocation observations here have their recorded Linux domain;
 they do not establish all-platform resource behavior. #113/#121 remain open.
+
+Since H16 (#192) every profile's leaf budget `L` is 8,192 triangles (CesiumJS
+property-texture width; `fast` was 32,768 and `balanced` 16,384). Tree shapes
+recorded here for `fast` or `balanced` therefore no longer apply to current
+output; the capture, sort and tree rules are unchanged.

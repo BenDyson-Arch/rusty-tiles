@@ -17,6 +17,11 @@ Bulk receipts live at `~/.cache/rusty-tiles-evidence/h8-leaves-20261013/`; the
 manifest records their SHA-256 values. The earlier
 [foundation-manifest.json](foundation-manifest.json) remains historical evidence.
 
+Since H16 (#192) every profile's leaf budget is 8,192 triangles (CesiumJS
+property-texture width), so `fast` and `balanced` trees changed shape and the
+figures below describe the earlier 16,384-triangle `balanced` budget; the same
+mesh now gives 1,959 balanced leaves.
+
 The final balanced 10-million-triangle run emitted 1,024 leaves, totaling
 1,334,467,104 GLB bytes, in 71.13 seconds. Its measured high-water RSS was
 219,254,784 bytes and sampled physical scratch peak was 6,555,504,640 bytes.
