@@ -71,6 +71,14 @@ fn key(row: &FullTriangle) -> PrimitiveKey {
         row.triangle.source.primitive,
     )
 }
+/// A run of at most one table's triangles of one prepared primitive.
+struct Piece<'a> {
+    triangles: &'a [FullTriangle],
+    corner_depths: &'a [[u8; 3]],
+    uvs: Vec<&'a [[f32; 2]]>,
+    material: &'a Option<Value>,
+}
+
 fn allocate(length: usize) -> Result<Vec<u8>, JobError> {
     let mut bytes = Vec::new();
     bytes.try_reserve_exact(length).map_err(|_| overflow())?;
@@ -291,7 +299,10 @@ pub(super) fn encode(
     // Both property tables have at most `total` rows (one per triangle, one per present
     // primitive). The tree's leaf budget already bounds `total`; a wider table is a broken
     // plan, never a silent consumer-incompatible leaf.
-    if total as u64 > CONSUMER_TABLE_ROWS {
+    // Bench-only (`RUSTY_TILES_BENCH_LEAF_TRIANGLES`): a wider leaf is split into pieces of
+    // at most 8192 triangles, each with its own source_triangle table.
+    let split = total as u64 > CONSUMER_TABLE_ROWS;
+    if split && super::super::config::bench_leaf_triangles().is_none() {
         return Err(invalid("leaf property table exceeds the consumer row limit").into());
     }
     // Every triangle's mandatory numeric columns are uncompressed: this lower
@@ -339,7 +350,27 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
+    let rows_per_piece = if split {
+        CONSUMER_TABLE_ROWS as usize
+    } else {
+        usize::MAX
+    };
+    let mut pieces: Vec<Piece<'_>> = Vec::new();
     for primitive in &atlas.primitives {
+        let n = primitive.triangles.len();
+        let mut start = 0;
+        while start < n {
+            let end = n.min(start.saturating_add(rows_per_piece));
+            pieces.push(Piece {
+                triangles: &primitive.triangles[start..end],
+                corner_depths: &primitive.corner_depths[start..end],
+                uvs: primitive.uvs.iter().map(|uv| &uv[3 * start..3 * end]).collect(),
+                material: &primitive.material,
+            });
+            start = end;
+        }
+    }
+    for (piece_index, primitive) in pieces.iter().enumerate() {
         let flags = primitive.triangles[0].flags;
         if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
             return Err(invalid("prepared primitive mixes attribute presence").into());
@@ -420,6 +451,8 @@ pub(super) fn encode(
             for (i, row) in primitive.triangles.iter().enumerate() {
                 let id = if set == 0 {
                     primitive_ids[&key(row)]
+                } else if split {
+                    i
                 } else {
                     rank + i
                 };
@@ -430,9 +463,14 @@ pub(super) fn encode(
             attributes[format!("_FEATURE_ID_{set}")] =
                 json!(wire.attribute(&bytes, count, 4, 5126, "SCALAR")?);
         }
+        let (triangle_count, triangle_table) = if split {
+            (primitive.triangles.len(), 1 + piece_index)
+        } else {
+            (total, 1)
+        };
         let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":[
             {"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"},
-            {"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}]}}});
+            {"featureCount":triangle_count,"attribute":1,"propertyTable":triangle_table,"label":"source_triangle"}]}}});
         if let Some(material) = &primitive.material {
             output["material"] = json!(materials.len());
             materials.push(material.clone());
@@ -441,20 +479,23 @@ pub(super) fn encode(
         nodes.push(node);
         rank += primitive.triangles.len();
     }
-    let rows: Vec<&FullTriangle> = atlas
-        .primitives
-        .iter()
-        .flat_map(|p| p.triangles.iter())
-        .collect();
+    let mut table_inputs: Vec<(&str, Vec<&FullTriangle>)> = vec![(
+        "source_primitive",
+        primitive_rows.values().copied().collect::<Vec<_>>(),
+    )];
+    if split {
+        for piece in &pieces {
+            table_inputs.push(("source_triangle", piece.triangles.iter().collect()));
+        }
+    } else {
+        table_inputs.push((
+            "source_triangle",
+            pieces.iter().flat_map(|p| p.triangles.iter()).collect(),
+        ));
+    }
     let mut classes = Map::new();
     let mut tables = Vec::new();
-    for (class, input) in [
-        (
-            "source_primitive",
-            primitive_rows.values().copied().collect::<Vec<_>>(),
-        ),
-        ("source_triangle", rows),
-    ] {
+    for (class, input) in table_inputs {
         let mut schema = Map::new();
         let mut properties = Map::new();
         let columns = if class == "source_primitive" { 5 } else { 11 };
