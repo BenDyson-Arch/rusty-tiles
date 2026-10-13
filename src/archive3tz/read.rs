@@ -3,6 +3,9 @@
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Seek, SeekFrom};
 
+/// Index rows per streamed chunk: a 65,520-byte buffer.
+const INDEX_CHUNK_ROWS: usize = 2730;
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ReadLimits {
     pub source_archive_bytes: u64,
@@ -140,7 +143,9 @@ impl<R: Read + Seek> StoredArchive<R> {
         }
         // Cardinality is admitted before any index allocation. The catalog
         // supplies every association; no second directory interpretation.
-        let bytes = self.read_member(super::TZ_INDEX_NAME, length)?;
+        // The index is streamed in whole-row chunks, so its resident cost is
+        // one fixed buffer, not 24 bytes per entry.
+        let (offset, crc) = (last.data_offset, last.crc32);
         self.index_read_bytes = length;
         let mut offsets = Vec::new();
         offsets
@@ -150,21 +155,50 @@ impl<R: Read + Seek> StoredArchive<R> {
         offsets.sort_unstable_by_key(|&i| self.members[i].local_offset);
         let mut seen = bounded_bytes(n - 1)?;
         let mut previous = None;
-        for row in bytes.as_chunks::<24>().0 {
-            let key = (u64_at(row, 0), u64_at(row, 8));
-            if previous.is_some_and(|previous| previous > key) {
-                return Err(malformed("3TZ index hashes are not ordered"));
+        // A stored CRC mismatch outranks every row failure, as when the index
+        // was checked whole before parsing: the first row failure is held
+        // until the complete index has been read and its CRC verified.
+        let mut failure = None;
+        let mut hasher = crc32fast::Hasher::new();
+        let mut buffer = [0; INDEX_CHUNK_ROWS * 24];
+        let mut remaining = length;
+        self.reader.seek(SeekFrom::Start(offset))?;
+        while remaining != 0 {
+            let count = remaining.min(buffer.len() as u64) as usize;
+            let chunk = &mut buffer[..count];
+            read_exact(&mut self.reader, chunk)?;
+            remaining -= count as u64;
+            hasher.update(chunk);
+            if failure.is_some() {
+                continue;
             }
-            previous = Some(key);
-            let offset = u64_at(row, 16);
-            let position = offsets
-                .binary_search_by_key(&offset, |&i| self.members[i].local_offset)
-                .map_err(|_| malformed("3TZ index differs from admitted directory"))?;
-            let i = offsets[position];
-            if seen[i] != 0 || md5::compute(self.members[i].name.as_bytes()).0 != row[..16] {
-                return Err(malformed("3TZ index differs from admitted directory"));
+            for row in chunk.as_chunks::<24>().0 {
+                let key = (u64_at(row, 0), u64_at(row, 8));
+                if previous.is_some_and(|previous| previous > key) {
+                    failure = Some("3TZ index hashes are not ordered");
+                    break;
+                }
+                previous = Some(key);
+                let offset = u64_at(row, 16);
+                let Ok(position) =
+                    offsets.binary_search_by_key(&offset, |&i| self.members[i].local_offset)
+                else {
+                    failure = Some("3TZ index differs from admitted directory");
+                    break;
+                };
+                let i = offsets[position];
+                if seen[i] != 0 || md5::compute(self.members[i].name.as_bytes()).0 != row[..16] {
+                    failure = Some("3TZ index differs from admitted directory");
+                    break;
+                }
+                seen[i] = 1;
             }
-            seen[i] = 1;
+        }
+        if hasher.finalize() != crc {
+            return Err(malformed("stored member CRC mismatch"));
+        }
+        if let Some(message) = failure {
+            return Err(malformed(message));
         }
         Ok(())
     }
@@ -487,6 +521,14 @@ fn scan_directory(
             end_offset,
         )
     };
+    // A format rule, not a resource policy: it precedes every engineering
+    // limit and any catalog allocation, matching the producer's refusal.
+    if entries > super::MEMBER_CEILING {
+        return Err(ReadError::Unsupported(format!(
+            "3TZ member ceiling: {entries} members exceed {}",
+            super::MEMBER_CEILING
+        )));
+    }
     if entries > limits.archive_entries {
         return Err(ReadError::limit("archive exceeds entry limit"));
     }
@@ -520,7 +562,7 @@ fn scan_directory(
     let mut cursor = offset;
     let mut total = 0u64;
     let mut name_bytes = 0u64;
-    for _ in 0..entries {
+    for ordinal in 0..entries {
         if cursor.checked_add(46).is_none_or(|n| n > stop) {
             return Err(malformed("truncated ZIP central entry"));
         }
@@ -569,7 +611,12 @@ fn scan_directory(
             &extra,
             Some(u16_at(&h, 34)),
         )?;
-        if member > limits.member_bytes {
+        // The last-entry index is structural, not payload: validate_index
+        // admits exactly 24 * (entries - 1) bytes, a length the checked
+        // central-directory count fixes and the member ceiling bounds, and
+        // streams it. Every other member keeps the per-member limit.
+        let index = ordinal + 1 == entries && name == super::TZ_INDEX_NAME.as_bytes();
+        if !index && member > limits.member_bytes {
             return Err(ReadError::limit("archive member exceeds byte limit"));
         }
         if compressed != member {
@@ -815,6 +862,13 @@ pub(crate) mod tests {
         archive(&records, &(0..records.len()).collect::<Vec<_>>(), 0)
     }
     fn indexed(records: &[Record<'_>]) -> Vec<u8> {
+        indexed_rows(records, |_| {})
+    }
+    /// Index rows in sorted order; `edit` defects them before the CRC is set.
+    fn indexed_rows(
+        records: &[Record<'_>],
+        edit: impl FnOnce(&mut Vec<([u8; 16], u64)>),
+    ) -> Vec<u8> {
         let mut offset = 0u64;
         let mut rows: Vec<_> = records
             .iter()
@@ -825,6 +879,7 @@ pub(crate) mod tests {
             })
             .collect();
         rows.sort_by_key(|(hash, _)| (u64_at(hash, 0), u64_at(hash, 8)));
+        edit(&mut rows);
         let mut index = Vec::new();
         for (hash, offset) in rows {
             index.extend(hash);
@@ -1094,39 +1149,44 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn archive_zip64_counts_do_not_change_member_descriptor_width() {
-        let mut bytes = archive(
-            &[Record::stored(b"a", b"data").described(false, true)],
-            &[0],
-            0,
-        );
-        let classic = bytes.split_off(bytes.len() - 22);
-        let count = u16_at(&classic, 10);
+    /// Replaces a classic end record with a ZIP64 end declaring `count`
+    /// entries on both count fields. Returns the ZIP64 record offset.
+    fn zip64_end(mut bytes: Vec<u8>, count: u64) -> (Vec<u8>, usize) {
+        let mut classic = bytes.split_off(bytes.len() - 22);
         let directory_size = u32_at(&classic, 12);
         let directory = u32_at(&classic, 16);
-        let record_offset = bytes.len() as u64;
+        let record_offset = bytes.len();
         let mut record = [0; 56];
         record[..4].copy_from_slice(b"PK\x06\x06");
         record[4..12].copy_from_slice(&44u64.to_le_bytes());
         put16(&mut record, 12, 45);
         put16(&mut record, 14, 45);
-        record[24..32].copy_from_slice(&u64::from(count).to_le_bytes());
-        record[32..40].copy_from_slice(&u64::from(count).to_le_bytes());
+        record[24..32].copy_from_slice(&count.to_le_bytes());
+        record[32..40].copy_from_slice(&count.to_le_bytes());
         record[40..48].copy_from_slice(&directory_size.to_le_bytes());
         record[48..56].copy_from_slice(&directory.to_le_bytes());
         bytes.extend(record);
         let mut locator = [0; 20];
         locator[..4].copy_from_slice(b"PK\x06\x07");
-        locator[8..16].copy_from_slice(&record_offset.to_le_bytes());
+        locator[8..16].copy_from_slice(&(record_offset as u64).to_le_bytes());
         put32(&mut locator, 16, 1);
         bytes.extend(locator);
-        let mut classic = classic;
         put16(&mut classic, 8, u16::MAX);
         put16(&mut classic, 10, u16::MAX);
         bytes.extend(classic);
+        (bytes, record_offset)
+    }
+
+    #[test]
+    fn archive_zip64_counts_do_not_change_member_descriptor_width() {
+        let bytes = archive(
+            &[Record::stored(b"a", b"data").described(false, true)],
+            &[0],
+            0,
+        );
+        let count = u64::from(u16_at(&bytes, bytes.len() - 12));
+        let (mut bytes, record_offset) = zip64_end(bytes, count);
         admit(&bytes).unwrap();
-        let record_offset = record_offset as usize;
         bytes[record_offset + 32] = 2;
         assert!(matches!(admit(&bytes), Err(ReadError::InvalidInput(_))));
     }
@@ -1567,5 +1627,291 @@ pub(crate) mod tests {
         assert!(
             matches!(StoredArchive::new(Cursor::new(&absent), absent.len() as u64, &natural_limits(absent.len())), Err(ReadError::MissingMember(name)) if name == "tileset.json")
         );
+    }
+
+    fn ceiling_refusal(count: u64) -> String {
+        format!("3TZ member ceiling: {count} members exceed 178956970")
+    }
+
+    #[test]
+    fn member_ceiling_is_a_typed_refusal_before_limits_and_allocation() {
+        let base = indexed(&[Record::stored(b"tileset.json", b"{}")]);
+        let ceiling = super::super::MEMBER_CEILING;
+        assert_eq!(ceiling, 178_956_970);
+        let generous = ReadLimits {
+            archive_entries: u64::MAX,
+            central_directory_bytes: u64::MAX,
+            ..limits()
+        };
+        for count in [ceiling + 1, ceiling + 2, u64::MAX] {
+            let (bytes, _) = zip64_end(base.clone(), count);
+            // Refused before the 16-entry limit, and before the declared
+            // directory length could refute the count.
+            for limits in [limits(), generous] {
+                assert!(
+                    matches!(scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &limits),
+                        Err(ReadError::Unsupported(message)) if message == ceiling_refusal(count))
+                );
+            }
+        }
+        // Exactly the ceiling is admitted by the format rule; the engineering
+        // limit or the directory length then decides.
+        let (bytes, _) = zip64_end(base, ceiling);
+        assert!(
+            matches!(admit(&bytes), Err(ReadError::ResourceLimit(message)) if message == "archive exceeds entry limit")
+        );
+        assert!(
+            matches!(scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &generous),
+                Err(ReadError::InvalidInput(message)) if message == "ZIP entry count exceeds directory length")
+        );
+    }
+
+    #[test]
+    fn validate_reports_the_member_ceiling_as_unsupported() {
+        let count = super::super::MEMBER_CEILING + 1;
+        let (bytes, _) = zip64_end(indexed(&[Record::stored(b"tileset.json", b"{}")]), count);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ceiling.3tz");
+        std::fs::write(&path, bytes).unwrap();
+        let failure =
+            crate::validate::inspect(crate::validate::ValidationRequest::new(&path)).unwrap_err();
+        assert!(
+            matches!(&failure, crate::validate::ValidationFailure::Unsupported(message) if *message == ceiling_refusal(count)),
+            "{failure:?}"
+        );
+    }
+
+    /// `tileset.json` plus `payloads` empty members, so the index exceeds one
+    /// streamed chunk when `payloads >= INDEX_CHUNK_ROWS`.
+    fn empty_member_names(payloads: usize) -> Vec<String> {
+        (0..payloads).map(|i| format!("m{i:05}")).collect()
+    }
+    fn index_archive(names: &[String], edit: impl FnOnce(&mut Vec<([u8; 16], u64)>)) -> Vec<u8> {
+        let mut records = vec![Record::stored(b"tileset.json", b"{}")];
+        records.extend(
+            names
+                .iter()
+                .map(|name| Record::stored(name.as_bytes(), b"")),
+        );
+        indexed_rows(&records, edit)
+    }
+    /// Natural limits with a per-member limit far below the index length.
+    fn tight_member_limits(length: usize) -> ReadLimits {
+        ReadLimits {
+            member_bytes: 2,
+            ..natural_limits(length)
+        }
+    }
+    fn open<'a>(
+        bytes: &'a [u8],
+        limits: &ReadLimits,
+    ) -> Result<StoredArchive<Cursor<&'a [u8]>>, ReadError> {
+        StoredArchive::new(Cursor::new(bytes), bytes.len() as u64, limits)
+    }
+    fn refused(bytes: &[u8], expected: &str) -> bool {
+        matches!(open(bytes, &tight_member_limits(bytes.len())),
+            Err(ReadError::InvalidInput(message)) if message == expected)
+    }
+
+    #[test]
+    fn index_is_bounded_by_member_count_not_member_limit() {
+        let names = empty_member_names(INDEX_CHUNK_ROWS + 270);
+        let rows = names.len() + 1;
+        let bytes = index_archive(&names, |_| {});
+        let limits = tight_member_limits(bytes.len());
+        let owner = open(&bytes, &limits).unwrap();
+        assert_eq!(owner.len(), rows + 1);
+        assert_eq!(owner.index_read_bytes(), 24 * rows as u64);
+        assert!(owner.index_read_bytes() > INDEX_CHUNK_ROWS as u64 * 24);
+        assert!(owner.index_read_bytes() > limits.member_bytes);
+        // Payload members keep the per-member limit.
+        let bounded = ReadLimits {
+            member_bytes: 1,
+            ..limits
+        };
+        assert!(
+            matches!(open(&bytes, &bounded), Err(ReadError::ResourceLimit(message)) if message == "archive member exceeds byte limit")
+        );
+        // Only the last central entry is the index: an index-named payload
+        // elsewhere is an ordinary member under the per-member limit.
+        let index = [7; 48];
+        let misplaced = archive(
+            &[
+                Record::stored(b"tileset.json", b"{}"),
+                Record::stored(super::super::TZ_INDEX_NAME.as_bytes(), &index),
+                Record::stored(b"z", b""),
+            ],
+            &[0, 1, 2],
+            0,
+        );
+        assert!(
+            matches!(open(&misplaced, &tight_member_limits(misplaced.len())),
+                Err(ReadError::ResourceLimit(message)) if message == "archive member exceeds byte limit")
+        );
+    }
+
+    #[test]
+    fn index_rows_disagreeing_with_the_directory_count_are_refused() {
+        let names = empty_member_names(INDEX_CHUNK_ROWS + 270);
+        let exact = "3TZ index must contain every member exactly once";
+        for edit in [
+            (|rows: &mut Vec<([u8; 16], u64)>| rows.push(*rows.last().unwrap()))
+                as fn(&mut Vec<([u8; 16], u64)>),
+            |rows| {
+                rows.pop();
+            },
+            |rows| {
+                let last = *rows.last().unwrap();
+                rows.extend(std::iter::repeat_n(last, 4096));
+            },
+            |rows| rows.truncate(1),
+        ] {
+            assert!(refused(&index_archive(&names, edit), exact));
+        }
+    }
+
+    #[test]
+    fn streamed_row_failures_across_chunks_keep_crc_precedence() {
+        let names = empty_member_names(INDEX_CHUNK_ROWS + 270);
+        let boundary = INDEX_CHUNK_ROWS;
+        let ordered = "3TZ index hashes are not ordered";
+        let differs = "3TZ index differs from admitted directory";
+        // Defects straddling and following the first chunk boundary.
+        assert!(refused(
+            &index_archive(&names, |rows| rows.swap(boundary - 1, boundary)),
+            ordered
+        ));
+        assert!(refused(
+            &index_archive(&names, |rows| rows[boundary] = rows[boundary - 1]),
+            differs
+        ));
+        assert!(refused(
+            &index_archive(&names, |rows| rows.last_mut().unwrap().1 += 1),
+            differs
+        ));
+        assert!(refused(
+            &index_archive(&names, |rows| rows.last_mut().unwrap().0[15] ^= 1),
+            differs
+        ));
+        // A row failure in the first chunk is held until the CRC over the
+        // whole index, corrupted in its last chunk, has been checked.
+        let mut bytes = index_archive(&names, |rows| rows.swap(0, 1));
+        assert!(refused(&bytes, ordered));
+        let end = directory(&bytes);
+        bytes[end - 1] ^= 1;
+        assert!(refused(&bytes, "stored member CRC mismatch"));
+    }
+
+    /// Admission at more than 5,592,406 index rows, beyond what a 128 MiB
+    /// per-member limit allowed. Writes about 640 MB under
+    /// `RUSTY_TILES_SCALE_DIR` (default: the system temporary directory).
+    #[test]
+    #[ignore = "writes a ~640 MB synthetic archive"]
+    fn index_above_default_member_limit_is_admitted_at_scale() {
+        use std::io::{BufWriter, Write};
+        const MEMBERS: u64 = 5_600_001;
+        let member_bytes = crate::validate::ValidationLimits::default().member_bytes;
+        let rows = MEMBERS - 1;
+        assert!(24 * rows > member_bytes);
+        let dir = std::env::var_os("RUSTY_TILES_SCALE_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let file = tempfile::NamedTempFile::new_in(dir).unwrap();
+        let name = |i: u64| {
+            if i == 0 {
+                b"tileset.json".to_vec()
+            } else {
+                format!("{i:07x}").into_bytes()
+            }
+        };
+        let data = |i: u64| if i == 0 { &b"{}"[..] } else { &b""[..] };
+        let local_len = |i: u64| 30 + name(i).len() as u64 + data(i).len() as u64;
+        let local_header = |name: &[u8], data: &[u8]| {
+            let mut record = Record::stored(name, data);
+            record.flags = 0;
+            local(&record)
+        };
+        let central_header = |name: &[u8], data: &[u8], offset: u64| {
+            let mut record = Record::stored(name, data);
+            record.flags = 0;
+            central(&record, u32::try_from(offset).unwrap())
+        };
+        {
+            let mut out = BufWriter::new(file.as_file());
+            let mut index = Vec::with_capacity(rows as usize);
+            let mut offset = 0u64;
+            for i in 0..rows {
+                let (name, data) = (name(i), data(i));
+                index.push((md5::compute(&name).0, offset));
+                out.write_all(&local_header(&name, data)).unwrap();
+                offset += local_len(i);
+            }
+            index.sort_unstable_by_key(|(hash, _)| (u64_at(hash, 0), u64_at(hash, 8)));
+            let mut crc = crc32fast::Hasher::new();
+            for (hash, at) in &index {
+                crc.update(hash);
+                crc.update(&at.to_le_bytes());
+            }
+            let index_offset = offset;
+            let index_name = super::super::TZ_INDEX_NAME.as_bytes();
+            let mut header = local_header(index_name, b"");
+            put32(&mut header, 14, crc.clone().finalize());
+            put32(&mut header, 18, u32::try_from(24 * rows).unwrap());
+            put32(&mut header, 22, u32::try_from(24 * rows).unwrap());
+            out.write_all(&header).unwrap();
+            for (hash, at) in &index {
+                out.write_all(hash).unwrap();
+                out.write_all(&at.to_le_bytes()).unwrap();
+            }
+            drop(index);
+            let directory = index_offset + header.len() as u64 + 24 * rows;
+            let mut offset = 0u64;
+            for i in 0..rows {
+                out.write_all(&central_header(&name(i), data(i), offset))
+                    .unwrap();
+                offset += local_len(i);
+            }
+            let mut central = central_header(index_name, b"", index_offset);
+            put32(&mut central, 16, crc.finalize());
+            put32(&mut central, 20, u32::try_from(24 * rows).unwrap());
+            put32(&mut central, 24, u32::try_from(24 * rows).unwrap());
+            out.write_all(&central).unwrap();
+            let end = out.stream_position().unwrap();
+            // ZIP64 end: the count exceeds the classic 16-bit field.
+            let mut record = [0; 56];
+            record[..4].copy_from_slice(b"PK\x06\x06");
+            record[4..12].copy_from_slice(&44u64.to_le_bytes());
+            put16(&mut record, 12, 45);
+            put16(&mut record, 14, 45);
+            record[24..32].copy_from_slice(&MEMBERS.to_le_bytes());
+            record[32..40].copy_from_slice(&MEMBERS.to_le_bytes());
+            record[40..48].copy_from_slice(&(end - directory).to_le_bytes());
+            record[48..56].copy_from_slice(&directory.to_le_bytes());
+            out.write_all(&record).unwrap();
+            let mut locator = [0; 20];
+            locator[..4].copy_from_slice(b"PK\x06\x07");
+            locator[8..16].copy_from_slice(&end.to_le_bytes());
+            put32(&mut locator, 16, 1);
+            out.write_all(&locator).unwrap();
+            let mut classic = [0; 22];
+            classic[..4].copy_from_slice(b"PK\x05\x06");
+            put16(&mut classic, 8, u16::MAX);
+            put16(&mut classic, 10, u16::MAX);
+            put32(&mut classic, 12, u32::MAX);
+            put32(&mut classic, 16, u32::MAX);
+            out.write_all(&classic).unwrap();
+            out.flush().unwrap();
+        }
+        let length = file.as_file().metadata().unwrap().len();
+        let limits = ReadLimits {
+            source_archive_bytes: length,
+            central_directory_bytes: length,
+            archive_entries: MEMBERS,
+            member_bytes,
+            archive_stored_bytes: length,
+        };
+        let owner = StoredArchive::new(file.reopen().unwrap(), length, &limits).unwrap();
+        assert_eq!(owner.len() as u64, MEMBERS);
+        assert_eq!(owner.index_read_bytes(), 24 * rows);
     }
 }

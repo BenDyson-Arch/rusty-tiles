@@ -9,6 +9,10 @@ use std::{
     },
 };
 pub const TZ_INDEX_NAME: &str = "@3dtilesIndex1@";
+/// Largest 3TZ member count, index included, that producers write and the
+/// validator admits. A larger archive is a typed Unsupported refusal. At the
+/// ceiling the index is 24 * (N - 1) = 4,294,967,256 bytes.
+pub(crate) const MEMBER_CEILING: u64 = 178_956_970;
 mod read;
 pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 
