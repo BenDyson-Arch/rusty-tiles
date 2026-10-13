@@ -6,8 +6,8 @@ use super::{geom::Bvh, Mutation};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
     mesh_large::{
-        mesh_leaves_to_3tz, mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile,
-        MeshTilesetRequest,
+        delivery::{mesh_leaves_to_3tz, MeshTilesetRequest},
+        leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
     },
     validate::{inspect, ValidationRequest},
     JobErrorKind, RunControl,
@@ -402,7 +402,7 @@ fn archive(
     leaves: &Path,
     output: &Path,
 ) -> (
-    crate::mesh_large::MeshTilesetReport,
+    crate::mesh_large::delivery::MeshTilesetReport,
     BTreeMap<String, Vec<u8>>,
 ) {
     let result = mesh_leaves_to_3tz(
@@ -1000,5 +1000,44 @@ fn control_fill_across_seams_is_caught() {
         refused.error.message().contains("border-hole rule"),
         "{}",
         refused.error.message()
+    );
+}
+
+/// The public `mesh_to_tileset` path carries the certified coarse tiles: the published
+/// archive holds one member per proxy row beside the leaves and validates.
+#[test]
+fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let output = work.path().join("public.3tz");
+    crate::mesh_large::mesh_to_tileset(
+        crate::mesh_large::TilerRequest::new(&input, &output).with_jobs(
+            crate::mesh_large::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()),
+        ),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+    let mut members = Vec::new();
+    for i in 0..zip.len() {
+        let mut bytes = Vec::new();
+        zip.by_index(i).unwrap().read_to_end(&mut bytes).unwrap();
+        members.push(bytes);
+    }
+    // Coarse members are recognised by their proxy_source tables.
+    let coarse = members
+        .iter()
+        .filter(|m| m.starts_with(b"glTF") && m.windows(12).any(|w| w == b"proxy_source"))
+        .count();
+    assert!(coarse >= 1, "coarse tiles published");
+    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    assert!(
+        checked
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment"),
+        "{:?}",
+        checked.not_inspected
     );
 }

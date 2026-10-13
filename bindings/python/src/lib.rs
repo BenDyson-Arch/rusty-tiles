@@ -3,7 +3,7 @@ use pyo3::{
     create_exception,
     exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyDict, PyList},
+    types::{PyBool, PyDict, PyInt, PyList},
 };
 use serde_json::Value;
 use std::{
@@ -19,7 +19,8 @@ use tiles_core::{
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshApproximation,
     MeshPlacement, MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer,
-    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes,
+    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes, TilerJobs, TilerProfile,
+    TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -254,6 +255,119 @@ fn cleanup_diagnostics(diagnostics: Vec<tiles_core::CleanupDiagnostic>) -> Vec<C
             message: diagnostic.error.to_string(),
         })
         .collect()
+}
+
+/// One installed tiler archive; runtime diagnostics stay outside its semantic report.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct TilerResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    #[pyo3(get)]
+    archive: bool,
+    report: Value,
+    diagnostics: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl TilerResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+
+    #[getter]
+    fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.diagnostics)
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
+fn tiler_request_error(py: Python<'_>, error: JobError) -> PyErr {
+    job_failure_to_python(
+        py,
+        JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        },
+    )
+}
+
+fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJobs> {
+    let Some(jobs) = jobs else {
+        return Ok(TilerJobs::Auto);
+    };
+    if jobs.is_instance_of::<PyBool>() || !jobs.is_instance_of::<PyInt>() {
+        return Err(PyTypeError::new_err(
+            "jobs must be an integer maximum or None",
+        ));
+    }
+    let count = jobs
+        .extract::<usize>()
+        .ok()
+        .and_then(std::num::NonZeroUsize::new)
+        .ok_or_else(|| {
+            tiler_request_error(
+                py,
+                JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "jobs must be a positive integer within the platform worker-count range",
+                ),
+            )
+        })?;
+    Ok(TilerJobs::Maximum(count))
+}
+
+/// Stream an admitted local metre/Y-up static mesh into one Tiles 1.1 .3tz.
+/// Profiles are provisional; jobs is a resource-capped maximum, and None means auto.
+#[pyfunction]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, force=false, callback=None))]
+#[allow(clippy::too_many_arguments)]
+fn mesh_to_tileset(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    profile: &str,
+    jobs: Option<Bound<'_, PyAny>>,
+    scratch_dir: Option<PathBuf>,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<TilerResult> {
+    let profile = profile
+        .parse::<TilerProfile>()
+        .map_err(|error| tiler_request_error(py, error))?;
+    let jobs = tiler_jobs(py, jobs)?;
+    let mut request = TilerRequest::new(input, output)
+        .with_profile(profile)
+        .with_jobs(jobs)
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)
+        .with_output_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        });
+    if let Some(path) = scratch_dir {
+        request = request.with_scratch_dir(path);
+    }
+    let result = run_job(py, callback, |run| {
+        tiles_core::mesh_to_tileset(request, run)
+    })?;
+    Ok(TilerResult {
+        output: result.output,
+        archive: true,
+        report: serde_json::json!(result.report),
+        diagnostics: serde_json::json!(result.diagnostics),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
 }
 
 /// Published local mesh with its finalized report and cleanup diagnostics.
@@ -953,28 +1067,140 @@ fn convert_to_3tz(
     })
 }
 
+/// A validation report's payload rows: a read-only sequence of dicts in URI order, read on
+/// demand so a large report is never materialized.
+#[pyclass(frozen, sequence, module = "rusty_tiles", name = "ValidationPayloads")]
+struct ValidationPayloads {
+    rows: tiles_core::validate::PayloadRows,
+}
+
+impl ValidationPayloads {
+    fn row(&self, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
+        let row = self
+            .rows
+            .get(index)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("payload index out of range"))?
+            .map_err(|failure| error_to_python(Error::Validation(failure)))?;
+        let row = serde_json::to_value(row).map_err(|e| DataError::new_err(e.to_string()))?;
+        json_to_python(py, &row)
+    }
+}
+
+#[pymethods]
+impl ValidationPayloads {
+    fn __len__(&self) -> usize {
+        self.rows.len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let len = self.rows.len();
+        if let Ok(slice) = index.cast::<pyo3::types::PySlice>() {
+            let range = slice.indices(len as isize)?;
+            let mut rows = Vec::with_capacity(range.slicelength);
+            let mut at = range.start;
+            for _ in 0..range.slicelength {
+                rows.push(self.row(py, at as usize)?);
+                at += range.step;
+            }
+            return Ok(PyList::new(py, rows)?.into_any().unbind());
+        }
+        let index: isize = index.extract()?;
+        let resolved = if index < 0 {
+            index + len as isize
+        } else {
+            index
+        };
+        if resolved < 0 || resolved as usize >= len {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "payload index out of range",
+            ));
+        }
+        self.row(py, resolved as usize)
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> ValidationPayloadsIter {
+        ValidationPayloadsIter {
+            rows: slf.rows.clone(),
+            next: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<ValidationPayloads of {} rows>", self.rows.len())
+    }
+}
+
+#[pyclass(frozen, module = "rusty_tiles")]
+struct ValidationPayloadsIter {
+    rows: tiles_core::validate::PayloadRows,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+#[pymethods]
+impl ValidationPayloadsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        let index = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if index >= self.rows.len() {
+            return Ok(None);
+        }
+        ValidationPayloads {
+            rows: self.rows.clone(),
+        }
+        .row(py, index)
+        .map(Some)
+    }
+}
+
 /// Inspect the bounded C1 archive/payload profile; see checks and notInspected.
+/// `report["payloads"]` is a list of dicts, so the report is plain JSON data. With
+/// `lazy_payloads=True` it is a read-only `ValidationPayloads` sequence that reads rows on
+/// demand instead, for reports too large to hold (it is not JSON-serializable as is;
+/// `list(...)` materializes it).
 #[pyfunction]
-fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (input, *, lazy_payloads = false))]
+fn validate(py: Python<'_>, input: PathBuf, lazy_payloads: bool) -> PyResult<Py<PyAny>> {
     let result = py
         .detach(|| {
             tiles_core::validate::inspect(tiles_core::validate::ValidationRequest::new(input))
         })
         .map_err(|failure| error_to_python(Error::Validation(failure)))?;
     py.check_signals()?;
-    let result = serde_json::to_value(result).map_err(|e| DataError::new_err(e.to_string()))?;
-    json_to_python(py, &result)
+    let mut summary = result
+        .summary_json()
+        .map_err(|e| DataError::new_err(e.to_string()))?;
+    // Insert the key here so the dict keeps the CLI's sorted key order.
+    summary["payloads"] = Value::Null;
+    let report = json_to_python(py, &summary)?;
+    let lazy = ValidationPayloads {
+        rows: result.payloads,
+    };
+    let payloads = if lazy_payloads {
+        Py::new(py, lazy)?.into_any()
+    } else {
+        let rows = (0..lazy.rows.len())
+            .map(|index| lazy.row(py, index))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, rows)?.into_any().unbind()
+    };
+    report.bind(py).set_item("payloads", payloads)?;
+    Ok(report)
 }
 
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<ConversionResult>()?;
+    module.add_class::<ValidationPayloads>()?;
     module.add_class::<VectorResult>()?;
     module.add_class::<PointCloudResult>()?;
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;
+    module.add_class::<TilerResult>()?;
     module.add_class::<ModelWrapResult>()?;
     module.add_class::<ModelManifestResult>()?;
     module.add_class::<RasterDirectoryResult>()?;
@@ -1006,6 +1232,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(mesh_to_tileset, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(model_to_manifest, module)?)?;

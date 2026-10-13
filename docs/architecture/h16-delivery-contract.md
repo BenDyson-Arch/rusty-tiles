@@ -7,9 +7,9 @@ leaves (#187) as one Tiles 1.1 implicit forest in a `.3tz`, through the shared
 typed serializer of #191/#198 (`src/tileset_node.rs`, `src/implicit/tileset.rs`,
 `src/implicit/tileset/stream.rs`). Parents carry no content unless the leaf
 directory has H17 coarse tiles (`proxyManifest`), which are then published as
-their content ([H17 contract](h17-lod-contract.md)). The hidden CLI entries are `mesh-leaves-to-3tz` (an H8 leaf directory to a
-`.3tz`) and `mesh-large-to-3tz` (H8, then H16); public naming is frozen in
-roadmap milestone 4. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
+their content ([H17 contract](h17-lod-contract.md)). The public entry is
+`rusty-tiles mesh` / `mesh_to_tileset` (H26); the leaf-directory steps are
+crate-internal. Evidence: `~/.cache/rusty-tiles-evidence/h16-20261013/`
 ([acceptance record](../../bench/architecture_audit/mesh_large_h16/README.md)).
 
 ## Input boundary

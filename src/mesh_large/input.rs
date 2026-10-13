@@ -177,6 +177,32 @@ pub(crate) struct StreamSource {
     pub external_bytes: u64,
 }
 impl StreamSource {
+    /// Reject final-output aliases before any source capture or scratch allocation.
+    pub(crate) fn reject_output(&self, output: &Path) -> Result<()> {
+        let identity = match File::open(output) {
+            Ok(file) => Some(file_identity(
+                &file,
+                output,
+                &file
+                    .metadata()
+                    .map_err(|e| JobError::io("inspect output identity", output, e))?,
+            )?),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(JobError::io("inspect output identity", output, error)),
+        };
+        if self
+            .paths
+            .iter()
+            .any(|path| path.canonical == output || Some(path.identity) == identity)
+        {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                "mesh output aliases the source or an admitted dependency",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn open(input: &Path, check: &mut dyn FnMut() -> Result<()>) -> Result<Self> {
         check()?;
         let original = std::path::absolute(input)

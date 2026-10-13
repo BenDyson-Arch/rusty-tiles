@@ -703,7 +703,7 @@ fn drops_remove_scratch_files_and_directory() {
 #[test]
 fn failed_removal_stays_accounted() {
     let (_parent, scratch) = new_scratch(Arc::new(FileIo));
-    let mut file = scratch.new_file("blocked");
+    let mut file = scratch.new_file("blocked").unwrap();
     // remove_file refuses a directory on every platform.
     std::fs::create_dir(file.path()).unwrap();
     file.completed(100);
@@ -712,7 +712,7 @@ fn failed_removal_stays_accounted() {
     assert_eq!(scratch.live_bytes(), 100, "still on disk, still counted");
     std::fs::remove_dir(blocked).unwrap();
 
-    let mut file = scratch.new_file("gone");
+    let mut file = scratch.new_file("gone").unwrap();
     file.completed(50);
     drop(file); // never created: NotFound counts as removed
     assert_eq!(scratch.live_bytes(), 100);
@@ -806,6 +806,124 @@ fn real_volume_preflight_and_missing_directory() {
         "an explicit scratch directory is never created"
     );
     assert_eq!(Scratch::default_parent(), std::env::temp_dir());
+}
+
+#[test]
+fn deferred_scratch_exists_only_after_the_first_spill_file() {
+    let parent = tempfile::tempdir().unwrap();
+    let config = SortConfig {
+        run_bytes: 4 * size_of::<Keyed>(),
+        fan_in: 2,
+        buffer_bytes: 64,
+        jobs: 1,
+    };
+    let records = |n: u32| {
+        (0..n).map(move |seq| Keyed {
+            key: (n - seq) as u16,
+            seq,
+        })
+    };
+    // A sort that fits one run never asks for a file: nothing is preflighted or created.
+    let scratch = Scratch::deferred(Placement::In(parent.path().into()), u64::MAX);
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    sorter.extend(records(4)).unwrap();
+    let sorted: Vec<_> = sorter.finish().unwrap().map(Result::unwrap).collect();
+    assert_eq!(
+        sorted.iter().map(|r| r.seq).collect::<Vec<_>>(),
+        [3, 2, 1, 0]
+    );
+    assert!(!scratch.is_created());
+    assert_eq!(scratch.path(), parent.path());
+    assert_eq!(entries(parent.path()), 0);
+    // The first spilled run runs the deferred preflight, which refuses before creating anything.
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    assert!(matches!(
+        sorter.extend(records(5)),
+        Err(SpillError::InsufficientSpace(_))
+    ));
+    assert!(!scratch.is_created());
+    assert_eq!(entries(parent.path()), 0);
+    // With room, the directory appears at the first run and is removed on close.
+    let scratch = Scratch::deferred(Placement::In(parent.path().into()), 0);
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    sorter.extend(records(9)).unwrap();
+    assert!(scratch.is_created());
+    assert_ne!(scratch.path(), parent.path());
+    let sorted: Vec<_> = sorter.finish().unwrap().map(Result::unwrap).collect();
+    assert_eq!(sorted.len(), 9);
+    assert_eq!(entries(parent.path()), 1);
+    scratch.close().unwrap();
+    assert_eq!(entries(parent.path()), 0);
+    Scratch::deferred(Placement::In(parent.path().into()), 0)
+        .close()
+        .unwrap();
+}
+
+/// A volume inspector that calls any directory named `ram` memory-backed.
+fn ram_named(path: &Path) -> Result<Volume, SpillError> {
+    if !path.is_dir() {
+        return Err(SpillError::io(
+            "inspect scratch volume",
+            path,
+            io::Error::from(io::ErrorKind::NotFound),
+        ));
+    }
+    Ok(Volume {
+        available_bytes: 1 << 40,
+        memory_backed: path.file_name().is_some_and(|name| name == "ram"),
+        allocation_unit_bytes: 4096,
+    })
+}
+
+#[test]
+fn disk_placement_skips_memory_backed_candidates_and_reports_a_last_resort() {
+    let root = tempfile::tempdir().unwrap();
+    let (ram, disk) = (root.path().join("ram"), root.path().join("disk"));
+    std::fs::create_dir_all(&ram).unwrap();
+    std::fs::create_dir_all(&disk).unwrap();
+    let make = |candidates: Vec<std::path::PathBuf>, allowed| {
+        Scratch::deferred_with(
+            Placement::Disk {
+                candidates,
+                memory_backed_allowed: allowed,
+            },
+            0,
+            Arc::new(FileIo),
+            ram_named,
+        )
+    };
+    // A disk candidate after a memory-backed one wins; a missing one is skipped.
+    let scratch = make(
+        vec![root.path().join("missing"), ram.clone(), disk.clone()],
+        false,
+    );
+    let mut sorter = ExternalSorter::new(
+        &scratch,
+        SortConfig {
+            run_bytes: size_of::<Keyed>(),
+            fan_in: 2,
+            buffer_bytes: 64,
+            jobs: 1,
+        },
+    )
+    .unwrap();
+    sorter
+        .extend((0..3).map(|seq| Keyed { key: 0, seq }))
+        .unwrap();
+    assert!(scratch.path().starts_with(&disk) && !scratch.memory_backed());
+    drop(sorter);
+    drop(scratch);
+    // Only memory-backed candidates: refused unless the owner reports it.
+    let refused = make(vec![ram.clone()], false);
+    let SpillError::Io { operation, .. } = refused.new_file("x").err().unwrap() else {
+        panic!("typed refusal expected");
+    };
+    assert_eq!(operation, "no disk-backed scratch directory");
+    assert!(!refused.is_created());
+    assert_eq!(entries(&ram), 0);
+    let reported = make(vec![ram.clone()], true);
+    drop(reported.new_file("x").unwrap());
+    assert!(reported.memory_backed() && reported.path().starts_with(&ram));
 }
 
 #[cfg(target_os = "linux")]
@@ -922,16 +1040,23 @@ fn spill_memory_is_flat_in_input_size() {
     let small = child(17 * run_records);
     let large = child(136 * run_records);
     assert_eq!((small.2, large.2), (2, 3));
+    // Flatness compares each child's growth over its own baseline, so baseline noise
+    // (about ±0.3 MiB between processes) cancels. 2 MiB covers one more merge level's
+    // buffers and allocator granularity; holding the 8x larger input would add over 30 MiB.
     assert!(
-        large.1 <= small.1 + 1024,
+        large.1 - large.0 <= small.1 - small.0 + 2048,
         "VmHWM grew with input size: small {small:?}, large {large:?}"
     );
-    // 1.5·R + (F + 1)·b is about 0.5 MiB here. The fixed allowance covers first-touch code
-    // pages, sort threads and the test harness (about 8 MiB measured), and stays below a third
-    // of the records' 34 MiB.
+    // The allowance is the sorter's own declared bound, `memory_bound`: 1.5·R + (F + 1)·b
+    // (about 0.5 MiB here) plus the stable sort's minimum scratch of 8 MB per sorting thread
+    // (two here), which is what the measured growth (about 8 to 11.6 MiB, varying with
+    // first-touch pages and the allocator) consists of. It is still under half the large
+    // input's 34 MiB of records, so holding the input resident fails it.
+    let allowance = memory_config().memory_bound::<Wide>().div_ceil(1024);
+    assert!(allowance < 17 * 1024, "allowance {allowance} KiB");
     assert!(
-        large.1 - large.0 <= 11 * 1024,
-        "large sort grew VmHWM by {} KiB",
+        large.1 - large.0 <= allowance,
+        "large sort grew VmHWM by {} KiB (allowance {allowance} KiB)",
         large.1 - large.0
     );
 }

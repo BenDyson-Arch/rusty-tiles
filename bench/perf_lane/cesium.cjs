@@ -313,4 +313,4 @@ if (require.main === module) {
   // Exit explicitly: a CDP connection is left open (never browser.close() on someone else's browser).
   main().then(() => process.exit(0), error => { console.error(String(error.stack || error)); process.exit(1); });
 }
-module.exports = {finishTracker, GL_ARGS};
+module.exports = {finishTracker, GL_ARGS, VIEWPORT, FACTS, webglInfo, openContext, openPage};

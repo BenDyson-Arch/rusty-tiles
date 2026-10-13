@@ -1,6 +1,6 @@
 ### Added
 
-- Large-mesh tiler (hidden `mesh-leaf-payloads` / `mesh-large-to-3tz`): every internal
+- Mesh tiler (`rusty-tiles mesh` / `mesh_to_tileset`): every internal
   tile now carries a certified coarse proxy (H17). Proxies are simplified onto existing
   source vertices, quantized on the frozen H8 lattice, and certified in both directions
   against the baked source (composed and direct bounds, outward-rounded) after decoding

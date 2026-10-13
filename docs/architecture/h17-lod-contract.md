@@ -170,7 +170,7 @@ seam edges, removed-vertex logs and rows are spilled. Scratch adds the pre-pass
 
 ## Acceptance
 
-`cargo test --lib mesh_large::lod` (15 tests): exact-rational reference for the
+`cargo test --lib mesh_large::lod` (16 tests, including the public `mesh_to_tileset` path): exact-rational reference for the
 interval witness and the inward-rounding control; refinement against dense
 samples; simplifier, seam-removal and fill topology units; terrain (three
 primitives, islands, holes) and synthetic-depth (> 21) runs through H8 and H16

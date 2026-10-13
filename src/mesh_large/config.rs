@@ -246,7 +246,7 @@ pub(crate) struct JobsPlan {
 }
 
 /// `auto` is `min(cores, (available − base − tmpfs scratch) ÷ per-job need)`, at least 1. An
-/// explicit count is used as given.
+/// explicit count is a maximum. Unknown memory admits one worker; stages still check fit.
 pub(crate) fn plan_jobs(
     requested: Jobs,
     cores: usize,
@@ -257,16 +257,21 @@ pub(crate) fn plan_jobs(
 ) -> JobsPlan {
     let cores = cores.max(1) as u64;
     let usable = available_memory.map(|m| m.saturating_sub(memory_backed_scratch));
-    let (jobs, limited_by, label) = match requested {
-        Jobs::Fixed(n) => (n.get() as u64, "request", n.to_string()),
-        Jobs::Auto => {
-            let by_memory = usable.map(|m| m.saturating_sub(base) / per_job.max(1));
-            match by_memory {
-                Some(0) => (1, "floor", "auto".into()),
-                Some(n) if n < cores => (n, "memory", "auto".into()),
-                _ => (cores, "cores", "auto".into()),
-            }
-        }
+    let maximum = match requested {
+        Jobs::Fixed(n) => n.get() as u64,
+        Jobs::Auto => cores,
+    };
+    let label = match requested {
+        Jobs::Fixed(n) => n.to_string(),
+        Jobs::Auto => "auto".into(),
+    };
+    let cap = cores.min(maximum);
+    let (jobs, limited_by) = match usable.map(|m| m.saturating_sub(base) / per_job.max(1)) {
+        None => (1, "unknown_memory"),
+        Some(0) => (1, "floor"), // The stage must reject a bound that cannot fit one job.
+        Some(n) if n < cap => (n, "memory"),
+        _ if maximum < cores => (cap, "request"),
+        _ => (cap, "cores"),
     };
     JobsPlan {
         requested: label,
@@ -500,4 +505,39 @@ pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {
     triangles
         .div_ceil(leaf_triangles)
         .saturating_add(u64::from(triangles > leaf_triangles))
+}
+
+#[cfg(test)]
+mod worker_controls {
+    use super::*;
+    #[test]
+    fn maximum_is_capped_by_memory_and_cores_and_unknown_memory_is_one() {
+        let maximum = Jobs::Fixed(NonZeroUsize::new(64).unwrap());
+        let memory = plan_jobs(maximum, 16, Some(1300), 100, 600, 200);
+        assert_eq!((memory.jobs, memory.limited_by), (3, "memory"));
+        let cores = plan_jobs(maximum, 4, Some(10_000), 0, 0, 1);
+        assert_eq!((cores.jobs, cores.limited_by), (4, "cores"));
+        let request = plan_jobs(
+            Jobs::Fixed(NonZeroUsize::new(2).unwrap()),
+            16,
+            Some(10_000),
+            0,
+            0,
+            1,
+        );
+        assert_eq!((request.jobs, request.limited_by), (2, "request"));
+        for mode in [Jobs::Auto, maximum] {
+            let unknown = plan_jobs(mode, 64, None, 100, 600, 200);
+            assert_eq!((unknown.jobs, unknown.limited_by), (1, "unknown_memory"));
+            // A floor is a scheduling candidate, never evidence that its bound fits.
+            let floor = plan_jobs(mode, 64, Some(799), 100, 600, 200);
+            assert_eq!((floor.jobs, floor.limited_by), (1, "floor"));
+            assert!(
+                floor.base_memory_bytes
+                    + floor.per_job_memory_bytes
+                    + floor.memory_backed_scratch_bytes
+                    > floor.available_memory_bytes.unwrap()
+            );
+        }
+    }
 }
