@@ -310,6 +310,38 @@ class Archives(unittest.TestCase):
     def test_default_implicit_reaches_2p22(self):
         self.assertGreaterEqual((4 ** 12 - 1) // 3, 1 << 22)
 
+    def test_combined_small_archive_and_conjunctive_scale(self):
+        out = ROOT / 'combined'
+        m = quiet(gen_archive.main, ['combined', '--out', str(out), '--force', '--reserve-gib', '0',
+                                     '--levels', '4', '--subtree-levels', '2', '--content-levels', '2',
+                                     '--member-mib', '1'])
+        path = out / 'archive.3tz'
+        self.assertEqual(m['kind'], 'archive-combined')
+        self.assertEqual(m['truth']['archive_bytes'], path.stat().st_size)
+        self.assertFalse(m['truth']['combined_scale_met'])
+        check_index(self, path)
+        with zipfile.ZipFile(path) as z:
+            self.assertEqual(walk_implicit(z, 2, 4), 85)
+            self.assertIsNone(z.testzip())
+            for name in z.namelist():
+                if name.endswith('.glb'):
+                    wire = z.read(name)
+                    self.assertEqual(len(wire), sc.MiB)
+                    doc, buffers = parse_glb(wire)
+                    self.assertEqual(accessor(doc, buffers, 0).shape, (3, 3))
+        self.assertLess(path.stat().st_blocks * 512, path.stat().st_size // 4)
+        budget = run_case.load_budget(pathlib.Path(__file__).with_name('budgets.toml'), 'gate-d-combined')
+        for tiles, size, expected in [(1 << 22, 4 * sc.GiB + 1, ['pass', 'pass']),
+                                       ((1 << 22) - 1, 4 * sc.GiB + 1, ['below', 'pass']),
+                                       (1 << 22, 4 * sc.GiB, ['pass', 'below'])]:
+            _, scale = run_case.check_budgets(budget, {}, {'manifest': {'truth': {'tiles': tiles, 'archive_bytes': size}}}, ran=set())
+            statuses = {s['metric']: s['status'] for s in scale}
+            self.assertEqual([statuses['truth.tiles'], statuses['truth.archive_bytes']], expected)
+        # Default geometry/count arithmetic is independent of file creation.
+        self.assertEqual((4 ** 12 - 1) // 3, 5_592_405)
+        self.assertEqual((4 ** 4 - 1) // 3, 85)
+        self.assertGreater(85 * 56 * sc.MiB, 4 * sc.GiB)
+
     def test_large_sparse_and_zip64(self):
         out = ROOT / 'large'
         m = quiet(gen_archive.main, ['large', '--out', str(out), '--force', '--reserve-gib', '0',
