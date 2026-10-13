@@ -7,8 +7,10 @@ Writes pc-perf-2000.3tz, pc-deep.3tz, vec-perf.3tz and a2fix/{octree,quadtree}-{
 under DIR (default ~/.cache/rusty-tiles-w-corpus/samples), never /tmp (a RAM tmpfs that a reboot empties).
 Each archive's sha256 is checked against manifest.json; the bytes depend on the f2238cd binary
 (`git worktree add ... f2238cd`, release build; sha256 of the retained build 369c3c81...), so a
-mismatch means the wrong producer. Inputs come from bench/perf_lane/corpus.py (pinned digests) and the
-seeded cloud.las below.  Existing archives with the right digest are kept.  Run `run.py` afterwards.
+mismatch means the wrong producer, except vec-perf (W5u), which embeds the PROJ version and is
+marked verdictOnly in the manifest. Inputs come from bench/perf_lane/corpus.py (pinned digests, generated
+deterministically) plus one external dependency: cloud.las (sha256 353b9130...), which has no generator and
+is copied from ~/.cache/c2-corpus/run2/inputs/cloud.las (pc-deep cannot be rebuilt without it).  Existing archives with the right digest are kept.  Run `run.py` afterwards.
 """
 import base64, hashlib, json, os, pathlib, struct, subprocess, sys, tempfile
 
@@ -57,11 +59,15 @@ def main(argv):
     producer = pathlib.Path(argv[argv.index("--producer") + 1]) if "--producer" in argv else DEFAULT_PRODUCER
     if str(out.resolve()).startswith("/tmp/"):
         sys.exit("refusing /tmp: it is RAM-backed and lost at reboot")
-    want = {}
+    want, loose = {}, set()
     for a in json.load(open(HERE / "manifest.json"))["artifacts"]:
         if "/rusty-tiles-w-corpus/samples/" in a["path"]:
-            want[pathlib.Path(a["path"].split("/samples/", 1)[1])] = a["sha256"]
-    todo = {rel: h for rel, h in want.items() if not (out / rel).exists() or sha(out / rel) != h}
+            rel = pathlib.Path(a["path"].split("/samples/", 1)[1])
+            want[rel] = a["sha256"]
+            if a.get("verdictOnly"):
+                loose.add(rel)
+    todo = {rel: h for rel, h in want.items()
+            if not (out / rel).exists() or (rel not in loose and sha(out / rel) != h)}
     if not todo:
         print("all seven archives present with pinned digests")
         return 0
@@ -98,7 +104,7 @@ def main(argv):
                     materialize(A2 / f"{shape}.json", pathlib.Path(d) / "t", mutation == "rename-class")
                     (out / "a2fix").mkdir(exist_ok=True)
                     run("convert", "-i", pathlib.Path(d) / "t", "-o", out / rel)
-    bad = [str(r) for r, h in todo.items() if sha(out / r) != h]
+    bad = [str(r) for r, h in todo.items() if r not in loose and sha(out / r) != h]
     for r in todo:
         print(("MISMATCH " if str(r) in bad else "ok       ") + str(r))
     return 1 if bad else 0

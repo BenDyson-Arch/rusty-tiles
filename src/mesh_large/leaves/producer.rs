@@ -298,13 +298,21 @@ fn encode_with_density_budget<T>(
         }
     }
 }
-/// Keep the writer's retryable-budget / hard-failure split when its error
-/// enters the density retry loop: only `Budget` may lower texture density.
-fn write_error_class(error: writer::WriteError) -> atlas::PrepareError {
-    match error {
-        writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
-        writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
-    }
+/// Write one prepared atlas. This is the single place the writer's
+/// retryable-budget / hard-failure split enters the density retry loop: only
+/// `Budget` may lower texture density, a writer `Failure` must surface as is.
+fn write_prepared<A, R, L>(
+    prepared: Result<(A, R), atlas::PrepareError>,
+    write: impl FnOnce(&A) -> Result<L, writer::WriteError>,
+) -> Result<(L, R), atlas::PrepareError> {
+    prepared.and_then(|(atlas, receipt)| {
+        write(&atlas)
+            .map_err(|error| match error {
+                writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
+                writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
+            })
+            .map(|leaf| (leaf, receipt))
+    })
 }
 /// One leaf's frozen inputs, read serially from the captured streams.
 struct LeafInput {
@@ -387,25 +395,25 @@ fn encode_leaf(
         u32::from(input.plan.density_drop),
         |density_drop| {
             (services.check)().map_err(atlas::PrepareError::from)?;
-            atlas::prepare(
-                (input.records.clone(), input.corner_depths.clone()),
-                services,
-                config.profile,
-                node.depth() as u8,
-                density_drop,
+            write_prepared(
+                atlas::prepare(
+                    (input.records.clone(), input.corner_depths.clone()),
+                    services,
+                    config.profile,
+                    node.depth() as u8,
+                    density_drop,
+                ),
+                |atlas| {
+                    timing::time(Stage::GlbWrite, || {
+                        writer::encode(
+                            atlas,
+                            &captured.lattice,
+                            node.depth() as u8,
+                            config.tile_bytes(),
+                        )
+                    })
+                },
             )
-            .and_then(|(atlas, receipt)| {
-                timing::time(Stage::GlbWrite, || {
-                    writer::encode(
-                        &atlas,
-                        &captured.lattice,
-                        node.depth() as u8,
-                        config.tile_bytes(),
-                    )
-                })
-                .map_err(write_error_class)
-                .map(|leaf| (leaf, receipt))
-            })
         },
     )?;
     // Members are named by frozen leaf order, so workers write them in
@@ -799,8 +807,8 @@ mod tests {
             let result = encode_with_density_budget(Profile::Balanced, 2, |drop| {
                 attempts.push(drop);
                 match writer_error.take() {
-                    Some(error) => Err(write_error_class(error)),
-                    None => Ok(()),
+                    Some(error) => write_prepared(Ok(((), ())), |_| Err::<(), _>(error)),
+                    None => Ok(((), ())),
                 }
             });
             if retried {

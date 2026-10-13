@@ -101,7 +101,8 @@
    "path": "/home/bend/.cache/rusty-tiles-w-corpus/samples/vec-perf.3tz",
    "ref": "W5u (vector default on perf input, JSON template)",
    "sha256": "d3415b764baf0b0c597e51cf87a73d482a7cc2c13a1c3a0b39a6cbfae905ac54",
-   "source": "regenerate.py with producer f2238cd; re-pinned 2026-10-13 (was 3fae0aca...): the bytes embed PROJ in vector-build.json and PROJ 9.8.1 -> 9.9.0 landed that day; verdict is the JSON-template refusal, unchanged"
+   "source": "regenerate.py with producer f2238cd; re-pinned 2026-10-13 (was 3fae0aca...): the bytes embed PROJ in vector-build.json and PROJ 9.8.1 -> 9.9.0 landed that day; verdict is the JSON-template refusal, unchanged",
+   "verdictOnly": true
   },
   {
    "expected": "Unsupported",

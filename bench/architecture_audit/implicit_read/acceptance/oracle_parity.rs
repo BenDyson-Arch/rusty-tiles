@@ -310,8 +310,9 @@ fn production_matches_every_i1_oracle_witness_and_control() {
 }
 
 /// W corpus (producer artifacts pinned by sha256 in `corpus/manifest.json`, oracle verdicts and
-/// digests in `corpus/results.json`). Artifacts live outside the repository; a missing or
-/// re-hashed file is skipped and listed, so CI runs only what is present.
+/// digests in `corpus/results.json`). Artifacts live outside the repository; a missing file is
+/// skipped and listed, so CI runs only what is present. A present file whose hash differs fails
+/// unless its entry is `verdictOnly`.
 #[test]
 fn production_matches_the_oracle_on_the_w_corpus() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(ROOT);
@@ -334,13 +335,24 @@ fn production_matches_the_oracle_on_the_w_corpus() {
             continue;
         }
         let path = Path::new(a["path"].as_str().unwrap());
-        let present = std::fs::read(path)
-            .ok()
-            .is_some_and(|b| format!("{:x}", Sha256::digest(&b)) == a["sha256"].as_str().unwrap());
-        if !present {
-            skipped.push(id.to_owned());
-            continue;
-        }
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                skipped.push(id.to_owned());
+                continue;
+            }
+        };
+        // A re-hashed archive is a loud failure, never a skip, unless the entry
+        // is marked `verdictOnly` (bytes embed a toolchain version, e.g. PROJ):
+        // then only the verdict is compared and the digest/tile checks are not.
+        let verdict_only = a["verdictOnly"].as_bool() == Some(true);
+        let hash_ok = format!("{:x}", Sha256::digest(&bytes)) == a["sha256"].as_str().unwrap();
+        assert!(
+            hash_ok || verdict_only,
+            "{id}: {} is present but its sha256 changed; regenerate with corpus/regenerate.py \
+             or mark the entry verdictOnly",
+            path.display()
+        );
         let o = &results[id];
         assert_eq!(
             o["oracle"], a["expected"],
@@ -365,7 +377,7 @@ fn production_matches_the_oracle_on_the_w_corpus() {
         if !kind_ok {
             problems.push(format!("kind {kind} != {want}"));
         }
-        if kind == "Accepted" && o["oracle"] == "Accepted" {
+        if kind == "Accepted" && o["oracle"] == "Accepted" && !verdict_only {
             if got["tilesSha256"] != o["tilesSha256"] {
                 problems.push("tilesSha256".into());
             }

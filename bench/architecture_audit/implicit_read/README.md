@@ -42,6 +42,7 @@ that is missing or re-hashed (`python3 -I corpus/regenerate.py`; it refuses `/tm
 pre-forest producer binary `f2238cd` (`~/.cache/c2-corpus/rusty-tiles-f2238cd`, sha256 `369c3c81...`),
 the pinned perf-lane inputs (`bench/perf_lane/corpus.py`) and the retained `cloud.las`.
 Six archives regenerate byte-identically. `vec-perf` embeds the PROJ version, and the PROJ 9.8.1 ->
-9.9.0 upgrade of 2026-10-13 changed its bytes, so W5u was re-pinned (verdict unchanged:
-Unsupported). Check: `cargo test --lib production_matches_the_oracle_on_the_w_corpus` on develop `df3f7a5`
+9.9.0 upgrade of 2026-10-13 changed its bytes, so W5u is marked `verdictOnly` in the manifest (only its
+verdict, Unsupported, is compared). Any other present archive whose hash differs now fails the parity
+test instead of being skipped. `cloud.las` has no generator and is copied from `~/.cache/c2-corpus/run2/inputs/`. Check: `cargo test --lib production_matches_the_oracle_on_the_w_corpus` on develop `df3f7a5`
 runs 41 of 41, with none skipped.
