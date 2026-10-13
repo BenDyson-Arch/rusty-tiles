@@ -462,7 +462,19 @@ impl Bvh {
                 .map(|p| point_box(*p, n.lo, n.hi))
                 .fold(0f64, f64::max)
         };
-        let mut heap = BinaryHeap::new();
+        HEAP.with_borrow_mut(|heap| self.search_with(heap, x, cap, evals, labels, &lower))
+    }
+
+    fn search_with(
+        &self,
+        heap: &mut BinaryHeap<Entry>,
+        x: &Tri,
+        cap: u32,
+        evals: &mut u64,
+        labels: Option<(&[u32], u32)>,
+        lower: &dyn Fn(&Node) -> f64,
+    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+        heap.clear();
         heap.push(Entry(lower(&self.nodes[0]), 0));
         let mut best: Option<(usize, f64)> = None;
         let mut same: Option<(usize, f64)> = None;
@@ -514,6 +526,11 @@ impl Bvh {
         let x = [p, p, p];
         self.best_target(&x, cap, evals).map_or(f64::INFINITY, |b| b.1)
     }
+}
+
+thread_local! {
+    /// One reusable search heap per thread (queries are frequent and small).
+    static HEAP: std::cell::RefCell<BinaryHeap<Entry>> = const { std::cell::RefCell::new(BinaryHeap::new()) };
 }
 
 /// Min-heap entry on a plain lower bound.

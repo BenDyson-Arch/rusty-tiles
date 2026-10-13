@@ -238,6 +238,58 @@ pub(crate) struct SimplifyReport {
     pub collapses: u64,
     pub output_faces: u64,
     pub locked: u64,
+    /// Rejected collapse candidates: link, orphan, label, survivors, degenerate, fold,
+    /// role, seam reach.
+    pub rejected: [u64; 8],
+}
+
+/// The one-ring of a vertex: `(neighbour, face)` pairs sorted, one per face per neighbour.
+pub(crate) struct Ring {
+    pairs: Vec<(u32, u32)>,
+    faces: Vec<u32>,
+}
+
+impl Ring {
+    fn runs(&self) -> impl Iterator<Item = (u32, &[u32])> + '_ {
+        let mut i = 0;
+        std::iter::from_fn(move || {
+            if i >= self.pairs.len() {
+                return None;
+            }
+            let w = self.pairs[i].0;
+            let start = i;
+            while i < self.pairs.len() && self.pairs[i].0 == w {
+                i += 1;
+            }
+            Some((w, &self.faces[start..i]))
+        })
+    }
+    fn get(&self, w: &u32) -> Option<&[u32]> {
+        let start = self.pairs.partition_point(|p| p.0 < *w);
+        let end = self.pairs.partition_point(|p| p.0 <= *w);
+        (start < end).then(|| &self.faces[start..end])
+    }
+    fn contains_key(&self, w: &u32) -> bool {
+        self.get(w).is_some()
+    }
+    fn keys(&self) -> impl Iterator<Item = &u32> + '_ {
+        self.pairs
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| *i == 0 || self.pairs[i - 1].0 != p.0)
+            .map(|(_, p)| &p.0)
+    }
+    fn into_keys(self) -> impl Iterator<Item = u32> {
+        let mut keys: Vec<u32> = self.pairs.iter().map(|p| p.0).collect();
+        keys.dedup();
+        keys.into_iter()
+    }
+    fn values(&self) -> impl Iterator<Item = &[u32]> + '_ {
+        self.runs().map(|(_, f)| f)
+    }
+    fn iter(&self) -> impl Iterator<Item = (u32, &[u32])> + '_ {
+        self.runs()
+    }
 }
 
 /// Half-edge collapse simplifier over a key mesh.
@@ -258,6 +310,10 @@ pub(crate) struct Simplifier {
     /// Seam vertices not on the source boundary: true-boundary decimation must not reach
     /// them (their border edges stay seam edges, which the depth audit then checks exactly).
     seam: Vec<bool>,
+    /// All seam vertices: the relaxed pass may not collapse onto them, so it never kills a
+    /// face holding a seam edge.
+    cut: Vec<bool>,
+    rejected: std::cell::Cell<[u64; 8]>,
     pub report: SimplifyReport,
 }
 
@@ -293,6 +349,8 @@ impl Simplifier {
             },
             relaxed: false,
             seam: Vec::new(),
+            cut: Vec::new(),
+            rejected: std::cell::Cell::new([0; 8]),
             report: SimplifyReport {
                 input_faces: faces.len() as u64,
                 ..Default::default()
@@ -365,20 +423,19 @@ impl Simplifier {
     }
 
     /// Neighbours of `u` with, per neighbour, the faces on edge `(u, w)`.
-    fn ring(&self, u: u32) -> BTreeMap<u32, Vec<u32>> {
-        let mut ring: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    fn ring(&self, u: u32) -> Ring {
+        let mut pairs: Vec<(u32, u32)> = Vec::with_capacity(16);
         for f in self.live(u) {
-            let face = self.faces[f as usize];
-            for &w in &face.v {
+            for &w in &self.faces[f as usize].v {
                 if w != u {
-                    let list = ring.entry(w).or_default();
-                    if !list.contains(&f) {
-                        list.push(f);
-                    }
+                    pairs.push((w, f));
                 }
             }
         }
-        ring
+        pairs.sort_unstable();
+        pairs.dedup();
+        let faces = pairs.iter().map(|p| p.1).collect();
+        Ring { pairs, faces }
     }
 
     fn role(&self, u: u32) -> Role {
@@ -388,19 +445,19 @@ impl Simplifier {
         self.role_in(u, &self.ring(u))
     }
 
-    fn role_in(&self, u: u32, ring: &BTreeMap<u32, Vec<u32>>) -> Role {
+    fn role_in(&self, u: u32, ring: &Ring) -> Role {
         if self.locked[u as usize] {
             return Role::Locked;
         }
         let mut features = Vec::new();
-        for (w, list) in ring {
+        for (w, list) in ring.iter() {
             if list.len() > 2 {
                 return if self.relaxed { Role::Free } else { Role::Locked };
             }
             let feature = list.len() == 1
                 || self.faces[list[0] as usize].label != self.faces[list[1] as usize].label;
             if feature {
-                features.push(*w);
+                features.push(w);
             }
         }
         match features.len() {
@@ -412,9 +469,21 @@ impl Simplifier {
     }
 
     /// Topology and geometry checks for collapsing `u` onto `v`.
-    fn valid(&self, u: u32, v: u32, ring_u: &BTreeMap<u32, Vec<u32>>) -> bool {
+    fn valid(&self, u: u32, v: u32, ring_u: &Ring) -> bool {
+        let reason = self.why_not(u, v, ring_u);
+        if let Some(r) = reason {
+            self.rejected.set({
+                let mut a = self.rejected.get();
+                a[r] += 1;
+                a
+            });
+        }
+        reason.is_none()
+    }
+
+    fn why_not(&self, u: u32, v: u32, ring_u: &Ring) -> Option<usize> {
         let Some(shared) = ring_u.get(&v) else {
-            return false;
+            return Some(0);
         };
         let ring_v = self.ring(v);
         let thirds: BTreeSet<u32> = shared
@@ -422,10 +491,16 @@ impl Simplifier {
             .flat_map(|&f| self.faces[f as usize].v)
             .filter(|&w| w != u && w != v)
             .collect();
+        let mut link = true;
         for w in ring_u.keys() {
             if *w != v && ring_v.contains_key(w) && !thirds.contains(w) {
-                return false;
+                link = false;
             }
+        }
+        // The relaxed pass admits a non-manifold result away from seams (it never collapses
+        // onto a seam vertex); folds and duplicates are cleaned up after the collapse.
+        if !link && !self.relaxed {
+            return Some(0);
         }
         // No other vertex may lose its last face (a kept seam vertex would vanish).
         for &w in &thirds {
@@ -434,7 +509,7 @@ impl Simplifier {
                 .filter(|&&f| self.faces[f as usize].v.contains(&w))
                 .count();
             if (self.locked[w as usize] || !self.relaxed) && self.live(w).count() <= dying {
-                return false;
+                return Some(1);
             }
         }
         if !self.relaxed {
@@ -447,11 +522,11 @@ impl Simplifier {
                 .iter()
                 .any(|(l, n)| self.label_live[*l as usize] <= *n)
             {
-                return false;
+                return Some(2);
             }
             let survivors = self.live(u).chain(self.live(v)).filter(|f| !shared.contains(f)).count();
             if survivors == 0 {
-                return false;
+                return Some(3);
             }
         }
         for f in self.live(u) {
@@ -466,13 +541,13 @@ impl Simplifier {
                 continue;
             }
             if ln == 0. || !(ln.is_finite()) {
-                return false;
+                return Some(4);
             }
             if lo > 0. && dot(old, new) < FLIP_COS * lo * ln {
-                return false;
+                return Some(5);
             }
         }
-        true
+        None
     }
 
     fn apply(&mut self, u: u32, v: u32) {
@@ -540,6 +615,34 @@ impl Simplifier {
         }
     }
 
+    /// [`Simplifier::cleanup`] restricted to the faces around `v`.
+    fn cleanup_around(&mut self, v: u32) {
+        let faces: Vec<u32> = self.live(v).collect();
+        let mut seen: BTreeMap<([u32; 3], u32), [Vec<usize>; 2]> = BTreeMap::new();
+        for f in faces {
+            let i = f as usize;
+            let face = self.faces[i];
+            let mut sorted = face.v;
+            sorted.sort_unstable();
+            if sorted[0] == sorted[1] || sorted[1] == sorted[2] {
+                self.kill(i);
+                continue;
+            }
+            let lead = (0..3).min_by_key(|&k| face.v[k]).unwrap();
+            let odd = usize::from(face.v[(lead + 1) % 3] != sorted[1]);
+            seen.entry((sorted, face.label)).or_default()[odd].push(i);
+        }
+        for [even, odd] in seen.into_values() {
+            for &i in even.iter().skip(1).chain(odd.iter().skip(1)) {
+                self.kill(i);
+            }
+            if let (Some(&a), Some(&b)) = (even.first(), odd.first()) {
+                self.kill(a);
+                self.kill(b);
+            }
+        }
+    }
+
     fn kill(&mut self, i: usize) {
         if self.alive_f[i] {
             self.alive_f[i] = false;
@@ -563,7 +666,7 @@ impl Simplifier {
             let mut targets: Vec<u32> = ring
                 .iter()
                 .filter(|(_, l)| l.len() == 1)
-                .map(|(w, _)| *w)
+                .map(|(w, _)| w)
                 .collect();
             // Only a vertex inside one seam chain (exactly two border edges, the same two on
             // both sides) has a side-independent removal: either collapse gives the chain
@@ -604,6 +707,9 @@ impl Simplifier {
         let ring = self.ring(u);
         let role = self.role_in(u, &ring);
         if role == Role::Locked {
+            let mut a = self.rejected.get();
+            a[6] += 1;
+            self.rejected.set(a);
             return;
         }
         for &v in ring.keys() {
@@ -613,6 +719,9 @@ impl Simplifier {
                 }
             }
             if self.boundary_reaches_seam(v, &ring) {
+                let mut a = self.rejected.get();
+                a[7] += 1;
+                self.rejected.set(a);
                 continue;
             }
             heap.push(Reverse((Cost(self.cost(u, v)), u, v, self.stamp[u as usize])));
@@ -651,6 +760,9 @@ impl Simplifier {
                 continue;
             }
             self.apply(u, v);
+            if self.relaxed {
+                self.cleanup_around(v);
+            }
             self.report.collapses += 1;
             self.push(&mut heap, v);
             for w in self.ring(v).into_keys() {
@@ -659,13 +771,17 @@ impl Simplifier {
         }
     }
 
-    pub(crate) fn set_seam(&mut self, seam: Vec<bool>) {
+    pub(crate) fn set_seam(&mut self, seam: Vec<bool>, cut: Vec<bool>) {
         self.seam = seam;
+        self.cut = cut;
     }
 
-    /// A border vertex may not collapse onto a non-boundary seam vertex.
-    fn boundary_reaches_seam(&self, v: u32, ring_u: &BTreeMap<u32, Vec<u32>>) -> bool {
-        self.seam.get(v as usize).copied().unwrap_or(false) && ring_u.values().any(|l| l.len() == 1)
+    /// A border vertex may not collapse onto a non-boundary seam vertex; in the relaxed
+    /// pass nothing collapses onto any seam vertex.
+    fn boundary_reaches_seam(&self, v: u32, ring_u: &Ring) -> bool {
+        (self.relaxed && self.cut.get(v as usize).copied().unwrap_or(false))
+            || (self.seam.get(v as usize).copied().unwrap_or(false)
+                && ring_u.values().any(|l| l.len() == 1))
     }
 
     pub(crate) fn live_faces(&self) -> usize {
@@ -692,6 +808,7 @@ impl Simplifier {
             .collect();
         self.report.output_faces = faces.len() as u64;
         self.report.locked = self.locked.iter().filter(|l| **l).count() as u64;
+        self.report.rejected = self.rejected.get();
         (faces, self.report)
     }
 }

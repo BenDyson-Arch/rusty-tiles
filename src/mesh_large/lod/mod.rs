@@ -46,7 +46,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Proxy face target `P` per tile; more than `2P` after simplification is Unsupported.
+/// Proxy face target `P` per tile. Above `2P` after simplification a tile is reported over
+/// budget; above `4P` it is Unsupported. (Property tables stay within CesiumJS's 8192 rows
+/// whatever the face count: each glTF primitive holds at most 8192 triangles.)
 pub(crate) const TARGET_FACES: usize = 8192;
 /// Most vertices of a fillable hole loop.
 const FILL_LOOP: usize = 64;
@@ -320,6 +322,8 @@ pub(crate) struct LodReport {
     pub lattice_sha256: String,
     pub sidecar_peak_bytes: u64,
     pub relaxed_tiles: u64,
+    /// Tiles above `2P` faces (each glTF primitive still holds at most 8192 triangles).
+    pub over_budget_tiles: u64,
     /// Run facts outside the deterministic manifest.
     #[serde(skip)]
     pub jobs: u64,
@@ -581,8 +585,18 @@ fn load_leaf(ctx: &Ctx, node: &NodeRecord, index: u64, error: f64) -> Result<Chi
                 .encode(&[s.positions[c]; 3], &[s.info[c].ell; 3], depth)?
                 .decoded[0];
             if expected.map(f32::to_bits) != face.p[c].map(f32::to_bits) {
+                let matching: Vec<u8> = (0..ctx.lattice.steps().len() as u8)
+                    .filter(|&ell| {
+                        ctx.lattice
+                            .encode(&[s.positions[c]; 3], &[ell; 3], depth)
+                            .is_ok_and(|e| e.decoded[0].map(f32::to_bits) == face.p[c].map(f32::to_bits))
+                    })
+                    .collect();
                 return Err(state(format!(
-                    "leaf {index}: decoded corner differs from its frozen lattice point"
+                    "leaf {index}: decoded corner {:?} of source {:?} differs from its frozen \
+                     lattice point {:?} (corner depth {}, leaf depth {depth}; depths that \
+                     decode to it: {matching:?}; provenance {:?})",
+                    face.p[c], s.positions[c], expected, s.info[c].ell, provenance
                 )));
             }
         }
@@ -708,6 +722,7 @@ struct Outcome {
     phases: [f64; 7],
     forced_keys: Vec<Key>,
     failed_keys: Vec<Key>,
+    over_budget: bool,
 }
 
 /// Faces of a mesh grouped by label (stable), the GLB face order.
@@ -902,11 +917,13 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
             .iter()
             .map(|v| v.info.cut(d) && !v.info.special)
             .collect(),
+        mesh.vertices.iter().map(|v| v.info.cut(d)).collect(),
     );
     out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     simplifier.simplify(ctx.target);
-    let relaxed = simplifier.live_faces() > 2 * ctx.target;
+    let strict_faces = simplifier.live_faces();
+    let relaxed = strict_faces > 2 * ctx.target;
     if relaxed {
         simplifier.relax();
         simplifier.simplify(ctx.target);
@@ -915,7 +932,17 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     out.relaxed = relaxed;
     out.forced = report.forced;
     out.forced_unchecked = report.forced_unchecked;
-    if s_faces.len() > 2 * ctx.target {
+    out.over_budget = s_faces.len() > 2 * ctx.target;
+    if std::env::var_os("RT_LOD_BUDGET_DEBUG").is_some() && out.over_budget {
+        let cut = mesh.vertices.iter().filter(|v| v.info.cut(d)).count();
+        let special = mesh.vertices.iter().filter(|v| v.info.special).count();
+        let used: BTreeSet<u32> = s_faces.iter().flat_map(|f| f.v).collect();
+        let used_cut = used.iter().filter(|&&v| mesh.vertices[v as usize].info.cut(d)).count();
+        let used_special = used.iter().filter(|&&v| mesh.vertices[v as usize].info.special).count();
+        eprintln!("BUDGET f{}-d{d}: T faces {} verts {} cut {cut} special {special} kept-extra {} forced {} failed {}; strict {strict_faces} final {} used verts {} (cut {used_cut}, special {used_special}) report {:?}",
+            node.first, mesh.faces.len(), mesh.vertices.len(), keep_extra.len(), forced.len(), failed.len(), s_faces.len(), used.len(), report);
+    }
+    if s_faces.len() > 4 * ctx.target {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
             format!(
@@ -923,7 +950,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
                  {} limit (locked seam or non-manifold vertices)",
                 node.first,
                 s_faces.len(),
-                2 * ctx.target
+                4 * ctx.target
             ),
         ));
     }
@@ -1802,6 +1829,7 @@ pub(crate) fn produce(
             report.forced_collapses += o.forced;
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);
+            report.over_budget_tiles += u64::from(o.over_budget);
             for (a, b) in report.phase_seconds.iter_mut().zip(o.phases) {
                 *a += b;
             }
