@@ -8,9 +8,12 @@ mod mips;
 pub(super) mod planning;
 mod prepared;
 pub(crate) mod producer;
+mod schedule;
 mod sparse_mips;
 mod writer;
 
+#[cfg(test)]
+mod calibration_tests;
 #[cfg(test)]
 mod mip_oracle_tests;
 

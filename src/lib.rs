@@ -38,6 +38,7 @@ mod raster_directory;
 pub mod report;
 mod runtime;
 mod spill;
+mod stage_timing;
 pub mod terrain;
 pub mod texture;
 pub mod tile;
