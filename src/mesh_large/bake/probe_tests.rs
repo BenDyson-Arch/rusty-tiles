@@ -872,3 +872,298 @@ fn skinny_scalar_colour_only_capture_has_normal_fans_without_atlas_obligation() 
     assert_eq!(error.kind(), JobErrorKind::Unsupported);
     assert_eq!(calls, 1);
 }
+
+#[test]
+fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level() {
+    for profile in [
+        Profile::Fast,
+        Profile::Balanced,
+        Profile::Quality,
+        Profile::Lossless,
+    ] {
+        // Recreate actual admitted capture and raster for every profile. No
+        // encoded output is fed back, and no callback invents an assembled Fit.
+        let (_work, c) = capture(1, |input| {
+            let mut doc: serde_json::Value =
+                serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+            doc["materials"][0]["pbrMetallicRoughness"]["metallicRoughnessTexture"] =
+                serde_json::json!({"index":0,"texCoord":0});
+            doc["materials"][0]["normalTexture"] =
+                serde_json::json!({"index":0,"texCoord":1,"scale":2.});
+            doc["materials"][0]["occlusionTexture"] =
+                serde_json::json!({"index":0,"texCoord":0,"strength":0.4});
+            doc["materials"][0]["emissiveTexture"] = serde_json::json!({"index":0,"texCoord":1});
+            doc["materials"][0]["emissiveFactor"] = serde_json::json!([0.2, 0.3, 0.4]);
+            fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        });
+        let f = packet(&c);
+        let l = BakeLimits {
+            profile,
+            ..limits()
+        };
+        let mut source = CapturedSource::new(&c, l.source_cache_bytes, &mut || Ok(())).unwrap();
+        source.begin(f.node, l.query_work).unwrap();
+        let layout = charts::build(
+            &f,
+            &raster_faces(&f, &source).unwrap(),
+            l,
+            0.125,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+        let mut raster =
+            raster::build(&f, &layout, &mut source, &mut children, l, &mut || Ok(())).unwrap();
+        assert_eq!(raster.pages.len(), 5);
+        let mut slots = std::collections::BTreeSet::new();
+        for (index, page) in raster.pages.iter_mut().enumerate() {
+            slots.insert(slot_index(page.slot));
+            let material = source.material(page.material).unwrap();
+            let output = delivery::encode(
+                page,
+                &raster.masks[index],
+                &material,
+                profile,
+                l.memory_bytes,
+                l.query_work,
+                &mut || Ok(()),
+            )
+            .unwrap_or_else(|e| panic!("{profile:?}/{:?} delivery: {e}", page.slot));
+            assert_eq!(output.slot, page.slot);
+            assert_eq!(output.material, page.material);
+            assert_eq!(output.sampler, page.sampler);
+            assert_eq!(output.size, [page.width, page.height]);
+            let mut dimensions = Vec::new();
+            let (mut w, mut h) = (page.width, page.height);
+            loop {
+                dimensions.push([w, h]);
+                if w == 1 && h == 1 {
+                    break;
+                }
+                w = (w / 2).max(1);
+                h = (h / 2).max(1);
+            }
+            assert_eq!(page.levels.len(), dimensions.len());
+            assert_eq!(output.receipt["semanticLevels"], dimensions.len());
+            let emitted = if profile == Profile::Lossless {
+                1
+            } else {
+                dimensions.len()
+            };
+            assert_eq!(output.receipt["mipCount"], emitted);
+            let codec = output.receipt["codec"].as_array().unwrap();
+            if profile == Profile::Lossless {
+                assert_eq!(output.mime, "image/png");
+                assert_eq!(&output.bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+                let decoded =
+                    image::load_from_memory_with_format(&output.bytes, image::ImageFormat::Png)
+                        .unwrap()
+                        .into_rgba8();
+                assert_eq!([decoded.width(), decoded.height()], dimensions[0]);
+                assert_eq!(decoded.as_raw(), &page.levels[0].rgba);
+                assert!(codec.iter().any(|r| r["level0_rgba_exact"] == true));
+                assert!(codec.iter().any(|r| r["decodedBaseExact"] == true));
+            } else {
+                assert_eq!(output.mime, "image/ktx2");
+                assert_eq!(
+                    &output.bytes[..12],
+                    &[0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 13, 10, 26, 10]
+                );
+                let word = |offset| {
+                    u32::from_le_bytes(output.bytes[offset..offset + 4].try_into().unwrap())
+                };
+                assert_eq!([word(20), word(24)], dimensions[0]);
+                assert_eq!(word(40) as usize, emitted);
+                let dfd = word(48) as usize;
+                let colour = matches!(page.slot, TextureSlot::BaseColor | TextureSlot::Emissive);
+                assert_eq!(
+                    output.bytes[dfd + 14],
+                    if colour { 2 } else { 1 },
+                    "actual DFD transfer"
+                );
+                let scalar = page.slot == TextureSlot::Occlusion && profile != Profile::Quality;
+                assert_eq!(
+                    output.bytes[dfd + 12],
+                    if scalar { 163 } else { 166 },
+                    "actual ETC1S/UASTC model"
+                );
+                let decoder = basisu::Transcoder::new(&output.bytes).unwrap();
+                assert_eq!(decoder.level_count() as usize, emitted);
+                assert!(codec
+                    .iter()
+                    .any(|r| r["proxyDecodedCompleteChain"] == emitted
+                        && r["terminal1x1"] == serde_json::json!([1, 1])));
+                for (mip, level) in page.levels.iter().enumerate() {
+                    let decoded = decoder
+                        .transcode(
+                            mip as u32,
+                            basisu::TargetFormat::Rgba32,
+                            basisu::DecodeFlags::NONE,
+                        )
+                        .unwrap();
+                    assert_eq!([level.width, level.height], dimensions[mip]);
+                    assert_eq!(
+                        decoded.len(),
+                        level.width as usize * level.height as usize * 4
+                    );
+                    let floor = codec
+                        .iter()
+                        .find(|r| r["mip"] == mip && r["channels"].is_array())
+                        .expect("decoded floor for every emitted mip");
+                    let channels: &[usize] = match page.slot {
+                        TextureSlot::MetallicRoughness => &[1, 2, 3],
+                        TextureSlot::Occlusion => &[0, 3],
+                        _ => &[0, 1, 2, 3],
+                    };
+                    let metrics = floor["channels"].as_array().unwrap();
+                    assert_eq!(metrics.len(), channels.len());
+                    for (&channel, metric) in channels.iter().zip(metrics) {
+                        assert_eq!(metric["channel"], channel);
+                        assert!(metric["texels"].as_u64().unwrap() > 0);
+                        assert!(
+                            metric["exact"] == true
+                                || metric["psnr"].as_f64().unwrap()
+                                    >= metric["floor"].as_f64().unwrap()
+                        );
+                        // Independently name the retained current small-level
+                        // policy; optional tails/maxima must not become null by
+                        // accident or weaken the concrete applicable floor.
+                        let quality = profile == Profile::Quality;
+                        let colour_channel = colour && channel < 3;
+                        let expected_floor = if colour_channel {
+                            if quality {
+                                23.
+                            } else {
+                                20.
+                            }
+                        } else if channel == 3 && quality {
+                            34.
+                        } else {
+                            30.
+                        };
+                        assert_eq!(metric["floor"], expected_floor);
+                        assert!(metric["p999Cap"].is_null());
+                        let expected_max = if colour_channel {
+                            None
+                        } else if channel == 3 {
+                            Some(if profile == Profile::Fast {
+                                80
+                            } else if quality {
+                                32
+                            } else {
+                                64
+                            })
+                        } else {
+                            Some(match page.slot {
+                                TextureSlot::Normal => 112,
+                                TextureSlot::Occlusion => {
+                                    if quality {
+                                        8
+                                    } else {
+                                        80
+                                    }
+                                }
+                                _ => 32,
+                            })
+                        };
+                        assert_eq!(metric["maxCap"].as_u64(), expected_max);
+                        if let Some(cap) = expected_max {
+                            assert!(metric["max"].as_u64().unwrap() <= cap);
+                        }
+                        let expected_block =
+                            colour_channel.then_some(if quality { 48. } else { 80. });
+                        assert_eq!(metric["blockRmseCap"].as_f64(), expected_block);
+                        if let Some(cap) = expected_block {
+                            assert!(metric["blockRmse"].as_f64().unwrap() <= cap);
+                        }
+                    }
+                    if page.slot == TextureSlot::Normal {
+                        let (mean_cap, max_cap) = match profile {
+                            Profile::Fast => (0.08, 0.20),
+                            Profile::Quality => (0.03, 0.10),
+                            _ => (0.05, 0.15),
+                        };
+                        assert!(floor["normal"]["length_mean"].as_f64().unwrap() <= mean_cap);
+                        assert!(floor["normal"]["length_max"].as_f64().unwrap() <= max_cap);
+                        assert!(floor["normal"]["angle_mean"].as_f64().unwrap() <= 3.);
+                        assert!(floor["normal"]["angle_p99"].as_f64().unwrap() <= 12.);
+                        // Independent constant source golden: authored source
+                        // axes are XYZ and literal scale2 affects XY after filtering.
+                        let raw = [
+                            2. * (120. / 127.5 - 1.),
+                            2. * (80. / 127.5 - 1.),
+                            40. / 127.5 - 1.,
+                        ];
+                        let length = raw.iter().map(|v| v * v).sum::<f64>().sqrt();
+                        let expected = raw.map(|v| v / length);
+                        for (i, pixel) in decoded.as_chunks::<4>().0.iter().enumerate() {
+                            if level.support[i] == 0 {
+                                continue;
+                            }
+                            let components: [f64; 3] =
+                                std::array::from_fn(|a| f64::from(pixel[a]) / 127.5 - 1.);
+                            let frame = level.frames[i];
+                            let world: [f64; 3] = std::array::from_fn(|a| {
+                                frame.tangent[a] * components[0]
+                                    + frame.bitangent[a] * components[1]
+                                    + frame.normal[a] * components[2]
+                            });
+                            let length = world.iter().map(|v| v * v).sum::<f64>().sqrt();
+                            let cosine = world
+                                .iter()
+                                .zip(expected)
+                                .map(|(a, b)| a * b / length)
+                                .sum::<f64>();
+                            assert!(
+                                cosine.clamp(-1., 1.).acos().to_degrees() <= 3.,
+                                "independent decoded source direction {profile:?}/{mip}"
+                            );
+                        }
+                    } else {
+                        let expected = [120u8, 80, 40, 255];
+                        for (i, pixel) in decoded.as_chunks::<4>().0.iter().enumerate() {
+                            if level.support[i] == 0 {
+                                continue;
+                            }
+                            for &channel in channels {
+                                assert!(pixel[channel].abs_diff(expected[channel])<=16,"constant source class readback {profile:?}/{:?}/{mip}/{channel}",page.slot);
+                            }
+                        }
+                    }
+                }
+            }
+            if page.slot == TextureSlot::Normal {
+                let authored = output
+                    .receipt
+                    .pointer("/semantic/authoredRendererFrameFloors/rendererFrameFloors")
+                    .unwrap()
+                    .as_array()
+                    .unwrap();
+                assert_eq!(authored.len(), emitted);
+                let decoded = codec
+                    .iter()
+                    .find_map(|r| {
+                        if profile == Profile::Lossless {
+                            r.get("rendererFrameFloors")
+                        } else {
+                            r.pointer("/normalRendererFrames/rendererFrameFloors")
+                        }
+                    })
+                    .unwrap()
+                    .as_array()
+                    .unwrap();
+                assert_eq!(decoded.len(), emitted);
+                for receipts in [authored, decoded] {
+                    for (mip, receipt) in receipts.iter().enumerate() {
+                        assert_eq!(receipt["mip"], mip);
+                        assert_eq!(receipt["committedMixtureReference"], true);
+                        assert!(receipt["totalWeight"].as_f64().unwrap() > 0.);
+                        assert!(receipt["meanAngle"].as_f64().unwrap() <= 3.);
+                        assert!(receipt["p99AngleUpper"].as_f64().unwrap() <= 12.);
+                    }
+                }
+            }
+        }
+        assert_eq!(slots, std::collections::BTreeSet::from([0, 1, 2, 3, 4]));
+    }
+}
