@@ -292,6 +292,7 @@ impl Reuse {
         ambiguous: bool,
         options: &VectorOptions,
         reader: &source::Reader,
+        grid: &super::encoding::QuantizationGrid,
     ) -> Result<(), Error> {
         #[cfg(feature = "native-geospatial")]
         let versions = crate::geospatial::versions()?;
@@ -315,12 +316,20 @@ impl Reuse {
             "lodTolerance":options.lod.tolerance_metres,"lodLevels":options.lod.levels,"parentRepair":options.parent_repair,"aggregatePoints":options.aggregate_points,"skipInvalid":options.skip_invalid,"repair":repair,"ambiguousOutlines":ambiguous,
             "sourceCrs":options.source_crs,"where":options.where_clause,"heightOffset":options.height_offset,"listFields":options.list_fields,"fields":options.fields,"dropFields":options.drop_fields});
         self.config["tiling"] = json!("implicit-forest-v3");
+        // Quantized payloads snap to the dataset's lattice: a different
+        // lattice rebuilds them (cache signatures) instead of refusing reuse.
+        self.config["quantizationGrid"] = if options.quantize {
+            grid.describe()
+        } else {
+            Value::Null
+        };
         // Accepted schema/list inventory is derived from this source revision.
         // It belongs in cache signatures, but changes must rebuild content rather
         // than refusing deletions or an empty accepted inventory.
         fn settings(config: &Value) -> Value {
             let mut settings = config.clone();
             settings.as_object_mut().unwrap().remove("schemas");
+            settings.as_object_mut().unwrap().remove("quantizationGrid");
             if let Some(layers) = settings["layers"].as_array_mut() {
                 for layer in layers {
                     layer.as_object_mut().unwrap().remove("jsonFields");

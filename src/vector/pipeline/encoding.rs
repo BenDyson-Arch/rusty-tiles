@@ -363,9 +363,160 @@ fn bridge_len(
     .map_err(|error| codec_failure(error, attempt))
 }
 
+/// The build's shared quantization lattice: per axis, the points `k * 2^e`
+/// of the local vector frame. It is fixed once from the spooled dataset
+/// bounds, before any candidate is encoded. Every quantized payload holding
+/// a vertex that other spool rows also hold (fragments of split polygons and
+/// lines, borders between features) snaps those vertices, from their exact
+/// source positions, to its step; its other vertices use the payload's own
+/// finer power-of-two step on the same lattice, and payloads without such
+/// vertices keep their own range. A vertex shared by fragments in
+/// different tiles (at any depth) therefore has one lattice index, and every
+/// payload decodes it to the same frame position: the node translation is
+/// `k_lo * 2^e - center` and the scale `65535 * 2^e`, both before the
+/// forest adds the tile offset. Deriving the range per payload instead
+/// rounds a shared vertex differently on each side of a seam (cracks).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct QuantizationGrid {
+    exponent: [i32; 3],
+}
+impl QuantizationGrid {
+    /// Lowest exponent: keeps `65535 * 2^e` a normal float32.
+    const MIN_EXPONENT: i32 = -120;
+    /// The coarsest lattice an axis needs: one u16 window (with one cell of
+    /// rounding slack) spans `lo..hi`, and every index stays exact in f64.
+    pub(super) fn enclosing(lo: Point, hi: Point) -> Self {
+        Self {
+            exponent: std::array::from_fn(|i| {
+                let span = hi[i] - lo[i];
+                let magnitude = lo[i].abs().max(hi[i].abs());
+                // |k| < 2^53 so k * 2^e and the index arithmetic are exact;
+                // a zero-span axis (every value equal) then decodes exactly.
+                let mut e = if magnitude > 0. && magnitude.is_finite() {
+                    magnitude.log2().floor() as i32 - 52
+                } else {
+                    Self::MIN_EXPONENT
+                };
+                if span > 0. && span.is_finite() {
+                    e = e.max((span / 65534.).log2().floor() as i32 - 1);
+                    while 65534. * 2f64.powi(e) < span {
+                        e += 1;
+                    }
+                }
+                e.max(Self::MIN_EXPONENT)
+            }),
+        }
+    }
+    /// The grid of every feature row in a spool.
+    pub(super) fn for_spool(db: &rusqlite::Connection) -> Result<Self, Error> {
+        let (lo, hi) = db
+            .query_row(
+                "SELECT COALESCE(MIN(lx),0),COALESCE(MIN(ly),0),COALESCE(MIN(lz),0),COALESCE(MAX(hx),0),COALESCE(MAX(hy),0),COALESCE(MAX(hz),0) FROM features",
+                [],
+                |r| Ok(([r.get(0)?, r.get(1)?, r.get(2)?], [r.get(3)?, r.get(4)?, r.get(5)?])),
+            )
+            .map_err(sql)?;
+        Ok(Self::enclosing(lo, hi))
+    }
+    /// The identity a reuse cache must key payloads by.
+    pub(super) fn describe(&self) -> Value {
+        json!({"lattice":"k*2^e in the local vector frame","exponents":self.exponent})
+    }
+    /// One payload's lattice exponent and lowest index per axis. The
+    /// payload's own (finest fitting) power-of-two step, never coarser than
+    /// the build's; `coarse` vertices first snap to the build's step, which
+    /// is a multiple of the payload's, so every tile decodes them to the same
+    /// point. All positions and every line-strip end mirror `2c - n` fit one
+    /// u16 window. Only when that is wider than the window at the build's
+    /// step does the payload use a coarser step; the doublings say so.
+    fn place(
+        &self,
+        sources: &[&[Point]],
+        coarse: &[Vec<bool>],
+        ends: &[(usize, u32, u32)],
+    ) -> Placement {
+        let all = || sources.iter().flat_map(|s| s.iter());
+        let own = bounds(all())
+            .map(|(lo, hi)| Self::enclosing(lo, hi).exponent)
+            .unwrap_or(self.exponent);
+        let mut placement = Placement {
+            exponent: std::array::from_fn(|i| own[i].min(self.exponent[i])),
+            shared: self.exponent,
+            low: [0; 3],
+            doublings: [0; 3],
+        };
+        for i in 0..3 {
+            loop {
+                let index = |b: usize, v: usize| placement.index(sources[b][v][i], coarse[b][v], i);
+                let mut low = i64::MAX;
+                let mut high = i64::MIN;
+                for (b, points) in sources.iter().enumerate() {
+                    for v in 0..points.len() {
+                        let k = index(b, v);
+                        low = low.min(k);
+                        high = high.max(k);
+                    }
+                }
+                for (b, c, n) in ends {
+                    let k = 2 * index(*b, *c as usize) - index(*b, *n as usize);
+                    low = low.min(k);
+                    high = high.max(k);
+                }
+                if low > high || high - low <= 65535 {
+                    placement.low[i] = if low > high { 0 } else { low };
+                    break;
+                }
+                placement.exponent[i] += 1;
+            }
+            placement.doublings[i] = (placement.exponent[i] - self.exponent[i]).max(0) as u32;
+        }
+        placement
+    }
+}
+/// The build's grid and the payload's vertices that other tiles also hold
+/// (spooled in more than one feature row), which snap to its step.
+#[derive(Clone, Copy)]
+pub(super) struct SharedGrid<'a> {
+    pub grid: &'a QuantizationGrid,
+    pub coarse: &'a BTreeSet<PointKey>,
+}
+struct Placement {
+    exponent: [i32; 3],
+    /// The build's exponents, for vertices shared with other tiles.
+    shared: [i32; 3],
+    low: [i64; 3],
+    doublings: [u32; 3],
+}
+impl Placement {
+    /// The (absolute) lattice index of one coordinate at this payload's step.
+    fn index(&self, v: f64, coarse: bool, axis: usize) -> i64 {
+        let e = self.exponent[axis];
+        if coarse {
+            let shared = self.shared[axis];
+            // Exact: a multiple of 2^shared, itself a multiple of 2^e.
+            lattice_index(lattice_index(v, shared) as f64 * 2f64.powi(shared), e)
+        } else {
+            lattice_index(v, e)
+        }
+    }
+}
+/// The nearest lattice index (ties to even): `v / 2^e` is exact.
+fn lattice_index(v: f64, exponent: i32) -> i64 {
+    (v * 2f64.powi(-exponent)).round_ties_even() as i64
+}
+/// `(batch, end, neighbour)` for both ends of every line strip.
+fn strip_ends(batch: usize, indices: &[u32], ends: &mut Vec<(usize, u32, u32)>) {
+    for strip in indices.split(|i| *i == u32::MAX).filter(|s| s.len() >= 2) {
+        ends.push((batch, strip[0], strip[1]));
+        ends.push((batch, strip[strip.len() - 1], strip[strip.len() - 2]));
+    }
+}
+
 #[derive(Default)]
 struct Batch {
     points: Vec<Point>,
+    /// The exact source (frame) position of each point, for the shared grid.
+    sources: Vec<Point>,
     ids: Vec<usize>,
     indices: Vec<u32>,
     loops: Vec<u32>,
@@ -378,6 +529,8 @@ struct Encoded {
     primitives: usize,
     rounding: f64,
     quantization: f64,
+    /// Axes on which this payload left the shared grid (padded line range).
+    coarsened: [u32; 3],
     before_bytes: usize,
 }
 pub(super) struct Candidate {
@@ -388,20 +541,6 @@ pub(super) struct Candidate {
 }
 fn view(glb: &mut MetadataGlb, bytes: &[u8]) -> usize {
     glb.view(if bytes.is_empty() { &[0] } else { bytes })
-}
-/// Per-axis maximum |c - n| over line-strip ends c and their one neighbour n.
-fn strip_end_reach(indices: &[u32], points: &[Point], mut reach: Point) -> Point {
-    for strip in indices.split(|i| *i == u32::MAX).filter(|s| s.len() >= 2) {
-        for (c, n) in [
-            (strip[0], strip[1]),
-            (strip[strip.len() - 1], strip[strip.len() - 2]),
-        ] {
-            for i in 0..3 {
-                reach[i] = reach[i].max((points[c as usize][i] - points[n as usize][i]).abs());
-            }
-        }
-    }
-    reach
 }
 fn u32_accessor(glb: &mut MetadataGlb, values: &[u32]) -> usize {
     let bytes: Vec<_> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
@@ -473,6 +612,7 @@ fn metadata(
 fn emit(
     items: &[&Feature],
     center: Point,
+    grid: Option<SharedGrid<'_>>,
     repair: bool,
     schemas: &BTreeMap<String, String>,
     options: &VectorOptions,
@@ -480,7 +620,9 @@ fn emit(
     policy: ProducerPolicy,
     attempt: &Attempt,
 ) -> FeatureResult<Encoded> {
-    let source = emit_source(items, center, repair, schemas, options, reports, attempt)?;
+    let source = emit_source(
+        items, center, grid, repair, schemas, options, reports, attempt,
+    )?;
     let (bytes, before_bytes) = bridge(source.document, source.binary, policy, attempt)?;
     Ok(Encoded {
         bytes,
@@ -488,6 +630,7 @@ fn emit(
         primitives: source.primitives,
         rounding: source.rounding,
         quantization: source.quantization,
+        coarsened: source.coarsened,
         before_bytes,
     })
 }
@@ -500,11 +643,17 @@ struct Source {
     primitives: usize,
     rounding: f64,
     quantization: f64,
+    coarsened: [u32; 3],
 }
+/// With `grid`, quantized positions snap to the build's shared lattice;
+/// without, to this payload's own range (fitting, and payloads that hold no
+/// fragment of a split feature, so no vertex they share with another tile
+/// needs to agree).
 #[allow(clippy::too_many_arguments)]
 fn emit_source(
     items: &[&Feature],
     center: Point,
+    grid: Option<SharedGrid<'_>>,
     repair: bool,
     schemas: &BTreeMap<String, String>,
     options: &VectorOptions,
@@ -529,10 +678,12 @@ fn emit_source(
     for (fid, feature) in items.iter().enumerate() {
         let mut parts = Vec::new();
         match &feature.geometry {
-            Geometry::Point(p) => parts.push((0, vec![*p], None)),
-            Geometry::MultiPoint(p) => parts.push((0, p.clone(), None)),
-            Geometry::LineString(p) => parts.push((3, p.clone(), None)),
-            Geometry::MultiLineString(p) => parts.extend(p.iter().map(|p| (3, p.clone(), None))),
+            Geometry::Point(p) => parts.push((0, vec![*p], None, None)),
+            Geometry::MultiPoint(p) => parts.push((0, p.clone(), None, None)),
+            Geometry::LineString(p) => parts.push((3, p.clone(), None, None)),
+            Geometry::MultiLineString(p) => {
+                parts.extend(p.iter().map(|p| (3, p.clone(), None, None)))
+            }
             geometry => {
                 let polygons = match geometry {
                     Geometry::Polygon(r) => vec![r],
@@ -540,23 +691,40 @@ fn emit_source(
                     _ => unreachable!(),
                 };
                 for (index, rings) in polygons.into_iter().enumerate() {
+                    // Each polygon vertex is one of these local ring points;
+                    // the shared grid snaps its exact source position.
+                    let mut origin = BTreeMap::new();
                     let local: Vec<Vec<_>> = rings
                         .iter()
-                        .map(|r| r.iter().map(|p| sub(*p, center)).collect())
+                        .map(|r| {
+                            r.iter()
+                                .map(|p| {
+                                    let local = sub(*p, center);
+                                    origin.entry(key(local)).or_insert(*p);
+                                    local
+                                })
+                                .collect()
+                        })
                         .collect();
                     let polygon = geometry::polygon_for(feature, &local, index, center, repair)?;
                     let mut report = polygon.report.clone();
                     report["sourceId"] = feature.source_id().clone();
                     reports.push(report);
+                    let sources = polygon
+                        .positions
+                        .iter()
+                        .map(|p| origin.get(&key(*p)).copied().unwrap_or(add(*p, center)))
+                        .collect();
                     parts.push((
                         4,
                         polygon.positions.iter().map(|p| add(*p, center)).collect(),
+                        Some(sources),
                         Some(polygon),
                     ));
                 }
             }
         }
-        for (mode, positions, polygon) in parts {
+        for (mode, positions, sources, polygon) in parts {
             let points: Vec<_> = positions.iter().map(|p| sub(*p, center)).collect();
             let batch = batches.entry(mode).or_default();
             let base = u32::try_from(batch.points.len())
@@ -600,6 +768,7 @@ fn emit_source(
             }
             batch.ids.extend(std::iter::repeat_n(fid, points.len()));
             batch.points.extend_from_slice(&points);
+            batch.sources.extend(sources.unwrap_or(positions));
             all_positions.extend(points);
         }
     }
@@ -607,7 +776,7 @@ fn emit_source(
         glb::add_extension(&mut glb.document, "KHR_mesh_primitive_restart", true)?;
     }
     let mut position_accessors = Vec::new();
-    let mut line_end_reach = [0f64; 3];
+    let mut line_ends = Vec::new();
     for (mode, batch) in &batches {
         let mut ext = json!({"EXT_mesh_features":crate::metadata::MeshFeatures::attribute(items.len(), 0, Some(0))});
         if *mode == 4 {
@@ -631,10 +800,10 @@ fn emit_source(
         let position_view = view(&mut glb, &bytes);
         let (lo, hi) = bounds(values.iter())?;
         if *mode == 3 {
-            line_end_reach = strip_end_reach(&batch.indices, &values, line_end_reach);
+            strip_ends(position_accessors.len(), &batch.indices, &mut line_ends);
         }
         let position=glb.accessor(json!({"bufferView":position_view,"componentType":5126,"count":values.len(),"type":"VEC3","min":lo,"max":hi}));
-        position_accessors.push((position, position_view, values));
+        position_accessors.push((position, position_view, values, &batch.sources));
         let mut ids = Vec::new();
         for id in &batch.ids {
             if items.len() <= 65536 {
@@ -657,47 +826,123 @@ fn emit_source(
         .map(|p| norm(sub(*p, p.map(|v| v as f32 as f64))))
         .fold(0., f64::max);
     let mut quantization: f64 = 0.;
+    let mut coarsened = [0; 3];
     if options.quantize {
-        let (lo, hi) = bounds(position_accessors.iter().flat_map(|(_, _, p)| p.iter()))?;
         // Workaround for a CesiumJS bug (seen in 1.146,
         // renderBufferPolylineCollection.js): a line strip's missing end
         // neighbour is synthesised as 2c-n and stored in prev/next buffers of
-        // the position component type, so with u16 positions an end within
-        // one end segment of the range edge wraps (e.g. -65535 -> 1) into a
-        // sheared cap or long spike. Pad by that reach plus two quanta
-        // (rounding of c and n) so 2c-n stays in [0, 65535]:
-        // pad >= reach + 2 (extent + 2 pad) / 65535.
-        let pad: Point = std::array::from_fn(|i| {
-            if line_end_reach[i] > 0. {
-                (line_end_reach[i] + 2. * (hi[i] - lo[i]) / 65535.) / (1. - 4. / 65535.)
-            } else {
-                0.
+        // the position component type, so with u16 positions an end on the
+        // range edge wraps (e.g. -65535 -> 1) into a sheared cap or long
+        // spike. Both ranges below keep every end's mirror in [0, 65535].
+        //
+        // `lo`, `scale`, half a step per axis, and each accessor's codes.
+        let (lo, scale, half_step, codes): (Point, Point, Point, Vec<Vec<[u16; 3]>>) = match grid {
+            Some(shared) => {
+                // The build's lattice, from exact source positions; the
+                // window holds the written mirrors 2c-n exactly.
+                let sources: Vec<&[Point]> = position_accessors
+                    .iter()
+                    .map(|(_, _, _, s)| s.as_slice())
+                    .collect();
+                let coarse: Vec<Vec<bool>> = sources
+                    .iter()
+                    .map(|points| {
+                        points
+                            .iter()
+                            .map(|p| shared.coarse.contains(&key(*p)))
+                            .collect()
+                    })
+                    .collect();
+                let placement = shared.grid.place(&sources, &coarse, &line_ends);
+                coarsened = placement.doublings;
+                let step: Point = placement.exponent.map(|e| 2f64.powi(e));
+                // Exact: |k_lo| < 2^53 and the step is a power of two.
+                let lo = std::array::from_fn(|i| placement.low[i] as f64 * step[i] - center[i]);
+                let codes = sources
+                    .iter()
+                    .zip(&coarse)
+                    .map(|(points, coarse)| {
+                        points
+                            .iter()
+                            .zip(coarse)
+                            .map(|(p, coarse)| {
+                                std::array::from_fn(|i| {
+                                    let k = placement.index(p[i], *coarse, i) - placement.low[i];
+                                    // `place` sized the window from these same indices.
+                                    u16::try_from(k).expect("lattice index inside its u16 window")
+                                })
+                            })
+                            .collect()
+                    })
+                    .collect();
+                (lo, step.map(|s| s * 65535.), step.map(|s| s / 2.), codes)
             }
-        });
-        // Outward to float32 so the node translation stays exact and short.
-        let lo = std::array::from_fn(|i| match pad[i] > 0. {
-            true => ((lo[i] - pad[i]) as f32).next_down() as f64,
-            false => lo[i],
-        });
-        let hi = std::array::from_fn(|i| match pad[i] > 0. {
-            true => ((hi[i] + pad[i]) as f32).next_up() as f64,
-            false => hi[i],
-        });
-        let extent = sub(hi, lo);
-        let scale = extent.map(|v| if v > 0. { v } else { 1. });
-        for (accessor, view, points) in &position_accessors {
+            None => {
+                // This payload's own range (fitting, and payloads without
+                // fragments), padded by the strip-end reach plus two
+                // quanta (rounding of c and n):
+                // pad >= reach + 2 (extent + 2 pad) / 65535.
+                let values = || position_accessors.iter().flat_map(|(_, _, p, _)| p.iter());
+                let (lo, hi) = bounds(values())?;
+                let mut reach = [0f64; 3];
+                for (batch, c, n) in &line_ends {
+                    let points = &position_accessors[*batch].2;
+                    for i in 0..3 {
+                        reach[i] =
+                            reach[i].max((points[*c as usize][i] - points[*n as usize][i]).abs());
+                    }
+                }
+                let pad: Point = std::array::from_fn(|i| {
+                    if reach[i] > 0. {
+                        (reach[i] + 2. * (hi[i] - lo[i]) / 65535.) / (1. - 4. / 65535.)
+                    } else {
+                        0.
+                    }
+                });
+                // Outward to float32 so the node translation stays exact and short.
+                let lo: Point = std::array::from_fn(|i| match pad[i] > 0. {
+                    true => ((lo[i] - pad[i]) as f32).next_down() as f64,
+                    false => lo[i],
+                });
+                let hi: Point = std::array::from_fn(|i| match pad[i] > 0. {
+                    true => ((hi[i] + pad[i]) as f32).next_up() as f64,
+                    false => hi[i],
+                });
+                let extent = sub(hi, lo);
+                let scale = extent.map(|v| if v > 0. { v } else { 1. });
+                let codes = position_accessors
+                    .iter()
+                    .map(|(_, _, points, _)| {
+                        points
+                            .iter()
+                            .map(|p| {
+                                std::array::from_fn(|i| {
+                                    ((p[i] - lo[i]) / scale[i] * 65535.)
+                                        .round_ties_even()
+                                        .clamp(0., 65535.)
+                                        as u16
+                                })
+                            })
+                            .collect()
+                    })
+                    .collect();
+                (lo, scale, mul(extent, 1. / 131070.), codes)
+            }
+        };
+        for ((accessor, view, values, sources), codes) in position_accessors.iter().zip(&codes) {
             let mut bytes = Vec::new();
             let mut low = [u16::MAX; 3];
             let mut high = [0u16; 3];
-            for p in points {
-                let q: [u16; 3] = std::array::from_fn(|i| {
-                    ((p[i] - lo[i]) / scale[i] * 65535.)
-                        .round_ties_even()
-                        .clamp(0., 65535.) as u16
-                });
+            for (v, q) in codes.iter().enumerate() {
                 let decoded: Point =
                     std::array::from_fn(|i| q[i] as f64 / 65535. * scale[i] + lo[i]);
-                quantization = quantization.max(norm(sub(decoded, *p)));
+                // From the position that was snapped: exact source on the
+                // build's lattice, the float32 position on a payload range.
+                let snapped = match grid {
+                    Some(_) => sub(sources[v], center),
+                    None => values[v],
+                };
+                quantization = quantization.max(norm(sub(decoded, snapped)));
                 for i in 0..3 {
                     low[i] = low[i].min(q[i]);
                     high[i] = high[i].max(q[i]);
@@ -717,10 +962,16 @@ fn emit_source(
         glb.document["nodes"][0]["translation"] = json!(lo);
         glb.document["nodes"][0]["scale"] = json!(scale);
         glb::add_extension(&mut glb.document, "KHR_mesh_quantization", true)?;
-        quantization = quantization.max(norm(mul(extent, 1. / 131070.)));
+        // Source-to-decoded displacement (measured, and at least half a
+        // step), plus the float32 placement allowance of a client that holds
+        // the node translation, scale and normalized value in float32 and
+        // rounds their product and sum. (`positionRoundingMetres`, still added
+        // to the tile error, double-counts float32 rounding on the shared
+        // lattice, which snaps exact source positions: conservative.)
+        quantization = quantization.max(norm(half_step));
         quantization += norm(sub(lo, lo.map(|v| v as f32 as f64)))
             + norm(sub(scale, scale.map(|v| v as f32 as f64)))
-            + norm(scale) * 2f64.powi(-24);
+            + (norm(lo) + 2. * norm(scale)) * 2f64.powi(-24);
     }
     let vertices = all_positions.len();
     let primitives = batches.len();
@@ -737,6 +988,7 @@ fn emit_source(
         primitives,
         rounding,
         quantization,
+        coarsened,
     })
 }
 
@@ -783,10 +1035,13 @@ pub(super) fn fits_feature(
     let center = mul(add(lo, hi), 0.5);
     let schemas = feature_schemas(feature);
     // A fill fragment and its polygon's outline are separate spool rows,
-    // each fitted alone; a tile encodes them together in one GLB.
+    // each fitted alone; a tile encodes them together in one GLB. Admission
+    // precedes the build's shared grid (same u16 layout); final encoding
+    // re-checks the budgets.
     let source = emit_source(
         &[feature],
         center,
+        None,
         repair,
         &schemas,
         options,
@@ -817,6 +1072,8 @@ pub(super) struct Encoder<'a> {
     pub output: &'a Path,
     pub policy: ProducerPolicy,
     pub attempt: &'a Attempt,
+    /// The build's one quantization lattice, shared by every candidate.
+    pub grid: &'a QuantizationGrid,
 }
 
 pub(super) fn encode(
@@ -834,6 +1091,7 @@ pub(super) fn encode(
         output,
         policy,
         attempt,
+        grid,
     } = encoder;
     attempt
         .check()
@@ -907,6 +1165,10 @@ pub(super) fn encode(
     let mut lock_query = db
         .prepare_cached("SELECT shared FROM vertices WHERE x=?1 AND y=?2 AND z=?3")
         .map_err(sql)?;
+    // Vertices other spool rows also hold: the only ones another tile can
+    // render, so the only ones that must decode identically everywhere
+    // (collected for quantization).
+    let mut shared = BTreeSet::new();
     while aggregation.is_none() {
         let Some(row) = rows.next().map_err(sql)? else {
             break;
@@ -915,12 +1177,26 @@ pub(super) fn encode(
         let feature: Feature = serde_json::from_str(&row.get::<_, String>(0).map_err(sql)?)?;
         let mut locked = BTreeSet::new();
         for p in feature.geometry.points() {
-            if feature.surface_fragment
-                || lock_query
+            // Quantization needs every shared vertex, fragments included
+            // (a fragment vertex without a row counts as shared).
+            let is_shared = if !feature.surface_fragment || options.quantize {
+                use rusqlite::OptionalExtension;
+                match lock_query
                     .query_row(rusqlite::params![p[0], p[1], p[2]], |r| r.get::<_, i32>(0))
+                    .optional()
                     .map_err(sql)?
-                    != 0
-            {
+                {
+                    Some(flag) => flag != 0,
+                    None if feature.surface_fragment => true,
+                    None => return Err(sql(rusqlite::Error::QueryReturnedNoRows)),
+                }
+            } else {
+                false
+            };
+            if is_shared {
+                shared.insert(key(*p));
+                locked.insert(key(*p));
+            } else if feature.surface_fragment {
                 locked.insert(key(*p));
             }
         }
@@ -963,20 +1239,55 @@ pub(super) fn encode(
     let features: Vec<&Feature> = others.into_iter().chain(&outlines).collect();
     let mut reports = Vec::new();
     let aggregate_schemas = BTreeMap::new();
-    let encoded = emit(
+    // A vertex spooled in more than one row (fragments of split polygons
+    // and lines, borders between features) can be rendered by other tiles,
+    // at any depth: such payloads quantize on the build's lattice and snap
+    // those vertices to its step, so they decode identically and fills meet
+    // without cracks. Every other vertex keeps this payload's finer step.
+    let on_grid = options.quantize && !shared.is_empty();
+    let byte_limit = options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE);
+    let metadata_schemas = if aggregation.is_some() {
+        &aggregate_schemas
+    } else {
+        schemas
+    };
+    let mut encoded = emit(
         &features,
         center,
+        on_grid.then_some(SharedGrid {
+            grid,
+            coarse: &shared,
+        }),
         repair,
-        if aggregation.is_some() {
-            &aggregate_schemas
-        } else {
-            schemas
-        },
+        metadata_schemas,
         options,
         &mut reports,
         policy,
         attempt,
     )?;
+    // Admission fitted each row on its own range. Should the shared
+    // lattice compress worse past the budget, keep the content on its own
+    // range (as admitted) instead of refusing it, and say so.
+    let mut grid_fallback = false;
+    if on_grid && encoded.bytes.len() > byte_limit {
+        let mut own_reports = Vec::new();
+        let own = emit(
+            &features,
+            center,
+            None,
+            repair,
+            metadata_schemas,
+            options,
+            &mut own_reports,
+            policy,
+            attempt,
+        )?;
+        if own.bytes.len() <= byte_limit {
+            encoded = own;
+            reports = own_reports;
+            grid_fallback = true;
+        }
+    }
     drop(features);
     drop(outlines);
     if level == 0 {
@@ -987,6 +1298,7 @@ pub(super) fn encode(
     let before_bytes = encoded.before_bytes;
     let rounding = encoded.rounding;
     let quantization = encoded.quantization;
+    let coarsened = encoded.coarsened;
     let bytes = encoded.bytes;
     let sources = if aggregation.is_some() {
         SourceIdentity::Aggregate
@@ -1007,9 +1319,8 @@ pub(super) fn encode(
         Err(error) => return Err(error.error.into()),
     }
     drop(bytes);
-    // Implicit scene-root placement adds JSON to the content. Reserve its
-    // maximum framing increase before accepting a content candidate.
-    let byte_limit = options.max_bytes.saturating_sub(IMPLICIT_FRAMING_RESERVE);
+    // Implicit scene-root placement adds JSON to the content (reserved in
+    // `byte_limit`) before accepting a content candidate.
     if vertex_count > options.max_vertices || byte_count > byte_limit {
         result.reason = Some(if vertex_count > options.max_vertices {
             "vertices"
@@ -1036,6 +1347,19 @@ pub(super) fn encode(
         point_aggregation: aggregation.clone(),
         build_path: None,
     });
+    if coarsened != [0; 3] {
+        // A padded line range wider than the shared window: this content's
+        // lattice is 2^n times coarser on these axes, so its seams with
+        // neighbours on the shared grid are not exact.
+        result.reports.push(json!({"buildPrefix":prefix,"level":level,"quantizationGridDoublings":coarsened,
+            "reason":"padded line-strip range wider than the shared quantization window; seams on these axes are not exact"}));
+    }
+    if grid_fallback {
+        // Exceeded maxBytes on the shared lattice: quantized on its own
+        // range, as admitted, so its shared vertices are not exact.
+        result.reports.push(json!({"buildPrefix":prefix,"level":level,"quantizationGridFallback":"bytes",
+            "reason":"content exceeds maxBytes on the shared quantization grid; kept on its own range, seams are not exact"}));
+    }
     if let Some(mut report) = aggregation {
         report["substitution"] = json!("pointAggregates");
         report["buildPrefix"] = json!(prefix);
@@ -1065,6 +1389,12 @@ mod tests {
                 .explicit_object(record.bounds(), crate::tileset_node::ObjectRole::Tile)
                 .unwrap(),
         )
+    }
+
+    /// A grid derived from one payload's own bounds (as admission fitting does).
+    fn payload_grid(items: &[&Feature]) -> QuantizationGrid {
+        let (lo, hi) = bounds(items.iter().flat_map(|f| f.geometry.points())).unwrap();
+        QuantizationGrid::enclosing(lo, hi)
     }
 
     fn point_feature() -> Feature {
@@ -1104,6 +1434,8 @@ mod tests {
         let schemas = BTreeMap::new();
         let encoder = Encoder {
             spool: &spool,
+            // Unused: a payload without fragments quantizes on its own range.
+            grid: &QuantizationGrid::enclosing([-1e3; 3], [1e3; 3]),
             max_features: 4,
             repair: false,
             options,
@@ -1240,6 +1572,7 @@ mod tests {
                     let encoded = emit(
                         &[&feature],
                         [0.; 3],
+                        None,
                         false,
                         &BTreeMap::new(),
                         &options,
@@ -1430,6 +1763,7 @@ mod tests {
                 let encoded = emit(
                     &[&feature],
                     [0.; 3],
+                    None,
                     false,
                     &BTreeMap::new(),
                     &options,
@@ -1513,6 +1847,7 @@ mod tests {
             let encoded = emit(
                 &items,
                 [0.; 3],
+                None,
                 false,
                 &BTreeMap::new(),
                 &options,
@@ -1576,6 +1911,300 @@ mod tests {
         }
     }
 
+    /// Fill vertices of one payload as a client decodes them into the frame
+    /// (meshopt stream, normalized u16, node translation and scale, tile
+    /// center): in f64, and with float32 node values and product.
+    fn decoded_fills(encoded: &Encoded, center: Point) -> (Vec<Point>, Vec<Point>) {
+        let (document, views) = read_views(&encoded.bytes);
+        let node = &document["nodes"][0];
+        let t: Point = std::array::from_fn(|i| node["translation"][i].as_f64().unwrap());
+        let s: Point = std::array::from_fn(|i| node["scale"][i].as_f64().unwrap());
+        let primitive = document["meshes"][0]["primitives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["mode"] == 4)
+            .unwrap();
+        let position =
+            &document["accessors"][primitive["attributes"]["POSITION"].as_u64().unwrap() as usize];
+        assert_eq!(position["componentType"], 5123);
+        let data = &views[position["bufferView"].as_u64().unwrap() as usize];
+        let (mut wide, mut narrow) = (Vec::new(), Vec::new());
+        for v in 0..position["count"].as_u64().unwrap() as usize {
+            let q: [u16; 3] = std::array::from_fn(|i| {
+                u16::from_le_bytes([data[v * 8 + i * 2], data[v * 8 + i * 2 + 1]])
+            });
+            wide.push(std::array::from_fn(|i| {
+                center[i] + t[i] + f64::from(q[i]) / 65535. * s[i]
+            }));
+            narrow.push(std::array::from_fn(|i| {
+                center[i] + f64::from(t[i] as f32 + (f32::from(q[i]) / 65535.) * s[i] as f32)
+            }));
+        }
+        (wide, narrow)
+    }
+
+    /// Two fill fragments share a cut edge across adjacent tiles of
+    /// different size (depth) and center, at negative coordinates; the large
+    /// one also carries a padded outline strip. On the build's grid every
+    /// shared vertex, including one just past a rounding tie, decodes to one
+    /// frame position in both payloads, within each certified bound (also
+    /// through float32 placement). Each payload's own grid opens the seam.
+    #[test]
+    fn adjacent_payloads_decode_shared_fill_vertices_identically() {
+        let grid = QuantizationGrid::enclosing([-200000., -50., -150000.], [100000., 50., 150000.]);
+        assert_eq!(grid.exponent, [3, -9, 3]);
+        let (x, h) = (-12345.678, -20.25);
+        let (z0, z1) = (-4000.3, -1500.7);
+        // Just past the tie between lattice indices -375 and -374 (step 8).
+        let tie = (-375. + 0.5) * 8.;
+        let zt = tie + 8. * 2f64.powi(-30);
+        let shared = [[x, h, z0], [x, h, zt], [x, h, -2200.9], [x, h, z1]];
+        let mut a = point_feature();
+        a.properties.insert("_source_id".into(), json!("a"));
+        a.surface_fragment = true;
+        let mut ring_a = vec![[x - 5000.5, h, z0]];
+        ring_a.extend(shared);
+        ring_a.extend([[x - 5000.5, h, z1], [x - 5000.5, h, z0]]);
+        a.geometry = Geometry::Polygon(vec![ring_a]);
+        let mut b = point_feature();
+        b.properties.insert("_source_id".into(), json!("b"));
+        b.surface_fragment = true;
+        let far = [
+            [x + 60000.25, h, z0 - 1000.],
+            [x + 60000.25, h, z1 + 30000.],
+        ];
+        let mut ring_b = vec![shared[0], far[0], far[1]];
+        ring_b.extend(shared.iter().rev().copied());
+        b.geometry = Geometry::Polygon(vec![ring_b]);
+        let mut outline = point_feature();
+        outline.properties.insert("_source_id".into(), json!("o"));
+        outline.geometry = Geometry::MultiLineString(vec![vec![shared[0], far[0], far[1]]]);
+        // Tile A's center puts the tie vertex where a float32 local position
+        // would round below the tie: snapping recentred float32 values (not
+        // exact source positions) would split this vertex across the seam.
+        let v = 98304f64;
+        let center_a = [x - 2500., 0., tie - v - 2f64.powi(-7) / 4.];
+        let recentred = ((zt - center_a[2]) as f32) as f64 + center_a[2];
+        assert_ne!(lattice_index(recentred, 3), lattice_index(zt, 3));
+        let center_b = [x + 30000., 0., z1 + 13000.];
+        // The seam vertices are spooled in both fragments (and the outline).
+        let coarse: BTreeSet<PointKey> = shared.iter().map(|p| key(*p)).collect();
+        let build = SharedGrid {
+            grid: &grid,
+            coarse: &coarse,
+        };
+        for meshopt in [false, true] {
+            let options = VectorOptions {
+                meshopt,
+                quantize: true,
+                ..VectorOptions::default()
+            };
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let encode = |items: &[&Feature], center: Point, grid: Option<SharedGrid<'_>>| {
+                emit(
+                    items,
+                    center,
+                    grid,
+                    false,
+                    &BTreeMap::new(),
+                    &options,
+                    &mut Vec::new(),
+                    ProducerPolicy::new(meshopt).unwrap(),
+                    &attempt,
+                )
+                .unwrap()
+            };
+            let nearest = |points: &[Point], p: Point| -> Point {
+                *points
+                    .iter()
+                    .min_by(|u, w| norm(sub(**u, p)).total_cmp(&norm(sub(**w, p))))
+                    .unwrap()
+            };
+            let seam_gap = |grid_a: Option<SharedGrid<'_>>, grid_b| -> f64 {
+                let first = encode(&[&a], center_a, grid_a);
+                let second = encode(&[&b, &outline], center_b, grid_b);
+                if grid_a.is_some() {
+                    // The padded outline range fits the shared window.
+                    assert_eq!(second.coarsened, [0; 3]);
+                }
+                let (wide_a, narrow_a) = decoded_fills(&first, center_a);
+                let (wide_b, narrow_b) = decoded_fills(&second, center_b);
+                for (encoded, wide, narrow, ring) in [
+                    (&first, &wide_a, &narrow_a, &a),
+                    (&second, &wide_b, &narrow_b, &b),
+                ] {
+                    for p in ring.geometry.points() {
+                        for decoded in [wide, narrow] {
+                            let d = norm(sub(nearest(decoded, *p), *p));
+                            assert!(d <= encoded.quantization, "{d} > {}", encoded.quantization);
+                        }
+                    }
+                }
+                shared
+                    .iter()
+                    .map(|p| norm(sub(nearest(&wide_a, *p), nearest(&wide_b, *p))))
+                    .fold(0., f64::max)
+            };
+            assert!(
+                seam_gap(Some(build), Some(build)) < 1e-9,
+                "shared grid seam"
+            );
+            // Each payload's own range (the behaviour before the shared grid).
+            assert!(seam_gap(None, None) > 1e-3, "per-payload ranges crack");
+        }
+    }
+
+    /// Through the final producer: an unsplit polygon whose corners other
+    /// rows also hold snaps those corners to the build's step and keeps its
+    /// own vertex finer; without shared vertices it keeps its own range.
+    #[test]
+    fn only_payloads_with_shared_vertices_use_the_build_grid() {
+        let grid = QuantizationGrid::enclosing([-1e5; 3], [1e5; 3]);
+        for fragment in [false, true] {
+            // `fragment`: the first two corners are also spooled elsewhere.
+            let mut feature = point_feature();
+            feature.geometry = Geometry::Polygon(vec![vec![
+                [-10., 0., -10.],
+                [30., 0., -10.],
+                [30., 0., 20.],
+                [-10., 0., -10.],
+            ]]);
+            let root = tempfile::tempdir().unwrap();
+            let spool = root.path().join("features.sqlite");
+            let db = rusqlite::Connection::open(&spool).unwrap();
+            db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER);").unwrap();
+            db.execute(
+                "INSERT INTO features VALUES(1,'',?1)",
+                [serde_json::to_string(&feature).unwrap()],
+            )
+            .unwrap();
+            for (i, p) in feature.geometry.points().enumerate() {
+                db.execute(
+                    "INSERT INTO vertices VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![p[0], p[1], p[2], i32::from(fragment && i < 2)],
+                )
+                .unwrap();
+            }
+            drop(db);
+            std::fs::create_dir(root.path().join("t")).unwrap();
+            let options = VectorOptions {
+                quantize: true,
+                ..VectorOptions::default()
+            };
+            let schemas = BTreeMap::new();
+            let run = crate::RunControl::default();
+            let attempt = run.begin().unwrap();
+            let encoder = Encoder {
+                spool: &spool,
+                grid: &grid,
+                max_features: 4,
+                repair: false,
+                options: &options,
+                schemas: &schemas,
+                output: root.path(),
+                policy: ProducerPolicy::new(false).unwrap(),
+                attempt: &attempt,
+            };
+            let center = [10., 0., 5.];
+            let node = tile_json(encode(encoder, "", center, 0).unwrap().node.unwrap());
+            let uri = node["content"]["uri"].as_str().unwrap();
+            let (document, views) = read_views(&std::fs::read(root.path().join(uri)).unwrap());
+            let scale = &document["nodes"][0]["scale"];
+            let translation = &document["nodes"][0]["translation"];
+            if fragment {
+                // The build step is 2^2 m (a 2e5 m extent); this payload's
+                // own step is finer, and a power of two.
+                assert_eq!(grid.exponent, [2; 3]);
+                let step: Point = std::array::from_fn(|i| scale[i].as_f64().unwrap() / 65535.);
+                assert!(
+                    step.iter().all(|s| *s < 4. && s.log2().fract() == 0.),
+                    "{scale}"
+                );
+                let position = &document["accessors"][document["meshes"][0]["primitives"][0]
+                    ["attributes"]["POSITION"]
+                    .as_u64()
+                    .unwrap() as usize];
+                let data = &views[position["bufferView"].as_u64().unwrap() as usize];
+                let decoded = |v: usize| -> Point {
+                    std::array::from_fn(|i| {
+                        let q = u16::from_le_bytes([data[v * 8 + i * 2], data[v * 8 + i * 2 + 1]]);
+                        center[i] + translation[i].as_f64().unwrap() + f64::from(q) * step[i]
+                    })
+                };
+                let points: Vec<Point> = feature.geometry.points().copied().collect();
+                for v in 0..3 {
+                    let p = decoded(v);
+                    let source = *points
+                        .iter()
+                        .min_by(|a, b| norm(sub(**a, p)).total_cmp(&norm(sub(**b, p))))
+                        .unwrap();
+                    let on_build_grid = p.iter().all(|c| c % 4. == 0.);
+                    // Shared corners land on the build grid; the other keeps
+                    // its own, finer position.
+                    if source == points[2] {
+                        assert_eq!(p, source);
+                    } else {
+                        assert!(on_build_grid, "{p:?}");
+                    }
+                }
+            } else {
+                assert_eq!(scale, &json!([40., 1., 30.]));
+                assert_eq!(translation, &json!([-20., -0., -15.]));
+            }
+        }
+    }
+
+    /// A padded strip range wider than the shared window coarsens only that
+    /// payload's lattice (reported), keeping every end mirror in u16 range.
+    #[test]
+    fn padded_line_wider_than_the_shared_window_coarsens_and_reports() {
+        let mut line = point_feature();
+        line.properties.insert("_source_id".into(), json!("l"));
+        line.geometry = Geometry::LineString(vec![[-100., 0., 0.], [100., 0., 0.]]);
+        let grid = payload_grid(&[&line]);
+        let placement = grid.place(
+            &[&[[-100., 0., 0.], [100., 0., 0.]]],
+            &[vec![false, false]],
+            &[(0, 0, 1), (0, 1, 0)],
+        );
+        // Mirrors reach +-300 against a 256-unit window: two doublings.
+        assert_eq!(placement.doublings, [2, 0, 0]);
+        let options = VectorOptions {
+            quantize: true,
+            ..VectorOptions::default()
+        };
+        let run = crate::RunControl::default();
+        let attempt = run.begin().unwrap();
+        let encoded = emit(
+            &[&line],
+            [0.; 3],
+            Some(SharedGrid {
+                grid: &grid,
+                coarse: &BTreeSet::new(),
+            }),
+            false,
+            &BTreeMap::new(),
+            &options,
+            &mut Vec::new(),
+            ProducerPolicy::new(false).unwrap(),
+            &attempt,
+        )
+        .unwrap();
+        assert_eq!(encoded.coarsened, [2, 0, 0]);
+        let (document, views) = read_views(&encoded.bytes);
+        let position = &document["accessors"][document["meshes"][0]["primitives"][0]["attributes"]
+            ["POSITION"]
+            .as_u64()
+            .unwrap() as usize];
+        let data = &views[position["bufferView"].as_u64().unwrap() as usize];
+        let q = |v: usize| i64::from(u16::from_le_bytes([data[v * 8], data[v * 8 + 1]]));
+        for (c, n) in [(0, 1), (1, 0)] {
+            assert!((0..=65535).contains(&(2 * q(c) - q(n))));
+        }
+    }
+
     #[test]
     fn nullable_metadata_ids_and_node_association_survive_compression() {
         let first = point_feature();
@@ -1596,6 +2225,7 @@ mod tests {
             let encoded = emit(
                 &[&first, &second],
                 [0.; 3],
+                None,
                 false,
                 &BTreeMap::new(),
                 &options,
@@ -1666,6 +2296,7 @@ mod tests {
                 let raw = emit(
                     &[&point_feature()],
                     [0.; 3],
+                    None,
                     false,
                     &BTreeMap::new(),
                     &base,
@@ -1771,6 +2402,7 @@ mod tests {
         emit_source(
             items,
             [1., 2., 0.],
+            None,
             false,
             &schemas,
             options,
@@ -1904,6 +2536,7 @@ mod tests {
         let encoded = emit(
             &[feature],
             center,
+            None,
             false,
             &schemas,
             options,
@@ -2035,6 +2668,7 @@ mod tests {
             let attempt = run.begin().unwrap();
             let encoder = Encoder {
                 spool: &spool,
+                grid: &QuantizationGrid::enclosing([-1e3; 3], [1e3; 3]),
                 max_features: 4,
                 repair: false,
                 options: &options,
@@ -2227,6 +2861,7 @@ mod tests {
         let encoded = emit(
             &[&fill, &holed],
             [0.; 3],
+            None,
             false,
             &BTreeMap::new(),
             &options,
@@ -2601,6 +3236,7 @@ mod tests {
             let attempt = run.begin().unwrap();
             let encoder = Encoder {
                 spool: &spool,
+                grid: &QuantizationGrid::enclosing([-1e3; 3], [1e3; 3]),
                 max_features: 1,
                 repair: false,
                 options: &options,
@@ -2693,6 +3329,7 @@ mod tests {
             let attempt = run.begin().unwrap();
             let encoder = Encoder {
                 spool: &spool,
+                grid: &QuantizationGrid::enclosing([-1e3; 3], [1e3; 3]),
                 max_features: 1,
                 repair,
                 options: &options,

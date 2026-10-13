@@ -463,6 +463,7 @@ struct Build<'a> {
     reuse: Reuse,
     workers: BTreeSet<usize>,
     partition_seconds: f64,
+    grid: encoding::QuantizationGrid,
 }
 impl Build<'_> {
     fn stats(&self, prefix: &str) -> Result<Stats, Error> {
@@ -483,6 +484,7 @@ impl Build<'_> {
             output: self.output,
             policy: self.policy,
             attempt: self.attempt,
+            grid: &self.grid,
         };
         let values: Vec<Result<Candidate, Error>> = self.pool.install(|| {
             levels
@@ -900,8 +902,10 @@ pub(super) fn convert(
         }
         *reader.frame_mut() = Some(Frame::local([0.; 3]));
     }
+    // The one quantization grid of this build, fixed before any candidate.
+    let grid = encoding::QuantizationGrid::for_spool(&db)?;
     let mut reuse = reuse;
-    reuse.configure(max_features, repair, ambiguous, options, &reader)?;
+    reuse.configure(max_features, repair, ambiguous, options, &reader, &grid)?;
     counters.fragments = db
         .query_row("SELECT COUNT(*) FROM features", [], |r| {
             Ok(r.get::<_, i64>(0)? as usize)
@@ -941,6 +945,7 @@ pub(super) fn convert(
         reuse,
         workers: BTreeSet::new(),
         partition_seconds,
+        grid,
     };
     let encoding_started = Instant::now();
     let before_partition = build.partition_seconds;
