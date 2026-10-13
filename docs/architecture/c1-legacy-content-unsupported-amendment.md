@@ -69,9 +69,11 @@ subtree template is exempt.
 - **glTF unaffected.** Every all-glTF archive keeps its exact report.
 - **Order.** The first failure in traversal order still wins:
   - archive admission;
-  - then, per reference: tile checks, including "content bounds escape tile";
-  - then the member lookup;
-  - then L0, L1, the read and L2.
+  - then, per reference: L0, the reference check (a missing member is InvalidInput "missing
+    archive entry: NAME", so it precedes every later check, including the content volume);
+  - then the remaining tile checks, including "content bounds escape tile";
+  - then the member lookup for the tile byte count;
+  - then L1, the read and L2.
 
   Implicit T runs at root admission. C2 runs only after C1 succeeds, so a legacy verdict
   beats every `notInspected` reason and every Outside.

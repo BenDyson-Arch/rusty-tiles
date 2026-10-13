@@ -16,8 +16,9 @@ two cases:
 - its archive member name ends in `.b3dm`, `.i3dm`, `.pnts` or `.cmpt` (ASCII,
   case-insensitive). This is decided before the payload is read;
 - its first four bytes are one of those magics, for example b3dm bytes in a `.glb`
-  or `.bin` member. The magic decides under any suffix; only those four bytes of
-  the existing read are examined.
+  or `.bin` member. The magic decides under any non-legacy suffix (a legacy suffix
+  decides first, before any read); only those four bytes of the existing read
+  are examined.
 
 An implicit content template whose normalized last segment has one of those
 suffixes is Unsupported at root admission, and no subtree is read. Nothing after

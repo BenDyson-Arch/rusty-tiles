@@ -267,7 +267,7 @@ LEGACY_FORMATS = ("b3dm", "i3dm", "pnts", "cmpt")
 
 
 def _ascii_legacy_suffix(text):
-    """H7 (PROPOSED): the legacy 3D Tiles 1.0 format named by a final `.b3dm`/`.i3dm`/`.pnts`/`.cmpt`
+    """H7: the legacy 3D Tiles 1.0 format named by a final `.b3dm`/`.i3dm`/`.pnts`/`.cmpt`
     (ASCII case-insensitive), else None."""
     tail = text[-5:]
     if len(tail) < 5 or tail[0] != ".":
@@ -362,7 +362,7 @@ def normalize_template(raw, base, octree, is_content, stage):
     # Step 4: JSON detection on the last segment of the normalized template (content templates only).
     if is_content and out and out[-1][-1][0] == "lit" and _ascii_endswith_json(out[-1][-1][1]):
         unsupported("external tileset content template", stage)
-    # Step 4b (H7, PROPOSED): legacy detection on the same last segment (content templates only).
+    # Step 4b (H7): legacy detection on the same last segment (content templates only).
     if is_content and out and out[-1][-1][0] == "lit":
         legacy = _ascii_legacy_suffix(out[-1][-1][1])
         if legacy is not None:

@@ -425,11 +425,13 @@ def build_cases(inputs):
     spec["nodes"][1]["children"] = [2]
     cases.append(single("shared-child-not-shared-mesh", "context", spec, {"outcome": "InvalidNode"},
                         points=literal_points(w03)))
-    # 7. matrix and TRS on the W01 node (a GLB since H7; formerly the RTC b3dm)
+    # 7. matrix and TRS on the W01 node (a GLB since H7; formerly the RTC b3dm). An optional
+    # unknown extension keeps a co-occurring exclusion (gltfExtension, formerly rtcCenter), so
+    # the row still shows that a malformed node beats an exclusion (R8 step 1 before step 2).
     spec = copy.deepcopy(w01)
     spec["nodes"][0]["translation"] = [0, 0, 0]
     case = Case("matrix-and-TRS", "context", {"outcome": "InvalidNode"}, "matrix-and-TRS")
-    chain_case(case, "w.glb", payload_from_spec(spec),
+    chain_case(case, "w.glb", payload_from_spec(spec, lambda g: add_used(g, "ACME_marker")),
                w01["tile_chain_root_first"], [(0, rtc_points[0])])
     cases.append(case)
     # 8. zero quaternion

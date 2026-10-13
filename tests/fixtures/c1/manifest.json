@@ -495,6 +495,51 @@
       "sha256": "287c2a15ea0fe5a4536250c8e410a2d0c07255a766886d2440dca2b326cd67e7"
     },
     {
+      "name": "legacy_b3dm_then_glb_defect",
+      "path": "legacy_b3dm_then_glb_defect.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "A .b3dm tile before a truncated GLB tile: the legacy verdict is the first failure in traversal order.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "b.b3dm"
+      ],
+      "sha256": "e4f49ed9de68168c482effa2fafe800f4166e15d0b2d0d5b4058d50cc1d6beb4"
+    },
+    {
+      "name": "legacy_glb_defect_then_b3dm",
+      "path": "legacy_glb_defect_then_b3dm.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "A truncated GLB tile before a .b3dm tile: the GLB defect is the first failure in traversal order.",
+      "messageIncludes": [],
+      "sha256": "3fd1ad6af2b84c4f349abe82197b068d3c4186ea1addb8e8ab867f1bb2f64b11"
+    },
+    {
+      "name": "legacy_b3dm_referenced_twice",
+      "path": "legacy_b3dm_referenced_twice.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "One .b3dm referenced by two tiles: the first reference fails, so no legacy verdict is cached.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "b.b3dm"
+      ],
+      "sha256": "28add73c05109e77525508e98b41b64e6b395e2b5c8777463562bc61989cf4bc"
+    },
+    {
+      "name": "legacy_b3dm_in_external_tileset",
+      "path": "legacy_b3dm_in_external_tileset.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "Content of an external tileset: the member name is resolved before classification.",
+      "messageIncludes": [
+        "legacy b3dm",
+        "ext/t.b3dm"
+      ],
+      "sha256": "823da8241cb949c79295eee64a1915f3f614a815f2f291b5cf52d934373f6da1"
+    },
+    {
       "name": "legacy_subtree_template_suffix",
       "path": "legacy_subtree_template_suffix.3tz",
       "expectedKind": null,

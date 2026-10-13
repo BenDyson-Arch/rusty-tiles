@@ -1045,7 +1045,9 @@ the predicates and the C2-WB formula's structure are unchanged.
 5. **Oracle.** O-explicit reads GLB and glTF only. Legacy content is the oracle outcome
    `Unsupported` with `phase: "C1"` and facts `{format, member, rule: suffix|magic}`. A
    non-`glb`/`gltf` suffix is Undecided, because C1 refuses it. The composed-oracle pins in
-   `c2o/implicit.py` were re-pinned for `check.py`, `gltf.py` and `i1_oracle.py`.
+   `c2o/implicit.py` were re-pinned for `check.py`, `gltf.py` and `i1_oracle.py`. Unlike
+   production, the oracle applies the generic suffix rule before reading, so it calls a
+   `.bin` member with legacy magic Undecided; the C1 corpus and Rust controls cover that case.
 
 **Exit-status changes versus slice 3.**
 
@@ -1063,8 +1065,13 @@ archive becoming Unsupported; no other verdict changed.
   `NotInspected [rtcCenter]` to C1 Unsupported (`expected: C1Refused unsupported`, oracle
   `Unsupported`). `W01-noRTC-variant`, its 9 ulp variants and `matrix-and-TRS` are re-emitted
   as `w.glb` with the same glTF, tile chain and volumes; their verdicts (Contained, Outside
-  with the same depth, level, role, node and coordinate, InvalidNode) are unchanged and only
-  the member name in the oracle facts changes. Old and new hashes:
+  with the same depth, level, role, node and coordinate, InvalidNode) are unchanged. The
+  member name in the oracle facts changes, and the 10 `W01-noRTC-variant*` rows' `precheck`
+  records change because the b3dm header and feature table no longer count toward `B(u)` and
+  `J(u)`: `bytes` 560→512, `16J` 976→944, `referenceUnits` 2708→2628 and `units` 3098→3018.
+  `matrix-and-TRS` also declares an optional unknown glTF extension (`ACME_marker`), so it
+  keeps a co-occurring exclusion (`gltfExtension`, formerly `rtcCenter`) and still shows that
+  a malformed node beats an exclusion. Old and new hashes:
 
   | Fixture | Old sha256 | New sha256 |
   | --- | --- | --- |
@@ -1072,7 +1079,7 @@ archive becoming Unsupported; no other verdict changed.
   | `~ulp-L0-content-r0` / `r1` / `r2` | `26492464…` / `08ffd7ac…` / `04051a90…` | `c743643d…` / `9ebbc395…` / `d46db43e…` |
   | `~ulp-L0-own-r0` / `r1` / `r2` | `6cca1cef…` / `996e359f…` / `72918921…` | `abcd2ed0…` / `427aef16…` / `7bbd4f06…` |
   | `~ulp-L1-ancestor-r0` / `r1` / `r2` | `902e6e48…` / `a3169e1a…` / `778b5d1b…` | `5add57e2…` / `922acb8e…` / `c453588b…` |
-  | `matrix-and-TRS` | `8e8ae7ac…` | `62be5191…` |
+  | `matrix-and-TRS` | `8e8ae7ac…` | `8d25cf1b…` |
 
 - **Controls:** the `RTC-added` pair retires (its mutated side is legacy content); 15 pairs
   remain, all agreeing. No other pair changed.

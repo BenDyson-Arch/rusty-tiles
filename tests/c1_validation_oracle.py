@@ -306,6 +306,28 @@ def generate(directory):
     legacy_case('legacy_implicit_glb_template_b3dm_bytes', {'tileset.json': json.dumps(implicit_content('c/{level}/{x}/{y}.glb')).encode(),
                                                             's/0/0/0.subtree': content_subtree, 'c/0/0/0.glb': wrapped}, 'unsupported',
                 'An implicit content emitted under a .glb template whose bytes are b3dm: Unsupported by magic.', ['legacy b3dm', 'c/0/0/0.glb', 'magic'])
+    # Traversal order (audit F1): the first failure in traversal order wins, so a legacy verdict is
+    # reported at its reference, never collected and reported after traversal.
+    def children(*uris):
+        leaf = lambda uri, half: {'boundingVolume': {'box': [0, 0, 0, half, 0, 0, 0, half, 0, 0, 0, half]}, 'geometricError': 0,
+                                  'content': {'uri': uri}}
+        return json.dumps({'asset': {'version': '1.1'}, 'geometricError': 2, 'root': {
+            'boundingVolume': {'box': [0, 0, 0, 2000, 0, 0, 0, 2000, 0, 0, 0, 2000]}, 'geometricError': 1, 'refine': 'ADD',
+            'children': [leaf(uri, half) for uri, half in uris]}}).encode()
+    truncated = embedded[:-4]
+    legacy_case('legacy_b3dm_then_glb_defect', {'tileset.json': children(('b.b3dm', 2000), ('a.glb', 2000)), 'b.b3dm': wrapped,
+                                                'a.glb': truncated}, 'unsupported',
+                'A .b3dm tile before a truncated GLB tile: the legacy verdict is the first failure in traversal order.', ['legacy b3dm', 'b.b3dm'])
+    legacy_case('legacy_glb_defect_then_b3dm', {'tileset.json': children(('a.glb', 2000), ('b.b3dm', 2000)), 'a.glb': truncated,
+                                                'b.b3dm': wrapped}, 'invalid_input',
+                'A truncated GLB tile before a .b3dm tile: the GLB defect is the first failure in traversal order.', [])
+    legacy_case('legacy_b3dm_referenced_twice', {'tileset.json': children(('b.b3dm', 2000), ('b.b3dm', 1000)), 'b.b3dm': wrapped},
+                'unsupported', 'One .b3dm referenced by two tiles: the first reference fails, so no legacy verdict is cached.', ['legacy b3dm', 'b.b3dm'])
+    external_root = copy.deepcopy(tileset); external_root['root']['content'] = {'uri': 'ext/external.json'}
+    external_doc = copy.deepcopy(tileset); external_doc['root']['content'] = {'uri': 't.b3dm'}
+    legacy_case('legacy_b3dm_in_external_tileset', {'tileset.json': json.dumps(external_root).encode(),
+                                                    'ext/external.json': json.dumps(external_doc).encode(), 'ext/t.b3dm': wrapped},
+                'unsupported', 'Content of an external tileset: the member name is resolved before classification.', ['legacy b3dm', 'ext/t.b3dm'])
     legacy_case('legacy_subtree_template_suffix', {'tileset.json': json.dumps(implicit_content('c/{level}/{x}/{y}.glb', 's/{level}/{x}/{y}.b3dm')).encode(),
                                                    's/0/0/0.b3dm': content_subtree, 'c/0/0/0.glb': embedded}, None,
                 'A subtree template ending in .b3dm is not content: legacy detection applies to content templates only.', [])

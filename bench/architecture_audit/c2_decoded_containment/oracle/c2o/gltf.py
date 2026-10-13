@@ -83,7 +83,7 @@ def split_glb(data, where):
     return chunks[0][1], binary
 
 
-# H7 (PROPOSED, c1-legacy-content-unsupported-amendment.md): legacy 3D Tiles 1.0
+# H7 (c1-legacy-content-unsupported-amendment.md): legacy 3D Tiles 1.0
 # content is Unsupported in C1, before any format parse. Detection uses the member
 # name's final suffix (L1, ASCII case-insensitive, no bytes read) and otherwise the
 # first four bytes (L2). Nothing after the magic is read: no length, version, table
