@@ -1,13 +1,16 @@
 """Game-style Cesium flythroughs of rusty-tiles outputs: deterministic camera paths, per-frame metrics, recipes.
 
 Usage: python3 -I bench/perf_lane/flythrough.py --bin RUSTY_TILES --recipes FILE [--recipes FILE ...] \
-         [--paths a,b] [--profiles native,cpu4x,lowcache] [--repeats 3] [--evidence DIR] [--commit-report FILE]
+         [--matrix validate|full] [--paths a,b] [--profiles ...] [--only ...] [--repeats N] [--evidence DIR] \
+         [--commit-report FILE]
 
 A recipe is a named conversion (CLI arguments) plus viewer options; a recipe file is one set of recipes on
 one dataset, and only recipes of the same set are compared. Each output is converted once per distinct
 argument list. Each run (recipe x path x profile x repeat) opens a fresh, cache-disabled context in the GPU
 Chromium over CDP (cesium.py's browser handling, ~/.cache/rusty-tiles-chromium.lock held per run), flies a
-path from flythrough.json frame by frame and records per-frame metrics (flythrough.cjs). Host load is
+path from flythrough.json frame by frame and records per-frame metrics (flythrough.cjs). A matrix preset
+(--matrix, default validate) picks the recipe x path x profile cells, the repeats and the cells that get one
+untimed run for screenshots and a Chrome trace. Host load is
 sampled around every run and noisy runs are flagged. Raw runs, screenshots, flythrough.json and an evidence
 FLYTHROUGH.md (with images) go to --evidence; --commit-report writes the image-free copy for git.
 Runs on a software renderer are refused unless --software-gl, and are labelled; profiles are never mixed.
@@ -174,17 +177,70 @@ def load_config(path=CONFIG):
     return config
 
 
-def run_order(recipes, paths, profiles, repeats, capture_profiles=()):
-    """(repeat, profile, path, recipe) in run order. Untimed screenshot runs (repeat 0) for capture_profiles
-    come first; then timed repeats 1..N, recipes rotating by one per repeat so no recipe always runs
-    first, every repeat of a profile completing before the next repeat."""
-    order = [(0, profile, path, recipe) for profile in profiles if profile in capture_profiles
-             for path in paths for recipe in recipes]
+def pick(value, available, what, where):
+    """'*' -> every available name, else the listed names, each of which must be available."""
+    if value == '*': return list(available)
+    if not isinstance(value, list) or not value or not all(isinstance(v, str) for v in value):
+        raise ValueError(f'{where}: {what} must be "*" or a non-empty list of names')
+    unknown = [v for v in value if v not in available]
+    if unknown: raise ValueError(f'{where}: unknown {what} {unknown}')
+    return value
+
+
+def expand_matrix(matrix, name, recipes, paths, profiles):
+    """A matrix preset as (recipes, cells, diagnostics, repeats). recipes is the matrix's recipe list in
+    load order; cells is the ordered list of timed (profile, path, recipe); diagnostics maps a
+    (profile, path, recipe) to {'capture', 'trace'} for its one extra, untimed run. recipes, paths and
+    profiles are the names available (after any command-line filters); a name a preset lists that is
+    filtered out is dropped, but one that does not exist at all is an error."""
+    where = f'matrix {name}'
+    if not isinstance(matrix, dict): raise ValueError(f'{where}: must be an object')
+    unknown = set(matrix) - {'description', 'repeats', 'recipes', 'cells', 'capture', 'trace'}
+    if unknown: raise ValueError(f'{where}: unknown keys {sorted(unknown)}')
+    repeats = matrix.get('repeats', 3)
+    if not isinstance(repeats, int) or isinstance(repeats, bool) or repeats < 1: raise ValueError(f'{where}: repeats must be >= 1')
+    chosen = pick(matrix.get('recipes', '*'), recipes['all'], 'recipes', where)
+    chosen = [r for r in recipes['all'] if r in chosen and r in recipes['kept']]
+
+    def block(spec, label):
+        if not isinstance(spec, dict) or set(spec) - {'profiles', 'paths', 'recipes'}:
+            raise ValueError(f'{where} {label}: expected {{profiles, paths, recipes}}')
+        out = []
+        for profile in pick(spec.get('profiles', '*'), profiles['all'], 'profiles', f'{where} {label}'):
+            for path in pick(spec.get('paths', '*'), paths['all'], 'paths', f'{where} {label}'):
+                for recipe in pick(spec.get('recipes', '*'), chosen if spec.get('recipes', '*') == '*' else recipes['all'],
+                                   'recipes', f'{where} {label}'):
+                    if profile in profiles['kept'] and path in paths['kept'] and recipe in chosen:
+                        out.append((profile, path, recipe))
+        return out
+
+    cells = []
+    if not isinstance(matrix.get('cells'), list) or not matrix['cells']: raise ValueError(f'{where}: cells must be a non-empty list')
+    for index, spec in enumerate(matrix['cells']):
+        for cell in block(spec, f'cell {index}'):
+            if cell not in cells: cells.append(cell)
+    diagnostics = {}
+    for kind in ('capture', 'trace'):
+        if matrix.get(kind) is None: continue
+        for cell in block(matrix[kind], kind):
+            if cell in cells: diagnostics.setdefault(cell, dict(capture=False, trace=False))[kind] = True
+    return chosen, cells, diagnostics, repeats
+
+
+def run_order(recipes, cells, repeats, diagnostics=None):
+    """(repeat, profile, path, recipe) in run order. The untimed diagnostic runs (repeat 0: screenshots
+    and/or a Chrome trace) come first; then timed repeats 1..N over the cells, recipes rotating by one per
+    repeat so no recipe always runs first, every repeat completing before the next."""
+    diagnostics = diagnostics or {}
+    profiles = list(dict.fromkeys(c[0] for c in cells))
+    paths = list(dict.fromkeys(c[1] for c in cells))
+    order = [(0, *cell) for cell in cells if cell in diagnostics]
     for repeat in range(repeats):
         rotated = recipes[repeat % len(recipes):] + recipes[:repeat % len(recipes)]
         for profile in profiles:
             for path in paths:
-                for recipe in rotated: order.append((repeat + 1, profile, path, recipe))
+                for recipe in rotated:
+                    if (profile, path, recipe) in cells: order.append((repeat + 1, profile, path, recipe))
     return order
 
 
@@ -289,10 +345,14 @@ def main():
     parser.add_argument('--bin', type=pathlib.Path, help='rusty-tiles CLI for recipes with convert')
     parser.add_argument('--recipes', action='append', required=True, type=pathlib.Path, help='recipe set JSON; repeat')
     parser.add_argument('--config', type=pathlib.Path, default=CONFIG, help='paths and profiles (default flythrough.json)')
-    parser.add_argument('--paths', help='comma-separated path names (default: all)')
-    parser.add_argument('--profiles', default='native', help='comma-separated profile names (default native)')
-    parser.add_argument('--only', help='comma-separated recipe names (default: all)')
-    parser.add_argument('--repeats', type=int, default=3)
+    parser.add_argument('--matrix', default='validate', help='run matrix preset from the config: validate (default, '
+                        'trimmed: native everywhere, constrained profiles on one recipe and two paths) or full')
+    parser.add_argument('--paths', help='comma-separated path names: restrict the matrix to these')
+    parser.add_argument('--profiles', help='comma-separated profile names: restrict the matrix to these')
+    parser.add_argument('--only', help='comma-separated recipe names: restrict the matrix to these')
+    parser.add_argument('--repeats', type=int, help='timed repeats (default from the matrix)')
+    parser.add_argument('--no-capture', action='store_true', help='skip the untimed screenshot runs')
+    parser.add_argument('--no-trace', action='store_true', help='skip the Chrome trace on the untimed runs')
     parser.add_argument('--evidence', type=pathlib.Path,
                         default=EVIDENCE / f'flythrough-{datetime.date.today():%Y%m%d}', help='raw output directory (not git)')
     parser.add_argument('--work', type=pathlib.Path, default=pathlib.Path.home() / '.cache/perf-lane/work/flythrough',
@@ -301,8 +361,6 @@ def main():
     parser.add_argument('--hold-seconds', type=float, help='waypoint hold limit (default from the config)')
     parser.add_argument('--timeout', type=float, default=120, help='seconds per bounded browser step')
     parser.add_argument('--settle-ms', type=float, default=cesium.SETTLE_MS)
-    parser.add_argument('--screenshots', default='native', help='comma-separated profiles that get one extra, untimed '
-                        'run per recipe and path capturing each waypoint (default native; "none" for no captures)')
     parser.add_argument('--cpus', default='0,1', help='CPU affinity of this driver and of conversions')
     parser.add_argument('--cdp-url', default=cesium.CDP_URL)
     parser.add_argument('--launch', action='store_true')
@@ -310,21 +368,31 @@ def main():
     parser.add_argument('--software-gl', action='store_true')
     for key, value in cesium.DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=pathlib.Path, default=value)
     args = parser.parse_args()
-    if args.repeats < 1: parser.error('--repeats must be >= 1')
+    if args.repeats is not None and args.repeats < 1: parser.error('--repeats must be >= 1')
     try:
         config, sets = load_config(args.config), load_recipe_sets(args.recipes)
+        if args.matrix not in config.get('matrices', {}): raise ValueError(f'unknown --matrix {args.matrix!r}')
+        loaded = [dict(r, set=s['set'], dataset=s['dataset']) for s in sets for r in s['recipes']]
+        names = dict(recipes=[r['name'] for r in loaded], paths=list(config['paths']), profiles=list(config['profiles']))
+        filters = dict(recipes=args.only, paths=args.paths, profiles=args.profiles)
+        available = {}
+        for key, every in names.items():
+            kept = filters[key].split(',') if filters[key] else every
+            unknown = [k for k in kept if k not in every]
+            if unknown: raise ValueError(f'unknown {key} {unknown}')
+            available[key] = dict(all=every, kept=kept)
+        chosen, cells, diagnostics, repeats = expand_matrix(config['matrices'][args.matrix], args.matrix,
+                                                            available['recipes'], available['paths'], available['profiles'])
     except ValueError as error: parser.error(str(error))
-    paths = args.paths.split(',') if args.paths else list(config['paths'])
-    profiles = args.profiles.split(',')
-    for name in paths:
-        if name not in config['paths']: parser.error(f'unknown path {name!r}')
-    for name in profiles:
-        if name not in config['profiles']: parser.error(f'unknown profile {name!r}')
-    recipes = [dict(r, set=s['set'], dataset=s['dataset']) for s in sets for r in s['recipes']]
-    if args.only:
-        keep = set(args.only.split(','))
-        recipes = [r for r in recipes if r['name'] in keep]
-        if not recipes: parser.error('--only selected no recipes')
+    if not cells: parser.error(f'matrix {args.matrix} with these filters selects no runs')
+    repeats = args.repeats or repeats
+    for cell in list(diagnostics):
+        if args.no_capture: diagnostics[cell]['capture'] = False
+        if args.no_trace: diagnostics[cell]['trace'] = False
+        if not any(diagnostics[cell].values()): del diagnostics[cell]
+    recipes = [r for r in loaded if r['name'] in chosen]
+    paths = list(dict.fromkeys(c[1] for c in cells))
+    profiles = list(dict.fromkeys(c[0] for c in cells))
     if any(r['convert'] for r in recipes) and not args.bin: parser.error('--bin is required for recipes with convert')
     os.sched_setaffinity(0, {int(c) for c in args.cpus.split(',')}); os.setpriority(os.PRIO_PROCESS, 0, 10)
     environment = dict(os.environ, NODE_PATH=str(args.node_modules), CHROMIUM=str(args.chromium))
@@ -332,8 +400,11 @@ def main():
     print(f"flythrough: renderer {renderer['renderer']!r} ({renderer['rendererClass']}), {renderer['browserVersion']}",
           file=sys.stderr, flush=True)
     work, evidence = args.work.resolve(), args.evidence.resolve()
-    for sub in ('runs', 'screenshots'): (evidence / sub).mkdir(parents=True, exist_ok=True)
+    for sub in ('runs', 'screenshots', 'traces'): (evidence / sub).mkdir(parents=True, exist_ok=True)
     (work / 'specs').mkdir(parents=True, exist_ok=True)
+    # Playwright stages trace streams in os.tmpdir(); keep them on disk under --work, never in /tmp.
+    (work / 'tmp').mkdir(exist_ok=True)
+    environment['TMPDIR'] = str(work / 'tmp')
 
     # Conversions: once per distinct argument list and binary, reused when the stamp matches.
     binary = None
@@ -371,25 +442,24 @@ def main():
     server = cesium.serve(mounts, args.cesium.resolve(), log)
     browser = cesium.browser_spec(args)
     hold_seconds = args.hold_seconds or config['holdSeconds']
-    capture = [] if args.screenshots == 'none' else args.screenshots.split(',')
-    for name in capture:
-        if name not in profiles: parser.error(f'--screenshots {name!r} is not a selected profile')
-    order = run_order([r['name'] for r in recipes], paths, profiles, args.repeats, capture)
+    order = run_order([r['name'] for r in recipes], cells, repeats, diagnostics)
     by_name = {r['name']: r for r in recipes}
     runs, screenshots = [], {}
     try:
         for number, (repeat, profile_name, path, name) in enumerate(order, 1):
             recipe, profile = by_name[name], config['profiles'][profile_name]
             steps = config['expanded'][path]
-            run_id = f'{name}.{path}.{profile_name}.' + (f'r{repeat}' if repeat else 'capture')
+            run_id = f'{name}.{path}.{profile_name}.' + (f'r{repeat}' if repeat else 'untimed')
             viewer = recipe['viewer']
             spec = dict(url=f'/data/{name}/tileset.json', steps=steps, fps=config['fps'], holdMs=hold_seconds * 1000,
                         settleMs=args.settle_ms, stepMs=int(args.timeout * 1000), browser=browser,
                         maximumScreenSpaceError=viewer.get('maximumScreenSpaceError', 16),
                         tilesetOptions=dict(viewer.get('tilesetOptions', {}), **profile.get('tilesetOptions', {})),
                         cpuThrottlingRate=profile.get('cpuThrottlingRate', 1),
-                        screenshots=repeat == 0)
+                        screenshots=repeat == 0 and diagnostics[(profile_name, path, name)]['capture'],
+                        trace=repeat == 0 and diagnostics[(profile_name, path, name)]['trace'])
             if viewer.get('scheduler'): spec['scheduler'] = viewer['scheduler']
+            if spec['trace']: spec['tracePath'] = str(evidence / 'traces' / f'{run_id}.json.gz')
             spec_file = work / 'specs' / f'{run_id}.json'; spec_file.write_text(json.dumps(spec))
             waypoints = sum(1 for s in steps if 'waypoint' in s)
             rate = spec['cpuThrottlingRate']
@@ -400,6 +470,14 @@ def main():
                                   str(spec_file), str(evidence / 'screenshots' / run_id)], environment, budget)
             result['serverRequests'] = cesium.requests(log[start:], name, recipe['directory'])
             facts, noise = flythrough_report.host_noise(host)
+            trace = None
+            if spec['trace'] and pathlib.Path(spec['tracePath']).exists():
+                with gzip.open(spec['tracePath'], 'rt') as stream: events = json.load(stream)
+                events = events.get('traceEvents', []) if isinstance(events, dict) else events
+                trace = dict(flythrough_report.trace_summary(events, f'http://127.0.0.1:{server.server_port}/'),
+                             file=str(pathlib.Path(spec['tracePath']).relative_to(evidence)))
+            elif spec['trace']:
+                trace = dict(error=result.get('traceError') or 'no trace written')
             found = problems(result, renderer)
             summary = flythrough_report.summarize(result) if result.get('frames') else {}
             with gzip.open(evidence / 'runs' / f'{run_id}.json.gz', 'wt') as stream:
@@ -409,7 +487,7 @@ def main():
                     shot = pathlib.Path(waypoint['screenshot'])
                     screenshots[f'{name}|{path}|{profile_name}|{waypoint["name"]}'] = dict(
                         file=str(shot.relative_to(evidence)), sha256=hashlib.sha256(shot.read_bytes()).hexdigest())
-            runs.append(dict(id=run_id, recipe=name, set=recipe['set'], path=path, profile=profile_name, repeat=repeat, capture=repeat == 0,
+            runs.append(dict(id=run_id, recipe=name, set=recipe['set'], path=path, profile=profile_name, repeat=repeat, untimed=repeat == 0, trace=trace,
                              host=host, hostFacts=facts, noise=noise, problems=found, summary=summary,
                              waypoints=[{k: w.get(k) for k in ('name', 'reached', 'fullQualitySeconds', 'holdFrames')}
                                         for w in result.get('waypoints', [])],
@@ -427,7 +505,7 @@ def main():
         for path in paths:
             for profile_name in profiles:
                 group = [r for r in runs if (r['recipe'], r['path'], r['profile']) == (recipe['name'], path, profile_name)
-                         and r['summary'] and not r['problems'] and not r['capture']]
+                         and r['summary'] and not r['problems'] and not r['untimed']]
                 if not group: continue
                 entry = flythrough_report.aggregate([r['summary'] for r in group], [bool(r['noise']) for r in group])
                 used = [r for r in group if not r['noise']] if entry['clean'] >= 2 else group
@@ -441,7 +519,7 @@ def main():
     # A run whose renderer differs from the preflight's is a problem (problems()) and is left out of every
     # aggregate, so one artifact never mixes renderer classes; the classes seen are recorded.
     classes = sorted({r['rendererClass'] for r in runs})
-    intervals = [v for r in runs if r['summary'] and not r['capture'] and r['profile'] == 'native'
+    intervals = [v for r in runs if r['summary'] and not r['untimed'] and r['profile'] == 'native'
                  for v in [r['summary'].get('allFrameP50Ms')] if v is not None]
     artifact = dict(
         generated=datetime.datetime.now().isoformat(timespec='seconds'),
@@ -449,8 +527,10 @@ def main():
                          rendererClass=renderer['rendererClass'], rendererClassesSeen=classes, browserVersion=renderer['browserVersion'], browser=browser,
                          viewport=renderer.get('viewport'), devicePixelRatio=renderer.get('devicePixelRatio'),
                          cesium=json.loads((args.cesium.resolve().parents[1] / 'package.json').read_text())['version'],
-                         fps=config['fps'], holdSeconds=hold_seconds, settleMs=args.settle_ms, repeats=args.repeats,
-                         captureProfiles=capture,
+                         fps=config['fps'], holdSeconds=hold_seconds, settleMs=args.settle_ms, repeats=repeats,
+                         matrix=dict(name=args.matrix, description=config['matrices'][args.matrix].get('description', ''),
+                                     filters=filters, cells=[list(c) for c in cells],
+                                     untimed={'|'.join(k): v for k, v in diagnostics.items()}),
                          medianIntervalMs=statistics.median(intervals) if intervals else None,
                          gpuTimer=next((r['gpuTimer'] for r in runs if r.get('gpuTimer')), None),
                          thresholds=dict(hitchMs=flythrough_report.HITCH_MS, popMinTiles=flythrough_report.POP_MIN_TILES,

@@ -74,15 +74,65 @@ class Paths(unittest.TestCase):
         self.assertEqual(set(config['profiles']), {'native', 'cpu4x', 'lowcache'})
 
     def test_run_order_rotates_recipes(self):
-        order = fly.run_order(['a', 'b', 'c'], ['p'], ['native'], 3)
+        cells = [('native', 'p', r) for r in 'abc']
+        order = fly.run_order(['a', 'b', 'c'], cells, 3)
         self.assertEqual([o[3] for o in order], ['a', 'b', 'c', 'b', 'c', 'a', 'c', 'a', 'b'])
         self.assertEqual([o[0] for o in order], [1, 1, 1, 2, 2, 2, 3, 3, 3])
 
-    def test_capture_runs_are_separate_and_first(self):
-        order = fly.run_order(['a', 'b'], ['p'], ['native', 'cpu4x'], 1, capture_profiles=['native'])
-        self.assertEqual(order[:2], [(0, 'native', 'p', 'a'), (0, 'native', 'p', 'b')])
-        self.assertEqual(sum(o[0] == 0 for o in order), 2)
-        self.assertEqual(len(order), 6)
+    def test_untimed_runs_are_separate_and_first(self):
+        cells = [('native', 'p', 'a'), ('native', 'p', 'b'), ('cpu4x', 'p', 'b')]
+        order = fly.run_order(['a', 'b'], cells, 1, {('native', 'p', 'a'): dict(capture=True, trace=False)})
+        self.assertEqual(order, [(0, 'native', 'p', 'a'), (1, 'native', 'p', 'a'), (1, 'native', 'p', 'b'), (1, 'cpu4x', 'p', 'b')])
+
+
+def names(every, kept=None):
+    return dict(all=every, kept=kept or every)
+
+
+class Matrix(unittest.TestCase):
+    def shipped(self, preset='validate', recipes=None, paths=None, profiles=None):
+        config = fly.load_config()
+        loaded = [r['name'] for s in fly.load_recipe_sets(sorted((HERE / 'recipes').glob('*.json'))) for r in s['recipes']]
+        return fly.expand_matrix(config['matrices'][preset], preset, names(loaded, recipes), names(list(config['paths']), paths),
+                                 names(list(config['profiles']), profiles))
+
+    def test_validate_preset_is_trimmed(self):
+        recipes, cells, diagnostics, repeats = self.shipped()
+        self.assertEqual(recipes, ['terrain-lod-sse0', 'terrain-skiplod-sse0', 'vector-default', 'vector-leaf16'])
+        self.assertEqual(repeats, 3)
+        self.assertEqual(sum(c[0] == 'native' for c in cells), 20)  # 4 recipes x 5 paths
+        constrained = sorted(c for c in cells if c[0] != 'native')
+        self.assertEqual(constrained, [(p, path, 'terrain-skiplod-sse0') for p in ('cpu4x', 'lowcache')
+                                       for path in ('approach', 'snap-teleport')])
+        self.assertEqual(sum(d['capture'] for d in diagnostics.values()), 20)
+        traced = sorted(c for c, d in diagnostics.items() if d['trace'])
+        self.assertEqual(traced, [('native', 'approach', r) for r in sorted(recipes)])  # one traced run per recipe
+        self.assertEqual(len(fly.run_order(recipes, cells, repeats, diagnostics)), 20 + 24 * 3)
+
+    def test_full_preset_covers_everything(self):
+        recipes, cells, _, _ = self.shipped('full')
+        self.assertEqual(len(cells), len(recipes) * 5 * 3)
+
+    def test_filters_restrict_presets(self):
+        recipes, cells, diagnostics, _ = self.shipped(profiles=['native'], paths=['approach'])
+        self.assertEqual(cells, [('native', 'approach', r) for r in recipes])
+        self.assertTrue(all(d['trace'] for d in diagnostics.values()))
+
+    def test_invalid_matrices(self):
+        available = (names(['a', 'b']), names(['p']), names(['native']))
+        bad = [
+            dict(cells=[]),
+            dict(cells=[{'profiles': ['nope']}]),
+            dict(cells=[{'profiles': '*', 'paths': '*', 'recipes': ['c']}]),
+            dict(recipes=['c'], cells=[{}]),
+            dict(cells=[{'views': '*'}]),
+            dict(cells=[{}], repeats=0),
+            dict(cells=[{}], extra=1),
+        ]
+        for item in bad:
+            with self.subTest(item=item), self.assertRaises(ValueError): fly.expand_matrix(item, 'm', *available)
+        _, cells, _, _ = fly.expand_matrix(dict(recipes=['b'], cells=[{}]), 'm', *available)
+        self.assertEqual(cells, [('native', 'p', 'b')])
 
 
 class Recipes(unittest.TestCase):
@@ -230,7 +280,7 @@ class Stats(unittest.TestCase):
         summary = rep.summarize(self.summary_run())
         host = dict(wallSeconds=10, psiStart={}, psiEnd={}, memAvailableMinGiB=30, gpuUtilStart=0, cpuBusyMean=0.1, loadAverage=1)
         facts, noise = rep.host_noise(host)
-        runs = [dict(id=f'r.p.{profile}.r{i}', recipe='r', set='s', path='p', profile=profile, repeat=i, capture=i == 0,
+        runs = [dict(id=f'r.p.{profile}.r{i}', recipe='r', set='s', path='p', profile=profile, repeat=i, untimed=i == 0, trace=dict(mainBusyMs=12.0, jsMs=5.0) if i == 0 else None,
                      hostFacts=facts, noise=noise, problems=[], summary=summary) for profile in ('native', 'cpu4x') for i in (0, 1, 2)]
         aggregates = {f'r|p|{profile}': dict(rep.aggregate([summary, summary], [False, False]),
                                               waypoints={'a': dict(median=0.4, n=2, of=2, unreached=0)})
@@ -240,7 +290,7 @@ class Stats(unittest.TestCase):
                         environment=dict(evidence='/e', commit='c', binary=dict(version='v', sha256='0' * 64), renderer='GPU',
                                          rendererClass='gpu', browserVersion='b', browser=dict(mode='cdp'), viewport=[1024, 768],
                                          devicePixelRatio=1, cesium='1.146.0', fps=60, medianIntervalMs=16.7, gpuTimer=None,
-                                         repeats=2, settleMs=250, holdSeconds=10, captureProfiles=['native']),
+                                         repeats=2, settleMs=250, holdSeconds=10, matrix=dict(name='validate')),
                         paths={'p': dict(description='d', motionFrames=3, waypoints=['a', 'b'])},
                         profiles={'native': {'description': 'n'}, 'cpu4x': {'cpuThrottlingRate': 4}},
                         recipes=[dict(set='s', name='r', convert=['x'], viewer={}, output=dict(bytes=1, files=1))])
@@ -251,6 +301,38 @@ class Stats(unittest.TestCase):
         self.assertIn('| 2/2 (2 clean) |', text)
         self.assertIn('| native | 2 | 0 |', text)  # capture runs are not counted as timed runs
         self.assertIn('`abababab', text)
+        self.assertIn('| r.p.native.r0 | 12 | 5 |', text)
+
+
+class Trace(unittest.TestCase):
+    def test_union_counts_overlaps_once(self):
+        self.assertEqual(rep.union_ms([(0, 1000), (500, 1500), (3000, 4000), (3100, 3200)]), 2.5)
+        self.assertEqual(rep.union_ms([]), 0)
+
+    def test_summary_splits_roles_by_page_process(self):
+        url = 'http://127.0.0.1:1234/'
+        events = [
+            dict(ph='M', name='process_name', pid=2, args=dict(name='GPU Process')),
+            dict(ph='M', name='thread_name', pid=1, tid=10, args=dict(name='CrRendererMain')),
+            dict(ph='M', name='thread_name', pid=1, tid=11, args=dict(name='DedicatedWorker thread')),
+            dict(ph='M', name='thread_name', pid=2, tid=20, args=dict(name='CrGpuMain')),
+            dict(ph='M', name='thread_name', pid=9, tid=90, args=dict(name='CrRendererMain')),
+            dict(ph='I', name='TracingStartedInBrowser', pid=0, tid=0, ts=0,
+                 args=dict(data=dict(frames=[dict(processId=1, url=url), dict(processId=9, url='http://other/')]))),
+            dict(ph='X', name='RunTask', cat='toplevel', pid=1, tid=10, ts=0, dur=10000),
+            dict(ph='X', name='FireAnimationFrame', cat='devtools.timeline', pid=1, tid=10, ts=1000, dur=6000),
+            dict(ph='X', name='FunctionCall', cat='devtools.timeline', pid=1, tid=10, ts=2000, dur=1000),  # nested: once
+            dict(ph='X', name='MinorGC', cat='v8', pid=1, tid=10, ts=8000, dur=500),
+            dict(ph='X', name='CommandBufferProxyImpl::WaitForGetOffsetInRange', cat='gpu', pid=1, tid=10, ts=9000, dur=800),
+            dict(ph='X', name='RunTask', cat='toplevel', pid=1, tid=11, ts=0, dur=4000),
+            dict(ph='X', name='RunTask', cat='toplevel', pid=2, tid=20, ts=0, dur=3000),
+            dict(ph='X', name='RunTask', cat='toplevel', pid=9, tid=90, ts=0, dur=50000),  # another tab: ignored
+        ]
+        out = rep.trace_summary(events, url)
+        self.assertEqual(out['rendererPids'], [1])
+        self.assertEqual((out['mainBusyMs'], out['jsMs'], out['gcMs']), (10, 6, 0.5))
+        self.assertEqual((out['gpuCommandsMs'], out['gpuWaitMs']), (0.8, 0.8))
+        self.assertEqual((out['workerBusyMs'], out['workerThreads'], out['gpuProcessBusyMs']), (4, 1, 3))
 
 
 class Noise(unittest.TestCase):

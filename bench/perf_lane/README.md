@@ -411,7 +411,7 @@ never a gate.
 ```sh
 python3 -I bench/perf_lane/flythrough.py --bin RUSTY_TILES \
   --recipes bench/perf_lane/recipes/terrain-skiplod.json --recipes bench/perf_lane/recipes/vector.json \
-  [--paths orbit-far,approach] [--profiles native,cpu4x,lowcache] [--repeats 3] [--only NAME,...] \
+  [--matrix validate|full] [--paths ...] [--profiles ...] [--only NAME,...] [--repeats N] [--no-capture] [--no-trace] \
   [--evidence ~/.cache/rusty-tiles-evidence/perf/flythrough-YYYYMMDD] [--commit-report bench/perf_lane/FLYTHROUGH.md]
 python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-render without running
 ```
@@ -492,8 +492,32 @@ python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-rende
     Cesium.js loads;
   - `lowcache`: `cacheBytes` 8 MiB and `maximumCacheOverflowBytes` 0.
     Profile tileset options override the recipe's.
-- **Repeats and noise.** `--repeats N` runs every recipe × path × profile N
-  times and rotates the recipe order each repeat. Every run holds the
+- **Matrix** (`flythrough.json` `matrices`, `--matrix`). A preset lists
+  its recipes, its timed cells (profiles × paths × recipes, `*` for all),
+  its repeats, and the cells that get an untimed capture or trace run.
+  - `validate`, the default, is trimmed to about 92 runs. It runs every
+    path on `native` for four recipes: the SSE 0 terrain pair, where #201
+    measured its effect, and both vector recipes. `cpu4x` and `lowcache`
+    run on `terrain-skiplod-sse0` only, for `approach` and
+    `snap-teleport`. Repeats: 3.
+  - `full` runs every loaded recipe on every path in every profile. It is
+    meant for recipe comparisons such as the later mesh sweep.
+
+  `--paths`, `--profiles` and `--only` restrict a preset, and `--repeats`
+  overrides it.
+- **Chrome trace.** Each `trace` cell's untimed run records a Chrome trace
+  over CDP (`browser.startTracing` on the page session, with categories
+  toplevel, timeline, V8, GC and gpu). It is written gzipped to `traces/`.
+  Playwright stages the stream under `--work/tmp`, not `/tmp`. The report
+  splits the trace by role, counting overlapping events once:
+  - the page renderer's main thread, in total, for JS, for GC, and for GPU
+    command issue and waits (`gpuCommandsMs`, `gpuWaitMs`);
+  - its worker threads (decoding) and image decode;
+  - the GPU process main thread, which other tabs share.
+
+  Timed runs are never traced.
+- **Repeats and noise.** Each timed cell runs N times, and the recipe
+  order rotates each repeat. Every run holds the
   browser lock, so do not wrap it in `flock` on that lock. While each run
   executes, the host is sampled for the following. `nvidia-smi` is read
   1.5 s after the previous run ends, so that run's own GPU work has
@@ -511,17 +535,17 @@ python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-rende
   the N runs used. A metric is marked `~` (unstable) when its repeats
   spread beyond max(10% of the median, a floor of 1 ms, 0.05 s, 0.25 MiB
   or 2 counts), and `?` when it has fewer than two values.
-- **Screenshots.** Captures never come from timed runs. `--screenshots`
-  names the profiles (default `native`, or `none`) that get one extra,
-  untimed run per recipe and path. That run uses `preserveDrawingBuffer`
-  and captures the canvas at each waypoint once it reaches full quality.
+- **Screenshots.** Captures never come from timed runs. Each `capture`
+  cell gets one extra, untimed run (`--no-capture` skips them). That run
+  uses `preserveDrawingBuffer` and captures the canvas at each waypoint
+  once it reaches full quality.
   Timed runs render without `preserveDrawingBuffer`, as a viewer would.
 - **Output.** `--evidence` (default
   `~/.cache/rusty-tiles-evidence/perf/flythrough-<date>/`) holds:
   - `runs/<recipe>.<path>.<profile>.r<N>.json.gz`, the per-frame columns,
-    waypoints, host samples and console (`.capture` for the screenshot
-    runs);
-  - `screenshots/`;
+    waypoints, host samples and console (`.untimed` for the capture and
+    trace runs);
+  - `screenshots/` and `traces/`;
   - `flythrough.json` (the artifact: runs, summaries, aggregates and
     screenshot digests);
   - `FLYTHROUGH.md` with the images.

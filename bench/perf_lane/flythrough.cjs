@@ -2,12 +2,18 @@
 // Usage: node flythrough.cjs URL SPEC_FILE SHOT_PREFIX   (NODE_PATH exposes Playwright)
 // SPEC (written by flythrough.py): {url, steps:[{pose:[heading, pitch, range, east, north, up], waypoint?}],
 // fps, holdMs, settleMs, stepMs, browser, maximumScreenSpaceError, tilesetOptions, scheduler?, cpuThrottlingRate,
-// screenshots}. Poses are relative to the root bounding sphere (degrees, multiples of its radius, in its
+// screenshots, trace, tracePath}. With trace, a Chrome trace (browser-wide, over CDP) spans the flythrough
+// and is written gzipped to tracePath. Poses are relative to the root bounding sphere (degrees, multiples of its radius, in its
 // east-north-up frame). The default render loop is off: each requestAnimationFrame sets the pose of the next
 // step and the simulated clock (frame / fps), then renders once, so the camera replays identically on every
 // run whatever the frame rate. A waypoint step renders at a fixed pose until full quality (cesium.cjs's
 // finish rule) or holdMs. Prints one JSON result; waypoint captures go to SHOT_PREFIX-<waypoint>.png.
 const fs = require('node:fs');
+const zlib = require('node:zlib');
+// Chrome trace categories for the untimed traced run: task boundaries, the DevTools timeline (JS, GC,
+// decode), V8 and GPU command-buffer activity.
+const TRACE_CATEGORIES = ['-*', 'toplevel', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'v8', 'v8.execute',
+  'disabled-by-default-v8.gc', 'gpu'];
 const {finishTracker, FACTS, webglInfo, openContext, openPage} = require('./cesium.cjs');
 
 async function fly(spec) {
@@ -244,11 +250,21 @@ async function main() {
       result = {loaded: false, failures: [`tab is ${before.visibility} after bringToFront; frame-paced timings would be throttled`]};
     } else {
       await page.addScriptTag({content: [finishTracker, webglInfo, fly].map(String).join('\n')});
+      let tracing = false, traceError = null;
+      if (spec.trace) {
+        try { await opened.browser.startTracing(page, {categories: TRACE_CATEGORIES}); tracing = true; }
+        catch (error) { traceError = 'startTracing: ' + String(error).slice(0, 500); }
+      }
       // fly() is bounded by its own steps; the driver's budget in flythrough.py bounds the whole run.
       result = await page.evaluate(async spec => {
         try { return await fly(spec); }
         catch (error) { return {loaded: false, failures: ['threw: ' + (error.stack ? `${error}\n${error.stack}` : String(error)).slice(0, 4000)]}; }
       }, spec);
+      if (tracing) {
+        try { fs.writeFileSync(spec.tracePath, zlib.gzipSync(await opened.browser.stopTracing())); }
+        catch (error) { traceError = 'stopTracing: ' + String(error).slice(0, 500); }
+      }
+      if (traceError) result.traceError = traceError;
     }
     for (const waypoint of result.waypoints || []) {
       if (!waypoint.png) continue;

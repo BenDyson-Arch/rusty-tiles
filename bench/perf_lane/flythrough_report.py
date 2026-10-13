@@ -133,6 +133,59 @@ def summarize(run):
     return out
 
 
+TRACE_JS = {'FunctionCall', 'EvaluateScript', 'v8.compile', 'V8.Execute', 'v8.callFunction', 'v8.run',
+            'FireAnimationFrame', 'TimerFire', 'EventDispatch', 'RunMicrotasks'}
+
+
+def union_ms(spans):
+    """Total length in ms of the union of (start, end) spans in microseconds (nested events count once)."""
+    total, reach = 0, None
+    for start, end in sorted(spans):
+        if reach is None or start > reach:
+            total += end - start; reach = end
+        elif end > reach:
+            total += end - reach; reach = end
+    return total / 1000
+
+
+def trace_summary(events, page_url):
+    """Split a Chrome trace of one flythrough into busy time per role (ms, overlapping events counted once):
+    the page's renderer main thread (all work, JS, GC, GPU command issue and waits), its workers (decoding)
+    and image decode, plus the GPU process main thread, which other tabs share. The renderer is the
+    process whose frame committed page_url."""
+    threads, processes, pids = {}, {}, set()
+    for e in events:
+        if e.get('ph') == 'M' and e.get('name') == 'thread_name': threads[(e['pid'], e['tid'])] = e['args'].get('name', '')
+        elif e.get('ph') == 'M' and e.get('name') == 'process_name': processes[e['pid']] = e['args'].get('name', '')
+        elif e.get('name') in ('TracingStartedInBrowser', 'FrameCommittedInBrowser'):
+            data = (e.get('args') or {}).get('data') or {}
+            for frame in data.get('frames') or [data]:
+                if str(frame.get('url', '')).startswith(page_url) and frame.get('processId'): pids.add(frame['processId'])
+    buckets = {k: [] for k in ('mainBusy', 'js', 'gc', 'gpuCommands', 'gpuWait', 'imageDecode', 'gpuProcessBusy')}
+    workers = {}
+    for e in events:
+        if e.get('ph') != 'X' or 'dur' not in e: continue
+        span, name, category = (e['ts'], e['ts'] + e['dur']), e.get('name', ''), e.get('cat', '')
+        thread = threads.get((e['pid'], e['tid']), '')
+        if e['pid'] in pids:
+            if thread == 'CrRendererMain':
+                buckets['mainBusy'].append(span)
+                if name in TRACE_JS: buckets['js'].append(span)
+                if 'GC' in name: buckets['gc'].append(span)
+                if 'gpu' in category.split(','):
+                    buckets['gpuCommands'].append(span)
+                    if any(word in name for word in ('Wait', 'Finish', 'Sync')): buckets['gpuWait'].append(span)
+            elif 'Worker' in thread:
+                workers.setdefault((e['tid'], thread), []).append(span)
+            if 'Decode' in name and 'Image' in name: buckets['imageDecode'].append(span)
+        elif processes.get(e['pid']) == 'GPU Process' and thread == 'CrGpuMain':
+            buckets['gpuProcessBusy'].append(span)
+    out = {f'{key}Ms': union_ms(spans) for key, spans in buckets.items()}
+    out.update(workerBusyMs=sum(union_ms(spans) for spans in workers.values()), workerThreads=len(workers),
+               rendererPids=sorted(pids), events=len(events))
+    return out
+
+
 def pressure_share(start, end, key, wall):
     """PSI 'some' stall share of wall seconds between two /proc/pressure snapshots."""
     if not wall or key not in (start or {}) or key not in (end or {}): return None
@@ -265,8 +318,9 @@ def render(artifact, directory, output, images=False):
            '- Basis: frame, CPU and GPU times, hitches, LOD pops and SSE jumps count motion frames only (`motion`); a '
            'path without motion (snap-teleport) counts its hold frames except each cut (`hold`). `all frames` adds the '
            'holds. Frames after a screenshot are never counted.',
-           f"- Screenshots come from one extra, untimed run per recipe and path in profiles {env.get('captureProfiles')}; "
-           'timed runs capture nothing and render without preserveDrawingBuffer.', '']
+           f"- Matrix `{env.get('matrix', {}).get('name')}`: {env.get('matrix', {}).get('description', '')}",
+           '- Screenshots and Chrome traces come only from one extra, untimed run per selected cell; timed runs '
+           'capture nothing, trace nothing and render without preserveDrawingBuffer.', '']
     out += ['## Paths', '', table(['path', 'motion frames', 'waypoints', 'description'],
                                   [[name, p['motionFrames'], ', '.join(p['waypoints']), p['description']]
                                    for name, p in artifact['paths'].items()]), '']
@@ -324,12 +378,22 @@ def render(artifact, directory, output, images=False):
             if any(c != 'n/a' for r in rows for c in r[2:-1]):
                 out += [f'{set_name}, {profile}' + ('' if images else f" (files under `{env['evidence']}/screenshots/`)") + ':', '',
                         table(['path', 'waypoint', *recipes, 'identical'], rows), '']
+    traced = [r for r in runs if r.get('trace')]
+    if traced:
+        keys = ('mainBusyMs', 'jsMs', 'gcMs', 'gpuCommandsMs', 'gpuWaitMs', 'workerBusyMs', 'imageDecodeMs', 'gpuProcessBusyMs')
+        out += ['## Chrome traces', '',
+                'One untimed, traced run per selected cell (tracing slows it). Busy ms over the flythrough, overlapping '
+                'events counted once: the page renderer main thread in total, its JS, GC and GPU command issue and '
+                'waits; its worker threads (decoding); image decode; and the GPU process main thread, which other tabs '
+                'share. Traces are under `traces/` in the evidence directory.', '',
+                table(['run', *keys], [[r['id'], *(fmt(r['trace'].get(k), 0) if 'error' not in r['trace'] else r['trace']['error'][:60]
+                                                   for k in keys)] for r in traced]), '']
     out += ['## Host load and noise', '',
             'Per run: PSI stall share of the run wall time (cpu, memory, io), lowest MemAvailable, GPU utilisation '
             f"before the run (another process) and mean CPU busy. Noisy when: {', '.join(f'{k} {v:g}' for k, v in NOISE.items())} "
             '(MemAvailable below, others at or above).', '']
     by_profile = {}
-    timed = [r for r in runs if not r.get('capture')]
+    timed = [r for r in runs if not r.get('untimed')]
     for run in timed: by_profile.setdefault(run['profile'], []).append(run)
     rows = []
     for profile, items in by_profile.items():
