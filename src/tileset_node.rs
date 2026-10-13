@@ -441,8 +441,10 @@ impl MemberName {
     /// `binding::filename_uri` writes a source filename for a sibling manifest:
     /// `/`-separated segments of URI unreserved ASCII and `%HH` escapes (upper-case hex) of
     /// every other byte. Each decoded segment is UTF-8, non-empty, not `.` or `..`, and has
-    /// no separator or control character; unlike [`MemberName::new`], it may start with
-    /// `.`, because the source file keeps its admitted name.
+    /// no separator or control character, and the whole URI passes the portable path rules
+    /// of admitted resource references (`binding::relative_uri`); unlike
+    /// [`MemberName::new`], it may start with `.`, because the source file keeps its
+    /// admitted name.
     pub(crate) fn escaped(uri: impl Into<String>) -> Result<Self, Error> {
         let uri = uri.into();
         let fail = |why: &str| invalid(format!("escaped URI {uri:?} {why}"));
@@ -501,6 +503,10 @@ impl MemberName {
         if decoded.chars().any(char::is_control) {
             return Err(fail("encodes a control character"));
         }
+        // The admitted resource reference rules: length and component ceilings and the
+        // portable filename profile (no `<>:"|?*`, no trailing dot or space).
+        crate::gltf_source::binding::relative_uri(&uri)
+            .map_err(|error| fail(&format!("is not a portable relative path: {error}")))?;
         Ok(Self {
             decoded: (decoded != uri).then_some(decoded),
             uri,
@@ -575,6 +581,10 @@ impl UriTemplate {
 
     pub(crate) fn as_str(&self) -> &str {
         &self.template
+    }
+
+    pub(crate) fn scheme(&self) -> SubdivisionScheme {
+        self.scheme
     }
 }
 
@@ -2258,6 +2268,10 @@ mod record_tests {
             ("a%41", "unreserved"),
             ("a b", "must be escaped"),
             ("a%FF", "UTF-8"),
+            ("a%3F.glb", "portable"),
+            ("trailing.", "portable"),
+            ("space%20", "portable"),
+            ("con%3A.glb", "portable"),
         ] {
             let message = is_data(MemberName::escaped(bad));
             assert!(message.contains(why), "{bad:?}: {message}");

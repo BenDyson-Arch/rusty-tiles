@@ -25,8 +25,8 @@ pub use tileset::{
 };
 #[allow(unused_imports)]
 pub(crate) use tileset::{
-    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, RootName, DOC_BYTES,
-    DOC_DEPTH, DOC_NODES, MAX_LEVELS,
+    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, ImplicitNames, RootName,
+    DOC_BYTES, DOC_DEPTH, DOC_NODES, MAX_LEVELS,
 };
 
 type Bits = BitVec<u8, Lsb0>;

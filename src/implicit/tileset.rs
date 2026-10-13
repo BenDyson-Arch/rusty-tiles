@@ -31,7 +31,7 @@ use std::{
 mod stream;
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use stream::{
-    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, RootName,
+    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, ImplicitNames, RootName,
 };
 
 /// S: a tile whose subtree height is at least S is an explicit skeleton tile (design §4.1).
@@ -518,14 +518,6 @@ fn child(c: Coordinates, slot: usize, scheme: SubdivisionScheme) -> Result<Coord
             0
         },
     })
-}
-
-fn key(c: Coordinates, scheme: SubdivisionScheme) -> String {
-    if scheme == SubdivisionScheme::Octree {
-        format!("{}-{}-{}-{}", c.level, c.x, c.y, c.z)
-    } else {
-        format!("{}-{}-{}", c.level, c.x, c.y)
-    }
 }
 
 fn coordinate_template(scheme: SubdivisionScheme) -> &'static str {
@@ -1149,17 +1141,19 @@ fn forest(
                 let name = format!("r{id}");
                 let root = ImplicitRoot {
                     id,
-                    name: &name,
+                    names: RootNames::Prefix(&name),
                     scheme,
                     directory,
                     template,
                 };
-                let (object, subtree, reach) = root.write(
+                let (object, subtree, reach, _) = root.write(
                     &nodes,
                     emit,
                     &mut tiles,
                     &mut members,
                     &mut implicit_sources,
+                    Publish::Write,
+                    None,
                     checkpoint,
                 )?;
                 written.insert(subtree);
@@ -1284,15 +1278,131 @@ fn forest(
     ))
 }
 
-/// An implicit root as written: its explicit tile object, its subtree member name and its
-/// drift bound (z-up), by which its explicit ancestors grow.
-type WrittenRoot = (Map<String, Value>, String, [f64; 3]);
+/// An implicit root as written: its explicit tile object, its subtree member name, its
+/// drift bound (z-up), by which its explicit ancestors grow, and its derived availability.
+type WrittenRoot = (Map<String, Value>, String, [f64; 3], Availability);
+
+/// How an implicit root names its members.
+pub(crate) enum RootNames<'a> {
+    /// `implicit-content/{prefix}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}` and
+    /// `subtrees/{prefix}-{level}-{x}-{y}[-{z}].subtree` (`r{id}` in a whole-tree forest).
+    Prefix(&'a str),
+    /// The caller's content templates, one per content slot in slot order, and subtree
+    /// template.
+    Templates {
+        contents: &'a [UriTemplate],
+        subtree: &'a UriTemplate,
+    },
+}
+
+/// How an implicit root's members are published.
+enum Publish<'p> {
+    /// The whole-tree forest: write every member.
+    Write,
+    /// The streamed forest: create every member new and never copy an unchanged payload.
+    /// A payload staged at its own final member stays in place; an unchanged payload staged
+    /// elsewhere is hard-linked (copied only where the filesystem has no hard links).
+    /// Everything created is recorded, so a refused document can be removed.
+    Fresh(&'p mut Created),
+}
+
+/// Files and directories a streamed document created, in creation order.
+#[derive(Debug, Default)]
+pub(crate) struct Created {
+    files: Vec<std::path::PathBuf>,
+    dirs: Vec<std::path::PathBuf>,
+}
+
+impl Created {
+    /// Create the missing parent directories of `member` under `directory`.
+    fn parents(&mut self, directory: &Path, member: &str) -> Result<(), Error> {
+        let mut missing = Vec::new();
+        let mut parent = directory.join(member);
+        while parent.pop() && parent != directory && !parent.exists() {
+            missing.push(parent.clone());
+        }
+        for dir in missing.into_iter().rev() {
+            std::fs::create_dir(&dir)?;
+            self.dirs.push(dir);
+        }
+        Ok(())
+    }
+
+    /// Create `member` with `bytes`, refusing an existing member.
+    fn file(&mut self, directory: &Path, member: &str, bytes: &[u8]) -> Result<(), Error> {
+        self.parents(directory, member)?;
+        let path = directory.join(member);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| exists(member, error))?;
+        self.files.push(path);
+        std::io::Write::write_all(&mut file, bytes)?;
+        Ok(())
+    }
+
+    /// Publish the unchanged payload `raw` as `member` without a second copy of its bytes.
+    fn link(
+        &mut self,
+        directory: &Path,
+        raw: &str,
+        member: &str,
+        bytes: &[u8],
+    ) -> Result<(), Error> {
+        self.parents(directory, member)?;
+        match std::fs::hard_link(directory.join(raw), directory.join(member)) {
+            Ok(()) => {
+                self.files.push(directory.join(member));
+                Ok(())
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(exists(member, error))
+            }
+            // A filesystem without hard links: one copy.
+            Err(_) => self.file(directory, member, bytes),
+        }
+    }
+
+    /// Remove everything created, newest first (best effort: a refusal is already being
+    /// reported).
+    pub(crate) fn remove(self) {
+        for file in self.files.iter().rev() {
+            let _ = std::fs::remove_file(file);
+        }
+        for dir in self.dirs.iter().rev() {
+            let _ = std::fs::remove_dir(dir);
+        }
+    }
+}
+
+fn exists(member: &str, error: std::io::Error) -> Error {
+    if error.kind() == std::io::ErrorKind::AlreadyExists {
+        data(format!("member {member:?} is already written"))
+    } else {
+        error.into()
+    }
+}
+
+/// The Morton index of `c` within its level: x, y (and z) bits interleaved from the least
+/// significant up.
+fn morton(c: Coordinates, scheme: SubdivisionScheme) -> u128 {
+    let mut index = 0u128;
+    let axes: &[u32] = match scheme {
+        SubdivisionScheme::Quadtree => &[c.x, c.y],
+        SubdivisionScheme::Octree => &[c.x, c.y, c.z],
+    };
+    for bit in 0..c.level {
+        for (k, axis) in axes.iter().enumerate() {
+            index |= u128::from((axis >> bit) & 1) << (bit as usize * axes.len() + k);
+        }
+    }
+    index
+}
 
 struct ImplicitRoot<'a> {
     id: usize,
-    /// The member prefix: `r{id}` in a whole-tree forest, the caller's [`RootName`] when
-    /// streamed.
-    name: &'a str,
+    names: RootNames<'a>,
     scheme: SubdivisionScheme,
     directory: &'a Path,
     template: &'static str,
@@ -1300,8 +1410,9 @@ struct ImplicitRoot<'a> {
 
 impl ImplicitRoot<'_> {
     /// Write one implicit root's payloads and its single subtree. Returns the explicit root
-    /// tile object, the subtree member name and the root's drift bound (see below), by which
-    /// its explicit ancestors must grow.
+    /// tile object, the subtree member name, the root's drift bound (see below), by which
+    /// its explicit ancestors must grow, and the availability its slots derive. A planned
+    /// availability (`expected`) that differs is refused before anything is read or written.
     ///
     /// Implicit tile `t` is published at `δ(t) = δ(parent) + translation(t)`, rounded per
     /// edge, so its row centre `B(t) + δ(t)` and its payload's rebased scene root (each
@@ -1309,6 +1420,7 @@ impl ImplicitRoot<'_> {
     /// row grows by an outward-rounded bound on the drift of its own and its descendants'
     /// content relative to it, so a vertex the producer's hierarchy contains exactly stays
     /// inside every volume C2 tests. Exact sums give a zero bound and unchanged rows.
+    #[allow(clippy::too_many_arguments)]
     fn write(
         &self,
         nodes: &[Node],
@@ -1316,9 +1428,11 @@ impl ImplicitRoot<'_> {
         tiles: &mut [Option<WrittenTile>],
         members: &mut Vec<String>,
         sources: &mut BTreeSet<String>,
+        mut publish: Publish<'_>,
+        expected: Option<&Availability>,
         checkpoint: &mut impl FnMut() -> Result<(), Error>,
     ) -> Result<WrittenRoot, Error> {
-        let (id, name, scheme, template) = (self.id, self.name, self.scheme, self.template);
+        let (id, scheme, template) = (self.id, self.scheme, self.template);
         let root = &nodes[id];
         let range = id..root.end;
         // R-4: the slot list drives the templates and the content layers, in the same order.
@@ -1345,18 +1459,84 @@ impl ImplicitRoot<'_> {
             }
         }
         let slot_list: Vec<_> = slots.keys().cloned().collect();
-        let mut subtree = Subtree::new(scheme, root.height + 1, slot_list.len())?;
+        let (content_templates, subtree_template) = match &self.names {
+            RootNames::Prefix(name) => (
+                slot_list
+                    .iter()
+                    .enumerate()
+                    .map(|(slot, (_, suffix))| {
+                        format!("implicit-content/{name}-{template}-{slot}.{suffix}")
+                    })
+                    .collect::<Vec<_>>(),
+                format!("subtrees/{name}-{template}.subtree"),
+            ),
+            RootNames::Templates { contents, subtree } => {
+                if contents.len() != slot_list.len() {
+                    return Err(data(format!(
+                        "tile {id}: {} content templates for {} content slots",
+                        contents.len(),
+                        slot_list.len()
+                    )));
+                }
+                for (uri, (_, suffix)) in contents.iter().zip(&slot_list) {
+                    if !uri.as_str().ends_with(&format!(".{suffix}")) {
+                        return Err(data(format!(
+                            "tile {id}: content template {:?} does not name a .{suffix} slot",
+                            uri.as_str()
+                        )));
+                    }
+                }
+                (
+                    contents.iter().map(|t| t.as_str().to_owned()).collect(),
+                    subtree.as_str().to_owned(),
+                )
+            }
+        };
+        let origin = Coordinates {
+            level: 0,
+            x: 0,
+            y: 0,
+            z: 0,
+        };
+        // Coordinates from the slots, and the availability they derive, before any I/O.
         let mut coordinates = BTreeMap::new();
+        coordinates.insert(id, origin);
+        for t in range.clone() {
+            let c = coordinates[&t];
+            for &next in &nodes[t].children {
+                coordinates.insert(next, child(c, nodes[next].slot, scheme)?);
+            }
+        }
+        let order = |c: &Coordinates| (c.level, morton(*c, scheme));
+        let mut available: Vec<Coordinates> = range.clone().map(|t| coordinates[&t]).collect();
+        available.sort_by_key(order);
+        let mut contents_available = vec![Vec::new(); slot_list.len()];
+        for t in range.clone() {
+            for (index, content) in nodes[t].contents.iter().enumerate() {
+                let slot = slot_list
+                    .iter()
+                    .position(|(i, s)| *i == index && *s == content.suffix)
+                    .expect("slot list covers every content");
+                contents_available[slot].push(coordinates[&t]);
+            }
+        }
+        for cells in &mut contents_available {
+            cells.sort_by_key(order);
+        }
+        let derived = Availability {
+            levels: root.height + 1,
+            tiles: available,
+            contents: contents_available,
+        };
+        if let Some(expected) = expected {
+            if let Some(difference) = expected.difference(&derived) {
+                return Err(data(format!(
+                    "implicit root {subtree_template:?}: availability mismatch: {difference}"
+                )));
+            }
+        }
+        let mut subtree = Subtree::new(scheme, root.height + 1, slot_list.len())?;
         let mut deltas: BTreeMap<usize, [f64; 3]> = BTreeMap::new();
-        coordinates.insert(
-            id,
-            Coordinates {
-                level: 0,
-                x: 0,
-                y: 0,
-                z: 0,
-            },
-        );
         deltas.insert(id, [0.; 3]);
         // |error| of each edge's δ sum, and per tile the drift bound G: first the largest
         // payload rebase error, then max(own, |edge(c)| + G(c)) over the children.
@@ -1369,7 +1549,6 @@ impl ImplicitRoot<'_> {
             let c = coordinates[&t];
             let delta = deltas[&t];
             for &next in &node.children {
-                coordinates.insert(next, child(c, nodes[next].slot, scheme)?);
                 let step = nodes[next].translation;
                 deltas.insert(next, std::array::from_fn(|i| delta[i] + step[i]));
                 edges.insert(
@@ -1398,15 +1577,33 @@ impl ImplicitRoot<'_> {
                 for (lane, error) in own.iter_mut().zip(rebase_error(&record)?) {
                     *lane = lane.max(error);
                 }
-                let member = format!(
-                    "implicit-content/{name}-{}-{slot}.{}",
-                    key(c, scheme),
-                    content.suffix
-                );
-                std::fs::write(self.directory.join(&member), &bytes)?;
+                let member = template_uri(&content_templates[slot], c, scheme)?;
+                match &mut publish {
+                    Publish::Write => {
+                        std::fs::write(self.directory.join(&member), &bytes)?;
+                        sources.insert(content.uri.clone());
+                    }
+                    Publish::Fresh(created) => {
+                        let unchanged = record.raw_root_node.is_empty();
+                        if member == content.uri {
+                            if !unchanged {
+                                return Err(data(format!(
+                                    "tile {t}: payload {member:?} is staged at its final member \
+                                     but needs a rebase"
+                                )));
+                            }
+                        } else {
+                            if unchanged {
+                                created.link(self.directory, &content.uri, &member, &bytes)?;
+                            } else {
+                                created.file(self.directory, &member, &bytes)?;
+                            }
+                            sources.insert(content.uri.clone());
+                        }
+                    }
+                }
                 total += bytes.len() as u64;
                 members.push(member.clone());
-                sources.insert(content.uri.clone());
                 flags[slot] = true;
                 written.push(WrittenContent {
                     member,
@@ -1467,24 +1664,22 @@ impl ImplicitRoot<'_> {
                 },
             )?;
         }
-        let origin = Coordinates {
-            level: 0,
-            x: 0,
-            y: 0,
-            z: 0,
-        };
         // Availability is derived from the slots: every tile is one available position.
         let (available, contents) = subtree.available();
-        let declared: usize = nodes[range.clone()].iter().map(|n| n.contents.len()).sum();
+        let declared: usize = derived.contents.iter().map(Vec::len).sum();
         if available != range.len() || contents != declared {
             return Err(data(format!(
-                "implicit root {name}: {} tiles and {declared} contents map to {available} \
-                 available tiles and {contents} available contents",
+                "tile {id}: {} tiles and {declared} contents map to {available} available tiles \
+                 and {contents} available contents",
                 range.len()
             )));
         }
-        let subtree_member = format!("subtrees/{name}-{}.subtree", key(origin, scheme));
-        std::fs::write(self.directory.join(&subtree_member), subtree.to_bytes()?)?;
+        let subtree_member = template_uri(&subtree_template, origin, scheme)?;
+        let bytes = subtree.to_bytes()?;
+        match &mut publish {
+            Publish::Write => std::fs::write(self.directory.join(&subtree_member), bytes)?,
+            Publish::Fresh(created) => created.file(self.directory, &subtree_member, &bytes)?,
+        }
         members.push(subtree_member.clone());
         // V_R is the level-0 row, widened alike.
         let reach = drift[&id];
@@ -1492,9 +1687,9 @@ impl ImplicitRoot<'_> {
         widen(&mut bounding_box, reach);
         let templates: Vec<Template> = slots
             .into_iter()
-            .enumerate()
-            .map(|(slot, ((_, suffix), (header, vector)))| Template {
-                uri: format!("implicit-content/{name}-{template}-{slot}.{suffix}"),
+            .zip(content_templates)
+            .map(|((_, (header, vector)), uri)| Template {
+                uri,
                 header,
                 vector,
             })
@@ -1502,10 +1697,10 @@ impl ImplicitRoot<'_> {
         let tiling = Tiling {
             scheme,
             levels: root.height + 1,
-            subtrees: format!("subtrees/{name}-{template}.subtree"),
+            subtrees: subtree_template,
         };
         let object = emit.implicit_root(id, root, &bounding_box, &templates, &tiling)?;
-        Ok((object, subtree_member, reach))
+        Ok((object, subtree_member, reach, derived))
     }
 }
 
@@ -2093,7 +2288,7 @@ fn integer(value: &Value, label: &str) -> Result<usize, Error> {
         .ok_or_else(|| invalid(&format!("invalid {label}")))
 }
 
-fn template(uri: &str, c: Coordinates, scheme: SubdivisionScheme) -> Result<String, Error> {
+fn template_uri(uri: &str, c: Coordinates, scheme: SubdivisionScheme) -> Result<String, Error> {
     if scheme == SubdivisionScheme::Quadtree && uri.contains("{z}") {
         return Err(invalid("quadtree URI contains {z}"));
     }
@@ -2387,7 +2582,7 @@ impl<F: FnMut(&str) -> Result<Vec<u8>, Error>> Reader<'_, F> {
         self.budget.charge(1, 0)?;
         let root = ancestor(c, c.level / self.levels * self.levels);
         if !self.cache.contains_key(&root) {
-            let bytes = (self.read)(&template(self.subtree_template, root, self.scheme)?)?;
+            let bytes = (self.read)(&template_uri(self.subtree_template, root, self.scheme)?)?;
             self.cache_bytes = self
                 .cache_bytes
                 .checked_add(bytes.len())
@@ -2434,7 +2629,7 @@ impl<F: FnMut(&str) -> Result<Vec<u8>, Error>> Reader<'_, F> {
         for (slot, flags) in tree.contents.iter().enumerate() {
             if flags[index] {
                 let mut content = self.templates[slot].clone();
-                content["uri"] = json!(template(
+                content["uri"] = json!(template_uri(
                     content["uri"]
                         .as_str()
                         .ok_or_else(|| invalid("content template has no URI"))?,
@@ -3149,6 +3344,7 @@ mod records_tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("t")).unwrap();
         for (name, bytes) in payloads {
+            std::fs::create_dir_all(dir.path().join(name).parent().unwrap()).unwrap();
             std::fs::write(dir.path().join(name), bytes).unwrap();
         }
         dir
@@ -3823,7 +4019,7 @@ mod records_tests {
         scheme: SubdivisionScheme,
     ) -> Result<(Value, Vec<ChunkOutput>), Error> {
         let plan = Plan::new(tree);
-        let writer = ForestWriter::new(document, directory, scheme)?;
+        let mut writer = ForestWriter::new(document, directory, scheme)?;
         let none = &mut || Ok(());
         if !plan.skeleton(tree) {
             let (top, output) = writer.root(plan.implicit(tree), none)?;
@@ -4082,110 +4278,302 @@ mod records_tests {
             .exists());
     }
 
-    /// Duplicate and out-of-range slots and planned availability that the slots do not
-    /// derive are typed refusals before any subtree is written.
+    fn cell(level: u32, x: u32, y: u32, z: u32) -> Coordinates {
+        Coordinates { level, x, y, z }
+    }
+
+    /// Every cell of a complete subtree of `levels` levels, in subtree bit order.
+    fn complete_cells(levels: u32, scheme: SubdivisionScheme) -> Vec<Coordinates> {
+        let mut cells = Vec::new();
+        for level in 0..levels {
+            let width = 1u32 << level;
+            let depth = if scheme == SubdivisionScheme::Octree {
+                width
+            } else {
+                1
+            };
+            for z in 0..depth {
+                for y in 0..width {
+                    for x in 0..width {
+                        cells.push(cell(level, x, y, z));
+                    }
+                }
+            }
+        }
+        cells.sort_by_key(|c| (c.level, morton(*c, scheme)));
+        cells
+    }
+
+    fn refused<T: std::fmt::Debug>(result: Result<T, Error>, why: &str) -> String {
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains(why), "{why:?} not in {message:?}");
+        message
+    }
+
+    /// Duplicate and out-of-range slots are typed refusals, whole and streamed.
     #[test]
     fn explicit_slot_validation() {
         let leaf = || slot_tile(70, Vec::new());
         let record = || leaf().record().clone();
-        let message = |result: Result<TileTree<Extras>, Error>| match result {
-            Err(Error::Data(message)) => message,
-            other => panic!("expected a typed data error, got {other:?}"),
-        };
-        assert!(message(TileTree::with_slots(
-            record(),
-            vec![(2, leaf()), (2, leaf())]
-        ))
-        .contains("duplicate child slot 2"));
-        assert!(message(TileTree::with_slots(record(), vec![(8, leaf())]))
-            .contains("child slot 8 is outside every subdivision scheme"));
+        refused(
+            TileTree::with_slots(record(), vec![(2, leaf()), (2, leaf())]),
+            "duplicate child slot 2",
+        );
+        refused(
+            TileTree::with_slots(record(), vec![(8, leaf())]),
+            "child slot 8 is outside every subdivision scheme",
+        );
         let raw = slot_raw(&[70]);
         let quad = SubdivisionScheme::Quadtree;
-        let refused = |message: String, why: &str| {
-            assert!(message.contains(why), "{message}");
-        };
         // Slot 5 is an octant, outside a quadtree: whole and streamed refuse it.
         let tree = TileTree::with_slots(record(), vec![(5, leaf())]).unwrap();
         let dir = stage(&raw);
+        let none = &mut || Ok(());
+        let why = "child slot 5 is outside the QUADTREE scheme";
         refused(
-            write_forest_records(&tree, &vector_document(), dir.path(), quad, &mut || Ok(()))
-                .unwrap_err()
-                .to_string(),
-            "child slot 5 is outside the QUADTREE scheme",
+            write_forest_records(&tree, &vector_document(), dir.path(), quad, none),
+            why,
         );
         refused(
-            write_chunked(&tree, &vector_document(), dir.path(), quad)
-                .unwrap_err()
-                .to_string(),
-            "child slot 5 is outside the QUADTREE scheme",
+            write_chunked(&tree, &vector_document(), dir.path(), quad),
+            why,
         );
-        assert!(!dir.path().join("subtrees").exists());
-        // Planned availability: levels, tiles and contents must be what the slots derive.
-        let tree = slot_tile(70, vec![(1, leaf()), (3, leaf())]);
+        assert_eq!(files(dir.path()), raw);
+    }
+
+    /// A planned availability is checked position by position before anything is written,
+    /// including the H16 controls: swapped Morton axes and a packed leaf duplicated into
+    /// its covered octants.
+    #[test]
+    fn planned_availability_is_positional() {
+        let octree = SubdivisionScheme::Octree;
+        let leaf = |tag| slot_tile(tag, Vec::new());
+        // Slot 1 is x = 1 and slot 6 is y = z = 1; the packed leaf covering octants 4 and 5
+        // occupies its first slot (4) only.
+        let tree = slot_tile(70, vec![(1, leaf(72)), (4, leaf(74)), (6, leaf(76))]);
+        let raw = slot_raw(&[70, 72, 74, 76]);
+        let tiles = vec![
+            cell(0, 0, 0, 0),
+            cell(1, 1, 0, 0),
+            cell(1, 0, 0, 1),
+            cell(1, 0, 1, 1),
+        ];
         let derived = Availability {
             levels: 2,
-            tiles: 3,
-            contents: 3,
+            tiles: tiles.clone(),
+            contents: vec![tiles.clone()],
         };
+        let write = |planned: Availability| {
+            let dir = stage(&raw);
+            let document = vector_document();
+            let writer = ForestWriter::new(&document, dir.path(), octree).unwrap();
+            let name = RootName::new("f0-d0").unwrap();
+            let tile = ForestTile::implicit(name, tree.clone()).planned(planned);
+            let result = writer.root(tile, &mut || Ok(()));
+            (result, files(dir.path()))
+        };
+        let swapped = |c: &Coordinates| cell(c.level, c.y, c.x, c.z);
+        let mut axes = derived.clone();
+        axes.tiles = tiles.iter().map(swapped).collect();
+        axes.tiles.sort_by_key(|c| (c.level, morton(*c, octree)));
+        let mut packed = derived.clone();
+        packed.tiles.push(cell(1, 1, 0, 1));
+        packed.tiles.sort_by_key(|c| (c.level, morton(*c, octree)));
+        let mut content = derived.clone();
+        content.contents[0].pop();
+        let mut order = derived.clone();
+        order.tiles.swap(1, 2);
         for (planned, why) in [
             (
                 Availability {
                     levels: 3,
-                    ..derived
+                    ..derived.clone()
                 },
-                "levels: 3",
+                "planned levels: 3",
             ),
+            (axes, "tile row 1: planned"),
+            (packed, "tile row 3"),
+            (
+                content,
+                "content slot 0: planned 3 positions, the slots derive 4",
+            ),
+            (order, "tile row 1"),
             (
                 Availability {
-                    tiles: 4,
-                    ..derived
+                    contents: Vec::new(),
+                    ..derived.clone()
                 },
-                "tiles: 4",
-            ),
-            (
-                Availability {
-                    contents: 2,
-                    ..derived
-                },
-                "contents: 2",
+                "content slots",
             ),
         ] {
-            let dir = stage(&raw);
-            let document = vector_document();
-            let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
-            let name = RootName::new("f0_d0").unwrap();
-            let error = writer
-                .root(
-                    ForestTile::planned(name, tree.clone(), planned),
-                    &mut || Ok(()),
-                )
-                .unwrap_err()
-                .to_string();
-            refused(error.clone(), "availability mismatch");
-            refused(error, why);
-            assert!(!dir.path().join("subtrees").exists());
+            let (result, after) = write(planned);
+            let message = refused(result, why);
+            assert!(message.contains("availability mismatch"), "{message}");
+            assert_eq!(after, raw, "nothing is written");
         }
-        let dir = stage(&raw);
-        let document = vector_document();
-        let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
-        let name = RootName::new("f0_d0").unwrap();
-        let (top, output) = writer
-            .root(
-                ForestTile::planned(name.clone(), tree, derived),
-                &mut || Ok(()),
-            )
-            .unwrap();
-        assert_eq!(output.implicit_roots, [(name, derived)]);
+        let (result, after) = write(derived.clone());
+        let (top, output) = result.unwrap();
+        assert_eq!(
+            output.implicit_roots,
+            [("subtrees/f0-d0-0-0-0-0.subtree".to_owned(), derived)]
+        );
         assert_eq!(
             top["root"]["implicitTiling"]["subtrees"]["uri"],
-            "subtrees/f0_d0-{level}-{x}-{y}.subtree"
+            "subtrees/f0-d0-{level}-{x}-{y}-{z}.subtree"
         );
-        assert!(dir.path().join("subtrees/f0_d0-0-0-0.subtree").exists());
+        assert!(after.contains_key("implicit-content/f0-d0-1-0-0-1-0.glb"));
     }
 
-    /// Partition misuse is refused: a reused root or document name, an external document
-    /// not rooted at an explicit tile, a link as tileset.json's root, too many children and
-    /// bad names.
+    /// Caller templates name every member, including per-root folders; unchanged payloads
+    /// are never copied (in place at their final name, otherwise hard-linked); the height
+    /// cap refuses deep roots.
+    #[test]
+    fn caller_templates_and_payloads_without_copies() {
+        use std::os::unix::fs::MetadataExt;
+        let octree = SubdivisionScheme::Octree;
+        let template = |t: &str| UriTemplate::new(t, octree).unwrap();
+        let names = ImplicitNames::Templates {
+            contents: vec![template("implicit-content/f12-d3/{level}/{x}/{y}/{z}.glb")],
+            subtree: template("subtrees/f12-d3/{level}/{x}/{y}/{z}.subtree"),
+        };
+        // The root payload is staged at its final member; the child's elsewhere.
+        let (root_bytes, child_bytes) = (payload(90), payload(92));
+        let final_root = "implicit-content/f12-d3/0/0/0/0.glb";
+        let record = |bytes: &[u8], uri: &str| {
+            TileRecord::new(
+                NodePlacement::INHERIT,
+                TileBox::centred([4.; 3]).unwrap(),
+                GeometricError::new(1.).unwrap(),
+                Refine::Replace,
+                vec![ContentRef::new(
+                    MemberName::new(uri).unwrap(),
+                    Sha256::digest(bytes).into(),
+                    bytes.len() as u64,
+                    ContentKind::Glb,
+                    false,
+                    SourceIdentity::Aggregate,
+                )
+                .unwrap()],
+                None::<Extras>,
+            )
+            .unwrap()
+        };
+        let child = TileTree::new(record(&child_bytes, &member(&child_bytes)), Vec::new());
+        let tree = TileTree::with_slots(record(&root_bytes, final_root), vec![(7, child)]).unwrap();
+        let mut raw = slot_raw(&[92]);
+        raw.insert(final_root.to_owned(), root_bytes.clone());
+        let dir = stage(&raw);
+        let document = TilesetDocument::root(GeometricError::new(10.).unwrap(), []);
+        let capped = ForestWriter::new(&document, dir.path(), octree)
+            .unwrap()
+            .with_max_implicit_levels(1);
+        refused(
+            capped.root(ForestTile::named(names.clone(), tree.clone()), &mut || {
+                Ok(())
+            }),
+            "an implicit root has 2 levels; this forest admits at most 1",
+        );
+        assert_eq!(files(dir.path()), raw);
+        let writer = ForestWriter::new(&document, dir.path(), octree)
+            .unwrap()
+            .with_max_implicit_levels(2);
+        let (top, output) = writer
+            .root(ForestTile::named(names, tree), &mut || Ok(()))
+            .unwrap();
+        assert_eq!(
+            top["root"]["content"]["uri"],
+            "implicit-content/f12-d3/{level}/{x}/{y}/{z}.glb"
+        );
+        let child_member = "implicit-content/f12-d3/1/1/1/1.glb";
+        assert_eq!(
+            output.members,
+            [final_root, child_member, "subtrees/f12-d3/0/0/0/0.subtree"]
+        );
+        // The root payload stayed in place and is no source; the child is a hard link.
+        assert_eq!(output.implicit_sources, [member(&child_bytes)]);
+        let written = files(dir.path());
+        assert_eq!(written[final_root], root_bytes);
+        assert_eq!(written[child_member], child_bytes);
+        let links = |m: &str| std::fs::metadata(dir.path().join(m)).unwrap().nlink();
+        assert_eq!((links(final_root), links(child_member)), (1, 2));
+    }
+
+    /// A refused document removes everything it created; explicit payloads are listed once
+    /// across documents; a raw source that is a written member is refused.
+    #[test]
+    fn refused_documents_leave_nothing_and_sources_are_checked() {
+        let quad = SubdivisionScheme::Quadtree;
+        let raw = slot_raw(&[80, 82]);
+        let document = vector_document();
+        let none = &mut || Ok(());
+        let leaf = |tag| slot_tile(tag, Vec::new());
+        let name = |n: &str| RootName::new(n).unwrap();
+        let explicit = |children| ForestTile::explicit(leaf(80).record().clone(), children);
+        let dir = stage(&raw);
+        let mut writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
+        // The second root's members coincide with the first's: the whole document goes.
+        let twice = explicit(vec![
+            ForestTile::implicit(name("a/r1"), leaf(82)),
+            ForestTile::implicit(name("a/r1"), leaf(82)),
+        ]);
+        refused(
+            writer.external(MemberName::new("d/one.json").unwrap(), twice, none),
+            "\"implicit-content/a/r1-0-0-0-0.glb\" is already written",
+        );
+        assert_eq!(files(dir.path()), raw);
+        assert!(!dir.path().join("implicit-content").exists());
+        // The explicit payload of the refused document is listed by the next one, once.
+        let (_, one) = writer
+            .external(
+                MemberName::new("d/one.json").unwrap(),
+                explicit(Vec::new()),
+                none,
+            )
+            .unwrap();
+        let (_, two) = writer
+            .external(
+                MemberName::new("d/two.json").unwrap(),
+                explicit(Vec::new()),
+                none,
+            )
+            .unwrap();
+        assert_eq!(one.members, [member(&payload(80)), "d/one.json".to_owned()]);
+        assert_eq!(two.members, ["d/two.json"]);
+        // A root whose raw source is another root's written member.
+        let first = "implicit-content/b-0-0-0-0.glb";
+        let bytes = payload(82);
+        let reread = TileRecord::new(
+            NodePlacement::INHERIT,
+            TileBox::centred([4.; 3]).unwrap(),
+            GeometricError::new(1.).unwrap(),
+            Refine::Replace,
+            vec![ContentRef::new(
+                MemberName::new(first).unwrap(),
+                Sha256::digest(&bytes).into(),
+                bytes.len() as u64,
+                ContentKind::Glb,
+                true,
+                SourceIdentity::Aggregate,
+            )
+            .unwrap()],
+            None::<Extras>,
+        )
+        .unwrap();
+        let before = files(dir.path());
+        let collides = explicit(vec![
+            ForestTile::implicit(name("b"), leaf(82)),
+            ForestTile::implicit(name("c"), TileTree::new(reread, Vec::new())),
+        ]);
+        refused(
+            writer.external(MemberName::new("d/three.json").unwrap(), collides, none),
+            "collides with a written member",
+        );
+        assert_eq!(files(dir.path()), before);
+    }
+
+    /// Partition misuse is refused: a reused document name, an external document not
+    /// rooted at an explicit tile, a link as tileset.json's root, too many children and bad
+    /// names.
     #[test]
     fn streamed_partition_misuse_is_refused() {
         let quad = SubdivisionScheme::Quadtree;
@@ -4194,25 +4582,24 @@ mod records_tests {
         let none = &mut || Ok(());
         let leaf = |tag| slot_tile(tag, Vec::new());
         let name = |n: &str| RootName::new(n).unwrap();
-        for bad in ["", "r-1", "a/b", "x.y", &"a".repeat(65)] {
+        for good in ["r1", "f12-d3", "f12/d3", "a_b.c~d"] {
+            assert_eq!(RootName::new(good).unwrap().as_str(), good);
+        }
+        for bad in [
+            "",
+            "x/",
+            "../x",
+            ".x",
+            "a b",
+            "a{b}",
+            "a//b",
+            &"a".repeat(257),
+        ] {
             assert!(RootName::new(bad).is_err(), "{bad:?}");
         }
         let explicit = |children| ForestTile::explicit(leaf(80).record().clone(), children);
         let dir = stage(&raw);
-        let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
-        // One implicit root name twice.
-        let twice = explicit(vec![
-            ForestTile::implicit(name("r1"), leaf(82)),
-            ForestTile::implicit(name("r1"), leaf(82)),
-        ]);
-        let error = writer
-            .external(MemberName::new("d/one.json").unwrap(), twice, none)
-            .unwrap_err();
-        assert!(
-            error.to_string().contains("r1 is already written"),
-            "{error}"
-        );
-        // A document name twice, and names that are not new external documents.
+        let mut writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
         let (link, output) = writer
             .external(
                 MemberName::new("d/two.json").unwrap(),
@@ -4222,32 +4609,32 @@ mod records_tests {
             .unwrap();
         assert_eq!(output.members.last().unwrap(), "d/two.json");
         for bad in ["d/two.json", "tileset.json", "d/three.glb"] {
-            let error = writer
-                .external(MemberName::new(bad).unwrap(), explicit(Vec::new()), none)
-                .unwrap_err();
-            assert!(error.to_string().contains(bad), "{error}");
+            refused(
+                writer.external(MemberName::new(bad).unwrap(), explicit(Vec::new()), none),
+                bad,
+            );
         }
-        let error = writer
-            .external(
+        refused(
+            writer.external(
                 MemberName::new("d/four.json").unwrap(),
                 ForestTile::implicit(name("r4"), leaf(82)),
                 none,
-            )
-            .unwrap_err();
-        assert!(error.to_string().contains("explicit tile"), "{error}");
+            ),
+            "explicit tile",
+        );
         let children = (0..5).map(|_| explicit(Vec::new())).collect();
-        let error = writer
-            .external(
+        refused(
+            writer.external(
                 MemberName::new("d/five.json").unwrap(),
                 explicit(children),
                 none,
-            )
-            .unwrap_err();
-        assert!(error.to_string().contains("5 children exceed"), "{error}");
-        let error = writer
-            .root(ForestTile::<Extras>::Link(link), none)
-            .unwrap_err();
-        assert!(error.to_string().contains("d/two.json"), "{error}");
+            ),
+            "5 children exceed",
+        );
+        refused(
+            writer.root(ForestTile::<Extras>::Link(link), none),
+            "d/two.json",
+        );
         // Escaped (sibling) names are not forest members.
         let model = ContentRef::source_model(
             MemberName::escaped("a%20b.glb").unwrap(),
@@ -4256,8 +4643,7 @@ mod records_tests {
             ContentKind::Glb,
         )
         .unwrap();
-        let mut record = leaf(80).record().clone();
-        record.set_extras(None).unwrap();
+        let record = leaf(80).record().clone();
         let record = TileRecord::new(
             record.placement(),
             *record.bounds(),
@@ -4269,12 +4655,9 @@ mod records_tests {
         .unwrap();
         let dir = stage(&raw);
         let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
-        let error = writer
-            .root(ForestTile::explicit(record, Vec::new()), none)
-            .unwrap_err();
-        assert!(
-            error.to_string().contains("not an archive member"),
-            "{error}"
+        refused(
+            writer.root(ForestTile::explicit(record, Vec::new()), none),
+            "not an archive member",
         );
     }
 
@@ -4291,10 +4674,12 @@ mod records_tests {
     /// documents of 4 skeleton tiles over 32 complete three-level implicit roots (585 tiles
     /// each), linked from a two-level root document. Resident memory stays bounded by one
     /// document: the process's RSS grows by less than 64 MiB after the first document.
-    /// Run alone for a clean RSS series: `cargo test --release --lib
-    /// streamed_forest_memory_is_bounded_by_one_document -- --ignored --nocapture`.
+    /// Ignored by default because RSS is per process: run it alone. CI runs it alone in the
+    /// debug test build (about 30 s); release takes about 2 s:
+    /// `cargo test --lib streamed_forest_memory_is_bounded_by_one_document -- --ignored
+    /// --exact --nocapture` (set `M1S2_MEMORY_REPORT` to keep the JSON report).
     #[test]
-    #[ignore = "writes a 2^20-tile forest; run alone in release for its RSS series"]
+    #[ignore = "writes a 2^20-tile forest; run alone so its RSS series is its own"]
     fn streamed_forest_memory_is_bounded_by_one_document() {
         let octree = SubdivisionScheme::Octree;
         let dir = tempfile::tempdir().unwrap();
@@ -4340,8 +4725,16 @@ mod records_tests {
             TileTree::with_slots(record(height as f64, contents), children).unwrap()
         }
         let document = TilesetDocument::root(GeometricError::new(100.).unwrap(), []);
-        let writer = ForestWriter::new(&document, dir.path(), octree).unwrap();
+        let mut writer = ForestWriter::new(&document, dir.path(), octree)
+            .unwrap()
+            .with_max_implicit_levels(4);
         let none = &mut || Ok(());
+        let cells = complete_cells(4, octree);
+        let planned = Availability {
+            levels: 4,
+            tiles: cells.clone(),
+            contents: vec![vec![cells[0]]],
+        };
         let started = std::time::Instant::now();
         let mut samples = Vec::new();
         let mut links = Vec::new();
@@ -4352,14 +4745,9 @@ mod records_tests {
                 .map(|p| {
                     let implicit = (0..8u32)
                         .map(|r| {
-                            let name = RootName::new(format!("d{d}_p{p}_r{r}")).unwrap();
+                            let name = RootName::new(format!("d{d}/p{p}-r{r}")).unwrap();
                             let tree = complete(3, &record, vec![content.clone()]);
-                            let planned = Availability {
-                                levels: 4,
-                                tiles: 585,
-                                contents: 1,
-                            };
-                            ForestTile::planned(name, tree, planned)
+                            ForestTile::implicit(name, tree).planned(planned.clone())
                         })
                         .collect();
                     ForestTile::explicit(record(4., Vec::new()), implicit)
