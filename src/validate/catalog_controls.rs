@@ -65,7 +65,8 @@ fn payload_rows_are_in_uri_order_across_shared_long_prefixes() {
     let mut uris = vec![
         format!("{long}/a.glb"),
         format!("{long}/b.glb"),
-        format!("{long}/A.glb"),
+        // Distinct ignoring case too: Windows and macOS file systems fold case.
+        format!("{long}/C.glb"),
         format!("{longer}/z.glb"),
         format!("{longer}/y.glb"),
         format!("{longer}/yy.glb"),

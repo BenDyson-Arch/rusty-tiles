@@ -166,8 +166,9 @@ else is available, and the report's `scratch.memoryBacked` then says so. The ind
 unreferenced members are reported as the first 16 names in byte order and a count. A
 failure of the validator's own scratch storage is `io`, `resource_limit` or
 `invalid_state` with the prefix "validation scratch:", never a verdict on the archive.
-The report's `payloads` rows are read on demand: the CLI streams them and Python's
-`report["payloads"]` is a lazy read-only sequence. See the
+The report's `payloads` rows are read on demand: the CLI streams them, and Python's
+`validate(input, lazy_payloads=True)` returns them as a lazy read-only sequence (by
+default they are a list). See the
 [catalog-at-scale amendment](architecture/c1-archive-catalog-scale-amendment.md). The report's
 `archiveStoredRecordLayout` check requires disjoint local-header/data/descriptor
 extents; coherent nested member records are Unsupported. Ordinary nested ZIP

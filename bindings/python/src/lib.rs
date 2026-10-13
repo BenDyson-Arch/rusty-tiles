@@ -1042,9 +1042,13 @@ impl ValidationPayloadsIter {
 }
 
 /// Inspect the bounded C1 archive/payload profile; see checks and notInspected.
-/// `report["payloads"]` is a lazy read-only sequence (`ValidationPayloads`).
+/// `report["payloads"]` is a list of dicts, so the report is plain JSON data. With
+/// `lazy_payloads=True` it is a read-only `ValidationPayloads` sequence that reads rows on
+/// demand instead, for reports too large to hold (it is not JSON-serializable as is;
+/// `list(...)` materializes it).
 #[pyfunction]
-fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (input, *, lazy_payloads = false))]
+fn validate(py: Python<'_>, input: PathBuf, lazy_payloads: bool) -> PyResult<Py<PyAny>> {
     let result = py
         .detach(|| {
             tiles_core::validate::inspect(tiles_core::validate::ValidationRequest::new(input))
@@ -1054,14 +1058,20 @@ fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
     let mut summary = result
         .summary_json()
         .map_err(|e| DataError::new_err(e.to_string()))?;
+    // Insert the key here so the dict keeps the CLI's sorted key order.
     summary["payloads"] = Value::Null;
     let report = json_to_python(py, &summary)?;
-    let payloads = Py::new(
-        py,
-        ValidationPayloads {
-            rows: result.payloads,
-        },
-    )?;
+    let lazy = ValidationPayloads {
+        rows: result.payloads,
+    };
+    let payloads = if lazy_payloads {
+        Py::new(py, lazy)?.into_any()
+    } else {
+        let rows = (0..lazy.rows.len())
+            .map(|index| lazy.row(py, index))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, rows)?.into_any().unbind()
+    };
     report.bind(py).set_item("payloads", payloads)?;
     Ok(report)
 }

@@ -65,7 +65,8 @@ report is 7.6 MB (87,381 payload rows). No archive in the corpus has more than 1
 unreferenced members, so the capped message does not occur there; the control above
 covers it.
 
-**Python.** `report["payloads"]` is a `ValidationPayloads`; its length, indexing
+**Python.** With `lazy_payloads=True`, `report["payloads"]` is a `ValidationPayloads`
+(by default it is a list, after CI showed callers that `json.dumps` the report); its length, indexing
 (negative and out of range), slices and iteration equal the CLI rows on a
 21,845-row archive, with 7 KB of traced Python memory while reading them. The
 validation tests of `bindings/python/tests/test_api.py` pass.
@@ -175,3 +176,8 @@ At `85f5c16`, release parity (`c2_oracle_parity`, `i1_oracle_parity`, `validate:
 `archive3tz::`, `spill::`) passed 182/182 in the resident profile and 182/182 in the
 forced-spill profile (`parity/audit/`). The Python containment and implicit tests pass
 against a release extension built from `85f5c16`.
+
+Audit mutants (`mutants-audit/report.json`, sha256 `19ebcfe5…`, lock A, `-j 2`):
+`clean` failed nothing; `rows-tie-previous` (the audit's survivor), `rows-run-start`,
+`scratch-ram-silent`, `scratch-report-dropped`, `page-cache-stale` and
+`json-row-separator` were each caught.
