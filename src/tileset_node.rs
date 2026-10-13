@@ -225,8 +225,7 @@ impl TileBox {
         })
     }
 
-    /// A box with a measured centre (the large-mesh tiler's boxes; no caller yet).
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// A box with a measured centre (the wrapped model's box; the large-mesh tiler's boxes).
     pub(crate) fn offset(center: Vec3, half: Vec3) -> Result<Self, Error> {
         Ok(Self {
             center: Some(finite3(center, "box centre")?),
@@ -350,6 +349,23 @@ impl NodePlacement {
         Ok(Self(Placement::Rigid { axes, origin }))
     }
 
+    /// The written column-major `transform` values, `None` without a transform.
+    pub(crate) fn matrix(&self) -> Option<[f64; 16]> {
+        match self.0 {
+            Placement::Inherit => None,
+            Placement::Translation(d) => Some([
+                1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., d[0], d[1], d[2], 1.,
+            ]),
+            Placement::Rigid {
+                axes: [e, n, u],
+                origin: o,
+            } => Some([
+                e[0], e[1], e[2], 0., n[0], n[1], n[2], 0., u[0], u[1], u[2], 0., o[0], o[1], o[2],
+                1.,
+            ]),
+        }
+    }
+
     /// The offset from the parent's frame for a child: zero without a transform, `None` for
     /// a rigid placement.
     pub(crate) fn child_translation(&self) -> Option<Vec3> {
@@ -402,19 +418,109 @@ fn check_relative(name: &str, what: &str) -> Result<(), Error> {
     Ok(())
 }
 
-/// A validated relative archive member name.
+/// A validated relative archive member name, or ([`MemberName::escaped`]) a relative URI
+/// reference whose percent escapes name a file beside the document.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) struct MemberName(String);
+pub(crate) struct MemberName {
+    uri: String,
+    /// The file the URI names, when it differs from the URI text (percent escapes).
+    decoded: Option<String>,
+}
 
 impl MemberName {
     pub(crate) fn new(name: impl Into<String>) -> Result<Self, Error> {
         let name = name.into();
         check_relative(&name, "member name")?;
-        Ok(Self(name))
+        Ok(Self {
+            uri: name,
+            decoded: None,
+        })
     }
 
+    /// A relative URI reference in canonical percent-encoded form, as
+    /// `binding::filename_uri` writes a source filename for a sibling manifest:
+    /// `/`-separated segments of URI unreserved ASCII and `%HH` escapes (upper-case hex) of
+    /// every other byte. Each decoded segment is UTF-8, non-empty, not `.` or `..`, and has
+    /// no separator or control character; unlike [`MemberName::new`], it may start with
+    /// `.`, because the source file keeps its admitted name.
+    pub(crate) fn escaped(uri: impl Into<String>) -> Result<Self, Error> {
+        let uri = uri.into();
+        let fail = |why: &str| invalid(format!("escaped URI {uri:?} {why}"));
+        let unreserved = |b: u8| b.is_ascii_alphanumeric() || b"-._~".contains(&b);
+        let hex = |b: u8| match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        };
+        let mut decoded = Vec::with_capacity(uri.len());
+        for segment in uri.split('/') {
+            let start = decoded.len();
+            let bytes = segment.as_bytes();
+            let mut at = 0;
+            while at < bytes.len() {
+                if bytes[at] == b'%' {
+                    let Some(byte) = bytes
+                        .get(at + 1..at + 3)
+                        .and_then(|pair| Some(hex(pair[0])? * 16 + hex(pair[1])?))
+                    else {
+                        return Err(fail(
+                            "has a percent escape that is not two upper-case hex digits",
+                        ));
+                    };
+                    if unreserved(byte) {
+                        return Err(fail("escapes an unreserved character"));
+                    }
+                    decoded.push(byte);
+                    at += 3;
+                } else if unreserved(bytes[at]) {
+                    decoded.push(bytes[at]);
+                    at += 1;
+                } else {
+                    return Err(fail(&format!(
+                        "has the character {:?}; it must be escaped",
+                        char::from(bytes[at])
+                    )));
+                }
+            }
+            match &decoded[start..] {
+                b"" | b"." | b".." => {
+                    return Err(fail("must be relative, with no empty, '.' or '..' segment"))
+                }
+                part if part
+                    .iter()
+                    .any(|b| *b == b'/' || *b == b'\\' || b.is_ascii_control()) =>
+                {
+                    return Err(fail("encodes a separator or control character"))
+                }
+                _ => {}
+            }
+            decoded.push(b'/');
+        }
+        decoded.pop();
+        let decoded = String::from_utf8(decoded).map_err(|_| fail("does not decode to UTF-8"))?;
+        if decoded.chars().any(char::is_control) {
+            return Err(fail("encodes a control character"));
+        }
+        Ok(Self {
+            decoded: (decoded != uri).then_some(decoded),
+            uri,
+        })
+    }
+
+    /// The URI text, as written.
     pub(crate) fn as_str(&self) -> &str {
-        &self.0
+        &self.uri
+    }
+
+    /// The relative file path the name references: the URI with its escapes decoded.
+    pub(crate) fn path(&self) -> &str {
+        self.decoded.as_deref().unwrap_or(&self.uri)
+    }
+
+    /// Whether the name is a plain archive member name ([`MemberName::new`]): no escapes and
+    /// no leading `.`.
+    pub(crate) fn is_member(&self) -> bool {
+        self.decoded.is_none() && check_relative(&self.uri, "member name").is_ok()
     }
 }
 
@@ -475,12 +581,32 @@ impl UriTemplate {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ContentKind {
     Glb,
+    /// A glTF JSON document (an unchanged wrapped `.gltf` source).
+    Gltf,
 }
 
 impl ContentKind {
     pub(crate) fn suffix(self) -> &'static str {
         match self {
             Self::Glb => "glb",
+            Self::Gltf => "gltf",
+        }
+    }
+
+    /// The kind of a payload by its leading bytes: GLB magic, otherwise glTF JSON.
+    pub(crate) fn of(bytes: &[u8]) -> Self {
+        if bytes.starts_with(b"glTF") {
+            Self::Glb
+        } else {
+            Self::Gltf
+        }
+    }
+
+    /// The least byte length of a well-formed payload of this kind, and what it is.
+    fn minimum(self) -> (u64, &'static str) {
+        match self {
+            Self::Glb => (12, "a GLB header"),
+            Self::Gltf => (2, "a JSON object"),
         }
     }
 }
@@ -491,7 +617,8 @@ impl ContentKind {
 pub(crate) enum SourceIdentity {
     /// `count` source features, with a digest of their identities.
     Features { count: u32, digest: [u8; 32] },
-    /// Aggregates that carry no source identity.
+    /// Content that carries no per-feature source identity: aggregates, or an unchanged
+    /// wrapped source model, whose content digest is its identity.
     Aggregate,
     /// `count` source features in a payload reused from a previous build. Its content
     /// address pins the identities, which the previous build state does not record.
@@ -542,9 +669,10 @@ impl ContentRef {
                 uri.as_str()
             )));
         }
-        if byte_length < 12 {
+        let (minimum, what) = kind.minimum();
+        if byte_length < minimum {
             return Err(invalid(format!(
-                "content {:?} has {byte_length} bytes, less than a GLB header",
+                "content {:?} has {byte_length} bytes, less than {what}",
                 uri.as_str()
             )));
         }
@@ -564,6 +692,32 @@ impl ContentRef {
             kind,
             vector,
             sources,
+        })
+    }
+
+    /// An unchanged source model a wrapper references, of `kind` by its bytes
+    /// ([`ContentKind::of`]). The name keeps the admitted file name, whatever its suffix
+    /// ([`MemberName::escaped`] for a sibling file); it carries no per-feature identity.
+    pub(crate) fn source_model(
+        uri: MemberName,
+        sha256: [u8; 32],
+        byte_length: u64,
+        kind: ContentKind,
+    ) -> Result<Self, Error> {
+        let (minimum, what) = kind.minimum();
+        if byte_length < minimum {
+            return Err(invalid(format!(
+                "source model {:?} has {byte_length} bytes, less than {what}",
+                uri.as_str()
+            )));
+        }
+        Ok(Self {
+            uri,
+            sha256,
+            byte_length,
+            kind,
+            vector: false,
+            sources: SourceIdentity::Aggregate,
         })
     }
 
@@ -596,7 +750,7 @@ impl ContentRef {
     /// Read this content's staged payload under `directory`. A missing member is a
     /// [`StagedContentError::Missing`].
     pub(crate) fn read_staged(&self, directory: &std::path::Path) -> Result<Vec<u8>, Error> {
-        match std::fs::read(directory.join(self.uri.as_str())) {
+        match std::fs::read(directory.join(self.uri.path())) {
             Ok(bytes) => Ok(bytes),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Err(StagedContentError::Missing {
@@ -782,7 +936,8 @@ pub(crate) struct TileRecord<X> {
 }
 
 /// The `extras` object of a typed value: refuses non-objects, non-finite numbers (which
-/// serde_json would write as `null`) and `implicitChildIndex` (slots are structural). An
+/// serde_json would write as `null`) and `implicitChildIndex` (slots are structural:
+/// [`TileTree::with_slots`]). An
 /// empty object is `None`: it is never written.
 fn extras_object<X: Serialize>(extras: Option<&X>) -> Result<Option<Map<String, Value>>, Error> {
     let Some(extras) = extras else {
@@ -793,7 +948,7 @@ fn extras_object<X: Serialize>(extras: Option<&X>) -> Result<Option<Map<String, 
         .map_err(|error| invalid(format!("extras: {error}")))?;
     match serde_json::to_value(extras)? {
         Value::Object(object) if object.contains_key("implicitChildIndex") => Err(invalid(
-            "extras must not carry implicitChildIndex; child slots are structural",
+            "extras must not carry implicitChildIndex; child slots are structural (TileTree::with_slots)",
         )),
         Value::Object(object) if object.is_empty() => Ok(None),
         Value::Object(object) => Ok(Some(object)),
@@ -963,17 +1118,57 @@ impl<X: Serialize> TileRecord<X> {
     }
 }
 
+/// The largest implicit child slot: an octree's Morton index `x + 2y + 4z` (a quadtree's
+/// slots are 0 to 3).
+pub(crate) const MAX_CHILD_SLOT: u8 = 7;
+
 /// A producer's explicit hierarchy H: each tile's children in build order, which is also
-/// their implicit child slot order.
+/// the order of an explicit `children` array. A child's implicit slot (its Morton index in
+/// the parent's subdivision, from which subtree availability is derived) is its index among
+/// its siblings ([`TileTree::new`]) or explicit ([`TileTree::with_slots`]).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TileTree<X> {
     record: TileRecord<X>,
     children: Vec<TileTree<X>>,
+    /// Explicit child slots, parallel to `children`; `None` for sibling-index slots.
+    slots: Option<Vec<u8>>,
 }
 
 impl<X: Serialize> TileTree<X> {
     pub(crate) fn new(record: TileRecord<X>, children: Vec<TileTree<X>>) -> Self {
-        Self { record, children }
+        Self {
+            record,
+            children,
+            slots: None,
+        }
+    }
+
+    /// A tile whose children occupy explicit implicit slots (sparse or packed octants), in
+    /// the given order. A slot above [`MAX_CHILD_SLOT`] or a slot shared by two children is
+    /// refused; the forest also refuses a slot outside its scheme (4 to 7 in a quadtree).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_slots(
+        record: TileRecord<X>,
+        children: Vec<(u8, TileTree<X>)>,
+    ) -> Result<Self, Error> {
+        let mut seen = 0u8;
+        for (slot, _) in &children {
+            if *slot > MAX_CHILD_SLOT {
+                return Err(invalid(format!(
+                    "child slot {slot} is outside every subdivision scheme (0 to {MAX_CHILD_SLOT})"
+                )));
+            }
+            if seen & (1 << slot) != 0 {
+                return Err(invalid(format!("duplicate child slot {slot}")));
+            }
+            seen |= 1 << slot;
+        }
+        let (slots, children) = children.into_iter().unzip();
+        Ok(Self {
+            record,
+            children,
+            slots: Some(slots),
+        })
     }
 
     pub(crate) fn record(&self) -> &TileRecord<X> {
@@ -993,16 +1188,23 @@ impl<X: Serialize> TileTree<X> {
         &mut self.children
     }
 
+    /// The implicit slot of child `index`.
+    pub(crate) fn slot(&self, index: usize) -> usize {
+        self.slots
+            .as_ref()
+            .map_or(index, |slots| usize::from(slots[index]))
+    }
+
     /// The tiles in preorder (children in order), without recursion: each record with its
-    /// parent's preorder index and its index among the parent's children.
+    /// parent's preorder index and its implicit slot.
     pub(crate) fn preorder(&self) -> Vec<(&TileRecord<X>, Option<usize>, usize)> {
         let mut out = Vec::new();
         let mut stack = vec![(self, None, 0)];
-        while let Some((tree, parent, index)) = stack.pop() {
+        while let Some((tree, parent, slot)) = stack.pop() {
             let id = out.len();
-            out.push((&tree.record, parent, index));
+            out.push((&tree.record, parent, slot));
             for (index, child) in tree.children.iter().enumerate().rev() {
-                stack.push((child, Some(id), index));
+                stack.push((child, Some(id), tree.slot(index)));
             }
         }
         out
@@ -2026,5 +2228,125 @@ mod record_tests {
         assert!(is_data(good.set_extras(Some(nested(f64::NAN, 0)))).contains("finite"));
         // A refused update keeps the previous extras.
         assert_eq!(good.extras().unwrap().inner.as_ref().unwrap().values, [3.]);
+    }
+
+    #[test]
+    fn escaped_sibling_names_and_source_models() {
+        // As binding::filename_uri writes a source filename: canonical escapes decode.
+        for (uri, path) in [
+            ("source.glb", "source.glb"),
+            (".hidden.GLB", ".hidden.GLB"),
+            ("my%20model%20%CE%B2.glb", "my model β.glb"),
+            ("noext", "noext"),
+            ("d/a%25b.gltf", "d/a%b.gltf"),
+        ] {
+            let name = MemberName::escaped(uri).unwrap();
+            assert_eq!((name.as_str(), name.path()), (uri, path));
+            assert_eq!(name.is_member(), MemberName::new(uri).is_ok(), "{uri}");
+        }
+        for (bad, why) in [
+            ("", "segment"),
+            ("a//b", "segment"),
+            ("%2E%2E", "unreserved"),
+            ("..", "segment"),
+            ("a%2Fb", "separator"),
+            ("a%5Cb", "separator"),
+            ("a%0Ab", "separator or control"),
+            ("a%C2%85b", "control"),
+            ("a%2", "two upper-case"),
+            ("a%2f", "two upper-case"),
+            ("a%41", "unreserved"),
+            ("a b", "must be escaped"),
+            ("a%FF", "UTF-8"),
+        ] {
+            let message = is_data(MemberName::escaped(bad));
+            assert!(message.contains(why), "{bad:?}: {message}");
+        }
+        assert_eq!(ContentKind::of(b"glTF\x02\0\0\0"), ContentKind::Glb);
+        assert_eq!(ContentKind::of(b"{\"asset\":{}}"), ContentKind::Gltf);
+        // A source model keeps its admitted name whatever its suffix; it is never vector.
+        let model = ContentRef::source_model(
+            MemberName::escaped("my%20model").unwrap(),
+            [3; 32],
+            2,
+            ContentKind::Gltf,
+        )
+        .unwrap();
+        assert_eq!(model.to_value().to_string(), r#"{"uri":"my%20model"}"#);
+        assert_eq!(
+            (model.kind(), model.vector(), model.sources()),
+            (ContentKind::Gltf, false, SourceIdentity::Aggregate)
+        );
+        let short = |kind, length| {
+            ContentRef::source_model(MemberName::new("m.x").unwrap(), [0; 32], length, kind)
+        };
+        assert!(is_data(short(ContentKind::Gltf, 1)).contains("a JSON object"));
+        assert!(is_data(short(ContentKind::Glb, 11)).contains("a GLB header"));
+        // The typed glTF kind still requires its suffix through ContentRef::new.
+        let gltf = |uri: &str| {
+            ContentRef::new(
+                MemberName::new(uri).unwrap(),
+                [0; 32],
+                64,
+                ContentKind::Gltf,
+                false,
+                SourceIdentity::Aggregate,
+            )
+        };
+        assert!(gltf("m/a.gltf").is_ok());
+        assert!(is_data(gltf("m/a.glb")).contains(".gltf"));
+        // A staged escaped name is read at its decoded path.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a b.glb"), b"glTF-bytes").unwrap();
+        let staged = ContentRef::source_model(
+            MemberName::escaped("a%20b.glb").unwrap(),
+            [0; 32],
+            12,
+            ContentKind::Glb,
+        )
+        .unwrap();
+        assert_eq!(staged.read_staged(dir.path()).unwrap(), b"glTF-bytes");
+    }
+
+    #[test]
+    fn placement_matrices_are_the_written_transforms() {
+        assert_eq!(NodePlacement::INHERIT.matrix(), None);
+        let translation = NodePlacement::translation([1., -2., 3.5]).unwrap();
+        let rigid = NodePlacement::rigid(AXES, [4_500_000., 600_000., 4_400_000.]).unwrap();
+        for placement in [translation, rigid] {
+            let written = placement.to_value().unwrap();
+            let matrix = placement.matrix().unwrap();
+            for (lane, value) in matrix.iter().enumerate() {
+                assert_eq!(written[lane].as_f64().unwrap().to_bits(), value.to_bits());
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_child_slots_order_and_validate() {
+        let leaf = || TileTree::new(record([1.; 3], 0., Vec::new()), Vec::new());
+        let tree = TileTree::with_slots(
+            record([2.; 3], 1., Vec::new()),
+            vec![(6, leaf()), (1, leaf())],
+        )
+        .unwrap();
+        let order: Vec<_> = tree
+            .preorder()
+            .into_iter()
+            .map(|(_, p, s)| (p, s))
+            .collect();
+        assert_eq!(order, [(None, 0), (Some(0), 6), (Some(0), 1)]);
+        assert_eq!((tree.slot(0), tree.slot(1)), (6, 1));
+        let message = |result: Result<TileTree<Extras>, Error>| is_data(result);
+        assert!(message(TileTree::with_slots(
+            record([2.; 3], 1., Vec::new()),
+            vec![(3, leaf()), (3, leaf())]
+        ))
+        .contains("duplicate child slot 3"));
+        assert!(message(TileTree::with_slots(
+            record([2.; 3], 1., Vec::new()),
+            vec![(MAX_CHILD_SLOT + 1, leaf())]
+        ))
+        .contains("outside every subdivision scheme"));
     }
 }

@@ -98,6 +98,8 @@ jobs:
         run: |
           cargo test --locked --features native-jpeg -- --nocapture --test-threads=1 2>&1 | tee "${{ runner.temp }}/c1-library.log"
           python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
+      - name: Check streamed forest memory alone
+        run: cargo test --locked --lib --features native-jpeg -- --ignored --exact --nocapture implicit::tileset::records_tests::streamed_forest_memory_is_bounded_by_one_document
       - name: Independently check streamed mesh capture and tree records
         shell: bash
         run: |

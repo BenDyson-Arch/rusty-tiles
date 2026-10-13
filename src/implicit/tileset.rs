@@ -28,14 +28,20 @@ use std::{
     path::{Component, Path},
 };
 
+mod stream;
+#[cfg_attr(not(test), allow(unused_imports))]
+pub(crate) use stream::{
+    Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, RootName,
+};
+
 /// S: a tile whose subtree height is at least S is an explicit skeleton tile (design §4.1).
 const SKELETON_HEIGHT: u32 = 4;
 /// P9: the writer refuses hierarchies with more levels than this.
-const MAX_LEVELS: u32 = 32;
+pub(crate) const MAX_LEVELS: u32 = 32;
 /// P8: value nodes per JSON document (validator semantics: the root, containers and scalars).
-const DOC_NODES: usize = 16_384;
+pub(crate) const DOC_NODES: usize = 16_384;
 /// P8: compact serialized bytes per JSON document.
-const DOC_BYTES: usize = 2 * 1024 * 1024;
+pub(crate) const DOC_BYTES: usize = 2 * 1024 * 1024;
 /// Skeleton levels below a document root (review D-3; lowered from v3's 12).
 ///
 /// A tile object at skeleton level k of a document sits at JSON depth 1 + 2k (document
@@ -48,7 +54,7 @@ const DOC_BYTES: usize = 2 * 1024 * 1024;
 /// link earlier instead of exceeding it.
 const DOC_LEVELS: u32 = 10;
 /// P8: JSON depth per document (the document object has depth 0).
-const DOC_DEPTH: usize = 32;
+pub(crate) const DOC_DEPTH: usize = 32;
 /// Reserved in `tileset.json` for producer edits after the writer (for example vector's
 /// `asset.extras.vectorBuildStateSha256`).
 const DOC_SLACK_NODES: usize = 64;
@@ -358,14 +364,22 @@ fn collect_records<'a, X: Serialize>(
         let contents = record
             .contents()
             .iter()
-            .map(|content| Content {
-                uri: content.uri().as_str().to_owned(),
-                suffix: content.kind().suffix().to_owned(),
-                header: content.header(),
-                vector: content.vector(),
-                declared: Some(content.clone()),
+            .map(|content| {
+                if !content.uri().is_member() {
+                    return Err(data(format!(
+                        "tile {id}: content {:?} is not an archive member name",
+                        content.uri().as_str()
+                    )));
+                }
+                Ok(Content {
+                    uri: content.uri().as_str().to_owned(),
+                    suffix: content.kind().suffix().to_owned(),
+                    header: content.header(),
+                    vector: content.vector(),
+                    declared: Some(content.clone()),
+                })
             })
-            .collect();
+            .collect::<Result<_, Error>>()?;
         let mut node = Node {
             tile: Map::new(),
             extras: record
@@ -1132,8 +1146,10 @@ fn forest(
                 implicit_roots += 1;
                 std::fs::create_dir_all(directory.join("implicit-content"))?;
                 std::fs::create_dir_all(directory.join("subtrees"))?;
+                let name = format!("r{id}");
                 let root = ImplicitRoot {
                     id,
+                    name: &name,
                     scheme,
                     directory,
                     template,
@@ -1274,6 +1290,9 @@ type WrittenRoot = (Map<String, Value>, String, [f64; 3]);
 
 struct ImplicitRoot<'a> {
     id: usize,
+    /// The member prefix: `r{id}` in a whole-tree forest, the caller's [`RootName`] when
+    /// streamed.
+    name: &'a str,
     scheme: SubdivisionScheme,
     directory: &'a Path,
     template: &'static str,
@@ -1299,7 +1318,7 @@ impl ImplicitRoot<'_> {
         sources: &mut BTreeSet<String>,
         checkpoint: &mut impl FnMut() -> Result<(), Error>,
     ) -> Result<WrittenRoot, Error> {
-        let (id, scheme, template) = (self.id, self.scheme, self.template);
+        let (id, name, scheme, template) = (self.id, self.name, self.scheme, self.template);
         let root = &nodes[id];
         let range = id..root.end;
         // R-4: the slot list drives the templates and the content layers, in the same order.
@@ -1379,18 +1398,18 @@ impl ImplicitRoot<'_> {
                 for (lane, error) in own.iter_mut().zip(rebase_error(&record)?) {
                     *lane = lane.max(error);
                 }
-                let name = format!(
-                    "implicit-content/r{id}-{}-{slot}.{}",
+                let member = format!(
+                    "implicit-content/{name}-{}-{slot}.{}",
                     key(c, scheme),
                     content.suffix
                 );
-                std::fs::write(self.directory.join(&name), &bytes)?;
+                std::fs::write(self.directory.join(&member), &bytes)?;
                 total += bytes.len() as u64;
-                members.push(name.clone());
+                members.push(member.clone());
                 sources.insert(content.uri.clone());
                 flags[slot] = true;
                 written.push(WrittenContent {
-                    member: name,
+                    member,
                     bytes: bytes.len() as u64,
                     rebase: Some(record),
                 });
@@ -1422,7 +1441,7 @@ impl ImplicitRoot<'_> {
             }
             drift.insert(t, bound);
         }
-        for (t, (c, flags)) in range.zip(layers) {
+        for (t, (c, flags)) in range.clone().zip(layers) {
             checkpoint()?;
             let node = &nodes[t];
             // P3: the level-0 row is the root's box; below it, B(t) + δ(t) in f64. Each
@@ -1454,9 +1473,19 @@ impl ImplicitRoot<'_> {
             y: 0,
             z: 0,
         };
-        let name = format!("subtrees/r{id}-{}.subtree", key(origin, scheme));
-        std::fs::write(self.directory.join(&name), subtree.to_bytes()?)?;
-        members.push(name.clone());
+        // Availability is derived from the slots: every tile is one available position.
+        let (available, contents) = subtree.available();
+        let declared: usize = nodes[range.clone()].iter().map(|n| n.contents.len()).sum();
+        if available != range.len() || contents != declared {
+            return Err(data(format!(
+                "implicit root {name}: {} tiles and {declared} contents map to {available} \
+                 available tiles and {contents} available contents",
+                range.len()
+            )));
+        }
+        let subtree_member = format!("subtrees/{name}-{}.subtree", key(origin, scheme));
+        std::fs::write(self.directory.join(&subtree_member), subtree.to_bytes()?)?;
+        members.push(subtree_member.clone());
         // V_R is the level-0 row, widened alike.
         let reach = drift[&id];
         let mut bounding_box = root.bounding_box;
@@ -1465,7 +1494,7 @@ impl ImplicitRoot<'_> {
             .into_iter()
             .enumerate()
             .map(|(slot, ((_, suffix), (header, vector)))| Template {
-                uri: format!("implicit-content/r{id}-{template}-{slot}.{suffix}"),
+                uri: format!("implicit-content/{name}-{template}-{slot}.{suffix}"),
                 header,
                 vector,
             })
@@ -1473,10 +1502,10 @@ impl ImplicitRoot<'_> {
         let tiling = Tiling {
             scheme,
             levels: root.height + 1,
-            subtrees: format!("subtrees/r{id}-{template}.subtree"),
+            subtrees: format!("subtrees/{name}-{template}.subtree"),
         };
         let object = emit.implicit_root(id, root, &bounding_box, &templates, &tiling)?;
-        Ok((object, name, reach))
+        Ok((object, subtree_member, reach))
     }
 }
 
@@ -3699,5 +3728,693 @@ mod records_tests {
         });
         assert!(matches!(cancelled, Err(Error::Message(_))));
         assert!(files(dir.path()).is_empty());
+    }
+
+    // ---- The streamed forest ----
+
+    type Ptr<X> = *const TileTree<X>;
+
+    /// The whole-tree writer's partition of `tree`: roles by height, skeleton tiles packed
+    /// breadth-first within DOC_LEVELS (no fixture reaches the node, byte or depth budget),
+    /// implicit roots `r{preorder id}` and documents `tileset-d{m}.json` in creation order.
+    struct Plan<'t, X> {
+        ids: std::collections::HashMap<Ptr<X>, usize>,
+        heights: std::collections::HashMap<Ptr<X>, u32>,
+        linked: std::collections::HashMap<Ptr<X>, usize>,
+        documents: Vec<&'t TileTree<X>>,
+    }
+
+    impl<'t, X: Serialize + Clone> Plan<'t, X> {
+        fn new(tree: &'t TileTree<X>) -> Self {
+            fn index<X: Serialize>(t: &TileTree<X>, plan: &mut Plan<'_, X>) -> u32 {
+                plan.ids.insert(t as Ptr<X>, plan.ids.len());
+                let height = t
+                    .children()
+                    .iter()
+                    .map(|c| index(c, plan) + 1)
+                    .max()
+                    .unwrap_or(0);
+                plan.heights.insert(t as Ptr<X>, height);
+                height
+            }
+            let mut plan = Plan {
+                ids: Default::default(),
+                heights: Default::default(),
+                linked: Default::default(),
+                documents: vec![tree],
+            };
+            index(tree, &mut plan);
+            let mut next = 0;
+            while next < plan.documents.len() && plan.skeleton(tree) {
+                let mut frontier = VecDeque::from([(plan.documents[next], 0u32)]);
+                while let Some((tile, level)) = frontier.pop_front() {
+                    for child in tile.children() {
+                        if !plan.skeleton(child) {
+                        } else if level < DOC_LEVELS {
+                            frontier.push_back((child, level + 1));
+                        } else {
+                            plan.linked.insert(child as Ptr<X>, plan.documents.len());
+                            plan.documents.push(child);
+                        }
+                    }
+                }
+                next += 1;
+            }
+            plan
+        }
+
+        fn skeleton(&self, t: &TileTree<X>) -> bool {
+            self.heights[&(t as Ptr<X>)] >= SKELETON_HEIGHT
+        }
+
+        fn implicit(&self, t: &TileTree<X>) -> ForestTile<X> {
+            let name = RootName::new(format!("r{}", self.ids[&(t as Ptr<X>)])).unwrap();
+            ForestTile::implicit(name, t.clone())
+        }
+
+        /// The document rooted at skeleton tile `t`, its links taken from `links`.
+        fn document(
+            &self,
+            t: &TileTree<X>,
+            links: &mut BTreeMap<usize, DocumentLink>,
+        ) -> ForestTile<X> {
+            let children = t
+                .children()
+                .iter()
+                .map(|c| match self.linked.get(&(c as Ptr<X>)) {
+                    Some(d) => ForestTile::Link(links.remove(d).expect("linked document")),
+                    None if self.skeleton(c) => self.document(c, links),
+                    None if c.children().is_empty() => {
+                        ForestTile::explicit(c.record().clone(), Vec::new())
+                    }
+                    None => self.implicit(c),
+                })
+                .collect();
+            ForestTile::explicit(t.record().clone(), children)
+        }
+    }
+
+    /// Stream `tree` through [`ForestWriter`] in the whole-tree writer's partition, deepest
+    /// documents first.
+    fn write_chunked<X: Serialize + Clone>(
+        tree: &TileTree<X>,
+        document: &TilesetDocument,
+        directory: &Path,
+        scheme: SubdivisionScheme,
+    ) -> Result<(Value, Vec<ChunkOutput>), Error> {
+        let plan = Plan::new(tree);
+        let writer = ForestWriter::new(document, directory, scheme)?;
+        let none = &mut || Ok(());
+        if !plan.skeleton(tree) {
+            let (top, output) = writer.root(plan.implicit(tree), none)?;
+            return Ok((top, vec![output]));
+        }
+        let mut links = BTreeMap::new();
+        let mut outputs = Vec::new();
+        for d in (1..plan.documents.len()).rev() {
+            let name = MemberName::new(format!("tileset-d{d}.json"))?;
+            let chunk = plan.document(plan.documents[d], &mut links);
+            let (link, output) = writer.external(name, chunk, none)?;
+            assert_eq!(link.name().as_str(), format!("tileset-d{d}.json"));
+            links.insert(d, link);
+            outputs.push(output);
+        }
+        let (top, output) = writer.root(plan.document(tree, &mut links), none)?;
+        assert!(links.is_empty(), "every document is linked once");
+        outputs.push(output);
+        Ok((top, outputs))
+    }
+
+    /// Delete the raw sources the streamed documents copied into `implicit-content/` that
+    /// no explicit tile keeps, as the whole-tree writer does.
+    fn delete_consumed(directory: &Path, outputs: &[ChunkOutput]) {
+        let mut kept = BTreeSet::new();
+        let mut written = BTreeSet::new();
+        let mut consumed = BTreeSet::new();
+        for output in outputs {
+            written.extend(output.members.iter().cloned());
+            consumed.extend(output.implicit_sources.iter().cloned());
+            for tile in &output.tiles {
+                for content in &tile.contents {
+                    if content.rebase.is_none() {
+                        kept.insert(content.member.clone());
+                    }
+                }
+            }
+        }
+        for source in consumed.difference(&kept) {
+            assert!(!written.contains(source));
+            std::fs::remove_file(directory.join(source)).unwrap();
+        }
+    }
+
+    /// Write `tree` whole and streamed from the same staged payloads and require identical
+    /// bytes: `tileset.json`, every member, the per-tile records and the member list.
+    fn whole_and_streamed<X: Serialize + Clone>(
+        tree: &TileTree<X>,
+        document: &TilesetDocument,
+        raw: &BTreeMap<String, Vec<u8>>,
+        scheme: SubdivisionScheme,
+    ) -> (Value, ForestOutput, BTreeMap<String, Vec<u8>>) {
+        let whole_dir = stage(raw);
+        let (top, output) =
+            write_forest_records(tree, document, whole_dir.path(), scheme, &mut || Ok(())).unwrap();
+        let stream_dir = stage(raw);
+        let (streamed, outputs) = write_chunked(tree, document, stream_dir.path(), scheme).unwrap();
+        delete_consumed(stream_dir.path(), &outputs);
+        assert_eq!(
+            serde_json::to_vec(&streamed).unwrap(),
+            serde_json::to_vec(&top).unwrap(),
+            "tileset.json"
+        );
+        let written = files(whole_dir.path());
+        assert_eq!(files(stream_dir.path()), written, "members");
+        assert_eq!(outputs.len(), output.documents);
+        let roots: usize = outputs.iter().map(|o| o.implicit_roots.len()).sum();
+        assert_eq!(roots, output.implicit_roots);
+        let mut tiles: Vec<_> = outputs.iter().flat_map(|o| &o.tiles).collect();
+        let mut whole: Vec<_> = output.tiles.iter().collect();
+        let order = |t: &&WrittenTile| format!("{t:?}");
+        tiles.sort_by_key(order);
+        whole.sort_by_key(order);
+        assert_eq!(tiles, whole, "per-tile records");
+        let mut members: Vec<_> = outputs.iter().flat_map(|o| o.members.clone()).collect();
+        let mut expected = output.members.clone();
+        members.sort();
+        expected.sort();
+        assert_eq!(members, expected);
+        (top, output, written)
+    }
+
+    fn chain(levels: u32, tag: u64, step: f64, second: bool) -> Spec {
+        let half = [2., 1., 0.5];
+        let mut chain = content(tag, 0, 0., [0.; 3], half);
+        for level in 1..levels {
+            let x = step * level as f64;
+            chain = content(
+                tag + 2 * level as u64 + 1,
+                level,
+                0.1 * level as f64,
+                [x, 0., 0.],
+                half,
+            )
+            .with(vec![chain]);
+            if second {
+                if let Kind::Content { second, .. } = &mut chain.kind {
+                    *second = Some(tag + 1000 + 2 * level as u64 + 1);
+                }
+            }
+        }
+        chain.path("")
+    }
+
+    /// The streamed forest, fed the whole-tree partition, is byte-identical to the whole
+    /// tree: one implicit root at tileset.json, skeletons with explicit leaves, drifting
+    /// links and external roots, nested external documents and the empty root.
+    #[test]
+    fn streamed_forest_is_byte_identical_to_the_whole_tree() {
+        let mut specs = vec![
+            ("a", Some(fixture_a())),
+            ("b", Some(fixture_b())),
+            ("chain17", Some(chain(17, 500, 1000., false))),
+            ("drift17", Some(chain(17, 600, 0.1, true))),
+            ("nested30", Some(chain(30, 700, 0.1, true))),
+            ("empty", None),
+        ];
+        // Several links under one document root: a wide skeleton of deep chains.
+        let wide = content(900, 20, 50., [0.; 3], [60., 60., 5.]).with(
+            (0..4u64)
+                .map(|i| {
+                    let mut c = chain(18, 1000 + 100 * i, 0.1, i % 2 == 0);
+                    c.center = [i as f64, 0., 0.];
+                    c.path = Some(["0", "1", "2", "3"][i as usize]);
+                    c
+                })
+                .collect(),
+        );
+        specs.push(("wide", Some(wide.path(""))));
+        let mut documents = Vec::new();
+        for (label, spec) in &specs {
+            for scheme in [SubdivisionScheme::Quadtree, SubdivisionScheme::Octree] {
+                for placed in [true, false] {
+                    let (tree, document) = typed(spec.as_ref(), placed);
+                    let (_, raw) = legacy(spec.as_ref(), placed);
+                    let (_, output, _) = whole_and_streamed(&tree, &document, &raw, scheme);
+                    documents.push((*label, output.documents));
+                }
+            }
+        }
+        let count = |label| documents.iter().find(|(l, _)| *l == label).unwrap().1;
+        assert_eq!(
+            (
+                count("a"),
+                count("chain17"),
+                count("nested30"),
+                count("wide")
+            ),
+            (1, 2, 3, 5)
+        );
+    }
+
+    fn slot_tile(tag: u64, children: Vec<(u8, TileTree<Extras>)>) -> TileTree<Extras> {
+        let bytes = payload(tag);
+        let content = ContentRef::new(
+            MemberName::new(member(&bytes)).unwrap(),
+            Sha256::digest(&bytes).into(),
+            bytes.len() as u64,
+            ContentKind::Glb,
+            true,
+            SourceIdentity::Features {
+                count: 1,
+                digest: [tag as u8; 32],
+            },
+        )
+        .unwrap();
+        let record = TileRecord::new(
+            NodePlacement::INHERIT,
+            TileBox::centred([4.; 3]).unwrap(),
+            GeometricError::new(children.len() as f64).unwrap(),
+            Refine::Replace,
+            vec![content],
+            Some(Extras::Empty(BuildPath {
+                build_path: format!("t{tag}"),
+            })),
+        )
+        .unwrap();
+        TileTree::with_slots(record, children).unwrap()
+    }
+
+    fn slot_raw(tags: &[u64]) -> BTreeMap<String, Vec<u8>> {
+        tags.iter()
+            .map(|&tag| (member(&payload(tag)), payload(tag)))
+            .collect()
+    }
+
+    fn vector_document() -> TilesetDocument {
+        TilesetDocument::root(
+            GeometricError::new(10.).unwrap(),
+            [TilesetExtension::ContentGltfVector],
+        )
+    }
+
+    /// Sparse octree slots 3 and 6, and slot 7 below slot 6: the availability and payload
+    /// coordinates are the slots' Morton cells, whole and streamed alike.
+    #[test]
+    fn explicit_slots_place_sparse_octants() {
+        let octree = SubdivisionScheme::Octree;
+        let tree = slot_tile(
+            60,
+            vec![
+                (3, slot_tile(62, Vec::new())),
+                (6, slot_tile(64, vec![(7, slot_tile(66, Vec::new()))])),
+            ],
+        );
+        let raw = slot_raw(&[60, 62, 64, 66]);
+        let (top, output, written) = whole_and_streamed(&tree, &vector_document(), &raw, octree);
+        assert_eq!(roles(&output)[0], TileRole::ImplicitRoot);
+        assert_eq!(top["root"]["implicitTiling"]["availableLevels"], 3);
+        let mut payloads: Vec<_> = written
+            .keys()
+            .filter(|k| k.starts_with("implicit-content/"))
+            .cloned()
+            .collect();
+        payloads.sort();
+        // (level, x, y, z): slot 3 is (1, 1, 1, 0), slot 6 (1, 0, 1, 1); slot 7 below it is
+        // (2, 1, 3, 3).
+        assert_eq!(
+            payloads,
+            [
+                "implicit-content/r0-0-0-0-0-0.glb",
+                "implicit-content/r0-1-0-1-1-0.glb",
+                "implicit-content/r0-1-1-1-0-0.glb",
+                "implicit-content/r0-2-1-3-3-0.glb",
+            ]
+        );
+        // The subtree's tile availability is exactly those cells: level 0 bit 0, level 1
+        // Morton 3 and 6 (bits 1 + 3, 1 + 6), level 2 Morton 0b110_111 (bit 9 + 55).
+        let subtree = &written["subtrees/r0-0-0-0-0.subtree"];
+        let json_length = u64::from_le_bytes(subtree[8..16].try_into().unwrap()) as usize;
+        let header: Value = serde_json::from_slice(&subtree[24..24 + json_length]).unwrap();
+        let view = &header["bufferViews"]
+            [header["tileAvailability"]["bitstream"].as_u64().unwrap() as usize];
+        let offset = 24 + json_length + view["byteOffset"].as_u64().unwrap() as usize;
+        let bits = &subtree[offset..offset + view["byteLength"].as_u64().unwrap() as usize];
+        let ones: Vec<usize> = (0..bits.len() * 8)
+            .filter(|i| bits[i / 8] >> (i % 8) & 1 == 1)
+            .collect();
+        assert_eq!(ones, [0, 4, 7, 9 + 55]);
+        assert_eq!(header["tileAvailability"]["availableCount"], 4);
+        // Sibling-index slots of the same children would be cells 0 and 1 instead.
+        let (a, b) = (slot_tile(62, Vec::new()), slot_tile(64, Vec::new()));
+        let sibling = TileTree::new(tree.record().clone(), vec![a, b]);
+        let dir = stage(&raw);
+        write_forest_records(
+            &sibling,
+            &vector_document(),
+            dir.path(),
+            octree,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert!(dir
+            .path()
+            .join("implicit-content/r0-1-1-0-0-0.glb")
+            .exists());
+    }
+
+    /// Duplicate and out-of-range slots and planned availability that the slots do not
+    /// derive are typed refusals before any subtree is written.
+    #[test]
+    fn explicit_slot_validation() {
+        let leaf = || slot_tile(70, Vec::new());
+        let record = || leaf().record().clone();
+        let message = |result: Result<TileTree<Extras>, Error>| match result {
+            Err(Error::Data(message)) => message,
+            other => panic!("expected a typed data error, got {other:?}"),
+        };
+        assert!(message(TileTree::with_slots(
+            record(),
+            vec![(2, leaf()), (2, leaf())]
+        ))
+        .contains("duplicate child slot 2"));
+        assert!(message(TileTree::with_slots(record(), vec![(8, leaf())]))
+            .contains("child slot 8 is outside every subdivision scheme"));
+        let raw = slot_raw(&[70]);
+        let quad = SubdivisionScheme::Quadtree;
+        let refused = |message: String, why: &str| {
+            assert!(message.contains(why), "{message}");
+        };
+        // Slot 5 is an octant, outside a quadtree: whole and streamed refuse it.
+        let tree = TileTree::with_slots(record(), vec![(5, leaf())]).unwrap();
+        let dir = stage(&raw);
+        refused(
+            write_forest_records(&tree, &vector_document(), dir.path(), quad, &mut || Ok(()))
+                .unwrap_err()
+                .to_string(),
+            "child slot 5 is outside the QUADTREE scheme",
+        );
+        refused(
+            write_chunked(&tree, &vector_document(), dir.path(), quad)
+                .unwrap_err()
+                .to_string(),
+            "child slot 5 is outside the QUADTREE scheme",
+        );
+        assert!(!dir.path().join("subtrees").exists());
+        // Planned availability: levels, tiles and contents must be what the slots derive.
+        let tree = slot_tile(70, vec![(1, leaf()), (3, leaf())]);
+        let derived = Availability {
+            levels: 2,
+            tiles: 3,
+            contents: 3,
+        };
+        for (planned, why) in [
+            (
+                Availability {
+                    levels: 3,
+                    ..derived
+                },
+                "levels: 3",
+            ),
+            (
+                Availability {
+                    tiles: 4,
+                    ..derived
+                },
+                "tiles: 4",
+            ),
+            (
+                Availability {
+                    contents: 2,
+                    ..derived
+                },
+                "contents: 2",
+            ),
+        ] {
+            let dir = stage(&raw);
+            let document = vector_document();
+            let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
+            let name = RootName::new("f0_d0").unwrap();
+            let error = writer
+                .root(
+                    ForestTile::planned(name, tree.clone(), planned),
+                    &mut || Ok(()),
+                )
+                .unwrap_err()
+                .to_string();
+            refused(error.clone(), "availability mismatch");
+            refused(error, why);
+            assert!(!dir.path().join("subtrees").exists());
+        }
+        let dir = stage(&raw);
+        let document = vector_document();
+        let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
+        let name = RootName::new("f0_d0").unwrap();
+        let (top, output) = writer
+            .root(
+                ForestTile::planned(name.clone(), tree, derived),
+                &mut || Ok(()),
+            )
+            .unwrap();
+        assert_eq!(output.implicit_roots, [(name, derived)]);
+        assert_eq!(
+            top["root"]["implicitTiling"]["subtrees"]["uri"],
+            "subtrees/f0_d0-{level}-{x}-{y}.subtree"
+        );
+        assert!(dir.path().join("subtrees/f0_d0-0-0-0.subtree").exists());
+    }
+
+    /// Partition misuse is refused: a reused root or document name, an external document
+    /// not rooted at an explicit tile, a link as tileset.json's root, too many children and
+    /// bad names.
+    #[test]
+    fn streamed_partition_misuse_is_refused() {
+        let quad = SubdivisionScheme::Quadtree;
+        let raw = slot_raw(&[80, 82]);
+        let document = vector_document();
+        let none = &mut || Ok(());
+        let leaf = |tag| slot_tile(tag, Vec::new());
+        let name = |n: &str| RootName::new(n).unwrap();
+        for bad in ["", "r-1", "a/b", "x.y", &"a".repeat(65)] {
+            assert!(RootName::new(bad).is_err(), "{bad:?}");
+        }
+        let explicit = |children| ForestTile::explicit(leaf(80).record().clone(), children);
+        let dir = stage(&raw);
+        let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
+        // One implicit root name twice.
+        let twice = explicit(vec![
+            ForestTile::implicit(name("r1"), leaf(82)),
+            ForestTile::implicit(name("r1"), leaf(82)),
+        ]);
+        let error = writer
+            .external(MemberName::new("d/one.json").unwrap(), twice, none)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("r1 is already written"),
+            "{error}"
+        );
+        // A document name twice, and names that are not new external documents.
+        let (link, output) = writer
+            .external(
+                MemberName::new("d/two.json").unwrap(),
+                explicit(Vec::new()),
+                none,
+            )
+            .unwrap();
+        assert_eq!(output.members.last().unwrap(), "d/two.json");
+        for bad in ["d/two.json", "tileset.json", "d/three.glb"] {
+            let error = writer
+                .external(MemberName::new(bad).unwrap(), explicit(Vec::new()), none)
+                .unwrap_err();
+            assert!(error.to_string().contains(bad), "{error}");
+        }
+        let error = writer
+            .external(
+                MemberName::new("d/four.json").unwrap(),
+                ForestTile::implicit(name("r4"), leaf(82)),
+                none,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("explicit tile"), "{error}");
+        let children = (0..5).map(|_| explicit(Vec::new())).collect();
+        let error = writer
+            .external(
+                MemberName::new("d/five.json").unwrap(),
+                explicit(children),
+                none,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("5 children exceed"), "{error}");
+        let error = writer
+            .root(ForestTile::<Extras>::Link(link), none)
+            .unwrap_err();
+        assert!(error.to_string().contains("d/two.json"), "{error}");
+        // Escaped (sibling) names are not forest members.
+        let model = ContentRef::source_model(
+            MemberName::escaped("a%20b.glb").unwrap(),
+            [0; 32],
+            64,
+            ContentKind::Glb,
+        )
+        .unwrap();
+        let mut record = leaf(80).record().clone();
+        record.set_extras(None).unwrap();
+        let record = TileRecord::new(
+            record.placement(),
+            *record.bounds(),
+            record.geometric_error(),
+            record.refine(),
+            vec![model],
+            None::<Extras>,
+        )
+        .unwrap();
+        let dir = stage(&raw);
+        let writer = ForestWriter::new(&document, dir.path(), quad).unwrap();
+        let error = writer
+            .root(ForestTile::explicit(record, Vec::new()), none)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("not an archive member"),
+            "{error}"
+        );
+    }
+
+    fn rss_kib() -> u64 {
+        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix("VmRSS:"))
+            .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+            .unwrap_or(0)
+    }
+
+    /// A 1,198,409-tile OCTREE forest, streamed one document at a time: 64 external
+    /// documents of 4 skeleton tiles over 32 complete three-level implicit roots (585 tiles
+    /// each), linked from a two-level root document. Resident memory stays bounded by one
+    /// document: the process's RSS grows by less than 64 MiB after the first document.
+    /// Run alone for a clean RSS series: `cargo test --release --lib
+    /// streamed_forest_memory_is_bounded_by_one_document -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "writes a 2^20-tile forest; run alone in release for its RSS series"]
+    fn streamed_forest_memory_is_bounded_by_one_document() {
+        let octree = SubdivisionScheme::Octree;
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("t")).unwrap();
+        let bytes = payload(1);
+        std::fs::write(dir.path().join(member(&bytes)), &bytes).unwrap();
+        let content = ContentRef::new(
+            MemberName::new(member(&bytes)).unwrap(),
+            Sha256::digest(&bytes).into(),
+            bytes.len() as u64,
+            ContentKind::Glb,
+            false,
+            SourceIdentity::Features {
+                count: 1,
+                digest: [1; 32],
+            },
+        )
+        .unwrap();
+        let record = |error: f64, contents: Vec<ContentRef>| {
+            TileRecord::<()>::new(
+                NodePlacement::INHERIT,
+                TileBox::centred([1.; 3]).unwrap(),
+                GeometricError::new(error).unwrap(),
+                Refine::Replace,
+                contents,
+                None,
+            )
+            .unwrap()
+        };
+        // A complete octree of `height` below a tile; only the top tile has content.
+        fn complete(
+            height: u32,
+            record: &dyn Fn(f64, Vec<ContentRef>) -> TileRecord<()>,
+            contents: Vec<ContentRef>,
+        ) -> TileTree<()> {
+            let children = if height == 0 {
+                Vec::new()
+            } else {
+                (0..8u8)
+                    .map(|slot| (slot, complete(height - 1, record, Vec::new())))
+                    .collect()
+            };
+            TileTree::with_slots(record(height as f64, contents), children).unwrap()
+        }
+        let document = TilesetDocument::root(GeometricError::new(100.).unwrap(), []);
+        let writer = ForestWriter::new(&document, dir.path(), octree).unwrap();
+        let none = &mut || Ok(());
+        let started = std::time::Instant::now();
+        let mut samples = Vec::new();
+        let mut links = Vec::new();
+        let mut tiles = 0usize;
+        let mut roots = 0usize;
+        for d in 0..64u32 {
+            let parents = (0..4u32)
+                .map(|p| {
+                    let implicit = (0..8u32)
+                        .map(|r| {
+                            let name = RootName::new(format!("d{d}_p{p}_r{r}")).unwrap();
+                            let tree = complete(3, &record, vec![content.clone()]);
+                            let planned = Availability {
+                                levels: 4,
+                                tiles: 585,
+                                contents: 1,
+                            };
+                            ForestTile::planned(name, tree, planned)
+                        })
+                        .collect();
+                    ForestTile::explicit(record(4., Vec::new()), implicit)
+                })
+                .collect();
+            let chunk = ForestTile::explicit(record(5., Vec::new()), parents);
+            let name = MemberName::new(format!("docs/d{d}.json")).unwrap();
+            let (link, output) = writer.external(name, chunk, none).unwrap();
+            tiles += output.tiles.len();
+            roots += output.implicit_roots.len();
+            links.push(link);
+            drop(output);
+            samples.push(rss_kib());
+        }
+        let mut links = links.into_iter();
+        let children = (0..8)
+            .map(|_| {
+                let linked = links.by_ref().take(8).map(ForestTile::Link).collect();
+                ForestTile::explicit(record(6., Vec::new()), linked)
+            })
+            .collect();
+        let (top, output) = writer
+            .root(ForestTile::explicit(record(7., Vec::new()), children), none)
+            .unwrap();
+        tiles += output.tiles.len();
+        samples.push(rss_kib());
+        assert_eq!(tiles, 1_198_409);
+        assert!(tiles >= 1 << 20);
+        assert_eq!(roots, 2048);
+        assert_eq!(
+            top["root"]["children"][7]["children"][7]["content"]["uri"],
+            "docs/d63.json"
+        );
+        let baseline = samples[0];
+        let peak = samples.iter().copied().max().unwrap();
+        let whole_lower_bound = tiles * std::mem::size_of::<TileTree<()>>() / 1024;
+        let report = json!({
+            "tiles": tiles,
+            "implicit_roots": roots,
+            "documents": 65,
+            "rss_after_first_document_kib": baseline,
+            "rss_peak_kib": peak,
+            "rss_growth_kib": peak - baseline,
+            "rss_samples_kib": samples,
+            "whole_tree_records_lower_bound_kib": whole_lower_bound,
+            "seconds": started.elapsed().as_secs_f64(),
+        });
+        eprintln!("{report}");
+        if let Ok(path) = std::env::var("M1S2_MEMORY_REPORT") {
+            std::fs::write(path, report.to_string()).unwrap();
+        }
+        assert!(
+            peak - baseline < 64 * 1024,
+            "RSS grew {} KiB beyond the first document",
+            peak - baseline
+        );
     }
 }

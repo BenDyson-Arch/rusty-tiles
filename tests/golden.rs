@@ -52,9 +52,10 @@ fn single_model_manifest_is_full_detail_and_uses_its_source_directory() {
     assert_eq!(ts["root"]["geometricError"], 0.0);
     assert_eq!(ts["root"]["content"]["uri"], "triangle.glb");
     assert!(ts["root"]["boundingVolume"]["box"].is_array());
+    // The typed records write the last row's structural constants as JSON integers.
     assert_eq!(
         ts["root"]["transform"],
-        serde_json::json!([1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.])
+        serde_json::json!([1., 0., 0., 0, 0., 1., 0., 0, 0., 0., 1., 0, 0., 0., 0., 1])
     );
     assert_eq!(fs::read(glb).unwrap(), triangle_glb());
 }
@@ -70,10 +71,13 @@ fn manifest_report_records_actual_explicit_placement() {
     )
     .unwrap();
     let ts: serde_json::Value = serde_json::from_slice(&fs::read(&result.output).unwrap()).unwrap();
-    assert_eq!(
-        ts["root"]["transform"],
-        serde_json::to_value(result.report.root_transform).unwrap()
-    );
+    let written: Vec<f64> = ts["root"]["transform"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
+    assert_eq!(written, result.report.root_transform);
     assert_eq!(result.report.root_transform[12], 6_378_147.);
     assert_eq!(result.report.root_transform[13], 0.);
     assert_eq!(result.report.root_transform[14], 0.);
