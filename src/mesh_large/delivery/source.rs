@@ -12,6 +12,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// The largest leaf JSON chunk read for bounds (H8's are a few KiB).
+const MAX_GLB_JSON: u64 = 64 << 20;
+
 pub(super) fn input(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message.into())
 }
@@ -166,7 +169,11 @@ impl LeafRow {
             digits.get(w.depth - 1)
         };
         let packed = w.path_length == 0 && w.last_octant != slot;
-        if w.last_octant < slot || packed != w.packed || (w.depth == 0 && w.last_octant != 0) {
+        // Only a spatial leaf packs octants; a run leaf or the root covers its own slot.
+        if w.last_octant < slot
+            || packed != w.packed
+            || ((w.path_length > 0 || w.depth == 0) && w.last_octant != slot)
+        {
             return Err(bad("lastOctant/packed disagree with the address"));
         }
         Ok(Self {
@@ -273,6 +280,9 @@ pub(crate) fn glb_bounds(path: &Path, row: &LeafRow) -> Result<Aabb, JobError> {
     let json_length = u64::from(u32_at(12));
     if &header[16..20] != b"JSON" || json_length + 20 > length {
         return Err(bad("first GLB chunk is not JSON"));
+    }
+    if json_length > MAX_GLB_JSON {
+        return Err(bad("GLB JSON chunk exceeds 64 MiB"));
     }
     let mut text = vec![0u8; json_length as usize];
     file.read_exact(&mut text).map_err(io)?;

@@ -197,6 +197,7 @@ impl Sink for PlanSink {
 
 /// Run a forest-writer call with the job's cancellation as its checkpoint.
 fn forest<T>(
+    staging: &Path,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     call: impl FnOnce(&mut dyn FnMut() -> Result<(), crate::Error>) -> Result<T, crate::Error>,
 ) -> Result<T, JobError> {
@@ -212,9 +213,7 @@ fn forest<T>(
         return Err(error);
     }
     result.map_err(|error| match error {
-        crate::Error::Io(source) => {
-            JobError::new(JobErrorKind::Io, format!("forest staging I/O: {source}"))
-        }
+        crate::Error::Io(source) => JobError::io("write forest member", staging, source),
         other => state(format!(
             "the forest writer refused a planned document: {other}"
         )),
@@ -239,6 +238,18 @@ impl WriteSink<'_> {
     /// the filesystem has no hard links).
     fn stage(&mut self, row: &LeafRow, member: &str) -> Result<(), JobError> {
         let source = self.leaves.path(row);
+        // The row's digest is checked here, so a payload that contradicts its row is the
+        // leaf directory's fault (InvalidInput); the writer re-checks the staged member.
+        let bytes =
+            std::fs::read(&source).map_err(|e| JobError::io("read leaf payload", &source, e))?;
+        if bytes.len() as u64 != row.bytes || <[u8; 32]>::from(Sha256::digest(&bytes)) != row.sha256
+        {
+            return Err(source::input(format!(
+                "leaf {}: payload bytes differ from its manifest row (length or SHA-256)",
+                row.uri
+            )));
+        }
+        drop(bytes);
         let target = self.staging.join(member);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)
@@ -379,7 +390,9 @@ impl Sink for WriteSink<'_> {
             .map_err(|e| state(e.to_string()))?;
         let tile = self.tile(node)?;
         let writer = self.writer.as_mut().expect("documents precede the root");
-        let (link, output) = forest(self.check, |mut cp| writer.external(name, tile, &mut cp))?;
+        let (link, output) = forest(self.staging, self.check, |mut cp| {
+            writer.external(name, tile, &mut cp)
+        })?;
         self.record(output, expected)?;
         Ok(Some(link))
     }
@@ -393,7 +406,9 @@ impl Sink for WriteSink<'_> {
             ForestTile::Link(_) => return Err(state("the root was written as a link")),
         }
         let writer = self.writer.take().expect("one root");
-        let (top, output) = forest(self.check, |mut cp| writer.root(tile, &mut cp))?;
+        let (top, output) = forest(self.staging, self.check, |mut cp| {
+            writer.root(tile, &mut cp)
+        })?;
         self.record(output, expected)?;
         self.top = Some(top);
         Ok(())

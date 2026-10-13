@@ -21,8 +21,8 @@ rank range `[first, end)`, H8's outward `geometryError`, and the payload's byte
 length and SHA-256. Rows are checked as H1 defines them: valid octant digits,
 synthetic run octants only below a depth-21 cell, depth at most 31, `packed`
 exactly when an unpacked-address leaf covers more than its first octant, ranks
-contiguous from 0, and the totals equal to `manifest.json`. Violations are
-`InvalidInput`. H8's tree, lattice and payload bytes are never changed, split or
+contiguous from 0, a synthetic run leaf or the root covering only its own
+slot, and the totals equal to `manifest.json`. Violations are `InvalidInput`. H8's tree, lattice and payload bytes are never changed, split or
 rebuilt. A row of more than 8,192 triangles is `Unsupported` (see Consumer
 property tables).
 
@@ -33,8 +33,9 @@ whose `min`/`max` bound the stored values. Each decoded coordinate is `t + s·c`
 products and sums are rounded outward with exact FMA/TwoSum residuals. The box
 is then taken from glTF y-up to the tile frame's z-up as `(x, y, z) -> (x, -z,
 y)`, the conversion C2 applies exactly once. A node with any other field is
-refused. The forest writer reads and hashes every payload against its row when
-it publishes it.
+refused. Each payload is read and hashed against its row when it is staged (a
+mismatch is `InvalidInput`), and the forest writer checks the staged member
+again when it publishes it.
 
 ## Hierarchy reconstruction
 
@@ -140,9 +141,9 @@ consumer proof.
 
 CesiumJS 1.146 builds one GPU structural-metadata texture per property table,
 whose width is the table's row count, and refuses tables wider than its 8,192
-maximum texture size ([H4 diagnosis](../../bench/architecture_audit/README.md),
-`~/.cache/rusty-tiles-evidence/h4-property-budget-20261013/`); it resolves picks
-through one table per model. An H8 leaf has a `source_triangle` table with one
+maximum texture size (the H4 diagnosis,
+`~/.cache/rusty-tiles-evidence/h4-property-budget-20261013/diagnosis.md`); it
+resolves picks through one table per model. An H8 leaf has a `source_triangle` table with one
 row per triangle and a `source_primitive` table with at most as many rows.
 
 **Decision: cap the leaf size.** Every profile's leaf budget `L` is 8,192
@@ -173,10 +174,13 @@ document needs. Nothing is staged. The second stages and writes one document at
 a time and must reproduce the first pass's shape and member count exactly.
 Resident hierarchy state is the open stack plus inline fragments below the
 partition limits: at most 32 frames of 8 children each below 1,024 records,
-reported as `peakHeldRecords`. A planning test streams 2^12 and 2^18 leaves:
-4,680 and 4,687 held records. The serializer keeps one name per explicit leaf
-and per document between documents (#198's deliberate residue); explicit leaves
-are a fraction of all leaves.
+reported as `peakHeldRecords`: 4,680 to 4,687 from 4,096 to 2,097,152 leaves.
+Measured H16 peak RSS is 24.3, 27.5, 37.2 and 48.4 MiB for synthetic trees of
+4,096, 32,768, 262,144 and 2,097,152 leaves (the last 2.4 M tiles, 522
+documents, 2.1 M members), and 20.8 MiB for the real 10 M-triangle mesh. What
+still grows is the index sorter's in-memory run (capped at 16 MiB) and the
+serializer's one name per explicit leaf and per document (#198's deliberate
+residue; explicit leaves are a small fraction of all leaves).
 
 The archive is written after `tileset.json`: `tileset.json` first, the other
 members in their deterministic production order, the index last. Index rows
@@ -228,10 +232,17 @@ Tests (`src/mesh_large/delivery/tests.rs` and the M1/H8 additions):
 - mixed tree: roles, explicit and implicit members, slots and subtree
   availability read back by an independent subtree-bitstream reader and compared
   with the generator's H1 addresses; payload bytes unchanged; validator accepts;
-- determinism across work locations, and across H8 jobs 1 and 2 on real leaves;
-- ceiling: early and exact refusals before staging, exact count admitted;
+- determinism across work locations for both a one-document and a
+  multi-document partition, and across H8 jobs 1 and 2 on real leaves;
+- ceiling: early and exact refusals, shown to precede staging (a missing work
+  folder fails only the admitted count), exact count admitted;
 - malformed input: preorder, octant order (including a packed overlap), rank
-  gap, tampered payload, a 8,193-triangle row, totals mismatch, bad address;
+  gap, payload length, a same-length payload change found while staging
+  (nothing published, no work files left), a 8,193-triangle row, totals
+  mismatch, bad addresses (depth 32, cell range, depth sum) and a run leaf
+  claiming more than its slot;
+- the streamed archive equals `archive3tz::serialize` byte for byte at 70,000
+  members (ZIP64 counts) with the index sorted through spilled runs;
 - root forms (one leaf, one implicit root) and the exact rigid placement;
 - planner memory bounded by the partition at 2^18 leaves;
 - 8,192/8,193 table rows at the H8 writer; every real leaf's tables within it;

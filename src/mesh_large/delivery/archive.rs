@@ -77,6 +77,18 @@ pub(crate) fn write(
     out: &mut File,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<u64, JobError> {
+    write_with(staging, names, count, scratch, out, check, SORT)
+}
+
+fn write_with(
+    staging: &Path,
+    names: &Path,
+    count: u64,
+    scratch: &Scratch,
+    out: &mut File,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    sort: SortConfig,
+) -> Result<u64, JobError> {
     let index_bytes = count
         .checked_mul(24)
         .filter(|bytes| *bytes < u64::from(u32::MAX))
@@ -86,7 +98,7 @@ pub(crate) fn write(
         1 << 20,
         File::create(&spool_path).map_err(io("create central-directory spool", &spool_path))?,
     );
-    let mut sorter = ExternalSorter::<IndexRow>::new(scratch, SORT)?;
+    let mut sorter = ExternalSorter::<IndexRow>::new(scratch, sort)?;
     let mut writer = BufWriter::with_capacity(1 << 20, &mut *out);
     let mut buffer = vec![0u8; 1 << 16];
     let mut written = 0u64;
@@ -213,4 +225,84 @@ pub(crate) fn write(
         .stream_position()
         .map_err(io("write central directory", &spool_path))?;
     Ok(length)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::archive3tz::{serialize, Member};
+
+    /// Over 65,535 members (ZIP64 end records) and an index sorted through many spilled runs:
+    /// the streamed writer gives exactly the bytes of the audited `archive3tz::serialize` for
+    /// the same member order, and the 3TZ reader admits them.
+    #[test]
+    fn streamed_archive_equals_the_audited_writer_beyond_zip64_counts() {
+        let work = tempfile::tempdir().unwrap();
+        let staging = work.path().join("staging");
+        std::fs::create_dir_all(staging.join("m")).unwrap();
+        std::fs::write(
+            staging.join("tileset.json"),
+            b"{\"asset\":{\"version\":\"1.1\"}}",
+        )
+        .unwrap();
+        let count = 70_000usize;
+        let mut names = String::new();
+        let mut members = vec!["tileset.json".to_owned()];
+        for i in 0..count {
+            let name = format!("m/{i:06}.bin");
+            std::fs::write(
+                staging.join(&name),
+                (i as u64).to_le_bytes().repeat(1 + i % 3),
+            )
+            .unwrap();
+            names.push_str(&name);
+            names.push('\n');
+            members.push(name);
+        }
+        let list = work.path().join("members.txt");
+        std::fs::write(&list, names).unwrap();
+        let scratch = Scratch::create(Some(work.path()), 1 << 30).unwrap();
+        let streamed = work.path().join("streamed.3tz");
+        let mut file = File::create(&streamed).unwrap();
+        let tiny = SortConfig {
+            run_bytes: 24 * 1000,
+            fan_in: 4,
+            buffer_bytes: 4096,
+            jobs: 1,
+        };
+        let length = write_with(
+            &staging,
+            &list,
+            count as u64 + 1,
+            &scratch,
+            &mut file,
+            &mut || Ok(()),
+            tiny,
+        )
+        .unwrap();
+        drop(file);
+        let streamed = std::fs::read(&streamed).unwrap();
+        assert_eq!(streamed.len() as u64, length);
+        let sources: Vec<_> = members.iter().map(|m| staging.join(m)).collect();
+        let inventory: Vec<Member<'_>> = members
+            .iter()
+            .zip(&sources)
+            .map(|(name, source)| {
+                let metadata = std::fs::metadata(source).unwrap();
+                Member {
+                    name,
+                    source,
+                    size: metadata.len(),
+                    modified: metadata.modified().ok(),
+                }
+            })
+            .collect();
+        let mut audited = std::io::Cursor::new(Vec::new());
+        serialize::<(), _>(&inventory, &mut audited, |_| Ok(())).unwrap();
+        assert!(
+            streamed == audited.into_inner(),
+            "streamed and audited archives differ"
+        );
+        crate::archive3tz::validate_reader_3tz(std::io::Cursor::new(streamed)).unwrap();
+    }
 }

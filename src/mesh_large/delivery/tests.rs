@@ -492,34 +492,44 @@ fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
     assert!(checked.content_references as u64 >= report.leaves);
 }
 
-/// Same input, different work locations and repeated runs: identical archive bytes. Default
-/// limits give a different (still valid) layout than the tight ones.
+/// Work files this module or the runtime leave next to an output (none after any run).
+fn leftovers(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(".tiles-"))
+        .collect()
+}
+
+/// Same input, different work locations and repeated runs: identical archive bytes, for the
+/// default partition and for the tight one that writes several external documents. The two
+/// partitions give different (both valid) layouts.
 #[test]
 fn archives_are_deterministic_across_work_locations() {
     let work = tempfile::tempdir().unwrap();
     let specs = mixed_tree(23);
     let dir = leaf_dir(work.path(), &specs);
-    let mut previous: Option<Vec<u8>> = None;
-    for location in ["a", "b/c"] {
-        let parent = work.path().join(location);
-        std::fs::create_dir_all(&parent).unwrap();
-        let output = parent.join("out.3tz");
-        run(&dir, &output, LIMITS, |r| r).unwrap();
-        let bytes = std::fs::read(&output).unwrap();
-        if let Some(prior) = &previous {
-            assert_eq!(prior, &bytes);
+    let mut layouts = Vec::new();
+    for (tag, limits) in [("default", LIMITS), ("tight", TIGHT)] {
+        let mut previous: Option<Vec<u8>> = None;
+        for location in ["a", "b/c"] {
+            let parent = work.path().join(tag).join(location);
+            std::fs::create_dir_all(&parent).unwrap();
+            let output = parent.join("out.3tz");
+            let report = run(&dir, &output, limits, |r| r).unwrap();
+            if tag == "tight" {
+                assert!(report.documents > 3, "{report:?}");
+            }
+            let bytes = std::fs::read(&output).unwrap();
+            if let Some(prior) = &previous {
+                assert_eq!(prior, &bytes, "{tag}");
+            }
+            previous = Some(bytes);
+            assert!(leftovers(&parent).is_empty());
         }
-        previous = Some(bytes);
-        // The staging folder is gone.
-        assert!(std::fs::read_dir(&parent).unwrap().all(|e| !e
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".tiles-h16-")));
+        layouts.push(previous.unwrap());
     }
-    let tight = work.path().join("tight.3tz");
-    run(&dir, &tight, TIGHT, |r| r).unwrap();
-    assert_ne!(std::fs::read(&tight).unwrap(), previous.unwrap());
+    assert_ne!(layouts[0], layouts[1]);
 }
 
 /// The 3TZ ceiling refuses early (a leaf-count lower bound) and exactly (the planned count,
@@ -547,6 +557,19 @@ fn member_ceiling_refuses_before_staging_and_admits_the_exact_count() {
             .to_string_lossy()
             .starts_with(".tiles-h16-")));
     }
+    // Before staging: with a work parent that does not exist, the ceiling refusal still
+    // comes first, while the admitted count fails only when staging begins.
+    let missing = work.path().join("no-such-parent");
+    for (ceiling, kind) in [
+        (exact - 1, JobErrorKind::Unsupported),
+        (exact, JobErrorKind::Io),
+    ] {
+        let target = work.path().join("direct.3tz");
+        let mut file = File::create(&target).unwrap();
+        let request = MeshTilesetRequest::new(&dir, &target).with_member_ceiling(ceiling);
+        let error = publish_with(&request, TIGHT, &mut || Ok(()), &mut file, &missing).unwrap_err();
+        assert_eq!(error.kind(), kind, "{}", error.message());
+    }
     // The production ceiling is the archive codec's.
     assert_eq!(
         MeshTilesetRequest::new("a", "b").member_ceiling,
@@ -572,7 +595,7 @@ fn renumber(rows: &mut [Value]) {
 fn malformed_leaf_directories_are_refused() {
     let base = mixed_tree(3);
     type Tamper = (&'static str, JobErrorKind, fn(&Path, &mut Vec<Value>));
-    let cases: [Tamper; 7] = [
+    let cases: [Tamper; 11] = [
         ("preorder", JobErrorKind::InvalidInput, |_, rows| {
             rows.swap(0, 1);
             renumber(rows);
@@ -612,6 +635,41 @@ fn malformed_leaf_directories_are_refused() {
                 rows[0]["pathLength"] = json!(1);
             },
         ),
+        (
+            "invalid H1 address",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                // Depth 32: one level beyond the 32-level hierarchy.
+                let last = rows.len() - 1;
+                rows[last]["pathLength"] = json!(11);
+                rows[last]["depth"] = json!(32);
+            },
+        ),
+        (
+            "invalid H1 address",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                let depth = rows[0]["cellDepth"].as_u64().unwrap();
+                rows[0]["cell"] = json!(1u64 << (3 * depth));
+            },
+        ),
+        (
+            "invalid H1 address",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                rows[0]["depth"] = json!(rows[0]["depth"].as_u64().unwrap() + 1);
+            },
+        ),
+        (
+            "lastOctant/packed disagree",
+            JobErrorKind::InvalidInput,
+            |_, rows| {
+                // A synthetic run leaf never packs octants.
+                let last = rows.len() - 1;
+                let slot = rows[last]["path"].as_u64().unwrap() & 7;
+                rows[last]["lastOctant"] = json!((slot + 1) % 8);
+            },
+        ),
     ];
     for (why, kind, tamper) in cases {
         let work = tempfile::tempdir().unwrap();
@@ -628,7 +686,7 @@ fn malformed_leaf_directories_are_refused() {
         let error = run(&dir, &output, TIGHT, |r| r).unwrap_err();
         assert_eq!(error.kind(), kind, "{why}: {}", error.message());
         assert!(error.message().contains(why), "{why}: {}", error.message());
-        assert!(!output.exists());
+        assert!(leftovers(work.path()).is_empty());
     }
     // A packed leaf overlapping its next sibling: two leaves under the root, the first
     // packed over octants 0..=3, the second at octant 2.
@@ -654,6 +712,36 @@ fn malformed_leaf_directories_are_refused() {
         "{}",
         error.message()
     );
+}
+
+/// A payload whose bytes contradict its row at the same length passes the bounds pass (which
+/// reads only the JSON chunk) and is refused when it is staged, after documents have been
+/// written: InvalidInput, nothing published, no work files left.
+#[test]
+fn payload_tampered_at_the_same_length_is_refused_while_staging() {
+    let work = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(9);
+    let dir = leaf_dir(work.path(), &specs);
+    let last = format!("leaves/{:012}.glb", specs.len() - 1);
+    let mut bytes = std::fs::read(dir.join(&last)).unwrap();
+    *bytes.last_mut().unwrap() ^= 0x40;
+    std::fs::write(dir.join(&last), bytes).unwrap();
+    let out = work.path().join("published");
+    std::fs::create_dir(&out).unwrap();
+    let output = out.join("out.3tz");
+    let failure = mesh_leaves_to_3tz(
+        MeshTilesetRequest::new(&dir, &output),
+        &RunControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::InvalidInput);
+    assert!(
+        failure.error.message().contains("payload bytes differ"),
+        "{}",
+        failure.error.message()
+    );
+    assert!(!output.exists());
+    assert!(leftovers(&out).is_empty(), "{:?}", leftovers(&out));
 }
 
 /// Root forms: a single leaf, a short tree (one implicit root at tileset.json), and the

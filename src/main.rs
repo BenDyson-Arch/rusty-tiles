@@ -72,7 +72,8 @@ enum Command {
         #[command(flatten)]
         placement: RigidPlacementArgs,
     },
-    /// Leaf payloads then their hierarchy: one full-detail .3tz from a local mesh (no coarse levels yet)
+    /// Leaf payloads then their hierarchy: one full-detail .3tz from a local mesh (no coarse
+    /// levels yet; `validate` does not yet admit the KTX2 leaves of the lossy profiles)
     #[command(hide = true, name = "mesh-large-to-3tz")]
     MeshLargeTo3tz {
         #[arg(short, long)]
