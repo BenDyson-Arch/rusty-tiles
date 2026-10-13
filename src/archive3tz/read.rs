@@ -7,11 +7,10 @@ use super::catalog::{
     self, md5_key, Catalog, CatalogConfig, Directory, IndexRow, Key, LogWriter, Member, Names, Row,
     RowsWriter,
 };
-use crate::spill::{Record, Scratch, SpillError};
+use crate::spill::{Placement, Record, Scratch, SpillError};
 use sha2::{Digest, Sha256};
 use std::{
     io::{self, Read, Seek, SeekFrom},
-    path::Path,
     sync::Arc,
 };
 
@@ -71,7 +70,9 @@ pub(crate) struct StoredArchive<R> {
 }
 
 impl<R: Read + Seek> StoredArchive<R> {
-    /// Admits the archive with this build's catalog profile and default scratch parent.
+    /// Admits the archive with this build's catalog profile. A spilled catalog goes to a
+    /// disk-backed default scratch; with only memory-backed candidates it is refused, since
+    /// this constructor has no report to state that the spill would sit in RAM.
     pub(crate) fn new(
         reader: R,
         known_length: u64,
@@ -82,20 +83,20 @@ impl<R: Read + Seek> StoredArchive<R> {
             known_length,
             limits,
             CatalogConfig::selected(),
-            None,
+            Placement::disk(false),
         )
     }
 
-    /// Admits the archive; a catalog over `config.resident_bytes` spills under
-    /// `scratch_parent` (default: the system temporary directory), created on first use.
+    /// Admits the archive; a catalog over `config.resident_bytes` spills to a scratch
+    /// directory at `placement`, created on first use.
     pub(crate) fn new_with(
         mut reader: R,
         known_length: u64,
         limits: &ReadLimits,
         config: CatalogConfig,
-        scratch_parent: Option<&Path>,
+        placement: Placement,
     ) -> Result<Self, ReadError> {
-        let scanned = scan_directory(&mut reader, known_length, limits, &config, scratch_parent)?;
+        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement)?;
         let mut archive = Self {
             reader,
             catalog: scanned.catalog,
@@ -688,7 +689,7 @@ fn scan_directory(
     size: u64,
     limits: &ReadLimits,
     config: &CatalogConfig,
-    scratch_parent: Option<&Path>,
+    placement: Placement,
 ) -> Result<Scanned, ReadError> {
     if size > limits.source_archive_bytes {
         return Err(ReadError::limit("source archive exceeds byte limit"));
@@ -816,7 +817,7 @@ fn scan_directory(
         .and_then(|n| n.checked_add(bytes))
         .is_some_and(|n| n <= config.resident_bytes);
     let scratch = Arc::new(Scratch::deferred(
-        scratch_parent,
+        placement,
         CatalogConfig::scratch_estimate(entries, bytes),
     ));
     let mut log = LogWriter::new(&scratch, memory, config)?;
@@ -1016,7 +1017,9 @@ fn scan_directory(
         if run.last().is_some_and(|held| held.key != row.key) {
             run.clear();
         }
-        if !duplicate {
+        // Names are read only within an equal-key run (MD5 and SHA-256/64 collisions or
+        // duplicates): a lone row costs no log read, so the scan stays sequential.
+        if !duplicate && !run.is_empty() {
             names.read(row.name_ref, row.name_len, &mut a)?;
             for held in &run {
                 names.read(held.name_ref, held.name_len, &mut b)?;
@@ -1052,6 +1055,7 @@ fn scan_directory(
 pub(crate) mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::path::Path;
 
     /// The scan with this build's catalog profile and default scratch.
     fn scan(
@@ -1059,7 +1063,13 @@ pub(crate) mod tests {
         size: u64,
         limits: &ReadLimits,
     ) -> Result<Scanned, ReadError> {
-        scan_directory(file, size, limits, &CatalogConfig::selected(), None)
+        scan_directory(
+            file,
+            size,
+            limits,
+            &CatalogConfig::selected(),
+            Placement::disk(false),
+        )
     }
 
     impl<R: Read + Seek> StoredArchive<R> {
@@ -1199,6 +1209,12 @@ pub(crate) mod tests {
     pub(crate) fn stored_zip(records: &[(&[u8], &[u8])]) -> Vec<u8> {
         let records: Vec<_> = records.iter().map(|&(n, d)| Record::stored(n, d)).collect();
         archive(&records, &(0..records.len()).collect::<Vec<_>>(), 0)
+    }
+    /// A valid 3TZ whose members appear, physically and in the central directory, in the
+    /// given order (the index last).
+    pub(crate) fn indexed_zip(records: &[(&[u8], &[u8])]) -> Vec<u8> {
+        let records: Vec<_> = records.iter().map(|&(n, d)| Record::stored(n, d)).collect();
+        indexed(&records)
     }
     fn indexed(records: &[Record<'_>]) -> Vec<u8> {
         indexed_rows(records, |_| {})
@@ -2305,7 +2321,7 @@ pub(crate) mod tests {
             bytes.len() as u64,
             &natural_limits(bytes.len()),
             config,
-            Some(parent),
+            Placement::In(parent.into()),
         )
     }
 

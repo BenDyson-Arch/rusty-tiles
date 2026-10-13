@@ -25,6 +25,7 @@ CATALOG = "src/archive3tz/catalog.rs"
 ROWS = "src/validate/rows.rs"
 VALIDATE = "src/validate.rs"
 TYPES = "src/validate/types.rs"
+SCRATCH = "src/spill/scratch.rs"
 MUTANTS = [
     ("clean", []),
     # The fast path admits any index with a valid CRC.
@@ -62,11 +63,21 @@ MUTANTS = [
                                 "            vector_build = Some(hash).filter(|_| false);")]),
     # Tied rows take the group's first position instead of their run's.
     ("rows-run-start", [(ROWS, "                run_start = position;", "                run_start = row.group;")]),
+    # Audit F1: the last row of a tied run is placed instead of refined.
+    ("rows-tie-previous", [(ROWS, "if row.more && (joins_previous || joins_next) {",
+                            "if row.more && joins_next {")]),
+    # Memory-backed scratch taken as if it were disk.
+    ("scratch-ram-silent", [(SCRATCH, "Ok(volume) if volume.memory_backed => memory_backed.push((parent, volume)),",
+                             "Ok(volume) if false => memory_backed.push((parent, volume)),")]),
+    # The report omits that it spilled.
+    ("scratch-report-dropped", [(VALIDATE, "scratch: scratch.is_created().then(",
+                                 "scratch: (false && scratch.is_created()).then(")]),
     # The streamed report drops the separator between payload rows.
     ("json-row-separator", [(TYPES, "                    if row > 0 {\n                        out.write_all(b\",\")?;",
                              "                    if row > 0 {\n                        out.write_all(b\"\")?;")]),
 ]
-TESTS = ["archive3tz::", "validate::catalog_controls", "validate::tests", "validate::memo_controls"]
+TESTS = ["archive3tz::", "validate::catalog_controls", "validate::rows", "validate::tests",
+         "validate::memo_controls", "spill::tests::disk_placement", "spill::tests::deferred"]
 
 
 def sh(cmd, **kw):

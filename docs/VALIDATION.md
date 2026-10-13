@@ -159,7 +159,10 @@ fixed-width row per member in `@3dtilesIndex1@` MD5 order and the names in a log
 stays in memory up to 96 MiB (every archive within the default entry and directory
 limits); a larger catalog moves to a scratch directory, created at its first spilled
 file, so resident memory does not grow with the entry count except for one bit per
-member. The index is checked by one streamed merge against the catalog. More than 16
+member (21.3 MiB at the member ceiling). Scratch goes to the first disk-backed
+directory with room among `$TMPDIR`, the user cache directory (`rusty-tiles/scratch`)
+and the system temporary directory; memory-backed scratch is used only when nothing
+else is available, and the report's `scratch.memoryBacked` then says so. The index is checked by one streamed merge against the catalog. More than 16
 unreferenced members are reported as the first 16 names in byte order and a count. A
 failure of the validator's own scratch storage is `io`, `resource_limit` or
 `invalid_state` with the prefix "validation scratch:", never a verdict on the archive.

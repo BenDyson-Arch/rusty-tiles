@@ -96,8 +96,18 @@ of a few records with fan-in 2, keeps two fences and one cached page.
 refusals are `Io` (exit 1); size overflow is `ResourceLimit`; a corrupt or truncated
 scratch file, a poisoned sorter or an invalid configuration is `InvalidState`. All
 carry the prefix `validation scratch:`. Scratch files are removed on drop and on error.
-The default scratch parent is the system temporary directory; VS-C adds
-`--scratch-dir` and the report label for memory-backed scratch.
+
+**CAT-6a. Scratch placement.** Spill is never put in RAM silently. At the first spilled
+file the scratch parent is the first **disk-backed** candidate that passes the free-space
+preflight, in this order: `$TMPDIR` when set, the user cache directory plus
+`rusty-tiles/scratch` (`$XDG_CACHE_HOME` or `~/.cache` on Linux, `~/Library/Caches` on
+macOS, `%LOCALAPPDATA%` on Windows; created if missing), then the system temporary
+directory. Memory-backed (tmpfs/ramfs) candidates are detected by the `spill` volume
+inspection (#166) and skipped. If every candidate is memory-backed, `validate` uses the
+first that fits and the report says so: the report gains `scratch` (`memoryBacked`,
+`peakBytes`) whenever anything spilled, and only then, so reports of archives that do
+not spill are unchanged. The report-less `validate_3tz` facade instead refuses with
+`io` "no disk-backed scratch directory". VS-C adds `--scratch-dir`.
 
 **CAT-7. Report rows.** First-inspected payloads add one 42-byte row (name location
 and counts) during traversal. Repeat references take their counts from the C2 per-URI
@@ -116,8 +126,8 @@ Only the `vector-build.json` digest is kept from the hash pass.
 
 ## Memory bound
 
-Resident memory that depends on N is the `used` bitmap, `⌈N/8⌉` bytes (16 MiB at the
-3TZ member ceiling; VS-B adds two more bits per rank). Everything else is a
+Resident memory that depends on N is the `used` bitmap, `8·⌈N/64⌉` bytes (21.3 MiB at
+the 3TZ member ceiling of 178,956,970; VS-B adds two more bits per rank). Everything else is a
 configuration constant:
 
 | Stage | Resident bound |
@@ -126,7 +136,7 @@ configuration constant:
 | lookups | resident ≤ 96 MiB; spilled: fences ≤ 12 MiB + page cache 16 MiB |
 | index check | one 65,520-byte chunk; on failure, two sorters with `R` = 24 MiB |
 | payload rows (walk) | one sorter with `R` = 32 MiB |
-| payload rows (report) | sorters with `R` = 64 MiB, after the walk's storage is released |
+| payload rows (report) | the first pass with `R` = 64 MiB, the later passes and the placed rows with `R` = 24 MiB, live together after the walk's storage is released: ≤ 1.5·64 + 2·1.5·24 MiB plus buffers, beside the resident catalog (≤ 96 MiB) and the retained name log |
 
 This slice does not bound the C2 tile arena, reference list and per-URI table, the
 external-document memo, or the live documents of the path. Those grow with tiles and
@@ -139,10 +149,13 @@ Central-directory admission reads the directory in 64 KiB chunks and each local 
 with its name in one read. Every stage is linear in N for fixed `R`, `F` and fence
 count: two external sorts of fixed-width records (at most two merge passes up to the
 member ceiling), one streamed index pass, one sequential row pass for duplicates and
-one for extents. A lookup is one key hash, one fence binary search and at most one page
-read plus one name read; names are compared once. Closure is one bitmap scan. Row
-ordering costs one pass per 64-byte chunk of the rows that still tie, so it is linear
-in the payload name bytes.
+one for extents; the duplicate pass reads names only within an equal-key run, so it does
+no random log reads in practice. A lookup is one key hash, one fence binary search and
+at most one page read plus one name read; names are compared once. Closure is one
+bitmap scan plus one random name read per unreferenced member (only failing archives
+have any). Row ordering costs one pass per 64-byte chunk of the rows that still tie, and
+each pass reads only that chunk of each tied name, so a name of length ℓ costs O(ℓ) in
+all: linear in the payload name bytes.
 
 ## API and report changes (breaking)
 
@@ -150,6 +163,12 @@ in the payload name bytes.
 - `ValidationReport::summary_json` and `ValidationReport::write_json` are new.
 - Python `validate()` returns `report["payloads"]` as `ValidationPayloads`.
 - The unreferenced-entries message is capped (CAT-1).
+- `ValidationReport::scratch` (`ScratchReport`) and the JSON `scratch` member appear
+  only when something spilled (CAT-6a).
+- Python: `report["payloads"]` is not a `list`. `report["payloads"] == [...]` is False
+  and `json.dumps(report)` raises `TypeError`; use `list(report["payloads"])`.
+- `validate_3tz` spills a large catalog to disk-backed scratch and refuses when only
+  memory-backed scratch is available.
 
 The JSON report keeps its shape, key order and row order.
 

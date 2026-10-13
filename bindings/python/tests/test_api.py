@@ -1248,6 +1248,24 @@ class WheelAPI(unittest.TestCase):
         self.assertNotIn("decodedContentBounds", report["notInspected"])
         self.assertNotIn("scene transforms", report["notInspected"])
         self.assertIn("skins, animations, morph targets and rendered extent", report["notInspected"])
+        # VS-A: payload rows are a lazy read-only sequence, not a list; the report keeps
+        # the CLI's sorted key order and states no scratch when nothing spilled.
+        rows = report["payloads"]
+        self.assertEqual(type(rows).__name__, "ValidationPayloads")
+        self.assertEqual(list(report), sorted(report))
+        self.assertNotIn("scratch", report)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["uri"], "a.glb")
+        self.assertEqual(sorted(row), ["accessorsChecked", "primitivesChecked", "uri", "vertices"])
+        self.assertEqual((rows[-1], rows[0:5], list(rows), list(rows)), (row, [row], [row], [row]))
+        for index in (1, -2):
+            with self.assertRaises(IndexError):
+                rows[index]
+        self.assertNotEqual(rows, [row])
+        with self.assertRaises(TypeError):
+            json.dumps(report)
+        self.assertEqual(json.loads(json.dumps({**report, "payloads": list(rows)}))["payloads"], [row])
         self.assertEqual(
             {key: report["limits"][key] for key in (
                 "containmentSpanBits", "containmentWorkUnits", "containmentBytesRead",

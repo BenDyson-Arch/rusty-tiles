@@ -18,7 +18,8 @@ mod scale_driver;
 mod types;
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    PayloadReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
+    PayloadReport, ScratchReport, ValidationFailure, ValidationLimits, ValidationReport,
+    ValidationRequest,
 };
 type Error = ValidationFailure;
 #[cfg(test)]
@@ -1320,7 +1321,12 @@ impl Check<'_> {
             report.primitives_checked,
             report.vertices,
         ]);
-        debug_assert_eq!(self.payload_counts.len(), self.c2.uris.len());
+        // Repeat references find their counts by C2 URI index: the two tables must align.
+        if self.payload_counts.len() != self.c2.uris.len() {
+            return Err(Error::InvalidState(
+                "payload counts are not aligned with the C2 URI facts".into(),
+            ));
+        }
         Ok(())
     }
     /// Phase 2 (outcome 4): serial per-reference streaming, in traversal order.
@@ -2471,8 +2477,16 @@ fn inspect_facts(
         member_bytes: limits.member_bytes,
         archive_stored_bytes: limits.archive_stored_bytes,
     };
-    let mut archive = Archive::new(source.try_clone()?, before.len(), &archive_limits)
-        .map_err(archive_admission_error)?;
+    // A spilled catalog prefers disk-backed scratch; memory-backed scratch is used only
+    // as a last resort, and the report then states it (`scratch.memoryBacked`).
+    let mut archive = Archive::new_with(
+        source.try_clone()?,
+        before.len(),
+        &archive_limits,
+        crate::archive3tz::CatalogConfig::selected(),
+        crate::spill::Placement::disk(true),
+    )
+    .map_err(archive_admission_error)?;
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
     let mut bytes_read = archive.index_read_bytes();
@@ -2676,6 +2690,10 @@ fn inspect_facts(
         content_references: check.contents as u64,
         entries,
         payloads,
+        scratch: scratch.is_created().then(|| ScratchReport {
+            memory_backed: scratch.memory_backed(),
+            peak_bytes: scratch.peak_bytes(),
+        }),
         limits: check.resources.limits,
         checks: [
             "archiveIndex",

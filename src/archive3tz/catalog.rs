@@ -404,6 +404,28 @@ impl Names {
         self.0.read(name_ref, out)
     }
 
+    /// `out.len()` bytes of the name at `name_ref`, starting `skip` bytes in; the range
+    /// must lie within the name.
+    pub(crate) fn read_part(
+        &self,
+        name_ref: u64,
+        skip: usize,
+        out: &mut [u8],
+    ) -> Result<(), SpillError> {
+        self.0.read(name_ref + skip as u64, out)
+    }
+
+    /// A resident log of `names` in the given order, and each name's offset.
+    #[cfg(test)]
+    pub(crate) fn of(names: &[&[u8]]) -> (Self, Vec<u64>) {
+        let mut log = LogWriter::Memory(Vec::new());
+        let refs = names
+            .iter()
+            .map(|name| log.append(name, 0, 0, 0).unwrap())
+            .collect();
+        (Self::from_log(log.finish().unwrap()), refs)
+    }
+
     /// Central-directory-order entries, read sequentially.
     pub(crate) fn directory(
         &self,

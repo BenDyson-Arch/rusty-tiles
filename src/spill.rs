@@ -14,7 +14,7 @@ mod sort;
 mod volume;
 
 #[allow(unused_imports)]
-pub(crate) use scratch::{FileIo, Scratch, SpillIo};
+pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sequence::{
     ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter,

@@ -4,23 +4,32 @@ use super::i1_fixtures::{package, point_glb, tileset, Files};
 use super::*;
 use crate::archive3tz::FORCED;
 
-/// Runs `inspect` with the catalog profile forced on this thread.
+/// Runs `inspect` with the catalog profile forced on this thread. A successful report
+/// states scratch exactly when the profile spills (`TMPDIR` is a disk in these runs).
 fn inspect_as(path: &Path, forced: bool) -> Result<ValidationReport, Error> {
     FORCED.with(|f| f.set(Some(forced)));
     let result = inspect_selected(ValidationRequest::new(path), ValidationLimits::default());
     FORCED.with(|f| f.set(None));
+    if let Ok(report) = &result {
+        assert_eq!(report.scratch.is_some(), forced, "{:?}", report.scratch);
+    }
     result
 }
 
-/// The comparable outcome: the CLI's JSON bytes, or the error category and message.
+/// The comparable outcome: the CLI's JSON bytes without the profile's `scratch` member,
+/// or the error category and message.
 fn outcome(result: Result<ValidationReport, Error>) -> String {
     match result {
         Ok(report) => {
             let mut streamed = Vec::new();
             report.write_json(&mut streamed).unwrap();
-            let materialized = serde_json::to_value(&report).unwrap().to_string();
-            assert_eq!(String::from_utf8(streamed).unwrap(), materialized);
-            materialized
+            let mut materialized = serde_json::to_value(&report).unwrap();
+            assert_eq!(
+                String::from_utf8(streamed).unwrap(),
+                materialized.to_string()
+            );
+            materialized.as_object_mut().unwrap().remove("scratch");
+            materialized.to_string()
         }
         Err(error) => format!("{}: {error}", error.category().0),
     }
@@ -157,5 +166,99 @@ fn vector_build_digest_and_conversion_marker_survive_the_hash_pass() {
     assert_eq!(
         both(&files),
         "invalid_input: vector build-state checksum mismatch"
+    );
+}
+
+/// A central directory in reverse URI order (the log order the row passes break ties by),
+/// with payload URIs tied past 64 and 128 bytes: rows still come out in URI order.
+#[test]
+fn payload_rows_follow_uri_order_when_the_directory_does_not() {
+    let one = "d".repeat(100);
+    let two = format!("{}/{}", "e".repeat(64), "f".repeat(70));
+    let mut uris: Vec<String> = (0..12)
+        .flat_map(|i| [format!("{one}/{i:02}.glb"), format!("{two}/{i}.glb")])
+        .collect();
+    uris.sort();
+    uris.reverse();
+    let glb = point_glb();
+    let manifest = tileset(content_tile(&uris));
+    let mut records: Vec<(&[u8], &[u8])> = vec![(b"tileset.json", &manifest)];
+    records.extend(uris.iter().map(|uri| (uri.as_bytes(), glb.as_slice())));
+    let bytes = crate::archive3tz::read_tests::indexed_zip(&records);
+    let work = tempfile::tempdir().unwrap();
+    let path = work.path().join("reversed.3tz");
+    std::fs::write(&path, bytes).unwrap();
+    let resident = outcome(inspect_as(&path, false));
+    assert_eq!(resident, outcome(inspect_as(&path, true)));
+    let report: Value = serde_json::from_str(&resident).unwrap();
+    let listed: Vec<&str> = report["payloads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["uri"].as_str().unwrap())
+        .collect();
+    uris.sort();
+    assert_eq!(listed, uris);
+}
+
+/// CAT-6: the validator's own scratch failures map to typed categories with the
+/// `validation scratch:` prefix, never to a verdict on the archive.
+#[test]
+fn scratch_failures_map_to_io_resource_limit_and_invalid_state() {
+    use crate::spill::{InsufficientSpace, PreflightStage, SpaceRole, SpillError};
+    let path = std::path::PathBuf::from("/scratch");
+    let cases = [
+        (
+            SpillError::io(
+                "write spill run",
+                &path,
+                std::io::Error::from(std::io::ErrorKind::StorageFull),
+            ),
+            "io",
+        ),
+        (
+            SpillError::InsufficientSpace(InsufficientSpace {
+                path: path.clone(),
+                needed: 2,
+                available: 1,
+                filesystem: SpaceRole::Scratch,
+                stage: PreflightStage::Geometry,
+            }),
+            "io",
+        ),
+        (SpillError::Overflow, "resource_limit"),
+        (
+            SpillError::CorruptRun {
+                path: path.clone(),
+                detail: "short".into(),
+            },
+            "invalid_state",
+        ),
+        (SpillError::Poisoned, "invalid_state"),
+        (SpillError::InvalidConfig("bad"), "invalid_state"),
+    ];
+    for (error, category) in cases {
+        let failure = spill_failure(error);
+        assert_eq!(failure.category().0, category, "{failure}");
+        assert!(
+            failure.to_string().starts_with("validation scratch: "),
+            "{failure}"
+        );
+    }
+    let kind = match spill_failure(SpillError::io(
+        "write spill run",
+        &path,
+        std::io::Error::from(std::io::ErrorKind::StorageFull),
+    )) {
+        Error::Io(error) => error.kind(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(kind, std::io::ErrorKind::StorageFull);
+    // Through the archive owner too.
+    assert_eq!(
+        archive_admission_error(crate::archive3tz::ReadError::Scratch(SpillError::Poisoned))
+            .category()
+            .0,
+        "invalid_state"
     );
 }

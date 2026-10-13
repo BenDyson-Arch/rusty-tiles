@@ -18,6 +18,8 @@ mod read;
 #[cfg(test)]
 pub(crate) use catalog::FORCED;
 pub(crate) use catalog::{CatalogConfig, Names};
+#[cfg(test)]
+pub(crate) use read::tests as read_tests;
 pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 
 #[derive(Debug, thiserror::Error)]

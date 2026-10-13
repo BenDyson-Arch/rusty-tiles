@@ -126,6 +126,19 @@ pub struct ValidationReport {
     pub limits: ValidationLimits,
     /// One row per inspected payload URI, in URI byte order, read on demand.
     pub payloads: PayloadRows,
+    /// Present only when the catalog or the payload rows spilled to scratch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scratch: Option<ScratchReport>,
+}
+/// The validation's scratch use, reported whenever any spill file was written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScratchReport {
+    /// The scratch directory is RAM (tmpfs or ramfs): the spill was held in memory. This
+    /// happens only when no disk-backed candidate was available or fitted.
+    pub memory_backed: bool,
+    /// Largest number of bytes held in scratch files at once.
+    pub peak_bytes: u64,
 }
 impl ValidationReport {
     /// The serialized report without its `payloads` member: a small JSON object.
@@ -140,6 +153,9 @@ impl ValidationReport {
             "notInspected": self.not_inspected,
         });
         value["limits"] = serde_json::to_value(&self.limits)?;
+        if let Some(scratch) = self.scratch {
+            value["scratch"] = serde_json::to_value(scratch)?;
+        }
         Ok(value)
     }
     /// Writes the report as compact JSON, byte-identical to the `Display` of

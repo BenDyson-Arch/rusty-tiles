@@ -75,7 +75,7 @@ impl Accounting {
 /// does both only when the first spill file is requested, so a consumer whose sorts and
 /// sequences stay in memory never touches the filesystem.
 pub(crate) struct Scratch {
-    parent: PathBuf,
+    placement: Placement,
     needed: u64,
     inspect: fn(&Path) -> Result<Volume, SpillError>,
     created: OnceLock<Created>,
@@ -87,6 +87,79 @@ pub(crate) struct Scratch {
 struct Created {
     dir: tempfile::TempDir,
     volume: Volume,
+}
+
+/// Where a deferred scratch directory is created.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Placement {
+    /// Inside exactly this existing directory.
+    In(PathBuf),
+    /// Inside the first disk-backed candidate that passes the free-space preflight. When
+    /// every candidate is memory-backed (tmpfs), the first that fits is used only if
+    /// `memory_backed_allowed` (its owner then reports [`Scratch::memory_backed`]);
+    /// otherwise creation is a typed refusal. Spill is never put in RAM silently.
+    Disk {
+        candidates: Vec<PathBuf>,
+        memory_backed_allowed: bool,
+    },
+}
+
+impl Placement {
+    /// [`Placement::Disk`] over the default candidates: `$TMPDIR` when set, then the user
+    /// cache directory (`$XDG_CACHE_HOME` or `~/.cache` on Linux, `~/Library/Caches` on
+    /// macOS, `%LOCALAPPDATA%` on Windows) plus `rusty-tiles/scratch`, then the system
+    /// temporary directory.
+    pub(crate) fn disk(memory_backed_allowed: bool) -> Self {
+        let mut candidates = Vec::new();
+        if let Some(dir) = std::env::var_os("TMPDIR").filter(|dir| !dir.is_empty()) {
+            candidates.push(PathBuf::from(dir));
+        }
+        if let Some(cache) = user_cache_dir() {
+            candidates.push(cache.join("rusty-tiles").join("scratch"));
+        }
+        let temp = std::env::temp_dir();
+        if !candidates.contains(&temp) {
+            candidates.push(temp);
+        }
+        Self::Disk {
+            candidates,
+            memory_backed_allowed,
+        }
+    }
+
+    fn first(&self) -> &Path {
+        match self {
+            Self::In(path) => path,
+            Self::Disk { candidates, .. } => candidates
+                .first()
+                .map_or_else(|| Path::new("."), PathBuf::as_path),
+        }
+    }
+}
+
+/// The platform's per-user cache directory, if it can be named.
+fn user_cache_dir() -> Option<PathBuf> {
+    let absolute = |dir: std::ffi::OsString| Some(PathBuf::from(dir)).filter(|d| d.is_absolute());
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA").and_then(absolute)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("HOME")
+            .and_then(absolute)
+            .map(|home| home.join("Library").join("Caches"))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::env::var_os("XDG_CACHE_HOME")
+            .and_then(absolute)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .and_then(absolute)
+                    .map(|home| home.join(".cache"))
+            })
+    }
 }
 
 impl Scratch {
@@ -111,25 +184,26 @@ impl Scratch {
     ) -> Result<Self, SpillError> {
         let parent = parent.map_or_else(Self::default_parent, Path::to_path_buf);
         let created = Self::materialize(&parent, needed, inspect)?;
-        let scratch = Self::deferred_with(Some(&parent), needed, io, volume::inspect_volume);
+        let scratch =
+            Self::deferred_with(Placement::In(parent), needed, io, volume::inspect_volume);
         let _ = scratch.created.set(created);
         Ok(scratch)
     }
 
-    /// Records `parent` and the free-space estimate `needed` without touching the filesystem.
-    /// The preflight and the directory happen at the first spill file, if any.
-    pub(crate) fn deferred(parent: Option<&Path>, needed: u64) -> Self {
-        Self::deferred_with(parent, needed, Arc::new(FileIo), volume::inspect_volume)
+    /// Records where scratch goes and the free-space estimate `needed` without touching the
+    /// filesystem. The placement, preflight and directory happen at the first spill file.
+    pub(crate) fn deferred(placement: Placement, needed: u64) -> Self {
+        Self::deferred_with(placement, needed, Arc::new(FileIo), volume::inspect_volume)
     }
 
     pub(crate) fn deferred_with(
-        parent: Option<&Path>,
+        placement: Placement,
         needed: u64,
         io: Arc<dyn SpillIo>,
         inspect: fn(&Path) -> Result<Volume, SpillError>,
     ) -> Self {
         Self {
-            parent: parent.map_or_else(Self::default_parent, Path::to_path_buf),
+            placement,
             needed,
             inspect,
             created: OnceLock::new(),
@@ -170,10 +244,78 @@ impl Scratch {
         if let Some(created) = self.created.get() {
             return Ok(created);
         }
-        let created = Self::materialize(&self.parent, self.needed, self.inspect)?;
+        let created = match &self.placement {
+            Placement::In(parent) => Self::materialize(parent, self.needed, self.inspect)?,
+            Placement::Disk {
+                candidates,
+                memory_backed_allowed,
+            } => Self::place(
+                candidates,
+                *memory_backed_allowed,
+                self.needed,
+                self.inspect,
+            )?,
+        };
         // A concurrent first spill may have won; the loser's directory is removed on drop.
         let _ = self.created.set(created);
         Ok(self.created.get().expect("scratch was just created"))
+    }
+
+    /// The first disk-backed candidate that fits; see [`Placement::Disk`].
+    fn place(
+        candidates: &[PathBuf],
+        memory_backed_allowed: bool,
+        needed: u64,
+        inspect: fn(&Path) -> Result<Volume, SpillError>,
+    ) -> Result<Created, SpillError> {
+        let mut memory_backed = Vec::new();
+        let mut first_error = None;
+        for parent in candidates {
+            // Our own cache subdirectory may not exist yet; other candidates must.
+            if parent.ends_with(Path::new("rusty-tiles").join("scratch")) {
+                let _ = fs::create_dir_all(parent);
+            }
+            match inspect(parent) {
+                Ok(volume) if volume.memory_backed => memory_backed.push((parent, volume)),
+                Ok(volume) => match Self::materialize(parent, needed, |_| Ok(volume)) {
+                    Ok(created) => return Ok(created),
+                    Err(error) => {
+                        first_error.get_or_insert(error);
+                    }
+                },
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        if memory_backed_allowed {
+            for (parent, volume) in &memory_backed {
+                match Self::materialize(parent, needed, |_| Ok(*volume)) {
+                    Ok(created) => return Ok(created),
+                    Err(error) => {
+                        first_error.get_or_insert(error);
+                    }
+                }
+            }
+        } else if let Some((parent, _)) = memory_backed.first() {
+            if first_error.is_none() {
+                return Err(SpillError::io(
+                    "no disk-backed scratch directory",
+                    parent.as_path(),
+                    io::Error::other(
+                        "every scratch candidate is memory-backed (tmpfs), which would hold the \
+                         spill in RAM; set TMPDIR to a disk-backed directory",
+                    ),
+                ));
+            }
+        }
+        Err(first_error.unwrap_or_else(|| {
+            SpillError::io(
+                "no scratch directory candidate",
+                ".",
+                io::Error::from(io::ErrorKind::NotFound),
+            )
+        }))
     }
 
     /// Whether the scratch directory exists (always, for [`Scratch::create`]).
@@ -185,7 +327,7 @@ impl Scratch {
     pub(crate) fn path(&self) -> &Path {
         self.created
             .get()
-            .map_or(self.parent.as_path(), |created| created.dir.path())
+            .map_or(self.placement.first(), |created| created.dir.path())
     }
 
     /// True when scratch is RAM (tmpfs/ramfs); reported as `scratch_memory_backed`.

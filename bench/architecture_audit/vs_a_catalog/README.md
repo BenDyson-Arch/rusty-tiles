@@ -131,7 +131,7 @@ SIGSEGV aborted its first build).
 
 - Whole-validation RSS is not flat in tiles: the C2 tile arena, reference list and
   per-URI table, the external-document memo and live documents are VS-B's.
-- The `used` bitmap is `N/8` bytes (16 MiB at the member ceiling).
+- The `used` bitmap is `8·⌈N/64⌉` bytes (21.3 MiB at the member ceiling).
 - Timings are from a shared host, release builds, warm page cache.
 - `spill::tests::spill_memory_is_flat_in_input_size` fails on this host on develop
   `957d252` as well as on this branch (VmHWM growth 11.3-11.6 MiB against an 11 MiB

@@ -118,20 +118,22 @@ fn scratch_error(error: SpillError) -> ValidationFailure {
     super::spill_failure(error)
 }
 
-/// The chunk of `name` at `depth` (64 bytes per depth), as a pending row of `group`.
-fn chunk_of(name: &[u8], depth: usize, group: u64, row: Placed) -> Pending {
-    let start = (depth * CHUNK).min(name.len());
-    let part = &name[start..];
-    let length = part.len().min(CHUNK);
+/// The chunk of `row`'s name at `depth` (bytes `64·depth..64·depth + 64`), as a pending
+/// row of `group`. Only those bytes are read, so a row of name length ℓ costs O(ℓ) over
+/// all its passes.
+fn chunk_of(names: &Names, row: Placed, depth: usize, group: u64) -> Result<Pending, SpillError> {
+    let len = usize::from(row.name_len);
+    let start = (depth * CHUNK).min(len);
+    let length = (len - start).min(CHUNK);
     let mut chunk = [0; CHUNK];
-    chunk[..length].copy_from_slice(&part[..length]);
-    Pending {
+    names.read_part(row.name_ref, start, &mut chunk[..length])?;
+    Ok(Pending {
         group,
         chunk,
         length: length as u8,
-        more: part.len() > CHUNK,
+        more: len - start > CHUNK,
         row,
-    }
+    })
 }
 
 /// Collects first-inspection payload rows during traversal: 42-byte rows, held in name-log
@@ -139,8 +141,10 @@ fn chunk_of(name: &[u8], depth: usize, group: u64, row: Placed) -> Pending {
 pub(super) struct RowSink<'s> {
     sorter: ExternalSorter<'s, Placed>,
     scratch: &'s Scratch,
-    /// The ordering passes run after the walk, with the catalog's sort resources.
+    /// The first ordering pass runs after the walk, with the catalog's row resources.
     config: SortConfig,
+    /// Later passes and the placed rows, live beside the first, use the side resources.
+    side: SortConfig,
 }
 
 impl<'s> RowSink<'s> {
@@ -152,6 +156,7 @@ impl<'s> RowSink<'s> {
             sorter: ExternalSorter::new(scratch, config.rows_sort).map_err(scratch_error)?,
             scratch,
             config: config.sort,
+            side: config.side_sort,
         })
     }
 
@@ -179,18 +184,16 @@ fn order<'s>(
     rows: ExternalSorter<'s, Placed>,
     scratch: &'s Scratch,
     config: SortConfig,
+    side: SortConfig,
     names: &Names,
 ) -> Result<ExternalSorter<'s, Placed>, SpillError> {
-    let mut buffer = Vec::new();
     let mut pass = ExternalSorter::new(scratch, config)?;
     for row in rows.finish()? {
-        let row = row?;
-        names.read(row.name_ref, row.name_len, &mut buffer)?;
-        pass.push(chunk_of(&buffer, 0, 0, row))?;
+        pass.push(chunk_of(names, row?, 0, 0)?)?;
     }
-    let mut placed = ExternalSorter::new(scratch, config)?;
+    let mut placed = ExternalSorter::new(scratch, side)?;
     for depth in 1.. {
-        let mut next = ExternalSorter::<Pending>::new(scratch, config)?;
+        let mut next = ExternalSorter::<Pending>::new(scratch, side)?;
         let mut tied = 0u64;
         let mut rows = pass.finish()?.peekable();
         // Within one group the rows take the group's positions in sorted order.
@@ -216,8 +219,7 @@ fn order<'s>(
                 None => false,
             };
             if row.more && (joins_previous || joins_next) {
-                names.read(row.row.name_ref, row.row.name_len, &mut buffer)?;
-                next.push(chunk_of(&buffer, depth, run_start, row.row))?;
+                next.push(chunk_of(names, row.row, depth, run_start)?)?;
                 tied += 1;
             } else {
                 placed.push(Placed {
@@ -248,9 +250,10 @@ impl RowSink<'_> {
             sorter,
             scratch: borrowed,
             config,
+            side,
         } = self;
-        let placed = order(sorter, borrowed, config, &names).map_err(scratch_error)?;
-        let store = Store::new(placed, borrowed, config).map_err(scratch_error)?;
+        let placed = order(sorter, borrowed, config, side, &names).map_err(scratch_error)?;
+        let store = Store::new(placed, borrowed, side).map_err(scratch_error)?;
         Ok(PayloadRows {
             inner: Arc::new(Inner {
                 store,
@@ -431,5 +434,63 @@ impl serde::Serialize for PayloadRows {
             seq.serialize_element(&row.map_err(S::Error::custom)?)?;
         }
         seq.end()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spill::Placement;
+
+    /// Orders rows whose log (central-directory) order differs from URI order, with ties
+    /// at depths 1 and 2 and names that end on a chunk boundary, and returns the URIs.
+    fn ordered(names: &[Vec<u8>], config: CatalogConfig) -> Vec<String> {
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Arc::new(Scratch::deferred(Placement::In(parent.path().into()), 0));
+        let slices: Vec<&[u8]> = names.iter().map(Vec::as_slice).collect();
+        let (log, refs) = Names::of(&slices);
+        let mut sink = RowSink::new(&scratch, &config).unwrap();
+        for (name, &name_ref) in names.iter().zip(&refs) {
+            let report = PayloadReport {
+                uri: String::from_utf8(name.clone()).unwrap(),
+                accessors_checked: name.len() as u64,
+                primitives_checked: 1,
+                vertices: 3,
+            };
+            sink.push(&report.uri, name_ref, &report).unwrap();
+        }
+        let rows = sink.finish(log, scratch.clone()).unwrap();
+        rows.iter()
+            .map(|row| {
+                let row = row.unwrap();
+                assert_eq!(row.accessors_checked, row.uri.len() as u64);
+                row.uri
+            })
+            .collect()
+    }
+
+    #[test]
+    fn deeper_passes_order_rows_whose_log_order_is_not_uri_order() {
+        let one = "d".repeat(100);
+        let two = format!("{}/{}", "e".repeat(64), "f".repeat(70));
+        let mut names: Vec<Vec<u8>> = Vec::new();
+        // A deterministic shuffle: 37 is coprime to 50.
+        for i in (0..50).map(|i| (i * 37) % 50) {
+            names.push(format!("{one}/{i:02}.glb").into_bytes());
+            names.push(format!("{two}/{}.glb", 49 - i).into_bytes());
+        }
+        names.push("e".repeat(64).into_bytes());
+        names.push("e".repeat(128).into_bytes());
+        names.push(one.clone().into_bytes());
+        names.push(b"a.glb".to_vec());
+        names.reverse();
+        let mut expected: Vec<String> = names
+            .iter()
+            .map(|name| String::from_utf8(name.clone()).unwrap())
+            .collect();
+        expected.sort();
+        for config in [CatalogConfig::DEFAULT, CatalogConfig::FORCED_SPILL] {
+            assert_eq!(ordered(&names, config), expected, "{config:?}");
+        }
     }
 }
