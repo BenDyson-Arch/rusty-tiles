@@ -12,7 +12,7 @@ use crate::{JobError, JobErrorKind};
 use std::mem::size_of;
 
 #[derive(Debug)]
-pub(super) struct Level {
+pub(in crate::mesh_large) struct Level {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
@@ -20,9 +20,9 @@ pub(super) struct Level {
 }
 /// Gutter/padding texel of an ID page: every channel all-ones, so each packed
 /// feature-ID set reads its own `nullFeatureId` (2^(8*bytes) - 1).
-pub(super) const ID_NO_FEATURE: [u8; 4] = [255; 4];
+pub(in crate::mesh_large) const ID_NO_FEATURE: [u8; 4] = [255; 4];
 #[derive(Debug)]
-pub(super) struct Chain {
+pub(in crate::mesh_large) struct Chain {
     pub class: Class,
     pub levels: Vec<Level>,
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
@@ -160,7 +160,52 @@ fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
     }
 }
 
-pub(super) fn build(
+/// Refill zero-support gutters after a caller re-expresses normal values.
+/// The caller already owns the level; memory_limit charges only this helper's
+/// transient nearest-owner scratch plus the returned owner map, with build's tie rules.
+/// Empty texels map to usize::MAX; positive support always owns itself.
+pub(in crate::mesh_large) fn refill_gutters(
+    level: &mut Level,
+    class: Class,
+    memory_limit: u64,
+) -> Result<Vec<usize>, JobError> {
+    let pixels = u64::from(level.width)
+        .checked_mul(u64::from(level.height))
+        .ok_or_else(resource)?;
+    let count = usize::try_from(pixels).map_err(|_| resource())?;
+    if count == 0
+        || level.rgba.len() != count.checked_mul(4).ok_or_else(resource)?
+        || level.support.len() != count
+    {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "gutter RGBA/support shape mismatch",
+        ));
+    }
+    let bytes = pixels
+        .checked_mul((size_of::<Nearest>() + size_of::<usize>()) as u64)
+        .ok_or_else(resource)?;
+    if bytes > memory_limit {
+        return Err(resource());
+    }
+    let mut nearest = reserve(count)?;
+    fill_gutters(level, class, &mut nearest);
+    let mut owners = reserve(count)?;
+    owners.extend((0..count).map(|i| {
+        if class == Class::Id {
+            if level.support[i] == 0 {
+                usize::MAX
+            } else {
+                i
+            }
+        } else {
+            nearest[i].owner
+        }
+    }));
+    Ok(owners)
+}
+
+pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,
     rgba: &[u8],

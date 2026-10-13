@@ -77,6 +77,7 @@ struct Piece<'a> {
     corner_depths: &'a [[u8; 3]],
     uvs: Vec<&'a [[f32; 2]]>,
     material: &'a Option<Value>,
+    feature_id_textures: &'a [Value],
 }
 
 fn allocate(length: usize) -> Result<Vec<u8>, JobError> {
@@ -393,8 +394,13 @@ pub(super) fn encode(
             pieces.push(Piece {
                 triangles: &primitive.triangles[start..end],
                 corner_depths: &primitive.corner_depths[start..end],
-                uvs: primitive.uvs.iter().map(|uv| &uv[3 * start..3 * end]).collect(),
+                uvs: primitive
+                    .uvs
+                    .iter()
+                    .map(|uv| &uv[3 * start..3 * end])
+                    .collect(),
                 material: &primitive.material,
+                feature_id_textures: &primitive.feature_id_textures,
             });
             start = end;
         }

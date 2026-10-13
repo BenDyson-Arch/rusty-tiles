@@ -5,6 +5,7 @@
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
 mod attributes;
+mod bake;
 mod capture;
 mod config;
 mod delivery;
