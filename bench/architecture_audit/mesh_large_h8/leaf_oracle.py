@@ -810,7 +810,7 @@ def verify(truth_path, output, decode_cache=None, controls=False, ktx_decoded=No
                         require(abs(actual['coverage']-baseline['sourceTarget']) <= floor,'independent original-source finite MASK residual')
                         artifact_metrics.append({'uri':receipt['uri'],'page':page_id,'primitive':pi,'mask':actual,'independentSemanticGap':0,'floor':floor})
         require(counted == receipt['end']-receipt['first'],'leaf rank-span count')
-        require(counted <= {'fast':32768,'balanced':16384,'quality':8192,'lossless':8192}[profile],'profile leaf item bound')
+        require(counted <= {'fast':8192,'balanced':8192,'quality':8192,'lossless':8192}[profile],'profile leaf item bound (CesiumJS property-table width, H16)')
         leaves += 1
     require(observed == total and leaves == manifest['report']['leaves'],'whole output source coverage/count')
     if small:

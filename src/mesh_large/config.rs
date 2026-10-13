@@ -17,6 +17,14 @@ pub(crate) const MEMBER_CEILING_3TZ: u64 = crate::archive3tz::MEMBER_CEILING;
 /// forest writer; both stages here use these lower terms.
 pub(crate) const MEMBERS_BESIDES_TILES: u64 = 1 + 1 + 3;
 
+/// The most rows one property table of a delivered model may have: CesiumJS 1.146 builds one
+/// GPU structural-metadata texture per property table whose width is the table's row count,
+/// and refuses one wider than its 8192 maximum texture size; picking resolves through one
+/// table per model. A leaf's `source_triangle` table has one row per triangle and its
+/// `source_primitive` table at most as many, so a leaf budget at or below this keeps every
+/// table of every leaf within it (H16 contract, "Consumer property tables").
+pub(crate) const CONSUMER_TABLE_ROWS: u64 = 8_192;
+
 /// Output profiles. The leaf triangle budget `L` comes from the profile; there is no separate
 /// leaf-triangle option (design §8; `--leaf-triangles` is retired).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -29,11 +37,12 @@ pub(crate) enum Profile {
 }
 
 impl Profile {
+    /// `L`. Every profile is capped at [`CONSUMER_TABLE_ROWS`]: `fast` (formerly 32,768) and
+    /// `balanced` (formerly 16,384) would give leaves whose per-triangle provenance table
+    /// CesiumJS cannot load. The profiles still differ in texture pages and encoding.
     pub(crate) fn leaf_triangles(self) -> u64 {
         match self {
-            Self::Fast => 32_768,
-            Self::Balanced => 16_384,
-            Self::Quality | Self::Lossless => 8_192,
+            Self::Fast | Self::Balanced | Self::Quality | Self::Lossless => CONSUMER_TABLE_ROWS,
         }
     }
 }
