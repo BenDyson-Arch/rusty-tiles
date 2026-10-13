@@ -123,6 +123,13 @@ jobs:
             ${{ runner.temp }}/h1-refusals/receipt.json
             ${{ runner.temp }}/h1-physical/receipt.json
           if-no-files-found: error
+      - name: Re-run validator parity with the catalog on scratch (VS-A forced spill)
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/vsa-scratch"
+          TMPDIR="${{ runner.temp }}/vsa-scratch" RUSTY_TILES_FORCED_SPILL=1 \
+            cargo test --locked --lib --features native-jpeg -- --test-threads=2 \
+            validate:: archive3tz:: c2_oracle_parity i1_oracle_parity
       - name: Independently check validation controls and finite work
         run: |
           python3 -B tests/c1_validation_oracle.py --generate "${{ runner.temp }}/c1-fixtures" --binary target/debug/rusty-tiles --output "${{ runner.temp }}/c1-validation.json"
