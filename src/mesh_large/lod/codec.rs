@@ -599,15 +599,17 @@ pub(crate) fn encode(
                     wire.attribute(&bytes, count, 12, json!({"componentType":5126,"type":"VEC3","min":min.map(f64::from),"max":max.map(f64::from)}))
                 }
             };
-            let mut bytes = Vec::with_capacity(count * 12);
+            // Normals as normalized bytes (KHR_mesh_quantization), padded to 4 bytes.
+            let mut bytes = Vec::with_capacity(count * 4);
             for f in faces {
                 for &i in f {
                     for v in smooth[i as usize] {
-                        bytes.extend_from_slice(&v.to_le_bytes());
+                        bytes.push(((v.clamp(-1., 1.) * 127.).round() as i8) as u8);
                     }
+                    bytes.push(0);
                 }
             }
-            let normal = wire.attribute(&bytes, count, 12, json!({"componentType":5126,"type":"VEC3"}));
+            let normal = wire.attribute(&bytes, count, 4, json!({"componentType":5120,"type":"VEC3","normalized":true}));
             let mut bytes = Vec::with_capacity(count * 4);
             for _ in 0..count {
                 bytes.extend_from_slice(&(row as f32).to_le_bytes());
@@ -668,10 +670,10 @@ pub(crate) fn encode(
         "buffers":[{"byteLength":binary.len()}],"bufferViews":views,"accessors":accessors,
         "extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_proxy_v1","classes":classes},"propertyTables":tables}}});
-    if quantized {
-        glb::add_extension(&mut document, "KHR_mesh_quantization", true)
-            .map_err(|e| invalid(e.to_string()))?;
-    }
+    // Byte normals need KHR_mesh_quantization even for float positions.
+    let _ = quantized;
+    glb::add_extension(&mut document, "KHR_mesh_quantization", true)
+        .map_err(|e| invalid(e.to_string()))?;
     let compressed = glb::meshopt_compress(
         &mut document,
         &binary,

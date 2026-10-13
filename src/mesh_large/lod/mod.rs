@@ -921,12 +921,15 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     );
     out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
-    simplifier.simplify(ctx.target);
+    // At most P faces, and at least a halving of the children (single-child chains and
+    // small subtrees still coarsen level by level).
+    let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
+    simplifier.simplify(target);
     let strict_faces = simplifier.live_faces();
     let relaxed = strict_faces > 2 * ctx.target;
     if relaxed {
         simplifier.relax();
-        simplifier.simplify(ctx.target);
+        simplifier.simplify(target);
     }
     let (s_faces, report) = simplifier.finish();
     out.relaxed = relaxed;
