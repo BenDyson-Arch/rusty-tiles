@@ -80,11 +80,15 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    by dyadic midpoint subdivision with explicit rounding slack. Per direction:
    - composed: `S->A <= up(h(S->T) + max e_c^->)`,
      `A->S <= up(max e_c^<- + h(T->S))`, `T` including vanished faces;
-   - direct against the baked source range, attempted where a child is a proxy
-     and the work budget (`256(|S|+|T|)` evaluations) can cover the range:
-     source->proxy streams the range (an exhausted budget keeps the source box
-     against a real proxy point), proxy->source keeps per-face minima over
-     65,536-triangle chunks (any complete chunk is a valid bound);
+   - direct against the baked source range, above children that include a proxy
+     (above leaf-only children `T` is the decoded source itself): source->proxy
+     makes one capped query per source triangle (parallel over fixed blocks; a
+     budget that ends early keeps the node's source box against a real proxy
+     point), so the composed term cannot add up level by level at shallow tiles;
+     proxy->source keeps per-face minima over 65,536-triangle chunks (any
+     complete chunk is a valid bound) and is attempted only for ranges of at
+     most four chunks, since a whole-face witness against small source triangles
+     is loose;
    - each direction takes `min(composed, direct)`; `e_raw` is the larger;
      published `e = max(e_raw, children's published)`.
    Per-primitive proxy->source bounds `e_A` (same-primitive witnesses) are
@@ -144,9 +148,9 @@ seam edges, removed-vertex logs and rows are spilled. Scratch adds the pre-pass
   depth-`d` proxy and a refined neighbour's depth-`d+1` content can gap by at
   most the two tiles' certified errors. Same-depth frontiers (including
   shallower leaves, packed leaves and synthetic depths) are bit-identical.
-- Direct terms are not attempted where they cannot complete (shallow tiles) or
-  where the children are leaves (they would equal the composed terms up to the
-  leaves' snap bound); the composed terms alone certify those tiles.
+- Above leaf-only children no direct term runs (it would equal the composed
+  term up to the leaves' snap bound), and the proxy->source direct term runs
+  only for small ranges; the composed terms certify the rest.
 - Profile constants (`P`, retention, budgets, refinement depth) are provisional.
 
 ## Acceptance
