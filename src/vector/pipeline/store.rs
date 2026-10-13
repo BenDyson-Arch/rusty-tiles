@@ -1235,7 +1235,26 @@ pub(super) fn convert(
     };
     let encoding_started = Instant::now();
     let before_partition = build.partition_seconds;
+    // A quantized build also keys its whole input by the rows' fingerprints
+    // before the survey: unchanged input restores the previous build's
+    // hierarchy, grid and contents as they are, without surveying or
+    // encoding. (Changed input surveys everything; the final pass still
+    // reuses unchanged subtrees.)
+    let mut surveyed = None;
+    let mut restored = None;
     if options.quantize && build.counters.features > 0 {
+        let unchanged = build.reuse.signature(&db, "")?;
+        let rows = build.stats("")?.count;
+        restored = build.reuse.restore_surveyed(
+            "",
+            &unchanged,
+            &mut build.counters,
+            rows,
+            options.max_tiles,
+        )?;
+        surveyed = Some(unchanged);
+    }
+    if restored.is_none() && options.quantize && build.counters.features > 0 {
         // Survey: build the hierarchy with every content on its own range and
         // record, per shared vertex, the largest exponent of the tiles holding
         // it. Splits and partitions it makes are kept; tiles are rebuilt.
@@ -1279,7 +1298,9 @@ pub(super) fn convert(
         build.pass = encoding::GridPass::Final;
         build.output = output;
     }
-    let root = if build.counters.features > 0 {
+    let root = if let Some(node) = restored {
+        node
+    } else if build.counters.features > 0 {
         build.build("", 0)?
     } else {
         let mut node = Node {
@@ -1294,6 +1315,9 @@ pub(super) fn convert(
             .remember("", build.reuse.signature(&db, "")?, &mut node)?;
         node
     };
+    if let Some(surveyed) = surveyed {
+        build.reuse.remember_survey("", surveyed);
+    }
     // Identity accounting: every source fragment is in exactly one full-detail leaf.
     let held = records::leaf_fragments(&root.tree)?;
     if held != build.counters.fragments {

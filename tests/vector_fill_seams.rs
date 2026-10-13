@@ -336,6 +336,69 @@ fn country_fragments_share_decoded_seam_vertices_across_pole_and_antimeridian() 
     }
 }
 
+/// Reusing a quantized build of unchanged input with fragmented fills,
+/// shared vertices and float32 tiles encodes nothing (no survey either) and
+/// publishes the same archive.
+#[test]
+fn quantized_reuse_of_unchanged_input_encodes_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let input =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/countries-source.geojson");
+    let arguments = ["--maxVertices", "256", "--quantize", "--meshopt"];
+    let first = temp.path().join("first.3tz");
+    convert(&input, &first, &arguments);
+    assert!(
+        contents(&first).iter().any(|c| c.step.is_none()),
+        "float32 tiles"
+    );
+    // Without --reproducible, so the report counts encoding workers.
+    let again = temp.path().join("again.3tz");
+    let result = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .args(["vector", "--json", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(&again)
+        .args(arguments)
+        .arg("--reuseTileset")
+        .arg(&first)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let mut a = zip::ZipArchive::new(fs::File::open(&first).unwrap()).unwrap();
+    let mut b = zip::ZipArchive::new(fs::File::open(&again).unwrap()).unwrap();
+    let report: Value = serde_json::from_slice(&member(&mut b, "conversion.json")).unwrap();
+    assert_eq!(report["performance"]["workersUsed"], 0, "{report}");
+    assert_eq!(report["reuse"]["rebuiltContents"], 0, "{report}");
+    assert_eq!(
+        report["reuse"]["reusedContents"],
+        report["reuse"]["publishedContents"]
+    );
+    let names: Vec<String> = a.file_names().map(str::to_string).collect();
+    assert_eq!(
+        names.iter().collect::<BTreeSet<_>>(),
+        b.file_names()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+            .iter()
+            .collect()
+    );
+    for name in names {
+        // Reports, as in every reuse: restored tiles are not re-encoded.
+        let reports = [
+            "conversion.json",
+            "geometry-reports.jsonl",
+            "@3dtilesIndex1@",
+        ];
+        if !reports.contains(&name.as_str()) {
+            assert!(member(&mut a, &name) == member(&mut b, &name), "{name}");
+        }
+    }
+}
+
 #[test]
 fn neighbouring_features_and_fragments_share_seams_at_negative_coordinates() {
     // Every polygon split, then only five of nine (split next to unsplit).
