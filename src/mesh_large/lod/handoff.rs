@@ -222,7 +222,12 @@ impl FrozenNode {
         if id.first >= id.end || self.faces.is_empty() || self.primitives.is_empty() {
             return Err(state("frozen tile without faces or rank range"));
         }
-        for p in &self.primitives {
+        for (i, p) in self.primitives.iter().enumerate() {
+            if p.row != i as u32 {
+                return Err(state(
+                    "frozen primitive row is not its source_primitive row",
+                ));
+            }
             if p.donor_ranges.is_empty()
                 || p.donor_ranges
                     .iter()
@@ -253,6 +258,18 @@ impl FrozenNode {
                 .gltf
                 .get(f.gltf as usize)
                 .ok_or_else(|| state("frozen face without its glTF primitive"))?;
+            // Set 0 is the source_primitive row of the face's own primitive, and every
+            // declared attribute set has one value per face (corner ell is checked against
+            // the lattice when the packet is written).
+            let attribute_sets = g.feature_ids.as_array().map_or(0, |sets| {
+                sets.iter().filter(|s| s.get("attribute").is_some()).count()
+            });
+            if f.features.len() != attribute_sets
+                || f.features.first().map(|s| s.0)
+                    != self.primitives.get(f.source as usize).map(|p| p.row)
+            {
+                return Err(state("frozen face feature IDs are inconsistent"));
+            }
             if !g.sources.contains(&f.source)
                 || f.fill.is_some_and(|i| {
                     self.fills
