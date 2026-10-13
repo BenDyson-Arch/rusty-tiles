@@ -36,6 +36,7 @@ nothing from the repository. It is pure Python 3 standard library.
 | `controls/` | `manifest.json` with base/mutated fixture pairs, hashes and expected verdicts; `fixtures/`. `large/` is generated, not committed |
 | `corpus/` | `run.py` and `manifest.json`: the oracle outcome for each artifact of R's producer corpus |
 | `wb/` | C2-WB (O-WB): the calibration-matrix class fixtures, per-term identities, chain-bit controls, the independent hand formula and the formula mutants. See [wb/README.md](wb/README.md) |
+| `h11/` | H11 corner fast path: `generate.py` (fixtures through `witnesses/build.py`, verdicts from the unmodified oracle), `fixtures/` (16) and `report.json`. See [H11](#h11-corner-fast-path-2026-10-13) |
 
 ## Replay
 
@@ -982,6 +983,98 @@ the earlier `final/wheels` build did not.
 content) peaks at 157 MiB RSS under `validate` at head versus 62 MiB on develop, because slice 3 registers one
 376-byte `TileFact` per visited implicit tile. This is bounded by `hierarchy_visits`, fallible and allowed by
 §5.4. Registering implicit tile facts lazily or compactly is a follow-up.
+
+## H11: corner fast path (2026-10-13)
+
+H11 skips exact per-vertex walks that a corner test proves Contained (contract
+[H11 amendment](../../../docs/architecture/c2-decoded-containment-contract.md#h11-amendment-corner-fast-path-2026-10-13)).
+Plan with invariants V1–V8 and the soundness argument, written before the code and amended after the
+first measurements: `~/.cache/rusty-tiles-evidence/h11-20261013/plan.md`. Bulk evidence is in that
+directory.
+
+**Controls (`h11/`).** `python3 -I h11/generate.py` writes 8 pairs with the witness builder and records
+the unmodified oracle's report for each; `--check` re-derives hashes and outcomes. Production must agree
+(`production_matches_every_h11_fast_path_control`, 16/16). Every pair targets fast-path mutants: an
+off-diagonal sphere escape (`h11-sphere-offdiagonal`), a rotated node over a box chain
+(`h11-rotated-box`), a rotated external-root tile `transform` over axis-aligned boxes with an identity
+composite, escaping the external content volume at an off-diagonal corner (`h11-rotated-tile-step`, audit
+F1: only the tile-step clause of the diagonal rule catches it), a unique maximum one f32 ulp past the face as the last vertex
+(`h11-ulp-last-vertex`), a u16 maximum (`h11-u16-maximum`), viewless zero words under declared bounds
+inside the volume (`h11-declared-bounds`), an escape in the third chunk (`h11-third-chunk`) and an
+all-inconclusive but contained sphere (`h11-inconclusive-sphere`).
+
+**Parity** (release lib tests, `--large` C2, C2-WB and I1 fixtures generated, `C2S3_EVIDENCE_DIR` and
+`C2S3_FOREST_DIR` set as in the slice-3 record): slice-1 261/261, C2-WB 102/102, slice-3 80/80, S3-18 sweep 181 cases (182 agreements with the two
+`references` pairs, R5 injection-only), forest 34/34 and 5/5 pairs, I1 181/181, W corpus 41/41, H11 14/14;
+0 disagreements, 0 skipped (head `e8d626d`, clean row of the H11 mutant run). After the audit fixes
+(16 H11 controls), with the command below: slice-1 261/261, slice-3 80/80, forest 34/34 and 5/5 pairs,
+H11 16/16, C2-WB, sweep and I1 passing; 0 disagreements, 0 skipped.
+
+Without the two directory variables the slice-3 evidence rows and the forest witnesses are listed as
+skipped and the run still passes (in about 0.4 s), so the documented command sets both. From the
+repository root, after the `--large` generators (`witnesses/generate.py` and `wb/generate.py` here,
+`../implicit_read/witnesses/generate.py` for I1):
+
+```sh
+C2S3_EVIDENCE_DIR=/home/bend/.cache/c2s3-evidence/slice3 \
+C2S3_FOREST_DIR=/home/bend/.cache/c2s3-evidence/forest-2d85208 \
+  cargo test --locked --release --lib -- c2_oracle_parity i1_oracle_parity
+```
+
+**Production mutants** (`acceptance/production-mutants/h11/mutants.py`, release, paired control or
+test):
+
+| Mutant | Paired | Also flips |
+| --- | --- | --- |
+| two diagonal corners regardless of the chain | `h11-sphere-offdiagonal.mutated` | `h11-rotated-box.mutated`; `walk_marked_equals_the_per_vertex_walk` |
+| diagonal rule ignores the tile steps (audit F1; `ignore-tile-step`) | `h11-rotated-tile-step.mutated` | `diagonal_corners_only_for_axis_aligned_box_chains` (run by hand after the audit, not in the report below) |
+| inward corner (one f32 ulp / one integer step) | `h11-ulp-last-vertex.mutated` | `h11-u16-maximum.mutated`, 8 slice-3 controls |
+| skipped fallback | `h11-sphere-offdiagonal.mutated` | 6 more H11 controls, 9 slice-3 controls, 4 unit tests |
+| trust declared accessor min/max (4 files) | `h11-declared-bounds.mutated` | `declared_accessor_bounds_cannot_hide_an_escape` |
+| raw box misses the chunk's last vertex | `h11-ulp-last-vertex.mutated` | `walk_marked_equals_the_per_vertex_walk` |
+| inconclusive test reports the first marked vertex | `h11-inconclusive-sphere.base` | 6 more H11 controls, 4 slice-3 controls, 4 unit tests |
+| corner credit ignored | `corner_walks_stay_within_the_credit_bound` | — (performance only) |
+| chunk offset ignored | `h11-third-chunk.mutated` | — |
+
+The non-finite fallback (`raw_box`'s FLOAT check, audit F2) is unreachable through an archive, since C1
+refuses non-finite words; `non_finite_words_take_the_per_vertex_walk` injects Inf, -Inf and NaN words and
+fails (a corner-walk fault instead of the earlier Outside) when the check is removed.
+
+The clean tree flips nothing. Report (evidence): `mutants/h11-report-final.json`, sha256
+`32f4ae2460feacdeb4ddcdd771b4804dc866c7a23dae2006c424ca88a628126f`.
+
+The 36-row slice-1/slice-3 matrix (`slice3/mutants.py`, placement now overridable with `C2M_*`):
+36/36 at the H11 head (`2e25864` source): every slice-3 mutant flips its paired control, all 19 slice-1
+mutants flip cases, and every mutant flips exactly the same non-H11 case set as at `f661e4e`; the clean
+tree flips nothing. Three slice-1 mutants also flip H11 controls (`add-1e-6-slack`, `omit-U`,
+`double-U`). Report (evidence): `mutants/s3-report.json`, sha256 `5d69d63fc5a1aee0473bfe4991327e6e875dad9a8719995367e49c303e15b0bc`.
+
+**Performance** (release `native-geospatial`, develop `7fad70c` vs H11 `2e25864`, same validator source as the
+head; forest and adversaries: best wall of 5 clean runs on a quiet P-core (`perf_validate.py`, pairs
+from 4–7 and 12–15); lane: `process.py --repeat 5 --cpus 14,15`, ABBA; peak RSS within ±1 MiB
+everywhere, outputs and verdicts identical):
+
+| Archive | develop s | H11 s | before slice 3 s |
+| --- | --- | --- | --- |
+| mf2-lod3 | 3.380 | **1.646** | 0.837 |
+| W5 vec-perf / quantize / meshopt | 1.145 / 1.198 / 1.209 | 0.147 / 0.150 / 0.182 | 0.09–0.11 |
+| W2 | 0.396 | 0.120 | 0.083 |
+| W3-pc-deep | 0.337 | 0.308 | 0.178 |
+| W5 / W2 / W3 `--explicit` | 1.144 / 0.761 / 0.342 | 0.152 / 0.116 / 0.231 | (C2 since slice 1) |
+| Perf lane validate: vector / vector-explicit | 1.149 / 1.170 | 0.147 / 0.150 | 0.094 (implicit) |
+| Perf lane validate: point-cloud / -explicit | 0.198 / 0.294 | 0.067 / 0.070 | 0.058 (implicit) |
+| Perf lane validate: mesh-local / mesh / mesh-explicit / glb-wrap | 0.218 / 0.103 / 0.085 / 0.062 | 0.065 / 0.052 / 0.051 / 0.046 | |
+| Adversary A1 (1.2M axis points on the unit sphere, every test inconclusive) | 0.370 | 0.370 | |
+| Adversary A2 (3,000 payloads of 9–20 such points; the credit binds) | 0.147 | 0.148 | |
+
+Every other forest archive improves (W1 0.074 → 0.051, W1-explicit 0.124 → 0.054, W6 0.056 → 0.045) or
+moves by at most 0.01 s. On mf2-lod3 the exact walk falls to 8.8% of
+samples; what remains of the slice-3 growth is the phase-2 C1 re-inspection (stream step 1), outside H11.
+The adversaries (and their `gltfUpAxis` twins, unchanged) show no measurable cost when every corner test
+fails. The value-identical hoist of per-accessor constants was not done (plan amendment 3).
+
+Perf evidence (`perf/`): `lane-process.json` `476c064c…`, `forest.json` `eab8266d…`, `adversary.json`
+`89a464ea…` (adversary generator `adversary/make.py`).
 
 ## What remains
 

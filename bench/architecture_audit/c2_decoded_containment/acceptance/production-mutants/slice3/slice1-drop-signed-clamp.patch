@@ -1,5 +1,5 @@
 diff --git a/src/validate/containment.rs b/src/validate/containment.rs
-index fb78a6c..d864320 100644
+index e59fa24..40a0428 100644
 --- a/src/validate/containment.rs
 +++ b/src/validate/containment.rs
 @@ -749,7 +749,6 @@ pub(crate) fn walk(

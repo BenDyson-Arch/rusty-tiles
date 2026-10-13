@@ -27,6 +27,17 @@ pub enum PointCloudCoordinates {
         height_offset_metres: f64,
     },
 }
+/// The largest `max_points`, and the default. Every tile, leaf or sampled
+/// parent, holds at most `max_points` points, and each point is one row of
+/// the tile's single `points` property table. CesiumJS 1.146 uploads that
+/// table as one GPU texture `count` texels wide and refuses tables wider than
+/// the WebGL maximum texture size (8192 on the pinned Chromium target; the
+/// device limit varies), which disables GPU metadata access and
+/// custom-shader styling for the tile. Splitting one tile into
+/// several tables does not help: a Cesium model picks and styles through one
+/// property table only.
+pub const MAX_POINTS_PER_TILE: usize = 8192;
+
 #[derive(Clone, Debug)]
 pub struct PointCloudOptions {
     pub metadata_attributes: bool,
@@ -37,7 +48,7 @@ impl Default for PointCloudOptions {
     fn default() -> Self {
         Self {
             metadata_attributes: false,
-            max_points: 50_000,
+            max_points: MAX_POINTS_PER_TILE,
             chunk_points: 100_000,
         }
     }
@@ -146,6 +157,14 @@ fn prepare(
         return Err(JobError::new(
             JobErrorKind::InvalidRequest,
             "maxPoints and chunkPoints must be at least 1",
+        ));
+    }
+    if request.options.max_points > MAX_POINTS_PER_TILE {
+        return Err(JobError::new(
+            JobErrorKind::InvalidRequest,
+            format!(
+                "maxPoints must be at most {MAX_POINTS_PER_TILE}: CesiumJS cannot build the metadata texture of a wider point property table"
+            ),
         ));
     }
     if request.output.extension().is_none_or(|e| e != "3tz")

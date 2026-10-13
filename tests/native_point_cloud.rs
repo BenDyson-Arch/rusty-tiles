@@ -559,36 +559,97 @@ fn point_cloud_and_packaging_use_private_publication() {
     assert_eq!(support::mode(&rebuilt), 0o600);
 }
 
+/// Pinned CesiumJS 1.146 cannot build the GPU metadata texture of a property
+/// table wider than 8192 rows, and a model picks through one table only, so
+/// every emitted table, leaf or sampled parent, has at most 8192 rows. The
+/// default is that cap; 8192 is admitted and 8193 refused before any output.
 #[test]
-fn large_tiles_use_exact_float_feature_ids_instead_of_wrapping_u16() {
+fn property_tables_fit_the_cesium_texture_width() {
     let work = tempfile::tempdir().unwrap();
     let input = work.path().join("cloud.las");
-    fixture(&input, 65_537, true, vec![]);
-    let output = work.path().join("cloud.3tz");
-    assert!(call(
+    fixture(&input, 65_537, false, vec![]);
+    let refused = work.path().join("refused.3tz");
+    let result = call(
         &input,
-        &output,
-        &["--sourceCrs", "local", "--maxPoints", "70000"]
-    )
-    .status
-    .success());
-    let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
-    let uri = expanded_root(&mut zip)["content"]["uri"]
+        &refused,
+        &["--sourceCrs", "local", "--maxPoints", "8193"],
+    );
+    assert_eq!(result.status.code(), Some(2));
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "invalid_request");
+    assert!(report["error"]["message"]
         .as_str()
         .unwrap()
-        .to_owned();
-    let glb = Glb::read(&mut zip, &uri);
-    let accessor = &glb.doc["accessors"][glb.doc["meshes"][0]["primitives"][0]["attributes"]
-        ["_FEATURE_ID_0"]
-        .as_u64()
-        .unwrap() as usize];
-    assert_eq!(accessor["componentType"], 5126);
-    let ids = glb.view(accessor["bufferView"].as_u64().unwrap() as usize);
-    assert_eq!(
-        f32::from_le_bytes(ids[65_536 * 4..].try_into().unwrap()),
-        65_536.
-    );
-    assert_eq!(glb.column("source_index").len(), 65_537 * 8);
+        .contains("at most 8192"));
+    assert!(!refused.exists());
+    // Coincident points split by record order into children of 8192 or 8193
+    // rows, the leaf/split boundary itself.
+    let coincident = work.path().join("coincident.las");
+    fixture(&coincident, 65_537, true, vec![]);
+    for (index, (source, options)) in [
+        (&input, vec![]),
+        (&input, vec!["--maxPoints", "8192", "--metadata-attributes"]),
+        (&coincident, vec![]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let output = work.path().join(format!("cloud-{index}.3tz"));
+        let mut args = vec!["--sourceCrs", "local"];
+        args.extend(&options);
+        let result = call(source, &output, &args);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap();
+        let conversion = document(&mut zip, "conversion.json");
+        assert_eq!(conversion["maxPoints"], 8192);
+        let glbs: Vec<_> = zip
+            .file_names()
+            .filter(|n| n.ends_with(".glb"))
+            .map(str::to_owned)
+            .collect();
+        let mut widest = 0;
+        for name in &glbs {
+            let glb = Glb::read(&mut zip, name);
+            let tables = glb.doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
+                .as_array()
+                .unwrap();
+            assert_eq!(tables.len(), 1, "{name}");
+            let count = tables[0]["count"].as_u64().unwrap();
+            assert!(count <= 8192, "{name}: {count} rows");
+            widest = widest.max(count);
+            let primitive = &glb.doc["meshes"][0]["primitives"][0];
+            let features = &primitive["extensions"]["EXT_mesh_features"]["featureIds"][0];
+            assert_eq!(
+                (
+                    features["featureCount"].as_u64(),
+                    features["propertyTable"].as_u64()
+                ),
+                (Some(count), Some(0))
+            );
+            let ids = &glb.doc["accessors"]
+                [primitive["attributes"]["_FEATURE_ID_0"].as_u64().unwrap() as usize];
+            assert_eq!(
+                (ids["count"].as_u64(), ids["componentType"].as_u64()),
+                (Some(count), Some(5123))
+            );
+            let ids = glb.view(ids["bufferView"].as_u64().unwrap() as usize);
+            for (row, id) in ids.as_chunks::<4>().0.iter().enumerate() {
+                assert_eq!(*id, [(row & 255) as u8, (row >> 8) as u8, 0, 0]);
+            }
+        }
+        // Sampled parents fill their voxel budget, so the widest table is near the cap.
+        assert!(widest > 4096, "{widest}");
+        // Leaves keep every source record exactly once.
+        let mut seen = Vec::new();
+        let root = expanded_root(&mut zip);
+        audit_leaves(&mut zip, &root, &mut seen, 8192);
+        seen.sort_unstable();
+        assert_eq!(seen, (0..65_537).collect::<Vec<_>>());
+    }
 }
 
 /// The exact sign of `Σ terms` over the reals (Shewchuk's grow-expansion with zero

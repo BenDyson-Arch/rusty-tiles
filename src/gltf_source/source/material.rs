@@ -67,6 +67,53 @@ pub(crate) struct Material {
 }
 
 impl Material {
+    /// Resolve alpha semantics once at the leaf preparation boundary.
+    pub(crate) fn mask(&self) -> Option<(f64, f64)> {
+        (self.value.get("alphaMode").and_then(Value::as_str) == Some("MASK")).then(|| {
+            let factor = self
+                .value
+                .get("pbrMetallicRoughness")
+                .and_then(|p| p.get("baseColorFactor"))
+                .and_then(|c| c.get(3))
+                .and_then(Value::as_f64)
+                .unwrap_or(1.0);
+            let cutoff = self
+                .value
+                .get("alphaCutoff")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.5);
+            (factor, cutoff)
+        })
+    }
+
+    /// Replace each admitted role's texture and UV binding; retain all literal factors.
+    pub(crate) fn remap_slots(&self, patches: &[(TextureSlot, usize, usize)]) -> Result<Value> {
+        if patches.len() != self.bindings().count() {
+            return Err(invalid("prepared slot closure differs from material"));
+        }
+        let mut value = self.value.clone();
+        for (spec, binding) in SLOTS.iter().zip(&self.bindings) {
+            let Some(_) = binding else { continue };
+            let mut matches = patches.iter().filter(|p| p.0 == spec.slot);
+            let Some(&(_, texture, uv)) = matches.next() else {
+                return Err(invalid("prepared role missing from material closure"));
+            };
+            if matches.next().is_some() || uv > 4 {
+                return Err(invalid(
+                    "prepared material role is duplicated or UV exceeds four",
+                ));
+            }
+            let mut info = &mut value;
+            for key in spec.path {
+                info = info
+                    .get_mut(*key)
+                    .ok_or_else(|| invalid("prepared role path missing"))?;
+            }
+            info["index"] = Value::from(texture);
+            info["texCoord"] = Value::from(uv);
+        }
+        Ok(value)
+    }
     /// The root proxy profile preserves untextured opaque core factors.
     pub(crate) fn proxy_eligible(&self) -> bool {
         self.bindings().next().is_none()

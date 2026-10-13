@@ -72,6 +72,7 @@ impl DirectoryTarget {
         Ok(Self { output, policy })
     }
 
+    #[cfg(any(feature = "native-geospatial", test))]
     pub(crate) fn stage(self, attempt: &Attempt) -> Result<DirectoryStaging<'_>, JobFailure> {
         self.stage_pending(attempt).map_err(|e| attempt.fail(e))
     }

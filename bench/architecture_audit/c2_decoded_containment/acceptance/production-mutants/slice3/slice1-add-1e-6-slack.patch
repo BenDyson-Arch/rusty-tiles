@@ -1,5 +1,5 @@
 diff --git a/src/validate/containment.rs b/src/validate/containment.rs
-index fb78a6c..d513fca 100644
+index e59fa24..be6f100 100644
 --- a/src/validate/containment.rs
 +++ b/src/validate/containment.rs
 @@ -707,7 +707,7 @@ fn inside(a: &mut Arena, p: [D; 3], w: D, v: &VolumeFacts) -> bool {

@@ -962,3 +962,54 @@ lane rule; per-class streaming 4.57–5.98 ns/unit on a P-core and 8.04–10.07 
 τ_P/τ_E. The `--explain` policy note for I1's validate cases is in the
 [I1 contract](i1-implicit-read-contract.md). Full record, hashes and readings:
 [slice-3 acceptance](../../bench/architecture_audit/c2_decoded_containment/README.md#slice-3-acceptance-r-2026-10-12).
+
+
+## H11 amendment (corner fast path, 2026-10-13)
+
+Source: the H11 plan (invariants V1–V8 and the soundness argument),
+`~/.cache/rusty-tiles-evidence/h11-20261013/plan.md`, sha256 `c7512d808a889b0f5e793cd6cecb533d3ca8e4957a7b6cdebcef2b8732c3c4a5`. The claim, the domain, the
+span definition (B1), the predicates, the work formula and every charge, the caps, the outcome
+precedence, the report schema and the arena reservation (B3) are unchanged. The streaming step 3
+("for each set bit in ascending order, decode the raw word and run the upward walk") is amended as
+follows; its observable outcome is unchanged.
+
+**Algorithm.** Per (instance, POSITION accessor), the marked vertices are taken in ascending chunks of
+1,024 indices (16 bitmap words). For a chunk, one pass over its marked indices reads each raw word with
+the walk's reader and keeps the componentwise raw minimum and maximum. The distinct corners of that raw
+box are walked exactly, with the unchanged walk; if all are Contained the chunk is skipped, otherwise
+every marked vertex of the chunk is walked in ascending order, as before. Only the all-minimum and
+all-maximum corners are walked when every row `r < 3` of the instance composite and of every tile step
+has at most one nonzero entry in columns 0–2 and every tested volume is a box; otherwise up to eight.
+A corner test is attempted only when it has fewer corners than marked vertices and the stream's corner
+credit covers it: each reference adds `T(u)/64` corner walks, a test spends its corner count and a
+skipped chunk refunds its marked count. Accessor `min`/`max` and every other declared bound are never
+read by this step.
+
+**Why it is exact.** The decode is monotone per component (the signed clamp included), so every marked
+vertex lies in the box spanned by the decoded corners. `W = G₃₃·k` does not depend on the vertex and each
+tile step is affine with `W` fixed, so the point tested at each level is affine in the decoded vertex. Box
+rows and spheres are convex, and so is their preimage under an affine map; the corners passing therefore
+puts the whole box, and every vertex in it, inside every tested volume. Under the diagonal condition each
+tested row is a function of one coordinate, so its extremes over the box are its values at the two
+diagonal corners, and box rows are tested independently. Corner walks use the same exact arithmetic, so
+no rounding is involved. Corners are raw words of the accessor's type and the span bound uses the type's
+fixed worst-case pair, so they fit the arena; a corner faults only where a vertex would (`W ≤ 0` is
+vertex-independent; non-finite words are refused by C1, and a non-finite word in a chunk sends it to
+the per-vertex walk without a corner test). This fault equivalence relies on excluded volumes never
+being streamed: a region or rotated box breaches inside the walk only after the earlier volumes pass,
+so a corner could fault where the per-vertex walk returns an earlier Outside. Any exclusion
+suppresses streaming (outcome precedence: exclusions before the precheck and the stream), so no
+such volume reaches a corner walk; a change that streams past an exclusion must revisit this step.
+
+**Work.** Charges are unchanged and admission reads nothing new. After every reference, the walks
+performed are at most the marked vertices so far plus `⌊ΣT(u)/64⌋` over the references so far, and each
+marked vertex is read at most twice. So "at most 24 limb multiplications per vertex unit" becomes at most
+`24·(1 + 1/64)` in the worst case (every chunk inconclusive). C2-WB's τ and the 2^29 cap are
+calibrations; the H11 record re-measures an all-inconclusive adversary
+([acceptance](../../bench/architecture_audit/c2_decoded_containment/README.md#h11-corner-fast-path-2026-10-13)).
+
+**Acceptance.** Production equals the oracle on every existing suite and on 16 new oracle-decided H11
+controls (`h11/`); nine H11 production mutants (two diagonal corners regardless, tile steps ignored by
+the diagonal rule, inward-rounded corners, skipped fallback, trusted declared bounds, a box missing the
+last vertex, first-vertex report on an inconclusive test, ignored credit, ignored chunk offset) each flip
+their paired control or test, and the slice-1 and slice-3 mutant matrix still flips.
