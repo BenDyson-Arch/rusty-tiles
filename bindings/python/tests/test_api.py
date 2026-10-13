@@ -1248,6 +1248,30 @@ class WheelAPI(unittest.TestCase):
         self.assertNotIn("decodedContentBounds", report["notInspected"])
         self.assertNotIn("scene transforms", report["notInspected"])
         self.assertIn("skins, animations, morph targets and rendered extent", report["notInspected"])
+        # VS-A: payload rows are a list by default, so the report is plain JSON data; with
+        # lazy_payloads=True they are a read-only sequence read on demand. The report keeps
+        # the CLI's sorted key order and states no scratch when nothing spilled.
+        self.assertEqual(list(report), sorted(report))
+        self.assertNotIn("scratch", report)
+        self.assertIsInstance(report["payloads"], list)
+        self.assertEqual(json.loads(json.dumps(report)), report)
+        [row] = report["payloads"]
+        self.assertEqual(row["uri"], "a.glb")
+        self.assertEqual(sorted(row), ["accessorsChecked", "primitivesChecked", "uri", "vertices"])
+        lazy = rusty_tiles.validate(package("inside-lazy", (1, 3, 2), (1, 2, 3), {"mesh": 0}),
+                                    lazy_payloads=True)
+        rows = lazy["payloads"]
+        self.assertEqual(type(rows).__name__, "ValidationPayloads")
+        self.assertEqual(list(lazy), list(report))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0], rows[-1], rows[0:5], list(rows), list(rows)),
+                         (row, row, [row], [row], [row]))
+        for index in (1, -2):
+            with self.assertRaises(IndexError):
+                rows[index]
+        with self.assertRaises(TypeError):
+            json.dumps(lazy)
+        self.assertEqual(json.loads(json.dumps({**lazy, "payloads": list(rows)}))["payloads"], [row])
         self.assertEqual(
             {key: report["limits"][key] for key in (
                 "containmentSpanBits", "containmentWorkUnits", "containmentBytesRead",

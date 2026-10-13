@@ -953,23 +953,134 @@ fn convert_to_3tz(
     })
 }
 
+/// A validation report's payload rows: a read-only sequence of dicts in URI order, read on
+/// demand so a large report is never materialized.
+#[pyclass(frozen, sequence, module = "rusty_tiles", name = "ValidationPayloads")]
+struct ValidationPayloads {
+    rows: tiles_core::validate::PayloadRows,
+}
+
+impl ValidationPayloads {
+    fn row(&self, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
+        let row = self
+            .rows
+            .get(index)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("payload index out of range"))?
+            .map_err(|failure| error_to_python(Error::Validation(failure)))?;
+        let row = serde_json::to_value(row).map_err(|e| DataError::new_err(e.to_string()))?;
+        json_to_python(py, &row)
+    }
+}
+
+#[pymethods]
+impl ValidationPayloads {
+    fn __len__(&self) -> usize {
+        self.rows.len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let len = self.rows.len();
+        if let Ok(slice) = index.cast::<pyo3::types::PySlice>() {
+            let range = slice.indices(len as isize)?;
+            let mut rows = Vec::with_capacity(range.slicelength);
+            let mut at = range.start;
+            for _ in 0..range.slicelength {
+                rows.push(self.row(py, at as usize)?);
+                at += range.step;
+            }
+            return Ok(PyList::new(py, rows)?.into_any().unbind());
+        }
+        let index: isize = index.extract()?;
+        let resolved = if index < 0 {
+            index + len as isize
+        } else {
+            index
+        };
+        if resolved < 0 || resolved as usize >= len {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "payload index out of range",
+            ));
+        }
+        self.row(py, resolved as usize)
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> ValidationPayloadsIter {
+        ValidationPayloadsIter {
+            rows: slf.rows.clone(),
+            next: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<ValidationPayloads of {} rows>", self.rows.len())
+    }
+}
+
+#[pyclass(frozen, module = "rusty_tiles")]
+struct ValidationPayloadsIter {
+    rows: tiles_core::validate::PayloadRows,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+#[pymethods]
+impl ValidationPayloadsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        let index = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if index >= self.rows.len() {
+            return Ok(None);
+        }
+        ValidationPayloads {
+            rows: self.rows.clone(),
+        }
+        .row(py, index)
+        .map(Some)
+    }
+}
+
 /// Inspect the bounded C1 archive/payload profile; see checks and notInspected.
+/// `report["payloads"]` is a list of dicts, so the report is plain JSON data. With
+/// `lazy_payloads=True` it is a read-only `ValidationPayloads` sequence that reads rows on
+/// demand instead, for reports too large to hold (it is not JSON-serializable as is;
+/// `list(...)` materializes it).
 #[pyfunction]
-fn validate(py: Python<'_>, input: PathBuf) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (input, *, lazy_payloads = false))]
+fn validate(py: Python<'_>, input: PathBuf, lazy_payloads: bool) -> PyResult<Py<PyAny>> {
     let result = py
         .detach(|| {
             tiles_core::validate::inspect(tiles_core::validate::ValidationRequest::new(input))
         })
         .map_err(|failure| error_to_python(Error::Validation(failure)))?;
     py.check_signals()?;
-    let result = serde_json::to_value(result).map_err(|e| DataError::new_err(e.to_string()))?;
-    json_to_python(py, &result)
+    let mut summary = result
+        .summary_json()
+        .map_err(|e| DataError::new_err(e.to_string()))?;
+    // Insert the key here so the dict keeps the CLI's sorted key order.
+    summary["payloads"] = Value::Null;
+    let report = json_to_python(py, &summary)?;
+    let lazy = ValidationPayloads {
+        rows: result.payloads,
+    };
+    let payloads = if lazy_payloads {
+        Py::new(py, lazy)?.into_any()
+    } else {
+        let rows = (0..lazy.rows.len())
+            .map(|index| lazy.row(py, index))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, rows)?.into_any().unbind()
+    };
+    report.bind(py).set_item("payloads", payloads)?;
+    Ok(report)
 }
 
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<ConversionResult>()?;
+    module.add_class::<ValidationPayloads>()?;
     module.add_class::<VectorResult>()?;
     module.add_class::<PointCloudResult>()?;
     module.add_class::<PackageResult>()?;
