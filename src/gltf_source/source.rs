@@ -7,7 +7,8 @@ mod json;
 mod material;
 mod original_bounds;
 mod texture;
-pub(crate) use material::Material;
+pub(crate) use material::{Material, TextureSlot};
+pub(crate) use texture::{decode_image, ImageInfo};
 
 pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const MAX_TRIANGLES: usize = 100_000;
@@ -540,7 +541,13 @@ pub(crate) struct ScenePrimitive<'a> {
     pub world: &'a Matrix,
     /// Negative for a mirroring transform; corners 1 and 2 are then swapped.
     pub determinant: f64,
+    pub normal_matrix: &'a [[f64; 3]; 3],
     pub position: AccessorView<'a>,
+    pub normal: Option<AccessorView<'a>>,
+    pub tangent: Option<AccessorView<'a>>,
+    pub texcoords: [Option<AccessorView<'a>>; 2],
+    pub color: Option<AccessorView<'a>>,
+    pub material: Option<u32>,
     pub indices: Option<AccessorView<'a>>,
     pub triangles: usize,
     pub has_normal: bool,
@@ -1349,6 +1356,23 @@ pub(crate) enum ImageSource {
     BufferView(usize),
     External(usize),
 }
+/// Typed admitted encoded-image location, without payload ownership.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ImageLocation {
+    External {
+        resource: usize,
+    },
+    Buffer {
+        buffer: usize,
+        start: usize,
+        length: usize,
+    },
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ImageView<'a> {
+    pub location: ImageLocation,
+    pub mime: Option<&'a str>,
+}
 /// A GLB BIN chunk located in the root, with its last (at most three) bytes for the padding
 /// check, so the payload itself need not be resident.
 pub(crate) struct BinChunk {
@@ -1508,6 +1532,57 @@ impl Document {
     pub fn image_sources(&self) -> &[ImageSource] {
         &self.images
     }
+    /// Validated material and texture metadata; consumers own copying/remapping.
+    pub(crate) fn materials(&self) -> &[Material] {
+        &self.materials
+    }
+    pub(crate) fn textures(&self) -> &[Value] {
+        &self.textures
+    }
+    pub(crate) fn samplers(&self) -> &[Value] {
+        &self.samplers
+    }
+    /// All fields were admitted by texture metadata parsing; retain checked range
+    /// arithmetic here so streaming consumers never reconstruct unchecked JSON offsets.
+    pub(crate) fn image_view(&self, index: usize) -> Result<ImageView<'_>> {
+        let source = self
+            .images
+            .get(index)
+            .ok_or_else(|| invalid("image index outside admitted range"))?;
+        let location = match *source {
+            ImageSource::External(resource) => ImageLocation::External { resource },
+            ImageSource::BufferView(view_index) => {
+                let views = list(&self.value, "bufferViews")?;
+                let view = views
+                    .get(view_index)
+                    .ok_or_else(|| invalid("image view index outside admitted range"))?;
+                let buffer = field(view, "buffer")?;
+                let start = offset(view, "byteOffset")?;
+                let length = field(view, "byteLength")?;
+                let end = start
+                    .checked_add(length)
+                    .ok_or_else(|| invalid("image view range overflow"))?;
+                if self
+                    .buffer_lengths
+                    .get(buffer)
+                    .is_none_or(|declared| end > *declared)
+                {
+                    return Err(invalid("image view outside declared buffer"));
+                }
+                ImageLocation::Buffer {
+                    buffer,
+                    start,
+                    length,
+                }
+            }
+        };
+        let images = list(&self.value, "images")?;
+        let mime = images
+            .get(index)
+            .and_then(|image| image.get("mimeType"))
+            .and_then(Value::as_str);
+        Ok(ImageView { location, mime })
+    }
     /// Declared byte lengths of the buffers, in declaration order.
     pub(crate) fn buffer_lengths(&self) -> &[usize] {
         &self.buffer_lengths
@@ -1543,7 +1618,13 @@ impl Document {
                     primitive: primitive as u32,
                     world: &instance.world,
                     determinant: instance.determinant,
+                    normal_matrix: &instance.normal_matrix,
                     position: self.accessors[p.position].view(p.position),
+                    normal: p.normal.map(|i| self.accessors[i].view(i)),
+                    tangent: p.tangent.map(|i| self.accessors[i].view(i)),
+                    texcoords: p.texcoords.map(|a| a.map(|i| self.accessors[i].view(i))),
+                    color: p.color.map(|i| self.accessors[i].view(i)),
+                    material: p.material.map(|i| i as u32),
                     indices: p.indices.map(|i| self.accessors[i].view(i)),
                     triangles: p.count / 3,
                     has_normal: p.normal.is_some(),

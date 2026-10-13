@@ -326,6 +326,68 @@ impl StreamSource {
             window_start: 0,
         }
     }
+    fn image_location(&self, index: usize) -> Result<(usize, u64, u64)> {
+        let resource_overflow = || {
+            JobError::new(
+                JobErrorKind::ResourceLimit,
+                "image source offset arithmetic overflow",
+            )
+        };
+        match self.document.image_view(index)?.location {
+            source::ImageLocation::External { resource } => {
+                let path = resource.checked_add(1).ok_or_else(resource_overflow)?;
+                let bound = self
+                    .paths
+                    .get(path)
+                    .ok_or_else(|| invalid("image resource outside admitted range"))?;
+                Ok((path, 0, bound.metadata.len()))
+            }
+            source::ImageLocation::Buffer {
+                buffer,
+                start,
+                length,
+            } => {
+                let location = self
+                    .buffers
+                    .get(buffer)
+                    .ok_or_else(|| invalid("image buffer outside admitted range"))?;
+                let start = u64::try_from(start).map_err(|_| resource_overflow())?;
+                let length = u64::try_from(length).map_err(|_| resource_overflow())?;
+                let offset = location
+                    .offset
+                    .checked_add(start)
+                    .ok_or_else(resource_overflow)?;
+                let end = offset.checked_add(length).ok_or_else(resource_overflow)?;
+                if end > self.paths[location.path].metadata.len() {
+                    return Err(invalid("image view outside actual source buffer"));
+                }
+                Ok((location.path, offset, length))
+            }
+        }
+    }
+    /// Encoded length from bound file metadata or the admitted image bufferView.
+    pub(crate) fn image_len(&self, index: usize) -> Result<u64> {
+        Ok(self.image_location(index)?.2)
+    }
+    /// Read one confined image slice. No descriptor escapes, and the bound handle
+    /// is checked before and after reading. The image owner limits chunk size.
+    pub(crate) fn read_image_chunk(&self, index: usize, offset: u64, out: &mut [u8]) -> Result<()> {
+        let (path, base, length) = self.image_location(index)?;
+        let size = u64::try_from(out.len()).map_err(|_| {
+            JobError::new(JobErrorKind::ResourceLimit, "image chunk length overflow")
+        })?;
+        if offset.checked_add(size).is_none_or(|end| end > length) {
+            return Err(invalid("image chunk outside admitted range"));
+        }
+        let at = base.checked_add(offset).ok_or_else(|| {
+            JobError::new(JobErrorKind::ResourceLimit, "image chunk offset overflow")
+        })?;
+        let bound = &self.paths[path];
+        let file = bound.open_checked(&self.base)?;
+        read_exact_at(&file, &bound.path, at, out)?;
+        bound.check_handle(&file)?;
+        Ok(())
+    }
     pub(crate) fn verify_unchanged(&self) -> Result<()> {
         for path in &self.paths {
             drop(path.open_checked(&self.base)?);
