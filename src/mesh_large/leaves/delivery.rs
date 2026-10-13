@@ -313,12 +313,18 @@ pub(super) fn check_level(
 }
 
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
+/// Quality is excluded on purpose: its occlusion gate (p99.9 <= 8, against 80
+/// elsewhere) is far tighter than ETC1S can meet, so Quality keeps UASTC.
 pub(super) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
     slot == TextureSlot::Occlusion && profile != Profile::Quality
 }
 /// Encoder mode and parameters of one slot and lossy profile.
 pub(super) fn codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
     let scalar = scalar_occlusion(slot, profile);
+    // Quality's effort of 2 is deliberately not pinned by a test: lowering it
+    // only changes encoder time and size, while every output is still held to
+    // the per-profile decoded-image floors in `check_level`, which are the
+    // contract. Mutating 2 to 0 therefore survives on purpose.
     let effort = match profile {
         Profile::Fast => 0,
         Profile::Balanced => 1,
@@ -780,6 +786,43 @@ mod tests {
                     w = (w / 2).max(1);
                     h = (h / 2).max(1);
                 }
+            }
+        }
+    }
+    /// Occlusion is scalar ETC1S in fast/balanced and UASTC in quality; every
+    /// other slot is UASTC. Read from the KTX2 DFD colour model of the output
+    /// itself (basic block word 2, byte 0): 163 is ETC1S, 166 is UASTC.
+    #[test]
+    fn occlusion_is_scalar_etc1s_except_in_quality() {
+        const ETC1S: u8 = 163;
+        const UASTC: u8 = 166;
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            for slot in [TextureSlot::Occlusion, TextureSlot::MetallicRoughness] {
+                let out = encode(
+                    [8, 8],
+                    &[90, 90, 90, 255].repeat(64),
+                    &[1; 64],
+                    slot,
+                    profile,
+                    128 * 1024 * 1024,
+                    None,
+                )
+                .unwrap();
+                let dfd = u32::from_le_bytes(out.bytes[48..52].try_into().unwrap()) as usize;
+                let scalar = matches!(
+                    (slot, profile),
+                    (TextureSlot::Occlusion, Profile::Fast | Profile::Balanced)
+                );
+                assert_eq!(
+                    out.bytes[dfd + 12],
+                    if scalar { ETC1S } else { UASTC },
+                    "{slot:?}/{profile:?} codec"
+                );
+                assert_eq!(
+                    out.receipts.last().unwrap()["scalar_rrr"],
+                    scalar,
+                    "{slot:?}/{profile:?} receipt"
+                );
             }
         }
     }
