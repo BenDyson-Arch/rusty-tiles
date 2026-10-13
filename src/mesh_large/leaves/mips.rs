@@ -5,6 +5,10 @@
 //! stable source row-major order; authored zero/nonfinite normals are refused.
 //! PNG cannot represent these authored levels; renderer mip correctness remains
 //! a separate proof obligation, never an implicit production fallback.
+//! `Class::Id` texels are opaque RGBA8 tuples (feature IDs or categorical
+//! codes): each level takes the overlap-weighted mode of its footprint, ties to
+//! the first contributor in row-major order, so no level ever holds a value
+//! absent from its source region.
 use crate::{JobError, JobErrorKind};
 use std::mem::size_of;
 
@@ -13,6 +17,8 @@ pub(crate) enum Class {
     Colour,
     Normal,
     Data,
+    /// Feature-ID / categorical texels: never averaged, gutters never dilated.
+    Id,
 }
 #[derive(Clone, Copy, Debug)]
 /// Historical uniform-image coverage reference for tests. Production MASK
@@ -289,11 +295,41 @@ pub(crate) fn build(
         out.rgba.try_reserve_exact(size).map_err(|_| overflow())?;
         out.rgba.resize(size, 0);
         let mut cancelled = 0;
+        // A halving footprint spans at most 3x3 source texels.
+        let mut tally: Vec<([u8; 4], u64)> = Vec::new();
+        if class == Class::Id {
+            tally.try_reserve_exact(9).map_err(|_| overflow())?;
+        }
         for y in 0..dh as u64 {
             for x in 0..dw as u64 {
                 // Integer overlap intervals in units of 1/destination dimension.
                 // Every edge source texel contributes, including odd and 1D pages.
                 let (xl, xr, yl, yr) = (x * sw, (x + 1) * sw, y * sh, (y + 1) * sh);
+                if class == Class::Id {
+                    tally.clear();
+                    for sy in yl / dh as u64..yr.div_ceil(dh as u64) {
+                        for sx in xl / dw as u64..xr.div_ceil(dw as u64) {
+                            let wx = xr.min((sx + 1) * dw as u64) - xl.max(sx * dw as u64);
+                            let wy = yr.min((sy + 1) * dh as u64) - yl.max(sy * dh as u64);
+                            let i = ((sy * sw + sx) * 4) as usize;
+                            let p: [u8; 4] = src.rgba[i..i + 4].try_into().expect("RGBA8");
+                            match tally.iter_mut().find(|(v, _)| *v == p) {
+                                Some((_, w)) => *w += wx * wy,
+                                None => tally.push((p, wx * wy)),
+                            }
+                        }
+                    }
+                    // Strictly greater keeps the first row-major value on ties.
+                    let mut best = tally[0];
+                    for &(v, w) in &tally[1..] {
+                        if w > best.1 {
+                            best = (v, w);
+                        }
+                    }
+                    let i = ((y * dw as u64 + x) * 4) as usize;
+                    out.rgba[i..i + 4].copy_from_slice(&best.0);
+                    continue;
+                }
                 let mut sum = [0.0; 4];
                 let mut total = 0.0;
                 let mut dominant = [0.0, 0.0, 1.0];
@@ -309,6 +345,7 @@ pub(crate) fn build(
                             Class::Colour => std::array::from_fn(|a| linear(p[a])),
                             Class::Normal => unit(normal(p)),
                             Class::Data => std::array::from_fn(|a| f64::from(p[a]) / 255.0),
+                            Class::Id => unreachable!("ID footprints take the mode above"),
                         };
                         if class == Class::Normal && weight > dominant_weight {
                             dominant = rgb;
@@ -337,6 +374,7 @@ pub(crate) fn build(
                         Class::Colour => srgb(component),
                         Class::Normal => byte((component + 1.0) * 0.5),
                         Class::Data => byte(component),
+                        Class::Id => unreachable!("ID footprints take the mode above"),
                     };
                 }
                 out.rgba[i + 3] = byte(sum[3] / total);
