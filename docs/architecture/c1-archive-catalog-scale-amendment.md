@@ -117,8 +117,9 @@ the rows whose names tied so far. The rows are then read back one at a time with
 from the catalog. `ValidationReport::payloads` is a `PayloadRows` (length, random
 access, iteration, streamed `Serialize`). The CLI writes the report streamed, with
 bytes identical to the former `serde_json::Value` output. Python's
-`report["payloads"]` is a lazy read-only sequence, `ValidationPayloads`, of the same
-dicts.
+`report["payloads"]` stays a list of the same dicts, so the report remains plain JSON
+data; `validate(input, lazy_payloads=True)` returns a lazy read-only sequence,
+`ValidationPayloads`, instead, which keeps Python memory constant in the row count.
 
 **CAT-8. Closure.** The `used` set is one bit per rank. Closure scans the bits in rank
 order, counts unreferenced members and keeps the 16 smallest names in a bounded heap.
@@ -161,12 +162,13 @@ all: linear in the payload name bytes.
 
 - `ValidationReport::payloads` is `PayloadRows` instead of `Vec<PayloadReport>`.
 - `ValidationReport::summary_json` and `ValidationReport::write_json` are new.
-- Python `validate()` returns `report["payloads"]` as `ValidationPayloads`.
+- Python `validate()` gains `lazy_payloads` (default `False`: a list, as before).
 - The unreferenced-entries message is capped (CAT-1).
 - `ValidationReport::scratch` (`ScratchReport`) and the JSON `scratch` member appear
   only when something spilled (CAT-6a).
-- Python: `report["payloads"]` is not a `list`. `report["payloads"] == [...]` is False
-  and `json.dumps(report)` raises `TypeError`; use `list(report["payloads"])`.
+- Python with `lazy_payloads=True`: `report["payloads"]` is not a `list`.
+  `report["payloads"] == [...]` is False and `json.dumps(report)` raises `TypeError`;
+  use `list(report["payloads"])`.
 - `validate_3tz` spills a large catalog to disk-backed scratch and refuses when only
   memory-backed scratch is available.
 
