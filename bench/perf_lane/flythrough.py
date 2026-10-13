@@ -321,11 +321,20 @@ def drive(command, environment, budget):
     return dict(loaded=False, driverError=(stderr or stdout)[-4000:]), host.facts
 
 
+def cancelled(request):
+    """A tile request Cesium cancelled (the tile left the view mid-flight): aborted, no HTTP status."""
+    return request.get('error') == 'net::ERR_ABORTED' and 'status' not in request and '/data/' in request.get('url', '')
+
+
 def problems(result, renderer):
+    """Why a run is not usable. Cancelled tile requests are normal while the camera moves; they are counted
+    (cancelledRequests), not failures."""
     found = []
     if result.get('timedOut'): found.append('run budget exceeded')
     if not result.get('loaded'): found.append('run failed')
-    for key in ('failures', 'failedRequests', 'externalRequests'):
+    failed = [r for r in result.get('failedRequests') or [] if not cancelled(r)]
+    if failed: found.append(f'failedRequests: {len(failed)}: {str(failed[0])[:300]}')
+    for key in ('failures', 'externalRequests'):
         if result.get(key): found.append(f'{key}: {len(result[key])}: {str(result[key][0])[:300]}')
     if (result.get('console') or {}).get('errors'): found.append(f"console errors: {len(result['console']['errors'])}")
     if result.get('driverError'): found.append('driver: ' + result['driverError'][-300:])
@@ -333,6 +342,50 @@ def problems(result, renderer):
         found.append(f"renderer changed: {result['renderer']!r}")
     if (result.get('visibility') or {}).get('after') not in (None, 'visible'): found.append('tab hidden after the run')
     return found
+
+
+def aggregate_runs(runs, recipes, paths, profiles):
+    """{'recipe|path|profile': aggregate} over the usable timed runs of each cell, with per-waypoint medians."""
+    aggregates = {}
+    for recipe in recipes:
+        for path in paths:
+            for profile_name in profiles:
+                group = [r for r in runs if (r['recipe'], r['path'], r['profile']) == (recipe, path, profile_name)
+                         and r['summary'] and not r['problems'] and not r['untimed']]
+                if not group: continue
+                entry = flythrough_report.aggregate([r['summary'] for r in group], [bool(r['noise']) for r in group])
+                used = [r for r in group if not r['noise']] if entry['clean'] >= 2 else group
+                entry['waypoints'] = {}
+                for label in [w['name'] for w in group[0]['waypoints']]:
+                    values = [w['fullQualitySeconds'] for r in used for w in r['waypoints'] if w['name'] == label and w['reached']]
+                    entry['waypoints'][label] = dict(median=statistics.median(values) if values else None, n=len(values), of=len(used),
+                                                     unreached=sum(1 for r in used for w in r['waypoints']
+                                                                   if w['name'] == label and not w['reached']))
+                aggregates[f"{recipe}|{path}|{profile_name}"] = entry
+    return aggregates
+
+
+def rebuild(evidence, commit_report=None):
+    """Recompute every run's problems, summary and noise from its raw file, then the aggregates and both
+    reports, without a browser (after a rule or threshold change). The run set itself is unchanged."""
+    artifact = json.loads((evidence / 'flythrough.json').read_text())
+    renderer = dict(renderer=artifact['environment']['renderer'])
+    for run in artifact['runs']:
+        with gzip.open(evidence / 'runs' / f"{run['id']}.json.gz", 'rt') as stream: raw = json.load(stream)
+        result = raw['result']
+        run['problems'] = problems(result, renderer)
+        run['summary'] = flythrough_report.summarize(result) if result.get('frames') else {}
+        run['hostFacts'], run['noise'] = flythrough_report.host_noise(raw['host'])
+        run['cancelledRequests'] = sum(1 for r in result.get('failedRequests') or [] if cancelled(r))
+    names = list(dict.fromkeys(r['name'] for r in artifact['recipes']))
+    artifact['aggregates'] = aggregate_runs(artifact['runs'], names, list(artifact['paths']), list(artifact['profiles']))
+    artifact['rebuilt'] = datetime.datetime.now().isoformat(timespec='seconds')
+    (evidence / 'flythrough.json').write_text(json.dumps(artifact, indent=1) + '\n')
+    report = evidence / 'FLYTHROUGH.md'
+    report.write_text(flythrough_report.render(artifact, evidence, report, images=True))
+    if commit_report:
+        commit_report.write_text(flythrough_report.render(artifact, evidence, commit_report.resolve(), images=False))
+    return artifact
 
 
 def git_commit():
@@ -343,7 +396,9 @@ def git_commit():
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--bin', type=pathlib.Path, help='rusty-tiles CLI for recipes with convert')
-    parser.add_argument('--recipes', action='append', required=True, type=pathlib.Path, help='recipe set JSON; repeat')
+    parser.add_argument('--recipes', action='append', type=pathlib.Path, help='recipe set JSON; repeat (required unless --rebuild)')
+    parser.add_argument('--rebuild', type=pathlib.Path, metavar='EVIDENCE', help='recompute problems, summaries, aggregates '
+                        'and reports of a recorded run from its raw files (no browser); with --commit-report also the git copy')
     parser.add_argument('--config', type=pathlib.Path, default=CONFIG, help='paths and profiles (default flythrough.json)')
     parser.add_argument('--matrix', default='validate', help='run matrix preset from the config: validate (default, '
                         'trimmed: native everywhere, constrained profiles on one recipe and two paths) or full')
@@ -368,6 +423,9 @@ def main():
     parser.add_argument('--software-gl', action='store_true')
     for key, value in cesium.DEFAULTS.items(): parser.add_argument('--' + key.replace('_', '-'), type=pathlib.Path, default=value)
     args = parser.parse_args()
+    if args.rebuild:
+        rebuild(args.rebuild.resolve(), args.commit_report); print(args.rebuild / 'FLYTHROUGH.md'); return
+    if not args.recipes: parser.error('--recipes is required')
     if args.repeats is not None and args.repeats < 1: parser.error('--repeats must be >= 1')
     try:
         config, sets = load_config(args.config), load_recipe_sets(args.recipes)
@@ -489,6 +547,7 @@ def main():
                         file=str(shot.relative_to(evidence)), sha256=hashlib.sha256(shot.read_bytes()).hexdigest())
             runs.append(dict(id=run_id, recipe=name, set=recipe['set'], path=path, profile=profile_name, repeat=repeat, untimed=repeat == 0, trace=trace,
                              host=host, hostFacts=facts, noise=noise, problems=found, summary=summary,
+                             cancelledRequests=sum(1 for r in result.get('failedRequests') or [] if cancelled(r)),
                              waypoints=[{k: w.get(k) for k in ('name', 'reached', 'fullQualitySeconds', 'holdFrames')}
                                         for w in result.get('waypoints', [])],
                              rendererClass=cesium.renderer_class(result.get('renderer')), gpuTimer=result.get('gpuTimer'),
@@ -500,22 +559,7 @@ def main():
     finally:
         server.shutdown(); server.server_close()
 
-    aggregates = {}
-    for recipe in recipes:
-        for path in paths:
-            for profile_name in profiles:
-                group = [r for r in runs if (r['recipe'], r['path'], r['profile']) == (recipe['name'], path, profile_name)
-                         and r['summary'] and not r['problems'] and not r['untimed']]
-                if not group: continue
-                entry = flythrough_report.aggregate([r['summary'] for r in group], [bool(r['noise']) for r in group])
-                used = [r for r in group if not r['noise']] if entry['clean'] >= 2 else group
-                entry['waypoints'] = {}
-                for label in [w['name'] for w in group[0]['waypoints']]:
-                    values = [w['fullQualitySeconds'] for r in used for w in r['waypoints'] if w['name'] == label and w['reached']]
-                    entry['waypoints'][label] = dict(median=statistics.median(values) if values else None, n=len(values), of=len(used),
-                                                     unreached=sum(1 for r in used for w in r['waypoints']
-                                                                   if w['name'] == label and not w['reached']))
-                aggregates[f"{recipe['name']}|{path}|{profile_name}"] = entry
+    aggregates = aggregate_runs(runs, [r['name'] for r in recipes], paths, profiles)
     # A run whose renderer differs from the preflight's is a problem (problems()) and is left out of every
     # aggregate, so one artifact never mixes renderer classes; the classes seen are recorded.
     classes = sorted({r['rendererClass'] for r in runs})

@@ -413,7 +413,8 @@ python3 -I bench/perf_lane/flythrough.py --bin RUSTY_TILES \
   --recipes bench/perf_lane/recipes/terrain-skiplod.json --recipes bench/perf_lane/recipes/vector.json \
   [--matrix validate|full] [--paths ...] [--profiles ...] [--only NAME,...] [--repeats N] [--no-capture] [--no-trace] \
   [--evidence ~/.cache/rusty-tiles-evidence/perf/flythrough-YYYYMMDD] [--commit-report bench/perf_lane/FLYTHROUGH.md]
-python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-render without running
+python3 -I bench/perf_lane/flythrough.py --rebuild EVIDENCE_DIR [--commit-report ...]   # re-derive from raw runs
+python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-render the artifact as is
 ```
 
 - **Recipes** (`recipes/*.json`). A recipe is a named set of conversion
@@ -552,7 +553,11 @@ python3 -I bench/perf_lane/flythrough_report.py --from EVIDENCE_DIR   # re-rende
 
   `--commit-report` writes the image-free copy that goes into git, with
   screenshot digests and an `identical` column. Runs that error are listed
-  under Failures, and the script exits 1. A run whose renderer differs
+  under Failures, and the script exits 1. A tile request that Cesium
+  aborts because its tile left the view (`net::ERR_ABORTED` with no
+  status) is normal while moving. It is counted in `cancelledRequests`
+  and is not a failure. `--rebuild` recomputes problems, summaries, noise,
+  aggregates and both reports from the raw runs, with no browser. A run whose renderer differs
   from the preflight's is such a failure and is left out of every
   aggregate. The artifact is still written, with the classes seen.
 

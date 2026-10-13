@@ -304,6 +304,20 @@ class Stats(unittest.TestCase):
         self.assertIn('| r.p.native.r0 | 12 | 5 |', text)
 
 
+class Problems(unittest.TestCase):
+    def test_cancelled_tile_requests_are_not_failures(self):
+        renderer = dict(renderer='GPU')
+        base = dict(loaded=True, renderer='GPU', visibility=dict(after='visible'))
+        cancelled = dict(url='http://127.0.0.1:1/data/t/a.glb', error='net::ERR_ABORTED')
+        self.assertEqual(fly.problems(dict(base, failedRequests=[cancelled]), renderer), [])
+        for bad in (dict(url='http://127.0.0.1:1/data/t/a.glb', status=404),
+                    dict(url='http://127.0.0.1:1/cesium/Cesium.js', error='net::ERR_ABORTED'),
+                    dict(url='http://127.0.0.1:1/data/t/a.glb', error='net::ERR_CONNECTION_RESET')):
+            with self.subTest(bad=bad):
+                self.assertEqual(len(fly.problems(dict(base, failedRequests=[cancelled, bad]), renderer)), 1)
+        self.assertEqual(fly.problems(dict(base, renderer='SwiftShader'), renderer), ["renderer changed: 'SwiftShader'"])
+
+
 class Trace(unittest.TestCase):
     def test_union_counts_overlaps_once(self):
         self.assertEqual(rep.union_ms([(0, 1000), (500, 1500), (3000, 4000), (3100, 3200)]), 2.5)

@@ -353,7 +353,7 @@ def render(artifact, directory, output, images=False):
                         cells.append('n/a' if not values else
                                      f"{fmt(values['median'], 2)}" + (f" [{values['n']}/{values['of']}]" if values['n'] != values['of'] else '')
                                      + (f" ({values['unreached']} unreached)" if values['unreached'] else ''))
-                    wrows.append([path, waypoint, *cells])
+                    if any(c != 'n/a' for c in cells): wrows.append([path, waypoint, *cells])
             out += [f'Time to full quality per waypoint (s, median), {set_name}, {profile}:', '',
                     table(['path', 'waypoint', *recipes], wrows), '']
     out += ['## Screenshots', '', 'Canvas captures at full quality, from the untimed capture run of each recipe, path and profile.', '']
@@ -384,8 +384,9 @@ def render(artifact, directory, output, images=False):
         out += ['## Chrome traces', '',
                 'One untimed, traced run per selected cell (tracing slows it). Busy ms over the flythrough, overlapping '
                 'events counted once: the page renderer main thread in total, its JS, GC and GPU command issue and '
-                'waits; its worker threads (decoding); image decode; and the GPU process main thread, which other tabs '
-                'share. Traces are under `traces/` in the evidence directory.', '',
+                'waits; the renderer\'s other worker threads (Chrome\'s thread pool: background compile, GC, decode; and '
+                'any web workers); image decode; and the GPU process main thread, which other tabs share. Traces are '
+                'under `traces/` in the evidence directory.', '',
                 table(['run', *keys], [[r['id'], *(fmt(r['trace'].get(k), 0) if 'error' not in r['trace'] else r['trace']['error'][:60]
                                                    for k in keys)] for r in traced]), '']
     out += ['## Host load and noise', '',
@@ -427,7 +428,9 @@ def render(artifact, directory, output, images=False):
     out += [f'{unstable} unstable metric cells of {len(rows) * len(STABILITY_METRICS)}.', '',
             table(['recipe', 'path', 'profile', 'runs', *STABILITY_METRICS], rows), '']
     failed = [r for r in runs if r.get('problems')]
-    out += ['## Failures', '']
+    cancelled = sum(r.get('cancelledRequests') or 0 for r in runs)
+    out += ['## Failures', '', f'Cancelled tile requests (Cesium aborts requests for tiles that leave the view; normal while '
+            f'moving, not failures): {cancelled} over {sum(1 for r in runs if r.get("cancelledRequests"))} runs.', '']
     out += [f"- `{r['id']}`: {'; '.join(r['problems'])[:400]}" for r in failed] or ['None.']
     return '\n'.join(out) + '\n'
 
