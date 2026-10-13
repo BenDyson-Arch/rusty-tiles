@@ -187,5 +187,25 @@ class Gate(unittest.TestCase):
         self.assertEqual(len(cesium.problems(more, case(rendererClass='software'), self.GPU)), 1)
 
 
+class TilesetOptions(unittest.TestCase):
+    KINDS = dict(terrain='tileset', raster='raster')
+
+    def test_parses_a_tileset_case(self):
+        self.assertEqual(cesium.parse_tileset_options(['terrain={"skipLevelOfDetail":true}'], self.KINDS),
+                         dict(terrain=dict(skipLevelOfDetail=True)))
+        self.assertEqual(cesium.parse_tileset_options([], self.KINDS), {})
+
+    def test_rejects_what_it_would_ignore(self):
+        for item in ('missing={"a":1}', 'raster={"a":1}', 'terrain=true', 'terrain=[1]', 'terrain=nope', 'terrain'):
+            with self.subTest(item=item), self.assertRaises(ValueError):
+                cesium.parse_tileset_options([item], self.KINDS)
+        with self.assertRaises(ValueError):
+            cesium.parse_tileset_options(['terrain={}', 'terrain={"a":1}'], self.KINDS)
+
+    def test_spec_reaches_the_page(self):
+        script = (HERE / 'cesium.cjs').read_text()
+        self.assertIn('...(spec.tilesetOptions || {}), maximumScreenSpaceError', script)
+
+
 if __name__ == '__main__':
     unittest.main()
