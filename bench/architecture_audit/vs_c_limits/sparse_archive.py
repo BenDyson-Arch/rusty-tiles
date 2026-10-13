@@ -121,7 +121,10 @@ def build(path, members, member_bytes, force_z64_eocd):
         for nm in names:
             w.hole_member(nm, prefix, hole, cache)
         rows = sorted(((hashlib.md5(n.encode("ascii")).digest(), off)
-                       for (n, off, _s, _c) in w.records), key=lambda r: r[0])
+                       for (n, off, _s, _c) in w.records),
+                      # 3TZ orders the index by the MD5 read as two little-endian u64s
+                      # (author correction: byte order was refused as "not ordered").
+                      key=lambda r: struct.unpack("<QQ", r[0]))
         index = b"".join(d + struct.pack("<Q", off) for d, off in rows)
         w.small(INDEX_NAME, index)
         cd_off = f.tell()
