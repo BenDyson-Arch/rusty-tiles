@@ -324,6 +324,9 @@ pub(crate) struct LodReport {
     pub relaxed_tiles: u64,
     /// Tiles above `2P` faces (each glTF primitive still holds at most 8192 triangles).
     pub over_budget_tiles: u64,
+    /// Tiles above 8192 faces, whose proxy_source rows are split per glTF primitive
+    /// (CesiumJS 1.146 then resolves picks only through the first table).
+    pub split_provenance_tiles: u64,
     /// Run facts outside the deterministic manifest.
     #[serde(skip)]
     pub jobs: u64,
@@ -1822,6 +1825,7 @@ pub(crate) fn produce(
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);
             report.over_budget_tiles += u64::from(o.over_budget);
+            report.split_provenance_tiles += u64::from(u64::from(row.faces) > 8192);
             for (a, b) in report.phase_seconds.iter_mut().zip(o.phases) {
                 *a += b;
             }

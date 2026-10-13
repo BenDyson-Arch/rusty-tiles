@@ -392,6 +392,17 @@ fn component_width(component: &str) -> usize {
     }
 }
 
+/// The `proxy_source` columns of a run of faces.
+fn source_columns(origins: &[super::mesh::Origin]) -> [(&'static str, &'static str, Vec<u64>); 5] {
+    [
+        ("node_index", "UINT32", origins.iter().map(|o| u64::from(o.node)).collect()),
+        ("mesh_index", "UINT32", origins.iter().map(|o| u64::from(o.mesh)).collect()),
+        ("primitive_index", "UINT32", origins.iter().map(|o| u64::from(o.primitive)).collect()),
+        ("triangle_index", "UINT64", origins.iter().map(|o| o.triangle).collect()),
+        ("fill", "UINT8", origins.iter().map(|o| u64::from(o.triangle == u64::MAX)).collect()),
+    ]
+}
+
 /// Area-weighted smooth normal per (indexed) vertex over decoded positions.
 fn normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[f32; 3]> {
     let mut sum = vec![[0f64; 3]; decoded.len()];
@@ -523,6 +534,16 @@ pub(crate) fn encode(
             start = end;
         }
     }
+    let total_faces: usize = primitives.iter().map(|p| p.faces.len()).sum();
+    let shared_source = (total_faces <= TABLE_ROWS).then(|| {
+        let origins: Vec<super::mesh::Origin> =
+            primitives.iter().flat_map(|p| p.origins.iter().copied()).collect();
+        let columns = source_columns(&origins);
+        let columns: Vec<(&str, &str, &[u64])> =
+            columns.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
+        add_table(&mut wire, "proxy_source", &columns, 0..total_faces)
+    });
+    let mut face_base = 0usize;
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
     let mut out_faces = Vec::new();
@@ -615,27 +636,29 @@ pub(crate) fn encode(
                 bytes.extend_from_slice(&(row as f32).to_le_bytes());
             }
             let primitive_id = wire.attribute(&bytes, count, 4, json!({"componentType":5126,"type":"SCALAR"}));
+            // One proxy_source table for the whole proxy when it fits (CesiumJS 1.146 resolves
+            // a mesh pick through one table per model); otherwise one per glTF primitive.
+            let (first_id, source_table, rows) = match shared_source {
+                Some(table) => (face_base, table, total_faces),
+                None => {
+                    let origins = &primitive.origins[start..start + faces.len()];
+                    let columns = source_columns(origins);
+                    let columns: Vec<(&str, &str, &[u64])> =
+                        columns.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
+                    (0, add_table(&mut wire, "proxy_source", &columns, 0..faces.len()), faces.len())
+                }
+            };
             let mut bytes = Vec::with_capacity(count * 4);
             for k in 0..faces.len() {
                 for _ in 0..3 {
-                    bytes.extend_from_slice(&(k as f32).to_le_bytes());
+                    bytes.extend_from_slice(&((first_id + k) as f32).to_le_bytes());
                 }
             }
+            face_base += faces.len();
             let face_id = wire.attribute(&bytes, count, 4, json!({"componentType":5126,"type":"SCALAR"}));
-            let origins = &primitive.origins[start..start + faces.len()];
-            let source: [(&str, &str, Vec<u64>); 5] = [
-                ("node_index", "UINT32", origins.iter().map(|o| u64::from(o.node)).collect()),
-                ("mesh_index", "UINT32", origins.iter().map(|o| u64::from(o.mesh)).collect()),
-                ("primitive_index", "UINT32", origins.iter().map(|o| u64::from(o.primitive)).collect()),
-                ("triangle_index", "UINT64", origins.iter().map(|o| o.triangle).collect()),
-                ("fill", "UINT8", origins.iter().map(|o| u64::from(o.triangle == u64::MAX)).collect()),
-            ];
-            let columns: Vec<(&str, &str, &[u64])> =
-                source.iter().map(|(n, c, v)| (*n, *c, v.as_slice())).collect();
-            let source_table = add_table(&mut wire, "proxy_source", &columns, 0..faces.len());
             let sets = [
                 json!({"featureCount":primitives.len(),"attribute":0,"propertyTable":primitive_table,"label":"source_primitive"}),
-                json!({"featureCount":faces.len(),"attribute":1,"propertyTable":source_table,"label":"proxy_source"}),
+                json!({"featureCount":rows,"attribute":1,"propertyTable":source_table,"label":"proxy_source"}),
             ];
             let mut attributes = json!({"POSITION":position,"NORMAL":normal});
             for (k, id) in [primitive_id, face_id].into_iter().enumerate() {

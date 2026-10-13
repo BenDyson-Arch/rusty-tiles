@@ -473,6 +473,10 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
             .flat_map(|l| l.provenance.iter().copied())
             .collect();
         let present_rows = &g.tables.iter().find(|t| t.0 == "source_primitive").unwrap().1;
+        if g.faces.len() <= 8192 {
+            // One provenance table per proxy (CesiumJS picks through one table per model).
+            assert_eq!(g.tables.iter().filter(|t| t.0 == "proxy_source").count(), 1);
+        }
         for (f, table) in g.features.iter().zip(&g.second_table) {
             let (class, t) = &g.tables[*table];
             assert_eq!(class, "proxy_source");
