@@ -125,11 +125,13 @@ The JSON admission rules, limits and outcome categories are otherwise unchanged.
 - **C2 oracle and O-implicit.** Both oracles classify legacy content as Unsupported (C1 and I1
   phases respectively).
 - **C1 corpus oracle.** `tests/c1_validation_oracle.py` expects `unsupported` for its 10 b3dm
-  controls, has 8 legacy-format controls, and 13 controls for the C1-only paths: legacy magic
+  controls, has 8 legacy-format controls, and 17 controls for the C1-only paths: legacy magic
   under `.bin`, a `.b3dm` holding a GLB, a missing `.b3dm`, the content-volume check before
   classification, `retainedContentUris` (present and missing), `rustyTilesSourceContents`,
-  three implicit content templates, b3dm bytes under a `.glb` template, and the exempt
-  subtree template (with an implicit baseline). Legacy cases also check message tokens.
+  three implicit content templates, b3dm bytes under a `.glb` template, the exempt subtree
+  template (with an implicit baseline), traversal order in both directions (b3dm before and
+  after a truncated GLB), a b3dm referenced twice and a b3dm inside an external tileset.
+  Legacy cases check message tokens, in Python and in `tests/c1_validate.rs` (cargo test).
 - **Frozen payload corpus.** The 12 b3dm controls of the corrected-205 bundle expect
   `unsupported` through the additive
   [legacy-unsupported amendment](../../bench/architecture_audit/c1_payload_integrity/production_controls/legacy_unsupported_amendment/2026-10-13/README.md);
