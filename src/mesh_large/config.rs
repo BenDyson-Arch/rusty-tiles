@@ -25,20 +25,6 @@ pub(crate) const MEMBERS_BESIDES_TILES: u64 = 1 + 1 + 3;
 /// table of every leaf within it (H16 contract, "Consumer property tables").
 pub(crate) const CONSUMER_TABLE_ROWS: u64 = 8_192;
 
-/// Bench-only leaf budget override, `RUSTY_TILES_BENCH_LEAF_TRIANGLES` (8,192 to 1,048,576):
-/// leaves wider than [`CONSUMER_TABLE_ROWS`] are split into glTF primitives of at most that
-/// many triangles, each with its own `source_triangle` table. Not a product option; it
-/// exists to measure the consumer cost of wider leaves against the default.
-pub(crate) fn bench_leaf_triangles() -> Option<u64> {
-    static VALUE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
-    *VALUE.get_or_init(|| {
-        std::env::var("RUSTY_TILES_BENCH_LEAF_TRIANGLES")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|v| (CONSUMER_TABLE_ROWS..=1 << 20).contains(v))
-    })
-}
-
 /// Output profiles. The leaf triangle budget `L` comes from the profile; there is no separate
 /// leaf-triangle option (design §8; `--leaf-triangles` is retired).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -115,7 +101,7 @@ impl TreeConfig {
             jobs: Jobs::Auto,
             scratch_dir: None,
             sort: SortConfig::default(),
-            leaf_triangles: bench_leaf_triangles().unwrap_or(profile.leaf_triangles()),
+            leaf_triangles: profile.leaf_triangles(),
             tile_bytes: TILE_BYTES,
             height_cap: HEIGHT_CAP,
             member_ceiling: MEMBER_CEILING_3TZ,
