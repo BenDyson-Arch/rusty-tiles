@@ -933,7 +933,7 @@ fn leaf_tables_within_consumer_limit(archive: &BTreeMap<String, Vec<u8>>) -> usi
 /// containment, their KTX2 containers checked by C1.
 #[test]
 fn real_leaves_from_h8_publish_deterministically_and_validate() {
-    use crate::{LeafOutputRequest, LeafProfile};
+    use crate::mesh_large::leaves::producer::{LeafOutputRequest, LeafProfile};
     use std::num::NonZeroUsize;
     let work = tempfile::tempdir().unwrap();
     let textured = super::super::full::tests::fixture(&work.path().join("src"), 8193);
@@ -947,7 +947,7 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
         let scratch = work.path().join(format!("scratch-{tag}"));
         std::fs::create_dir(&scratch).unwrap();
         let leaves = work.path().join(format!("leaves-{tag}"));
-        crate::mesh_to_leaf_payloads(
+        crate::mesh_large::leaves::producer::mesh_to_leaf_payloads(
             LeafOutputRequest::new(input, &leaves, LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(jobs).unwrap())
                 .with_scratch_dir(&scratch),
@@ -1060,4 +1060,84 @@ fn glb_bounds_are_outward_and_z_up() {
     }
     let (path, bytes) = write(doc(json!({"mesh":0,"rotation":[0,0,0,1]})));
     assert!(glb_bounds(&path, &row(bytes)).is_err());
+}
+
+// Independently authored conversion-member ceiling control.
+#[test]
+fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
+    let one = tempfile::tempdir().unwrap();
+    let specs = [Spec {
+        digits: vec![],
+        cell_depth: 0,
+        last_octant: 0,
+        triangles: 1,
+    }];
+    let leaves = leaf_dir(one.path(), &specs);
+    let output = one.path().join("unused.3tz");
+    let request = MeshTilesetRequest::new(&leaves, &output).with_member_ceiling(3);
+    let mut report_called = false;
+    let refused = prepare_tiler(
+        &request,
+        ResolvedPlacement::resolve(&request.placement).unwrap(),
+        &mut || Ok(()),
+        |_| {
+            report_called = true;
+            Ok(b"{}".to_vec())
+        },
+    );
+    let error = match refused {
+        Err(error) => error,
+        Ok(_) => panic!("omitted conversion.json from early ceiling"),
+    };
+    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    assert!(error.message().contains("at least"));
+    assert!(!report_called);
+    assert!(!output.exists());
+    let request = MeshTilesetRequest::new(&leaves, &output).with_member_ceiling(4);
+    let admitted = prepare_tiler(
+        &request,
+        ResolvedPlacement::resolve(&request.placement).unwrap(),
+        &mut || Ok(()),
+        |facts| {
+            assert_eq!(facts.members, 4); // content + tileset + conversion + archive index
+            Ok(b"{}".to_vec())
+        },
+    )
+    .unwrap();
+    assert_eq!(admitted.facts().members, 4);
+    assert!(admitted.conversion.is_some());
+    assert!(!output.exists());
+
+    // The established mixed-tree fixture creates extra forest documents under TIGHT.
+    // Baseline count excludes conversion; adding it must refuse at the exact pass.
+    let mixed = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(5);
+    let leaves = leaf_dir(mixed.path(), &specs);
+    let output = mixed.path().join("unused.3tz");
+    let baseline = prepare(
+        &MeshTilesetRequest::new(&leaves, &output),
+        TIGHT,
+        &mut || Ok(()),
+        false,
+    )
+    .unwrap();
+    let exact = baseline.facts().members;
+    assert!(exact >= specs.len() as u64 + 3);
+    let request = MeshTilesetRequest::new(&leaves, &output).with_member_ceiling(exact);
+    let refused = prepare(&request, TIGHT, &mut || Ok(()), true);
+    let error = match refused {
+        Err(error) => error,
+        Ok(_) => panic!("omitted conversion.json from exact ceiling"),
+    };
+    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    assert!(error.message().contains("exactly"));
+    let admitted = prepare(
+        &request.with_member_ceiling(exact + 1),
+        TIGHT,
+        &mut || Ok(()),
+        true,
+    )
+    .unwrap();
+    assert_eq!(admitted.facts().members, exact + 1);
+    assert!(!output.exists());
 }

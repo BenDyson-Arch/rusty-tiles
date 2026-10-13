@@ -3,7 +3,7 @@ use pyo3::{
     create_exception,
     exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyDict, PyList},
+    types::{PyBool, PyDict, PyInt, PyList},
 };
 use serde_json::Value;
 use std::{
@@ -19,7 +19,8 @@ use tiles_core::{
     vector::{VectorLodOptions, VectorOptions},
     Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshApproximation,
     MeshPlacement, MeshRequest, MeshTo3tzOptions, ModelManifestRequest, ModelWrapRequest, Observer,
-    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes,
+    OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes, TilerJobs, TilerProfile,
+    TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -254,6 +255,119 @@ fn cleanup_diagnostics(diagnostics: Vec<tiles_core::CleanupDiagnostic>) -> Vec<C
             message: diagnostic.error.to_string(),
         })
         .collect()
+}
+
+/// One installed tiler archive; runtime diagnostics stay outside its semantic report.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct TilerResult {
+    #[pyo3(get)]
+    output: PathBuf,
+    #[pyo3(get)]
+    archive: bool,
+    report: Value,
+    diagnostics: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl TilerResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+
+    #[getter]
+    fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.diagnostics)
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
+fn tiler_request_error(py: Python<'_>, error: JobError) -> PyErr {
+    job_failure_to_python(
+        py,
+        JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        },
+    )
+}
+
+fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJobs> {
+    let Some(jobs) = jobs else {
+        return Ok(TilerJobs::Auto);
+    };
+    if jobs.is_instance_of::<PyBool>() || !jobs.is_instance_of::<PyInt>() {
+        return Err(PyTypeError::new_err(
+            "jobs must be an integer maximum or None",
+        ));
+    }
+    let count = jobs
+        .extract::<usize>()
+        .ok()
+        .and_then(std::num::NonZeroUsize::new)
+        .ok_or_else(|| {
+            tiler_request_error(
+                py,
+                JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "jobs must be a positive integer within the platform worker-count range",
+                ),
+            )
+        })?;
+    Ok(TilerJobs::Maximum(count))
+}
+
+/// Stream an admitted local metre/Y-up static mesh into one Tiles 1.1 .3tz.
+/// Profiles are provisional; jobs is a resource-capped maximum, and None means auto.
+#[pyfunction]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, force=false, callback=None))]
+#[allow(clippy::too_many_arguments)]
+fn mesh_to_tileset(
+    py: Python<'_>,
+    input: PathBuf,
+    output: PathBuf,
+    profile: &str,
+    jobs: Option<Bound<'_, PyAny>>,
+    scratch_dir: Option<PathBuf>,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<TilerResult> {
+    let profile = profile
+        .parse::<TilerProfile>()
+        .map_err(|error| tiler_request_error(py, error))?;
+    let jobs = tiler_jobs(py, jobs)?;
+    let mut request = TilerRequest::new(input, output)
+        .with_profile(profile)
+        .with_jobs(jobs)
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)
+        .with_output_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        });
+    if let Some(path) = scratch_dir {
+        request = request.with_scratch_dir(path);
+    }
+    let result = run_job(py, callback, |run| {
+        tiles_core::mesh_to_tileset(request, run)
+    })?;
+    Ok(TilerResult {
+        output: result.output,
+        archive: true,
+        report: serde_json::json!(result.report),
+        diagnostics: serde_json::json!(result.diagnostics),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
 }
 
 /// Published local mesh with its finalized report and cleanup diagnostics.
@@ -1086,6 +1200,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<MeshResult>()?;
+    module.add_class::<TilerResult>()?;
     module.add_class::<ModelWrapResult>()?;
     module.add_class::<ModelManifestResult>()?;
     module.add_class::<RasterDirectoryResult>()?;
@@ -1117,6 +1232,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
+    module.add_function(wrap_pyfunction!(mesh_to_tileset, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(model_to_manifest, module)?)?;
