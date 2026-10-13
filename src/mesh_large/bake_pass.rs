@@ -351,6 +351,15 @@ pub(in crate::mesh_large) struct FaceIdentity {
     pub features: Vec<(u32, Option<u32>)>,
 }
 
+/// Only [`assemble`] can make one: binds a `Fit` to the frozen tile it was verified for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::mesh_large) struct Verified {
+    first: u64,
+    depth: u32,
+    untextured: [u8; 32],
+    tile_bytes: u64,
+}
+
 /// The adapter's verdict on one prepared node.
 #[derive(Debug)]
 pub(in crate::mesh_large) enum Assembly {
@@ -358,6 +367,8 @@ pub(in crate::mesh_large) enum Assembly {
     Fit {
         glb: Vec<u8>,
         decoded: Vec<FaceIdentity>,
+        /// Proof that [`assemble`] produced and verified it, for this frozen tile.
+        verified: Verified,
     },
     /// The complete member is larger than the tile budget (the only error that permits a
     /// density drop and rebake).
@@ -448,24 +459,44 @@ impl<'a> BakePass<'a> {
 
     /// Publish an accepted member over the tile's untextured proxy (geometric error
     /// unchanged; the proxy row's size and hash are refreshed by [`BakePass::finish`]).
+    /// Only a `Fit` that [`BakePass::assemble`] verified for this tile is accepted; its
+    /// bytes are checked again against the tile budget and decoded against the frozen
+    /// faces, then written atomically (temporary file and rename).
     pub(in crate::mesh_large) fn commit(
         &self,
         frozen: &FrozenNode,
-        glb: &[u8],
+        assembly: &Assembly,
     ) -> Result<(), JobError> {
         (self.check)()?;
+        let Assembly::Fit { glb, verified, .. } = assembly else {
+            return Err(state("only a Fit assembly may be committed"));
+        };
         let id = &frozen.identity;
+        if verified.first != id.first
+            || verified.depth != id.depth
+            || verified.untextured != frozen.glb_sha256
+            || verified.tile_bytes != self.tile_bytes
+        {
+            return Err(state("a Fit assembly committed to another tile or budget"));
+        }
+        if glb.len() as u64 > self.tile_bytes {
+            return Err(state("a committed member exceeds the tile budget"));
+        }
+        check_faces(frozen, glb)?;
         let path = self
             .stage
             .join(format!("proxies/f{}-d{}.glb", id.first, id.depth));
         if !path.exists() {
             return Err(state("a baked member has no proxy to replace"));
         }
+        let next = path.with_extension("glb.next");
         let mut file =
-            fs::File::create(&path).map_err(|e| JobError::io("write baked proxy", &path, e))?;
+            fs::File::create(&next).map_err(|e| JobError::io("write baked proxy", &next, e))?;
         file.write_all(glb)
             .and_then(|_| file.sync_all())
-            .map_err(|e| JobError::io("write baked proxy", &path, e))
+            .map_err(|e| JobError::io("write baked proxy", &next, e))?;
+        drop(file);
+        fs::rename(&next, &path).map_err(|e| JobError::io("replace baked proxy", &path, e))
     }
 
     /// Rewrite `proxies.jsonl` with every member's actual size and SHA-256 (streamed, one
@@ -778,7 +809,57 @@ pub(in crate::mesh_large) fn assemble(
         });
     }
     let decoded = verify(frozen, prepared, &out)?;
-    Ok(Assembly::Fit { glb: out, decoded })
+    let verified = Verified {
+        first: frozen.identity.first,
+        depth: frozen.identity.depth,
+        untextured: frozen.glb_sha256,
+        tile_bytes,
+    };
+    Ok(Assembly::Fit {
+        glb: out,
+        decoded,
+        verified,
+    })
+}
+
+/// The member's decoded faces are exactly the frozen faces (raw words, decoded bits and
+/// feature IDs per oriented face), as a multiset: output primitives may reorder faces.
+fn check_faces(frozen: &FrozenNode, glb: &[u8]) -> Result<(), JobError> {
+    let decoded = codec::decode(glb)?;
+    type FaceKey = ([[u32; 3]; 3], [[u32; 3]; 3], Vec<(u32, Option<u32>)>);
+    let mut got: Vec<FaceKey> = decoded
+        .faces
+        .iter()
+        .map(|d| {
+            (
+                d.raw,
+                d.p.map(|q| q.map(f32::to_bits)),
+                d.features
+                    .iter()
+                    .map(|(id, t)| (*id, t.map(|t| t as u32)))
+                    .collect(),
+            )
+        })
+        .collect();
+    let mut want: Vec<FaceKey> = frozen
+        .faces
+        .iter()
+        .map(|f| {
+            (
+                f.corners.map(|c| c.raw),
+                f.corners.map(|c| c.decoded),
+                f.features.clone(),
+            )
+        })
+        .collect();
+    got.sort_unstable();
+    want.sort_unstable();
+    if got != want {
+        return Err(state(
+            "a committed member does not decode to its frozen faces",
+        ));
+    }
+    Ok(())
 }
 
 /// Read the assembled member back from its bytes and compare every requested value.
@@ -1111,16 +1192,23 @@ mod tests {
                     Assembly::PhysicalBudget { actual_bytes } => assert!(actual_bytes > 64),
                     Assembly::Fit { .. } => panic!("a 64-byte member cannot fit"),
                 }
-                let Assembly::Fit { glb, decoded } = pass.assemble(&frozen, &prepared)? else {
+                let fit = pass.assemble(&frozen, &prepared)?;
+                let Assembly::Fit { decoded, .. } = &fit else {
                     panic!("the flat member fits");
                 };
                 assert_eq!(decoded.len(), frozen.faces.len());
-                for d in &decoded {
+                for d in decoded.iter() {
                     let f = &frozen.faces[d.face as usize];
                     assert_eq!(d.origin, f.origin);
                     assert_eq!(d.decoded, f.corners.map(|c| c.decoded));
                 }
-                pass.commit(&frozen, &glb)?;
+                // Commit accepts only a verified Fit for this very tile.
+                let budget = Assembly::PhysicalBudget { actual_bytes: 1 };
+                assert!(pass.commit(&frozen, &budget).is_err());
+                let mut other = frozen.clone();
+                other.identity.first += 1;
+                assert!(pass.commit(&other, &fit).is_err());
+                pass.commit(&frozen, &fit)?;
                 pass.preencode.write_proxy(first, depth, b"pages")?;
                 pass.release(first, depth)?;
                 self.seen
