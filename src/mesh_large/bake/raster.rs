@@ -2,11 +2,11 @@
 //! no texel centre. Support comes from clipped area, never copied gutters.
 use super::{
     charts::Layout,
-    frames::Frame,
+    frames::{self, Frame},
     invalid,
     math::{self, V3},
     resource,
-    sampling::ChildQuery,
+    sampling::{ChildQuery, ProxySample},
     source::CapturedSource,
     types::{
         slot_index, BakeLimits, FrozenNode, NormalSample, SignalLevel, SignalPage, TerminalSample,
@@ -25,9 +25,9 @@ const SLOTS: [TextureSlot; 5] = [
 pub(super) struct Raster {
     pub pages: Vec<SignalPage>,
     pub face_pages: Vec<[Option<usize>; 5]>,
-    pub frames: Vec<Frame>,
-    pub normal_attributes: Vec<[f32; 3]>,
-    pub tangent_attributes: Vec<[f32; 4]>,
+    pub frames: Vec<[Frame; 3]>,
+    pub normal_attributes: Vec<[[f32; 3]; 3]>,
+    pub tangent_attributes: Vec<[[f32; 4]; 3]>,
     pub colors: Vec<[[f32; 4]; 3]>,
     pub masks: Vec<Vec<mask::SurfaceSample>>,
     pub owner: Vec<Vec<usize>>,
@@ -143,33 +143,13 @@ pub(super) fn build(
     limits: BakeLimits,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Raster, JobError> {
-    let mut frames = Vec::with_capacity(f.faces.len());
+    let generated = frames::generate(f, layout, limits.memory_bytes, limits.query_work, check)?;
+    let frames = generated.frames;
+    let normal_attributes = generated.normals;
+    let tangent_attributes = generated.tangents;
     let mut colors = Vec::with_capacity(f.faces.len());
-    let mut normal_attributes = Vec::with_capacity(f.faces.len());
-    let mut tangent_attributes = Vec::with_capacity(f.faces.len());
-    for (i, face) in f.faces.iter().enumerate() {
+    for face in &f.faces {
         check()?;
-        let p = face.positions.map(|p| p.map(f64::from));
-        let n = math::face_normal(p);
-        let frame = if let Some(n) = n {
-            let raw = Frame::from_triangle(p, layout.uv[i].map(|p| p.map(f64::from)), n)?;
-            // Match the emitted f32 NORMAL/TANGENT and authored viewer axis normalization.
-            let n = raw.normal.map(|v| f64::from(v as f32));
-            let t = raw.tangent.map(|v| f64::from(v as f32));
-            let sign = if math::dot(math::cross(raw.normal, raw.tangent), raw.bitangent) < 0. {
-                -1.
-            } else {
-                1.
-            };
-            normal_attributes.push(n.map(|v| v as f32));
-            tangent_attributes.push([t[0] as f32, t[1] as f32, t[2] as f32, sign as f32]);
-            Frame::donor([n; 3], [[t[0], t[1], t[2], sign]; 3], [1., 0., 0.])?
-        } else {
-            normal_attributes.push([0., 0., 1.]);
-            tangent_attributes.push([1., 0., 0., 1.]);
-            identity()
-        };
-        frames.push(frame);
         let mut c = [[1.; 4]; 3];
         for (j, color) in c.iter_mut().enumerate() {
             *color = source.color(face.source, face.source_triangle, face.welds[j], check)?;
@@ -189,7 +169,9 @@ pub(super) fn build(
     let mut support_distance = 0f64;
     let mut centroid_samples = 0u64;
     let mut area_error = 0f64;
-    let mut charged = 0u64;
+    let mut charged = (f.faces.len() as u64)
+        .checked_mul(2048)
+        .ok_or_else(|| resource("corner attributes lease overflow"))?;
     let mut maximum_texel = 0f64;
     let mut support_scales = Vec::new();
     for plan in &layout.pages {
@@ -238,8 +220,7 @@ pub(super) fn build(
                 .checked_sub(count as u64)
                 .ok_or_else(|| resource("coverage support count"))?
                 / (count as u64))
-                .max(1)
-                .min(65536) as f64;
+                .clamp(1, 65536) as f64;
             support_scales.push(q);
             let mut sums = vec![[0.; 4]; count];
             let mut weights = vec![0.; count];
@@ -259,7 +240,6 @@ pub(super) fn build(
                     let Some(normal) = math::face_normal(points) else {
                         continue;
                     };
-                    let frame = frames[fi];
                     let t = layout.uv[fi].map(|p| {
                         [
                             f64::from(p[0]) * f64::from(width),
@@ -315,17 +295,26 @@ pub(super) fn build(
                                 let sum = bary.iter().sum::<f64>();
                                 let bary = bary.map(|w| w / sum);
                                 let p = math::bary(points, bary);
+                                let corners = frames[fi];
+                                let frame = Frame::interpolate(
+                                    corners.map(|f| f.normal),
+                                    corners.map(|f| f.tangent),
+                                    corners.map(|f| f.bitangent),
+                                    bary,
+                                )?;
                                 let signal = children
                                     .signal(
                                         source,
-                                        face,
-                                        p,
-                                        normal,
-                                        frame,
+                                        ProxySample {
+                                            face,
+                                            position: p,
+                                            geometric_normal: normal,
+                                            frame,
+                                            texel_size: actual_texel,
+                                            geometric_error: f.geometric_error,
+                                            depth: f.node.depth(),
+                                        },
                                         slot,
-                                        actual_texel,
-                                        f.geometric_error,
-                                        f.node.depth(),
                                         check,
                                     )?
                                     .ok_or_else(|| {

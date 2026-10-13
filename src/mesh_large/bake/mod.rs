@@ -138,6 +138,29 @@ fn packet_charge(
     add_charge(&mut total, limits.source_cache_bytes, limits.memory_bytes)?;
     Ok(total)
 }
+/// Resolve texture participation once from the admitted source binding closure.
+/// Scalar/COLOR-only faces retain generated normals and every immutable corner,
+/// but have no atlas/decoded-UV/tangent-map sampling obligation.
+fn raster_faces(f: &FrozenNode, source: &CapturedSource<'_>) -> Result<Vec<bool>, JobError> {
+    f.faces
+        .iter()
+        .map(|face| {
+            let textured = if face.material == u32::MAX {
+                false
+            } else {
+                source
+                    .captured
+                    .materials
+                    .get(face.material as usize)
+                    .ok_or_else(|| invalid("immutable source material closure"))?
+                    .bindings()
+                    .next()
+                    .is_some()
+            };
+            Ok(textured || !face.features.is_empty())
+        })
+        .collect()
+}
 /// Mandatory assembler feedback is the ONLY trigger for a density retry.
 /// Fidelity/domain/cancellation failures leave immediately; no candidate may
 /// escape until its complete GLB and all oriented identities are audited.
@@ -162,8 +185,34 @@ pub(crate) fn bake_node(
     {
         return Err(invalid("immutable proxy bake packet/policy"));
     }
-    if children.len() != usize::from(f.node.children) {
+    if children.len() != usize::from(f.node.children) || children.len() > 8 {
         return Err(invalid("mandatory retained child preencode closure"));
+    }
+    if !children.is_empty() {
+        // The at-most-eight immediate children must form the exact rank
+        // partition of this actual tree node, including synthetic run paths.
+        let mut ordered: [Option<&PreencodeChild>; 8] = [None; 8];
+        for (i, c) in children.iter().enumerate() {
+            ordered[i] = Some(c);
+        }
+        ordered[..children.len()].sort_unstable_by_key(|c| c.unwrap().node.first);
+        let mut next = f.node.first;
+        let mut identities = std::collections::BTreeSet::new();
+        for c in ordered[..children.len()].iter().flatten() {
+            if c.node.first != next
+                || c.node.first >= c.node.end
+                || c.node.end > f.node.end
+                || c.node.depth() != f.node.depth() + 1
+                || c.node.parent() != Some(f.node.identity())
+                || !identities.insert(c.node.identity())
+            {
+                return Err(invalid("immutable immediate-child identity/rank partition"));
+            }
+            next = c.node.end;
+        }
+        if next != f.node.end {
+            return Err(invalid("immutable child rank partition incomplete"));
+        }
     }
     let digest: [u8; 32] = Sha256::digest(&f.original_glb).into();
     if digest != f.original_sha256 {
@@ -194,6 +243,20 @@ pub(crate) fn bake_node(
         {
             return Err(invalid("immutable proxy/fill domain"));
         }
+        let scale = face.transform.scale.map(f32::from_bits);
+        if scale[0] <= 0.
+            || !scale[0].is_finite()
+            || face.transform.scale != [face.transform.scale[0]; 3]
+            || face
+                .transform
+                .translation
+                .iter()
+                .any(|v| !f32::from_bits(*v).is_finite())
+        {
+            return Err(invalid(
+                "immutable H17 POSITION transform must be finite positive uniform",
+            ));
+        }
         for i in 0..3 {
             if face.transform.decode(face.words[i]).map(f32::to_bits)
                 != face.positions[i].map(f32::to_bits)
@@ -207,12 +270,12 @@ pub(crate) fn bake_node(
             return Err(invalid("immutable face ordinal duplicated"));
         }
     }
+    let raster_faces = raster_faces(f, source)?;
     let available = limits
         .memory_bytes
         .checked_sub(borrowed)
         .ok_or_else(|| resource("bake borrowed packet lease"))?;
     source.begin(f.node, limits.query_work)?;
-    let source_density = source.density_floor(check)?;
     let k = match limits.profile {
         Profile::Fast => 2.,
         Profile::Balanced => 1.,
@@ -222,13 +285,19 @@ pub(crate) fn bake_node(
     if children
         .iter()
         .any(|c| !c.texel_size.is_finite() || c.texel_size <= 0.)
-        || child_density > f.child_texel_size.next_up()
+        || child_density != f.child_texel_size
     {
         return Err(invalid("actual child post-drop density handoff"));
     }
-    let planned = (k * f.geometric_error / 16.)
-        .max(f.child_texel_size)
-        .max(source_density);
+    let prescribed = (k * f.geometric_error / 16.).max(child_density);
+    // The source heuristic supplies a finite starting density only when the
+    // prescribed error/actual-child policy is zero. It never silently coarsens
+    // positive policy: that requires complete-member PhysicalBudget feedback.
+    let planned = if prescribed > 0. {
+        prescribed
+    } else {
+        source.density_floor(check)?
+    };
     let mut budget_receipts = Vec::new();
     for density_drop in 0..=limits.max_density_drops {
         check()?;
@@ -242,9 +311,35 @@ pub(crate) fn bake_node(
             memory_bytes: available,
             ..limits
         };
-        let layout = charts::build(f, local, texel, check)?;
-        let mut query = sampling::ChildQuery::new(children, available, limits.query_work)?;
-        let mut raster = raster::build(f, &layout, source, &mut query, local, check)?;
+        let chart_bytes = (f.faces.len() as u64)
+            .checked_mul(1024)
+            .ok_or_else(|| resource("resident chart lease overflow"))?;
+        let query_bytes = children
+            .iter()
+            .try_fold(0u64, |sum, c| {
+                (c.faces.len() as u64)
+                    .checked_mul(512)
+                    .and_then(|b| sum.checked_add(b))
+            })
+            .ok_or_else(|| resource("resident child-query lease overflow"))?;
+        let resident = chart_bytes
+            .checked_add(query_bytes)
+            .ok_or_else(|| resource("resident chart/query lease overflow"))?;
+        // Combined admission precedes either owner's node-sized allocations;
+        // each constructor receives only its own reservation.
+        let raster_limits = BakeLimits {
+            memory_bytes: available
+                .checked_sub(resident)
+                .ok_or_else(|| resource("resident chart/query lease"))?,
+            ..local
+        };
+        let chart_limits = BakeLimits {
+            memory_bytes: chart_bytes,
+            ..local
+        };
+        let layout = charts::build(f, &raster_faces, chart_limits, texel, check)?;
+        let mut query = sampling::ChildQuery::new(children, query_bytes, limits.query_work)?;
+        let mut raster = raster::build(f, &layout, source, &mut query, raster_limits, check)?;
         drop(query);
         let mut materials = BTreeMap::new();
         for i in f
@@ -266,7 +361,7 @@ pub(crate) fn bake_node(
         add_charge(
             &mut owned,
             (f.faces.len() as u64)
-                .checked_mul(2048)
+                .checked_mul(4096)
                 .ok_or_else(|| resource("chart/attribute/identity owning lease"))?,
             available,
         )?;
@@ -384,8 +479,8 @@ pub(crate) fn bake_node(
                     position: face.words[c],
                     transform: face.transform,
                     uv: layout.uv[i][c],
-                    normal: raster.normal_attributes[i],
-                    tangent: raster.tangent_attributes[i],
+                    normal: raster.normal_attributes[i][c],
+                    tangent: raster.tangent_attributes[i][c],
                     color: raster.colors[i][c],
                 });
             }
@@ -410,7 +505,7 @@ pub(crate) fn bake_node(
                 .ok_or_else(|| resource("complete assembly residual lease"))?,
             corners,
             face_indices: indices,
-            face_identities: identities.values().cloned().collect(),
+            face_identities: f.faces.iter().map(FrozenFace::identity).collect(),
             pages: encoded,
             source_materials: materials,
             face_pages: raster.face_pages.clone(),
@@ -458,9 +553,13 @@ pub(crate) fn bake_node(
                         source_triangle: face.source_triangle,
                         material: face.material,
                         positions: face.positions,
-                        uv: layout.uv[i],
-                        frames: [raster.frames[i]; 3],
-                        pages: raster.face_pages[i],
+                        frames: raster.frames[i],
+                        bindings: raster.face_pages[i].map(|page| {
+                            page.map(|page| ChildBinding {
+                                page,
+                                uv: layout.uv[i],
+                            })
+                        }),
                     })
                     .collect();
                 return Ok(BakedNode {

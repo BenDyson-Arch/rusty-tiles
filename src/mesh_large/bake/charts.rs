@@ -32,6 +32,9 @@ pub(super) struct Layout {
     pub charts: Vec<Chart>,
     pub pages: Vec<Page>,
     pub uv: Vec<[[f32; 2]; 3]>,
+    /// Source binding/ID-set participation resolved by the owning bake boundary.
+    /// False faces keep normals/COLOR/corners without UV sampling obligations.
+    pub raster_faces: Vec<bool>,
     pub texel_size: f64,
     pub gutter: u32,
 }
@@ -77,11 +80,13 @@ fn overlap(a: [P2; 3], b: [P2; 3]) -> bool {
 }
 pub(super) fn build(
     f: &FrozenNode,
+    raster_faces: &[bool],
     limits: BakeLimits,
     texel: f64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Layout, JobError> {
-    if !texel.is_finite()
+    if raster_faces.len() != f.faces.len()
+        || !texel.is_finite()
         || texel <= 0.
         || limits.max_page_edge < 4
         || !limits.max_page_edge.is_power_of_two()
@@ -125,12 +130,20 @@ pub(super) fn build(
         if assigned[seed] {
             continue;
         }
+        if !raster_faces[seed] {
+            assigned[seed] = true;
+            continue;
+        }
         check()?;
         let face = &f.faces[seed];
         let p = face.positions.map(|p| p.map(f64::from));
-        // Degenerate geometry participates in the immutable face/corner map,
-        // with a deterministic axis; it contributes no invented raster area.
-        let normal = math::face_normal(p).unwrap_or([0., 0., 1.]);
+        // Zero-area faces retain their immutable corner map and finite default
+        // UVs, but own no atlas chart/dimension/fidelity obligation. A very short
+        // collinear edge must not force an enormous raster allocation.
+        let Some(normal) = math::face_normal(p) else {
+            assigned[seed] = true;
+            continue;
+        };
         let axis = (0..3)
             .min_by(|a, b| normal[*a].abs().total_cmp(&normal[*b].abs()))
             .unwrap();
@@ -157,7 +170,7 @@ pub(super) fn build(
         while let Some(current) = queue.pop_front() {
             for &candidate in &adjacent[current] {
                 check()?;
-                if assigned[candidate] {
+                if assigned[candidate] || !raster_faces[candidate] {
                     continue;
                 }
                 let c = &f.faces[candidate];
@@ -204,9 +217,9 @@ pub(super) fn build(
         for &i in &chart.faces {
             for p in f.faces[i].positions {
                 let p = project(p.map(f64::from), x, y);
-                for a in 0..2 {
-                    chart.lo[a] = chart.lo[a].min(p[a]);
-                    chart.hi[a] = chart.hi[a].max(p[a]);
+                for (a, value) in p.into_iter().enumerate() {
+                    chart.lo[a] = chart.lo[a].min(value);
+                    chart.hi[a] = chart.hi[a].max(value);
                 }
             }
         }
@@ -319,6 +332,7 @@ pub(super) fn build(
             charts,
             pages,
             uv,
+            raster_faces: raster_faces.to_vec(),
             texel_size: texel,
             gutter,
         });

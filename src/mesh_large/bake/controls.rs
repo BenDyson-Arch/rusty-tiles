@@ -223,6 +223,730 @@ fn child_mip_footprint_uses_decoded_uv_jacobian_not_nominal_density() {
     assert!((actual.log2() - 2.).abs() < 0.001);
 }
 
+fn captured_child_source(
+    aliased_bindings: bool,
+) -> (
+    tempfile::TempDir,
+    crate::mesh_large::full::FullCaptured,
+    NodeRecord,
+    FrozenFace,
+) {
+    use crate::mesh_large::{config, full};
+    let work = tempfile::tempdir().unwrap();
+    let input = full::tests::fixture(work.path(), 1);
+    if aliased_bindings {
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&input).unwrap()).unwrap();
+        doc["textures"] = serde_json::json!([
+            {"source":0,"sampler":0}, {"source":0,"sampler":0}, {"source":0,"sampler":1}
+        ]);
+        doc["samplers"] = serde_json::json!([
+            {"wrapS":33071,"wrapT":33071},
+            {"wrapS":33071,"wrapT":33071,"magFilter":9728}
+        ]);
+        doc["materials"][0]["pbrMetallicRoughness"]["metallicRoughnessTexture"] =
+            serde_json::json!({"index":1,"texCoord":0});
+        doc["materials"][0]["emissiveTexture"] = serde_json::json!({"index":2,"texCoord":0});
+        doc["materials"][0]["emissiveFactor"] = serde_json::json!([1., 1., 1.]);
+        let offset = doc["bufferViews"][3]["byteOffset"].as_u64().unwrap() as usize;
+        let path = work.path().join("attributes.bin");
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes[offset + 8..offset + 12].copy_from_slice(&0.75f32.to_le_bytes());
+        std::fs::write(path, bytes).unwrap();
+        std::fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        image::RgbaImage::from_raw(2, 1, vec![0, 0, 0, 255, 255, 255, 255, 255])
+            .unwrap()
+            .save(work.path().join("pixel.png"))
+            .unwrap();
+    }
+    let mut config = config::TreeConfig::new(config::Profile::Balanced);
+    config.jobs = config::Jobs::Fixed(std::num::NonZeroUsize::new(1).unwrap());
+    config.sort.run_bytes = 8192;
+    config.sort.fan_in = 2;
+    config.sort.buffer_bytes = 128;
+    let scratch = work.path().join("scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    config.scratch_dir = Some(scratch);
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let node = captured
+        .tree
+        .nodes
+        .reader()
+        .unwrap()
+        .next()
+        .transpose()
+        .unwrap()
+        .unwrap();
+    let triangle = captured
+        .triangles
+        .reader()
+        .unwrap()
+        .next()
+        .transpose()
+        .unwrap()
+        .unwrap();
+    let positions = triangle.triangle.positions;
+    let face = FrozenFace {
+        ordinal: 0,
+        source: source::key(&triangle),
+        source_triangle: triangle.triangle.source.triangle,
+        material: triangle.material,
+        positions,
+        words: positions.map(|p| PositionWord::Float(p.map(f32::to_bits))),
+        transform: PositionTransform::default(),
+        welds: positions.map(|p| p.map(f32::to_bits)),
+        features: Vec::new(),
+        fill_bound: None,
+        donor_ranges: std::iter::once(node.first..node.end).collect(),
+    };
+    (work, captured, node, face)
+}
+
+fn two_pixel_child_page(face: &FrozenFace, support: [u32; 2], coarse: u8) -> SignalPage {
+    let terminal = |x: f64, weight| TerminalSample {
+        source_rank: face.donor_ranges[0].start,
+        barycentric: [0.75 - x, x, 0.25],
+        centre: [x, 0.25, 0.],
+        support_min: [x, 0.25, 0.],
+        support_max: [x, 0.25, 0.],
+        weight,
+        centre_is_centroid: false,
+    };
+    let samples = vec![terminal(0.25, support[0]), terminal(0.75, support[1])];
+    let total = support.iter().sum();
+    let centre = (0.25 * f64::from(support[0]) + 0.75 * f64::from(support[1])) / f64::from(total);
+    let mut reduced = terminal(centre, total);
+    reduced.centre_is_centroid = true;
+    reduced.support_min = [0.25, 0.25, 0.];
+    reduced.support_max = [0.75, 0.25, 0.];
+    let rgba = vec![0, 0, 0, 255, 255, 255, 255, 255];
+    let levels = vec![
+        SignalLevel {
+            width: 2,
+            height: 1,
+            rgba: rgba.clone(),
+            support: support.to_vec(),
+            frames: vec![identity(); 2],
+            samples: samples.clone(),
+            world_normals: Vec::new(),
+        },
+        SignalLevel {
+            width: 1,
+            height: 1,
+            rgba: vec![coarse, coarse, coarse, 255],
+            support: vec![total],
+            frames: vec![identity()],
+            samples: vec![reduced],
+            world_normals: Vec::new(),
+        },
+    ];
+    SignalPage {
+        width: 2,
+        height: 1,
+        rgba,
+        support: support.to_vec(),
+        slot: crate::gltf_source::source::TextureSlot::BaseColor,
+        samples,
+        levels,
+        sampler: serde_json::json!({"wrapS":33071,"wrapT":33071,"magFilter":9729,"minFilter":9987}),
+        material: face.material,
+        receipt: serde_json::json!({}),
+        normal_samples: Vec::new(),
+        normal_scale: 1.,
+    }
+}
+
+fn appearance_child(
+    node: NodeRecord,
+    face: &FrozenFace,
+    uv: [[f32; 2]; 3],
+    page: SignalPage,
+) -> PreencodeChild {
+    PreencodeChild {
+        node,
+        texel_size: 1.,
+        faces: vec![ChildFace {
+            source: face.source,
+            source_triangle: face.source_triangle,
+            material: face.material,
+            positions: face.positions,
+            frames: [identity(); 3],
+            bindings: [Some(ChildBinding { page: 0, uv }), None, None, None, None],
+        }],
+        pages: vec![page],
+    }
+}
+
+#[test]
+fn actual_child_linear_filter_ignores_unequal_geometric_support() {
+    let (_work, captured, node, face) = captured_child_source(false);
+    let mut source = source::CapturedSource::new(&captured, 128 << 20, &mut || Ok(())).unwrap();
+    source.begin(node, 10000).unwrap();
+    // Authored mip construction correctly uses geometric1/9support (coarse243),
+    // but physical LINEAR sampling of two base pixels uses equal sampler taps.
+    let children = [appearance_child(
+        node,
+        &face,
+        [[0., 0.25], [1., 0.25], [0., 1.]],
+        two_pixel_child_page(&face, [1, 9], 243),
+    )];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    let signal = query
+        .signal(
+            &mut source,
+            super::sampling::ProxySample {
+                face: &face,
+                position: [0.5, 0.25, 0.],
+                geometric_normal: [0., 0., 1.],
+                frame: identity(),
+                texel_size: 0.125,
+                geometric_error: 10.,
+                depth: 0,
+            },
+            crate::gltf_source::source::TextureSlot::BaseColor,
+            &mut || Ok(()),
+        )
+        .unwrap()
+        .unwrap();
+    assert!(
+        !signal.direct,
+        "direct repair must not hide a broken child filter"
+    );
+    assert_eq!(
+        signal.rgba.map(|v| (v * 255.).round() as u8),
+        [188, 188, 188, 255]
+    );
+    assert!((signal.rgba[0] * 255. - 243.).abs() > 50.);
+    close(signal.terminal.centre, [0.5, 0.25, 0.]);
+}
+
+#[test]
+fn actual_child_lod_uses_final_decoded_uvs_instead_of_nominal_ratio() {
+    let (_work, captured, node, face) = captured_child_source(false);
+    let mut source = source::CapturedSource::new(&captured, 128 << 20, &mut || Ok(())).unwrap();
+    source.begin(node, 10000).unwrap();
+    let decoded = |word: u16| f32::from(word) / 65535.;
+    let uv = [
+        [decoded(16384), decoded(16384)],
+        [1., decoded(16384)],
+        [decoded(16384), 1.],
+    ];
+    let mut page = two_pixel_child_page(&face, [1, 1], 188);
+    page.sampler =
+        serde_json::json!({"wrapS":33071,"wrapT":33071,"magFilter":9728,"minFilter":9984});
+    // On the unit world triangle, the independent diagonal pixel derivatives
+    // are2*(1-decoded16384) and1-decoded16384. Stretch~1.5 =>LOD~.585,
+    // choosing mip1 by NEAREST_MIPMAP_NEAREST. Nominal1/1instead givesLOD0
+    // and nearest white255 at u~.625. The true coarse linear mean is188.
+    let stretch = 2. * (1. - f64::from(decoded(16384)));
+    assert!(stretch.log2() > 0.5 && stretch.log2() < 1.);
+    let children = [appearance_child(node, &face, uv, page)];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    let signal = query
+        .signal(
+            &mut source,
+            super::sampling::ProxySample {
+                face: &face,
+                position: [0.5, 0.25, 0.],
+                geometric_normal: [0., 0., 1.],
+                frame: identity(),
+                texel_size: 1.,
+                geometric_error: 10.,
+                depth: 0,
+            },
+            crate::gltf_source::source::TextureSlot::BaseColor,
+            &mut || Ok(()),
+        )
+        .unwrap()
+        .unwrap();
+    assert!(
+        !signal.direct,
+        "direct repair must not hide nominal-density fallback"
+    );
+    assert_eq!(
+        signal.rgba.map(|v| (v * 255.).round() as u8),
+        [188, 188, 188, 255]
+    );
+    assert!((signal.rgba[0] * 255. - 255.).abs() > 60.);
+}
+
+#[test]
+fn actual_child_slot_bindings_keep_distinct_uv_sampler_and_aliased_signal_classes() {
+    use crate::gltf_source::source::TextureSlot;
+    let (_work, captured, node, face) = captured_child_source(true);
+    let mut source = source::CapturedSource::new(&captured, 128 << 20, &mut || Ok(())).unwrap();
+    source.begin(node, 10000).unwrap();
+    let base_uv = [[0., 0.25], [1., 0.25], [0., 1.]];
+    let other_uv = [[0., 0.25], [0.75, 0.25], [0., 1.]];
+    let base = two_pixel_child_page(&face, [1, 1], 188);
+    let mut data = two_pixel_child_page(&face, [1, 1], 128);
+    data.slot = TextureSlot::MetallicRoughness;
+    let mut emissive = two_pixel_child_page(&face, [1, 1], 188);
+    emissive.slot = TextureSlot::Emissive;
+    emissive.sampler["magFilter"] = serde_json::json!(9728);
+    let mut child = appearance_child(node, &face, base_uv, base);
+    child.faces[0].bindings[1] = Some(ChildBinding {
+        page: 1,
+        uv: other_uv,
+    });
+    child.faces[0].bindings[4] = Some(ChildBinding {
+        page: 2,
+        uv: other_uv,
+    });
+    child.pages.extend([data, emissive]);
+    let children = [child];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    // All three pages originate in one admitted black/white source image.
+    // At the same world point, Base UV1 is.5 and Data/Emissive UV0 is.375.
+    // Base LINEAR averages in light space to188; Data LINEAR whiteweight.25
+    // gives64; Emissive NEAREST chooses black0. At coarseLOD, committed colour
+    // means are188 while raw linear data mean is128. A sharedUV, sharedsampler
+    // or sharedcolour/data semantic chain cannot satisfy these independent taps.
+    for (texel_size, expected_values) in [(0.125, [188u8, 64, 0]), (2., [188, 128, 188])] {
+        let slots = [
+            TextureSlot::BaseColor,
+            TextureSlot::MetallicRoughness,
+            TextureSlot::Emissive,
+        ];
+        for (slot, expected) in slots.into_iter().zip(expected_values) {
+            let signal = query
+                .signal(
+                    &mut source,
+                    super::sampling::ProxySample {
+                        face: &face,
+                        position: [0.5, 0.25, 0.],
+                        geometric_normal: [0., 0., 1.],
+                        frame: identity(),
+                        texel_size,
+                        geometric_error: 10.,
+                        depth: 0,
+                    },
+                    slot,
+                    &mut || Ok(()),
+                )
+                .unwrap()
+                .unwrap();
+            assert!(
+                !signal.direct,
+                "repair must not hide a slot binding error for {slot:?}"
+            );
+            assert_eq!(
+                signal.rgba.map(|v| (v * 255.).round() as u8),
+                [expected, expected, expected, 255],
+                "slot={slot:?} parent_footprint={texel_size}",
+            );
+        }
+    }
+}
+
+fn oracle_direction(v: [f64; 3]) -> [f64; 3] {
+    let length = v[0].hypot(v[1]).hypot(v[2]);
+    v.map(|a| a / length)
+}
+
+fn near_direction(actual: [f64; 3], expected: [f64; 3]) {
+    for (a, e) in actual.into_iter().zip(expected) {
+        assert!(
+            (a - e).abs() < 2e-7,
+            "actual={actual:?} expected={expected:?}"
+        );
+    }
+}
+
+fn captured_fan_source(
+    y: f32,
+    z: f32,
+) -> (
+    tempfile::TempDir,
+    crate::mesh_large::full::FullCaptured,
+    FrozenNode,
+) {
+    use crate::mesh_large::{config, full};
+    let work = tempfile::tempdir().unwrap();
+    let input = full::tests::fixture(work.path(), 2);
+    let mut doc: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&input).unwrap()).unwrap();
+    let path = work.path().join("attributes.bin");
+    let mut bytes = std::fs::read(&path).unwrap();
+    for (i, value) in [1., 0., 0., 0., 0., 0., 0., y, z].into_iter().enumerate() {
+        bytes[36 + i * 4..40 + i * 4].copy_from_slice(&value.to_le_bytes());
+    }
+    std::fs::write(path, bytes).unwrap();
+    doc["accessors"][0]["min"] = serde_json::json!([0., y.min(0.), 0.]);
+    doc["accessors"][0]["max"] = serde_json::json!([1., 1., z.max(0.)]);
+    doc["materials"][0]["normalTexture"] = serde_json::json!({"index":0});
+    std::fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    image::RgbaImage::from_pixel(1, 1, image::Rgba([128, 128, 255, 255]))
+        .save(work.path().join("pixel.png"))
+        .unwrap();
+    let mut config = config::TreeConfig::new(config::Profile::Balanced);
+    config.jobs = config::Jobs::Fixed(std::num::NonZeroUsize::new(1).unwrap());
+    config.sort.run_bytes = 8192;
+    config.sort.fan_in = 2;
+    config.sort.buffer_bytes = 128;
+    let scratch = work.path().join("scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    config.scratch_dir = Some(scratch);
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let node = captured
+        .tree
+        .nodes
+        .reader()
+        .unwrap()
+        .next()
+        .transpose()
+        .unwrap()
+        .unwrap();
+    let mut faces: Vec<_> = captured
+        .triangles
+        .reader()
+        .unwrap()
+        .map(|t| {
+            let t = t.unwrap();
+            let p = t.triangle.positions;
+            FrozenFace {
+                ordinal: t.triangle.source.triangle,
+                source: source::key(&t),
+                source_triangle: t.triangle.source.triangle,
+                material: t.material,
+                positions: p,
+                words: p.map(|p| PositionWord::Float(p.map(f32::to_bits))),
+                transform: PositionTransform::default(),
+                welds: p.map(|p| p.map(f32::to_bits)),
+                features: Vec::new(),
+                fill_bound: None,
+                donor_ranges: std::iter::once(node.first..node.end).collect(),
+            }
+        })
+        .collect();
+    faces.sort_by_key(|f| f.source_triangle);
+    // Actual captured raw positions/source identities seed a frame-only packet;
+    // this does not claim an H17 GLB/certificate or return a fake Assembly::Fit.
+    let frozen = FrozenNode {
+        node,
+        original_glb: Vec::new(),
+        original_sha256: Sha256::digest([]).into(),
+        geometric_error: 0.,
+        child_texel_size: 0.,
+        faces,
+    };
+    (work, captured, frozen)
+}
+
+fn fan_layout(f: &FrozenNode, separate_charts: bool) -> super::charts::Layout {
+    use super::charts::{Chart, Layout, Page};
+    let groups = if separate_charts {
+        vec![vec![0], vec![1]]
+    } else {
+        vec![vec![0, 1]]
+    };
+    let charts = groups
+        .iter()
+        .enumerate()
+        .map(|(i, faces)| Chart {
+            faces: faces.clone(),
+            material: f.faces[faces[0]].material,
+            normal: [0., 0., 1.],
+            x: [1., 0., 0.],
+            y: [0., 1., 0.],
+            lo: [0.; 2],
+            hi: [1.; 2],
+            sigma: 1.,
+            pixels_per_metre: 8.,
+            page: i,
+            origin: [0; 2],
+            size: [16; 2],
+        })
+        .collect();
+    let pages = groups
+        .iter()
+        .enumerate()
+        .map(|(i, faces)| Page {
+            material: f.faces[faces[0]].material,
+            size: [16; 2],
+            charts: vec![i],
+        })
+        .collect();
+    Layout {
+        charts,
+        pages,
+        raster_faces: vec![true; f.faces.len()],
+        uv: vec![
+            [[0.25, 0.75], [0.75, 0.75], [0.25, 1.]],
+            [[0.75, 0.75], [0.25, 0.75], [0.25, 0.25]],
+        ],
+        texel_size: 0.125,
+        gutter: 2,
+    }
+}
+
+#[test]
+fn shared_original_weld_edge_uses_area_weighted_normals_and_decoded_tangents() {
+    let h = 3f32.sqrt();
+    let (_work, _captured, f) = captured_fan_source(-h, 1.);
+    let mut layout = fan_layout(&f, false);
+    // Continuous shared UV edge, with different raw tangent magnitudes/directions.
+    layout.uv = vec![
+        [[0.25, 0.5], [0.75, 0.75], [0.25, 1.]],
+        [[0.75, 0.75], [0.25, 0.5], [0.25, 0.25]],
+    ];
+    let generated = frames::generate(&f, &layout, 1 << 20, 10000, &mut || Ok(())).unwrap();
+    let h = f64::from(h);
+    // Raw oriented cross products are Z and[0,1,h]. Their area-weighted unit
+    // normal sum is proportional to[0,1,1+h], not the equal-face15degree mean.
+    let expected = oracle_direction([0., 1., 1. + h]);
+    for (fi, ci) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+        near_direction(generated.normals[fi][ci].map(f64::from), expected);
+    }
+    near_direction(generated.normals[0][2].map(f64::from), [0., 0., 1.]);
+    near_direction(
+        generated.normals[1][2].map(f64::from),
+        oracle_direction([0., 1., h]),
+    );
+    // Decoded-UV raw tangents are[2,-1,0] and[2,-2h,2]. Accumulate them
+    // with areas.5 andsqrt(1+h*h)/2 before projection/normalization.
+    let area = (1. + h * h).sqrt() / 2.;
+    let raw = [1. + 2. * area, -0.5 - 2. * h * area, 2. * area];
+    let dot = raw
+        .into_iter()
+        .zip(expected)
+        .map(|(a, b)| a * b)
+        .sum::<f64>();
+    let tangent = oracle_direction(std::array::from_fn(|i| raw[i] - expected[i] * dot));
+    for (fi, ci) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+        near_direction(generated.frames[fi][ci].tangent, tangent);
+        assert_eq!(generated.tangents[fi][ci][3], 1.);
+    }
+}
+
+#[test]
+fn crease_and_source_material_original_weld_boundaries_split_normal_fans() {
+    let (_work, _captured, mut f) = captured_fan_source(-0.5, 1.);
+    let generated =
+        frames::generate(&f, &fan_layout(&f, false), 1 << 20, 10000, &mut || Ok(())).unwrap();
+    // Angle63.435degrees exceeds the60degree crease threshold.
+    for ci in 0..2 {
+        near_direction(generated.frames[0][ci].normal, [0., 0., 1.]);
+        near_direction(
+            generated.frames[1][ci].normal,
+            oracle_direction([0., 1., 0.5]),
+        );
+    }
+    let (_smooth_work, _smooth_capture, smooth) = captured_fan_source(-3f32.sqrt(), 1.);
+    let original_faces = smooth.faces;
+    for boundary in 0..4 {
+        f.faces = original_faces.clone();
+        match boundary {
+            0 => f.faces[1].material += 1,
+            1 => f.faces[1].source.instance += 1,
+            2 => f.faces[1].source.primitive += 1,
+            _ => {
+                // Equal decoded positions may have distinct ORIGINAL welds
+                // after quantization; decoded-coordinate pooling is forbidden.
+                f.faces[1].welds[0][1] = 0.001f32.to_bits();
+                f.faces[1].welds[1][1] = 0.001f32.to_bits();
+            }
+        }
+        let generated =
+            frames::generate(&f, &fan_layout(&f, true), 1 << 20, 10000, &mut || Ok(())).unwrap();
+        for ci in 0..2 {
+            near_direction(generated.frames[0][ci].normal, [0., 0., 1.]);
+            near_direction(
+                generated.frames[1][ci].normal,
+                oracle_direction([0., 1., f64::from(3f32.sqrt())]),
+            );
+        }
+    }
+}
+
+#[test]
+fn chart_and_mirrored_handedness_seams_split_tangents_without_splitting_smooth_normals() {
+    let (_work, _captured, f) = captured_fan_source(-3f32.sqrt(), 1.);
+    let expected = oracle_direction([0., 1., 1. + f64::from(3f32.sqrt())]);
+    let mut chart_layout = fan_layout(&f, true);
+    chart_layout.uv[1] = chart_layout.uv[1].map(|p| [p[1], p[0]]);
+    let chart = frames::generate(&f, &chart_layout, 1 << 20, 10000, &mut || Ok(())).unwrap();
+    near_direction(chart.frames[0][0].normal, expected);
+    near_direction(chart.frames[1][1].normal, expected);
+    near_direction(chart.frames[0][0].tangent, [1., 0., 0.]);
+    assert!(chart.frames[1][1].tangent[1] > 0.9);
+    let mut mirrored = fan_layout(&f, false);
+    mirrored.uv[1] = mirrored.uv[1].map(|p| [1. - p[0], p[1]]);
+    let mirrored = frames::generate(&f, &mirrored, 1 << 20, 10000, &mut || Ok(())).unwrap();
+    for ci in 0..2 {
+        near_direction(mirrored.frames[0][ci].normal, expected);
+        near_direction(mirrored.frames[1][ci].normal, expected);
+        near_direction(mirrored.frames[0][ci].tangent, [1., 0., 0.]);
+        near_direction(mirrored.frames[1][ci].tangent, [-1., 0., 0.]);
+        assert_eq!(mirrored.tangents[0][ci][3], 1.);
+        assert_eq!(mirrored.tangents[1][ci][3], -1.);
+    }
+}
+
+#[test]
+fn actual_raster_fragment_frame_interpolates_emitted_corner_fan_attributes() {
+    use crate::mesh_large::config::Profile;
+    let (_work, captured, f) = captured_fan_source(-3f32.sqrt(), 1.);
+    let layout = fan_layout(&f, false);
+    let generated = frames::generate(&f, &layout, 1 << 20, 10000, &mut || Ok(())).unwrap();
+    let limits = BakeLimits {
+        profile: Profile::Balanced,
+        memory_bytes: 512 << 20,
+        member_bytes: 96 << 20,
+        source_cache_bytes: 128 << 20,
+        query_work: 1_000_000,
+        max_page_edge: 2048,
+        max_density_drops: 4,
+    };
+    let mut source =
+        source::CapturedSource::new(&captured, limits.source_cache_bytes, &mut || Ok(())).unwrap();
+    source.begin(f.node, limits.query_work).unwrap();
+    let mut children =
+        super::sampling::ChildQuery::new(&[], limits.memory_bytes, limits.query_work).unwrap();
+    let raster = super::raster::build(&f, &layout, &mut source, &mut children, limits, &mut || {
+        Ok(())
+    })
+    .unwrap();
+    let page = raster
+        .pages
+        .iter()
+        .find(|p| p.slot == crate::gltf_source::source::TextureSlot::Normal)
+        .unwrap();
+    let sample = page
+        .normal_samples
+        .iter()
+        .find(|s| {
+            let b = 2. * (s.uv[0] - 0.25);
+            let c = 4. * (s.uv[1] - 0.75);
+            b > 0. && c > 0.2 && c < 0.8 && b + c < 1.
+        })
+        .expect("first triangle must retain an interior fragment witness");
+    let b = 2. * (sample.uv[0] - 0.25);
+    let c = 4. * (sample.uv[1] - 0.75);
+    let weights = [1. - b - c, b, c];
+    // Independently evaluate the pinned VS normalization followed by FS
+    // barycentric interpolation/axis normalization from actual emitted f32 N.
+    let normals = generated.normals[0].map(|n| oracle_direction(n.map(f64::from)));
+    let expected = oracle_direction(std::array::from_fn(|a| {
+        normals
+            .into_iter()
+            .zip(weights)
+            .map(|(n, w)| n[a] * w)
+            .sum()
+    }));
+    close(sample.frame.normal, expected);
+    assert!(
+        sample.frame.normal[1] > 0.03,
+        "flat faceZ must not replace the emitted smooth fan"
+    );
+    assert!(
+        (sample.frame.normal[1] - normals[0][1]).abs() > 0.01,
+        "one corner frame must not replace fragment interpolation"
+    );
+}
+
+#[test]
+fn transitive_eight_face_zero_sum_fan_falls_back_to_valid_flat_corner_frames() {
+    use super::charts::{Chart, Layout, Page};
+    // Pure analytic frame-helper packet: no source query, donor/certificate
+    // claim, assembly callback or publication. Eight faces share original AB.
+    // Their oriented cross products circle Y/Z in45degree steps, connected by
+    // the60degree edge criterion. Opposite pairs appear consecutively so their
+    // area-weighted sums cancel exactly, including the diagonal contributions.
+    let directions = [
+        [0f32, -1.],
+        [0., 1.],
+        [1., 0.],
+        [-1., 0.],
+        [1., -1.],
+        [-1., 1.],
+        [-1., -1.],
+        [1., 1.],
+    ];
+    let template = immutable_fixture();
+    let mut node = template.node;
+    node.first = 0;
+    node.end = 8;
+    node.bytes = 0;
+    node.bounds = Bounds {
+        min: [0., -1., -1.],
+        max: [1.; 3],
+    };
+    let faces = directions
+        .into_iter()
+        .enumerate()
+        .map(|(i, [y, z])| {
+            let positions = [[0., 0., 0.], [1., 0., 0.], [0., y, z]];
+            FrozenFace {
+                ordinal: i as u64,
+                source: template.faces[0].source,
+                source_triangle: i as u64,
+                material: u32::MAX,
+                positions,
+                words: positions.map(|p| PositionWord::Float(p.map(f32::to_bits))),
+                transform: PositionTransform::default(),
+                welds: positions.map(|p| p.map(f32::to_bits)),
+                features: Vec::new(),
+                fill_bound: None,
+                donor_ranges: std::iter::once(0..8).collect(),
+            }
+        })
+        .collect();
+    let frozen = FrozenNode {
+        node,
+        original_glb: Vec::new(),
+        original_sha256: Sha256::digest([]).into(),
+        geometric_error: 0.,
+        child_texel_size: 0.,
+        faces,
+    };
+    // Independent singleton chart partitions keep the tangent domains valid;
+    // normal-fan connectivity is defined by weld edges, not chart membership.
+    let charts = directions
+        .into_iter()
+        .enumerate()
+        .map(|(i, [y, z])| Chart {
+            faces: vec![i],
+            material: u32::MAX,
+            normal: oracle_direction([0., -f64::from(z), f64::from(y)]),
+            x: [1., 0., 0.],
+            y: oracle_direction([0., f64::from(y), f64::from(z)]),
+            lo: [0.; 2],
+            hi: [1.; 2],
+            sigma: 1.,
+            pixels_per_metre: 8.,
+            page: i,
+            origin: [0; 2],
+            size: [16; 2],
+        })
+        .collect();
+    let layout = Layout {
+        charts,
+        raster_faces: vec![true; frozen.faces.len()],
+        pages: (0..8)
+            .map(|i| Page {
+                material: u32::MAX,
+                size: [16; 2],
+                charts: vec![i],
+            })
+            .collect(),
+        uv: vec![[[0.25, 0.25], [0.75, 0.25], [0.25, 0.75]]; 8],
+        texel_size: 0.125,
+        gutter: 2,
+    };
+    let generated = frames::generate(&frozen, &layout, 1 << 20, 10000, &mut || Ok(())).unwrap();
+    for (fi, [y, z]) in directions.into_iter().enumerate() {
+        let expected_n = oracle_direction([0., -f64::from(z), f64::from(y)]);
+        let expected_b = oracle_direction([0., f64::from(y), f64::from(z)]);
+        for ci in 0..3 {
+            near_direction(generated.frames[fi][ci].normal, expected_n);
+            near_direction(generated.frames[fi][ci].tangent, [1., 0., 0.]);
+            near_direction(generated.frames[fi][ci].bitangent, expected_b);
+            assert_eq!(generated.tangents[fi][ci][3], 1.);
+        }
+    }
+}
+
 #[test]
 fn authored_tangent_skew_is_not_silently_orthogonalized() {
     let donor = Frame::donor([[0., 0., 1.]; 3], [[0.8, 0., 0.6, 1.]; 3], [0.2, 0.3, 0.5]).unwrap();
@@ -390,10 +1114,10 @@ fn categorical_mips_choose_the_complete_tuple_and_never_premultiply_ids() {
     let chain = sparse_mips::build(4, 4, &pixels, &support, Class::Id, 1 << 20).unwrap();
     assert_eq!(chain.levels.len(), 3);
     for level in &chain.levels[1..] {
-        for pixel in level.rgba.chunks_exact(4) {
-            assert_eq!(pixel, [1, 9, 1, 64]);
+        for pixel in level.rgba.as_chunks::<4>().0 {
+            assert_eq!(*pixel, [1, 9, 1, 64]);
             assert_ne!(
-                pixel,
+                *pixel,
                 [1, 8, 1, 64],
                 "per-channel modes invent a nonexistent tuple"
             );
@@ -407,7 +1131,7 @@ fn three_packed_id_sets_png_readback_null_gutters_and_nearest_sampler_are_exact(
     let (pixels, mut support) = categorical_pixels();
     support[15] = 0;
     let mut ids = Vec::new();
-    for pixel in pixels.chunks_exact(4) {
+    for pixel in pixels.as_chunks::<4>().0 {
         ids.extend([
             u32::from(pixel[0]),
             u32::from(pixel[1]),
@@ -510,7 +1234,7 @@ pub(super) fn immutable_fixture() -> FrozenNode {
                 })
                 .collect(),
             fill_bound: None,
-            donor_ranges: vec![row as u64..row as u64 + 1],
+            donor_ranges: std::iter::once(row as u64..row as u64 + 1).collect(),
         }
     })
     .collect();

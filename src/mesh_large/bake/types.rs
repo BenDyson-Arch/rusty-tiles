@@ -137,15 +137,21 @@ pub(crate) struct PreencodeChild {
     pub faces: Vec<ChildFace>,
     pub pages: Vec<SignalPage>,
 }
+/// A real leaf may crop/remap each material slot independently; the page and
+/// its actual decoded per-face coordinates are one inseparable binding.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ChildBinding {
+    pub page: usize,
+    pub uv: [[f32; 2]; 3],
+}
 pub(crate) struct ChildFace {
     pub source: SourceKey,
     pub source_triangle: u64,
     pub material: u32,
     pub positions: [[f32; 3]; 3],
-    pub uv: [[f32; 2]; 3],
     pub frames: [Frame; 3],
-    /// Page for each original material binding, in TextureSlot order.
-    pub pages: [Option<usize>; 5],
+    /// Concrete page+UV for each original slot, in TextureSlot order.
+    pub bindings: [Option<ChildBinding>; 5],
 }
 pub(crate) struct SignalPage {
     pub width: u32,

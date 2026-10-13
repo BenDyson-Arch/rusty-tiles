@@ -152,8 +152,7 @@ pub(super) fn bake(
                 .checked_sub(count as u64)
                 .ok_or_else(|| resource("categorical support count"))?
                 / (count as u64))
-                .max(1)
-                .min(65536) as f64;
+                .clamp(1, 65536) as f64;
             let mut support = vec![0; count];
             let mut winners = vec![0usize; count];
             let mut best = vec![0f64; count];

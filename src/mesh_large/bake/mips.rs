@@ -109,8 +109,8 @@ pub(super) fn build(
                 frame.ok_or_else(|| invalid("occupied normal texel lacks base frame witness"))?;
             page.levels[0].frames[i] = frame;
             let v = frame.inverse_direction(page.levels[0].world_normals[i])?;
-            for a in 0..3 {
-                page.rgba[i * 4 + a] = quant(v[a]);
+            for (a, value) in v.into_iter().enumerate() {
+                page.rgba[i * 4 + a] = quant(value);
             }
         }
     }
@@ -234,8 +234,8 @@ pub(super) fn build(
                     });
                     world_normals[i] = world;
                     let v = frame.inverse_direction(world)?;
-                    for a in 0..3 {
-                        level.rgba[i * 4 + a] = quant(v[a]);
+                    for (a, value) in v.into_iter().enumerate() {
+                        level.rgba[i * 4 + a] = quant(value);
                     }
                 }
                 frames.push(frame);

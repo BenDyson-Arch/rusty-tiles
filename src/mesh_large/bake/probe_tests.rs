@@ -55,7 +55,7 @@ fn packet(c: &full::FullCaptured) -> FrozenNode {
                     .map(|p| p.map(|v| if v == 0. { 0 } else { v.to_bits() })),
                 features: Vec::new(),
                 fill_bound: None,
-                donor_ranges: vec![node.first..node.end],
+                donor_ranges: std::iter::once(node.first..node.end).collect(),
             }
         })
         .collect();
@@ -109,16 +109,10 @@ fn source_query_spill_weld_colour_and_lineage_ties_use_actual_capture() {
     let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
     source.begin(f.node, 10000).unwrap();
     let k = source::key(&t);
+    let mut query_face = f.faces[0].clone();
+    query_face.source_triangle = 1;
     let w = source
-        .nearest(
-            [0.25, 0.25, 0.],
-            k,
-            1,
-            [0., 0., 1.],
-            None,
-            &[f.node.first..f.node.end],
-            &mut || Ok(()),
-        )
+        .nearest([0.25, 0.25, 0.], &query_face, [0., 0., 1.], &mut || Ok(()))
         .unwrap();
     assert_eq!(
         w.triangle.triangle.source.triangle, 1,
@@ -136,15 +130,7 @@ fn source_query_spill_weld_colour_and_lineage_ties_use_actual_capture() {
     source.begin(f.node, 1).unwrap();
     assert_eq!(
         source
-            .nearest(
-                [0., 0., 0.],
-                k,
-                0,
-                [0., 0., 1.],
-                None,
-                &[f.node.first..f.node.end],
-                &mut || Ok(())
-            )
+            .nearest([0., 0., 0.], &f.faces[0], [0., 0., 1.], &mut || Ok(()))
             .unwrap_err()
             .kind(),
         JobErrorKind::ResourceLimit
@@ -168,7 +154,14 @@ fn five_aliased_slots_raster_and_normal_mips_use_original_captured_samples() {
     let l = limits();
     let mut source = CapturedSource::new(&c, l.source_cache_bytes, &mut || Ok(())).unwrap();
     source.begin(f.node, l.query_work).unwrap();
-    let layout = charts::build(&f, l, 0.125, &mut || Ok(())).unwrap();
+    let layout = charts::build(
+        &f,
+        &raster_faces(&f, &source).unwrap(),
+        l,
+        0.125,
+        &mut || Ok(()),
+    )
+    .unwrap();
     let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
     let mut raster =
         raster::build(&f, &layout, &mut source, &mut child, l, &mut || Ok(())).unwrap();
@@ -184,7 +177,7 @@ fn five_aliased_slots_raster_and_normal_mips_use_original_captured_samples() {
         );
         assert!(page.support.iter().any(|w| *w > 0));
         if page.slot != TextureSlot::Normal {
-            for (pixel, w) in page.rgba.chunks_exact(4).zip(&page.support) {
+            for (pixel, w) in page.rgba.as_chunks::<4>().0.iter().zip(&page.support) {
                 if *w > 0 {
                     assert_eq!(pixel, &[120, 80, 40, 255]);
                 }
@@ -240,7 +233,14 @@ fn all_and_mixed_degenerate_textured_capture_keeps_colour_and_geometry_without_e
         let l = limits();
         let mut source = CapturedSource::new(&c, l.source_cache_bytes, &mut || Ok(())).unwrap();
         source.begin(f.node, l.query_work).unwrap();
-        let layout = charts::build(&f, l, 0.125, &mut || Ok(())).unwrap();
+        let layout = charts::build(
+            &f,
+            &raster_faces(&f, &source).unwrap(),
+            l,
+            0.125,
+            &mut || Ok(()),
+        )
+        .unwrap();
         let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
         let raster =
             raster::build(&f, &layout, &mut source, &mut children, l, &mut || Ok(())).unwrap();
@@ -278,15 +278,7 @@ fn unequal_length_original_normal_pixels_filter_raw_then_apply_literal_scale() {
     source.begin(f.node, 10000).unwrap();
     let face = &f.faces[0];
     let w = source
-        .nearest(
-            [0.5, 0.25, 0.],
-            face.source,
-            face.source_triangle,
-            [0., 0., 1.],
-            None,
-            &face.donor_ranges,
-            &mut || Ok(()),
-        )
+        .nearest([0.5, 0.25, 0.], face, [0., 0., 1.], &mut || Ok(()))
         .unwrap();
     let (raw, uv) = source
         .signal(w, TextureSlot::Normal, 0., &mut || Ok(()))
@@ -372,4 +364,511 @@ fn mirrored_normal_texture_without_authored_tangent_keeps_admission_unsupported_
         0,
         "failed admission must leave no owned scratch"
     );
+}
+
+#[test]
+fn nonuniform_alias_bindings_keep_uv_sampler_and_class_identity() {
+    let (_work, c) = capture(1, |input| {
+        let mut doc: serde_json::Value = serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+        let off = doc["bufferViews"][4]["byteOffset"].as_u64().unwrap() as usize;
+        let path = input.parent().unwrap().join("attributes.bin");
+        let mut bin = fs::read(&path).unwrap();
+        // UV1 is half UV0 in U. At the same surface point these select a
+        // literal red texel versus the red/blue LINEAR half sample.
+        bin[off + 8..off + 12].copy_from_slice(&0.5f32.to_le_bytes());
+        fs::write(path, bin).unwrap();
+        image::RgbaImage::from_raw(2, 1, vec![255, 0, 0, 64, 0, 0, 255, 192])
+            .unwrap()
+            .save(input.parent().unwrap().join("pixel.png"))
+            .unwrap();
+        doc["samplers"] = serde_json::json!([
+            {"wrapS":33071,"wrapT":33071,"magFilter":9729,"minFilter":9987},
+            {"wrapS":10497,"wrapT":10497,"magFilter":9728,"minFilter":9984}]);
+        doc["textures"] = serde_json::json!([{"source":0,"sampler":0},{"source":0,"sampler":1}]);
+        doc["materials"][0]["pbrMetallicRoughness"]["metallicRoughnessTexture"] =
+            serde_json::json!({"index":0,"texCoord":0});
+        doc["materials"][0]["normalTexture"] =
+            serde_json::json!({"index":0,"texCoord":0,"scale":2.});
+        doc["materials"][0]["occlusionTexture"] =
+            serde_json::json!({"index":1,"texCoord":0,"strength":0.4});
+        doc["materials"][0]["emissiveTexture"] = serde_json::json!({"index":0,"texCoord":0});
+        doc["materials"][0]["emissiveFactor"] = serde_json::json!([0.2, 0.3, 0.4]);
+        fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    });
+    let f = packet(&c);
+    let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+    source.begin(f.node, 10000).unwrap();
+    let w = source
+        .nearest([0.5, 0.25, 0.], &f.faces[0], [0., 0., 1.], &mut || Ok(()))
+        .unwrap();
+    let mut sample = |slot| source.signal(w, slot, 0., &mut || Ok(())).unwrap().unwrap();
+    let midpoint = [0.5, 0., 0.5, 128. / 255.];
+    assert_eq!(sample(TextureSlot::MetallicRoughness), (midpoint, 0));
+    assert_eq!(sample(TextureSlot::Normal), (midpoint, 0));
+    assert_eq!(
+        sample(TextureSlot::Occlusion),
+        ([0., 0., 1., 192. / 255.], 0)
+    );
+    let (emissive, uv) = sample(TextureSlot::Emissive);
+    assert_eq!(uv, 0);
+    let linear_half = 1.055 * 0.5f64.powf(1. / 2.4) - 0.055;
+    assert!((emissive[0] - linear_half).abs() < 1e-12);
+    assert!((emissive[2] - linear_half).abs() < 1e-12);
+    assert_eq!((emissive[1], emissive[3]), (0., 128. / 255.));
+    assert_eq!(
+        sample(TextureSlot::BaseColor),
+        ([1., 0., 0., 64. / 255.], 1)
+    );
+    let material = source.material(f.faces[0].material).unwrap();
+    assert_eq!(material["normalTexture"]["scale"], 2.);
+    assert_eq!(material["occlusionTexture"]["strength"], 0.4);
+    assert_eq!(
+        material["emissiveFactor"],
+        serde_json::json!([0.2, 0.3, 0.4])
+    );
+    assert_eq!(material["pbrMetallicRoughness"]["metallicFactor"], 0.25);
+}
+
+#[test]
+fn entry_contract_errors_and_cancellation_never_reach_assembler() {
+    let (_work, c) = capture(1, |_| {});
+    let valid = packet(&c);
+    let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+    // The analytic packet carries an empty GLB: these are contract-error probes,
+    // never H17 admission or assembled-candidate acceptance.
+    let mut cases = Vec::new();
+    let mut f = packet(&c);
+    f.node.children = 1;
+    cases.push(f);
+    let mut f = packet(&c);
+    f.original_sha256[0] ^= 1;
+    cases.push(f);
+    let mut f = packet(&c);
+    f.faces[0].donor_ranges.clear();
+    cases.push(f);
+    let mut f = packet(&c);
+    f.faces[0].transform.scale = [1f32.to_bits(), 2f32.to_bits(), 1f32.to_bits()];
+    cases.push(f);
+    let mut f = packet(&c);
+    f.faces[0].transform.scale = [(-1f32).to_bits(); 3];
+    cases.push(f);
+    let mut f = packet(&c);
+    f.faces[0].transform.translation[0] = f32::INFINITY.to_bits();
+    cases.push(f);
+    for f in cases {
+        let mut calls = 0;
+        let error = bake_node(
+            &f,
+            &mut source,
+            &[],
+            limits(),
+            &mut |_| {
+                calls += 1;
+                Err(invalid("unexpected callback"))
+            },
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.kind(), JobErrorKind::InvalidState);
+        assert_eq!(calls, 0);
+    }
+    let mut calls = 0;
+    let error = bake_node(
+        &valid,
+        &mut source,
+        &[],
+        limits(),
+        &mut |_| {
+            calls += 1;
+            Err(invalid("unexpected callback"))
+        },
+        &mut || Err(JobError::new(JobErrorKind::Cancelled, "entry control")),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::Cancelled);
+    assert_eq!(calls, 0);
+    let tiny = BakeLimits {
+        memory_bytes: 1,
+        ..limits()
+    };
+    let error = bake_node(
+        &valid,
+        &mut source,
+        &[],
+        tiny,
+        &mut |_| {
+            calls += 1;
+            Err(invalid("unexpected callback"))
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+    assert_eq!(calls, 0);
+}
+
+#[test]
+fn entry_preparation_propagates_typed_failure_and_only_physical_budget_retries() {
+    let (_work, c) = capture(1, |input| {
+        let mut doc: serde_json::Value = serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+        doc["materials"][0]["pbrMetallicRoughness"]
+            .as_object_mut()
+            .unwrap()
+            .remove("baseColorTexture");
+        fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    });
+    let f = packet(&c);
+    let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+    // Empty original GLB is permitted solely for stage-preparation/error protocol
+    // probes. The callback NEVER claims Fit, certification, or successful output.
+    let inspect = |p: &PreparedNode| {
+        assert_eq!(p.corners.len(), 3);
+        assert_eq!(p.face_identities, vec![f.faces[0].identity()]);
+        assert!(p.pages.is_empty());
+        assert!(p.no_raster_faces.is_empty());
+        assert!(p.assembly_memory_bytes > 0 && p.assembly_memory_bytes < limits().memory_bytes);
+        for c in &p.corners {
+            assert_eq!(c.position, f.faces[0].words[usize::from(c.corner)]);
+            assert_eq!(c.transform, f.faces[0].transform);
+            assert_eq!(c.color, [1., 0.25, 0.5, 1.]);
+            assert!(c
+                .normal
+                .iter()
+                .chain(c.tangent.iter())
+                .all(|v| v.is_finite()));
+        }
+    };
+    let mut calls = 0;
+    let error = bake_node(
+        &f,
+        &mut source,
+        &[],
+        limits(),
+        &mut |p| {
+            calls += 1;
+            inspect(p);
+            Err(JobError::new(
+                JobErrorKind::Unsupported,
+                "typed assembler control",
+            ))
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    assert_eq!(calls, 1);
+    let policy = BakeLimits {
+        max_density_drops: 1,
+        ..limits()
+    };
+    calls = 0;
+    let error = bake_node(
+        &f,
+        &mut source,
+        &[],
+        policy,
+        &mut |p| {
+            calls += 1;
+            inspect(p);
+            Ok(Assembly::PhysicalBudget {
+                actual_bytes: policy.member_bytes + 1,
+            })
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+    assert_eq!(calls, 2);
+    calls = 0;
+    let error = bake_node(
+        &f,
+        &mut source,
+        &[],
+        policy,
+        &mut |_| {
+            calls += 1;
+            Ok(Assembly::PhysicalBudget {
+                actual_bytes: policy.member_bytes,
+            })
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::InvalidState);
+    assert_eq!(calls, 1);
+}
+
+#[test]
+fn physical_source_sampler_convex_bounds_preserve_constants_and_normal_guards() {
+    use crate::mesh_large::leaves::mips::{Class, Level};
+    let levels = [
+        Level {
+            width: 2,
+            height: 2,
+            rgba: vec![255; 16],
+        },
+        Level {
+            width: 1,
+            height: 1,
+            rgba: vec![255; 4],
+        },
+    ];
+    let sampler = crops::SourceSampler {
+        wrap_s: 33071,
+        wrap_t: 33071,
+        mag_filter: 9729,
+        min_filter: 9987,
+    };
+    for class in [Class::Data, Class::Colour] {
+        for x in 0..129 {
+            for y in 0..129 {
+                let rgba = source::sample(
+                    &levels,
+                    class,
+                    sampler,
+                    [x as f64 / 127., y as f64 / 127.],
+                    0.37,
+                )
+                .unwrap();
+                assert_eq!(
+                    rgba, [1.; 4],
+                    "constant physical taps must remain bounded and exact"
+                );
+            }
+        }
+    }
+    let identity = frames::Frame {
+        normal: [0., 0., 1.],
+        tangent: [1., 0., 0.],
+        bitangent: [0., 1., 0.],
+    };
+    for rgb in [
+        [f64::NAN, 0.5, 1.],
+        [1. + f64::EPSILON, 0.5, 1.],
+        [-f64::EPSILON, 0.5, 1.],
+    ] {
+        assert!(frames::reexpress(rgb, 1., identity, identity).is_err());
+    }
+    assert!(source::sample(&levels, Class::Data, sampler, [f64::INFINITY, 0.], 0.).is_err());
+    assert!(source::sample(&levels, Class::Data, sampler, [0., 0.], f64::NAN).is_err());
+}
+
+#[test]
+fn positive_actual_child_density_is_not_coarsened_by_source_heuristic() {
+    let (_work, c) = capture(2, |input| {
+        let mut doc: serde_json::Value = serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+        doc["materials"][0]["pbrMetallicRoughness"]
+            .as_object_mut()
+            .unwrap()
+            .remove("baseColorTexture");
+        fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    });
+    let mut f = packet(&c);
+    assert_eq!(f.node.identity(), (0, 0, 0, 0));
+    f.node.kind = crate::mesh_large::records::NodeKind::Internal;
+    f.node.children = 2;
+    f.child_texel_size = 0.25;
+    // These analytic immediate child records partition the captured source pool
+    // for a preparation-only protocol probe; they are not H17 sink certificates.
+    let children: Vec<_> = (0..2)
+        .map(|i| {
+            let mut node = f.node;
+            node.kind = crate::mesh_large::records::NodeKind::Leaf;
+            node.cell_depth = 1;
+            node.cell = i;
+            node.last_octant = i as u8;
+            node.children = 0;
+            node.first = f.node.first + i;
+            node.end = node.first + 1;
+            PreencodeChild {
+                node,
+                texel_size: 0.25,
+                faces: Vec::new(),
+                pages: Vec::new(),
+            }
+        })
+        .collect();
+    let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+    source.begin(f.node, limits().query_work).unwrap();
+    assert!(source.density_floor(&mut || Ok(())).unwrap() > f.child_texel_size);
+    let mut calls = 0;
+    let error = bake_node(
+        &f,
+        &mut source,
+        &children,
+        limits(),
+        &mut |p| {
+            calls += 1;
+            assert_eq!(p.receipts["density"]["planned"], 0.25);
+            assert_eq!(p.receipts["density"]["schedule"], 0.25);
+            Err(JobError::new(
+                JobErrorKind::Unsupported,
+                "density preparation only",
+            ))
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    assert_eq!(calls, 1);
+    f.child_texel_size = 0.5;
+    let error = bake_node(
+        &f,
+        &mut source,
+        &children,
+        limits(),
+        &mut |_| {
+            calls += 1;
+            Err(invalid("unexpected callback"))
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::InvalidState);
+    assert_eq!(calls, 1);
+}
+
+#[test]
+fn disparate_scale_collinear_faces_retain_corners_without_raster_density() {
+    for count in [1usize, 2] {
+        let (_work, c) = capture(count, |input| {
+            let mut doc: serde_json::Value =
+                serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+            let path = input.parent().unwrap().join("attributes.bin");
+            let mut bin = fs::read(&path).unwrap();
+            let points = [[0f32, 0., 0.], [1e-20, 0., 0.], [1., 0., 0.]];
+            for (i, v) in points.iter().flatten().enumerate() {
+                bin[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+            }
+            fs::write(path, bin).unwrap();
+            if count == 1 {
+                doc["accessors"][0]["max"] = serde_json::json!([1, 0, 0]);
+            }
+            doc["materials"][0]["normalTexture"] = serde_json::json!({"index":0});
+            fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        });
+        let f = packet(&c);
+        let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+        let l = BakeLimits {
+            profile: Profile::Lossless,
+            ..limits()
+        };
+        let mut calls = 0;
+        // Error/preparation only: analytic packet with empty originalGLB never
+        // obtains Fit. Real source capture and scalar/RGBA provenance are used.
+        let error = bake_node(
+            &f,
+            &mut source,
+            &[],
+            l,
+            &mut |p| {
+                calls += 1;
+                let nonraster: Vec<_> = f
+                    .faces
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, face)| {
+                        math::face_normal(face.positions.map(|p| p.map(f64::from)))
+                            .is_none()
+                            .then_some(i)
+                    })
+                    .collect();
+                assert_eq!(p.no_raster_faces, nonraster);
+                assert_eq!(nonraster.len(), 1);
+                let fi = nonraster[0];
+                assert!(p.face_pages[fi].iter().all(Option::is_none));
+                for corner in &p.corners[fi * 3..fi * 3 + 3] {
+                    assert_eq!(
+                        corner.position,
+                        f.faces[fi].words[usize::from(corner.corner)]
+                    );
+                    assert_eq!(corner.color, [1., 0.25, 0.5, 1.]);
+                    assert_eq!(corner.uv, [0., 0.]);
+                }
+                if count == 1 {
+                    assert!(p.pages.is_empty());
+                } else {
+                    assert_eq!(p.pages.len(), 2);
+                }
+                Err(JobError::new(
+                    JobErrorKind::Unsupported,
+                    "nonraster preparation only",
+                ))
+            },
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        assert_eq!(calls, 1);
+    }
+}
+
+#[test]
+fn skinny_scalar_colour_only_capture_has_normal_fans_without_atlas_obligation() {
+    let (_work, c) = capture(1, |input| {
+        let mut doc: serde_json::Value = serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+        let path = input.parent().unwrap().join("attributes.bin");
+        let mut bin = fs::read(&path).unwrap();
+        let points = [[0f32, 0., 0.], [1e-20, 0., 0.], [0., 1., 0.]];
+        for (i, v) in points.iter().flatten().enumerate() {
+            bin[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        fs::write(path, bin).unwrap();
+        doc["accessors"][0]["max"] = serde_json::json!([1e-20, 1, 0]);
+        doc["materials"][0]["pbrMetallicRoughness"]
+            .as_object_mut()
+            .unwrap()
+            .remove("baseColorTexture");
+        fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    });
+    let f = packet(&c);
+    assert!(math::face_normal(f.faces[0].positions.map(|p| p.map(f64::from))).is_some());
+    let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
+    assert_eq!(raster_faces(&f, &source).unwrap(), vec![false]);
+    let mut calls = 0;
+    // Nondegenerate scalar-only preparation with real captured COLOR. The
+    // callback refuses: empty original GLB is not an accepted finishing packet.
+    let error = bake_node(
+        &f,
+        &mut source,
+        &[],
+        limits(),
+        &mut |p| {
+            calls += 1;
+            assert!(p.pages.is_empty());
+            assert!(p.no_raster_faces.is_empty());
+            assert_eq!(p.corners.len(), 3);
+            assert_eq!(p.face_identities, vec![f.faces[0].identity()]);
+            assert!(p.receipts["charts"].as_array().unwrap().is_empty());
+            assert!(p.receipts["density"]["planned"].as_f64().unwrap() < 1e-19);
+            for corner in &p.corners {
+                assert_eq!(
+                    corner.position,
+                    f.faces[0].words[usize::from(corner.corner)]
+                );
+                assert_eq!(corner.color, [1., 0.25, 0.5, 1.]);
+                assert_eq!(corner.uv, [0., 0.]);
+                assert_eq!(corner.normal, [0., 0., 1.]);
+                assert!(corner.tangent.iter().all(|v| v.is_finite()));
+            }
+            Err(JobError::new(
+                JobErrorKind::Unsupported,
+                "scalar preparation only",
+            ))
+        },
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+    assert_eq!(calls, 1);
 }

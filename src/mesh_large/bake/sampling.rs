@@ -30,6 +30,16 @@ pub(super) struct ChildQuery<'a> {
     work: u64,
     limit: u64,
 }
+/// Actual decoded proxy coverage point and its emitted fragment frame.
+pub(super) struct ProxySample<'a> {
+    pub face: &'a FrozenFace,
+    pub position: V3,
+    pub geometric_normal: V3,
+    pub frame: Frame,
+    pub texel_size: f64,
+    pub geometric_error: f64,
+    pub depth: u32,
+}
 pub(super) struct Signal {
     pub rgba: [f64; 4],
     pub terminal: TerminalSample,
@@ -70,7 +80,7 @@ impl<'a> ChildQuery<'a> {
             .iter()
             .try_fold(0usize, |a, c| a.checked_add(c.faces.len()))
             .ok_or_else(|| resource("child query faces"))?;
-        if (count as u64).checked_mul(256).is_none_or(|b| b > memory) {
+        if (count as u64).checked_mul(512).is_none_or(|b| b > memory) {
             return Err(resource("child query BVH memory"));
         }
         let mut entries = Vec::new();
@@ -214,28 +224,23 @@ impl<'a> ChildQuery<'a> {
     pub(super) fn signal(
         &mut self,
         source: &mut CapturedSource<'_>,
-        face: &FrozenFace,
-        p: V3,
-        n: V3,
-        frame: Frame,
+        sample: ProxySample<'_>,
         slot: TextureSlot,
-        texel: f64,
-        error: f64,
-        depth: u32,
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<Option<Signal>, JobError> {
+        let ProxySample {
+            face,
+            position: p,
+            geometric_normal: n,
+            frame,
+            texel_size: texel,
+            geometric_error: error,
+            depth,
+        } = sample;
         let direct = |source: &mut CapturedSource<'_>,
                       check: &mut dyn FnMut() -> Result<(), JobError>|
          -> Result<Option<Signal>, JobError> {
-            let w = source.nearest(
-                p,
-                face.source,
-                face.source_triangle,
-                n,
-                face.fill_bound,
-                &face.donor_ranges,
-                check,
-            )?;
+            let w = source.nearest(p, face, n, check)?;
             direct_signal(source, w, p, frame, slot, texel, check)
         };
         // Accepted fills always use their immutable same-primitive eligibility.
@@ -247,15 +252,20 @@ impl<'a> ChildQuery<'a> {
         };
         let child = &self.children[e.child];
         let donor = &child.faces[e.face];
-        let Some(page) = donor.pages[slot_index(slot)].and_then(|i| child.pages.get(i)) else {
+        let Some(binding) = donor.bindings[slot_index(slot)] else {
             return direct(source, check);
         };
+        let page = child
+            .pages
+            .get(binding.page)
+            .ok_or_else(|| invalid("child slot binding page closure"))?;
         if page.slot != slot || page.material != face.material {
             return Err(invalid("child semantic binding closure"));
         }
-        let uv = std::array::from_fn(|a| (0..3).map(|i| f64::from(donor.uv[i][a]) * bary[i]).sum());
+        let uv =
+            std::array::from_fn(|a| (0..3).map(|i| f64::from(binding.uv[i][a]) * bary[i]).sum());
         let sampler = crops::resolve(Some(&page.sampler))?;
-        let pixel_uv = donor.uv.map(|uv| {
+        let pixel_uv = binding.uv.map(|uv| {
             [
                 f64::from(uv[0]) * f64::from(page.width),
                 f64::from(uv[1]) * f64::from(page.height),

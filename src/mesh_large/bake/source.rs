@@ -5,7 +5,7 @@ use super::{
     invalid,
     math::{self, V3},
     resource,
-    types::SourceKey,
+    types::{FrozenFace, SourceKey},
     unsupported,
 };
 use crate::{
@@ -229,13 +229,14 @@ impl<'a> CapturedSource<'a> {
     pub(super) fn nearest(
         &mut self,
         q: V3,
-        k: SourceKey,
-        lineage: u64,
+        face: &FrozenFace,
         normal: V3,
-        fill: Option<f64>,
-        ranges: &[std::ops::Range<u64>],
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<Witness, JobError> {
+        let k = face.source;
+        let lineage = face.source_triangle;
+        let fill = face.fill_bound;
+        let ranges = &face.donor_ranges;
         let captured = self.captured;
         let mut best: Option<Witness> = None;
         let mut unfiltered: Option<Witness> = None;
@@ -722,8 +723,13 @@ impl<'a> CapturedSource<'a> {
         while let Some(t) = reader.next().transpose()? {
             check()?;
             self.charge()?;
+            let p = t.triangle.positions.map(|p| p.map(f64::from));
+            // This heuristic is only for a zero prescribed raster density;
+            // retained no-raster geometry supplies no sampling density.
+            if math::face_normal(p).is_none() {
+                continue;
+            }
             for e in 0..3 {
-                let p = t.triangle.positions.map(|p| p.map(f64::from));
                 let d = math::distance2(p[e], p[(e + 1) % 3]).sqrt();
                 if d > 0. {
                     minimum = minimum.min(d / f64::from(edge));
@@ -762,10 +768,25 @@ fn linear(v: f64) -> f64 {
     }
 }
 fn srgb(v: f64) -> f64 {
+    if v == 0. || v == 1. {
+        return v;
+    }
     if v <= 0.0031308 {
         v * 12.92
     } else {
         1.055 * v.powf(1. / 2.4) - 0.055
+    }
+}
+/// The admitted taps and fraction are finite and bounded. Nested interpolation
+/// keeps constants exact; endpoint bounds contain only floating point rounding
+/// of the mathematical convex combination, never an external normal input.
+fn convex(a: f64, b: f64, t: f64) -> f64 {
+    if t == 0. {
+        a
+    } else if t == 1. {
+        b
+    } else {
+        (a + (b - a) * t).clamp(a.min(b), a.max(b))
     }
 }
 pub(super) fn sample(
@@ -843,16 +864,17 @@ pub(super) fn sample(
         let f = [xy[0] - x as f64, xy[1] - y as f64];
         let p = [get(x, y), get(x + 1, y), get(x, y + 1), get(x + 1, y + 1)];
         Ok(std::array::from_fn(|a| {
-            p[0][a] * (1. - f[0]) * (1. - f[1])
-                + p[1][a] * f[0] * (1. - f[1])
-                + p[2][a] * (1. - f[0]) * f[1]
-                + p[3][a] * f[0] * f[1]
+            convex(
+                convex(p[0][a], p[1][a], f[0]),
+                convex(p[2][a], p[3][a], f[0]),
+                f[1],
+            )
         }))
     };
     let p = fetch(&levels[a])?;
     let q = fetch(&levels[b])?;
     Ok(std::array::from_fn(|i| {
-        let v = p[i] * (1. - f) + q[i] * f;
+        let v = convex(p[i], q[i], f);
         if class == mips::Class::Colour && i < 3 {
             srgb(v)
         } else {
