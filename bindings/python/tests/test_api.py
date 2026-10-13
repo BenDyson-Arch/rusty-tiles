@@ -82,7 +82,7 @@ class WheelAPI(unittest.TestCase):
 
         result = rusty_tiles.mesh_to_tileset(source, output, jobs=1, callback=observe)
         self.assertIsInstance(result, rusty_tiles.TilerResult)
-        self.assertEqual(result.output, output.resolve())
+        self.assertTrue(result.output.samefile(output))
         self.assertTrue(result.archive)
         self.assertEqual(result.cleanup_diagnostics, [])
         with zipfile.ZipFile(output) as archive:
@@ -239,7 +239,7 @@ class WheelAPI(unittest.TestCase):
             )
         finally:
             os.chdir(original_cwd)
-        self.assertEqual(result.output, (self.root / "bound.3tz").resolve())
+        self.assertTrue(result.output.samefile(self.root / "bound.3tz"))
         self.assertFalse((other / "bound.3tz").exists())
         self.assertEqual(list(scratch.iterdir()), [])
         placement = result.report["placement"]
