@@ -298,6 +298,14 @@ fn encode_with_density_budget<T>(
         }
     }
 }
+/// Keep the writer's retryable-budget / hard-failure split when its error
+/// enters the density retry loop: only `Budget` may lower texture density.
+fn write_error_class(error: writer::WriteError) -> atlas::PrepareError {
+    match error {
+        writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
+        writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
+    }
+}
 /// One leaf's frozen inputs, read serially from the captured streams.
 struct LeafInput {
     node: NodeRecord,
@@ -395,10 +403,7 @@ fn encode_leaf(
                         config.tile_bytes(),
                     )
                 })
-                .map_err(|error| match error {
-                    writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
-                    writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
-                })
+                .map_err(write_error_class)
                 .map(|leaf| (leaf, receipt))
             })
         },
@@ -765,6 +770,49 @@ mod tests {
             });
             assert!(result.is_err());
             assert_eq!(attempts, [initial]);
+        }
+    }
+    /// A writer `Failure` (invalid state, consumer row limit, frame escape) must
+    /// reach the caller after one attempt; reclassified as `Budget` it would
+    /// silently coarsen textures and retry up to twelve times.
+    #[test]
+    fn writer_failure_is_never_a_density_retry_but_writer_budget_is() {
+        for (writer_error, retried) in [
+            (
+                writer::WriteError::Failure(JobError::new(
+                    JobErrorKind::InvalidState,
+                    "writer failure",
+                )),
+                false,
+            ),
+            (
+                writer::WriteError::Budget(JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    "member budget",
+                )),
+                true,
+            ),
+        ] {
+            let kind = writer_error.kind();
+            let mut attempts = Vec::new();
+            let mut writer_error = Some(writer_error);
+            let result = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+                attempts.push(drop);
+                match writer_error.take() {
+                    Some(error) => Err(write_error_class(error)),
+                    None => Ok(()),
+                }
+            });
+            if retried {
+                let (_, drop, reasons) = result.unwrap();
+                assert_eq!(
+                    (attempts.as_slice(), drop, reasons.len()),
+                    (&[2, 3][..], 3, 1)
+                );
+            } else {
+                assert_eq!(result.unwrap_err().kind(), kind);
+                assert_eq!(attempts, [2]);
+            }
         }
     }
     #[test]
