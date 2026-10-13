@@ -917,8 +917,7 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     // small subtrees still coarsen level by level).
     let target = ctx.target.min(kept_faces.len().div_ceil(2)).max(1);
     simplifier.simplify(target);
-    let strict_faces = simplifier.live_faces();
-    let relaxed = strict_faces > 2 * ctx.target;
+    let relaxed = simplifier.live_faces() > 2 * ctx.target;
     if relaxed {
         simplifier.relax();
         simplifier.simplify(target);
@@ -928,15 +927,6 @@ fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, 
     out.forced = report.forced;
     out.forced_unchecked = report.forced_unchecked;
     out.over_budget = s_faces.len() > 2 * ctx.target;
-    if std::env::var_os("RT_LOD_BUDGET_DEBUG").is_some() && out.over_budget {
-        let cut = mesh.vertices.iter().filter(|v| v.info.cut(d)).count();
-        let special = mesh.vertices.iter().filter(|v| v.info.special).count();
-        let used: BTreeSet<u32> = s_faces.iter().flat_map(|f| f.v).collect();
-        let used_cut = used.iter().filter(|&&v| mesh.vertices[v as usize].info.cut(d)).count();
-        let used_special = used.iter().filter(|&&v| mesh.vertices[v as usize].info.special).count();
-        eprintln!("BUDGET f{}-d{d}: T faces {} verts {} cut {cut} special {special} kept-extra {} forced {} failed {}; strict {strict_faces} final {} used verts {} (cut {used_cut}, special {used_special}) report {:?}",
-            node.first, mesh.faces.len(), mesh.vertices.len(), keep_extra.len(), forced.len(), failed.len(), s_faces.len(), used.len(), report);
-    }
     if s_faces.len() > 4 * ctx.target {
         return Err(JobError::new(
             JobErrorKind::Unsupported,
