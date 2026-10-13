@@ -4,6 +4,8 @@
 
 mod capture;
 mod config;
+#[cfg(test)]
+mod delivery;
 mod input;
 mod records;
 mod tree;
