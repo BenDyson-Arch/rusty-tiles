@@ -172,9 +172,35 @@ Preserve the following agreed large-mesh requirements:
   one unified design during milestone-4 acceptance, using real-mesh
   measurements. Data point: the full-resolution 10M-triangle photogrammetry mesh
   took 35.5 min with `balanced`, peaked at 12.4 GiB and produced an 8.1 GB
-  archive. Basis encoding dominates and scales with texel count. Planned leaf-size
-  comparison, measured with HLOD: 8192-triangle leaves against 32k-triangle
-  leaves split into per-primitive property tables of 8192 rows or fewer.
+  archive. Basis encoding dominates and scales with texel count. The leaf-size
+  comparison is settled; see the leaf size decision below.
+
+Recorded decisions for the tiler:
+
+- Public surface. The CLI is `rusty-tiles mesh` and the Python API is
+  `rusty_tiles.mesh_to_tileset`. This is the one public entry point; the H8
+  leaf-directory and H16 delivery APIs become internal. `--jobs N` is a
+  memory-capped maximum and reports the jobs it actually used; the default is
+  auto and memory-aware. Output is `.3tz` only in 0.4. Profiles stay
+  provisional. Placement is rigid local metres. mesh-to-3tz retires after full
+  tiler acceptance, with a migration note.
+- Leaf size. The 8192-triangle cap per leaf stays. Measured: CesiumJS 1.146
+  resolves mesh picks through one property table per model. 32k-triangle leaves
+  split into 4 tables picked correctly only 8 of 56 times and could not refine
+  at the default 1 GiB cache.
+- Cesium 1.146 sRGB limitation. KTX2 sRGB colour textures are uploaded as
+  linear (UNORM) formats on the ASTC, BC7, ETC2 and uncompressed paths. The
+  measured worst case is 72/255 on high-contrast test textures; linear data
+  textures are unaffected. The user decided this is documented, not a 0.4
+  blocker, and not filed upstream. The tiler adds no viewer-specific
+  compensation.
+- Validator. `validate` accepts KHR_texture_basisu / KTX2
+  ([#202](https://github.com/BenDyson-Arch/rusty-tiles/pull/202)), so the
+  tiler's own default output validates. VS-A
+  ([#206](https://github.com/BenDyson-Arch/rusty-tiles/pull/206)) handles the
+  catalog at scale; VS-B and VS-C follow. Large real archives (8.1 GB) still
+  exceed the default 1 GiB / 2^18-visit validator limits until VS-B and VS-C
+  land.
 
 Annotation readiness. Leaves keep exact per-triangle source provenance so that a
 future, post-0.4 lightweight "annotate" pass can add attributes to parts of 3D
@@ -219,7 +245,8 @@ peak resident memory, scratch, wall time and consumer load/refinement against th
 budgets. Smaller tests establish bounded correctness evidence; they do not
 substitute for these scale gates.
 
-Validator memory and work must scale with the supported delivered-resource domain. Keep
+Validator memory and work must scale with the supported delivered-resource domain;
+VS-B and VS-C close the gap for large real archives noted in milestone 3. Keep
 absolute volume caps opt-in, explicit per-item limits and non-circular
 amplification budgets; test malformed and multiply traversed resources with
 sensitive controls. Complete applicable platform CI, installed-wheel and
