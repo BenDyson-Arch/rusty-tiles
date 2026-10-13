@@ -52,11 +52,15 @@ Source: see `parity/source.txt` and `scale/bin/SOURCE`.
 261/261 (large fixtures generated), C2-WB classes 90/90 (with `@large`), H11 16/16,
 slice-3 controls 80/80 (with `C2S3_EVIDENCE_DIR`), S3-18 sweep 188/188, forest 34/34 (with
 `C2S3_FOREST_DIR`, all W twins and mf2-lod3), I1 controls 187/187 (large controls
-generated), W corpus 27/27 run, 14 skipped because their artifacts no longer exist
-(`/tmp` paths of the I1 preparation). Every `validate::`, `archive3tz::`,
-`content_integrity::` and `spill::` test passes in both profiles (332 resident, 317 forced;
+generated), W corpus 41/41, on the source merged with develop (`e0849d0`, final VS-A).
+Every `validate::`, `archive3tz::`, `content_integrity::` and `spill::` test passes in both
+profiles (333 resident, 318 forced;
 the two pinned context/stride acceptance modules run resident only, as their reports
 gain `scratch` when forced).
+
+**Python.** The installed release wheel passes `scripts/test_python_wheel.py` (46 tests), and
+`python_check.py` finds Python's report equal to the CLI's, for list and lazy payloads, on
+mf2-lod3, W5-vec-perf and `vsa-e14` (effective budgets, no `liveDocumentBytes`).
 
 **C1 CLI oracles.** All six pass against the plain debug binary. Against the
 `validate-forced-spill` binary, `payload_integrity_oracle` (73) and
@@ -107,5 +111,4 @@ walk, not the C1 value pass, dominates the stream on these archives.
 - C2 streaming at millions of references (no generated archive with tile rows at that
   scale; VS-D's generators).
 - κ: producer units against `κ_u·S` on the gate archives is VS-D's.
-- The W corpus rows whose artifacts are gone.
 - `liveDocumentBytes`, `storedBytes` and opt-in volume caps in the report: VS-C.
