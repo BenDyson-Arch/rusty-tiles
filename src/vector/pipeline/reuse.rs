@@ -1,6 +1,8 @@
 //! Versioned native encoder identity, immutable content and subtree invalidation.
 use super::*;
 use crate::implicit::{ForestOutput, RebaseRecord};
+use crate::tileset_node::TileTree;
+use records::{VectorTileExtras, VectorTree};
 use std::fs::File;
 use store::{Counters, Node};
 
@@ -75,6 +77,7 @@ fn encoder_with_framing(framing_source: &str) -> String {
         include_str!("aggregation.rs"),
         include_str!("../../point_sampling.rs"),
         include_str!("store.rs"),
+        include_str!("records.rs"),
         include_str!("reuse.rs"),
         include_str!("../../vector_encoding.rs"),
         include_str!("../../vector_encoding/limits.rs"),
@@ -94,6 +97,7 @@ fn encoder_with_framing(framing_source: &str) -> String {
         include_str!("../../georef.rs"),
         include_str!("../../implicit.rs"),
         include_str!("../../implicit/tileset.rs"),
+        include_str!("../../tileset_node.rs"),
         include_str!("../../../Cargo.lock"),
     ] {
         hasher.update(source.as_bytes());
@@ -137,7 +141,7 @@ fn has_legacy_fill(node: &Value) -> bool {
         .is_some_and(|children| children.iter().any(has_legacy_fill))
 }
 
-pub(super) fn contents(node: &Value) -> Vec<&Value> {
+fn contents(node: &Value) -> Vec<&Value> {
     if let Some(contents) = node["contents"].as_array() {
         contents.iter().collect()
     } else {
@@ -377,125 +381,117 @@ impl Reuse {
         else {
             return Ok(None);
         };
-        let mut value = self
+        let value = self
             .nodes
             .get(path)
             .cloned()
             .ok_or_else(|| data("cached subtree is absent from previous manifest"))?;
-        value.as_object_mut().unwrap().remove("transform");
         let mut archive = zip::ZipArchive::new(File::open(self.previous.as_ref().unwrap())?)?;
+        /// Read the cached subtree strictly as typed records, staging each content's raw
+        /// payload privately in the build workspace under its immutable name; this build's
+        /// writer rebases or publishes it per the new layout. The subtree's top tile drops
+        /// its transform: its new parent places it.
         fn visit(
             node: &Value,
+            child: bool,
             reuse: &mut Reuse,
             archive: &mut zip::ZipArchive<File>,
             counters: &mut Counters,
             max_tiles: usize,
-        ) -> Result<(), Error> {
+        ) -> Result<VectorTree, Error> {
             counters.tiles += 1;
             if counters.tiles > max_tiles {
                 return Err(data("reused hierarchy exceeds maxTiles"));
             }
             reuse.reused_tiles += 1;
-            let content = contents(node);
-            if !node["children"].as_array().is_some_and(|c| !c.is_empty()) && !content.is_empty() {
-                counters.leaf_tiles += 1;
-            }
-            if node["extras"]["routing"] == true {
-                counters.routing_tiles += 1;
-            }
-            for content in content {
-                let uri = content["uri"]
-                    .as_str()
-                    .ok_or_else(|| data("invalid previous content URI"))?;
-                let name = uri.strip_prefix("t/").ok_or_else(|| {
-                    data("previous content URI is not an immutable vector content path")
-                })?;
-                let (stem, suffix) = name
-                    .rsplit_once('.')
-                    .ok_or_else(|| data("invalid previous content path"))?;
-                if stem.len() != 64
-                    || !stem
-                        .bytes()
-                        .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v))
-                    || suffix != "glb"
-                {
-                    return Err(data(
-                        "previous content URI is not an immutable vector content path",
-                    ));
-                }
-                let bytes = previous_payload(archive, reuse.payloads.get(stem), uri, stem, suffix)?;
-                // Staged privately in the build workspace under its raw name; this
-                // build's writer rebases or publishes it per the new layout.
+            let children = match node.get("children") {
+                None => &[][..],
+                Some(Value::Array(children)) => children.as_slice(),
+                Some(_) => return Err(data("previous vector hierarchy: children must be an array; run a fresh conversion without reuseTileset (--reuse-tileset)")),
+            };
+            let record = records::previous_record(node, child, &mut |uri, stem| {
+                let bytes = previous_payload(archive, reuse.payloads.get(stem), uri, stem, "glb")?;
                 let target = reuse.output.join(uri);
                 if !target.exists() {
-                    std::fs::write(target, bytes)?;
+                    std::fs::write(target, &bytes)?;
                 }
                 reuse.reused_references += 1;
                 reuse.reused_uris.insert(uri.into());
+                Ok(bytes.len() as u64)
+            })?;
+            if children.is_empty() && !record.contents().is_empty() {
+                counters.leaf_tiles += 1;
             }
-            if !contents(node).is_empty() {
-                counters.maximum_tile_vertices = counters
-                    .maximum_tile_vertices
-                    .max(node["extras"]["vertices"].as_u64().unwrap_or(0) as usize);
-                counters.maximum_tile_bytes = counters
-                    .maximum_tile_bytes
-                    .max(node["extras"]["encodedBytes"].as_u64().unwrap_or(0) as usize);
+            if record.extras().is_some_and(VectorTileExtras::is_routing) {
+                counters.routing_tiles += 1;
             }
-            if let Some(children) = node["children"].as_array() {
-                for child in children {
-                    visit(child, reuse, archive, counters, max_tiles)?;
-                }
+            if let (false, Some(statistics)) = (
+                record.contents().is_empty(),
+                record.extras().and_then(VectorTileExtras::statistics),
+            ) {
+                counters.maximum_tile_vertices =
+                    counters.maximum_tile_vertices.max(statistics.vertices);
+                counters.maximum_tile_bytes =
+                    counters.maximum_tile_bytes.max(statistics.encoded_bytes);
             }
-            Ok(())
+            let children = children
+                .iter()
+                .map(|child| visit(child, true, reuse, archive, counters, max_tiles))
+                .collect::<Result<_, Error>>()?;
+            Ok(TileTree::new(record, children))
         }
-        visit(&value, self, &mut archive, counters, max_tiles)?;
+        let tree = visit(&value, false, self, &mut archive, counters, max_tiles)?;
         for (key, record) in self.old.range(path.to_string()..format!("{path}~")) {
             self.records.insert(key.clone(), record.clone());
         }
-        counters.fragments = counters.fragments + record.fragments - current_fragments;
+        // The restored leaves' own total: a record from an earlier partial reuse can count
+        // a restored descendant's split feature as one row.
+        let fragments = records::leaf_fragments(&tree)?;
+        counters.fragments = counters.fragments + fragments - current_fragments;
         self.reused_subtrees += 1;
         Ok(Some(Node {
-            value,
+            tree,
             center: record.center,
             padding: record.padding,
+            fragments,
         }))
     }
-    pub fn remember(&mut self, path: &str, signature: String, node: &mut Node, fragments: usize) {
-        node.value["extras"]["buildPath"] = json!(path);
+    pub fn remember(
+        &mut self,
+        path: &str,
+        signature: String,
+        node: &mut Node,
+    ) -> Result<(), Error> {
+        records::set_build_path(node.tree.record_mut(), path)?;
         self.records.insert(
             path.into(),
             Record {
                 signature,
                 center: node.center,
                 padding: node.padding,
-                fragments,
+                fragments: node.fragments,
                 cut: self.cuts.get(path).cloned(),
             },
         );
+        Ok(())
     }
-    /// Record build state and publish only referenced raw payloads. `explicit_root`
-    /// is the producer's hierarchy (the forest's input); `forest` is the writer's output.
+    /// Record build state and publish only referenced raw payloads. `tree` is the
+    /// producer's hierarchy H (the forest's input); `manifest` is `tileset.json` as the
+    /// forest wrote it, without the build state; `forest` is the writer's output. Returns
+    /// the build state's sha256, which `tileset.json` records, and the reuse report.
     pub fn publish(
         &mut self,
-        manifest: &mut Value,
+        manifest: &Value,
         frame: &Frame,
-        explicit_root: &Value,
+        tree: &VectorTree,
         forest: &ForestOutput,
-    ) -> Result<Value, Error> {
-        fn used(node: &Value, result: &mut BTreeSet<String>) {
-            for content in contents(node) {
-                if let Some(uri) = content["uri"].as_str() {
-                    result.insert(uri.into());
-                }
-            }
-            if let Some(children) = node["children"].as_array() {
-                for child in children {
-                    used(child, result);
-                }
-            }
-        }
-        let mut contents = BTreeSet::new();
-        used(explicit_root, &mut contents);
+    ) -> Result<([u8; 32], Value), Error> {
+        let contents: BTreeSet<&str> = tree
+            .preorder()
+            .into_iter()
+            .flat_map(|(record, _, _)| record.contents())
+            .map(|content| content.uri().as_str())
+            .collect();
         // Raw payloads stay published only where a forest's explicit tile names
         // them in place. The forest writer has already removed the raw sources it
         // rebased.
@@ -512,20 +508,16 @@ impl Reuse {
         }
         let mut state = json!({"version":1,"config":self.config,"anchor":frame.anchor,"frame":frame.axes,"records":self.records,
             "payloads":payload_map(forest),"manifestSha256":digest(manifest)?});
-        state["explicitRoot"] = explicit_root.clone();
+        state["explicitRoot"] = tree.to_value()?;
         let raw = canonical(&state)?;
         std::fs::write(self.output.join("vector-build.json"), &raw)?;
-        manifest["asset"]["extras"] = json!({"vectorBuildStateSha256":hash(&raw)});
-        Ok(
+        Ok((
+            Sha256::digest(&raw).into(),
             json!({"previousTileset":self.previous.is_some(),"requestedPreviousTileset":self.requested,"incompatibleReason":self.incompatible,
             "reusedSubtrees":self.reused_subtrees,"reusedTiles":self.reused_tiles,"reusedContents":self.reused_uris.len(),"reusedContentReferences":self.reused_references,
-            "publishedContents":contents.len(),"rebuiltContents":contents.difference(&self.reused_uris).count()}),
-        )
+            "publishedContents":contents.len(),"rebuiltContents":contents.iter().filter(|uri| !self.reused_uris.contains(**uri)).count()}),
+        ))
     }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn unhex(text: &str) -> Option<[u8; 32]> {
@@ -549,7 +541,7 @@ fn payload_map(forest: &ForestOutput) -> BTreeMap<String, Payload> {
     let mut map = BTreeMap::new();
     for content in forest.tiles.iter().flat_map(|tile| &tile.contents) {
         if let Some(record) = &content.rebase {
-            map.entry(hex(&record.raw_sha256))
+            map.entry(records::hex(&record.raw_sha256))
                 .or_insert_with(|| Payload {
                     member: content.member.clone(),
                     delta: record.delta,
@@ -715,7 +707,8 @@ mod codec_reuse_tests {
         );
         same.nodes.insert(
             "".into(),
-            json!({"extras":{"routing":true},"geometricError":0}),
+            json!({"boundingVolume":{"box":[0,0,0,1.0,0,0,0,1.0,0,0,0,1.0]},"refine":"REPLACE",
+                "extras":{"routing":true,"routingReason":null},"geometricError":0.0}),
         );
         let mut counters = Counters {
             fragments: 1,
@@ -740,5 +733,56 @@ mod codec_reuse_tests {
             .unwrap()
             .is_none());
         assert_eq!((same.reused_subtrees, counters.tiles), before);
+    }
+
+    /// A record written by an earlier partial reuse can count a restored leaf's split feature
+    /// as one row. Restore must take the fragment total from the stored leaves, correct the
+    /// build counter by the difference, and carry it on the node so `remember` records it.
+    #[test]
+    fn restore_counts_stored_leaf_fragments_and_remembers_them() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("t")).unwrap();
+        let glb = b"leaf payload".to_vec();
+        let uri = format!("t/{}.glb", hash(&glb));
+        let archive_path = root.path().join("previous.3tz");
+        let mut zip = zip::ZipWriter::new(File::create(&archive_path).unwrap());
+        zip.start_file(&uri, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut zip, &glb).unwrap();
+        zip.finish().unwrap();
+        let mut reuse = Reuse::new(root.path(), &VectorOptions::default()).unwrap();
+        reuse.previous = Some(archive_path);
+        reuse.old.insert(
+            "".into(),
+            Record {
+                signature: "signature".into(),
+                center: [0.; 3],
+                padding: 0.,
+                fragments: 1,
+                cut: None,
+            },
+        );
+        reuse.nodes.insert(
+            "".into(),
+            json!({"boundingVolume":{"box":[0,0,0,1.0,0,0,0,1.0,0,0,0,1.0]},"refine":"REPLACE",
+                "geometricError":0.0,
+                "content":{"uri":uri,"extensions":{"3DTILES_content_gltf_vector":{"vector":true}}},
+                "extras":{"featureFragments":5,"vertices":9,"primitives":1,"encodedBytes":1234,
+                    "geometryErrorMetres":0.3,"positionRoundingMetres":0.00001,
+                    "quantizationErrorMetres":0.0,"uncompressedBytes":2000,"toleranceMetres":0.0}}),
+        );
+        let start = 10;
+        let mut counters = Counters {
+            fragments: start,
+            ..Counters::default()
+        };
+        let mut node = reuse
+            .restore("", "signature", &mut counters, 1, 8)
+            .unwrap()
+            .expect("the unchanged subtree is restored");
+        assert_eq!(node.fragments, 5);
+        assert_eq!(counters.fragments, start + 4);
+        reuse.remember("", "signature".into(), &mut node).unwrap();
+        assert_eq!(reuse.records[""].fragments, 5);
     }
 }
