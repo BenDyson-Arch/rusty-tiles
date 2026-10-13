@@ -152,10 +152,10 @@ stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. Unsupported glTF extension
 names declared by payloads are listed as they are named, at most the 64 byte-smallest
 of at most 256 bytes each; when any is left out the report adds
-`notInspectedTruncated: true`. Decoded containment streams each reference as soon as
-its precheck step passes and publishes the first escape only after the whole archive
-passed C1 with no exclusion and no precheck stop, replaying each payload against
-digests of its own first, full inspection. A required unsupported
+`notInspectedTruncated: true`. Decoded containment streams only after the whole archive
+passed C1 with no exclusion and no precheck stop, from a log of the tiles and references
+seen while in domain, and replays each payload against digests of its own first, full
+inspection instead of inspecting it again. A required unsupported
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 

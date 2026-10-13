@@ -42,8 +42,8 @@ fixed numbers, so an archive's legitimate work could exceed them: the H16 tiler 
 - **S**: the admitted stored member bytes (VS-A), fixed before any budgeted work.
 - **Path stack**: the C2 tile facts of the current traversal path, root first.
 - **Rank**: a member's catalog position (VS-A).
-- **Facts record**: the 195-byte per-URI record of C2 facts, the vertex count and the H23
-  replay receipt (VS-B-11), keyed by rank.
+- **Facts record**: the 199-byte per-URI record of C2 facts, the vertex count, the H23
+  replay receipt (VS-B-11) and a CRC-32 of both, keyed by rank.
 - **In domain**: no exclusion and no precheck stop so far.
 
 ## Invariants
@@ -93,25 +93,34 @@ the stack. Each level chain is built from the stack in the same order as from th
 the same transforms, volumes, external-content volumes and roles. Each entry keeps its chain
 bits (C2-WB §3.3), its depth for the message, and the owner tag of VS-B-6.
 
-**VS-B-4. Inline streaming (A-C2-2.2–3).** The reference list and the content-volume list are
-removed. A reference ORs its chain, content and URI exclusion bits as before. While in domain it
-builds its level chain once and runs the precheck step. If the step passes and no stream
-outcome is recorded yet, the reference is streamed at once over a re-read of its member, with
-the same consumer, the same chain, a phase-2 arena of its own, the same bitmap, the same corner
-credit (accrued by `T(u)` per streamed reference, in traversal order) and the same re-read
-counter against `containmentBytesRead`. The first stream failure (Outside, allocation refusal,
-containment fault, re-read failure) is recorded and stops further streaming; precheck
-accounting continues. After traversal the outcome is published under the unchanged precedence
-(R8): a C1 failure anywhere; otherwise any exclusion; otherwise the precheck reason; otherwise
-the recorded stream failure; otherwise Contained. If the archive ends in domain, every reference
-was streamed in traversal order up to the first failure, which is the old phase 2 exactly. If it
-does not, the recorded outcome is discarded. If no reference streamed and phase 1 reserved no
-arena, an arena is reserved before Contained, as the old phase 2 did. Streamed work is charged
-before it is done, so it stays within the precheck's units (`T·V` and the rest) whether or not
-the archive ends in domain. Unlike the old phase 2, an archive that later leaves the domain (an exclusion or a precheck
-stop after some references) has streamed those references for a discarded result: at most the
-units charged so far, so at most the time of a Contained archive at the same cap (measured: the
-hostile `workLimit` archives take 2.1 s instead of 0.16 s at the default cap).
+**VS-B-4. Phase 2 after admission, from a stream log (A-C2-2.2–3, amended after audit).**
+The reference list and the content-volume list are removed. A reference ORs its chain, content
+and URI exclusion bits as before; while in domain it builds its level chain once and runs the
+precheck step. Phase 2 still runs only after whole-archive admission (C1 success, no exclusion,
+no precheck stop), as the old phase 2 and the H23 handoff require. Because no tile arena or
+reference list remains, the traversal writes a **stream log** while the archive is in domain:
+one record per tile registration (its input facts: parent position, depth, caller chain bits,
+transform, volume, external-content volume) and one per reference whose precheck step passed
+(its tile position, content volume and rank), in traversal order. The log stays in memory up to
+32 MiB and then goes to an append-only scratch file; it is dropped at the first registration or
+reference that finds the archive out of domain, since no stream will then run. After admission
+the log is read once: tile records rebuild the path stack exactly as during traversal (VS-B-3),
+and each reference record builds its level chain from it and is streamed with the old phase 2's
+state: the phase-1 arena (or one reserved before the first reference, as before), one bitmap,
+the corner credit accrued by `T(u)` per reference and the re-read counter against
+`containmentBytesRead`. The first failure (Outside, allocation refusal, containment fault,
+re-read failure) is the result. So the outcome precedence (R8) and every streamed byte are the
+old phase 2's, and an archive that leaves the domain streams nothing. The audit measured the
+first, inline design at 0.31 s to 3.9 s on the hostile `workLimit` archives; with the log they
+take 0.17–0.19 s again.
+
+*Why a log (the design's "spilled replay only where inline would break the memory bound").*
+Streaming inline needs no storage but streams references whose result is discarded when the
+archive later leaves the domain; keeping the references in memory would grow with the archive.
+The log is the only bounded way to stream after admission: memory at most 32 MiB, disk at most
+about 350 B per in-domain tile and 130 B per in-domain reference, which the visit and reference
+budgets bound. Its scratch is not in the preflight estimate, because tiles are not known from
+the end record; a full disk is a typed `io` failure.
 
 **VS-B-5. Per-URI facts (M7, M8).** The per-URI table, its name map and the count rows are
 replaced by a second bit per rank (inspected) and the facts record, written at the first
@@ -120,8 +129,10 @@ the exclusion bits and the precheck). The record holds the C2 facts exactly (`Ur
 `Nodes` or overflow, `Idx`, `E`, `B`, `Dec`, `J`, `Res`, `Prim`, the maximum node depth, the
 exclusion bits), the vertex count and the replay receipt (VS-B-11). The store is chosen from N
 before traversal, like the catalog (CAT-5): rank-indexed pages of 64 records in memory when
-`N·195 ≤ 100 MiB` (every archive within the default entry limit 2^19), otherwise a rank-indexed scratch file read and written one
-record at a time. The forced-spill profile always uses the file. Repeat references are never
+`N·199 ≤ 100 MiB` (every archive within the default entry limit 2^19), otherwise a rank-indexed
+scratch file read and written one record at a time, included in the scratch preflight estimate.
+Every record carries a CRC-32 checked on read; a mismatch is `invalid_state` "validation
+scratch: payload facts record R is corrupt", never a verdict. The forced-spill profile always uses the file. Repeat references are never
 re-inspected and never re-charged (C1 semantics unchanged). Recomputing evicted facts was
 rejected: it costs `Σ_refs size(u)`, which is not linear in S when more distinct payloads than
 a cache holds are referenced in rotation.
@@ -133,7 +144,11 @@ through an owner tag (recorder serial, local index) stored in the stack entry. S
 the events of recorders in progress are charged to a memo budget of 64 MiB (event size plus the
 document name). A recorder whose next event would exceed it becomes opaque and frees its events;
 its document then gets no summary, so later placements are traversed in full (EM-6 fallback),
-which gives the reference traversal's result by EM-1. Summaries are never evicted. So the memo
+which gives the reference traversal's result by EM-1. A summary also records the largest
+live-document charge of its expansion above the placement (VS-B-7), its own document and
+replayed nested placements included; a placement uses it only if that charge fits the limit
+beside the documents already live, so `liveDocumentBytes` gives the same verdict whether or not
+the memo is used (EM-6 fallback otherwise). Summaries are never evicted. So the memo
 is bounded, and with a full memo the work is still the logical charge of EM-2, bounded by the
 budgets of VS-B-2.
 
@@ -186,7 +201,7 @@ first, full C1 inspection of a payload yields a private 64-byte receipt: the SHA
 member bytes (with the payload kind) and of the ordered transcript of its external buffer and
 image resolutions (each entry `u64 URI length, URI, u64 byte length, bytes`, the full returned
 bytes). It exists only after that inspection succeeded, and is stored in the payload's facts
-record (VS-B-5), so a record is 195 bytes. Step 1 of the stream is now: re-read the member and
+record (VS-B-5), so a record is 199 bytes with its CRC. Step 1 of the stream is now: re-read the member and
 replay it against that receipt (`payload::replay_scene`). Replay checks the member's byte
 allowance, then its digest before interpreting any layout; resolves every external resource in
 the original order under the original limits, charging the re-read to `containmentBytesRead` as
@@ -199,17 +214,15 @@ the replay (which does no more work than the full inspection plus linear hashing
 already counts).
 
 - **Admission order.** A receipt is written only after its payload's full first admission
-  succeeded, and replay runs only for a reference whose precheck step passed while the archive
-  was in domain (VS-B-4). The stream's outcome is published only after whole-archive C1
-  admission, with no exclusion and no precheck stop. So replay never decides a C1 verdict, and
-  no replayed result reaches a report unless the whole archive was admitted.
+  succeeded, and replay runs only after whole-archive C1 admission with no exclusion and no
+  precheck stop (VS-B-4), as the handoff requires. So replay never decides a C1 verdict.
 - **Trust.** Receipts are read back only from this validation's own facts store, for a rank
   whose inspected bit it set, during the same validation. They are never decoded from archive
   bytes, reports or metadata, and never outlive the validation (the store is dropped before the
   report rows are ordered).
 - **Persistence bound.** One receipt per inspected member, inside its record: resident at most
-  `N·195` bytes when that fits 100 MiB (97.5 MiB at the default entry limit of 2^19), otherwise
-  in the rank-indexed scratch file (`N·195` bytes of disk, one record read per reference).
+  `N·199` bytes when that fits 100 MiB (99.5 MiB at the default entry limit of 2^19), otherwise
+  in the rank-indexed scratch file (`N·199` bytes of disk, one record read per reference).
 - **Unchanged bytes.** For bytes identical to the first admission, replay produces the same
   consumer events, facts and failures as the full inspection did (the old step 1), so every
   verdict and message is unchanged.
@@ -238,10 +251,11 @@ Traversal memory that depends on the archive (design §1.4, `M_walk`) is now con
 
 | Term | Bound |
 | --- | --- |
-| Bits per rank (used, inspected, subtree) | `3·⌈N/64⌉·8/8` B, 64 MiB at the member ceiling |
+| Bits per rank (used, inspected, subtree) | `24·⌈N/64⌉` B, 64 MiB at the member ceiling |
 | Path stack and level chain | `(hierarchyDepth + 2)` entries of about 400 B each |
 | C2 arenas, bitmap | two arenas of `(16·(nodeDepth + 1) + 32)` values (about 0.56 MiB each), bitmap ≤ `accessorElements/8` B |
 | Facts (receipts included) | resident ≤ 100 MiB; spilled: one record |
+| Stream log | resident ≤ 32 MiB; then scratch |
 | Memo | ≤ 64 MiB plus a summary header per summarized document within it |
 | Live documents | ≤ `liveDocumentBytes` (estimate: raw + 128 B per value node) |
 | I1 live path | ≤ `documentDecodedBytes`, index tables included |
@@ -250,13 +264,14 @@ Traversal memory that depends on the archive (design §1.4, `M_walk`) is now con
 | One payload in flight | as C1 (`memberBytes`, `documentDecodedBytes`, accessor plans) |
 
 The catalog, the payload rows and their sorts are VS-A's. Disk: the facts file is
-`N·195` bytes, sparse where ranks have no payload.
+`N·199` bytes, sparse where ranks have no payload; the stream log (VS-B-4).
 
 ## Work bound
 
 Every traversal step is O(1) or linear in what it reads: a tile registration is O(1) (stack
 truncation is amortized against pushes); a reference costs its level chain (charged
-`8·(L+1)` units) once, not twice; a facts access is one page or one positioned read; a summary
+`8·(L+1)` units) at its precheck and again when streamed, as before; the stream log is written
+and read once, sequentially; a facts access is one page or one positioned read; a summary
 replay is O(tiles + references) of its expansion, each charged as visits and references; the
 schema check is linear in the document; each live-document charge is linear in its document.
 With the budgets of VS-B-2 the hostile classes (shared external tilesets, `Const1` subtrees,
@@ -281,9 +296,11 @@ as floors: at the floors, today's bounds hold unchanged.
    `archive3tz::` and `content_integrity::implicit` test in both catalog profiles, plus the C1
    CLI oracles, with 0 disagreements. The I1 oracle models the index-table charge from this
    text (separate author).
-2. **Controls** (`src/validate/traversal_controls.rs`): outcome precedence with inline
-   streaming (Outside then a later exclusion, Outside then a later precheck stop, exclusion
-   after a passing stream, a stream failure kept behind a later C1 failure); the path stack
+2. **Controls** (`src/validate/traversal_controls.rs`): outcome precedence with the stream
+   after admission (Outside then a later exclusion, Outside then a later precheck stop,
+   exclusion after a passing reference, an Outside behind a later C1 failure); the
+   live-document verdict in both memo modes (the audit probe); the stream log resident and
+   spilled; the path stack
    against deep, wide, deferred-reference, implicit and replayed placements; the facts store in
    both profiles; memo exhaustion against the reference traversal; `liveDocumentBytes` at the
    charge and one below; the I1 table charge at the cap and one below; the label cap; the
