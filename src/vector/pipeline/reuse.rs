@@ -444,12 +444,16 @@ impl Reuse {
         for (key, record) in self.old.range(path.to_string()..format!("{path}~")) {
             self.records.insert(key.clone(), record.clone());
         }
-        counters.fragments = counters.fragments + record.fragments - current_fragments;
+        // The restored leaves' own total: a record from an earlier partial reuse can count
+        // a restored descendant's split feature as one row.
+        let fragments = records::leaf_fragments(&tree)?;
+        counters.fragments = counters.fragments + fragments - current_fragments;
         self.reused_subtrees += 1;
         Ok(Some(Node {
             tree,
             center: record.center,
             padding: record.padding,
+            fragments,
         }))
     }
     pub fn remember(
@@ -457,7 +461,6 @@ impl Reuse {
         path: &str,
         signature: String,
         node: &mut Node,
-        fragments: usize,
     ) -> Result<(), Error> {
         records::set_build_path(node.tree.record_mut(), path)?;
         self.records.insert(
@@ -466,7 +469,7 @@ impl Reuse {
                 signature,
                 center: node.center,
                 padding: node.padding,
-                fragments,
+                fragments: node.fragments,
                 cut: self.cuts.get(path).cloned(),
             },
         );
@@ -517,10 +520,6 @@ impl Reuse {
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 fn unhex(text: &str) -> Option<[u8; 32]> {
     let mut result = [0; 32];
     if text.len() != 64
@@ -542,7 +541,7 @@ fn payload_map(forest: &ForestOutput) -> BTreeMap<String, Payload> {
     let mut map = BTreeMap::new();
     for content in forest.tiles.iter().flat_map(|tile| &tile.contents) {
         if let Some(record) = &content.rebase {
-            map.entry(hex(&record.raw_sha256))
+            map.entry(records::hex(&record.raw_sha256))
                 .or_insert_with(|| Payload {
                     member: content.member.clone(),
                     delta: record.delta,

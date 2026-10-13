@@ -114,12 +114,13 @@ pub(super) struct Counters {
     pub skipped_features: usize,
     pub features_without_geometry: usize,
 }
-/// A built subtree of H, with the z-up centre of its original points and the largest
-/// content padding within it.
+/// A built subtree of H, with the z-up centre of its original points, the largest content
+/// padding within it and the source fragments its full-detail leaves hold.
 pub(super) struct Node {
     pub tree: VectorTree,
     pub center: Point,
     pub padding: f64,
+    pub fragments: usize,
 }
 struct Reports {
     file: Box<dyn Write>,
@@ -564,10 +565,16 @@ impl Build<'_> {
                 .maximum_tile_bytes
                 .max(statistics.encoded_bytes);
         }
+        let fragments = if children.is_empty() {
+            records::own_fragments(&record)?
+        } else {
+            children.iter().map(|n| n.fragments).sum()
+        };
         Ok(Node {
             tree: TileTree::new(record, children.into_iter().map(|n| n.tree).collect()),
             center: zcenter,
             padding,
+            fragments,
         })
     }
     fn build(&mut self, prefix: &str, depth: usize) -> Result<Node, Error> {
@@ -586,8 +593,9 @@ impl Build<'_> {
             return Ok(node);
         }
         let mut node = self.build_uncached(prefix, depth)?;
-        let count = self.stats(prefix)?.count;
-        self.reuse.remember(prefix, signature, &mut node, count)?;
+        // The subtree's own leaf total, not the spool rows under `prefix`: rows inside a
+        // restored descendant keep their unsplit form.
+        self.reuse.remember(prefix, signature, &mut node)?;
         Ok(node)
     }
     fn build_uncached(&mut self, prefix: &str, depth: usize) -> Result<Node, Error> {
@@ -943,11 +951,12 @@ pub(super) fn convert(
             tree: TileTree::new(TileRecord::empty_root(None)?, Vec::new()),
             center: [0.; 3],
             padding: 0.,
+            fragments: 0,
         };
         build.counters.tiles = 1;
         build
             .reuse
-            .remember("", build.reuse.signature(&db, "")?, &mut node, 0)?;
+            .remember("", build.reuse.signature(&db, "")?, &mut node)?;
         node
     };
     // Identity accounting: every source fragment is in exactly one full-detail leaf.

@@ -3254,7 +3254,8 @@ mod records_tests {
             let (tree, document) = typed(Some(&spec), true);
             let (_, raw) = legacy(Some(&spec), true);
             for member in raw.keys() {
-                let cases: [(&str, fn(&Path)); 3] = [
+                type Tamper = (&'static str, fn(&Path));
+                let cases: [Tamper; 3] = [
                     ("missing", |path| std::fs::remove_file(path).unwrap()),
                     ("length", |path| {
                         let mut bytes = std::fs::read(path).unwrap();

@@ -147,23 +147,32 @@ pub(super) fn leaf_fragments(tree: &VectorTree) -> Result<usize, Error> {
     let mut stack = vec![tree];
     while let Some(tile) = stack.pop() {
         if tile.children().is_empty() {
-            for content in tile.record().contents() {
-                match content.sources() {
-                    SourceIdentity::Features { count, .. } | SourceIdentity::Reused { count } => {
-                        total += count as usize
-                    }
-                    SourceIdentity::Aggregate => {
-                        return Err(data("a full-detail vector leaf holds point aggregates"))
-                    }
-                }
-            }
+            total += own_fragments(tile.record())?;
         }
         stack.extend(tile.children());
     }
     Ok(total)
 }
 
-fn hex(bytes: &[u8]) -> String {
+/// The source fragments a full-detail (leaf) record's contents hold. A content's count is
+/// its spool fragments (`featureFragments`); outline pieces of one source boundary are
+/// separate fragments, so a GLB can hold fewer `_source_id` features than this.
+pub(super) fn own_fragments(record: &VectorRecord) -> Result<usize, Error> {
+    let mut total = 0usize;
+    for content in record.contents() {
+        match content.sources() {
+            SourceIdentity::Features { count, .. } | SourceIdentity::Reused { count } => {
+                total += count as usize
+            }
+            SourceIdentity::Aggregate => {
+                return Err(data("a full-detail vector leaf holds point aggregates"))
+            }
+        }
+    }
+    Ok(total)
+}
+
+pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -266,6 +275,18 @@ pub(super) fn previous_record(
                 .map_err(|_| refused("a tile has unexpected extras"))?,
         ),
     };
+    match &extras {
+        // Routing tiles always record `routing: true` and their reason, `null` included.
+        Some(VectorTileExtras::Routing(routing))
+            if !routing.routing || object["extras"].get("routingReason").is_none() =>
+        {
+            return Err(refused("a routing tile has unexpected extras"));
+        }
+        Some(VectorTileExtras::Content(_)) if object.get("content").is_none() => {
+            return Err(refused("a tile without content has content statistics"));
+        }
+        _ => {}
+    }
     let mut contents = Vec::new();
     if let Some(content) = object.get("content") {
         let marker = serde_json::json!({ CONTENT_GLTF_VECTOR: {"vector": true} });
@@ -479,6 +500,10 @@ mod tests {
         assert_eq!(again, tree);
     }
 
+    fn json_set(key: &'static str, value: Value) -> Box<dyn Fn(&mut Value)> {
+        Box::new(move |v| v["extras"][key] = value.clone())
+    }
+
     /// Anything this producer does not write is refused with the rebuild message.
     #[test]
     fn previous_hierarchy_refuses_foreign_members() {
@@ -543,7 +568,33 @@ mod tests {
                 "integer error",
                 Box::new(|v| v["geometricError"] = serde_json::json!(1)),
             ),
+            (
+                "statistics without content",
+                Box::new(|v| {
+                    v.as_object_mut().unwrap().remove("content");
+                }),
+            ),
         ];
+        // The routing root: `routing` must be true and `routingReason` present.
+        for (label, mutate) in [
+            (
+                "routing false",
+                json_set("routing", serde_json::json!(false)),
+            ),
+            (
+                "no reason",
+                Box::new(|v: &mut Value| {
+                    v["extras"].as_object_mut().unwrap().remove("routingReason");
+                }) as Mutation,
+            ),
+        ] {
+            let mut node = written.clone();
+            mutate(&mut node);
+            assert!(
+                matches!(read(&node, false, &lengths), Err(Error::Data(m)) if m.contains("fresh conversion")),
+                "{label}"
+            );
+        }
         for (label, mutate) in cases {
             let mut node = child.clone();
             mutate(&mut node);

@@ -362,7 +362,8 @@ impl Observer for Tamper {
 
 #[test]
 fn staged_payload_mismatch_publishes_nothing() {
-    let cases: [(fn(&Path), &str); 3] = [
+    type Alteration = (fn(&Path), &'static str);
+    let cases: [Alteration; 3] = [
         (|path| fs::remove_file(path).unwrap(), "is missing"),
         (
             |path| {
@@ -439,4 +440,68 @@ fn observer_fault_at_ready_to_publish_publishes_nothing() {
         Some(Arc::new(FailAtPublish)),
         "observer refuses publication",
     );
+}
+
+/// Reuse bookkeeping: build 1 splits a long line into fragments; build 2 edits another
+/// feature, so the line's subtree is restored and the root rebuilt; build 3 reuses build 2
+/// with the same input. Every build's full-detail leaves hold every fragment once, and the
+/// unchanged rebuild republishes build 2.
+#[test]
+fn reuse_after_partial_reuse_of_a_split_feature_keeps_fragment_accounting() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("split.geojson");
+    let write = |name: &str| {
+        let line: Vec<Value> = (0..400)
+            .map(|i| json!([i as f64, (i % 7) as f64 * 0.25, 0.0]))
+            .collect();
+        fs::write(
+            &source,
+            json!({"type":"FeatureCollection","features":[
+                {"type":"Feature","id":"long","properties":{"name":"long"},
+                 "geometry":{"type":"LineString","coordinates":line}},
+                {"type":"Feature","id":"p1","properties":{"name":"p1"},
+                 "geometry":{"type":"Point","coordinates":[900.0,5.0,0.0]}},
+                {"type":"Feature","id":"p2","properties":{"name":name},
+                 "geometry":{"type":"Point","coordinates":[950.0,-5.0,0.0]}}]})
+            .to_string(),
+        )
+        .unwrap();
+    };
+    let options = |previous: Option<&Path>| VectorOptions {
+        source_crs: Some("local".into()),
+        max_vertices: 64,
+        reuse_tileset: previous.map(Path::to_path_buf),
+        ..options(1)
+    };
+    write("before");
+    let first = root.path().join("first.3tz");
+    let one = convert(&source, &first, options(None));
+    let report = json_member(&one, "conversion.json");
+    assert!(
+        report["fragments"].as_u64().unwrap() > 3,
+        "the line is split: {report}"
+    );
+    write("after");
+    let second = root.path().join("second.3tz");
+    let two = convert(&source, &second, options(Some(&first)));
+    let report = json_member(&two, "conversion.json");
+    assert!(
+        report["reuse"]["reusedSubtrees"].as_u64().unwrap() >= 1,
+        "{report}"
+    );
+    assert!(
+        report["reuse"]["rebuiltContents"].as_u64().unwrap() >= 1,
+        "{report}"
+    );
+    let third = root.path().join("third.3tz");
+    let three = convert(&source, &third, options(Some(&second)));
+    let report = json_member(&three, "conversion.json");
+    assert_eq!(report["reuse"]["rebuiltContents"], 0, "{report}");
+    assert_eq!(
+        report["fragments"],
+        json_member(&two, "conversion.json")["fragments"]
+    );
+    for name in ["tileset.json", "vector-build.json"] {
+        assert_eq!(three[name], two[name], "{name}");
+    }
 }
