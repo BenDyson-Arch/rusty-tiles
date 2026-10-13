@@ -1,0 +1,322 @@
+//! Per-URI facts at archive scale (VS-B-5).
+//!
+//! The first inspection of a payload writes one fixed-width record, keyed by the member's
+//! catalog rank: its C2 facts and its vertex count. Every later reference reads it back. The
+//! store is chosen once from the entry count, like the catalog: rank-indexed pages in memory
+//! when every record fits [`CatalogConfig::facts_resident_bytes`], otherwise a rank-indexed
+//! scratch file read and written one record at a time.
+use super::containment::{Bound, Pair, ReferenceFacts, UriBounds};
+use super::{refused, spill_failure, Bits, Error, UriFacts};
+use crate::archive3tz::CatalogConfig;
+use crate::spill::{Scratch, SlotFile};
+
+/// Encoded record width.
+pub(super) const WIDTH: usize = 131;
+/// Records per resident page.
+const PAGE: u64 = 64;
+
+/// One payload URI's facts as every later reference needs them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Stored {
+    pub facts: UriFacts,
+    /// The C1 vertex count of the payload, for the per-tile budgets.
+    pub vertices: u64,
+}
+
+fn encode(stored: &Stored, out: &mut [u8; WIDTH]) {
+    let f = &stored.facts;
+    let mut flags = 0u8;
+    let mut at = 1;
+    let mut put = |out: &mut [u8; WIDTH], bytes: &[u8]| {
+        out[at..at + bytes.len()].copy_from_slice(bytes);
+        at += bytes.len();
+    };
+    match &f.bounds {
+        Some(bounds) => {
+            flags |= 1;
+            for (i, bound) in bounds.pair0.iter().enumerate() {
+                let Pair(lo, hi) = match bound {
+                    Bound::Zero => {
+                        flags |= 4 << i;
+                        Pair(0, 0)
+                    }
+                    Bound::P(pair) => *pair,
+                };
+                put(out, &lo.to_le_bytes());
+                put(out, &hi.to_le_bytes());
+            }
+            put(out, &bounds.s_inst.to_le_bytes());
+            put(out, &bounds.s_pos.to_le_bytes());
+        }
+        None => put(out, &[0; 40]),
+    }
+    if f.nodes.is_some() {
+        flags |= 2;
+    }
+    let r = &f.per_reference;
+    for word in [
+        f.t,
+        f.nodes.unwrap_or(0),
+        f.idx,
+        f.e,
+        r.b,
+        r.dec,
+        r.json_nodes,
+        r.external_resources,
+        r.instance_primitives,
+        f.max_depth,
+    ] {
+        put(out, &word.to_le_bytes());
+    }
+    put(out, &f.exclusions.to_le_bytes());
+    put(out, &stored.vertices.to_le_bytes());
+    debug_assert_eq!(at, WIDTH);
+    out[0] = flags;
+}
+
+fn decode(bytes: &[u8; WIDTH]) -> Stored {
+    let flags = bytes[0];
+    let i32_at = |at: usize| i32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    let u64_at = |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
+    let bounds = (flags & 1 != 0).then(|| UriBounds {
+        pair0: std::array::from_fn(|i| {
+            if flags & (4 << i) != 0 {
+                Bound::Zero
+            } else {
+                Bound::P(Pair(i32_at(1 + 8 * i), i32_at(5 + 8 * i)))
+            }
+        }),
+        s_inst: u32_at(33),
+        s_pos: u32_at(37),
+    });
+    let word = |k: usize| u64_at(41 + 8 * k);
+    Stored {
+        facts: UriFacts {
+            bounds,
+            t: word(0),
+            nodes: (flags & 2 != 0).then(|| word(1)),
+            idx: word(2),
+            e: word(3),
+            per_reference: ReferenceFacts {
+                b: word(4),
+                dec: word(5),
+                json_nodes: word(6),
+                external_resources: word(7),
+                instance_primitives: word(8),
+            },
+            max_depth: word(9),
+            exclusions: u16::from_le_bytes([bytes[121], bytes[122]]),
+        },
+        vertices: u64_at(123),
+    }
+}
+
+enum Slots {
+    /// `⌈N/64⌉` page slots, each allocated at its first record.
+    Resident(Vec<Option<Box<[u8]>>>),
+    Spilled(SlotFile),
+}
+
+/// The inspected bit per rank and the records behind it.
+pub(super) struct FactStore {
+    inspected: Bits,
+    slots: Option<Slots>,
+    entries: u64,
+    resident: bool,
+}
+
+impl FactStore {
+    /// The store for `entries` members; nothing is allocated or created before the first
+    /// record.
+    pub(super) fn new(entries: u64, config: &CatalogConfig) -> Result<Self, Error> {
+        Ok(Self {
+            inspected: Bits::new(entries)?,
+            slots: None,
+            entries,
+            resident: entries
+                .checked_mul(WIDTH as u64)
+                .is_some_and(|bytes| bytes <= config.facts_resident_bytes),
+        })
+    }
+
+    pub(super) fn inspected(&self, rank: u64) -> bool {
+        self.inspected.get(rank)
+    }
+
+    /// Records the first inspection of the member at `rank`.
+    pub(super) fn insert(
+        &mut self,
+        rank: u64,
+        stored: &Stored,
+        scratch: &Scratch,
+    ) -> Result<(), Error> {
+        if self.inspected.get(rank) {
+            return Err(Error::InvalidState(
+                "payload facts recorded twice for one member".into(),
+            ));
+        }
+        let mut record = [0u8; WIDTH];
+        encode(stored, &mut record);
+        let slots = match &mut self.slots {
+            Some(slots) => slots,
+            None => {
+                let slots = if self.resident {
+                    let pages = usize::try_from(self.entries.div_ceil(PAGE))
+                        .map_err(|_| Error::limit("archive entry count exceeds host range"))?;
+                    let mut table = Vec::new();
+                    table.try_reserve_exact(pages).map_err(|_| refused())?;
+                    table.resize_with(pages, || None);
+                    Slots::Resident(table)
+                } else {
+                    Slots::Spilled(
+                        SlotFile::new(scratch, "uri-facts", WIDTH).map_err(spill_failure)?,
+                    )
+                };
+                self.slots.insert(slots)
+            }
+        };
+        match slots {
+            Slots::Resident(pages) => {
+                let page = &mut pages[(rank / PAGE) as usize];
+                if page.is_none() {
+                    let mut bytes = Vec::new();
+                    bytes
+                        .try_reserve_exact(PAGE as usize * WIDTH)
+                        .map_err(|_| refused())?;
+                    bytes.resize(PAGE as usize * WIDTH, 0);
+                    *page = Some(bytes.into_boxed_slice());
+                }
+                let at = (rank % PAGE) as usize * WIDTH;
+                page.as_mut().unwrap()[at..at + WIDTH].copy_from_slice(&record);
+            }
+            Slots::Spilled(file) => file.write(rank, &record).map_err(spill_failure)?,
+        }
+        self.inspected.set(rank);
+        Ok(())
+    }
+
+    /// The record of an inspected member.
+    pub(super) fn get(&self, rank: u64) -> Result<Stored, Error> {
+        if !self.inspected.get(rank) {
+            return Err(Error::InvalidState(
+                "payload facts read before the first inspection".into(),
+            ));
+        }
+        let mut record = [0u8; WIDTH];
+        match &self.slots {
+            Some(Slots::Resident(pages)) => {
+                let page = pages[(rank / PAGE) as usize]
+                    .as_ref()
+                    .ok_or_else(|| Error::InvalidState("payload facts page missing".into()))?;
+                let at = (rank % PAGE) as usize * WIDTH;
+                record.copy_from_slice(&page[at..at + WIDTH]);
+            }
+            Some(Slots::Spilled(file)) => file.read(rank, &mut record).map_err(spill_failure)?,
+            None => {
+                return Err(Error::InvalidState("payload facts store is empty".into()));
+            }
+        }
+        Ok(decode(&record))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample(seed: u64) -> Stored {
+        let bound = |k: u64| {
+            if (seed >> k) & 1 == 0 {
+                Bound::Zero
+            } else {
+                Bound::P(Pair(-(seed as i32) - k as i32, (seed as i32) ^ 0x5a5a))
+            }
+        };
+        Stored {
+            facts: UriFacts {
+                bounds: (seed % 3 != 0).then(|| UriBounds {
+                    pair0: std::array::from_fn(|i| bound(i as u64)),
+                    s_inst: seed as u32 ^ 7,
+                    s_pos: u32::MAX - seed as u32,
+                }),
+                t: seed.wrapping_mul(0x9e37_79b9_7f4a_7c15),
+                nodes: (seed % 5 != 0).then_some(seed << 3),
+                idx: !seed,
+                e: seed + 1,
+                per_reference: ReferenceFacts {
+                    b: seed + 2,
+                    dec: seed + 3,
+                    json_nodes: seed + 4,
+                    external_resources: seed + 5,
+                    instance_primitives: seed + 6,
+                },
+                max_depth: u64::MAX - seed,
+                exclusions: (seed as u16).rotate_left(3),
+            },
+            vertices: seed ^ u64::MAX,
+        }
+    }
+
+    #[test]
+    fn records_round_trip_every_field() {
+        for seed in 0..200u64 {
+            let stored = sample(seed);
+            let mut bytes = [0u8; WIDTH];
+            encode(&stored, &mut bytes);
+            assert_eq!(decode(&bytes), stored, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn resident_and_spilled_stores_agree() {
+        let scratch = Scratch::deferred(
+            crate::spill::Placement::In(
+                std::env::var_os("TMPDIR")
+                    .map_or_else(std::env::temp_dir, std::path::PathBuf::from),
+            ),
+            0,
+        );
+        let entries = 1000;
+        let mut stores = [
+            FactStore::new(entries, &CatalogConfig::DEFAULT).unwrap(),
+            FactStore::new(entries, &CatalogConfig::FORCED_SPILL).unwrap(),
+        ];
+        assert!(stores[0].resident && !stores[1].resident);
+        let ranks: Vec<u64> = (0..entries)
+            .map(|i| (i * 617) % entries)
+            .step_by(3)
+            .collect();
+        for store in &mut stores {
+            for &rank in &ranks {
+                store.insert(rank, &sample(rank), &scratch).unwrap();
+            }
+            assert!(store.insert(ranks[0], &sample(0), &scratch).is_err());
+            for rank in 0..entries {
+                assert_eq!(store.inspected(rank), ranks.contains(&rank));
+                if store.inspected(rank) {
+                    assert_eq!(store.get(rank).unwrap(), sample(rank));
+                } else {
+                    assert!(matches!(store.get(rank), Err(Error::InvalidState(_))));
+                }
+            }
+        }
+        assert!(scratch.is_created(), "the forced profile spills");
+    }
+
+    #[test]
+    fn default_profile_keeps_the_default_entry_limit_resident() {
+        let limit = crate::validate::ValidationLimits::default().archive_entries;
+        assert!(
+            FactStore::new(limit, &CatalogConfig::DEFAULT)
+                .unwrap()
+                .resident
+        );
+        let over = CatalogConfig::DEFAULT.facts_resident_bytes / WIDTH as u64 + 1;
+        assert!(
+            !FactStore::new(over, &CatalogConfig::DEFAULT)
+                .unwrap()
+                .resident
+        );
+    }
+}

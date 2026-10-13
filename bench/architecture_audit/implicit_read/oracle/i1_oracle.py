@@ -1125,7 +1125,23 @@ def admit_subtree(st, root, level, gx, gy, gz):
     if E > st.lim["references"] - st.refs:
         resource("references", "content index reservation exceeds references", f"{stage} §2a.10")
     st.refs += E
-    # §2a step 11: rank table (nothing to model).
+    # VS-B-8 (amendment 7): the availability index tables are charged to the live-path limit, after the step-10
+    # reservation and before any allocation.  Rank table: 4 * ceil(T/64) for a bitstream tile source.  When E > 0:
+    # offsets 4 * (P_t + 1), slots 2 * E, and per-source positions 4 * popcount over the distinct bitstream
+    # sources (distinct (bufferView, bit count) pairs; aliasing slots count once) used by contentAvailability.
+    # Over (limit - live bytes already on the path, including this subtree's own member and external buffers)
+    # is ResourceLimit document_decoded_bytes; otherwise the charge joins this subtree's held bytes.
+    charge = 4 * ((N_T + 63) // 64) if tile_src.kind == "V" else 0
+    if E > 0:
+        distinct = {id(s): s for s in content_src if s.kind == "V"}
+        charge += 4 * (P_t + 1) + 2 * E + 4 * sum(s.popcount for s in distinct.values())
+    if charge > st.lim["document_decoded_bytes"] - st.live:
+        resource("document_decoded_bytes", "subtree availability index exceeds the live subtree byte limit",
+                 f"{stage} §2a.10")
+    st.live += charge
+    sub.held += charge
+    st.max_live = max(st.max_live, st.live)
+    # §2a step 11: rank table (charged above).
     # §2a step 12 / §5: property tables.
     tables = js.get("propertyTables", [])
     doc = root.doc

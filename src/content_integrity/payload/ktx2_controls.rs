@@ -222,6 +222,7 @@ fn texture_and_image_rules_follow_the_extension() {
         .not_inspected
         .contains("KTX2 level data and transcoding"));
     assert!(!report.not_inspected.contains(EXT));
+    assert!(!report.extensions.contains(EXT));
     // A PNG fallback makes extensionsRequired optional; without one it is required.
     let fallback = json!({"source":1,"extensions":{EXT:{"source":0}}});
     assert!(payload(&textured(fallback, mime.clone(), &[EXT], &[], &ktx2)).is_ok());

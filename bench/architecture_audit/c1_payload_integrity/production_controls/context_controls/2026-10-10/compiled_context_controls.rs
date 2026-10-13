@@ -34,6 +34,7 @@ fn selected_limits() -> ValidationLimits {
         containment_bytes_read: 2147483648,
         containment_decoded_bytes: 2147483648,
         containment_node_depth: 64,
+        live_document_bytes: 268435456,
     }
 }
 
@@ -61,6 +62,7 @@ fn declared_limits_json(limits: &ValidationLimits) -> Value {
         "containmentBytesRead": limits.containment_bytes_read,
         "containmentDecodedBytes": limits.containment_decoded_bytes,
         "containmentNodeDepth": limits.containment_node_depth,
+        "liveDocumentBytes": limits.live_document_bytes,
     })
 }
 

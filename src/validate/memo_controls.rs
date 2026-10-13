@@ -56,7 +56,7 @@ struct Outcome {
 }
 fn inspect_with(path: &Path, limits: ValidationLimits, memoize: bool) -> Outcome {
     MEMOIZE.with(|m| m.set(memoize));
-    let inspection = inspect_facts(ValidationRequest::new(path), limits);
+    let inspection = inspect_facts(ValidationRequest::new(path), Budgets::Absolute(limits));
     MEMOIZE.with(|m| m.set(true));
     match inspection {
         Ok(inspection) => Outcome {

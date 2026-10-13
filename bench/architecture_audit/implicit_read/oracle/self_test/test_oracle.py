@@ -333,6 +333,13 @@ def test_live_path_and_dedup():
     check("dedup: Scan counts one distinct view", rec["counts"]["scanBytes"] == (T + 7) // 8)
     check("dedup: E counts aliases once per slot", rec["counts"]["emittedContents"] == 6
           and rec["counts"]["referencesCharged"] == 1 + 6)
+    # VS-B-8: rank 4*ceil(5/64) = 4, offsets 4*(2+1), slots 2*6, positions 4*2 (one distinct source): 36 B.
+    held = len(m["s/0/0/0.st"]) + 4 + 4 * 3 + 2 * 6 + 4 * 2
+    check("VS-B-8: tables join the live bytes", rec["counts"]["maxLivePathBytes"] == held)
+    check("VS-B-8: cap accepts", O.evaluate(path, {"document_decoded_bytes": held})["verdict"]["kind"] == "Accepted")
+    rl = O.evaluate(path, {"document_decoded_bytes": held - 1})
+    check("VS-B-8: cap - 1 refuses at the charge", rl["verdict"]["limit"] == "document_decoded_bytes"
+          and "availability index" in rl["verdict"]["reason"])
     os.unlink(path)
 
 

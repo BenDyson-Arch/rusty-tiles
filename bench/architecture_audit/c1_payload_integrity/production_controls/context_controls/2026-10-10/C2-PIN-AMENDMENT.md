@@ -83,3 +83,15 @@ entries are kept as history but no longer compared.
 | --- | --- | --- | --- |
 | `compiled_context_controls.rs` | `a142a385b07676102f82ce93e37d55d01e0dca99033466ab3ce42c4c8b0a8fb9` (I1 amendment) | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` | An `Outcome` (admitted, resource limit, unsupported) replaces the admitted flag; the three `b3dm-*` controls expect Unsupported |
 | `tests/payload_context_receipt.py` | `9a1eb507001fe8553d4ced0abb00303136c30fbc6967a8675335fa2fdc7ea91f` | `ffa0243acadfcc4241185b9ffabfde1b0423cbbe43bb4fc40d359534ab90b582` | The 82-execution receipt expects 35 admitted, 29 ResourceLimit and 18 Unsupported rows (was 44 and 38) and checks that exactly the b3dm controls' 18 runs are Unsupported |
+
+## VS-B amendment (live documents, 2026-10-14)
+
+The [VS-B traversal amendment](../../../../../../docs/architecture/validator-traversal-scale-amendment.md)
+adds the per-item limit `liveDocumentBytes` (VS-B-7). These controls select every limit
+explicitly, so the struct literal gains `live_document_bytes` at its default (268435456) and
+the declared limits JSON gains `liveDocumentBytes`. No archive, member pin, expectation or
+other selected limit changed; `fixtures/manifest.json` is unchanged.
+
+| File | Previous sha256 | Amended sha256 | Reason |
+| --- | --- | --- | --- |
+| `compiled_context_controls.rs` | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` (H7 amendment) | `2fbb4240d67f93d4400e14015f859d070102cca6d6b90583cdba161790531e21` | `live_document_bytes` added at its default in the selected limits and the declared limits JSON |

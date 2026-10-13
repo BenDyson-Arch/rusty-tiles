@@ -41,7 +41,11 @@ pub(crate) struct PayloadInspection {
     pub elements_checked: u64,
     /// Bytes C1 materialized: owned external and data-URI buffers plus meshopt views.
     pub materialized_bytes: u64,
+    /// The inspector's own not-inspected labels.
     pub not_inspected: BTreeSet<String>,
+    /// Declared glTF extensions outside the supported set: archive-named labels, which the
+    /// operation bounds (VS-B-9).
+    pub extensions: BTreeSet<String>,
     /// C2 format-owned exclusion facts of this payload.
     pub exclusions: scene::ContentExclusions,
     /// `J(u)`: `value_nodes()` of the glTF JSON or GLB JSON chunk admitted here.
@@ -470,7 +474,8 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             usize::try_from(count).map_err(|_| limit("accessor count outside host range"))?;
         push(&mut accessor_plans, (a, count, shape), slots)?;
     }
-    let mut not_inspected = used
+    let mut not_inspected = BTreeSet::new();
+    let unsupported_extensions = used
         .iter()
         .filter(|s| !supported.contains(&s.as_str()))
         .cloned()
@@ -1267,6 +1272,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         elements_checked: elements as u64,
         materialized_bytes: materialized,
         not_inspected,
+        extensions: unsupported_extensions,
         exclusions,
         json_nodes,
         external_resources,

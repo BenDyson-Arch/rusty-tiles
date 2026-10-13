@@ -913,12 +913,17 @@ def family_r_large():
     sizes = sorted({len(v) for k, v in m.items() if k.endswith(".subtree")})
     assert len(sizes) == 1
     S = sizes[0]
-    live, cum = 6 * S, 63 * S
-    note = f"S = {S} B per subtree; maximum live sum 6S = {live}; cumulative 63S = {cum}"
+    # VS-B-8 (amendment 7): each subtree also holds its rank table, 4 * ceil(T/64) = 4 B (T = 1, tile availability
+    # a bitstream, no content so E = 0 and no content tables).  The table is charged after the member read, so the
+    # sixth subtree's charge, not its read, is the first to cross cap - 1.
+    RANK = 4 * ((1 + 63) // 64)
+    live, cum = 6 * (S + RANK), 63 * S
+    note = (f"S = {S} B per subtree plus a {RANK} B rank table; maximum live sum 6(S + {RANK}) = {live}; "
+            f"cumulative members 63S = {cum}")
     case("R2", m, "Accepted", limits={"document_decoded_bytes": live}, large=True, ref="R2 (cap = maximum live sum)",
          note=note, file="R2")
     case("R2-1", m, "ResourceLimit:document_decoded_bytes", limits={"document_decoded_bytes": live - 1}, large=True,
-         ref="R2 (one less: refused before the sixth read)", note=note, file="R2")
+         ref="R2 (one less: the sixth subtree's table charge is refused)", note=note, file="R2")
     case("R2b.mid", m, "Accepted", limits={"document_decoded_bytes": (live + cum) // 2}, large=True,
          ref="R2b (between live and cumulative)", note=note, file="R2")
     case("R2b.cum-1", m, "Accepted", limits={"document_decoded_bytes": cum - 1}, large=True,
@@ -1138,6 +1143,71 @@ def family_w():
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# VS-B-8 (amendment 7): the availability index tables are charged to the live-path limit.  Each pair sets
+# document_decoded_bytes to exactly (subtree member bytes + table charge): the cap accepts, cap - 1 is refused at the
+# charge (the member read itself still fits).  The charge is derived from the formula, never from running anything:
+#   4 * ceil(T/64)                                   when the tile availability is a bitstream (rank table)
+#   + 4 * (P_t + 1) + 2 * E + 4 * sum(popcount(v))   when E > 0, over distinct bitstream content sources v
+# A 4 KiB unused view pads the member so that the cap stays above any one C1 payload view budget.
+
+def vsb_archive(scheme, L, tiles, slots, force_bitstream):
+    pad_view = b"\x00" * 4096
+    b = Implicit(scheme, L, L, BQ_BOX, 64.0, tiles, slots)
+    b.rows_box = b.rows_error = False
+    b.force_bitstream = force_bitstream
+    b.tile_count = False
+    b.alias_content = True            # slots with equal bit sets share one bufferView (one source)
+    b.subtree_hooks = [lambda irs: [ir.extra_views.append(pad_view) for ir in irs.values()]]
+    return implicit_archive(b)
+
+
+def family_vsb():
+    def pair(cid, m, charge, what, note):
+        member = len(m[ROOT_SUB])
+        cap = member + charge
+        full = f"{note}; member {member} B + tables {charge} B = cap {cap}"
+        case(cid, m, "Accepted", limits={"document_decoded_bytes": cap}, ref=f"VS-B-8 {what} (cap = member + tables)",
+             note=full, file=cid)
+        case(f"{cid}-1", m, "ResourceLimit:document_decoded_bytes", limits={"document_decoded_bytes": cap - 1},
+             ref=f"VS-B-8 {what} (one less: the table charge is refused)", note=full, file=cid)
+
+    # VS-B-8.1: bitstream tile availability, no content: rank table only.  QUADTREE L = 4: T = 85, 4 * ceil(85/64) = 8.
+    T = offset(4, 4)
+    assert T == 85
+    tiles = [(0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 0, 0), (2, 0, 0, 0), (3, 0, 0, 0)]
+    pair("VSB8.rank", vsb_archive("QUADTREE", 4, tiles, [], True), 4 * ((T + 63) // 64),
+         "rank table only", "QUADTREE L=4 A=4, T=85, E=0, bitstream tiles")
+
+    # VS-B-8.2: content slots 1 and 2 alias one bitstream source (X, popcount 3), slot 3 uses another (Y, popcount 2).
+    # QUADTREE L = 3: T = 21 (rank 4), P_t = 6, E = 3 + 3 + 2 = 8, distinct popcounts 3 + 2 = 5:
+    # 4 + 4 * 7 + 2 * 8 + 4 * 5 = 68.  Counting the aliased slot twice would charge 4 * 8 = 32 for positions (+12).
+    T = offset(4, 3)
+    assert T == 21
+    tiles = [(0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 0, 0), (1, 0, 1, 0), (2, 0, 0, 0), (2, 1, 0, 0)]
+    X = {(0, 0, 0, 0), (1, 0, 0, 0), (2, 1, 0, 0)}
+    Y = {(1, 1, 0, 0), (2, 0, 0, 0)}
+    slots = [Slot("c/a/{level}/{x}/{y}.glb", X), Slot("c/b/{level}/{x}/{y}.glb", X),
+             Slot("c/c/{level}/{x}/{y}.glb", Y)]
+    P_t, E, pops = len(tiles), len(X) + len(X) + len(Y), len(X) + len(Y)
+    assert (P_t, E, pops) == (6, 8, 5)
+    pair("VSB8.alias", vsb_archive("QUADTREE", 3, tiles, slots, True),
+         4 * ((T + 63) // 64) + 4 * (P_t + 1) + 2 * E + 4 * pops,
+         "offsets, slots and deduplicated positions", "QUADTREE L=3 A=3, T=21, P_t=6, E=8, slots 1-2 alias X(3), slot 3 Y(2)")
+
+    # VS-B-8.3: constant-1 tile availability (every tile available) with a bitstream content source: no rank table.
+    # QUADTREE L = 2: T = 5 = P_t, one slot with 3 content tiles: 4 * 6 + 2 * 3 + 4 * 3 = 42.
+    T = offset(4, 2)
+    assert T == 5
+    tiles = [(0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 0, 0), (1, 0, 1, 0), (1, 1, 1, 0)]
+    X = {(0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 1, 0)}
+    P_t, E, pops = len(tiles), len(X), len(X)
+    assert P_t == T
+    pair("VSB8.const", vsb_archive("QUADTREE", 2, tiles, [Slot("c/{level}/{x}/{y}.glb", X)], False),
+         4 * (P_t + 1) + 2 * E + 4 * pops, "constant tiles, content bitstream (no rank table)",
+         "QUADTREE L=2 A=2, tiles constant 1, P_t=5, E=3")
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # Sanity: an explicit-only archive with the O payload (outside I1; checks that the payload passes C1)
 
 def family_z():
@@ -1170,6 +1240,7 @@ def build(large):
     family_d()
     family_t()
     family_r(large)
+    family_vsb()
     family_w()
     family_z()
     by_id = {c["id"]: c for c in CASES}

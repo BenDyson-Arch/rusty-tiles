@@ -18,6 +18,34 @@ pub(crate) trait SpillIo: Send + Sync {
     fn open_random(&self, path: &Path) -> io::Result<File> {
         File::open(path)
     }
+    /// A new file for positioned reads and writes (fixed-width slots).
+    fn create_slots(&self, path: &Path) -> io::Result<File> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(path)
+    }
+}
+
+/// Writes all of `bytes` at `offset` without moving a shared cursor.
+pub(crate) fn write_all_at(file: &File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
+    while !bytes.is_empty() {
+        #[cfg(unix)]
+        let written = std::os::unix::fs::FileExt::write_at(file, bytes, offset);
+        #[cfg(windows)]
+        let written = std::os::windows::fs::FileExt::seek_write(file, bytes, offset);
+        match written {
+            Ok(0) => return Err(io::Error::from(io::ErrorKind::WriteZero)),
+            Ok(count) => {
+                bytes = &bytes[count..];
+                offset += count as u64;
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 /// Reads exactly `bytes.len()` bytes at `offset` without moving a shared cursor.

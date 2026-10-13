@@ -1,6 +1,7 @@
-//! Scale evidence driver (VS-A): inspects one archive with the absolute volume caps raised
-//! (source, directory, entries, stored bytes and read work) and every other limit at its
-//! default, as VS-C will. Run explicitly in a release test binary:
+//! Scale evidence driver (VS-A, VS-B): inspects one archive with the absolute volume caps
+//! raised (source, directory, entries and stored bytes) and every other limit at its default,
+//! with the amplification budgets scaled from the stored bytes (VS-B-2), as VS-C will. Run
+//! explicitly in a release test binary:
 //! `RUSTY_TILES_SCALE_INPUT=ARCHIVE BINARY --exact validate::scale_driver::drive --ignored`.
 use super::*;
 
@@ -15,17 +16,22 @@ fn drive() {
         central_directory_bytes: u64::MAX,
         archive_entries: u64::MAX,
         archive_stored_bytes: u64::MAX,
-        total_bytes_read: u64::MAX,
         ..ValidationLimits::default()
     };
     let start = std::time::Instant::now();
-    let result = inspect_selected(ValidationRequest::new(&path), limits);
+    let result = inspect_facts(ValidationRequest::new(&path), Budgets::Scaled(limits))
+        .map(|inspection| inspection.report);
     let seconds = start.elapsed().as_secs_f64();
     let outcome = match &result {
         Ok(report) => format!(
-            "ok tiles={} payloads={}",
+            "ok tiles={} payloads={} contained={} notInspected={}",
             report.tiles,
-            report.payloads.len()
+            report.payloads.len(),
+            report
+                .checks
+                .iter()
+                .any(|check| check == "decodedContentContainment"),
+            report.not_inspected.join("|")
         ),
         Err(error) => format!("{}: {error}", error.category().0),
     };

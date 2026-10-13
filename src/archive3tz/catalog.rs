@@ -35,6 +35,9 @@ pub(crate) struct CatalogConfig {
     pub cache_bytes: u64,
     /// Buffer of each scratch log or sequence writer and reader.
     pub buffer_bytes: usize,
+    /// The validator's per-URI facts (131 B per entry) stay in memory when `N·131` fits
+    /// (VS-B-5); otherwise they go to a rank-indexed scratch file.
+    pub facts_resident_bytes: u64,
 }
 
 impl CatalogConfig {
@@ -67,6 +70,8 @@ impl CatalogConfig {
         max_fences: 1 << 19,
         cache_bytes: 16 << 20,
         buffer_bytes: 256 << 10,
+        // 2^19 entries (the default entry limit) need 65.5 MiB.
+        facts_resident_bytes: 72 << 20,
     };
 
     /// Every store on scratch, runs of a few records, two fences and one cached page: the
@@ -95,6 +100,7 @@ impl CatalogConfig {
         max_fences: 2,
         cache_bytes: 0,
         buffer_bytes: 64,
+        facts_resident_bytes: 0,
     };
 
     /// The profile of this build. Test builds and `validate-forced-spill` builds select

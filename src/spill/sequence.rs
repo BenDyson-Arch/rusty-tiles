@@ -387,3 +387,79 @@ impl<T: Record> Iterator for SequenceReader<'_, T> {
         }
     }
 }
+
+/// Fixed-width slots in one scratch file, written and read at any index in any order. A slot
+/// never written reads as zeros up to the file end; the file is sparse where the platform
+/// allows. Holds its own read-write handle; the file is removed when it is dropped.
+pub(crate) struct SlotFile {
+    // Declared before `file` so the handle closes before the file is removed.
+    handle: File,
+    file: SpillFile,
+    width: usize,
+    /// One past the highest slot written.
+    end: u64,
+}
+
+impl SlotFile {
+    pub(crate) fn new(scratch: &Scratch, stem: &str, width: usize) -> Result<Self, SpillError> {
+        if width == 0 {
+            return Err(SpillError::InvalidConfig("slot width must be nonzero"));
+        }
+        let file = scratch.new_file(stem)?;
+        let handle = scratch
+            .io()
+            .create_slots(file.path())
+            .map_err(|e| SpillError::io("create spill slots", file.path(), e))?;
+        Ok(Self {
+            handle,
+            file,
+            width,
+            end: 0,
+        })
+    }
+
+    fn offset(&self, index: u64) -> Result<u64, SpillError> {
+        index
+            .checked_mul(self.width as u64)
+            .ok_or(SpillError::Overflow)
+    }
+
+    /// Writes slot `index`; `bytes.len()` must be the slot width.
+    pub(crate) fn write(&mut self, index: u64, bytes: &[u8]) -> Result<(), SpillError> {
+        if bytes.len() != self.width {
+            return Err(SpillError::InvalidConfig("slot write of the wrong width"));
+        }
+        let offset = self.offset(index)?;
+        let end = index.checked_add(1).ok_or(SpillError::Overflow)?;
+        if end > self.end {
+            // Accounted at the logical extent before the write, as sequences are.
+            self.file.completed(self.offset(end)?);
+            self.end = end;
+        }
+        super::scratch::write_all_at(&self.handle, bytes, offset)
+            .map_err(|e| SpillError::io("write spill slots", self.file.path(), e))
+    }
+
+    /// Reads slot `index` into `bytes` (the slot width); a slot past the end is corrupt.
+    pub(crate) fn read(&self, index: u64, bytes: &mut [u8]) -> Result<(), SpillError> {
+        if bytes.len() != self.width {
+            return Err(SpillError::InvalidConfig("slot read of the wrong width"));
+        }
+        if index >= self.end {
+            return Err(SpillError::CorruptRun {
+                path: self.file.path().to_owned(),
+                detail: format!("slot {index} was never written"),
+            });
+        }
+        read_exact_at(&self.handle, bytes, self.offset(index)?).map_err(|e| {
+            if e.kind() == io::ErrorKind::UnexpectedEof {
+                SpillError::CorruptRun {
+                    path: self.file.path().to_owned(),
+                    detail: format!("slot {index} ends early"),
+                }
+            } else {
+                SpillError::io("read spill slots", self.file.path(), e)
+            }
+        })
+    }
+}
