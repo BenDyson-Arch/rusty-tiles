@@ -1474,24 +1474,36 @@ pub(super) fn encode(
     let mut storage = Storage::U16;
     // Shared vertices the survey did not record for this tile (the spool's
     // shared set can grow during the survey): kept on this tile's own step.
+    // A vertex no co-rendering tile holds (only ancestors or descendants)
+    // needs no shared step: a tile with only such vertices keeps its own
+    // range.
     let mut unrecorded = 0usize;
     if options.quantize && pass == GridPass::Final && !shared.is_empty() {
         let mut query = db
             .prepare_cached(
-                "SELECT ex,ey,ez,fl FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 AND kind=?4 AND prefix=?5 AND level=?6",
+                "SELECT ex,ey,ez,fl,al FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 AND kind=?4 AND prefix=?5 AND level=?6",
             )
             .map_err(sql)?;
         for k in &shared {
             let (p, kind) = k;
             use rusqlite::OptionalExtension;
-            if let Some((e, float)) = query
+            if let Some((e, float, alone)) = query
                 .query_row(
                     rusqlite::params![p[0], p[1], p[2], *kind as i64, prefix, level],
-                    |r| Ok(([r.get(0)?, r.get(1)?, r.get(2)?], r.get::<_, bool>(3)?)),
+                    |r| {
+                        Ok((
+                            [r.get(0)?, r.get(1)?, r.get(2)?],
+                            r.get::<_, bool>(3)?,
+                            r.get::<_, bool>(4)?,
+                        ))
+                    },
                 )
                 .optional()
                 .map_err(sql)?
             {
+                if alone {
+                    continue;
+                }
                 exponents.insert(*k, e);
                 if float {
                     storage = Storage::Float32;
@@ -2421,7 +2433,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let spool = root.path().join("features.sqlite");
         let db = rusqlite::Connection::open(&spool).unwrap();
-        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER);").unwrap();
+        db.execute_batch("CREATE TABLE features(id INTEGER PRIMARY KEY,path TEXT,data TEXT); CREATE TABLE vertices(x REAL,y REAL,z REAL,shared INTEGER); CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER);").unwrap();
         for (id, feature) in [(1, &fill), (2, &line)] {
             db.execute(
                 "INSERT INTO features VALUES(?1,'',?2)",
@@ -2486,7 +2498,7 @@ mod tests {
         ] {
             let c = cell(p);
             db.execute(
-                "INSERT INTO grid VALUES(?1,?2,?3,?4,'',0,?5,?5,?5,1)",
+                "INSERT INTO grid VALUES(?1,?2,?3,?4,'',0,?5,?5,?5,1,0)",
                 rusqlite::params![c[0], c[1], c[2], kind as i64, e],
             )
             .unwrap();
@@ -2554,6 +2566,24 @@ mod tests {
         }
         modes.sort();
         assert_eq!(modes, [3, 4], "fill and line strip in one float32 content");
+        // No co-rendering tile holds any of them: its own u16 range, unreported.
+        db.execute("UPDATE grid SET al=1", []).unwrap();
+        let (candidate, bytes) = encode_tile();
+        assert!(candidate
+            .reports
+            .iter()
+            .all(|r| r.get("quantizationGrid").is_none()));
+        let (document, _) = read_views(&bytes);
+        assert!(document["extensionsUsed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("KHR_mesh_quantization")));
+        let scale = document["nodes"][0]["scale"][0].as_f64().unwrap();
+        assert_ne!(
+            (scale / 65535.).log2().fract(),
+            0.,
+            "a range, not a lattice step"
+        );
     }
 
     /// The u16 window holds every strip end's mirror `2c - n`: a two-point

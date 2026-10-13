@@ -437,11 +437,11 @@ fn fingerprint(db: &Connection, id: i64, value: &str, grid: bool) -> Result<(), 
     hasher.update(mask);
     if grid {
         let mut exponents = db
-            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez,fl FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
+            .prepare_cached("SELECT kind,prefix,level,ex,ey,ez,fl,al FROM grid WHERE cx=?1 AND cy=?2 AND cz=?3 ORDER BY kind,prefix,level")
             .map_err(sql)?;
         for p in &points {
             let p = encoding::cell(**p);
-            let held: Vec<(i64, String, u32, [i32; 3], bool)> = exponents
+            let held: Vec<(i64, String, u32, [i32; 3], bool, bool)> = exponents
                 .query_map(params![p[0], p[1], p[2]], |r| {
                     Ok((
                         r.get(0)?,
@@ -449,6 +449,7 @@ fn fingerprint(db: &Connection, id: i64, value: &str, grid: bool) -> Result<(), 
                         r.get(2)?,
                         [r.get(3)?, r.get(4)?, r.get(5)?],
                         r.get(6)?,
+                        r.get(7)?,
                     ))
                 })
                 .map_err(sql)?
@@ -474,8 +475,9 @@ fn ancestor(a: &(String, u32), b: &(String, u32)) -> bool {
 /// The survey's record of shared vertices (`holders`: per vertex cell and
 /// kind, each tile holding it and that tile's own u16 and float32
 /// exponents) and the resolved grid (`grid`: each holder's snapping
-/// exponents and whether the tile stores float32).
-const GRID_TABLES: &str = "CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fx INTEGER,fy INTEGER,fz INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;";
+/// exponents, whether the tile stores float32, and whether no other tile
+/// that can render with it holds the vertex).
+const GRID_TABLES: &str = "CREATE TABLE holders(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fx INTEGER,fy INTEGER,fz INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID; CREATE TABLE grid(cx INTEGER,cy INTEGER,cz INTEGER,kind INTEGER,prefix TEXT,level INTEGER,ex INTEGER,ey INTEGER,ez INTEGER,fl INTEGER,al INTEGER,PRIMARY KEY(cx,cy,cz,kind,prefix,level)) WITHOUT ROWID;";
 
 type Tile = (String, u32);
 
@@ -589,7 +591,7 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
     {
         let mut insert = db
             .prepare_cached(
-                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez,fl) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                "INSERT INTO grid(cx,cy,cz,kind,prefix,level,ex,ey,ez,fl,al) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             )
             .map_err(sql)?;
         vertex_groups(db, |p, groups| {
@@ -617,7 +619,8 @@ fn resolve_grid(db: &Connection) -> Result<(), Error> {
                             e[0],
                             e[1],
                             e[2],
-                            float.contains(tile)
+                            float.contains(tile),
+                            group.len() == 1
                         ])
                         .map_err(sql)?;
                 }
@@ -2042,6 +2045,17 @@ mod grid_tests {
             assert_eq!(row(1, 0, prefix, level), ([3, 3, 3], float), "{prefix}");
         }
         assert_eq!(row(2, 0, "00", 0), ([3, 3, 3], false));
+        // Only an ancestor shares vertex 2: no copy it must agree with.
+        let alone = |cell: i64| -> Vec<bool> {
+            db.prepare("SELECT al FROM grid WHERE cx=?1 ORDER BY prefix")
+                .unwrap()
+                .query_map([cell], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(alone(2), [true, true]);
+        assert_eq!(alone(1), [false; 4]);
         assert_eq!(row(2, 0, "0", 2), ([-3, -3, -3], true));
         assert_eq!(row(3, 1, "01", 0), ([3, 3, 3], true));
         assert_eq!(
@@ -2148,7 +2162,7 @@ mod grid_tests {
         }
         let c = encoding::cell(ring[1]);
         db.execute(
-            "INSERT INTO grid VALUES(?1,?2,?3,0,'0',0,2,2,2,0)",
+            "INSERT INTO grid VALUES(?1,?2,?3,0,'0',0,2,2,2,0,0)",
             params![c[0], c[1], c[2]],
         )
         .unwrap();
@@ -2164,6 +2178,9 @@ mod grid_tests {
         let float = print(&db);
         assert_ne!(u16, float, "storage flip");
         db.execute("UPDATE grid SET ex=3", []).unwrap();
-        assert_ne!(float, print(&db), "exponent change");
+        let exponent = print(&db);
+        assert_ne!(float, exponent, "exponent change");
+        db.execute("UPDATE grid SET al=1", []).unwrap();
+        assert_ne!(exponent, print(&db), "partners gone");
     }
 }
