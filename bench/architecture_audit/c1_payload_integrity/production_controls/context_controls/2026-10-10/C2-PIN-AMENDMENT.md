@@ -87,11 +87,12 @@ entries are kept as history but no longer compared.
 ## VS-B amendment (live documents, 2026-10-14)
 
 The [VS-B traversal amendment](../../../../../../docs/architecture/validator-traversal-scale-amendment.md)
-adds the per-item limit `liveDocumentBytes` (VS-B-7). These controls select every limit
-explicitly, so the struct literal gains `live_document_bytes` at its default (268435456) and
-the declared limits JSON gains `liveDocumentBytes`. No archive, member pin, expectation or
-other selected limit changed; `fixtures/manifest.json` is unchanged.
+adds the per-item limit `liveDocumentBytes` (VS-B-7) to `ValidationLimits`. These controls
+select every limit explicitly, so the struct literal gains `live_document_bytes` at its default
+(268435456). The field is not serialized in the report's `limits` until VS-C, so the declared
+limits JSON is unchanged. No archive, member pin, expectation or other selected limit changed;
+`fixtures/manifest.json` is unchanged.
 
 | File | Previous sha256 | Amended sha256 | Reason |
 | --- | --- | --- | --- |
-| `compiled_context_controls.rs` | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` (H7 amendment) | `2fbb4240d67f93d4400e14015f859d070102cca6d6b90583cdba161790531e21` | `live_document_bytes` added at its default in the selected limits and the declared limits JSON |
+| `compiled_context_controls.rs` | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` (H7 amendment) | `91cbe51512738bdcaea4120a698bde523687b134cbfd945b8ad01bb5959085b0` | `live_document_bytes` added at its default in the selected limits |

@@ -79,7 +79,10 @@ pub struct ValidationLimits {
     /// C2 precheck: maximum selected glTF node path depth.
     pub containment_node_depth: u64,
     /// Tileset documents being traversed at once: `Σ (raw bytes + 128 · JSON value nodes)`
-    /// over the documents on the external-tileset path (VS-B-7).
+    /// over the documents on the external-tileset path (VS-B-7). Not yet serialized in the
+    /// report's `limits`: VS-C adds it with the limit surface, so the pinned C1 report
+    /// bundles are amended once.
+    #[serde(skip_serializing)]
     pub live_document_bytes: u64,
 }
 impl Default for ValidationLimits {

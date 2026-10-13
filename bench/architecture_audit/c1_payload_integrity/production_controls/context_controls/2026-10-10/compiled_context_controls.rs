@@ -62,7 +62,6 @@ fn declared_limits_json(limits: &ValidationLimits) -> Value {
         "containmentBytesRead": limits.containment_bytes_read,
         "containmentDecodedBytes": limits.containment_decoded_bytes,
         "containmentNodeDepth": limits.containment_node_depth,
-        "liveDocumentBytes": limits.live_document_bytes,
     })
 }
 

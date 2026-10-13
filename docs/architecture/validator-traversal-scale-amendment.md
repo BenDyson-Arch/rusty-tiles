@@ -262,7 +262,9 @@ as floors: at the floors, today's bounds hold unchanged.
 
 ## Report and API changes (breaking)
 
-- `limits` holds the effective budgets (VS-B-2) and the new `liveDocumentBytes`.
+- `limits` holds the effective budgets (VS-B-2). `liveDocumentBytes` is enforced but not yet
+  serialized: VS-C adds it to `limits` with the rest of the limit surface, so the pinned C1
+  report bundles are amended once.
 - `ValidationLimits::live_document_bytes` is a new public field.
 - `ValidationReport::not_inspected_truncated` is new; JSON `notInspectedTruncated` appears only
   when true.
