@@ -21,14 +21,14 @@ fn drive() {
     // The test-only seams would hold one record per tile and per payload.
     SEAMS.with(|seams| seams.set(false));
     let start = std::time::Instant::now();
-    let result = inspect_facts(ValidationRequest::new(&path), Budgets::Scaled(limits))
-        .map(|inspection| inspection.report);
+    let result = inspect_facts(ValidationRequest::new(&path), Budgets::Scaled(limits));
     let seconds = start.elapsed().as_secs_f64();
     let outcome = match &result {
-        Ok(report) => format!(
-            "ok tiles={} payloads={} contained={} notInspected={}",
+        Ok(Inspection { report, units, .. }) => format!(
+            "ok tiles={} payloads={} units={units} unitsBudget={} contained={} notInspected={}",
             report.tiles,
             report.payloads.len(),
+            report.limits.containment_work_units,
             report
                 .checks
                 .iter()
