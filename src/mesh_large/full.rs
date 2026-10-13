@@ -1042,6 +1042,122 @@ pub(super) mod tests {
         assert_eq!(failed.error.kind(), JobErrorKind::Cancelled);
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
     }
+    /// A position-only grid of welded quads in seeded shuffled order, with repeated
+    /// triangles so the rank and corner sorts see equal positions from distinct ranks.
+    fn shuffled_grid(parent: &Path, side: usize, seed: u64) -> PathBuf {
+        fs::create_dir_all(parent).unwrap();
+        let vertex = |x: usize, y: usize| {
+            let z = ((x * 7 + y * 13) % 5) as f32 * 0.125;
+            [x as f32, y as f32, z]
+        };
+        let mut triangles = Vec::new();
+        for y in 0..side {
+            for x in 0..side {
+                let (a, b) = (vertex(x, y), vertex(x + 1, y));
+                let (c, d) = (vertex(x, y + 1), vertex(x + 1, y + 1));
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+        for i in (0..triangles.len()).step_by(17) {
+            triangles.push(triangles[i]);
+        }
+        let mut state = seed | 1;
+        for i in (1..triangles.len()).rev() {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            triangles.swap(i, (state % (i as u64 + 1)) as usize);
+        }
+        let mut bytes = Vec::new();
+        for triangle in &triangles {
+            for value in triangle.iter().flatten() {
+                bytes.extend(value.to_le_bytes());
+            }
+        }
+        fs::write(parent.join("positions.bin"), &bytes).unwrap();
+        let doc = serde_json::json!({
+            "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+            "buffers":[{"uri":"positions.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteLength":bytes.len()}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":triangles.len()*3,
+                "type":"VEC3","min":[0.,0.,0.],"max":[side as f32,side as f32,0.5]}]
+        });
+        let input = parent.join("grid.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        input
+    }
+    /// Corner depths, tree rank order and weld depths are identical for every worker count
+    /// and run size, from in-memory sorts down to one-record runs merged two at a time, and
+    /// every corner depth is its position's welded minimum.
+    #[test]
+    fn corner_depth_join_is_identical_across_jobs_and_run_sizes() {
+        type Outputs = (Vec<CornerDepth>, Vec<Vec<u8>>, Vec<([u32; 3], u8)>);
+        let dir = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("scratch");
+        fs::create_dir(&parent).unwrap();
+        let input = shuffled_grid(&dir.path().join("source"), 20, 0x5eed_c0de_2026);
+        let run = |jobs: usize, run_bytes: usize, fan_in: usize| -> Outputs {
+            let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
+            config.jobs = Jobs::Fixed(NonZeroUsize::new(jobs).unwrap());
+            config.scratch_dir = Some(parent.clone());
+            config.sort.run_bytes = run_bytes;
+            config.sort.fan_in = fan_in;
+            config.sort.buffer_bytes = 61;
+            let output = capture(&input, &config, &mut || Ok(())).unwrap();
+            let depths: Vec<_> = output
+                .corner_depths
+                .reader()
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            let ranks: Vec<_> = output
+                .tree
+                .triangles
+                .reader()
+                .unwrap()
+                .map(|t| {
+                    let mut bytes = vec![0; TriangleRecord::SIZE];
+                    t.unwrap().encode(&mut bytes);
+                    bytes
+                })
+                .collect();
+            let weld: Vec<_> = output
+                .tree
+                .weld_depths
+                .reader()
+                .unwrap()
+                .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
+                .collect();
+            let lookup: std::collections::BTreeMap<_, _> = weld.iter().copied().collect();
+            for (triangle, depths) in output.tree.triangles.reader().unwrap().zip(&depths) {
+                let triangle = triangle.unwrap();
+                for corner in 0..3 {
+                    let key = triangle.positions[corner].map(f32::to_bits);
+                    assert_eq!(depths.depths[corner], lookup[&key]);
+                }
+            }
+            output.close().unwrap();
+            (depths, ranks, weld)
+        };
+        let expected = run(1, 64 << 20, 64);
+        assert_eq!(
+            expected.0.len(),
+            20 * 20 * 2 + (20 * 20 * 2usize).div_ceil(17)
+        );
+        let smallest = 2 * size_of::<FullTriangle>();
+        for jobs in [1, 2, 4, 8] {
+            for (run_bytes, fan_in) in [(smallest, 2), (smallest * 3, 3), (4096, 2), (1 << 16, 64)]
+            {
+                assert!(
+                    run(jobs, run_bytes, fan_in) == expected,
+                    "jobs {jobs}, run bytes {run_bytes}, fan-in {fan_in}"
+                );
+            }
+        }
+        assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
+    }
     #[test]
     fn checked_full_scratch_and_decoder_memory_charges() {
         let cfg = TreeConfig::new(Profile::Balanced);
