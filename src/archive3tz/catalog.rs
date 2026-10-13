@@ -22,6 +22,9 @@ use std::{io::Read, sync::Arc};
 pub(crate) struct CatalogConfig {
     /// External sorts of rows, extents and index rows.
     pub sort: SortConfig,
+    /// External sorts of the physical extents (live beside the row sort) and of a failing
+    /// index's rows and pairs.
+    pub side_sort: SortConfig,
     /// External sorts of the report's payload rows (live during traversal).
     pub rows_sort: SortConfig,
     /// Rows and log stay in memory when `N·(64 + 22) + centralDirectoryBytes` fits.
@@ -39,12 +42,19 @@ impl CatalogConfig {
     /// to 96 MiB, which covers every archive within the default entry (2^19) and
     /// central-directory (32 MiB) limits: at most 2^19·86 B + 32 MiB ≈ 77 MiB. Larger
     /// catalogs use 2^19 fences (12 MiB) and a 16 MiB page cache. Payload rows collect in a
-    /// 32 MiB run (2^19 rows of 48 B) before they spill.
+    /// 32 MiB run (2^19 rows of 48 B) before they spill. Extents and index-diagnosis rows
+    /// sort in 24 MiB runs, so the build holds at most `1.5·64 + 1.5·24` MiB of runs.
     pub(crate) const DEFAULT: Self = Self {
         sort: SortConfig {
             run_bytes: 64 << 20,
             fan_in: 32,
             buffer_bytes: 1 << 20,
+            jobs: 1,
+        },
+        side_sort: SortConfig {
+            run_bytes: 24 << 20,
+            fan_in: 32,
+            buffer_bytes: 256 << 10,
             jobs: 1,
         },
         rows_sort: SortConfig {
@@ -65,6 +75,12 @@ impl CatalogConfig {
     pub(crate) const FORCED_SPILL: Self = Self {
         sort: SortConfig {
             run_bytes: 4 * size_of::<Row>(),
+            fan_in: 2,
+            buffer_bytes: 64,
+            jobs: 1,
+        },
+        side_sort: SortConfig {
+            run_bytes: 4 * 32,
             fan_in: 2,
             buffer_bytes: 64,
             jobs: 1,
@@ -792,10 +808,10 @@ impl Catalog {
     }
 }
 
-/// An external sorter of `T` on `scratch` with the catalog's sort resources.
-pub(crate) fn sorter<'s, T: Record>(
-    scratch: &'s Scratch,
-    config: &CatalogConfig,
-) -> Result<ExternalSorter<'s, T>, SpillError> {
-    ExternalSorter::new(scratch, config.sort)
+/// An external sorter of `T` on `scratch` with sort resources `config`.
+pub(crate) fn sorter<T: Record>(
+    scratch: &Scratch,
+    config: SortConfig,
+) -> Result<ExternalSorter<'_, T>, SpillError> {
+    ExternalSorter::new(scratch, config)
 }

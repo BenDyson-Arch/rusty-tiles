@@ -273,7 +273,7 @@ impl<R: Read + Seek> StoredArchive<R> {
     /// sequential check accepts.
     fn first_mismatch(&mut self, length: u64, index_offset: u64) -> Result<Option<u64>, ReadError> {
         let scratch = self.scratch.clone();
-        let mut rows = catalog::sorter::<IndexRow>(&scratch, &self.config)?;
+        let mut rows = catalog::sorter::<IndexRow>(&scratch, self.config.side_sort)?;
         let crc_ok = index_pass(
             &mut self.reader,
             &self.last,
@@ -289,7 +289,7 @@ impl<R: Read + Seek> StoredArchive<R> {
         if !crc_ok {
             return Err(malformed("stored member CRC mismatch"));
         }
-        let mut members = catalog::sorter::<IndexRow>(&scratch, &self.config)?;
+        let mut members = catalog::sorter::<IndexRow>(&scratch, self.config.side_sort)?;
         self.catalog.rows().for_each(|row| {
             if row.local_offset != index_offset {
                 members.push(IndexRow {
@@ -820,8 +820,8 @@ fn scan_directory(
         CatalogConfig::scratch_estimate(entries, bytes),
     ));
     let mut log = LogWriter::new(&scratch, memory, config)?;
-    let mut rows = catalog::sorter::<Row>(&scratch, config)?;
-    let mut extents = catalog::sorter::<Extent>(&scratch, config)?;
+    let mut rows = catalog::sorter::<Row>(&scratch, config.sort)?;
+    let mut extents = catalog::sorter::<Extent>(&scratch, config.side_sort)?;
     let mut last = None;
     let mut directory = DirectoryBuffer {
         start: offset,

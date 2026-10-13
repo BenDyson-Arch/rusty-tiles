@@ -83,7 +83,8 @@ detected as equal names within one equal-key run of the sorted catalog.
 `N·86 + centralDirectoryBytes ≤ 96 MiB`, which holds for every archive within the
 default entry (2^19) and directory (32 MiB) limits. Otherwise rows and log go to
 scratch: one fence per page of `⌈N / 2^19⌉` rows and a 16 MiB direct-mapped page
-cache. External sorts run with `R` = 64 MiB, `F` = 32, `b` = 1 MiB. The choice is fixed
+cache. External sorts run with `R` = 64 MiB, `F` = 32, `b` = 1 MiB (rows) and `R` = 24 MiB
+(extents and index diagnosis). The choice is fixed
 from the end record before any record is read. Scratch is created only at the first
 spilled file (a deferred `Scratch`), after its free-space preflight against the
 estimate `2·(N·84 + CD) + 2·64·N` bytes. So no archive within the default limits
@@ -121,9 +122,9 @@ configuration constant:
 
 | Stage | Resident bound |
 | --- | --- |
-| catalog build | resident profile: rows, extents and log ≤ 96 MiB + sort scratch; spilled profile: two sorters (`1.5·R + (F+1)·b` each, ≤ 2 × 129 MiB) + log writer |
+| catalog build | resident profile: rows, extents and log ≤ 96 MiB + sort scratch; spilled profile: the row sorter (`R` = 64 MiB) and the extent sorter (`R` = 24 MiB), `1.5·R + (F+1)·b` each, ≤ 129 + 45 MiB, plus the log writer |
 | lookups | resident ≤ 96 MiB; spilled: fences ≤ 12 MiB + page cache 16 MiB |
-| index check | one 65,520-byte chunk; on failure, two sorters |
+| index check | one 65,520-byte chunk; on failure, two sorters with `R` = 24 MiB |
 | payload rows (walk) | one sorter with `R` = 32 MiB |
 | payload rows (report) | sorters with `R` = 64 MiB, after the walk's storage is released |
 
