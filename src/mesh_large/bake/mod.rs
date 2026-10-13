@@ -1,13 +1,17 @@
 //! Immutable H17 proxy appearance owner. Geometry is copied from the successful
 //! finishing packet and independently audited after complete-member assembly.
+mod assembler;
 mod charts;
+mod child_bridge;
 #[cfg(test)]
 mod controls;
 mod delivery;
 mod frames;
 mod ids;
+pub(in crate::mesh_large) mod integration;
 mod math;
 mod mips;
+mod packet;
 #[cfg(test)]
 mod probe_tests;
 mod raster;
