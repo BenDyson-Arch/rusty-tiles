@@ -1,7 +1,11 @@
 //! Sequential spill: records written once, in order, and read back in that order any number of
 //! times. Files live in the owned scratch directory and are accounted like sort runs.
-use super::{scratch::SpillFile, Record, Scratch, SpillError, SpillIo};
+use super::{
+    scratch::{read_exact_at, SpillFile},
+    Record, Scratch, SpillError, SpillIo,
+};
 use std::{
+    fs::File,
     io::{self, BufReader, BufWriter, Read, Write},
     marker::PhantomData,
     sync::Arc,
@@ -31,7 +35,7 @@ impl<T: Record> SequenceWriter<T> {
         if T::SIZE == 0 {
             return Err(SpillError::InvalidConfig("record size must be nonzero"));
         }
-        let file = scratch.new_file(stem);
+        let file = scratch.new_file(stem)?;
         let io = scratch.io_handle();
         let inner = io
             .create(file.path())
@@ -153,6 +157,187 @@ impl<T: Record> Sequence<T> {
             encoded: vec![0; T::SIZE],
             ranged: true,
         })
+    }
+}
+
+impl<T: Record> Sequence<T> {
+    /// Positioned access to the completed records, independent of any sequential reader.
+    pub(crate) fn random(&self) -> Result<RandomRecords<T>, SpillError> {
+        let file = self
+            .io
+            .open_random(self.file.path())
+            .map_err(|e| SpillError::io("open spill sequence", self.file.path(), e))?;
+        Ok(RandomRecords {
+            file,
+            path: self.file.path().to_owned(),
+            records: self.records,
+            _record: PhantomData,
+        })
+    }
+}
+
+/// Positioned reads of whole records of a completed [`Sequence`]. Holds its own handle.
+pub(crate) struct RandomRecords<T: Record> {
+    file: File,
+    path: std::path::PathBuf,
+    records: u64,
+    _record: PhantomData<T>,
+}
+
+impl<T: Record> RandomRecords<T> {
+    /// Replaces `out` with records `first..first + count`; the range must lie in the sequence.
+    pub(crate) fn read(
+        &self,
+        first: u64,
+        count: usize,
+        encoded: &mut Vec<u8>,
+        out: &mut Vec<T>,
+    ) -> Result<(), SpillError> {
+        let end = first
+            .checked_add(count as u64)
+            .filter(|&end| end <= self.records)
+            .ok_or(SpillError::InvalidConfig(
+                "record range outside the sequence",
+            ))?;
+        let bytes = count.checked_mul(T::SIZE).ok_or(SpillError::Overflow)?;
+        encoded.resize(bytes, 0);
+        let offset = first
+            .checked_mul(T::SIZE as u64)
+            .ok_or(SpillError::Overflow)?;
+        read_exact_at(&self.file, encoded, offset).map_err(|e| {
+            if e.kind() == io::ErrorKind::UnexpectedEof {
+                SpillError::CorruptRun {
+                    path: self.path.clone(),
+                    detail: format!("records {first}..{end} end early"),
+                }
+            } else {
+                SpillError::io("read spill sequence", &self.path, e)
+            }
+        })?;
+        out.clear();
+        out.extend((0..count).map(|i| T::decode(&encoded[i * T::SIZE..(i + 1) * T::SIZE])));
+        Ok(())
+    }
+}
+
+/// Appends raw bytes to one scratch file (a log of variable-length entries).
+pub(crate) struct ByteWriter {
+    // Declared before `file` so the handle closes before an error removes the file.
+    writer: BufWriter<Box<dyn Write + Send>>,
+    file: SpillFile,
+    io: Arc<dyn SpillIo>,
+    len: u64,
+}
+
+impl ByteWriter {
+    pub(crate) fn new(
+        scratch: &Scratch,
+        stem: &str,
+        buffer_bytes: usize,
+    ) -> Result<Self, SpillError> {
+        if buffer_bytes == 0 {
+            return Err(SpillError::InvalidConfig("stream buffer must be nonzero"));
+        }
+        let file = scratch.new_file(stem)?;
+        let io = scratch.io_handle();
+        let inner = io
+            .create(file.path())
+            .map_err(|e| SpillError::io("create spill log", file.path(), e))?;
+        Ok(Self {
+            writer: BufWriter::with_capacity(buffer_bytes, inner),
+            file,
+            io,
+            len: 0,
+        })
+    }
+
+    pub(crate) fn append(&mut self, bytes: &[u8]) -> Result<(), SpillError> {
+        let len = self
+            .len
+            .checked_add(bytes.len() as u64)
+            .ok_or(SpillError::Overflow)?;
+        self.file.completed(len);
+        self.writer
+            .write_all(bytes)
+            .map_err(|e| SpillError::io("write spill log", self.file.path(), e))?;
+        self.len = len;
+        Ok(())
+    }
+
+    pub(crate) fn len(&self) -> u64 {
+        self.len
+    }
+
+    pub(crate) fn finish(mut self) -> Result<ByteFile, SpillError> {
+        self.writer
+            .flush()
+            .map_err(|e| SpillError::io("write spill log", self.file.path(), e))?;
+        let Self {
+            writer,
+            file,
+            io,
+            len,
+        } = self;
+        drop(writer);
+        let random = io
+            .open_random(file.path())
+            .map_err(|e| SpillError::io("open spill log", file.path(), e))?;
+        Ok(ByteFile {
+            random,
+            file,
+            io,
+            len,
+        })
+    }
+}
+
+/// A completed byte log; its file is removed when it is dropped.
+pub(crate) struct ByteFile {
+    // Declared before `file` so the handle closes before the file is removed.
+    random: File,
+    file: SpillFile,
+    io: Arc<dyn SpillIo>,
+    len: u64,
+}
+
+impl ByteFile {
+    pub(crate) fn len(&self) -> u64 {
+        self.len
+    }
+
+    /// Reads exactly `bytes.len()` bytes at `offset`; the range must lie in the log.
+    pub(crate) fn read_at(&self, offset: u64, bytes: &mut [u8]) -> Result<(), SpillError> {
+        if offset
+            .checked_add(bytes.len() as u64)
+            .is_none_or(|end| end > self.len)
+        {
+            return Err(self.corrupt(format!("range at {offset} outside the log")));
+        }
+        read_exact_at(&self.random, bytes, offset)
+            .map_err(|e| SpillError::io("read spill log", self.file.path(), e))
+    }
+
+    /// A sequential reader of the whole log from its first byte.
+    pub(crate) fn reader(
+        &self,
+        buffer_bytes: usize,
+    ) -> Result<BufReader<Box<dyn Read + Send>>, SpillError> {
+        let inner = self
+            .io
+            .open(self.file.path())
+            .map_err(|e| SpillError::io("open spill log", self.file.path(), e))?;
+        Ok(BufReader::with_capacity(buffer_bytes.max(1), inner))
+    }
+
+    pub(crate) fn path(&self) -> &std::path::Path {
+        self.file.path()
+    }
+
+    fn corrupt(&self, detail: String) -> SpillError {
+        SpillError::CorruptRun {
+            path: self.file.path().to_owned(),
+            detail,
+        }
     }
 }
 

@@ -1169,8 +1169,8 @@ mod tests {
     use super::*;
     use crate::{
         mesh_large::{
-            mesh_leaves_to_3tz, mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile,
-            MeshTilesetRequest,
+            delivery::{mesh_leaves_to_3tz, MeshTilesetRequest},
+            leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
         },
         validate::{inspect, ValidationRequest},
         RunControl,

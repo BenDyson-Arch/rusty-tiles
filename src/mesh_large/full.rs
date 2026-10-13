@@ -312,6 +312,16 @@ pub(crate) fn capture(
     }
     check().map_err(super::failure)?;
     let source = StreamSource::open(input, check).map_err(super::failure)?;
+    capture_admitted(source, config, check)
+}
+
+pub(crate) fn capture_admitted(
+    source: StreamSource,
+    config: &TreeConfig,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<FullCaptured, JobFailure> {
+    config.validate().map_err(super::failure)?;
+    check().map_err(super::failure)?;
     super::member_gate(
         config::tile_lower_bound(
             source.document.triangle_count() as u64,

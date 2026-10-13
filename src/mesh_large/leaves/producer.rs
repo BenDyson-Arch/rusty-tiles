@@ -32,7 +32,7 @@ use std::{
     },
 };
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LeafProfile {
     Fast,
@@ -153,7 +153,7 @@ fn hex(bytes: impl AsRef<[u8]>) -> String {
 /// sources live in a separately budgeted cache; in-flight leaves own their
 /// geometry closure and encoded members up to the tile budget each.
 #[derive(Clone, Copy, Debug, Serialize)]
-struct StagePlan {
+pub(crate) struct StagePlan {
     /// Per-page limit for internal allocation checks (largest page lease).
     page_bytes: u64,
     gate_bytes: u64,
@@ -164,10 +164,11 @@ struct StagePlan {
     jobs: u64,
     jobs_limited_by: &'static str,
     available_bytes: Option<u64>,
+    bound_bytes: u64,
 }
 /// Bytes reserved for the runtime, allocator slack and the output writer.
 const STAGE_RESERVE: u64 = 256 << 20;
-fn stage_plan(
+pub(crate) fn stage_plan(
     profile: Profile,
     captured: &full::FullCaptured,
     requested: Jobs,
@@ -257,19 +258,13 @@ fn stage_plan(
                 .ok_or_else(|| resource("window"))?,
         )
         .ok_or_else(|| resource("per-job overflow"))?;
-    let (jobs, limited_by) = match requested {
-        Jobs::Fixed(n) => (n.get() as u64, "request"),
-        Jobs::Auto => match usable.map(|u| {
-            u.saturating_sub(cache_bytes)
-                .saturating_sub(page_bytes)
-                .saturating_sub(2 * leaf_owned)
-                / per_job.max(1)
-        }) {
-            Some(0) => (1, "floor"),
-            Some(n) if n < cores => (n, "memory"),
-            _ => (cores, "cores"),
-        },
-    };
+    let fixed = cache_bytes
+        .checked_add(page_bytes)
+        .and_then(|n| n.checked_add(2 * leaf_owned))
+        .ok_or_else(|| resource("leaf fixed memory overflow"))?;
+    let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
+    let jobs = plan.jobs;
+    let limited_by = plan.limited_by;
     let window = jobs
         .checked_mul(4)
         .and_then(|n| n.checked_add(2))
@@ -287,7 +282,14 @@ fn stage_plan(
             "one leaf job cannot fit available memory including owned scratch",
         ));
     }
+    let bound_bytes = global_bytes
+        .checked_add(STAGE_RESERVE)
+        .and_then(|n| n.checked_add(cache_bytes))
+        .and_then(|n| n.checked_add(gate_bytes))
+        .and_then(|n| n.checked_add(leaves))
+        .ok_or_else(|| resource("leaf declared memory overflow"))?;
     Ok(StagePlan {
+        bound_bytes,
         page_bytes,
         gate_bytes,
         cache_bytes,
@@ -475,7 +477,7 @@ fn encode_leaf(
 /// every member, manifest row and the first reported failure are independent
 /// of the worker count.
 #[allow(clippy::too_many_arguments)]
-fn produce(
+pub(crate) fn produce(
     path: &Path,
     captured: &full::FullCaptured,
     config: &TreeConfig,
@@ -485,7 +487,7 @@ fn produce(
     target: usize,
     baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<LeafOutputReport, JobError> {
+) -> Result<LeafStageOutput, JobError> {
     use super::super::{bake_pass, lod::handoff::HandoffSink};
     // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
     // tile packets.
@@ -714,7 +716,48 @@ fn produce(
     timing::finish(
         json!({"profile":profile,"leaves":report.leaves,"triangles":report.triangles,"glbBytes":report.glb_bytes,"sourceImages":captured.image_info.len(),"sourceTexels":source_texels,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()}),
     );
-    Ok(report)
+    let stats = cache.stats();
+    Ok(LeafStageOutput {
+        report,
+        diagnostics: LeafStageDiagnostics {
+            memory_bound_bytes: stage.bound_bytes,
+            jobs: stage.jobs,
+            jobs_limited_by: stage.jobs_limited_by,
+            available_bytes: stage.available_bytes,
+            page_bytes: stage.page_bytes,
+            gate_bytes: stage.gate_bytes,
+            cache_bytes: stage.cache_bytes,
+            global_bytes: stage.global_bytes,
+            leaf_bytes: stage.leaf_bytes,
+            window: stage.window,
+            page_gate_peak_bytes: gate.peak(),
+            cache_peak_resident_bytes: stats.peak_resident_bytes,
+            cache_hits: stats.hits,
+            cache_misses: stats.misses,
+        },
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LeafStageDiagnostics {
+    pub memory_bound_bytes: u64,
+    pub jobs: u64,
+    pub jobs_limited_by: &'static str,
+    pub available_bytes: Option<u64>,
+    pub page_bytes: u64,
+    pub gate_bytes: u64,
+    pub cache_bytes: u64,
+    pub global_bytes: u64,
+    pub leaf_bytes: u64,
+    pub window: u64,
+    pub page_gate_peak_bytes: u64,
+    pub cache_peak_resident_bytes: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+}
+pub(crate) struct LeafStageOutput {
+    pub report: LeafOutputReport,
+    pub diagnostics: LeafStageDiagnostics,
 }
 
 fn write_leaf(
@@ -813,7 +856,7 @@ pub fn mesh_to_leaf_payloads(
     let cleanup_path = captured.scratch.path().to_owned();
     let cleanup = captured.close();
     let report = match result {
-        Ok(report) => report,
+        Ok(output) => output.report,
         Err(error) => {
             let mut failed = stage.fail(error);
             if let Err(error) = cleanup {

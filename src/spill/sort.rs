@@ -284,7 +284,7 @@ fn write_run<T: Record>(
     buffer_bytes: usize,
     records: &mut impl Cursor<T>,
 ) -> Result<Run, SpillError> {
-    let mut file = scratch.new_file("run");
+    let mut file = scratch.new_file("run")?;
     // Declared after `file` so the handle closes before an error removes the file.
     let mut writer = BufWriter::with_capacity(
         buffer_bytes,
@@ -625,6 +625,31 @@ pub(crate) struct SortedStream<'s, T: Record> {
 impl<T: Record> SortedStream<'_, T> {
     pub(crate) fn remaining(&self) -> u64 {
         self.remaining
+    }
+
+    /// The whole sorted output as one vector, without a copy, when the input never left
+    /// memory and was sorted as one chunk (`jobs == 1`) and nothing has been read yet.
+    /// Otherwise the stream is returned unchanged.
+    pub(crate) fn into_sorted_vec(mut self) -> Result<Vec<T>, Self> {
+        let untouched = self.remaining == self.stats.records;
+        match self.source.take() {
+            None if self.stats.records == 0 => Ok(Vec::new()),
+            Some(Source::Memory(merger)) if untouched && merger.sources.len() <= 1 => {
+                let Merger { sources, heap } = merger;
+                drop(heap);
+                match sources.into_iter().next() {
+                    None => Ok(Vec::new()),
+                    Some(cursor) => {
+                        let MemCursor { data, .. } = cursor;
+                        Ok(Arc::try_unwrap(data).unwrap_or_else(|data| (*data).clone()))
+                    }
+                }
+            }
+            source => {
+                self.source = source;
+                Err(self)
+            }
+        }
     }
 
     pub(crate) fn stats(&self) -> SortStats {

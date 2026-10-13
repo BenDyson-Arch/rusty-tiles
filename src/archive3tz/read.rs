@@ -1,10 +1,23 @@
 //! Finite stored ZIP/ZIP64 admission before directory/index allocation.
 //! Caller owns the selected source identity, known byte length and resource policy.
+//!
+//! The admitted catalog is held by [`super::catalog`]: in memory when small, otherwise on
+//! deferred scratch, so resident memory does not grow with the entry count (VS-A).
+use super::catalog::{
+    self, md5_key, Catalog, CatalogConfig, Directory, IndexRow, Key, LogWriter, Member, Names, Row,
+    RowsWriter,
+};
+use crate::spill::{Placement, Record, Scratch, SpillError};
 use sha2::{Digest, Sha256};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::{
+    io::{self, Read, Seek, SeekFrom},
+    sync::Arc,
+};
 
 /// Index rows per streamed chunk: a 65,520-byte buffer.
 const INDEX_CHUNK_ROWS: usize = 2730;
+/// Central-directory bytes read at once.
+const DIRECTORY_CHUNK: u64 = 64 * 1024;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ReadLimits {
@@ -27,58 +40,119 @@ pub(crate) enum ReadError {
     MissingMember(String),
     #[error(transparent)]
     Io(#[from] io::Error),
+    /// The catalog's own scratch storage failed; never a verdict on the archive.
+    #[error("archive catalog scratch: {0}")]
+    Scratch(#[from] SpillError),
 }
 
-/// Raw central-directory identity and the admitted stored range.
-pub(crate) struct StoredMember {
-    pub name: String,
-    pub size: u64,
-    pub local_offset: u64,
-    pub data_offset: u64,
-    pub crc32: u32,
+/// The last central-directory entry, which a 3TZ requires to be its index.
+#[derive(Clone, Copy, Debug)]
+struct Last {
+    is_index: bool,
+    size: u64,
+    data_offset: u64,
+    local_offset: u64,
+    crc32: u32,
 }
 
 /// One selected end record, one admitted catalog, one owned source reader.
 pub(crate) struct StoredArchive<R> {
     reader: R,
-    members: Vec<StoredMember>,
-    by_name: Vec<usize>,
+    catalog: Catalog,
+    last: Last,
+    /// S, fixed before traversal: the basis of VS-C's scaled budgets.
+    #[allow(dead_code)]
+    stored_bytes: u64,
     index_read_bytes: u64,
+    config: CatalogConfig,
+    // Declared last: every scratch file above is removed before the directory.
+    scratch: Arc<Scratch>,
 }
 
 impl<R: Read + Seek> StoredArchive<R> {
+    /// Admits the archive with this build's catalog profile. A spilled catalog goes to a
+    /// disk-backed default scratch; with only memory-backed candidates it is refused, since
+    /// this constructor has no report to state that the spill would sit in RAM.
     pub(crate) fn new(
-        mut reader: R,
+        reader: R,
         known_length: u64,
         limits: &ReadLimits,
     ) -> Result<Self, ReadError> {
-        let (members, by_name) = scan_directory(&mut reader, known_length, limits)?;
+        Self::new_with(
+            reader,
+            known_length,
+            limits,
+            CatalogConfig::selected(),
+            Placement::disk(false),
+        )
+    }
+
+    /// Admits the archive; a catalog over `config.resident_bytes` spills to a scratch
+    /// directory at `placement`, created on first use.
+    pub(crate) fn new_with(
+        mut reader: R,
+        known_length: u64,
+        limits: &ReadLimits,
+        config: CatalogConfig,
+        placement: Placement,
+    ) -> Result<Self, ReadError> {
+        let scanned = scan_directory(&mut reader, known_length, limits, &config, placement)?;
         let mut archive = Self {
             reader,
-            members,
-            by_name,
+            catalog: scanned.catalog,
+            last: scanned.last,
+            stored_bytes: scanned.stored_bytes,
             index_read_bytes: 0,
+            config,
+            scratch: scanned.scratch,
         };
         archive.validate_index()?;
         Ok(archive)
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.members.len()
+    /// Admitted member count N, index included.
+    pub(crate) fn len(&self) -> u64 {
+        self.catalog.len()
     }
 
-    pub(crate) fn member_at(&self, index: usize) -> Result<&StoredMember, ReadError> {
-        self.members
-            .get(index)
-            .ok_or_else(|| ReadError::MissingMember(format!("ordinal {index}")))
+    /// S: the sum of admitted stored member sizes.
+    #[allow(dead_code)]
+    pub(crate) fn stored_bytes(&self) -> u64 {
+        self.stored_bytes
     }
 
-    pub(crate) fn member(&self, name: &str) -> Result<&StoredMember, ReadError> {
-        let at = self
-            .by_name
-            .binary_search_by(|&i| self.members[i].name.as_str().cmp(name))
-            .map_err(|_| ReadError::MissingMember(name.into()))?;
-        Ok(&self.members[self.by_name[at]])
+    /// The member named exactly `name`, if any.
+    pub(crate) fn find(&mut self, name: &str) -> Result<Option<Member>, ReadError> {
+        Ok(self.catalog.find(name)?)
+    }
+
+    pub(crate) fn member(&mut self, name: &str) -> Result<Member, ReadError> {
+        self.find(name)?
+            .ok_or_else(|| ReadError::MissingMember(name.into()))
+    }
+
+    /// The name of the member at `rank` (catalog order).
+    pub(crate) fn name(&mut self, rank: u64) -> Result<String, ReadError> {
+        Ok(self.catalog.name(rank)?)
+    }
+
+    /// Shared access to the member names, for consumers that outlive this reader.
+    pub(crate) fn names(&self) -> Names {
+        self.catalog.names()
+    }
+
+    /// The members in central-directory order.
+    pub(crate) fn directory(&self) -> Result<Directory, ReadError> {
+        Ok(self.catalog.directory()?)
+    }
+
+    /// The catalog's scratch, for consumers that spill under the same directory.
+    pub(crate) fn scratch(&self) -> Arc<Scratch> {
+        self.scratch.clone()
+    }
+
+    pub(crate) fn config(&self) -> &CatalogConfig {
+        &self.config
     }
 
     /// Constructor work that C1 charges under its existing aggregate read cap.
@@ -102,9 +176,14 @@ impl<R: Read + Seek> StoredArchive<R> {
         Ok(bytes)
     }
 
-    pub(crate) fn hash_member(&mut self, index: usize) -> Result<[u8; 32], ReadError> {
-        let member = self.member_at(index)?;
-        let (mut remaining, offset, expected_crc) = (member.size, member.data_offset, member.crc32);
+    /// Streams one admitted stored range through CRC-32 and SHA-256.
+    pub(crate) fn hash_range(
+        &mut self,
+        size: u64,
+        offset: u64,
+        expected_crc: u32,
+    ) -> Result<[u8; 32], ReadError> {
+        let mut remaining = size;
         self.reader.seek(SeekFrom::Start(offset))?;
         let mut buffer = [0; 64 * 1024];
         let mut crc = crc32fast::Hasher::new();
@@ -128,81 +207,197 @@ impl<R: Read + Seek> StoredArchive<R> {
             return Err(malformed("3TZ must contain tileset.json and an index"));
         }
         self.member("tileset.json")?;
-        let length = u64::try_from(n - 1)
-            .ok()
-            .and_then(|n| n.checked_mul(24))
+        let length = (n - 1)
+            .checked_mul(24)
             .ok_or_else(|| malformed("3TZ index length overflows"))?;
-        let last = &self.members[n - 1];
-        if last.name != super::TZ_INDEX_NAME {
+        if !self.last.is_index {
             return Err(malformed("last ZIP member must be @3dtilesIndex1@"));
         }
-        if last.size != length {
+        if self.last.size != length {
             return Err(malformed(
                 "3TZ index must contain every member exactly once",
             ));
         }
-        // Cardinality is admitted before any index allocation. The catalog
-        // supplies every association; no second directory interpretation.
-        // The index is streamed in whole-row chunks, so its resident cost is
-        // one fixed buffer, not 24 bytes per entry.
-        let (offset, crc) = (last.data_offset, last.crc32);
+        // Cardinality is admitted before any index read. The catalog supplies every
+        // association; no second directory interpretation. The index is streamed in
+        // whole-row chunks against the catalog in rank order, so neither is held whole.
         self.index_read_bytes = length;
-        let mut offsets = Vec::new();
-        offsets
-            .try_reserve_exact(n - 1)
-            .map_err(|_| ReadError::limit("bounded index offset table unavailable"))?;
-        offsets.extend(0..n - 1);
-        offsets.sort_unstable_by_key(|&i| self.members[i].local_offset);
-        let mut seen = bounded_bytes(n - 1)?;
-        let mut previous = None;
-        // A stored CRC mismatch outranks every row failure, as when the index
-        // was checked whole before parsing: the first row failure is held
-        // until the complete index has been read and its CRC verified.
-        let mut failure = None;
-        let mut hasher = crc32fast::Hasher::new();
-        let mut buffer = [0; INDEX_CHUNK_ROWS * 24];
-        let mut remaining = length;
-        self.reader.seek(SeekFrom::Start(offset))?;
-        while remaining != 0 {
-            let count = remaining.min(buffer.len() as u64) as usize;
-            let chunk = &mut buffer[..count];
-            read_exact(&mut self.reader, chunk)?;
-            remaining -= count as u64;
-            hasher.update(chunk);
-            if failure.is_some() {
-                continue;
-            }
-            for row in chunk.as_chunks::<24>().0 {
-                let key = (u64_at(row, 0), u64_at(row, 8));
-                if previous.is_some_and(|previous| previous > key) {
-                    failure = Some("3TZ index hashes are not ordered");
-                    break;
+        let index_offset = self.last.local_offset;
+        let mut pending = CatalogCursor {
+            rows: self.catalog.rows().iter()?,
+            index_offset,
+        };
+        let mut previous: Option<[u64; 2]> = None;
+        let mut unordered = None;
+        let mut matched = true;
+        // A stored CRC mismatch outranks every row failure, as when the index was checked
+        // whole before parsing: row failures are decided after the CRC.
+        let crc_ok = index_pass(
+            &mut self.reader,
+            &self.last,
+            length,
+            |position, key, offset| {
+                if unordered.is_none() && previous.is_some_and(|previous| previous > key) {
+                    unordered = Some(position);
                 }
                 previous = Some(key);
-                let offset = u64_at(row, 16);
-                let Ok(position) =
-                    offsets.binary_search_by_key(&offset, |&i| self.members[i].local_offset)
-                else {
-                    failure = Some("3TZ index differs from admitted directory");
-                    break;
-                };
-                let i = offsets[position];
-                if seen[i] != 0 || md5::compute(self.members[i].name.as_bytes()).0 != row[..16] {
-                    failure = Some("3TZ index differs from admitted directory");
-                    break;
+                if matched {
+                    matched = pending
+                        .next()?
+                        .is_some_and(|(row, local)| row.md5 == key && local == offset);
                 }
-                seen[i] = 1;
-            }
-        }
-        if hasher.finalize() != crc {
+                Ok(())
+            },
+        )?;
+        drop(pending);
+        if !crc_ok {
             return Err(malformed("stored member CRC mismatch"));
         }
-        if let Some(message) = failure {
-            return Err(malformed(message));
+        if matched {
+            return Ok(());
         }
-        Ok(())
+        // Exact diagnosis (only for a failing index or an MD5-colliding group in another
+        // order): the first row, in index order, that the sequential check rejects.
+        let first_mismatch = self.first_mismatch(length, index_offset)?;
+        match (unordered, first_mismatch) {
+            (Some(unordered), first) if first.is_none_or(|first| unordered <= first) => {
+                Err(malformed("3TZ index hashes are not ordered"))
+            }
+            (None, None) => Ok(()),
+            _ => Err(malformed("3TZ index differs from admitted directory")),
+        }
+    }
+
+    /// The first index position whose row names no admitted non-index member, or repeats
+    /// an earlier row's member (its MD5 and offset). Rows and catalog pairs are sorted by
+    /// `(md5, offset)` on scratch and merged; each pair's earliest row is the one the
+    /// sequential check accepts.
+    fn first_mismatch(&mut self, length: u64, index_offset: u64) -> Result<Option<u64>, ReadError> {
+        let scratch = self.scratch.clone();
+        let mut rows = catalog::sorter::<IndexRow>(&scratch, self.config.side_sort)?;
+        let crc_ok = index_pass(
+            &mut self.reader,
+            &self.last,
+            length,
+            |position, md5, offset| {
+                Ok(rows.push(IndexRow {
+                    md5,
+                    offset,
+                    position,
+                })?)
+            },
+        )?;
+        if !crc_ok {
+            return Err(malformed("stored member CRC mismatch"));
+        }
+        let mut members = catalog::sorter::<IndexRow>(&scratch, self.config.side_sort)?;
+        self.catalog.rows().for_each(|row| {
+            if row.local_offset != index_offset {
+                members.push(IndexRow {
+                    md5: row.key.md5,
+                    offset: row.local_offset,
+                    position: 0,
+                })?;
+            }
+            Ok(())
+        })?;
+        Ok(first_failing_row(rows.finish()?, members.finish()?)?)
     }
 }
+
+/// The first index position the sequential check rejects, from the index rows and the
+/// non-index catalog pairs, each sorted by `(md5, offset)` (rows then by position).
+///
+/// Before the first failure every row passes, so the first failure is the least of: each
+/// pair absent from the catalog, at its earliest row; each present pair repeated, at its
+/// second row. Equal MD5s (collisions) need no special case: pairs are exact.
+fn first_failing_row(
+    rows: impl Iterator<Item = Result<IndexRow, SpillError>>,
+    members: impl Iterator<Item = Result<IndexRow, SpillError>>,
+) -> Result<Option<u64>, SpillError> {
+    let mut members = members.peekable();
+    type Group = Option<(([u64; 2], u64), u64, bool)>;
+    // A pair's rows all fail when no member has it; otherwise only its later rows do.
+    fn close(group: Group, second: Option<u64>, first: &mut Option<u64>) {
+        if let Some((_, lowest, present)) = group {
+            let failing = if present { second } else { Some(lowest) };
+            if let Some(failing) = failing {
+                *first = Some(first.map_or(failing, |first| first.min(failing)));
+            }
+        }
+    }
+    let mut first: Option<u64> = None;
+    let mut group: Group = None;
+    let mut second = None;
+    for row in rows {
+        let row = row?;
+        let pair = (row.md5, row.offset);
+        if group.is_some_and(|(held, _, _)| held == pair) {
+            second.get_or_insert(row.position);
+            continue;
+        }
+        close(group, second.take(), &mut first);
+        let present = loop {
+            match members.peek() {
+                Some(Ok(member)) if (member.md5, member.offset) < pair => {
+                    members.next();
+                }
+                Some(Ok(member)) => break (member.md5, member.offset) == pair,
+                Some(Err(_)) => return Err(members.next().unwrap().unwrap_err()),
+                None => break false,
+            }
+        };
+        group = Some((pair, row.position, present));
+    }
+    close(group, second, &mut first);
+    Ok(first)
+}
+
+/// Reads the index once in whole-row chunks, giving each row's position, MD5 key and
+/// offset to `row`; returns whether the stored CRC matches.
+fn index_pass(
+    reader: &mut (impl Read + Seek),
+    last: &Last,
+    length: u64,
+    mut row: impl FnMut(u64, [u64; 2], u64) -> Result<(), ReadError>,
+) -> Result<bool, ReadError> {
+    let mut hasher = crc32fast::Hasher::new();
+    let mut buffer = [0; INDEX_CHUNK_ROWS * 24];
+    let mut remaining = length;
+    let mut position = 0u64;
+    reader.seek(SeekFrom::Start(last.data_offset))?;
+    while remaining != 0 {
+        let count = remaining.min(buffer.len() as u64) as usize;
+        let chunk = &mut buffer[..count];
+        read_exact(reader, chunk)?;
+        remaining -= count as u64;
+        hasher.update(chunk);
+        for bytes in chunk.as_chunks::<24>().0 {
+            row(position, md5_key(&bytes[..16]), u64_at(bytes, 16))?;
+            position += 1;
+        }
+    }
+    Ok(hasher.finalize() == last.crc32)
+}
+
+/// Non-index catalog rows in rank order, read lazily.
+struct CatalogCursor<'a> {
+    rows: Box<dyn Iterator<Item = Result<Row, SpillError>> + 'a>,
+    index_offset: u64,
+}
+
+impl CatalogCursor<'_> {
+    fn next(&mut self) -> Result<Option<(Key, u64)>, ReadError> {
+        for row in self.rows.by_ref() {
+            let row = row?;
+            if row.local_offset != self.index_offset {
+                return Ok(Some((row.key, row.local_offset)));
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl ReadError {
     fn unsupported(message: &str) -> Self {
         Self::Unsupported(message.into())
@@ -367,11 +562,6 @@ impl Ends {
         Ok(selected)
     }
 }
-#[derive(Clone, Copy, Debug)]
-struct Extent {
-    start: u64,
-    ends: Ends,
-}
 
 fn descriptor(
     file: &mut (impl Read + Seek),
@@ -421,11 +611,86 @@ fn descriptor(
     Ok(ends)
 }
 
+/// The admitted directory: its catalog, last entry and stored total S.
+struct Scanned {
+    catalog: Catalog,
+    last: Last,
+    stored_bytes: u64,
+    scratch: Arc<Scratch>,
+}
+
+/// Central-directory bytes, read in chunks instead of one read per field.
+struct DirectoryBuffer {
+    start: u64,
+    bytes: Vec<u8>,
+    stop: u64,
+}
+
+impl DirectoryBuffer {
+    /// `len` bytes at `at`; the caller has checked `at + len <= stop`.
+    fn get(
+        &mut self,
+        file: &mut (impl Read + Seek),
+        at: u64,
+        len: usize,
+    ) -> Result<&[u8], ReadError> {
+        let end = at + len as u64;
+        if at < self.start || end > self.start + self.bytes.len() as u64 {
+            let want = (len as u64).max(DIRECTORY_CHUNK).min(self.stop - at);
+            self.bytes.clear();
+            self.bytes
+                .try_reserve_exact(want as usize)
+                .map_err(|_| ReadError::limit("bounded archive allocation unavailable"))?;
+            self.bytes.resize(want as usize, 0);
+            read(file, at, &mut self.bytes)?;
+            self.start = at;
+        }
+        let from = (at - self.start) as usize;
+        Ok(&self.bytes[from..from + len])
+    }
+}
+
+/// One record's physical extent, sorted by start for the disjointness check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Extent {
+    start: u64,
+    ends: [u64; 2],
+    count: u8,
+}
+
+impl Record for Extent {
+    const SIZE: usize = 25;
+    fn encode(&self, out: &mut [u8]) {
+        out[..8].copy_from_slice(&self.start.to_le_bytes());
+        out[8..16].copy_from_slice(&self.ends[0].to_le_bytes());
+        out[16..24].copy_from_slice(&self.ends[1].to_le_bytes());
+        out[24] = self.count;
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        Self {
+            start: u64_at(bytes, 0),
+            ends: [u64_at(bytes, 8), u64_at(bytes, 16)],
+            count: bytes[24],
+        }
+    }
+}
+
+impl Extent {
+    fn ends(self) -> Ends {
+        Ends {
+            values: self.ends,
+            count: usize::from(self.count),
+        }
+    }
+}
+
 fn scan_directory(
     file: &mut (impl Read + Seek),
     size: u64,
     limits: &ReadLimits,
-) -> Result<(Vec<StoredMember>, Vec<usize>), ReadError> {
+    config: &CatalogConfig,
+    placement: Placement,
+) -> Result<Scanned, ReadError> {
     if size > limits.source_archive_bytes {
         return Err(ReadError::limit("source archive exceeds byte limit"));
     }
@@ -545,20 +810,25 @@ fn scan_directory(
     {
         return Err(malformed("ZIP entry count exceeds directory length"));
     }
-    let count = usize::try_from(entries)
-        .map_err(|_| ReadError::limit("archive entry count exceeds host range"))?;
-    let mut extents = Vec::new();
-    extents
-        .try_reserve_exact(count)
-        .map_err(|_| ReadError::limit("bounded extent table allocation unavailable"))?;
-    let mut members = Vec::new();
-    members
-        .try_reserve_exact(count)
-        .map_err(|_| ReadError::limit("bounded catalog allocation unavailable"))?;
-    let mut by_name = Vec::new();
-    by_name
-        .try_reserve_exact(count)
-        .map_err(|_| ReadError::limit("bounded name ordinal table unavailable"))?;
+    // Catalog storage is chosen from the admitted count and directory length, before any
+    // record is read. Scratch, if any, is preflighted and created at its first file.
+    let memory = entries
+        .checked_mul(64 + catalog::LOG_HEADER as u64)
+        .and_then(|n| n.checked_add(bytes))
+        .is_some_and(|n| n <= config.resident_bytes);
+    let scratch = Arc::new(Scratch::deferred(
+        placement,
+        CatalogConfig::scratch_estimate(entries, bytes),
+    ));
+    let mut log = LogWriter::new(&scratch, memory, config)?;
+    let mut rows = catalog::sorter::<Row>(&scratch, config.sort)?;
+    let mut extents = catalog::sorter::<Extent>(&scratch, config.side_sort)?;
+    let mut last = None;
+    let mut directory = DirectoryBuffer {
+        start: offset,
+        bytes: Vec::new(),
+        stop,
+    };
     let mut cursor = offset;
     let mut total = 0u64;
     let mut name_bytes = 0u64;
@@ -567,7 +837,7 @@ fn scan_directory(
             return Err(malformed("truncated ZIP central entry"));
         }
         let mut h = [0; 46];
-        read(file, cursor, &mut h)?;
+        h.copy_from_slice(directory.get(file, cursor, 46)?);
         if &h[..4] != b"PK\x01\x02" {
             return Err(malformed("invalid ZIP central entry"));
         }
@@ -589,8 +859,7 @@ fn scan_directory(
             .checked_add(46 + name_size as u64 + extra_size as u64 + u64::from(u16_at(&h, 32)))
             .filter(|&n| n <= stop)
             .ok_or_else(|| malformed("ZIP entry fields exceed central directory"))?;
-        let mut name = bounded_bytes(name_size)?;
-        read(file, cursor + 46, &mut name)?;
+        let name = directory.get(file, cursor + 46, name_size)?.to_vec();
         if std::str::from_utf8(&name).is_err() {
             if u16_at(&h, 8) & 0x800 != 0 {
                 return Err(malformed("invalid UTF-8 ZIP member name"));
@@ -604,8 +873,9 @@ fn scan_directory(
                 "non-ASCII ZIP names require the UTF-8 flag",
             ));
         }
-        let mut extra = bounded_bytes(extra_size)?;
-        read(file, cursor + 46 + name_size as u64, &mut extra)?;
+        let extra = directory
+            .get(file, cursor + 46 + name_size as u64, extra_size)?
+            .to_vec();
         let ([member, compressed, local_offset], disk, central_zip64) = zip64_sizes(
             [u32_at(&h, 24), u32_at(&h, 20), u32_at(&h, 42)],
             &extra,
@@ -632,8 +902,12 @@ fn scan_directory(
         if local_offset.checked_add(30).is_none_or(|n| n > offset) {
             return Err(malformed("ZIP local header outside source payload"));
         }
+        // The fixed local header and its name are read at once, never past the directory.
+        let span = (offset - local_offset).min(30 + name_size as u64) as usize;
+        let mut local_record = bounded_bytes(span)?;
+        read(file, local_offset, &mut local_record)?;
         let mut local = [0; 30];
-        read(file, local_offset, &mut local)?;
+        local.copy_from_slice(&local_record[..30]);
         if &local[..4] != b"PK\x03\x04"
             || u16_at(&local, 8) != 0
             || u16_at(&local, 6) != u16_at(&h, 8)
@@ -650,17 +924,18 @@ fn scan_directory(
         if data_start.checked_add(member).is_none_or(|n| n > offset) {
             return Err(malformed("stored ZIP payload outside source"));
         }
-        let mut actual_name = bounded_bytes(local_name)?;
-        read(file, local_offset + 30, &mut actual_name)?;
-        if actual_name != name {
+        // `data_start + member <= offset` bounds the name within the bytes read above.
+        if local_record[30..30 + local_name] != name[..] {
             return Err(malformed("local ZIP name differs from central directory"));
         }
         let mut local_extra = bounded_bytes(usize::from(u16_at(&local, 28)))?;
-        read(
-            file,
-            local_offset + 30 + local_name as u64,
-            &mut local_extra,
-        )?;
+        if !local_extra.is_empty() {
+            read(
+                file,
+                local_offset + 30 + local_name as u64,
+                &mut local_extra,
+            )?;
+        }
         let ([local_member, local_compressed], _, local_zip64) =
             zip64_sizes([u32_at(&local, 22), u32_at(&local, 18)], &local_extra, None)?;
         let crc = u32_at(&h, 16);
@@ -700,17 +975,28 @@ fn scan_directory(
         };
         extents.push(Extent {
             start: local_offset,
-            ends,
-        });
-        by_name.push(members.len());
-        members.push(StoredMember {
-            name: String::from_utf8(name)
-                .map_err(|_| malformed("invalid UTF-8 ZIP member name"))?,
+            ends: ends.values,
+            count: ends.count as u8,
+        })?;
+        let name_ref = log.append(&name, member, data_start, crc as u32)?;
+        rows.push(Row {
+            key: Key::of(&name),
+            name_ref,
+            name_len: name_size as u16,
             size: member,
-            local_offset,
             data_offset: data_start,
+            local_offset,
             crc32: crc as u32,
-        });
+        })?;
+        if ordinal + 1 == entries {
+            last = Some(Last {
+                is_index: index,
+                size: member,
+                data_offset: data_start,
+                local_offset,
+                crc32: crc as u32,
+            });
+        }
         total = total
             .checked_add(member)
             .filter(|&n| n <= limits.archive_stored_bytes)
@@ -720,25 +1006,88 @@ fn scan_directory(
     if cursor != stop {
         return Err(malformed("ZIP directory length/count mismatch"));
     }
-    by_name.sort_unstable_by(|&a, &b| members[a].name.cmp(&members[b].name));
-    if by_name
-        .windows(2)
-        .any(|pair| members[pair[0]].name == members[pair[1]].name)
-    {
+    let log = log.finish()?;
+    let names = catalog::Names::from_log(log);
+    // Equal names have equal keys, so duplicates are adjacent within an equal-key run.
+    let mut run: Vec<Row> = Vec::new();
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    let mut duplicate = false;
+    let writer = RowsWriter::new(&scratch, memory, entries, config)?;
+    let sorted = catalog::store_sorted(rows.finish()?, writer, |row| {
+        if run.last().is_some_and(|held| held.key != row.key) {
+            run.clear();
+        }
+        // Names are read only within an equal-key run (MD5 and SHA-256/64 collisions or
+        // duplicates): a lone row costs no log read, so the scan stays sequential.
+        if !duplicate && !run.is_empty() {
+            names.read(row.name_ref, row.name_len, &mut a)?;
+            for held in &run {
+                names.read(held.name_ref, held.name_len, &mut b)?;
+                duplicate |= a == b;
+            }
+        }
+        run.push(*row);
+        Ok(())
+    })?;
+    if duplicate {
         return Err(malformed("duplicate ZIP member name"));
     }
-    extents.sort_unstable_by_key(|extent| extent.start);
-    for (index, extent) in extents.iter().enumerate() {
-        let boundary = extents.get(index + 1).map_or(offset, |next| next.start);
-        extent.ends.select(boundary)?;
+    // Physical disjointness: each extent against the next start (or the directory).
+    let mut extents = extents.finish()?.peekable();
+    while let Some(extent) = extents.next() {
+        let extent = extent?;
+        let boundary = match extents.peek() {
+            Some(Ok(next)) => next.start,
+            Some(Err(_)) => return Err(extents.next().unwrap().unwrap_err().into()),
+            None => offset,
+        };
+        extent.ends().select(boundary)?;
     }
-    Ok((members, by_name))
+    Ok(Scanned {
+        catalog: Catalog::new(sorted, names, config),
+        last: last.ok_or_else(|| malformed("3TZ must contain tileset.json and an index"))?,
+        stored_bytes: total,
+        scratch,
+    })
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::path::Path;
+
+    /// The scan with this build's catalog profile and default scratch.
+    fn scan(
+        file: &mut (impl Read + Seek),
+        size: u64,
+        limits: &ReadLimits,
+    ) -> Result<Scanned, ReadError> {
+        scan_directory(
+            file,
+            size,
+            limits,
+            &CatalogConfig::selected(),
+            Placement::disk(false),
+        )
+    }
+
+    impl<R: Read + Seek> StoredArchive<R> {
+        /// Central-directory-order entries.
+        fn entries(&self) -> Vec<catalog::DirectoryEntry> {
+            let mut directory = self.directory().unwrap();
+            std::iter::from_fn(|| directory.next_entry().unwrap()).collect()
+        }
+        /// Hashes the member at central-directory position `index`.
+        fn hash_member(&mut self, index: usize) -> Result<[u8; 32], ReadError> {
+            let entry = self
+                .entries()
+                .into_iter()
+                .nth(index)
+                .ok_or_else(|| ReadError::MissingMember(format!("ordinal {index}")))?;
+            self.hash_range(entry.size, entry.data_offset, entry.crc32)
+        }
+    }
 
     fn put16(bytes: &mut [u8], at: usize, value: u16) {
         bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
@@ -861,6 +1210,12 @@ pub(crate) mod tests {
         let records: Vec<_> = records.iter().map(|&(n, d)| Record::stored(n, d)).collect();
         archive(&records, &(0..records.len()).collect::<Vec<_>>(), 0)
     }
+    /// A valid 3TZ whose members appear, physically and in the central directory, in the
+    /// given order (the index last).
+    pub(crate) fn indexed_zip(records: &[(&[u8], &[u8])]) -> Vec<u8> {
+        let records: Vec<_> = records.iter().map(|&(n, d)| Record::stored(n, d)).collect();
+        indexed(&records)
+    }
     fn indexed(records: &[Record<'_>]) -> Vec<u8> {
         indexed_rows(records, |_| {})
     }
@@ -902,7 +1257,7 @@ pub(crate) mod tests {
         }
     }
     fn admit(bytes: &[u8]) -> Result<(), ReadError> {
-        scan_directory(&mut Cursor::new(bytes), bytes.len() as u64, &limits()).map(|_| ())
+        scan(&mut Cursor::new(bytes), bytes.len() as u64, &limits()).map(|_| ())
     }
     fn directory(bytes: &[u8]) -> usize {
         u32_at(bytes, bytes.len() - 6) as usize
@@ -1132,7 +1487,7 @@ pub(crate) mod tests {
             member_bytes: 4,
             archive_stored_bytes: 8,
         };
-        scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &exact).unwrap();
+        scan(&mut Cursor::new(&bytes), bytes.len() as u64, &exact).unwrap();
         for field in 0..5 {
             let mut bounded = exact;
             match field {
@@ -1143,7 +1498,7 @@ pub(crate) mod tests {
                 _ => bounded.archive_stored_bytes -= 1,
             }
             assert!(matches!(
-                scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &bounded),
+                scan(&mut Cursor::new(&bytes), bytes.len() as u64, &bounded),
                 Err(ReadError::ResourceLimit(_))
             ));
         }
@@ -1257,19 +1612,19 @@ pub(crate) mod tests {
             reads: 0,
         };
         assert!(matches!(
-            scan_directory(&mut reader, 4097, &limits()),
+            scan(&mut reader, 4097, &limits()),
             Err(ReadError::ResourceLimit(_))
         ));
         assert_eq!(reader.reads, 0);
         assert!(
-            matches!(scan_directory(&mut reader, 22, &limits()), Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::InvalidData)
+            matches!(scan(&mut reader, 22, &limits()), Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::InvalidData)
         );
         reader.seek = true;
         assert!(
-            matches!(scan_directory(&mut reader, 22, &limits()), Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied)
+            matches!(scan(&mut reader, 22, &limits()), Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied)
         );
         assert!(matches!(
-            scan_directory(&mut Cursor::new([]), 22, &limits()),
+            scan(&mut Cursor::new([]), 22, &limits()),
             Err(ReadError::InvalidInput(_))
         ));
     }
@@ -1299,12 +1654,13 @@ pub(crate) mod tests {
         let mut held = StoredArchive::new(file, bytes.len() as u64, &limits).unwrap();
         assert_eq!(cursor.len(), 3);
         assert_eq!(cursor.index_read_bytes(), 48);
-        for index in 0..cursor.len() {
-            let a = cursor.member_at(index).unwrap();
-            let b = held.member_at(index).unwrap();
+        let (a, b) = (cursor.entries(), held.entries());
+        assert_eq!(a.len(), 3);
+        for index in 0..a.len() {
+            let (a, b) = (&a[index], &b[index]);
             assert_eq!(
-                (&a.name, a.local_offset, a.data_offset, a.size, a.crc32),
-                (&b.name, b.local_offset, b.data_offset, b.size, b.crc32)
+                (&a.name, a.data_offset, a.size, a.crc32),
+                (&b.name, b.data_offset, b.size, b.crc32)
             );
             assert_eq!(
                 cursor.hash_member(index).unwrap(),
@@ -1321,7 +1677,7 @@ pub(crate) mod tests {
             Err(ReadError::MissingMember(_))
         ));
         assert!(matches!(
-            cursor.member_at(3),
+            cursor.hash_member(3),
             Err(ReadError::MissingMember(_))
         ));
     }
@@ -1491,13 +1847,10 @@ pub(crate) mod tests {
         let bytes = indexed(&[manifest]);
         let length = bytes.len();
         let directory = directory(&bytes) as u64;
-        // Separate actual reads/seeks of the fixed header, raw name, and a
-        // nonempty framed extra must all retain their underlying I/O cause.
-        for offset in [
-            directory,
-            directory + 46,
-            directory + 46 + b"tileset.json".len() as u64,
-        ] {
+        // The directory is read in chunks from its first record; the actual read or seek
+        // of a chunk must retain its underlying I/O cause, as must the local header read.
+        let local = 0u64;
+        for offset in [directory, local] {
             for seek_fault in [false, true] {
                 let source = DirectoryFault {
                     inner: Cursor::new(bytes.clone()),
@@ -1649,7 +2002,7 @@ pub(crate) mod tests {
             // directory length could refute the count.
             for limits in [limits(), generous] {
                 assert!(
-                    matches!(scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &limits),
+                    matches!(scan(&mut Cursor::new(&bytes), bytes.len() as u64, &limits),
                         Err(ReadError::Unsupported(message)) if message == ceiling_refusal(count))
                 );
             }
@@ -1661,7 +2014,7 @@ pub(crate) mod tests {
             matches!(admit(&bytes), Err(ReadError::ResourceLimit(message)) if message == "archive exceeds entry limit")
         );
         assert!(
-            matches!(scan_directory(&mut Cursor::new(&bytes), bytes.len() as u64, &generous),
+            matches!(scan(&mut Cursor::new(&bytes), bytes.len() as u64, &generous),
                 Err(ReadError::InvalidInput(message)) if message == "ZIP entry count exceeds directory length")
         );
     }
@@ -1720,7 +2073,7 @@ pub(crate) mod tests {
         let bytes = index_archive(&names, |_| {});
         let limits = tight_member_limits(bytes.len());
         let owner = open(&bytes, &limits).unwrap();
-        assert_eq!(owner.len(), rows + 1);
+        assert_eq!(owner.len(), rows as u64 + 1);
         assert_eq!(owner.index_read_bytes(), 24 * rows as u64);
         assert!(owner.index_read_bytes() > INDEX_CHUNK_ROWS as u64 * 24);
         assert!(owner.index_read_bytes() > limits.member_bytes);
@@ -1913,5 +2266,291 @@ pub(crate) mod tests {
         let owner = StoredArchive::new(file.reopen().unwrap(), length, &limits).unwrap();
         assert_eq!(owner.len() as u64, MEMBERS);
         assert_eq!(owner.index_read_bytes(), 24 * rows);
+    }
+
+    // ---- VS-A catalog controls -------------------------------------------------------
+
+    /// The pre-VS-A index check, kept as the independent reference: non-index members by
+    /// offset, a binary search per row and a seen table, first failure in index order.
+    fn reference_index(
+        rows: &[([u8; 16], u64)],
+        members: &[([u8; 16], u64)],
+    ) -> Result<(), &'static str> {
+        let mut offsets: Vec<usize> = (0..members.len()).collect();
+        offsets.sort_by_key(|&i| members[i].1);
+        let mut seen = vec![false; members.len()];
+        let mut previous = None;
+        for (hash, offset) in rows {
+            let key = (u64_at(hash, 0), u64_at(hash, 8));
+            if previous.is_some_and(|previous| previous > key) {
+                return Err("3TZ index hashes are not ordered");
+            }
+            previous = Some(key);
+            let Ok(position) = offsets.binary_search_by_key(offset, |&i| members[i].1) else {
+                return Err("3TZ index differs from admitted directory");
+            };
+            let i = offsets[position];
+            if seen[i] || members[i].0 != *hash {
+                return Err("3TZ index differs from admitted directory");
+            }
+            seen[i] = true;
+        }
+        Ok(())
+    }
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    fn admit_with<'a>(
+        bytes: &'a [u8],
+        config: CatalogConfig,
+        parent: &Path,
+    ) -> Result<StoredArchive<Cursor<&'a [u8]>>, ReadError> {
+        StoredArchive::new_with(
+            Cursor::new(bytes),
+            bytes.len() as u64,
+            &natural_limits(bytes.len()),
+            config,
+            Placement::In(parent.into()),
+        )
+    }
+
+    fn outcome<R>(result: Result<R, ReadError>) -> Result<(), String> {
+        result.map(|_| ()).map_err(|error| format!("{error:?}"))
+    }
+
+    /// Randomly defected indexes give the reference check's verdict under both catalog
+    /// profiles: the merge-join and its exact diagnosis decide every first failure.
+    #[test]
+    fn index_merge_join_matches_the_sequential_reference() {
+        let parent = tempfile::tempdir().unwrap();
+        let names: Vec<Vec<u8>> = (0..40)
+            .map(|i| format!("m/{i:03}.glb").into_bytes())
+            .collect();
+        let mut random = XorShift(0x9e37_79b9_7f4a_7c15);
+        let (mut verdicts, mut trials) = (std::collections::BTreeMap::new(), 0);
+        for trial in 0..600 {
+            let count = 1 + random.below(names.len());
+            let mut records = vec![Record::stored(b"tileset.json", b"{}")];
+            records.extend(names[..count].iter().map(|name| Record::stored(name, b"x")));
+            let mut offset = 0u64;
+            let members: Vec<([u8; 16], u64)> = records
+                .iter()
+                .map(|record| {
+                    let row = (md5::compute(record.name).0, offset);
+                    offset += local(record).len() as u64;
+                    row
+                })
+                .collect();
+            let index_member = (md5::compute(TZ_INDEX).0, offset);
+            let mut edited = Vec::new();
+            let bytes = indexed_rows(&records, |rows| {
+                for _ in 0..random.below(4) {
+                    let n = rows.len();
+                    let (a, b) = (random.below(n), random.below(n));
+                    match random.below(8) {
+                        0 => rows.swap(a, b),
+                        1 => rows[a].0 = members[random.below(members.len())].0,
+                        2 => rows[a].1 = members[random.below(members.len())].1,
+                        3 => rows[a].1 = 7,
+                        4 => rows[a] = rows[b],
+                        5 => rows[a] = index_member,
+                        6 => rows[a..].reverse(),
+                        _ => rows[a].0[15] ^= 1,
+                    }
+                }
+                edited = rows.clone();
+            });
+            let expected = reference_index(&edited, &members).map_err(str::to_owned);
+            for config in [CatalogConfig::DEFAULT, CatalogConfig::FORCED_SPILL] {
+                let actual = admit_with(&bytes, config, parent.path())
+                    .map(|_| ())
+                    .map_err(|error| match error {
+                        ReadError::InvalidInput(message) => message,
+                        other => panic!("trial {trial}: {other:?}"),
+                    });
+                assert_eq!(actual, expected, "trial {trial}, {config:?}");
+            }
+            *verdicts.entry(format!("{expected:?}")).or_insert(0) += 1;
+            trials += 1;
+        }
+        // Sensitivity: every verdict occurs often.
+        assert_eq!(verdicts.len(), 3, "{verdicts:?}");
+        assert!(
+            verdicts.values().all(|&n| n >= 50),
+            "{verdicts:?} of {trials}"
+        );
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);
+    }
+
+    const TZ_INDEX: &[u8] = super::super::TZ_INDEX_NAME.as_bytes();
+
+    /// MD5-colliding members cannot be written as valid UTF-8 names, so the diagnosis is
+    /// checked on synthetic keys: equal MD5s with distinct offsets, in either index order.
+    #[test]
+    fn diagnosis_resolves_md5_collisions_by_offset() {
+        let row = |md5: u64, offset, position| IndexRow {
+            md5: [md5, 0],
+            offset,
+            position,
+        };
+        let diagnose = |index: &[(u64, u64)], members: &[(u64, u64)]| {
+            let mut rows: Vec<_> = index
+                .iter()
+                .enumerate()
+                .map(|(i, &(m, o))| row(m, o, i as u64))
+                .collect();
+            rows.sort();
+            let mut pairs: Vec<_> = members.iter().map(|&(m, o)| row(m, o, 0)).collect();
+            pairs.sort();
+            first_failing_row(rows.into_iter().map(Ok), pairs.into_iter().map(Ok)).unwrap()
+        };
+        let members = [(1, 10), (5, 30), (5, 20), (9, 40)];
+        // A colliding group in either order is admitted.
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 20), (5, 30), (9, 40)], &members),
+            None
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 20), (9, 40)], &members),
+            None
+        );
+        // A repeated pair fails at its second row; an absent pair at its first.
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 30), (9, 40)], &members),
+            Some(2)
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 30), (5, 40), (9, 40)], &members),
+            Some(2)
+        );
+        assert_eq!(
+            diagnose(&[(5, 10), (5, 20), (5, 30), (9, 40)], &members),
+            Some(0)
+        );
+        assert_eq!(
+            diagnose(&[(1, 10), (5, 20), (5, 30), (9, 40), (9, 40)], &members),
+            Some(4)
+        );
+        // Collisions in the catalog are matched by offset as well.
+        let mut random = XorShift(7);
+        for _ in 0..2000 {
+            let members: Vec<(u64, u64)> =
+                (0..8).map(|i| (random.below(3) as u64, 10 * i)).collect();
+            let mut index = members.clone();
+            index.sort_by_key(|&(m, _)| m);
+            for _ in 0..random.below(3) {
+                let (a, b) = (random.below(8), random.below(8));
+                match random.below(3) {
+                    0 => index[a].1 = index[b].1,
+                    1 => index[a].0 = random.below(3) as u64,
+                    _ => index.swap(a, b),
+                }
+            }
+            index.sort_by_key(|&(m, _)| m);
+            let digest = |m: u64| {
+                let mut d = [0u8; 16];
+                d[..8].copy_from_slice(&m.to_le_bytes());
+                d
+            };
+            let as_rows = |list: &[(u64, u64)]| {
+                list.iter()
+                    .map(|&(m, o)| (digest(m), o))
+                    .collect::<Vec<_>>()
+            };
+            let expected = reference_index(&as_rows(&index), &as_rows(&members)).is_err();
+            assert_eq!(
+                diagnose(&index, &members).is_some(),
+                expected,
+                "{index:?} {members:?}"
+            );
+        }
+    }
+
+    /// The forced-spill profile really spills (scratch appears during admission and is
+    /// removed with the archive); the default keeps a small catalog in memory.
+    #[test]
+    fn forced_spill_profile_uses_scratch_and_default_does_not() {
+        let parent = tempfile::tempdir().unwrap();
+        let names: Vec<Vec<u8>> = (0..9).map(|i| format!("{i}.bin").into_bytes()).collect();
+        let mut records = vec![Record::stored(b"tileset.json", b"{}")];
+        records.extend(names.iter().map(|name| Record::stored(name, b"x")));
+        let bytes = indexed(&records);
+        let mut default = admit_with(&bytes, CatalogConfig::DEFAULT, parent.path()).unwrap();
+        assert!(!default.scratch().is_created());
+        let mut forced = admit_with(&bytes, CatalogConfig::FORCED_SPILL, parent.path()).unwrap();
+        assert!(forced.scratch().is_created());
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 1);
+        for archive in [&mut default, &mut forced] {
+            assert_eq!(archive.len(), 11);
+            for name in names.iter().chain([&b"tileset.json".to_vec()]) {
+                let name = std::str::from_utf8(name).unwrap();
+                let member = archive.member(name).unwrap();
+                assert_eq!(archive.name(member.rank).unwrap(), name);
+            }
+            assert!(archive.find("absent").unwrap().is_none());
+            assert!(archive.find("0.bi").unwrap().is_none());
+        }
+        let ranks = |archive: &mut StoredArchive<_>| {
+            (0..archive.len())
+                .map(|rank| archive.name(rank).unwrap())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ranks(&mut default), ranks(&mut forced));
+        assert_eq!(
+            outcome(admit_with(&bytes, CatalogConfig::DEFAULT, parent.path())),
+            outcome(admit_with(
+                &bytes,
+                CatalogConfig::FORCED_SPILL,
+                parent.path()
+            ))
+        );
+        drop((default, forced));
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);
+    }
+
+    /// Duplicate names and overlapping records keep their messages and precedence on the
+    /// spilled path.
+    #[test]
+    fn duplicate_and_overlap_failures_agree_across_profiles() {
+        let parent = tempfile::tempdir().unwrap();
+        let cases: Vec<Vec<u8>> = vec![
+            indexed(&[
+                Record::stored(b"tileset.json", b"{}"),
+                Record::stored(b"a", b"1"),
+                Record::stored(b"b", b"2"),
+                Record::stored(b"a", b"3"),
+            ]),
+            {
+                let a = Record::stored(b"tileset.json", b"{}");
+                let b = Record::stored(b"b", b"2");
+                let index = Record::stored(TZ_INDEX, b"");
+                archive(&[a, b, index], &[0, 1, 2], 0)
+            },
+        ];
+        for bytes in &cases {
+            assert_eq!(
+                outcome(admit_with(bytes, CatalogConfig::DEFAULT, parent.path())),
+                outcome(admit_with(
+                    bytes,
+                    CatalogConfig::FORCED_SPILL,
+                    parent.path()
+                ))
+            );
+        }
+        assert!(matches!(
+            admit_with(&cases[0], CatalogConfig::FORCED_SPILL, parent.path()),
+            Err(ReadError::InvalidInput(message)) if message == "duplicate ZIP member name"
+        ));
     }
 }

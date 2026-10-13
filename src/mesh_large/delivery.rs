@@ -52,7 +52,7 @@ pub struct MeshTilesetRequest {
 }
 
 impl MeshTilesetRequest {
-    /// `leaves` is a directory published by [`crate::mesh_to_leaf_payloads`].
+    /// `leaves` is a directory published by the internal leaf producer.
     pub fn new(leaves: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
         Self {
             leaves: leaves.into(),
@@ -552,18 +552,131 @@ fn publish_with(
     out: &mut File,
     work_parent: &Path,
 ) -> Result<(MeshTilesetReport, u64), JobError> {
+    let prepared = prepare(request, limits, check, false)?;
+    write_prepared(prepared, check, out, work_parent)
+}
+
+/// Semantic delivery facts known before archive serialization. No runtime measurements.
+#[derive(Clone, Debug)]
+pub(crate) struct DeliveryFacts {
+    pub tiles: u64,
+    pub explicit_tiles: u64,
+    pub implicit_roots: u64,
+    pub implicit_tiles: u64,
+    pub documents: u64,
+    pub max_depth: u32,
+    pub synthetic_leaves: u64,
+    pub packed_leaves: u64,
+    pub members: u64,
+    pub member_ceiling: u64,
+    pub root_geometric_error: f64,
+    pub tileset_geometric_error: f64,
+    pub placement: MeshPlacementReport,
+    pub root_transform: Option<[f64; 16]>,
+}
+
+pub(crate) struct PreparedDelivery {
+    limits: Limits,
+    leaves: LeafDirectory,
+    planned: Planned,
+    placement: ResolvedPlacement,
+    root: NodePlacement,
+    members: u64,
+    member_ceiling: u64,
+    conversion: Option<Vec<u8>>,
+}
+impl PreparedDelivery {
+    pub(crate) fn facts(&self) -> DeliveryFacts {
+        let shape = &self.planned.shape;
+        DeliveryFacts {
+            tiles: shape.tiles,
+            explicit_tiles: shape.explicit_tiles,
+            implicit_roots: shape.implicit_roots,
+            implicit_tiles: shape.implicit_tiles,
+            documents: shape.documents,
+            max_depth: shape.max_depth,
+            synthetic_leaves: shape.synthetic_leaves,
+            packed_leaves: shape.packed_leaves,
+            members: self.members,
+            member_ceiling: self.member_ceiling,
+            root_geometric_error: self.planned.root_error,
+            tileset_geometric_error: self.planned.tileset_error,
+            placement: self.placement.report(),
+            root_transform: self.root.matrix(),
+        }
+    }
+}
+
+fn prepare(
+    request: &MeshTilesetRequest,
+    limits: Limits,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    conversion_member: bool,
+) -> Result<PreparedDelivery, JobError> {
     let placement = ResolvedPlacement::resolve(&request.placement)?;
+    prepare_resolved(request, placement, limits, check, conversion_member)
+}
+
+fn prepare_resolved(
+    request: &MeshTilesetRequest,
+    placement: ResolvedPlacement,
+    limits: Limits,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    conversion_member: bool,
+) -> Result<PreparedDelivery, JobError> {
     let root = root_placement(&placement)?;
     let leaves = LeafDirectory::open(&request.leaves)?;
     // Early: every leaf is a member, as are tileset.json and the index.
     ceiling(
-        leaves.totals.leaves.saturating_add(2),
+        leaves
+            .totals
+            .leaves
+            .saturating_add(2 + u64::from(conversion_member)),
         request.member_ceiling,
         "at least",
     )?;
     let planned = plan_pass(&leaves, limits, check)?;
-    let members = planned.members + 1;
+    let members = planned.members + 1 + u64::from(conversion_member);
     ceiling(members, request.member_ceiling, "exactly")?;
+    Ok(PreparedDelivery {
+        limits,
+        leaves,
+        planned,
+        placement,
+        root,
+        members,
+        member_ceiling: request.member_ceiling,
+        conversion: None,
+    })
+}
+
+pub(crate) fn prepare_tiler(
+    request: &MeshTilesetRequest,
+    placement: ResolvedPlacement,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    make_report: impl FnOnce(&DeliveryFacts) -> Result<Vec<u8>, JobError>,
+) -> Result<PreparedDelivery, JobError> {
+    let mut prepared = prepare_resolved(request, placement, LIMITS, check, true)?;
+    prepared.conversion = Some(make_report(&prepared.facts())?);
+    Ok(prepared)
+}
+
+pub(crate) fn write_prepared(
+    prepared: PreparedDelivery,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+    out: &mut File,
+    work_parent: &Path,
+) -> Result<(MeshTilesetReport, u64), JobError> {
+    let PreparedDelivery {
+        limits,
+        leaves,
+        planned,
+        placement,
+        root,
+        members,
+        member_ceiling,
+        conversion,
+    } = prepared;
     check()?;
     let work = tempfile::Builder::new()
         .prefix(".tiles-h16-")
@@ -615,6 +728,13 @@ fn publish_with(
         check,
         ..
     } = sink;
+    if let Some(bytes) = conversion {
+        let member = staging.join("conversion.json");
+        std::fs::write(&member, bytes)
+            .map_err(|e| JobError::io("write conversion.json", &member, e))?;
+        writeln!(names, "conversion.json")
+            .map_err(|e| JobError::io("write member list", &names_path, e))?;
+    }
     names
         .flush()
         .map_err(|e| JobError::io("write member list", &names_path, e))?;
@@ -648,7 +768,7 @@ fn publish_with(
         packed_leaves: shape.packed_leaves,
         proxies: shape.proxies,
         members,
-        member_ceiling: request.member_ceiling,
+        member_ceiling,
         archive_bytes,
         root_geometric_error: planned.root_error,
         tileset_geometric_error: planned.tileset_error,
