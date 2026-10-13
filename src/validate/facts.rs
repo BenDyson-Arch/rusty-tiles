@@ -245,13 +245,13 @@ mod tests {
         };
         Stored {
             facts: UriFacts {
-                bounds: (seed % 3 != 0).then(|| UriBounds {
+                bounds: (!seed.is_multiple_of(3)).then(|| UriBounds {
                     pair0: std::array::from_fn(|i| bound(i as u64)),
                     s_inst: seed as u32 ^ 7,
                     s_pos: u32::MAX - seed as u32,
                 }),
                 t: seed.wrapping_mul(0x9e37_79b9_7f4a_7c15),
-                nodes: (seed % 5 != 0).then_some(seed << 3),
+                nodes: (!seed.is_multiple_of(5)).then_some(seed << 3),
                 idx: !seed,
                 e: seed + 1,
                 per_reference: ReferenceFacts {
