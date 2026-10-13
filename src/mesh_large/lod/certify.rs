@@ -25,6 +25,8 @@ pub(crate) fn source_tri(s: &LodSource) -> Tri {
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DirectReport {
+    /// Not attempted: the range is too large for the work budget to finish.
+    pub skipped: bool,
     pub source_to_proxy: f64,
     pub source_to_proxy_exhausted: bool,
     /// `None` when not even one chunk completed.
@@ -50,6 +52,13 @@ pub(crate) fn direct(
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<DirectReport, JobError> {
     let mut report = DirectReport::default();
+    // Attempt only ranges the budget can finish (about 8 evaluations per triangle and
+    // direction); otherwise the composed term alone is the certificate.
+    if (end - first).saturating_mul(16) > work {
+        report.skipped = true;
+        report.source_to_proxy = f64::INFINITY;
+        return Ok(report);
+    }
     // Source -> proxy.
     let mut evals = 0u64;
     let anchor = proxy[0][0];
@@ -104,7 +113,7 @@ pub(crate) fn direct(
         }
         let bvh = Bvh::new(&chunk);
         for (face, best) in proxy.iter().zip(faces.iter_mut()) {
-            if let Some((k, _)) = bvh.best_target(face, CAP, &mut evals) {
+            if let Some((k, _)) = bvh.best_target(face, CAP / 2, &mut evals) {
                 *best = best.min(ar.patch(face, bvh.tri(k), 0.));
             }
         }

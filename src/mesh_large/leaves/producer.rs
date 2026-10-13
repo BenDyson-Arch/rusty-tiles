@@ -58,6 +58,7 @@ pub struct LeafOutputRequest {
     jobs: Jobs,
     scratch_dir: Option<PathBuf>,
     lod_mutation: super::super::lod::Mutation,
+    lod_target: usize,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -72,6 +73,7 @@ impl LeafOutputRequest {
             jobs: Jobs::Auto,
             scratch_dir: None,
             lod_mutation: super::super::lod::Mutation::None,
+            lod_target: super::super::lod::TARGET_FACES,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -86,6 +88,12 @@ impl LeafOutputRequest {
     #[cfg(test)]
     pub(crate) fn with_lod_mutation(mut self, mutation: super::super::lod::Mutation) -> Self {
         self.lod_mutation = mutation;
+        self
+    }
+    /// Test fixtures: a smaller coarse-tile face target, so small inputs get deep LOD.
+    #[cfg(test)]
+    pub(crate) fn with_lod_target(mut self, target: usize) -> Self {
+        self.lod_target = target;
         self
     }
 }
@@ -442,6 +450,7 @@ fn produce(
     stage: &StagePlan,
     profile: LeafProfile,
     mutation: super::super::lod::Mutation,
+    target: usize,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafOutputReport, JobError> {
     let leaves = path.join("leaves");
@@ -588,6 +597,7 @@ fn produce(
                 sort: config.sorter(stage.jobs as usize),
                 jobs: stage.jobs as usize,
                 mutation,
+                target,
             },
             check,
         )
@@ -599,7 +609,7 @@ fn produce(
         &path.join("manifest.json"),
         &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let resources = json!({"lod":{"jobs":lod.jobs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
+    let resources = json!({"lod":{"jobs":lod.jobs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds,"auditSeconds":lod.audit_seconds,"phaseSeconds":{"loadChildren":lod.phase_seconds[0],"islandsSeams":lod.phase_seconds[1],"simplify":lod.phase_seconds[2],"encodeComposed":lod.phase_seconds[3],"direct":lod.phase_seconds[4],"primitivesFills":lod.phase_seconds[5],"finalEncode":lod.phase_seconds[6]}},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
     write_file(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
@@ -704,6 +714,7 @@ pub fn mesh_to_leaf_payloads(
         &stage_plan,
         request.profile,
         request.lod_mutation,
+        request.lod_target,
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();

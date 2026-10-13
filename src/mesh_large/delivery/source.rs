@@ -191,6 +191,66 @@ impl LeafRow {
     }
 }
 
+/// One `proxies.jsonl` row: an H17 coarse tile, in postorder (H16's tile-closing order).
+#[derive(Clone, Debug)]
+pub(crate) struct ProxyRow {
+    pub uri: String,
+    pub sha256: [u8; 32],
+    pub bytes: u64,
+    pub first: u64,
+    pub end: u64,
+    pub depth: u32,
+    pub geometric_error: f64,
+    pub primitives: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProxyWire {
+    schema_version: u32,
+    uri: String,
+    sha256: String,
+    bytes: u64,
+    first: u64,
+    end: u64,
+    depth: u32,
+    geometric_error: f64,
+    primitives: u32,
+}
+
+impl ProxyRow {
+    pub(crate) fn parse(line: &str, row: u64) -> Result<Self, JobError> {
+        let bad = |why: &str| input(format!("proxies.jsonl row {row}: {why}"));
+        let w: ProxyWire = serde_json::from_str(line).map_err(|e| bad(&e.to_string()))?;
+        if w.schema_version != 1 {
+            return Err(bad("unsupported schemaVersion"));
+        }
+        let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
+        if w.uri != expected {
+            return Err(bad("uri is not proxies/f<first>-d<depth>.glb"));
+        }
+        if w.first >= w.end || w.depth > 30 {
+            return Err(bad("invalid rank range or depth"));
+        }
+        if !w.geometric_error.is_finite() || w.geometric_error < 0. {
+            return Err(bad("geometricError must be finite and non-negative"));
+        }
+        if u64::from(w.primitives) > CONSUMER_TABLE_ROWS || w.primitives == 0 {
+            return Err(bad("primitive table outside 1..=8192 rows"));
+        }
+        Ok(Self {
+            uri: w.uri,
+            sha256: hex32(&w.sha256).ok_or_else(|| bad("sha256 is not 64 hex digits"))?,
+            bytes: w.bytes,
+            first: w.first,
+            end: w.end,
+            depth: w.depth,
+            geometric_error: w.geometric_error,
+            primitives: w.primitives,
+        })
+    }
+}
+
 /// An axis-aligned box in the tile frame (z-up metres), closed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Aabb {
@@ -264,11 +324,16 @@ fn numbers<const N: usize>(value: Option<&Value>, default: f64) -> Option<[f64; 
 /// evaluated with outward rounding, then taken from glTF y-up to the tile frame's z-up as
 /// `(x, y, z) -> (x, -z, y)`, the conversion C2 applies exactly once.
 pub(crate) fn glb_bounds(path: &Path, row: &LeafRow) -> Result<Aabb, JobError> {
-    let bad = |why: &str| input(format!("leaf {}: {why}", row.uri));
+    payload_bounds(path, &row.uri, row.bytes)
+}
+
+/// [`glb_bounds`] for any H8/H17 payload of `bytes` bytes.
+pub(crate) fn payload_bounds(path: &Path, uri: &str, bytes: u64) -> Result<Aabb, JobError> {
+    let bad = |why: &str| input(format!("payload {uri}: {why}"));
     let io = |e| JobError::io("read leaf GLB", path, e);
     let mut file = File::open(path).map_err(io)?;
     let length = file.metadata().map_err(io)?.len();
-    if length != row.bytes {
+    if length != bytes {
         return Err(bad("file length differs from its manifest row"));
     }
     let mut header = [0u8; 20];
@@ -376,6 +441,8 @@ pub(crate) struct LeafTotals {
 pub(crate) struct LeafDirectory {
     root: PathBuf,
     pub totals: LeafTotals,
+    /// H17 coarse tiles are present (`proxyManifest`).
+    pub proxies: bool,
 }
 
 impl LeafDirectory {
@@ -406,14 +473,51 @@ impl LeafDirectory {
         if totals.leaves == 0 {
             return Err(input("the leaf directory has no leaves"));
         }
+        let proxies = match manifest.get("proxyManifest") {
+            None => false,
+            Some(v) if v == "proxies.jsonl" => true,
+            Some(_) => return Err(input("manifest.json proxyManifest is not proxies.jsonl")),
+        };
         Ok(Self {
             root: root.to_owned(),
             totals,
+            proxies,
         })
     }
 
     pub(crate) fn path(&self, row: &LeafRow) -> PathBuf {
         self.root.join(&row.uri)
+    }
+
+    pub(crate) fn member(&self, uri: &str) -> PathBuf {
+        self.root.join(uri)
+    }
+
+    /// The H17 proxy rows with their decoded bounds, in file (post)order; empty when the
+    /// directory has none.
+    pub(crate) fn proxy_rows(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(ProxyRow, Aabb), JobError>> + '_>, JobError> {
+        if !self.proxies {
+            return Ok(Box::new(std::iter::empty()));
+        }
+        let path = self.root.join("proxies.jsonl");
+        let file = File::open(&path).map_err(|e| JobError::io("open proxy rows", &path, e))?;
+        let mut lines = BufReader::new(file).lines();
+        let mut row = 0u64;
+        Ok(Box::new(std::iter::from_fn(move || {
+            let line = lines.next()?;
+            row += 1;
+            Some(
+                line.map_err(|e| JobError::io("read proxy rows", &path, e))
+                    .and_then(|line| ProxyRow::parse(&line, row))
+                    .and_then(|proxy| {
+                        let bounds =
+                            payload_bounds(&self.member(&proxy.uri), &proxy.uri, proxy.bytes)?;
+                        Ok((proxy, bounds))
+                    }),
+            )
+        })))
     }
 
     /// The rows with their decoded bounds, streamed in file order.

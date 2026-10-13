@@ -15,7 +15,7 @@ mod tests;
 
 use self::{
     plan::{document_members, state, Builder, Limits, Linked, Node, Shape, Sink, LIMITS},
-    source::{LeafDirectory, LeafRow},
+    source::{LeafDirectory, LeafRow, ProxyRow},
 };
 use super::config::MEMBER_CEILING_3TZ;
 use crate::{
@@ -91,6 +91,9 @@ pub struct MeshTilesetReport {
     pub max_depth: u32,
     pub synthetic_leaves: u64,
     pub packed_leaves: u64,
+    /// Internal tiles with an H17 coarse tile (all of them when the leaf directory has
+    /// proxies; none for a full-detail-only directory).
+    pub proxies: u64,
     /// Every 3TZ member, `tileset.json` and the index included.
     pub members: u64,
     pub member_ceiling: u64,
@@ -160,6 +163,30 @@ fn leaf_content(row: &LeafRow, member: String) -> Result<ContentRef, JobError> {
         false,
         SourceIdentity::Features {
             count,
+            digest: digest.finalize().into(),
+        },
+    )
+    .map_err(|e| state(e.to_string()))
+}
+
+/// The content of an H17 proxy published as `member`: its source identities are the
+/// present primitives of its `source_primitive` table; removed ones are in its
+/// `lod_vanished` table. The digest binds the tile's rank range to the payload.
+fn proxy_content(row: &ProxyRow, member: String) -> Result<ContentRef, JobError> {
+    let mut digest = Sha256::new();
+    digest.update(b"rusty-tiles/h17/proxy-identity/v1\0");
+    digest.update(row.first.to_le_bytes());
+    digest.update(row.end.to_le_bytes());
+    digest.update(row.depth.to_le_bytes());
+    digest.update(row.sha256);
+    ContentRef::new(
+        MemberName::new(member).map_err(|e| state(e.to_string()))?,
+        row.sha256,
+        row.bytes,
+        ContentKind::Glb,
+        false,
+        SourceIdentity::Features {
+            count: row.primitives,
             digest: digest.finalize().into(),
         },
     )
@@ -237,16 +264,32 @@ impl WriteSink<'_> {
     /// Hard-link a leaf payload into the staging directory at `member` (one copy only where
     /// the filesystem has no hard links).
     fn stage(&mut self, row: &LeafRow, member: &str) -> Result<(), JobError> {
-        let source = self.leaves.path(row);
+        self.stage_payload(&row.uri, row.bytes, row.sha256, member)
+    }
+
+    fn stage_proxy(&mut self, node: &Node, member: &str) -> Result<Vec<ContentRef>, JobError> {
+        let Some(row) = node.proxy.as_deref() else {
+            return Ok(Vec::new());
+        };
+        self.stage_payload(&row.uri, row.bytes, row.sha256, member)?;
+        Ok(vec![proxy_content(row, member.to_owned())?])
+    }
+
+    fn stage_payload(
+        &mut self,
+        uri: &str,
+        length: u64,
+        sha256: [u8; 32],
+        member: &str,
+    ) -> Result<(), JobError> {
+        let source = self.leaves.member(uri);
         // The row's digest is checked here, so a payload that contradicts its row is the
         // leaf directory's fault (InvalidInput); the writer re-checks the staged member.
         let bytes =
             std::fs::read(&source).map_err(|e| JobError::io("read leaf payload", &source, e))?;
-        if bytes.len() as u64 != row.bytes || <[u8; 32]>::from(Sha256::digest(&bytes)) != row.sha256
-        {
+        if bytes.len() as u64 != length || <[u8; 32]>::from(Sha256::digest(&bytes)) != sha256 {
             return Err(source::input(format!(
-                "leaf {}: payload bytes differ from its manifest row (length or SHA-256)",
-                row.uri
+                "payload {uri}: bytes differ from its manifest row (length or SHA-256)"
             )));
         }
         drop(bytes);
@@ -284,7 +327,9 @@ impl WriteSink<'_> {
         if !node.is_skeleton() {
             return self.implicit(node);
         }
-        let own = record(&node, Vec::new())?;
+        let contents =
+            self.stage_proxy(&node, &format!("content/f{}-d{}.glb", node.first, node.depth))?;
+        let own = record(&node, contents)?;
         let children = node
             .children
             .into_iter()
@@ -349,7 +394,15 @@ impl WriteSink<'_> {
             let content = leaf_content(row, member)?;
             return Ok(TileTree::new(record(&node, vec![content])?, Vec::new()));
         }
-        let own = record(&node, Vec::new())?;
+        let member = format!(
+            "implicit-content/{key}-{}-{}-{}-{}.glb",
+            c.level, c.x, c.y, c.z
+        );
+        let contents = self.stage_proxy(&node, &member)?;
+        if !contents.is_empty() {
+            planned.contents[0].push(c);
+        }
+        let own = record(&node, contents)?;
         let mut children = Vec::with_capacity(node.children.len());
         for child in node.children {
             let slot = child.slot;
@@ -440,7 +493,8 @@ fn plan_pass(
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
-    let mut builder = Builder::new(&mut sink, limits);
+    let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -539,7 +593,8 @@ fn publish_with(
         top: None,
         check,
     };
-    let mut builder = Builder::new(&mut sink, limits);
+    let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;
@@ -589,6 +644,7 @@ fn publish_with(
         max_depth: shape.max_depth,
         synthetic_leaves: shape.synthetic_leaves,
         packed_leaves: shape.packed_leaves,
+        proxies: shape.proxies,
         members,
         member_ceiling: request.member_ceiling,
         archive_bytes,

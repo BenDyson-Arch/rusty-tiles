@@ -431,8 +431,31 @@ impl Bvh {
     /// `cap` triangle evaluations (at least one is always evaluated), and that estimate
     /// (squared). Pruning uses box distances as LOWER bounds only.
     pub(crate) fn best_target(&self, x: &Tri, cap: u32, evals: &mut u64) -> Option<(usize, f64)> {
+        self.search(x, cap, evals, None).0
+    }
+
+    /// As [`Bvh::best_target`], also returning the best target among the evaluated ones
+    /// whose original index has label `want` in `labels` (same evaluations, no extra search).
+    pub(crate) fn best_targets(
+        &self,
+        x: &Tri,
+        cap: u32,
+        evals: &mut u64,
+        labels: &[u32],
+        want: u32,
+    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
+        self.search(x, cap, evals, Some((labels, want)))
+    }
+
+    fn search(
+        &self,
+        x: &Tri,
+        cap: u32,
+        evals: &mut u64,
+        labels: Option<(&[u32], u32)>,
+    ) -> (Option<(usize, f64)>, Option<(usize, f64)>) {
         if self.tris.is_empty() {
-            return None;
+            return (None, None);
         }
         let lower = |n: &Node| {
             x.iter()
@@ -442,6 +465,7 @@ impl Bvh {
         let mut heap = BinaryHeap::new();
         heap.push(Entry(lower(&self.nodes[0]), 0));
         let mut best: Option<(usize, f64)> = None;
+        let mut same: Option<(usize, f64)> = None;
         let mut used = 0u32;
         while let Some(Entry(bound, index)) = heap.pop() {
             if let Some((_, b)) = best {
@@ -453,13 +477,26 @@ impl Bvh {
             if node.count > 0 {
                 for k in node.first..node.first + node.count {
                     let t = &self.tris[k as usize];
+                    let matches = labels.is_some_and(|(l, w)| l[self.ids[k as usize] as usize] == w);
+                    let limit = match (best, same) {
+                        (Some((_, b)), Some((_, s))) if matches => b.max(s),
+                        (Some((_, b)), None) if matches => f64::INFINITY.max(b),
+                        (Some((_, b)), _) => b,
+                        (None, _) => f64::INFINITY,
+                    };
                     let mut estimate = 0f64;
                     for p in x {
                         estimate = estimate.max(closest_weights(*p, t).2);
+                        if estimate >= limit {
+                            break;
+                        }
                     }
                     used += 1;
                     if best.is_none_or(|(_, b)| estimate < b) {
                         best = Some((k as usize, estimate));
+                    }
+                    if matches && same.is_none_or(|(_, b)| estimate < b) {
+                        same = Some((k as usize, estimate));
                     }
                 }
             } else {
@@ -469,7 +506,7 @@ impl Bvh {
             }
         }
         *evals += u64::from(used);
-        best
+        (best, same)
     }
 
     /// Plain nearest squared distance from `p` (a refinement threshold, never a bound).
@@ -540,6 +577,9 @@ pub(crate) struct Directed {
     pub evals: u64,
     pub exhausted: bool,
     pub refined_faces: u64,
+    /// With labels: per face of `X`, a bound against the same-label part of `Y` from the
+    /// Phase A evaluations (`INFINITY` when none was evaluated; unrefined).
+    pub same: Vec<f64>,
 }
 
 #[derive(Clone, Copy)]
@@ -596,6 +636,17 @@ fn witness(ar: Arith, y: &Bvh, x: &Tri, slack: f64, cap: u32, evals: &mut u64) -
 /// face's last complete bound (a parent bound is replaced only when all four children of
 /// a split have bounds).
 pub(crate) fn directed(ar: Arith, x: &[Tri], y: &Bvh, limits: Limits) -> Directed {
+    directed_labelled(ar, x, y, limits, None)
+}
+
+/// [`directed`], also giving same-label witnesses when `labels = (x labels, y labels)`.
+pub(crate) fn directed_labelled(
+    ar: Arith,
+    x: &[Tri],
+    y: &Bvh,
+    limits: Limits,
+    labels: Option<(&[u32], &[u32])>,
+) -> Directed {
     let mut evals = 0u64;
     if x.is_empty() {
         return Directed {
@@ -605,6 +656,7 @@ pub(crate) fn directed(ar: Arith, x: &[Tri], y: &Bvh, limits: Limits) -> Directe
             evals,
             exhausted: false,
             refined_faces: 0,
+            same: Vec::new(),
         };
     }
     if y.is_empty() {
@@ -615,15 +667,35 @@ pub(crate) fn directed(ar: Arith, x: &[Tri], y: &Bvh, limits: Limits) -> Directe
             evals,
             exhausted: false,
             refined_faces: 0,
+            same: vec![f64::INFINITY; x.len()],
         };
     }
-    let mut faces: Vec<f64> = x
-        .iter()
-        .map(|t| witness(ar, y, t, 0., limits.face_cap, &mut evals))
-        .collect();
+    let mut same = Vec::new();
+    let mut faces: Vec<f64> = match labels {
+        None => x
+            .iter()
+            .map(|t| witness(ar, y, t, 0., limits.face_cap, &mut evals))
+            .collect(),
+        Some((xl, yl)) => x
+            .iter()
+            .zip(xl)
+            .map(|(t, &l)| {
+                let (best, matched) = y.best_targets(t, limits.face_cap, &mut evals, yl, l);
+                same.push(matched.map_or(f64::INFINITY, |(k, _)| ar.patch(t, y.tri(k), 0.)));
+                best.map_or(f64::INFINITY, |(k, _)| ar.patch(t, y.tri(k), 0.))
+            })
+            .collect(),
+    };
+    // The refinement threshold: nearest distances of the corners of the faces with the
+    // largest bounds (refinement only ever matters for those).
+    let mut order: Vec<usize> = (0..x.len()).collect();
+    let top = order.len().min(64);
+    if top < order.len() {
+        order.select_nth_unstable_by(top, |&a, &b| faces[b].total_cmp(&faces[a]));
+    }
     let mut lower = 0f64;
-    for t in x {
-        for p in t {
+    for &f in &order[..top] {
+        for p in &x[f] {
             lower = lower.max(y.nearest(*p, limits.patch_cap, &mut evals));
         }
     }
@@ -683,6 +755,7 @@ pub(crate) fn directed(ar: Arith, x: &[Tri], y: &Bvh, limits: Limits) -> Directe
         evals,
         exhausted,
         refined_faces: patches.len() as u64,
+        same,
     }
 }
 

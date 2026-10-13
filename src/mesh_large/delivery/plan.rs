@@ -10,7 +10,7 @@
 //! A skeleton tile whose inline document fragment grows past [`Limits`] is written as an
 //! external document at once and replaced by its link, so resident state is the open stack
 //! plus fragments below the limits, whatever the input size.
-use super::source::{add_down, add_up, Aabb, LeafRow};
+use super::source::{add_down, add_up, Aabb, LeafRow, ProxyRow};
 use crate::{tileset_node::TileBox, JobError, JobErrorKind};
 
 /// The fixed partition. Inline fragments stay below these; the root document and every
@@ -78,6 +78,8 @@ pub(crate) struct Node {
     pub error: f64,
     pub height: u32,
     pub leaf: Option<Box<LeafRow>>,
+    /// The H17 coarse tile of an internal tile.
+    pub proxy: Option<Box<ProxyRow>>,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -107,7 +109,7 @@ pub(crate) fn document_members(node: &Node) -> u64 {
         if node.leaf.is_some() {
             1
         } else {
-            node.children.iter().map(implicit_leaves).sum()
+            u64::from(node.proxy.is_some()) + node.children.iter().map(implicit_leaves).sum::<u64>()
         }
     }
     fn walk(node: &Node) -> u64 {
@@ -118,7 +120,7 @@ pub(crate) fn document_members(node: &Node) -> u64 {
         } else if !node.is_skeleton() {
             implicit_leaves(node) + 1
         } else {
-            node.children.iter().map(walk).sum()
+            u64::from(node.proxy.is_some()) + node.children.iter().map(walk).sum::<u64>()
         }
     }
     walk(node)
@@ -136,6 +138,8 @@ pub(crate) struct Shape {
     pub max_depth: u32,
     pub synthetic_leaves: u64,
     pub packed_leaves: u64,
+    /// Internal tiles published with an H17 coarse tile.
+    pub proxies: u64,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -167,8 +171,12 @@ impl Frame {
 }
 
 /// The streaming builder. Feed leaves in row order, then [`Builder::finish`].
+/// H17 proxy rows in postorder, with their decoded bounds.
+pub(crate) type Proxies<'p> = Box<dyn Iterator<Item = Result<(ProxyRow, Aabb), JobError>> + 'p>;
+
 pub(crate) struct Builder<'s, S: Sink> {
     sink: &'s mut S,
+    proxies: Option<Proxies<'s>>,
     limits: Limits,
     stack: Vec<Frame>,
     next_rank: u64,
@@ -183,8 +191,14 @@ fn child_axes(axes: [u32; 3], slot: u8) -> [u32; 3] {
 
 impl<'s, S: Sink> Builder<'s, S> {
     pub(crate) fn new(sink: &'s mut S, limits: Limits) -> Self {
+        Self::with_proxies(sink, limits, None)
+    }
+
+    /// A builder that gives every internal tile the next H17 proxy row (postorder).
+    pub(crate) fn with_proxies(sink: &'s mut S, limits: Limits, proxies: Option<Proxies<'s>>) -> Self {
         Self {
             sink,
+            proxies,
             limits,
             stack: Vec::new(),
             next_rank: 0,
@@ -287,6 +301,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             error: row.geometry_error,
             height: 0,
             leaf: Some(Box::new(row)),
+            proxy: None,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -311,20 +326,48 @@ impl<'s, S: Sink> Builder<'s, S> {
         if frame.children.is_empty() {
             return Err(state("an internal tile closed without children"));
         }
-        let extent = frame
+        let mut extent = frame
             .children
             .iter()
             .map(|c| c.extent)
             .reduce(Aabb::union)
             .unwrap();
+        let children_error = frame.children.iter().map(|c| c.error).fold(0., f64::max);
+        let proxy = match self.proxies.as_mut() {
+            None => None,
+            Some(rows) => {
+                let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
+                let (row, bounds) = rows.next().transpose()?.ok_or_else(|| {
+                    bad(format!(
+                        "proxies.jsonl ends before internal tile f{}-d{}",
+                        frame.first, frame.depth
+                    ))
+                })?;
+                if (row.first, row.end, row.depth) != (frame.first, self.next_rank, frame.depth) {
+                    return Err(bad(format!(
+                        "proxies.jsonl row {} is not internal tile f{}-d{} (postorder)",
+                        row.uri, frame.first, frame.depth
+                    )));
+                }
+                if row.geometric_error < children_error {
+                    return Err(bad(format!(
+                        "proxy {} has a geometric error below its children's",
+                        row.uri
+                    )));
+                }
+                // The proxy's snapped vertices may leave the children's boxes.
+                extent = extent.union(bounds);
+                self.shape.proxies += 1;
+                Some(Box::new(row))
+            }
+        };
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
-        let error = frame
-            .children
-            .iter()
-            .map(|c| c.error)
-            .fold(EMPTY_PARENT_SCALE * diagonal, f64::max);
+        let error = match &proxy {
+            Some(row) => row.geometric_error,
+            None => children_error.max(EMPTY_PARENT_SCALE * diagonal),
+        };
         if !error.is_finite() {
             return Err(state("an empty parent's geometric error is not finite"));
         }
@@ -362,6 +405,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             error,
             height,
             leaf: None,
+            proxy,
             children: frame.children,
             link: None,
             objects,
@@ -404,6 +448,8 @@ impl<'s, S: Sink> Builder<'s, S> {
                 error,
                 height,
                 leaf: None,
+                // The proxy is the external document's root content, not the link's.
+                proxy: None,
                 children: Vec::new(),
                 link: Some(link),
                 objects: 1,
@@ -425,6 +471,14 @@ impl<'s, S: Sink> Builder<'s, S> {
                 JobErrorKind::InvalidInput,
                 "the leaf directory has no leaf rows",
             ));
+        }
+        if let Some(rows) = self.proxies.as_mut() {
+            if rows.next().is_some() {
+                return Err(JobError::new(
+                    JobErrorKind::InvalidInput,
+                    "proxies.jsonl has rows beyond the internal tiles",
+                ));
+            }
         }
         Ok(self.shape)
     }

@@ -366,9 +366,15 @@ impl Simplifier {
         if self.locked[u as usize] {
             return Role::Locked;
         }
-        let ring = self.ring(u);
+        self.role_in(u, &self.ring(u))
+    }
+
+    fn role_in(&self, u: u32, ring: &BTreeMap<u32, Vec<u32>>) -> Role {
+        if self.locked[u as usize] {
+            return Role::Locked;
+        }
         let mut features = Vec::new();
-        for (w, list) in &ring {
+        for (w, list) in ring {
             if list.len() > 2 {
                 return if self.relaxed { Role::Free } else { Role::Locked };
             }
@@ -399,6 +405,16 @@ impl Simplifier {
             .collect();
         for w in ring_u.keys() {
             if *w != v && ring_v.contains_key(w) && !thirds.contains(w) {
+                return false;
+            }
+        }
+        // No other vertex may lose its last face (a kept seam vertex would vanish).
+        for &w in &thirds {
+            let dying = shared
+                .iter()
+                .filter(|&&f| self.faces[f as usize].v.contains(&w))
+                .count();
+            if (self.locked[w as usize] || !self.relaxed) && self.live(w).count() <= dying {
                 return false;
             }
         }
@@ -461,15 +477,23 @@ impl Simplifier {
         self.quadric[v as usize].add(&q);
         self.alive_v[u as usize] = false;
         self.vfaces[u as usize].clear();
+        let (faces, alive) = (&self.faces, &self.alive_f);
+        let list = &mut self.vfaces[v as usize];
+        list.retain(|&f| alive[f as usize] && faces[f as usize].v.contains(&v));
+        list.sort_unstable();
+        list.dedup();
         self.stamp[v as usize] += 1;
         for w in self.ring(v).into_keys() {
             self.stamp[w as usize] += 1;
         }
     }
 
-    /// Remove faces that repeat a vertex and duplicate faces (same vertex set and label).
+    /// Remove faces that repeat a vertex; of same-winding duplicates (same vertex set,
+    /// label and orientation) keep the first; remove opposite-winding coincident pairs
+    /// entirely (a fold has no surface, and keeping one face would pinch a seam chain).
     fn cleanup(&mut self) {
-        let mut seen = BTreeSet::new();
+        // (sorted vertices, label) -> (first live face with even winding, with odd winding)
+        let mut seen: BTreeMap<([u32; 3], u32), [Vec<usize>; 2]> = BTreeMap::new();
         for i in 0..self.faces.len() {
             if !self.alive_f[i] {
                 continue;
@@ -477,18 +501,41 @@ impl Simplifier {
             let f = self.faces[i];
             let mut sorted = f.v;
             sorted.sort_unstable();
-            if sorted[0] == sorted[1] || sorted[1] == sorted[2] || !seen.insert((sorted, f.label)) {
-                self.alive_f[i] = false;
-                self.live_faces -= 1;
-                self.label_live[f.label as usize] -= 1;
+            if sorted[0] == sorted[1] || sorted[1] == sorted[2] {
+                self.kill(i);
+                continue;
+            }
+            // Winding parity: rotate so the least vertex leads; even if the next is the middle.
+            let lead = (0..3).min_by_key(|&k| f.v[k]).unwrap();
+            let odd = usize::from(f.v[(lead + 1) % 3] != sorted[1]);
+            seen.entry((sorted, f.label)).or_default()[odd].push(i);
+        }
+        for [even, odd] in seen.into_values() {
+            for &i in even.iter().skip(1).chain(odd.iter().skip(1)) {
+                self.kill(i);
+            }
+            if let (Some(&a), Some(&b)) = (even.first(), odd.first()) {
+                self.kill(a);
+                self.kill(b);
             }
         }
     }
 
-    /// Remove every `forced` vertex (non-kept seam vertices), in key order, each by a
+    fn kill(&mut self, i: usize) {
+        if self.alive_f[i] {
+            self.alive_f[i] = false;
+            self.live_faces -= 1;
+            self.label_live[self.faces[i].label as usize] -= 1;
+        }
+    }
+
+    /// Remove every `forced` vertex (non-kept seam vertices), in key order, each by a valid
     /// collapse along one of its border edges where possible: the shared seam chain then
-    /// runs through the kept vertices only, identically on both sides.
-    pub(crate) fn force(&mut self, forced: &[u32]) {
+    /// runs through the kept vertices only, identically on both sides. A vertex with no
+    /// valid collapse is kept (locked) and returned: the caller adds it to the depth's
+    /// keep set and re-runs every tile that shares it, so both sides keep it.
+    pub(crate) fn force(&mut self, forced: &[u32]) -> Vec<u32> {
+        let mut failed = Vec::new();
         for &u in forced {
             if !self.alive_v[u as usize] {
                 continue;
@@ -502,20 +549,19 @@ impl Simplifier {
             if targets.is_empty() {
                 targets = ring.keys().copied().collect();
             }
-            if targets.is_empty() {
-                continue;
-            }
-            let chosen = targets.iter().copied().find(|&v| self.valid(u, v, &ring));
-            match chosen {
-                Some(v) => self.apply(u, v),
+            match targets.iter().copied().find(|&v| self.valid(u, v, &ring)) {
+                Some(v) => {
+                    self.apply(u, v);
+                    self.report.forced += 1;
+                }
                 None => {
-                    self.apply(u, targets[0]);
-                    self.cleanup();
+                    self.locked[u as usize] = true;
                     self.report.forced_unchecked += 1;
+                    failed.push(u);
                 }
             }
-            self.report.forced += 1;
         }
+        failed
     }
 
     fn cost(&self, u: u32, v: u32) -> f64 {
@@ -528,11 +574,15 @@ impl Simplifier {
         if !self.alive_v[u as usize] {
             return;
         }
-        let role = self.role(u);
+        if self.locked[u as usize] {
+            return;
+        }
+        let ring = self.ring(u);
+        let role = self.role_in(u, &ring);
         if role == Role::Locked {
             return;
         }
-        for &v in self.ring(u).keys() {
+        for &v in ring.keys() {
             if let Role::Chain(a, b) = role {
                 if v != a && v != b {
                     continue;
@@ -564,13 +614,12 @@ impl Simplifier {
                 heap.push(Reverse((Cost(actual), u, v, su)));
                 continue;
             }
-            let role = self.role(u);
-            match role {
+            let ring = self.ring(u);
+            match self.role_in(u, &ring) {
                 Role::Locked => continue,
                 Role::Chain(a, b) if v != a && v != b => continue,
                 _ => {}
             }
-            let ring = self.ring(u);
             if !self.valid(u, v, &ring) {
                 continue;
             }
@@ -761,7 +810,7 @@ mod tests {
             .map(|(i, _)| i as u32)
             .collect();
         let mut s = Simplifier::new(&mesh, &mesh.faces, locked);
-        s.force(&forced);
+        assert!(s.force(&forced).is_empty());
         let (out, _) = s.finish();
         let used: BTreeSet<u32> = out.iter().flat_map(|f| f.v).collect();
         for f in &forced {

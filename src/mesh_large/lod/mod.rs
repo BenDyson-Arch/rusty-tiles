@@ -139,6 +139,7 @@ struct Row {
 }
 const FLAG_COMPOSED_EXHAUSTED: u8 = 1;
 const FLAG_DIRECT_EXHAUSTED: u8 = 2;
+const FLAG_DIRECT_SKIPPED: u8 = 4;
 
 impl Row {
     fn order(&self) -> (u64, u8, u64) {
@@ -223,9 +224,10 @@ struct SeamEdge {
     lo_dec: [u32; 3],
     hi_dec: [u32; 3],
     special: bool,
+    round: u8,
 }
 impl Record for SeamEdge {
-    const SIZE: usize = 12 * 4 + 8 + 1 + 1;
+    const SIZE: usize = 12 * 4 + 8 + 1 + 1 + 1;
     fn encode(&self, out: &mut [u8]) {
         let mut w = 0;
         for k in [self.lo, self.hi, self.lo_dec, self.hi_dec] {
@@ -237,6 +239,7 @@ impl Record for SeamEdge {
         out[w..w + 8].copy_from_slice(&self.owner.to_le_bytes());
         out[w + 8] = self.owner_depth;
         out[w + 9] = u8::from(self.special);
+        out[w + 10] = self.round;
     }
     fn decode(b: &[u8]) -> Self {
         let k = |i: usize| -> [u32; 3] {
@@ -250,6 +253,32 @@ impl Record for SeamEdge {
             owner: u64::from_le_bytes(b[48..56].try_into().unwrap()),
             owner_depth: b[56],
             special: b[57] != 0,
+            round: b[58],
+        }
+    }
+}
+
+/// A finished tile of the current depth (its latest round).
+struct Done(Outcome);
+
+/// A seam vertex a tile removes (logged so a contested vertex re-runs every remover).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ForcedKey {
+    key: Key,
+    first: u64,
+}
+impl Record for ForcedKey {
+    const SIZE: usize = 20;
+    fn encode(&self, out: &mut [u8]) {
+        for (i, v) in self.key.iter().enumerate() {
+            out[4 * i..4 * i + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        out[12..].copy_from_slice(&self.first.to_le_bytes());
+    }
+    fn decode(b: &[u8]) -> Self {
+        Self {
+            key: std::array::from_fn(|i| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap())),
+            first: u64::from_le_bytes(b[12..20].try_into().unwrap()),
         }
     }
 }
@@ -278,10 +307,16 @@ pub(crate) struct LodReport {
     pub direct_from_used: u64,
     pub composed_exhausted: u64,
     pub direct_exhausted: u64,
+    /// Tiles whose source range is too large for the direct budget (composed only).
+    pub direct_skipped: u64,
     pub seam_edges: u64,
     pub seam_matched: u64,
     pub seam_unmatched_boundary: u64,
     pub seam_relabelled: u64,
+    /// Seam consensus: extra rounds run and vertices kept because a tile could not
+    /// remove them validly.
+    pub seam_rounds: u64,
+    pub seam_kept_extra: u64,
     pub lattice_sha256: String,
     pub sidecar_peak_bytes: u64,
     pub relaxed_tiles: u64,
@@ -292,6 +327,10 @@ pub(crate) struct LodReport {
     pub prepass_seconds: f64,
     #[serde(skip)]
     pub seconds: f64,
+    #[serde(skip)]
+    pub phase_seconds: [f64; 7],
+    #[serde(skip)]
+    pub audit_seconds: f64,
     pub texture: &'static str,
 }
 
@@ -636,6 +675,11 @@ struct Outcome {
     direct_to_used: bool,
     direct_from_used: bool,
     relaxed: bool,
+    /// Seconds: load children, islands/seams, simplify, encode+composed, direct,
+    /// per-primitive+fills, final encode/records/sidecar.
+    phases: [f64; 7],
+    forced_keys: Vec<Key>,
+    failed_keys: Vec<Key>,
 }
 
 /// Faces of a mesh grouped by label (stable), the GLB face order.
@@ -678,8 +722,9 @@ fn primitives(mesh: &KeyMesh, faces: &[Face]) -> Vec<ProxyPrimitive> {
     out
 }
 
-fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
+fn process(ctx: &Ctx, job: &Job, keep_extra: &BTreeSet<Key>) -> Result<Outcome, JobError> {
     (ctx.check)()?;
+    let mut clock = std::time::Instant::now();
     let node = &job.node;
     let d = node.depth();
     let ar = ctx.ar;
@@ -698,6 +743,13 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
         t_tris.extend_from_slice(&c.decoded);
         t_slot.extend(std::iter::repeat_n(c.slot, c.faces.len()));
     }
+    let mut lap = |slot: &mut f64| {
+        let now = std::time::Instant::now();
+        *slot += (now - clock).as_secs_f64();
+        clock = now;
+    };
+    let mut phases = [0f64; 7];
+    lap(&mut phases[0]);
     let mesh = KeyMesh::build(&key_faces);
     let mut out = Outcome::default();
 
@@ -718,6 +770,36 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
             })
             .unwrap();
         vanish[keep] = false;
+    }
+    // Policy (not soundness: the certificate measures whatever vanishes): an island may
+    // vanish only when it lies within the tile's natural spacing, diagonal / sqrt(P), of
+    // the surface that stays, so one far floater cannot dominate a tile's error.
+    if vanish.iter().any(|v| *v) {
+        let lo = node.bounds.min.map(f64::from);
+        let hi = node.bounds.max.map(f64::from);
+        let diagonal = ((0..3).map(|a| (hi[a] - lo[a]).powi(2)).sum::<f64>()).sqrt();
+        let spacing = diagonal / (ctx.target as f64).sqrt();
+        let staying: Vec<Tri> = comps
+            .iter()
+            .zip(&vanish)
+            .filter(|(_, v)| !**v)
+            .flat_map(|(c, _)| c.faces.iter().map(|&f| t_tris[f as usize]))
+            .collect();
+        let bvh = Bvh::new(&staying);
+        let mut evals = 0;
+        for (c, v) in comps.iter().zip(vanish.iter_mut()) {
+            if !*v {
+                continue;
+            }
+            let far = c.faces.iter().any(|&f| {
+                t_tris[f as usize]
+                    .iter()
+                    .any(|p| bvh.nearest(*p, 64, &mut evals).sqrt() > spacing)
+            });
+            if far {
+                *v = false;
+            }
+        }
     }
     let mut removed_face = vec![false; mesh.faces.len()];
     let mut vanished_rows: Vec<(u32, Key, u32, u8)> = Vec::new(); // label, key, faces, mask
@@ -754,10 +836,12 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
         if !v.info.cut(d) {
             continue;
         }
-        let mut keep = kept(&v.info, v.key, d, k);
-        // Control: one side of each seam keeps a third of the vertices both should remove.
+        let mut keep = kept(&v.info, v.key, d, k) || keep_extra.contains(&v.key);
+        // Control: the first tile of each depth keeps a third of the seam vertices its
+        // neighbours remove.
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
-            && node.first % 2 == 1
+            && node.first == 0
+            && d >= 1
             && key_hash(v.key) % 3 == 0
         {
             keep = true;
@@ -768,8 +852,11 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
             forced.push(i as u32);
         }
     }
+    lap(&mut phases[1]);
     let mut simplifier = Simplifier::new(&mesh, &kept_faces, locked);
-    simplifier.force(&forced);
+    let failed = simplifier.force(&forced);
+    out.forced_keys = forced.iter().map(|&i| mesh.vertices[i as usize].key).collect();
+    out.failed_keys = failed.iter().map(|&i| mesh.vertices[i as usize].key).collect();
     simplifier.simplify(ctx.target);
     let relaxed = simplifier.live_faces() > 2 * ctx.target;
     if relaxed {
@@ -811,6 +898,7 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
     }
 
     // Encode the unfilled proxy, decode its bytes, certify.
+    lap(&mut phases[2]);
     let s_order = by_label(&s_faces);
     let flat_records: Vec<RecordTable> = Vec::new();
     let unfilled = codec::encode(&primitives(&mesh, &s_order), ctx.materials, ctx.lattice, d, &flat_records)?;
@@ -830,7 +918,15 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
     let child_to = children.iter().map(|c| c.to).fold(0f64, f64::max);
     let child_from = children.iter().map(|c| c.from).fold(0f64, f64::max);
     let child_max = children.iter().map(|c| c.published).fold(0f64, f64::max);
-    let s_t = geom::directed(ar, &s_tris, &t_bvh, Limits::for_sizes(s_tris.len(), t_tris.len()));
+    let s_labels: Vec<u32> = s_order.iter().map(|f| f.label).collect();
+    let t_labels: Vec<u32> = mesh.faces.iter().map(|f| f.label).collect();
+    let s_t = geom::directed_labelled(
+        ar,
+        &s_tris,
+        &t_bvh,
+        Limits::for_sizes(s_tris.len(), t_tris.len()),
+        Some((&s_labels, &t_labels)),
+    );
     let skip_removed = ctx.mutation == Mutation::SkipRemoved;
     let t_measured: Vec<Tri> = if skip_removed {
         t_tris
@@ -860,7 +956,15 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
     };
     let lo = node.bounds.min.map(f64::from);
     let hi = node.bounds.max.map(f64::from);
-    let work = 256 * (s_tris.len() as u64 + t_tris.len() as u64);
+    // Direct terms where they can differ from the composed ones: above leaf-only children
+    // T is the decoded source itself (up to the leaves' own snap bound).
+    let leaf_parent = job.children.iter().all(|c| matches!(c, Child::Leaf { .. }));
+    let work = if leaf_parent {
+        0
+    } else {
+        256 * (s_tris.len() as u64 + t_tris.len() as u64)
+    };
+    lap(&mut phases[3]);
     let direct = certify::direct(
         ar, ctx.source, node.first, node.end, lo, hi, &s_tris, &s_bvh, work, &skip, ctx.check,
     )?;
@@ -875,6 +979,7 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
         return Err(state(format!("coarse tile f{}-d{d}: certificate is not finite", node.first)));
     }
 
+    lap(&mut phases[4]);
     // Per-primitive proxy -> source bounds (composed through each child's own bound).
     let mut t_by_label: BTreeMap<u32, Vec<Tri>> = BTreeMap::new();
     for (f, t) in mesh.faces.iter().zip(&t_tris) {
@@ -896,16 +1001,25 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
     let mut label_bvh: BTreeMap<u32, Bvh> = BTreeMap::new();
     let mut label_error: BTreeMap<u32, f64> = BTreeMap::new();
     {
-        let mut s_by_label: BTreeMap<u32, Vec<Tri>> = BTreeMap::new();
-        for (f, t) in s_order.iter().zip(&s_tris) {
-            s_by_label.entry(f.label).or_default().push(*t);
+        // Same-primitive witnesses come from the S -> T search; a face whose search met no
+        // same-primitive target gets one filtered query.
+        let mut per_label: BTreeMap<u32, f64> = BTreeMap::new();
+        let mut evals = 0u64;
+        for ((f, t), &same) in s_order.iter().zip(&s_tris).zip(&s_t.same) {
+            let bound = if same.is_finite() {
+                same
+            } else {
+                let bvh = label_bvh
+                    .entry(f.label)
+                    .or_insert_with(|| Bvh::new(&t_by_label[&f.label]));
+                bvh.best_target(t, 64, &mut evals)
+                    .map_or(f64::INFINITY, |(k, _)| ar.patch(t, bvh.tri(k), 0.))
+            };
+            let e = per_label.entry(f.label).or_insert(0.);
+            *e = e.max(bound);
         }
-        for (label, tris) in &s_by_label {
-            let bvh = label_bvh
-                .entry(*label)
-                .or_insert_with(|| Bvh::new(&t_by_label[label]));
-            let h = geom::directed(ar, tris, bvh, Limits::for_sizes(tris.len(), bvh.len()));
-            label_error.insert(*label, up_add(ar, h.bound, label_child[label]));
+        for (label, h) in per_label {
+            label_error.insert(label, up_add(ar, h, label_child[&label]));
         }
     }
 
@@ -999,6 +1113,7 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
     }
     let published = raw.max(child_max);
 
+    lap(&mut phases[5]);
     // Final encoding with fills and records; decode and compare once more.
     let mut all = s_order.clone();
     all.extend_from_slice(&fill_faces);
@@ -1119,6 +1234,7 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
             lo_dec: dec(&lo)?,
             hi_dec: dec(&hi)?,
             special: lo.info.special && hi.info.special,
+            round: 0,
         });
     }
 
@@ -1161,6 +1277,10 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
         FLAG_DIRECT_EXHAUSTED
     } else {
         0
+    } | if direct.skipped {
+        FLAG_DIRECT_SKIPPED
+    } else {
+        0
     };
     out.row = Some(Row {
         first: node.first,
@@ -1182,6 +1302,8 @@ fn process(ctx: &Ctx, job: &Job) -> Result<Outcome, JobError> {
         sha256: Sha256::digest(&encoded.glb).into(),
         flags,
     });
+    lap(&mut phases[6]);
+    out.phases = phases;
     Ok(out)
 }
 
@@ -1225,6 +1347,7 @@ fn leaf_seams(
             lo_dec: dec(a, ia)?,
             hi_dec: dec(b, ib)?,
             special: ia.special && ib.special,
+            round: 0,
         })?;
         n += 1;
     }
@@ -1267,10 +1390,14 @@ fn audit(
         } else if relabel {
             counts.relabelled += 1;
         } else {
+            let p = |k: Key| k.map(f32::from_bits);
             return Err(state(format!(
-                "depth {d} seam: an edge of tile f{}-d{} has no partner tile (crack); a crack \
-                 is never published as a hole",
-                first.owner, first.owner_depth
+                "depth {d} seam: edge {:?}-{:?} of tile f{}-d{} has no partner tile (crack); a \
+                 crack is never published as a hole",
+                p(first.lo),
+                p(first.hi),
+                first.owner,
+                first.owner_depth
             )));
         }
         group.clear();
@@ -1317,6 +1444,8 @@ pub(crate) struct LodInput<'a> {
     pub sort: crate::spill::SortConfig,
     pub jobs: usize,
     pub mutation: Mutation,
+    /// Proxy face target `P` ([`TARGET_FACES`] in production).
+    pub target: usize,
 }
 
 /// Build, certify and write every coarse tile; returns the report. Writes `proxies/` and
@@ -1329,7 +1458,7 @@ pub(crate) fn produce(
     let captured = input.captured;
     let mut report = LodReport {
         schema_version: 1,
-        target_faces: TARGET_FACES as u64,
+        target_faces: input.target as u64,
         texture: "untextured: flat material factors and smooth normals; texture baking is H13",
         jobs: input.jobs as u64,
         ..Default::default()
@@ -1375,7 +1504,7 @@ pub(crate) fn produce(
             internal += 1;
         }
     }
-    report.retention = retention(&sums, TARGET_FACES as u128);
+    report.retention = retention(&sums, input.target as u128);
     let rows_path = input.stage.join("proxies.jsonl");
     if internal == 0 {
         fs::write(&rows_path, b"").map_err(|e| JobError::io("write proxy rows", &rows_path, e))?;
@@ -1408,7 +1537,7 @@ pub(crate) fn produce(
         lattice: &captured.lattice,
         materials: &materials,
         retention: &report.retention.clone(),
-        target: TARGET_FACES,
+        target: input.target,
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
         check,
@@ -1426,107 +1555,181 @@ pub(crate) fn produce(
     for d in (0..=deepest as u32).rev() {
         check()?;
         let mut seams = ExternalSorter::<SeamEdge>::new(input.scratch, input.sort)?;
-        // List this depth's internal tiles and their children (preorder stream).
-        let mut nodes = captured.tree.nodes.reader()?;
-        let mut leaves = leaf_facts.reader()?;
-        let mut leaf_index = 0u64;
-        let mut window: Vec<Job> = Vec::new();
-        let mut current: Option<Job> = None;
+        let mut forced_log =
+            crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?;
+        let mut done: BTreeMap<u64, Done> = BTreeMap::new();
+        let mut keep: BTreeSet<Key> = BTreeSet::new();
+        let mut latest: BTreeMap<(u64, u8), u8> = BTreeMap::new();
+        let mut failed: BTreeSet<Key> = BTreeSet::new();
         let window_size = 4 * input.jobs.max(1);
-        let run = |window: &mut Vec<Job>,
-                       rows: &mut ExternalSorter<Row>,
-                       seams: &mut ExternalSorter<SeamEdge>,
-                       report: &mut LodReport|
-         -> Result<u64, JobError> {
-            if window.is_empty() {
-                return Ok(0);
-            }
-            let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
-                use rayon::prelude::*;
-                window.par_iter().map(|job| process(&ctx, job)).collect()
-            });
-            let mut bytes = 0;
-            for outcome in outcomes {
-                let o = outcome?;
-                let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
-                report.proxies += 1;
-                report.proxy_faces += u64::from(row.faces);
-                report.max_proxy_faces = report.max_proxy_faces.max(u64::from(row.faces));
-                report.proxy_bytes += row.bytes;
-                let e = &mut report.max_error_by_depth[row.depth as usize];
-                *e = e.max(row.published);
-                report.vanished_components += o.vanished_components;
-                report.vanished_faces += o.vanished_faces;
-                report.fill_candidates += o.fill_candidates;
-                report.fills += u64::from(row.filled);
-                report.fills_rejected_bound += o.fills_rejected_bound;
-                report.fills_rejected_topology += o.fills_rejected_topology;
-                report.forced_collapses += o.forced;
-                report.relaxed_tiles += u64::from(o.relaxed);
-                report.forced_unchecked += o.forced_unchecked;
-                report.direct_to_used += u64::from(o.direct_to_used);
-                report.direct_from_used += u64::from(o.direct_from_used);
-                report.composed_exhausted += u64::from(row.flags & FLAG_COMPOSED_EXHAUSTED != 0);
-                report.direct_exhausted += u64::from(row.flags & FLAG_DIRECT_EXHAUSTED != 0);
-                bytes += o.sidecar_bytes;
-                rows.push(row)?;
-                for s in o.seams {
-                    seams.push(s)?;
+        let mut round = 0u8;
+        let mut selected: Option<BTreeSet<u64>> = None;
+        loop {
+            // List this depth's internal tiles (all, or the re-run selection) and their
+            // children from the preorder stream.
+            let mut nodes = captured.tree.nodes.reader()?;
+            let mut leaves = leaf_facts.reader()?;
+            let mut leaf_index = 0u64;
+            let mut window: Vec<Job> = Vec::new();
+            let mut current: Option<Job> = None;
+            let wanted = |n: &NodeRecord| selected.as_ref().is_none_or(|s| s.contains(&n.first));
+            let run = |window: &mut Vec<Job>,
+                           seams: &mut ExternalSorter<SeamEdge>,
+                           forced_log: &mut crate::spill::SequenceWriter<ForcedKey>,
+                           done: &mut BTreeMap<u64, Done>,
+                           failed: &mut BTreeSet<Key>|
+             -> Result<(), JobError> {
+                if window.is_empty() {
+                    return Ok(());
                 }
-            }
-            window.clear();
-            Ok(bytes)
-        };
-        let mut written = 0u64;
-        while let Some(n) = nodes.next().transpose()? {
-            if n.kind == NodeKind::Leaf {
-                let fact = leaves
-                    .next()
-                    .transpose()?
-                    .ok_or_else(|| state("leaf facts end before the tree"))?;
-                if fact.first != n.first {
-                    return Err(state("leaf facts out of tree order"));
+                let outcomes: Vec<Result<Outcome, JobError>> = pool.install(|| {
+                    use rayon::prelude::*;
+                    window.par_iter().map(|job| process(&ctx, job, &keep)).collect()
+                });
+                for (job, outcome) in window.iter().zip(outcomes) {
+                    let mut o = outcome?;
+                    for mut e in std::mem::take(&mut o.seams) {
+                        e.round = round;
+                        seams.push(e)?;
+                    }
+                    if round == 0 {
+                        for key in std::mem::take(&mut o.forced_keys) {
+                            forced_log.push(&ForcedKey { key, first: job.node.first })?;
+                        }
+                    }
+                    failed.extend(std::mem::take(&mut o.failed_keys));
+                    done.insert(job.node.first, Done(o));
                 }
-                if n.depth() <= d {
-                    leaf_seams(&source, &captured.lattice, &n, d, &mut seams)?;
+                window.clear();
+                Ok(())
+            };
+            while let Some(n) = nodes.next().transpose()? {
+                if n.kind == NodeKind::Leaf {
+                    let fact = leaves
+                        .next()
+                        .transpose()?
+                        .ok_or_else(|| state("leaf facts end before the tree"))?;
+                    if fact.first != n.first {
+                        return Err(state("leaf facts out of tree order"));
+                    }
+                    if round == 0 && n.depth() <= d {
+                        leaf_seams(&source, &captured.lattice, &n, d, &mut seams)?;
+                    }
+                    if n.depth() == d + 1 {
+                        if let Some(job) = current.as_mut() {
+                            job.children.push(Child::Leaf {
+                                node: n,
+                                index: leaf_index,
+                                error: f64::from_bits(fact.error_bits),
+                            });
+                        }
+                    }
+                    leaf_index += 1;
+                    continue;
                 }
-                if n.depth() == d + 1 {
-                    let job = current.as_mut().ok_or_else(|| state("a leaf child without its parent"))?;
-                    job.children.push(Child::Leaf {
+                if n.depth() == d {
+                    if let Some(job) = current.take() {
+                        window.push(job);
+                        if window.len() >= window_size {
+                            run(&mut window, &mut seams, &mut forced_log, &mut done, &mut failed)?;
+                        }
+                    }
+                    current = wanted(&n).then(|| Job {
                         node: n,
-                        index: leaf_index,
-                        error: f64::from_bits(fact.error_bits),
+                        children: Vec::new(),
                     });
-                }
-                leaf_index += 1;
-                continue;
-            }
-            if n.depth() == d {
-                if let Some(job) = current.take() {
-                    window.push(job);
-                    if window.len() >= window_size {
-                        written += run(&mut window, &mut rows, &mut seams, &mut report)?;
+                } else if n.depth() == d + 1 {
+                    if let Some(job) = current.as_mut() {
+                        job.children.push(Child::Proxy { node: n });
+                    }
+                } else if n.depth() < d {
+                    if let Some(job) = current.take() {
+                        window.push(job);
                     }
                 }
-                current = Some(Job {
-                    node: n,
-                    children: Vec::new(),
-                });
-            } else if n.depth() == d + 1 {
-                let job = current.as_mut().ok_or_else(|| state("a child without its parent"))?;
-                job.children.push(Child::Proxy { node: n });
             }
+            if let Some(job) = current.take() {
+                window.push(job);
+            }
+            run(&mut window, &mut seams, &mut forced_log, &mut done, &mut failed)?;
+            if failed.is_empty() {
+                break;
+            }
+            // Seam consensus: keep every vertex some tile could not remove, and re-run
+            // every tile that was removing it, until no tile fails.
+            round += 1;
+            if round > 16 {
+                return Err(JobError::new(
+                    JobErrorKind::Unsupported,
+                    format!(
+                        "depth {d}: seam vertex consensus did not converge in 16 rounds ({} \
+                         vertices still contested)",
+                        failed.len()
+                    ),
+                ));
+            }
+            report.seam_rounds += 1;
+            report.seam_kept_extra += failed.len() as u64;
+            let log = std::mem::replace(
+                &mut forced_log,
+                crate::spill::SequenceWriter::<ForcedKey>::new(input.scratch, "lod-forced", 1 << 16)?,
+            )
+            .finish()?;
+            let mut rerun = BTreeSet::new();
+            for f in log.reader()? {
+                let f = f?;
+                if failed.contains(&f.key) {
+                    rerun.insert(f.first);
+                }
+                forced_log.push(&f)?;
+            }
+            for first in &rerun {
+                latest.insert((*first, d as u8), round);
+            }
+            keep.append(&mut failed);
+            selected = Some(rerun);
         }
-        if let Some(job) = current.take() {
-            window.push(job);
+        drop(forced_log);
+        let mut written = 0u64;
+        for Done(o) in done.into_values() {
+            let row = o.row.ok_or_else(|| state("a coarse tile produced no row"))?;
+            report.proxies += 1;
+            report.proxy_faces += u64::from(row.faces);
+            report.max_proxy_faces = report.max_proxy_faces.max(u64::from(row.faces));
+            report.proxy_bytes += row.bytes;
+            let e = &mut report.max_error_by_depth[row.depth as usize];
+            *e = e.max(row.published);
+            report.vanished_components += o.vanished_components;
+            report.vanished_faces += o.vanished_faces;
+            report.fill_candidates += o.fill_candidates;
+            report.fills += u64::from(row.filled);
+            report.fills_rejected_bound += o.fills_rejected_bound;
+            report.fills_rejected_topology += o.fills_rejected_topology;
+            report.forced_collapses += o.forced;
+            report.forced_unchecked += o.forced_unchecked;
+            report.relaxed_tiles += u64::from(o.relaxed);
+            for (a, b) in report.phase_seconds.iter_mut().zip(o.phases) {
+                *a += b;
+            }
+            report.direct_to_used += u64::from(o.direct_to_used);
+            report.direct_from_used += u64::from(o.direct_from_used);
+            report.composed_exhausted += u64::from(row.flags & FLAG_COMPOSED_EXHAUSTED != 0);
+            report.direct_exhausted += u64::from(row.flags & FLAG_DIRECT_EXHAUSTED != 0);
+            report.direct_skipped += u64::from(row.flags & FLAG_DIRECT_SKIPPED != 0);
+            written += o.sidecar_bytes;
+            rows.push(row)?;
         }
-        written += run(&mut window, &mut rows, &mut seams, &mut report)?;
         sidecar_bytes.insert(d, written);
         sidecar_live += written;
         report.sidecar_peak_bytes = report.sidecar_peak_bytes.max(sidecar_live);
-        // Audit this depth's frontier seams, then drop the children's sidecars.
+        // Audit this depth's frontier seams (each tile's latest round), then drop the
+        // children's sidecars.
         let relabel = input.mutation == Mutation::CrackAsHole;
-        let counts = audit(seams.finish()?, d, relabel)?;
+        let audit_started = std::time::Instant::now();
+        let current_round = |e: &SeamEdge| latest.get(&(e.owner, e.owner_depth)).copied().unwrap_or(0) == e.round;
+        let edges = seams.finish()?.filter(|e| e.as_ref().map_or(true, current_round));
+        let counts = audit(edges, d, relabel)?;
+        report.audit_seconds += audit_started.elapsed().as_secs_f64();
         report.seam_edges += counts.edges;
         report.seam_matched += counts.matched;
         report.seam_unmatched_boundary += counts.boundary;
@@ -1553,6 +1756,7 @@ pub(crate) fn produce(
             "vanishedRecords":r.vanished,"filledRecords":r.filled,
             "composedExhausted":r.flags & FLAG_COMPOSED_EXHAUSTED != 0,
             "directExhausted":r.flags & FLAG_DIRECT_EXHAUSTED != 0,
+            "directSkipped":r.flags & FLAG_DIRECT_SKIPPED != 0,
             "latticeSha256":report.lattice_sha256});
         serde_json::to_writer(&mut writer, &line).map_err(|e| state(e.to_string()))?;
         writer
