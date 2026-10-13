@@ -869,9 +869,9 @@ mod tests {
                         [block.width, block.height],
                     )
                     .unwrap();
-                    for axis in 0..2 {
+                    for (axis, coordinate) in mapped.into_iter().enumerate() {
                         let edge = if axis == 0 { block.width } else { block.height };
-                        let x = f64::from(mapped[axis]) * f64::from(edge) - 0.5;
+                        let x = f64::from(coordinate) * f64::from(edge) - 0.5;
                         let lo = f64::from(island.offset[axis] + gutter);
                         let interior = if axis == 0 {
                             island.crop.interior_width

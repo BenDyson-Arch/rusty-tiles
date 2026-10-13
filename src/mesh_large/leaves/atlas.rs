@@ -135,7 +135,7 @@ fn pack_islands(
             width = width.max(x);
         }
         let height = y + row;
-        (height <= u64::from(max_edge)).then(|| (width as u32, height as u32, offsets))
+        (height <= u64::from(max_edge)).then_some((width as u32, height as u32, offsets))
     };
     let mut best: Option<(u64, u32, u32, Vec<[u32; 2]>)> = None;
     let mut limit = 4u32;
