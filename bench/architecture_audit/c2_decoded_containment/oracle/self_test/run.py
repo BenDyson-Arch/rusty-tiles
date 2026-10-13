@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from c2o import meshopt  # noqa: E402
-from c2o.gltf import Payload  # noqa: E402
+from c2o.gltf import LegacyContent, Payload, PayloadError  # noqa: E402
 from c2o.check import level_operations  # noqa: E402
 from c2o import spans as S  # noqa: E402
 from c2o.numbers import JsonNumberError, Overflow, contains_overflow, f32_exact, f32_bits, load_json, lowbit_highbit, value_nodes  # noqa: E402
@@ -341,6 +341,7 @@ def test_repeated_resource_bytes():
     class Members:
         def __init__(self, members):
             self.members = members
+            self.infos = members
 
         def read(self, name):
             return self.members[name]
@@ -355,8 +356,57 @@ def test_repeated_resource_bytes():
     check("C2-WB Res counts entries, aliases included", p.external_resources == 4, p.external_resources)
 
 
+def test_legacy_content():
+    """H7 (PROPOSED): b3dm/i3dm/pnts/cmpt are C1 Unsupported, by final suffix before any read (L1)
+    or by the first four bytes (L2); existence first (L0); nothing after the magic is read."""
+    class Members:
+        def __init__(self, members):
+            self.infos = members
+            self.reads = []
+
+        def read(self, name):
+            self.reads.append(name)
+            return self.infos[name]
+
+    def outcome(name, data):
+        archive = Members({name: data})
+        try:
+            Payload(archive, name)
+        except LegacyContent as err:
+            return ("Unsupported", err.fmt, err.rule, archive.reads)
+        except PayloadError:
+            return ("Undecided", None, None, archive.reads)
+        return ("decoded", None, None, archive.reads)
+    for name, fmt in (("t.b3dm", "b3dm"), ("t.i3dm", "i3dm"), ("t.pnts", "pnts"), ("t.cmpt", "cmpt"),
+                      ("d/T.B3DM", "b3dm"), ("t.PnTs", "pnts")):
+        # Suffix verdicts never read the member: corrupt or empty bytes give the same outcome.
+        for data in (b"", b"glTF", fmt.encode(), b"\xff" * 64):
+            got = outcome(name, data)
+            check("L1 %s %r" % (name, data[:4]), got == ("Unsupported", fmt, "suffix", []), got)
+    for fmt in ("b3dm", "i3dm", "pnts", "cmpt"):
+        for name in ("t.glb", "t.gltf", "T.GLB"):
+            got = outcome(name, fmt.encode() + bytes(60))
+            check("L2 %s in %s" % (fmt, name), got[:3] == ("Unsupported", fmt, "magic"), got)
+    for name in ("b3dm/t.glb", "t.b3dm.glb", "t.cmpt/x.glb"):
+        got = outcome(name, b"{\"asset\":{\"version\":\"2.0\"},\"generator\":\"b3dm\"}")
+        check("legacy words outside the final suffix and magic: %s" % name, got[0] == "decoded", got)
+    for name in ("t.bin", "t", "t.vctr", "t.b3dmx", "t.glb3dm"):
+        got = outcome(name, b"b3dm" + bytes(28))
+        check("non-admitted suffix %s is Undecided, not legacy" % name, got == ("Undecided", None, None, []), got)
+    archive = Members({})
+    try:
+        Payload(archive, "missing.b3dm")
+        got = "decoded"
+    except LegacyContent:
+        got = "Unsupported"
+    except PayloadError:
+        got = "Undecided"
+    check("L0: a missing .b3dm member is not classified", got == "Undecided", got)
+
+
 def main():
-    for test in (test_meshopt, test_worked_example, test_wb_weights, test_repeated_resource_bytes, test_identity_equivalence, test_soundness,
+    for test in (test_meshopt, test_worked_example, test_wb_weights, test_repeated_resource_bytes, test_legacy_content,
+                 test_identity_equivalence, test_soundness,
                  test_identities, test_integer_predicate):
         try:
             test()

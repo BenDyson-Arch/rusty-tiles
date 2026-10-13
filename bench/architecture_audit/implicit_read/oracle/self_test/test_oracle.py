@@ -153,6 +153,20 @@ def test_templates():
               "c/{level}-{x}-{y}-{z}.JsOn"):
         check(f"JSON detection {t}", expect_outcome(lambda t=t: O.normalize_template(t, base, True, True, "t"),
                                                     "Unsupported", "external tileset"))
+    # H7 (PROPOSED) step 4b: legacy suffixes on the normalized last segment, content templates only.
+    for t, fmt in (("c/{level}-{x}-{y}-{z}.b3dm", "b3dm"), ("c/{level}-{x}-{y}-{z}.I3DM", "i3dm"),
+                   ("c/{level}-{x}-{y}-{z}.pnts/.", "pnts"), ("c/{level}-{x}-{y}-{z}.cmpt/", "cmpt"),
+                   ("c/x.b3dm/{level}-{x}-{y}-{z}/..", "b3dm"), ("c/{level}-{x}-{y}-{z}.b3%64m", "b3dm")):
+        check(f"legacy detection {t}", expect_outcome(lambda t=t: O.normalize_template(t, base, True, True, "t"),
+                                                      "Unsupported", f"legacy {fmt}"))
+    for t in ("c/{level}-{x}-{y}-{z}.b3dm.glb", "b3dm/{level}-{x}-{y}-{z}.glb", "c/{level}-{x}-{y}-{z}b3dm",
+              "c/{level}-{x}-{y}-{z}.xb3dm"):
+        check(f"no legacy detection {t}", O.normalize_template(t, base, True, True, "t").text == t)
+    check("subtree template is not legacy-detected",
+          O.normalize_template("s/{level}/{x}/{y}.b3dm", base, False, False, "t").text == "s/{level}/{x}/{y}.b3dm")
+    check("JSON detection precedes legacy detection", expect_outcome(
+        lambda: O.normalize_template("c/{level}-{x}-{y}-{z}.b3dm/../a.json", base, True, True, "t"),
+        "Unsupported", "external tileset"))
     check("escape guard last segment", expect_outcome(
         lambda: O.normalize_template("c/{level}-{x}-{y}-{z}.j%7{x}on", base, True, True, "t"),
         "Unsupported", "escape adjacent"))

@@ -263,6 +263,19 @@ def _ascii_endswith_json(text):
     return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in tail[1:]) == "json"
 
 
+LEGACY_FORMATS = ("b3dm", "i3dm", "pnts", "cmpt")
+
+
+def _ascii_legacy_suffix(text):
+    """H7: the legacy 3D Tiles 1.0 format named by a final `.b3dm`/`.i3dm`/`.pnts`/`.cmpt`
+    (ASCII case-insensitive), else None."""
+    tail = text[-5:]
+    if len(tail) < 5 or tail[0] != ".":
+        return None
+    suffix = "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in tail[1:])
+    return suffix if suffix in LEGACY_FORMATS else None
+
+
 def normalize_template(raw, base, octree, is_content, stage):
     # Step 1: raw syntax.
     if not isinstance(raw, str):
@@ -349,6 +362,11 @@ def normalize_template(raw, base, octree, is_content, stage):
     # Step 4: JSON detection on the last segment of the normalized template (content templates only).
     if is_content and out and out[-1][-1][0] == "lit" and _ascii_endswith_json(out[-1][-1][1]):
         unsupported("external tileset content template", stage)
+    # Step 4b (H7): legacy detection on the same last segment (content templates only).
+    if is_content and out and out[-1][-1][0] == "lit":
+        legacy = _ascii_legacy_suffix(out[-1][-1][1])
+        if legacy is not None:
+            unsupported(f"legacy {legacy} content template", stage)
     # Step 5: variable survival.
     if required - {v for seg in out for k, v in seg if k == "var"}:
         unsupported("template variables eliminated by dot-segments", stage)

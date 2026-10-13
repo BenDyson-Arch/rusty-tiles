@@ -81,7 +81,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/test-undrawn-vertices.patch",
-   "patchSha256": "b05dee3da213fe4a33ee8b92e9632024e71d864a2ebb619cbda69f0244f45498"
+   "patchSha256": "c634851f1a75183a7554260c0d794b47249f09c61936427717872457a1d05f7d"
   },
   {
    "flipped": 4,
@@ -96,7 +96,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/rounded-normalized-quotient.patch",
-   "patchSha256": "e176a369236671981ee36e32ae59222c5b5ea6daee3cd5ad38f83c8bed909f31"
+   "patchSha256": "c34b2a1c23b0c13b2bbedea74bb7f4d7dc52fa310a1bedd901b6f40a2a155e1a"
   },
   {
    "flipped": 177,
@@ -192,7 +192,7 @@
    "namedFixtureFlips": true,
    "pass": true,
    "patch": "oracle/mutants/patches/reuse-URI-cache-for-verdicts.patch",
-   "patchSha256": "401d8def8bb09d874fe33e0627a4c8a04dbd130e3e585a6d802963a30bfa8239"
+   "patchSha256": "cd948d9f3e6ce24ce93741ae46b0b91bd30452b59af3a7b7a193a24744e1e3a0"
   },
   {
    "flipped": 1,

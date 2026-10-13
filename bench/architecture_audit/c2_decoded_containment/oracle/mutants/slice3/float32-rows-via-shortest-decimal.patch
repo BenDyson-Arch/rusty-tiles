@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -141,6 +141,9 @@
+@@ -143,6 +143,9 @@
          values = _row(vol[4:])
          if len(values) != 12:
              raise OracleUndecided("I1 row at %s does not have 12 values" % where)

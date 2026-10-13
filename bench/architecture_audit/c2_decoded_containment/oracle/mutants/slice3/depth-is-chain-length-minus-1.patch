@@ -1,6 +1,6 @@
 --- a/oracle/c2o/implicit.py
 +++ b/oracle/c2o/implicit.py
-@@ -289,7 +289,6 @@
+@@ -291,7 +291,6 @@
                  cwhere = "%s.content[%d]" % (twhere, slot)
                  self._reference(target, target, cwhere, chain, None)
                  ref = self.references[-1]

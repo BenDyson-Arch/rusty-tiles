@@ -380,7 +380,7 @@ use payload::scene::{
     ContentExclusions, Instance, NodeTransform, PositionFormat, PositionWord, SceneConsumer,
 };
 
-/// The frozen 15-name not-inspected reason enum.
+/// The frozen not-inspected reason enum (14 names; H7 removed `rtcCenter`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Reason {
     DerivedImplicitVolume,
@@ -389,7 +389,6 @@ enum Reason {
     UpAxisOverride,
     RegionVolume,
     RotatedBox,
-    RtcCenter,
     GltfExtension,
     SceneSelection,
     Skin,
@@ -399,14 +398,13 @@ enum Reason {
     NumericSpan,
     WorkLimit,
 }
-const REASONS: [Reason; 15] = [
+const REASONS: [Reason; 14] = [
     Reason::DerivedImplicitVolume,
     Reason::TilesetExtension,
     Reason::TileMetadata,
     Reason::UpAxisOverride,
     Reason::RegionVolume,
     Reason::RotatedBox,
-    Reason::RtcCenter,
     Reason::GltfExtension,
     Reason::SceneSelection,
     Reason::Skin,
@@ -425,7 +423,6 @@ impl Reason {
             Self::UpAxisOverride => "upAxisOverride",
             Self::RegionVolume => "regionVolume",
             Self::RotatedBox => "rotatedBox",
-            Self::RtcCenter => "rtcCenter",
             Self::GltfExtension => "gltfExtension",
             Self::SceneSelection => "sceneSelection",
             Self::Skin => "skin",
@@ -443,7 +440,6 @@ impl Reason {
 const TILESET_ALLOWLIST: [&str; 1] = ["3DTILES_content_gltf_vector"];
 fn content_reasons(facts: &ContentExclusions) -> u16 {
     [
-        (facts.rtc_center, Reason::RtcCenter),
         (facts.gltf_extension, Reason::GltfExtension),
         (facts.scene_selection, Reason::SceneSelection),
         (facts.skin, Reason::Skin),
@@ -503,11 +499,21 @@ fn scene_error(error: payload::SceneError<Error, Error>) -> Error {
         payload::SceneError::Consumer(error) => error,
     }
 }
+/// H7: legacy 3D Tiles 1.0 content is Unsupported, never partially inspected.
+fn legacy(format: &str, name: &str, magic: bool) -> Error {
+    let magic = if magic {
+        format!(" starts with {format} magic")
+    } else {
+        String::new()
+    };
+    Error::unsupported(format!(
+        "legacy {format} content is unsupported (glTF 2.0 content only): {name}{magic}"
+    ))
+}
 fn payload_kind(name: &str) -> Result<payload::PayloadKind, Error> {
     match name.to_ascii_lowercase().rsplit_once('.') {
         Some((_, "glb")) => Ok(payload::PayloadKind::Glb),
         Some((_, "gltf")) => Ok(payload::PayloadKind::LocalGltf),
-        Some((_, "b3dm")) => Ok(payload::PayloadKind::B3dm),
         _ => Err(Error::unsupported(
             "payload format outside GLB/local glTF 2.0",
         )),
@@ -1137,9 +1143,17 @@ struct ImplicitParent {
     refine: Option<&'static str>,
 }
 impl Check<'_> {
+    /// The single payload classifier (H7 INV-4): every payload caller comes here.
     fn payload(&mut self, name: &str) -> Result<PayloadReport, Error> {
         if let Some(report) = self.payloads.get(name) {
             return Ok(report.clone());
+        }
+        // L0 is the caller's: every caller has already established that the
+        // member exists (`Resources::reference` or the catalog lookup for the
+        // tile byte count), so a missing member stays InvalidInput.
+        // L1: a legacy suffix is Unsupported before any payload byte is read.
+        if let Some(format) = payload::legacy_suffix(name) {
+            return Err(legacy(format, name, false));
         }
         let references_before = self.resources.reference_visits;
         let bytes_before = self.resources.bytes_read;
@@ -1157,6 +1171,10 @@ impl Check<'_> {
             &self.resources.limits,
             self.resources.limits.member_bytes,
         )?;
+        // L2: legacy magic in the buffer just read wins over any other suffix.
+        if let Some(format) = payload::legacy_magic(&bytes) {
+            return Err(legacy(format, name, true));
+        }
         let remaining = self.resources.limits.total_payload_elements - self.elements;
         let kind = payload_kind(name)?;
         let mut consumer = FactConsumer {
@@ -3903,51 +3921,116 @@ mod containment_controls {
         }
     }
 
-    fn b3dm(glb: &[u8], table: &[u8], body: usize) -> Vec<u8> {
-        let mut table = table.to_vec();
-        while !(28 + table.len()).is_multiple_of(8) {
-            table.push(b' ');
+    /// The H7 Unsupported message of a legacy verdict, or a panic.
+    fn legacy_verdict(result: Result<ValidationReport, Error>) -> String {
+        match result {
+            Err(Error::Unsupported(message)) if message.starts_with("legacy ") => message,
+            other => panic!("expected a legacy Unsupported verdict, got {other:?}"),
         }
-        let mut out = b"b3dm".to_vec();
-        out.extend(1u32.to_le_bytes());
-        out.extend(0u32.to_le_bytes());
-        out.extend((table.len() as u32).to_le_bytes());
-        out.extend((body as u32).to_le_bytes());
-        out.extend([0u8; 8]);
-        out.extend(table);
-        out.extend(vec![0u8; body]);
-        out.extend(glb);
-        while !out.len().is_multiple_of(8) {
-            out.push(0);
-        }
-        let length = out.len() as u32;
-        out[8..12].copy_from_slice(&length.to_le_bytes());
-        out
     }
 
     #[test]
-    fn rtc_center_in_json_or_binary_form_excludes_and_plain_b3dm_streams() {
-        let payload = points(&[[0., 0., 0.]]);
-        let files = |b3dm: Vec<u8>| {
+    fn legacy_content_is_unsupported_by_suffix_or_magic_and_never_inspected() {
+        let glb = points(&[[0., 0., 0.]]);
+        fn files(name: &str, bytes: Vec<u8>) -> Vec<(&str, Vec<u8>)> {
             vec![
-                ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
-                ("a.b3dm", b3dm),
+                ("tileset.json", tileset(content_tile(wide(), name))),
+                (name, bytes),
             ]
-        };
-        let plain = b3dm(&payload, br#"{"BATCH_LENGTH":0}"#, 0);
-        assert!(contained(&run(&files(plain)).unwrap()));
-        for (table, body) in [
-            (&br#"{"BATCH_LENGTH":0,"RTC_CENTER":[1,2,3]}"#[..], 0),
-            (
-                &br#"{"BATCH_LENGTH":0,"RTC_CENTER":{"byteOffset":0}}"#[..],
-                16,
-            ),
+        }
+        let after_magic = |format: &str, rest: &[u8]| [format.as_bytes(), rest].concat();
+        for format in ["b3dm", "i3dm", "pnts", "cmpt"] {
+            // L1: the suffix decides; nothing after the name is looked at, so a
+            // GLB, garbage, an empty member and a valid-looking header agree.
+            for name in [
+                format!("a.{format}"),
+                format!("a.{}", format.to_uppercase()),
+            ] {
+                for bytes in [glb.clone(), Vec::new(), after_magic(format, &[0xff; 24])] {
+                    let message = legacy_verdict(run(&files(&name, bytes)));
+                    assert_eq!(
+                        message,
+                        format!(
+                            "legacy {format} content is unsupported (glTF 2.0 content only): {name}"
+                        )
+                    );
+                }
+            }
+            // L2: the first four bytes decide under any other suffix (magic wins).
+            for name in ["a.glb", "a.gltf", "a.bin", "a"] {
+                for rest in [&[][..], &glb[4..], &[0xff; 3][..]] {
+                    let message = legacy_verdict(run(&files(name, after_magic(format, rest))));
+                    assert_eq!(
+                        message,
+                        format!(
+                            "legacy {format} content is unsupported (glTF 2.0 content only): \
+                             {name} starts with {format} magic"
+                        )
+                    );
+                }
+            }
+        }
+        // Not legacy: a non-final legacy suffix, magic off offset 0, short members.
+        assert!(contained(
+            &run(&files("b3dm.cmpt/x.glb", glb.clone())).unwrap()
+        ));
+        for (name, bytes) in [
+            ("a.bin", glb.clone()),
+            ("a.vctr", b"vctr".to_vec()),
+            ("a.bin", b"b3d".to_vec()),
+            ("a.bin", b" b3dm".to_vec()),
         ] {
-            assert_eq!(
-                not_inspected(run(&files(b3dm(&payload, table, body)))),
-                ["rtcCenter"]
+            assert!(
+                matches!(run(&files(name, bytes)), Err(Error::Unsupported(m))
+                    if m == "payload format outside GLB/local glTF 2.0"),
+                "{name}"
             );
         }
+        assert!(matches!(
+            run(&files("a.glb", b"B3DM".to_vec())),
+            Err(Error::InvalidInput(_))
+        ));
+        // L0: a missing legacy member stays InvalidInput.
+        assert!(matches!(
+            run(&[("tileset.json", tileset(content_tile(wide(), "a.b3dm")))]),
+            Err(Error::InvalidInput(m)) if m.contains("a.b3dm")
+        ));
+    }
+
+    /// R-1: a legacy suffix is refused before the payload read. The GLB twin has
+    /// the same names' lengths and member sizes, so its smallest admitting
+    /// `total_bytes_read` minus the payload size is exactly the legacy archive's
+    /// need; a classifier placed after the read would breach it.
+    #[test]
+    fn legacy_suffix_is_refused_before_the_payload_read() {
+        let glb = points(&[[0., 0., 0.]]);
+        let twin = vec![
+            ("tileset.json", tileset(content_tile(wide(), "ab.glb"))),
+            ("ab.glb", glb.clone()),
+        ];
+        let legacy_files = vec![
+            ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
+            ("a.b3dm", [&b"b3dm"[..], &glb[4..]].concat()),
+        ];
+        let limited = |bytes| ValidationLimits {
+            total_bytes_read: bytes,
+            ..ValidationLimits::default()
+        };
+        let (mut low, mut high) = (0u64, 1 << 20);
+        while low < high {
+            let middle = (low + high) / 2;
+            if run_with(&twin, limited(middle)).is_ok() {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        let need = low - glb.len() as u64;
+        legacy_verdict(run_with(&legacy_files, limited(need)));
+        assert!(matches!(
+            run_with(&legacy_files, limited(need - 1)),
+            Err(Error::ResourceLimit(_))
+        ));
     }
 
     // ---- Slice 3: implicit archives (contract §4) ----
@@ -4349,19 +4432,13 @@ mod containment_controls {
 
     #[test]
     fn outcome_precedence() {
-        // Malformed node beats an exclusion (here rtcCenter).
+        // Malformed node beats an exclusion (here gltfExtension).
         let malformed = with_doc(|d| {
+            d["extensionsUsed"] = json!(["EXT_mesh_gpu_instancing"]);
             d["nodes"][0]["matrix"] = json!([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
             d["nodes"][0]["scale"] = json!([1, 1, 1]);
         });
-        let failure = run(&[
-            ("tileset.json", tileset(content_tile(wide(), "a.b3dm"))),
-            (
-                "a.b3dm",
-                b3dm(&malformed, br#"{"BATCH_LENGTH":0,"RTC_CENTER":[0,0,0]}"#, 0),
-            ),
-        ])
-        .unwrap_err();
+        let failure = run(&single(wide(), malformed)).unwrap_err();
         assert!(
             matches!(&failure, Error::InvalidInput(m) if m.contains("matrix must not coexist")),
             "{failure:?}"

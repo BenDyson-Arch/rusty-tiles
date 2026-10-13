@@ -31,12 +31,15 @@ def main():
     # ValidationLimits defaults in admitted reports; the C2 bundles stay as history.
     # C2-WB cap amendment (2026-10-12): containmentWorkUnits 2^28 -> 2^29 in admitted
     # reports; the validator-caps bundles stay as history.
+    # H7 legacy-content amendment (2026-10-13): the 12 b3dm controls of corrected-205
+    # expect Unsupported; polygon-sensitive-5 holds no legacy content and keeps its bundle.
     amendment = controls / 'c2wb_cap_amendment/2026-10-12'
+    legacy = controls / 'legacy_unsupported_amendment/2026-10-13'
     bundles = [
-        ('corrected205', 'corrected-205-c2wb-fixtures.tar.gz',
-         '7d844ecf1fc99719b0807f2859bbc6e988ee110283d5f001c25a0eee563fdb7e',
-         '3ef63c08433e1b69573e83c9aef0fe00972f94b9160e7934b07974bad956ae35', 205),
-        ('polygon5', 'polygon-sensitive-5-c2wb-fixtures.tar.gz',
+        ('corrected205', legacy / 'corrected-205-legacy-fixtures.tar.gz',
+         '7fe07fd1341d8fdbc743be9cb7cd0b1fa063731b5678621d652e799ad0101b8d',
+         'f4ce9c7bd60e7788ca9ec7d6af5c7edf20f08e2c2cc8f25ced32a2d2c9a01815', 205),
+        ('polygon5', amendment / 'polygon-sensitive-5-c2wb-fixtures.tar.gz',
          'd64eaf9ade5bb7b3dd5d73a5b2398a12083c2bc3ae948a3a250a07139971b25f',
          '2d5d56c03526d50ecc864da16ae744ffa44efaa10e683c9fa4f7bdd40cda6ef8', 5),
     ]
@@ -56,7 +59,7 @@ def main():
         spec.loader.exec_module(oracle)
         for label, name, bundle_hash, manifest_hash, count in bundles:
             status = 1
-            bundle = amendment / name
+            bundle = name
             assert sha(bundle) == bundle_hash
             fixtures = args.work / label / 'fixtures'
             with tarfile.open(bundle) as archive:
