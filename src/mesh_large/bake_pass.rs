@@ -119,42 +119,71 @@ fn page_metadata(page: &PreencodePage) -> PreencodePage {
     }
 }
 
-/// Fill a page's metadata with the pixel bytes of its page file.
-fn read_page_pixels(mut page: PreencodePage, b: &[u8]) -> Result<PreencodePage, JobError> {
+/// Fill a page's metadata with the pixels of its page file: the file's size must equal
+/// what the metadata implies, and every buffer is charged to `lease` before it is
+/// allocated; reads are chunked with `check` between them.
+fn read_page(
+    mut page: PreencodePage,
+    path: &Path,
+    lease: &mut Lease,
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<PreencodePage, JobError> {
+    use std::io::Read;
     let bad = || state("retained pre-encode page is corrupt");
-    if b.get(..8) != Some(PAGE_MAGIC) {
-        return Err(bad());
-    }
-    let mut at = 8usize;
-    let mut take = |len: usize| -> Result<&[u8], JobError> {
-        let end = at.checked_add(len).ok_or_else(bad)?;
-        let bytes = b.get(at..end).ok_or_else(bad)?;
-        at = end;
-        Ok(bytes)
-    };
-    for l in &mut page.levels {
-        let len = (l.width as usize)
-            .checked_mul(l.height as usize)
+    let texels = |w: u32, h: u32| -> Result<usize, JobError> {
+        (w as usize)
+            .checked_mul(h as usize)
             .and_then(|x| x.checked_mul(4))
+            .ok_or_else(bad)
+    };
+    let mut expected = 8u64;
+    for l in &page.levels {
+        expected = expected
+            .checked_add(texels(l.width, l.height)? as u64)
             .ok_or_else(bad)?;
-        l.rgba = take(len)?.to_vec();
     }
     if page.support.is_some() {
-        let len = (page.width as usize)
-            .checked_mul(page.height as usize)
-            .and_then(|x| x.checked_mul(4))
+        expected = expected
+            .checked_add(texels(page.width, page.height)? as u64)
             .ok_or_else(bad)?;
+    }
+    check()?;
+    let io = |e| JobError::io("read pre-encode page", path, e);
+    let mut file = fs::File::open(path).map_err(io)?;
+    if file.metadata().map_err(io)?.len() != expected {
+        return Err(bad());
+    }
+    let mut read = |out: &mut [u8]| -> Result<(), JobError> {
+        for chunk in out.chunks_mut(1 << 20) {
+            check()?;
+            file.read_exact(chunk).map_err(io)?;
+        }
+        Ok(())
+    };
+    let mut magic = [0u8; 8];
+    read(&mut magic)?;
+    if &magic != PAGE_MAGIC {
+        return Err(bad());
+    }
+    for l in &mut page.levels {
+        let len = texels(l.width, l.height)?;
+        lease.charge(len as u64)?;
+        l.rgba = vec![0; len];
+        read(&mut l.rgba)?;
+    }
+    if page.support.is_some() {
+        let len = texels(page.width, page.height)?;
+        // The raw bytes and the decoded words coexist briefly.
+        lease.charge(2 * len as u64)?;
+        let mut raw = vec![0u8; len];
+        read(&mut raw)?;
         page.support = Some(
-            take(len)?
-                .as_chunks::<4>()
+            raw.as_chunks::<4>()
                 .0
                 .iter()
                 .map(|c| u32::from_le_bytes(*c))
                 .collect(),
         );
-    }
-    if at != b.len() {
-        return Err(bad());
     }
     Ok(page)
 }
@@ -319,9 +348,19 @@ impl PreencodeStore {
         }
         Ok(())
     }
-    pub(in crate::mesh_large) fn read_leaf(&self, index: u64) -> Result<LeafPreencode, JobError> {
+    /// A leaf's accepted pre-encode appearance within `memory_limit` bytes: the head
+    /// file, its decoded structures and every page buffer are charged before allocation,
+    /// page files must have exactly the size their metadata implies, and every read and
+    /// decode step checks `check`.
+    pub(in crate::mesh_large) fn read_leaf(
+        &self,
+        index: u64,
+        memory_limit: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<LeafPreencode, JobError> {
         let path = self.leaf_path(index);
-        let b = fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))?;
+        let mut lease = Lease::new(memory_limit, "reading retained leaf appearance");
+        let b = read_bounded(&path, None, &mut lease, check, "read pre-encode store")?;
         let bad = || state("retained pre-encode packet is corrupt");
         if b.get(..8) != Some(LEAF_MAGIC) {
             return Err(bad());
@@ -330,13 +369,14 @@ impl PreencodeStore {
         if 16usize.checked_add(n) != Some(b.len()) {
             return Err(bad());
         }
+        // Decoded head structures: at most sixteen bytes per byte of JSON text.
+        lease.charge_items(n as u64, 16)?;
         let head: LeafHead = serde_json::from_slice(&b[16..]).map_err(|_| bad())?;
+        drop(b);
         let mut pages = Vec::with_capacity(head.pages.len());
         for page in head.pages {
             let path = self.page_path(index, head.drop, page.page);
-            let bytes =
-                fs::read(&path).map_err(|e| JobError::io("read pre-encode page", &path, e))?;
-            pages.push(read_page_pixels(page, &bytes)?);
+            pages.push(read_page(page, &path, &mut lease, check)?);
         }
         Ok(LeafPreencode {
             pages,
@@ -368,13 +408,28 @@ impl PreencodeStore {
     ) -> Result<(), JobError> {
         self.put(&self.proxy_path(first, depth), bytes)
     }
+    /// A bake-produced proxy packet within `memory_limit` bytes (bounded, cancellable).
     pub(in crate::mesh_large) fn read_proxy(
         &self,
         first: u64,
         depth: u32,
+        memory_limit: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Vec<u8>, JobError> {
         let path = self.proxy_path(first, depth);
-        fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))
+        let mut lease = Lease::new(memory_limit, "reading a retained proxy packet");
+        read_bounded(&path, None, &mut lease, check, "read pre-encode store")
+    }
+    /// Bytes of a retained proxy packet (a size query before any read).
+    pub(in crate::mesh_large) fn proxy_size(
+        &self,
+        first: u64,
+        depth: u32,
+    ) -> Result<u64, JobError> {
+        let path = self.proxy_path(first, depth);
+        Ok(fs::metadata(&path)
+            .map_err(|e| JobError::io("inspect pre-encode store", &path, e))?
+            .len())
     }
     pub(in crate::mesh_large) fn release_proxy(
         &self,
@@ -1451,7 +1506,15 @@ mod tests {
                 for c in &frozen.children {
                     match c.leaf {
                         Some(leaf) => {
-                            let pre = pass.preencode.read_leaf(leaf.index)?;
+                            // A lease below the head and pages is refused before allocation.
+                            assert_eq!(
+                                pass.preencode
+                                    .read_leaf(leaf.index, 16, pass.check)
+                                    .unwrap_err()
+                                    .kind(),
+                                JobErrorKind::ResourceLimit
+                            );
+                            let pre = pass.preencode.read_leaf(leaf.index, 1 << 30, pass.check)?;
                             assert!(!pre.pages.is_empty(), "leaf pre-encode pages retained");
                             assert!(pre.pages.iter().all(
                                 |p| p.levels[0].rgba.len() == (p.width * p.height * 4) as usize
@@ -1467,7 +1530,16 @@ mod tests {
                                 done.contains(&(c.first, c.depth)),
                                 "child proxy baked before its parent"
                             );
-                            assert_eq!(pass.preencode.read_proxy(c.first, c.depth)?, b"pages");
+                            assert_eq!(pass.preencode.proxy_size(c.first, c.depth)?, 5);
+                            assert!(pass
+                                .preencode
+                                .read_proxy(c.first, c.depth, 4, pass.check)
+                                .is_err());
+                            assert_eq!(
+                                pass.preencode
+                                    .read_proxy(c.first, c.depth, 1 << 30, pass.check)?,
+                                b"pages"
+                            );
                             pass.preencode.release_proxy(c.first, c.depth)?;
                         }
                     }
