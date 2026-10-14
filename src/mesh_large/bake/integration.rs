@@ -1,7 +1,7 @@
 //! H17's immutable handoff adapter and H27's real complete-member protocol.
 //! Missing owner leases/retained leaf frames are explicit integration errors;
 //! no untextured or geometry-only substitute can satisfy this entry point.
-use super::{assembler, bake_node, invalid, resource, types::*, unsupported, CapturedSource};
+use super::{assembler, bake_node, child_bridge, invalid, resource, types::*, CapturedSource};
 use crate::{
     mesh_large::{
         bake_pass as root,
@@ -30,6 +30,71 @@ impl ProxyTextureBaker {
         }
         Ok(Self { limits })
     }
+    /// The production policy, resolved once from the actual run before the bake stage:
+    /// - memory: half of what the host reports available after the captured state's
+    ///   owned scratch (memory-backed), metadata and the stage reserve; a host that cannot
+    ///   report its memory gets a fixed 1 GiB, never an unbounded allowance;
+    /// - source cache: room for the largest decoded source image's mip chain (32 bytes
+    ///   per source pixel, at least 1 MiB), at most a quarter of the memory;
+    /// - query work: a finite runaway guard of 2^40 index visits per tile;
+    /// - page edge: the profile's leaf page edge; eight complete-member density drops.
+    pub(crate) fn for_stage(
+        profile: crate::mesh_large::config::Profile,
+        captured: &crate::mesh_large::full::FullCaptured,
+    ) -> Result<Self, JobError> {
+        use crate::mesh_large::config::{available_memory, Profile};
+        const RESERVE: u64 = 256 << 20;
+        let tmpfs = if captured.scratch.memory_backed() {
+            captured.report.scratch.need_bytes
+        } else {
+            0
+        };
+        let owned = captured
+            .report
+            .memory
+            .owned_metadata_bytes
+            .saturating_add(captured.report.memory.geometry.document_bytes);
+        let memory_bytes = match available_memory() {
+            Some(a) => {
+                a.saturating_sub(tmpfs)
+                    .saturating_sub(owned)
+                    .saturating_sub(RESERVE)
+                    / 2
+            }
+            None => 1 << 30,
+        };
+        let largest = captured
+            .image_info
+            .iter()
+            .map(|i| u64::from(i.width) * u64::from(i.height))
+            .max()
+            .unwrap_or(0);
+        let source_cache_bytes = largest
+            .saturating_mul(32)
+            .max(1 << 20)
+            .min(memory_bytes / 4);
+        if memory_bytes < 64 << 20 {
+            return Err(resource(
+                "available memory cannot hold the proxy texture bake stage",
+            ));
+        }
+        Self::new(BakeLimits {
+            profile,
+            memory_bytes,
+            member_bytes: crate::mesh_large::config::TILE_BYTES,
+            source_cache_bytes,
+            query_work: 1 << 40,
+            max_page_edge: match profile {
+                Profile::Fast => 2048,
+                Profile::Lossless => 8192,
+                Profile::Balanced | Profile::Quality => 4096,
+            },
+            max_density_drops: 8,
+        })
+    }
+    pub(crate) fn limits(&self) -> BakeLimits {
+        self.limits
+    }
     pub(super) fn limits_for(&self, pass: &root::BakePass<'_>) -> BakeLimits {
         BakeLimits {
             profile: pass.profile,
@@ -39,26 +104,61 @@ impl ProxyTextureBaker {
     }
 }
 impl root::ProxyBaker for ProxyTextureBaker {
+    /// Bake every coarse tile in postorder (children before parents): read the frozen
+    /// packet and the certified member under exact leases, load the retained children,
+    /// run the core with the owner's leased assembler, commit the verified bytes, retain
+    /// this tile's exact packet for its parent, then release its children and packet.
     fn bake(&self, pass: &root::BakePass<'_>) -> Result<(), JobError> {
         (pass.check)()?;
         let limits = self.limits_for(pass);
         if limits.member_bytes == 0 || pass.jobs == 0 {
             return Err(invalid("live proxy bake pass policy"));
         }
-        // Iterate the actual producer's postorder rows, rather than inventing
-        // an empty successful pass. Empty proxy output needs no appearance.
-        if let Some(next) = pass.nodes()?.next() {
-            (pass.check)()?;
-            let (first, _depth) = next?;
+        let mut check = || (pass.check)();
+        let mut nodes = pass.nodes()?.peekable();
+        if nodes.peek().is_none() {
+            return Ok(());
+        }
+        let mut source = CapturedSource::new(pass.captured, limits.source_cache_bytes, &mut check)?;
+        for next in nodes {
+            check()?;
+            let (first, depth) = next?;
             if first >= pass.captured.triangles.len() {
                 return Err(invalid("proxy row outside captured hierarchy"));
             }
-            // Owner APIs are required before any bake index/page/writer owner
-            // is allocated. The branch currently exposes neither a leased
-            // certified-member read nor a leased complete assembly entry.
-            return Err(unsupported(
-                "H27 requires root-owned bounded certified proxy read, complete assembly lease, and retained published leaf frames/density/source support before activation",
-            ));
+            // The decoded packet stays resident beside the core, so its exact lease comes
+            // off the stage allowance first; the core owns the remainder.
+            let lease = pass.frozen_lease_bytes(first, depth)?;
+            let core = limits
+                .memory_bytes
+                .checked_sub(lease)
+                .filter(|core| *core >= lease)
+                .ok_or_else(|| resource("frozen tile packet exceeds the bake memory lease"))?;
+            let frozen = pass.frozen(first, depth, lease)?;
+            let parent = node_record(&frozen)?;
+            let glb = pass.read_certified_proxy(first, depth, frozen.glb_bytes)?;
+            let children =
+                child_bridge::load_children(pass, &frozen, &parent, core / 2, &mut check)?;
+            let accepted = bake_one(
+                &frozen,
+                glb,
+                &mut source,
+                &children,
+                BakeLimits {
+                    memory_bytes: core,
+                    ..limits
+                },
+                &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
+                &mut check,
+            )?;
+            drop(children);
+            pass.commit(&frozen, accepted.assembly)?;
+            if depth > 0 {
+                child_bridge::persist(pass.preencode, &accepted.preencode, core, &mut check)?;
+            }
+            drop(accepted.preencode);
+            child_bridge::release_children(pass.preencode, &frozen)?;
+            pass.release(first, depth)?;
         }
         Ok(())
     }

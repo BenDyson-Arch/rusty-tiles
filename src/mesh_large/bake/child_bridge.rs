@@ -325,25 +325,206 @@ pub(super) fn persist(
     check()?;
     store.write_proxy(child.node.first, child.node.depth(), &bytes)
 }
+/// The H1 identity of `parent`'s child in octant `slot`: a synthetic run step below a
+/// key-depth cell or inside a run, else a spatial child cell.
+pub(super) fn child_record(parent: &NodeRecord, child: &handoff::FrozenChild) -> NodeRecord {
+    use crate::mesh_large::records::{NodeKind, KEY_DEPTH};
+    let run = parent.path_len > 0 || parent.cell_depth >= KEY_DEPTH;
+    NodeRecord {
+        cell_depth: if run {
+            parent.cell_depth
+        } else {
+            parent.cell_depth + 1
+        },
+        cell: if run {
+            parent.cell
+        } else {
+            (parent.cell << 3) | u64::from(child.slot)
+        },
+        path_len: if run { parent.path_len + 1 } else { 0 },
+        path: if run {
+            (parent.path << 3) | u64::from(child.slot)
+        } else {
+            0
+        },
+        last_octant: child.slot,
+        kind: if child.leaf.is_some() {
+            NodeKind::Leaf
+        } else {
+            NodeKind::Internal
+        },
+        children: 0,
+        first: child.first,
+        end: child.end,
+        bytes: 0,
+        bounds: crate::mesh_large::records::Bounds::EMPTY,
+    }
+}
+
+fn unit_or(v: [f64; 3], fallback: [f64; 3]) -> [f64; 3] {
+    super::math::unit(v).unwrap_or(fallback)
+}
+/// A unit renderer frame at one accepted leaf corner: the published NORMAL (else the
+/// face normal), the published TANGENT projected off it (else any perpendicular), and
+/// the bitangent with the published handedness.
+fn leaf_frame(
+    normal: Option<[f32; 3]>,
+    tangent: Option<[f32; 4]>,
+    face: Option<[f64; 3]>,
+) -> super::frames::Frame {
+    use super::math::{cross, dot, mul, sub};
+    let n = unit_or(
+        normal.map_or(face.unwrap_or([0., 0., 1.]), |n| n.map(f64::from)),
+        face.unwrap_or([0., 0., 1.]),
+    );
+    let helper = if n[0].abs() < 0.9 {
+        [1., 0., 0.]
+    } else {
+        [0., 1., 0.]
+    };
+    let raw = tangent.map_or(helper, |t| [t[0], t[1], t[2]].map(f64::from));
+    let t = super::math::unit(sub(raw, mul(n, dot(n, raw))))
+        .or_else(|| super::math::unit(sub(helper, mul(n, dot(n, helper)))))
+        .unwrap_or([1., 0., 0.]);
+    let w = tangent.map_or(1., |t| if t[3] < 0. { -1. } else { 1. });
+    super::frames::Frame {
+        tangent: t,
+        bitangent: unit_or(mul(cross(n, t), w), [0., 1., 0.]),
+        normal: n,
+    }
+}
+
+/// An accepted H8 leaf child from its published witness (#233): decoded positions,
+/// renderer frames, expanded source identity and measured post-drop texel spacing.
+///
+/// The leaf's retained pages carry no per-texel terminal-source ledger, so they are not
+/// resampled: its faces bind no child page and a proxy texel over them samples the
+/// captured source directly (the core's direct path) at the proxy's own density. The
+/// witness is still cross-checked against the retained packet: the same source tuples in
+/// the same order, ranks inside the child, and each slot's zero-raster bit equal to the
+/// retained page-UV/decoded-position footprint and implied by zero geometric area (the
+/// bake's no-raster rule).
+pub(super) fn from_witness(
+    parent: &NodeRecord,
+    child: &handoff::FrozenChild,
+    leaf: &LeafPreencode,
+    memory: u64,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<PreencodeChild, JobError> {
+    use crate::mesh_large::{attributes, leaves::witness};
+    let w = &leaf.witness;
+    if w.primitives.len() != leaf.primitives.len() {
+        return Err(invalid("leaf witness primitive count"));
+    }
+    let count = w
+        .primitives
+        .iter()
+        .try_fold(0u64, |n, p| n.checked_add(p.faces.len() as u64))
+        .ok_or_else(|| resource("leaf witness face count"))?;
+    if count
+        .checked_mul(std::mem::size_of::<ChildFace>() as u64)
+        .is_none_or(|n| n > memory)
+    {
+        return Err(resource("leaf child face lease"));
+    }
+    let mut faces = Vec::new();
+    faces
+        .try_reserve_exact(count as usize)
+        .map_err(|_| resource("leaf child faces reserve"))?;
+    for (p, retained) in w.primitives.iter().zip(&leaf.primitives) {
+        check()?;
+        let n = p.faces.len();
+        if retained.triangles.len() != n
+            || p.positions.len() != 3 * n
+            || (p.flags & attributes::NORMAL != 0) != (p.normals.len() == 3 * n)
+            || (p.flags & attributes::TANGENT != 0) != (p.tangents.len() == 3 * n)
+        {
+            return Err(invalid("leaf witness/retained primitive shape"));
+        }
+        for (i, face) in p.faces.iter().enumerate() {
+            if retained.triangles[i] != (p.node, p.mesh, p.primitive, face.triangle)
+                || face.rank < child.first
+                || face.rank >= child.end
+            {
+                return Err(invalid("leaf witness source identity/rank"));
+            }
+            let positions: [[f32; 3]; 3] = std::array::from_fn(|c| p.positions[3 * i + c]);
+            let p64 = positions.map(|v| v.map(f64::from));
+            let geometric = super::math::face_normal(p64);
+            for b in &p.bindings {
+                let page = leaf
+                    .pages
+                    .iter()
+                    .find(|q| q.page == b.page)
+                    .ok_or_else(|| invalid("leaf witness binding page is not retained"))?;
+                let uv = retained
+                    .uvs
+                    .get(b.texcoord as usize)
+                    .and_then(|uv| uv.get(3 * i..3 * i + 3))
+                    .ok_or_else(|| invalid("leaf witness binding TEXCOORD"))?;
+                let uv = std::array::from_fn(|c| {
+                    [
+                        f64::from(uv[c][0]) * f64::from(page.width),
+                        f64::from(uv[c][1]) * f64::from(page.height),
+                    ]
+                });
+                let zero = face.zero_raster & (1 << b.slot) != 0;
+                if zero != witness::texel_spacing(p64, uv).is_none()
+                    || (geometric.is_none() && !zero)
+                {
+                    return Err(invalid(
+                        "leaf zero-raster witness disagrees with its footprint or no-raster geometry",
+                    ));
+                }
+            }
+            let frames = std::array::from_fn(|c| {
+                leaf_frame(
+                    p.normals.get(3 * i + c).copied(),
+                    p.tangents.get(3 * i + c).copied(),
+                    geometric,
+                )
+            });
+            faces.push(ChildFace {
+                source: SourceKey {
+                    node: p.node,
+                    mesh: p.mesh,
+                    primitive: p.primitive,
+                    instance: p.expanded_ordinal,
+                },
+                source_triangle: face.triangle,
+                material: p.material,
+                positions,
+                frames,
+                bindings: [None; 5],
+            });
+        }
+    }
+    // No rasterising bound face: this leaf sets no density floor for its parent.
+    let texel_size = w.texel_spacing.unwrap_or(0.);
+    if !texel_size.is_finite() || texel_size < 0. {
+        return Err(invalid("leaf witness texel spacing"));
+    }
+    let child = PreencodeChild {
+        node: child_record(parent, child),
+        texel_size,
+        faces,
+        pages: Vec::new(),
+    };
+    packet::validate(&child, check)?;
+    Ok(child)
+}
+
+/// Every retained child of `frozen`, within `memory` bytes: proxy children are the
+/// bake's own exact packets; leaf children come from their accepted witness.
 pub(super) fn load_children(
     pass: &BakePass<'_>,
     frozen: &handoff::FrozenNode,
+    parent: &NodeRecord,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<PreencodeChild>, JobError> {
     if frozen.children.len() > 8 {
         return Err(invalid("retained children exceed octants"));
-    }
-    if frozen.children.iter().any(|c| c.leaf.is_some()) {
-        return Err(unsupported("H27 accepted H8 renderer-frame, terminal-source and actual-density witness is required before leaf consumption"));
-    }
-    // The root store currently exposes eager reads, without a file-size or
-    // decoded-owner lease. Aggregate live scratch bounds each proxy file; use
-    // a deliberately conservative bound before invoking its allocator. A
-    // charged per-packet reader is an owner request for scalable operation.
-    let live = pass.preencode.usage().0;
-    if live.checked_mul(128).is_none_or(|n| n > memory) {
-        return Err(resource("retained proxy eager-reader preflight lease"));
     }
     let owner = (frozen.children.len() as u64)
         .checked_mul(std::mem::size_of::<PreencodeChild>() as u64)
@@ -354,11 +535,17 @@ pub(super) fn load_children(
     let mut out = Vec::new();
     out.try_reserve_exact(frozen.children.len())
         .map_err(|_| resource("retained children reserve"))?;
+    // Each child gets one share for its read and one for its decoded owner.
     let share = residual
-        .checked_div(frozen.children.len().max(1) as u64)
+        .checked_div(2 * frozen.children.len().max(1) as u64)
         .unwrap();
     for child in &frozen.children {
         check()?;
+        if let Some(leaf) = &child.leaf {
+            let packet = pass.preencode.read_leaf(leaf.index, share, pass.check)?;
+            out.push(from_witness(parent, child, &packet, share, check)?);
+            continue;
+        }
         let bytes = pass
             .preencode
             .read_proxy(child.first, child.depth, share, pass.check)?;

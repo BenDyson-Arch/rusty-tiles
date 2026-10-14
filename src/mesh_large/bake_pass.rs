@@ -404,14 +404,20 @@ impl PreencodeStore {
             let path = self.page_path(index, head.drop, page.page);
             pages.push(read_page(page, &path, &mut lease, check)?);
         }
-        let path = self.witness_path(index);
-        let bytes = fs::read(&path).map_err(|e| JobError::io("read leaf witness", &path, e))?;
-        if head.witness.version != WITNESS_VERSION || bytes.len() as u64 != head.witness.bytes {
+        if head.witness.version != WITNESS_VERSION {
             return Err(bad());
         }
-        // Decoding allocates at most a fixed multiple of the charged file bytes; the
-        // bounded reader of request #5 supplies the caller's lease here.
-        let witness = LeafWitness::decode(&bytes, u64::MAX)?;
+        let path = self.witness_path(index);
+        let bytes = read_bounded(
+            &path,
+            Some(head.witness.bytes),
+            &mut lease,
+            check,
+            "read leaf witness",
+        )?;
+        check()?;
+        // The decoder charges its owned structures against what remains of this lease.
+        let witness = LeafWitness::decode(&bytes, lease.limit().saturating_sub(lease.used()))?;
         Ok(LeafPreencode {
             pages,
             primitives: head.primitives,
@@ -646,6 +652,16 @@ impl<'a> BakePass<'a> {
         memory_limit: u64,
     ) -> Result<FrozenNode, JobError> {
         self.handoff.read(first, depth, memory_limit, self.check)
+    }
+
+    /// The exact memory lease [`BakePass::frozen`] charges for a tile's packet (file bytes
+    /// plus every decoded owner), from a cancellable streaming scan before any read.
+    pub(in crate::mesh_large) fn frozen_lease_bytes(
+        &self,
+        first: u64,
+        depth: u32,
+    ) -> Result<u64, JobError> {
+        self.handoff.lease_bytes(first, depth, self.check)
     }
 
     /// Bytes of a tile's packet on disk.

@@ -286,9 +286,10 @@ pub(crate) fn bake_node(
         Profile::Quality | Profile::Lossless => 0.5,
     };
     let child_density = children.iter().map(|c| c.texel_size).fold(0., f64::max);
+    // A zero child spacing is a leaf with no rasterising bound face: no density floor.
     if children
         .iter()
-        .any(|c| !c.texel_size.is_finite() || c.texel_size <= 0.)
+        .any(|c| !c.texel_size.is_finite() || c.texel_size < 0.)
         || child_density != f.child_texel_size
     {
         return Err(invalid("actual child post-drop density handoff"));
