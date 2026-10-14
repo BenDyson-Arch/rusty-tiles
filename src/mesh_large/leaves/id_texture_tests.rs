@@ -427,6 +427,7 @@ fn basis_ktx2_is_refused_and_would_change_ids() {
             profile,
             MEMORY,
             None,
+            delivery::LADDER,
             |_| Ok(Value::Null),
         )
         .unwrap_err();

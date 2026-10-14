@@ -1,0 +1,3 @@
+### Fixed
+
+- `rusty-tiles mesh` no longer fails a lossy run when one texture page misses its decoded-image gate. That page is re-encoded at UASTC pack level 2, then level 3. If both miss, it falls back to an exact level-0 PNG, but only when its sampler never reads coarser mip levels. Every step is checked by the same gates, which are not loosened. The tiler report counts escalated pages by step (`escalated_pages`, `lossless_fallback_pages`) and lists the first 32, naming leaf, slot, source image and material, and each missed gate with its mip level. Any remaining hard failure names the leaf, page, slot and sources.

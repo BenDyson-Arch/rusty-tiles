@@ -19,6 +19,95 @@ pub(super) struct Delivery {
     pub mime: &'static str,
     pub mip_count: u32,
     pub receipts: Vec<Value>,
+    /// Set when the profile's own encoder setting missed a gate and a later
+    /// step of the ladder delivered the page.
+    pub escalation: Option<Escalation>,
+}
+
+/// One step of the per-page encoder ladder of a lossy profile. A page starts
+/// at its profile's setting; a miss of any decoded-image gate (per-level
+/// channel and normal floors, MASK coverage, source-sampler check) moves it
+/// one step up, and every step is checked again by the same gates of the run
+/// profile. Gates are never loosened. The ladder depends only on the page, so
+/// output is the same for any worker count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Step {
+    /// The profile's own codec setting.
+    Profile,
+    /// UASTC pack level 2 (Basis effort 5, the library default; RDO is never
+    /// used). Above every profile's own level; scalar ETC1S occlusion moves to
+    /// full UASTC, the Quality profile's mode for it.
+    UastcLevel2,
+    /// UASTC pack level 3 (effort 8). Level 4 (effort 10) was measured at
+    /// about 16 times the cost of level 3 and 40 times level 2, for about
+    /// 0.5 dB, so the ladder goes to exact PNG instead.
+    UastcLevel3,
+    /// Exact level-0 PNG. Only for pages whose sampler never reads a coarser
+    /// level, so dropping the authored coarse levels changes nothing sampled.
+    LosslessPng,
+}
+impl Step {
+    pub(crate) const LOSSY: [Step; 3] = [Step::Profile, Step::UastcLevel2, Step::UastcLevel3];
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Step::Profile => "profile",
+            Step::UastcLevel2 => "uastc_level2",
+            Step::UastcLevel3 => "uastc_level3",
+            Step::LosslessPng => "lossless_png",
+        }
+    }
+}
+/// One gate a ladder step missed: the step, the mip level when the gate is
+/// per level (the source-sampler check spans all levels) and the gate's text.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GateMiss {
+    pub step: Step,
+    pub mip: Option<usize>,
+    pub gate: String,
+}
+impl GateMiss {
+    pub(crate) fn to_json(&self) -> Value {
+        json!({"step":self.step.name(),"mip":self.mip,"gate":self.gate})
+    }
+}
+/// The step that delivered a page and every miss before it, in ladder order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Escalation {
+    pub step: Step,
+    pub misses: Vec<GateMiss>,
+}
+/// Page-owned ladder facts, resolved by the atlas.
+#[derive(Clone, Copy)]
+pub(super) struct Ladder<'a> {
+    /// The page sampler has no mipmap minification filter, so it reads level
+    /// 0 only and an exact level-0 PNG is a complete lossless substitute that
+    /// keeps the sampler. Mip-sampled pages end the ladder at UASTC level 3:
+    /// glTF PNG cannot carry their class-correct authored levels.
+    pub level0_sampled: bool,
+    /// Run cancellation, polled before every re-encode.
+    pub check: &'a dyn Fn() -> Result<(), JobError>,
+}
+#[cfg(test)]
+fn no_check() -> Result<(), JobError> {
+    Ok(())
+}
+/// Tests: a level-0-sampled page that is never cancelled.
+#[cfg(test)]
+pub(super) const LADDER: Ladder<'static> = Ladder {
+    level0_sampled: true,
+    check: &no_check,
+};
+/// A typed gate refusal becomes a ladder miss; every other error stays hard.
+fn missed(error: JobError, step: Step, mip: Option<usize>) -> Result<GateMiss, JobError> {
+    if error.kind() == JobErrorKind::Unsupported {
+        Ok(GateMiss {
+            step,
+            mip,
+            gate: error.message().to_owned(),
+        })
+    } else {
+        Err(error)
+    }
 }
 #[derive(Clone, Copy)]
 pub(super) struct MaskDelivery<'a> {
@@ -357,6 +446,29 @@ pub(super) fn codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mod
         },
     )
 }
+/// Encoder mode and parameters of one lossy ladder step.
+pub(super) fn step_settings(
+    slot: TextureSlot,
+    profile: Profile,
+    step: Step,
+) -> Result<(codec::Mode, codec::Params), JobError> {
+    let (mode, params) = codec_settings(slot, profile);
+    let effort = match step {
+        Step::Profile => return Ok((mode, params)),
+        Step::UastcLevel2 => 5,
+        Step::UastcLevel3 => 8,
+        Step::LosslessPng => {
+            return Err(error(
+                JobErrorKind::InvalidState,
+                "lossless ladder step has no codec setting",
+            ))
+        }
+    };
+    Ok((
+        codec::Mode::Uastc { zstd: true },
+        codec::Params { effort, ..params },
+    ))
+}
 
 pub(super) fn workspace_charge(dimensions: [u32; 2], profile: Profile) -> Result<u64, JobError> {
     let [width, height] = dimensions;
@@ -390,6 +502,7 @@ pub(super) fn workspace_charge(dimensions: [u32; 2], profile: Profile) -> Result
     Ok(charge)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn encode(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -398,6 +511,7 @@ pub(super) fn encode(
     profile: Profile,
     memory_limit: u64,
     mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
 ) -> Result<Delivery, JobError> {
     let [width, height] = dimensions;
     let base = u64::from(width)
@@ -418,29 +532,8 @@ pub(super) fn encode(
         return Err(resource());
     }
     if profile == Profile::Lossless {
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(
-                usize::try_from(base.checked_mul(8).ok_or_else(resource)?)
-                    .map_err(|_| resource())?,
-            )
-            .map_err(|_| resource())?;
-        timing::time(Stage::PngEncode, || {
-            image::codecs::png::PngEncoder::new(&mut bytes).write_image(
-                rgba,
-                width,
-                height,
-                image::ExtendedColorType::Rgba8,
-            )
-        })
-        .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode {e}")))?;
-        let decoded = timing::time(Stage::PngVerify, || {
-            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-        })
-        .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG verify {e}")))?
-        .into_rgba8();
-        timing::count(Counter::EncodedChainTexels, base);
-        if decoded.as_raw() != rgba {
+        let (bytes, decoded) = png_round_trip(rgba, width, height)?;
+        if decoded != rgba {
             return Err(error(
                 JobErrorKind::InvalidState,
                 "PNG changed literal RGBA8",
@@ -453,14 +546,45 @@ pub(super) fn encode(
             receipts: vec![
                 json!({"profile":"lossless","level0_rgba_exact":true,"normal_normalized":false,"alpha_guard":false,"mips":"viewer generated outside guarantee","charged_bytes":charge}),
             ],
+            escalation: None,
         });
     }
     let chain = timing::time(Stage::SparseMips, || {
         sparse_mips::build(width, height, rgba, support, class(slot), memory_limit)
     })?;
-    encode_authored(&chain, slot, profile, memory_limit, mask, |_| {
+    encode_authored(&chain, slot, profile, memory_limit, mask, ladder, |_| {
         Ok(Value::Null)
     })
+}
+
+/// PNG-encodes one RGBA8 level and decodes it independently of the encoder.
+fn png_round_trip(rgba: &[u8], width: u32, height: u32) -> Result<(Vec<u8>, Vec<u8>), JobError> {
+    let base = u64::from(width) * u64::from(height);
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(
+            usize::try_from(base.checked_mul(8).ok_or_else(resource)?).map_err(|_| resource())?,
+        )
+        .map_err(|_| resource())?;
+    timing::time(Stage::PngEncode, || {
+        image::codecs::png::PngEncoder::new(&mut bytes).write_image(
+            rgba,
+            width,
+            height,
+            image::ExtendedColorType::Rgba8,
+        )
+    })
+    .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG encode {e}")))?;
+    let decoded = timing::time(Stage::PngVerify, || {
+        image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+    })
+    .map_err(|e| error(JobErrorKind::InvalidState, format!("PNG verify {e}")))?
+    .into_rgba8();
+    timing::count(Counter::EncodedChainTexels, base);
+    if decoded.dimensions() != (width, height) {
+        return Err(error(JobErrorKind::InvalidState, "PNG changed dimensions"));
+    }
+    Ok((bytes, decoded.into_raw()))
 }
 
 /// The atlas owner supplies the complete chain and the independent source-sampler check.
@@ -470,7 +594,86 @@ pub(super) fn encode_authored(
     profile: Profile,
     memory_limit: u64,
     mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
+    validate: impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
+) -> Result<Delivery, JobError> {
+    escalate(
+        chain,
+        slot,
+        profile,
+        memory_limit,
+        mask,
+        ladder,
+        validate,
+        &|_, _, _| {},
+    )
+}
+
+/// Decoded-level hook between the encoder and the gates. Production passes a
+/// no-op; tests corrupt one step's decoded level to prove the gates run there.
+type Tamper<'a> = &'a dyn Fn(Step, usize, &mut [u8]);
+
+/// Authored levels after MASK adjustment and the finite-sample guard (what is
+/// encoded), and the pre-guard truth every gate compares against.
+struct Prepared {
+    delivered: Vec<Vec<u8>>,
+    expected: Vec<Vec<u8>>,
+    mask_receipts: Vec<Option<super::mask::MaskReceipt>>,
+    guard_receipts: Vec<Value>,
+}
+
+/// Every gate of one decoded level beyond the channel floors: MASK coverage.
+fn mask_gate(
+    mask: Option<MaskDelivery<'_>>,
+    reference: Option<&super::mask::MaskReceipt>,
+    decoded: &[u8],
+    level: &sparse_mips::Level,
+    index: usize,
+    profile: Profile,
+) -> Result<Option<Result<Value, JobError>>, JobError> {
+    let (Some(context), Some(reference)) = (mask, reference) else {
+        return Ok(None);
+    };
+    let coverage = super::mask::coverage(
+        decoded,
+        level.width,
+        level.height,
+        context.samples,
+        context.factor,
+        context.cutoff,
+        if index == 0 {
+            context.linear
+        } else {
+            context.min_linear
+        },
+    )?;
+    let floor = match profile {
+        Profile::Fast => 0.02,
+        Profile::Balanced => 0.01,
+        _ => 0.005,
+    };
+    let residual = (coverage - reference.target).abs();
+    let allowed = (reference.optimum_gap + floor).min(1.);
+    let receipt = json!({"mip":index,"mask_target":reference.target,"fixed_semantic_gap":reference.optimum_gap,"scale":reference.scale,"scans":reference.scans,"decoded_coverage":coverage,"residual":residual,"allowed":allowed});
+    Ok(Some(if residual > allowed {
+        Err(fidelity(format!(
+            "MASK mip{index} residual{residual} allowed{allowed}"
+        )))
+    } else {
+        Ok(receipt)
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn escalate(
+    chain: &sparse_mips::Chain,
+    slot: TextureSlot,
+    profile: Profile,
+    memory_limit: u64,
+    mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
     mut validate: impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
+    tamper: Tamper<'_>,
 ) -> Result<Delivery, JobError> {
     if profile == Profile::Lossless {
         return Err(error(
@@ -490,6 +693,95 @@ pub(super) fn encode_authored(
     if charge > memory_limit {
         return Err(resource());
     }
+    let mut prepared = prepare_levels(chain, mask)?;
+    let scalar = scalar_occlusion(slot, profile);
+    let mut misses = Vec::new();
+    // Each step runs to completion and drops its encoder output before the
+    // next starts, so the page's single lease and charge cover every step.
+    for step in Step::LOSSY {
+        if step != Step::Profile {
+            (ladder.check)()?;
+        }
+        if scalar {
+            // ETC1S stores R in every channel; UASTC steps restore the
+            // authored G and B, which the guard and MASK never touch.
+            let rrr = step == Step::Profile;
+            for (pixels, truth) in prepared.delivered.iter_mut().zip(&prepared.expected) {
+                for (pixel, t) in pixels
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(truth.as_chunks::<4>().0)
+                {
+                    pixel[1] = if rrr { pixel[0] } else { t[1] };
+                    pixel[2] = if rrr { pixel[0] } else { t[2] };
+                }
+            }
+        }
+        let rrr = scalar && step == Step::Profile;
+        match lossy_step(
+            chain,
+            &prepared,
+            slot,
+            profile,
+            step,
+            (mask, rrr, charge),
+            &mut validate,
+            tamper,
+        )? {
+            Ok(mut delivery) => {
+                if step != Step::Profile {
+                    delivery.escalation = Some(Escalation { step, misses });
+                }
+                return Ok(delivery);
+            }
+            Err(miss) => misses.push(miss),
+        }
+    }
+    if ladder.level0_sampled {
+        (ladder.check)()?;
+        match png_step(
+            chain,
+            &prepared,
+            slot,
+            profile,
+            mask,
+            charge,
+            &mut validate,
+            tamper,
+        )? {
+            Ok(mut delivery) => {
+                delivery.escalation = Some(Escalation {
+                    step: Step::LosslessPng,
+                    misses,
+                });
+                return Ok(delivery);
+            }
+            Err(miss) => misses.push(miss),
+        }
+    }
+    let tried: Vec<String> = misses
+        .iter()
+        .map(|m| match m.mip {
+            Some(mip) => format!("{} mip{mip}: {}", m.step.name(), m.gate),
+            None => format!("{}: {}", m.step.name(), m.gate),
+        })
+        .collect();
+    Err(fidelity(format!(
+        "texture {slot:?} {profile:?}: every encoder step missed its gate{}; {}",
+        if ladder.level0_sampled {
+            ""
+        } else {
+            " (mip-sampled page: no lossless PNG step)"
+        },
+        tried.join("; ")
+    )))
+}
+
+fn prepare_levels(
+    chain: &sparse_mips::Chain,
+    mask: Option<MaskDelivery<'_>>,
+) -> Result<Prepared, JobError> {
     let mut delivered = Vec::new();
     delivered
         .try_reserve_exact(chain.levels.len())
@@ -578,27 +870,39 @@ pub(super) fn encode_authored(
         }
         expected.push(truth);
     }
-    let scalar = scalar_occlusion(slot, profile);
-    if scalar {
-        for pixels in &mut delivered {
-            for pixel in pixels.as_chunks_mut::<4>().0 {
-                pixel[1] = pixel[0];
-                pixel[2] = pixel[0];
-            }
-        }
-    }
+    Ok(Prepared {
+        delivered,
+        expected,
+        mask_receipts,
+        guard_receipts,
+    })
+}
+
+/// One KTX2 step: encode the prepared chain, then gate every decoded level.
+/// `Ok(Err(miss))` is a gate miss the ladder may climb past.
+#[allow(clippy::too_many_arguments)]
+fn lossy_step(
+    chain: &sparse_mips::Chain,
+    prepared: &Prepared,
+    slot: TextureSlot,
+    profile: Profile,
+    step: Step,
+    (mask, scalar, charge): (Option<MaskDelivery<'_>>, bool, u64),
+    validate: &mut impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
+    tamper: Tamper<'_>,
+) -> Result<Result<Delivery, GateMiss>, JobError> {
     let mut levels = Vec::new();
     levels
         .try_reserve_exact(chain.levels.len())
         .map_err(|_| resource())?;
-    for (level, pixels) in chain.levels.iter().zip(&delivered) {
+    for (level, pixels) in chain.levels.iter().zip(&prepared.delivered) {
         levels.push(codec::MipLevel {
             rgba: pixels,
             width: level.width,
             height: level.height,
         });
     }
-    let (mode, params) = codec_settings(slot, profile);
+    let (mode, params) = step_settings(slot, profile, step)?;
     let effort = params.effort;
     let (bytes, mut decoded_levels) = codec::encode_ktx2_mips_decoded(&levels, mode, params)?;
     let mut receipts = Vec::new();
@@ -616,7 +920,7 @@ pub(super) fn encode_authored(
         );
         // The codec's mandatory verification decoded every level with the
         // vendored transcoder; reuse those bytes rather than decode again.
-        let decoded = std::mem::take(
+        let mut decoded = std::mem::take(
             decoded_levels
                 .get_mut(index)
                 .ok_or_else(|| error(JobErrorKind::InvalidState, "missing decoded level"))?,
@@ -624,9 +928,10 @@ pub(super) fn encode_authored(
         if decoded.len() != level.rgba.len() {
             return Err(error(JobErrorKind::InvalidState, "decoded level shape"));
         }
-        receipts.push(timing::time(Stage::FidelityCheck, || {
+        tamper(step, index, &mut decoded);
+        match timing::time(Stage::FidelityCheck, || {
             check_level(
-                &expected[index],
+                &prepared.expected[index],
                 &decoded,
                 &level.support,
                 level.width,
@@ -634,37 +939,24 @@ pub(super) fn encode_authored(
                 profile,
                 index,
             )
-        })?);
-        if mask.is_some() {
-            receipts.push(guard_receipts[index].clone());
+        }) {
+            Ok(receipt) => receipts.push(receipt),
+            Err(e) => return missed(e, step, Some(index)).map(Err),
         }
-        if let (Some(context), Some(reference)) = (mask, mask_receipts[index].as_ref()) {
-            let coverage = super::mask::coverage(
-                &decoded,
-                level.width,
-                level.height,
-                context.samples,
-                context.factor,
-                context.cutoff,
-                if index == 0 {
-                    context.linear
-                } else {
-                    context.min_linear
-                },
-            )?;
-            let floor = match profile {
-                Profile::Fast => 0.02,
-                Profile::Balanced => 0.01,
-                _ => 0.005,
-            };
-            let residual = (coverage - reference.target).abs();
-            let allowed = (reference.optimum_gap + floor).min(1.);
-            receipts.push(json!({"mip":index,"mask_target":reference.target,"fixed_semantic_gap":reference.optimum_gap,"scale":reference.scale,"scans":reference.scans,"decoded_coverage":coverage,"residual":residual,"allowed":allowed}));
-            if residual > allowed {
-                return Err(fidelity(format!(
-                    "MASK mip{index} residual{residual} allowed{allowed}"
-                )));
-            }
+        if mask.is_some() {
+            receipts.push(prepared.guard_receipts[index].clone());
+        }
+        match mask_gate(
+            mask,
+            prepared.mask_receipts[index].as_ref(),
+            &decoded,
+            level,
+            index,
+            profile,
+        )? {
+            Some(Ok(receipt)) => receipts.push(receipt),
+            Some(Err(e)) => return missed(e, step, Some(index)).map(Err),
+            None => {}
         }
         decoded_chain.push(mips::Level {
             width: level.width,
@@ -672,17 +964,99 @@ pub(super) fn encode_authored(
             rgba: decoded,
         });
     }
-    let sampler_receipt = timing::time(Stage::SamplerCheckDecoded, || validate(&decoded_chain))?;
+    let sampler_receipt =
+        match timing::time(Stage::SamplerCheckDecoded, || validate(&decoded_chain)) {
+            Ok(receipt) => receipt,
+            Err(e) => return missed(e, step, None).map(Err),
+        };
     if !sampler_receipt.is_null() {
         receipts.push(sampler_receipt);
     }
-    receipts.push(json!({"charged_bytes":charge,"native_workspace_provisional":true,"scalar_rrr":scalar,"effort":effort,"caller_levels":chain.levels.len()}));
-    Ok(Delivery {
+    receipts.push(json!({"charged_bytes":charge,"native_workspace_provisional":true,"scalar_rrr":scalar,"effort":effort,"step":step.name(),"caller_levels":chain.levels.len()}));
+    Ok(Ok(Delivery {
         bytes,
         mime: "image/ktx2",
         mip_count: chain.levels.len() as u32,
         receipts,
-    })
+        escalation: None,
+    }))
+}
+
+/// The last step: exact PNG of the prepared level 0 (MASK-adjusted and
+/// guarded like every KTX2 step), decoded independently and checked by the
+/// same level-0 gates. A PNG that changes its input is a hard failure.
+#[allow(clippy::too_many_arguments)]
+fn png_step(
+    chain: &sparse_mips::Chain,
+    prepared: &Prepared,
+    slot: TextureSlot,
+    profile: Profile,
+    mask: Option<MaskDelivery<'_>>,
+    charge: u64,
+    validate: &mut impl FnMut(&[mips::Level]) -> Result<Value, JobError>,
+    tamper: Tamper<'_>,
+) -> Result<Result<Delivery, GateMiss>, JobError> {
+    let step = Step::LosslessPng;
+    let level = chain.levels.first().ok_or_else(resource)?;
+    let pixels = prepared.delivered.first().ok_or_else(resource)?;
+    let (bytes, mut decoded) = png_round_trip(pixels, level.width, level.height)?;
+    tamper(step, 0, &mut decoded);
+    if decoded != *pixels {
+        return Err(error(
+            JobErrorKind::InvalidState,
+            format!(
+                "texture {slot:?} {profile:?} mip0: lossless PNG fallback changed literal RGBA8"
+            ),
+        ));
+    }
+    let mut receipts = Vec::new();
+    match timing::time(Stage::FidelityCheck, || {
+        check_level(
+            &prepared.expected[0],
+            &decoded,
+            &level.support,
+            level.width,
+            slot,
+            profile,
+            0,
+        )
+    }) {
+        Ok(receipt) => receipts.push(receipt),
+        Err(e) => return missed(e, step, Some(0)).map(Err),
+    }
+    if mask.is_some() {
+        receipts.push(prepared.guard_receipts[0].clone());
+    }
+    match mask_gate(
+        mask,
+        prepared.mask_receipts[0].as_ref(),
+        &decoded,
+        level,
+        0,
+        profile,
+    )? {
+        Some(Ok(receipt)) => receipts.push(receipt),
+        Some(Err(e)) => return missed(e, step, Some(0)).map(Err),
+        None => {}
+    }
+    let decoded = [mips::Level {
+        width: level.width,
+        height: level.height,
+        rgba: decoded,
+    }];
+    match timing::time(Stage::SamplerCheckDecoded, || validate(&decoded)) {
+        Ok(receipt) if receipt.is_null() => {}
+        Ok(receipt) => receipts.push(receipt),
+        Err(e) => return missed(e, step, None).map(Err),
+    }
+    receipts.push(json!({"charged_bytes":charge,"step":step.name(),"level0_rgba_exact":true,"mips":"page sampler reads level 0 only; authored coarser levels not delivered","caller_levels":chain.levels.len()}));
+    Ok(Ok(Delivery {
+        bytes,
+        mime: "image/png",
+        mip_count: 1,
+        receipts,
+        escalation: None,
+    }))
 }
 
 /// One exact PNG per authored ID level. Level 0 is the delivered texture
@@ -779,6 +1153,7 @@ mod tests {
             Profile::Lossless,
             128 * 1024 * 1024,
             None,
+            LADDER,
         )
         .unwrap();
         assert_eq!(out.mime, "image/png");
@@ -800,7 +1175,8 @@ mod tests {
                 TextureSlot::Normal,
                 Profile::Lossless,
                 1,
-                None
+                None,
+                LADDER
             )
             .unwrap_err()
             .kind(),
@@ -837,6 +1213,7 @@ mod tests {
                     profile,
                     128 * 1024 * 1024,
                     None,
+                    LADDER,
                 )
                 .unwrap();
                 if profile == Profile::Lossless {
@@ -900,6 +1277,7 @@ mod tests {
                     profile,
                     128 * 1024 * 1024,
                     None,
+                    LADDER,
                 )
                 .unwrap();
                 let dfd = u32::from_le_bytes(out.bytes[48..52].try_into().unwrap()) as usize;
@@ -999,6 +1377,7 @@ mod tests {
                         linear: true,
                         min_linear: true,
                     }),
+                    LADDER,
                 )
                 .unwrap();
                 let independent = basisu::Transcoder::new(&out.bytes).unwrap();
@@ -1067,6 +1446,7 @@ mod tests {
                         linear: true,
                         min_linear: true,
                     }),
+                    LADDER,
                 ) {
                     Err(error) => {
                         assert_ne!(
@@ -1172,6 +1552,7 @@ mod tests {
                 profile,
                 128 * 1024 * 1024,
                 None,
+                LADDER,
             )
             .unwrap();
             let decoded = decoded_levels(&out, edge);
@@ -1256,6 +1637,7 @@ mod tests {
                 profile,
                 128 * 1024 * 1024,
                 None,
+                LADDER,
             )
             .unwrap();
             let decoded = decoded_levels(&out, edge);
@@ -1279,6 +1661,7 @@ mod tests {
                 profile,
                 128 * 1024 * 1024,
                 None,
+                LADDER,
             )
             .unwrap();
             let mut flipped = decoded_levels(&out, edge).swap_remove(0);
@@ -1411,6 +1794,7 @@ mod tests {
                     linear: true,
                     min_linear: true,
                 }),
+                LADDER,
             ) {
                 Err(error) => {
                     assert_eq!(error.kind(), JobErrorKind::Unsupported);
@@ -1446,6 +1830,282 @@ mod tests {
                         w = (w / 2).max(1);
                         h = (h / 2).max(1);
                     }
+                }
+            }
+        }
+    }
+
+    fn hash64(x: usize, y: usize, s: usize) -> u64 {
+        let mut h = (x as u64).wrapping_mul(0x9E37_79B9)
+            ^ (y as u64).wrapping_mul(0x85EB_CA6B)
+            ^ (s as u64).wrapping_mul(0x27D4_EB2F);
+        h ^= h >> 13;
+        h = h.wrapping_mul(0xC2B2_AE35);
+        h ^ (h >> 16)
+    }
+    /// [`photo_page`] with every `every`-th 4x4 block (by hash) replaced by
+    /// four random colours scattered over its texels. UASTC's fastest pack
+    /// level misses the partitions such blocks need; stronger levels find them.
+    pub(super) fn hard_block_page(edge: usize, every: u64) -> Vec<u8> {
+        let photo = photo_page(edge);
+        let mut out = Vec::with_capacity(edge * edge * 4);
+        for i in 0..edge * edge {
+            let (x, y) = (i % edge, i / edge);
+            if hash64(x / 4, y / 4, 77).is_multiple_of(every) {
+                let c = hash64(x / 4, y / 4, (hash64(x, y, 9) % 4) as usize);
+                out.extend([c as u8, (c >> 8) as u8, (c >> 16) as u8, 255]);
+            } else {
+                out.extend_from_slice(&photo[i * 4..i * 4 + 4]);
+            }
+        }
+        out
+    }
+    /// Independent uniform noise in every colour channel: no lossy step meets
+    /// the colour gate.
+    fn noise_page(edge: usize) -> Vec<u8> {
+        (0..edge * edge)
+            .flat_map(|i| {
+                let (x, y) = (i % edge, i / edge);
+                [
+                    hash64(x, y, 0) as u8,
+                    hash64(x, y, 1) as u8,
+                    hash64(x, y, 2) as u8,
+                    255,
+                ]
+            })
+            .collect()
+    }
+    const MEMORY: u64 = 128 * 1024 * 1024;
+    fn chain(rgba: &[u8], edge: usize) -> sparse_mips::Chain {
+        sparse_mips::build(
+            edge as u32,
+            edge as u32,
+            rgba,
+            &vec![1; edge * edge],
+            Class::Colour,
+            MEMORY,
+        )
+        .unwrap()
+    }
+    /// The delivered page against the authored chain, decoded by the
+    /// independent transcoder (KTX2) or PNG decoder, under the run gates.
+    fn independently_gated(out: &Delivery, chain: &sparse_mips::Chain, profile: Profile) {
+        let edge = chain.levels[0].width as usize;
+        if out.mime == "image/png" {
+            let decoded = image::load_from_memory_with_format(&out.bytes, image::ImageFormat::Png)
+                .unwrap()
+                .into_rgba8();
+            assert_eq!(decoded.as_raw(), &chain.levels[0].rgba, "PNG is exact");
+            assert_eq!(out.mip_count, 1);
+            return;
+        }
+        let decoded = decoded_levels(out, edge);
+        assert_eq!(decoded.len(), chain.levels.len());
+        for (mip, (level, decoded)) in chain.levels.iter().zip(&decoded).enumerate() {
+            check_level(
+                &level.rgba,
+                decoded,
+                &level.support,
+                level.width,
+                TextureSlot::BaseColor,
+                profile,
+                mip,
+            )
+            .unwrap();
+        }
+    }
+    #[test]
+    fn gate_misses_escalate_one_step_at_a_time_to_a_passing_step() {
+        use Step::{LosslessPng, UastcLevel2, UastcLevel3};
+        let profile = Profile::Balanced;
+        for (edge, rgba, step, missed) in [
+            (
+                128,
+                hard_block_page(128, 10),
+                UastcLevel2,
+                vec![Step::Profile],
+            ),
+            (
+                128,
+                hard_block_page(128, 3),
+                UastcLevel3,
+                vec![Step::Profile, UastcLevel2],
+            ),
+            (
+                64,
+                noise_page(64),
+                LosslessPng,
+                vec![Step::Profile, UastcLevel2, UastcLevel3],
+            ),
+        ] {
+            let support = vec![1; edge * edge];
+            let dimensions = [edge as u32; 2];
+            let out = encode(
+                dimensions,
+                &rgba,
+                &support,
+                TextureSlot::BaseColor,
+                profile,
+                MEMORY,
+                None,
+                LADDER,
+            )
+            .unwrap();
+            let escalation = out.escalation.as_ref().expect("escalated");
+            assert_eq!(escalation.step, step);
+            assert_eq!(
+                escalation.misses.iter().map(|m| m.step).collect::<Vec<_>>(),
+                missed
+            );
+            for miss in &escalation.misses {
+                let mip = miss.mip.expect("per-level gate");
+                assert!(miss.gate.contains(&format!("mip{mip} ")), "{miss:?}");
+            }
+            independently_gated(&out, &chain(&rgba, edge), profile);
+            let last = out.receipts.last().unwrap();
+            assert_eq!(last["step"], step.name());
+        }
+        // A page that meets its gate at the profile step is not escalated.
+        let rgba = photo_page(64);
+        let out = encode(
+            [64; 2],
+            &rgba,
+            &[1; 64 * 64],
+            TextureSlot::BaseColor,
+            profile,
+            MEMORY,
+            None,
+            LADDER,
+        )
+        .unwrap();
+        assert!(out.escalation.is_none());
+        assert_eq!(out.receipts.last().unwrap()["step"], "profile");
+    }
+    /// Corrupts one 4x4 block of decoded level 0 at the listed steps. A ladder
+    /// that accepted any step without its gates would deliver that step.
+    fn corrupt_at(steps: &[Step]) -> impl Fn(Step, usize, &mut [u8]) + '_ {
+        move |step, mip, level| {
+            if mip == 0 && steps.contains(&step) {
+                let edge = (level.len() / 4).isqrt();
+                for y in 8..12 {
+                    for x in 8..12 {
+                        for c in 0..3 {
+                            level[(y * edge + x) * 4 + c] ^= 0x80;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    #[test]
+    fn every_ladder_step_is_rechecked_by_the_same_gates() {
+        use Step::{LosslessPng, UastcLevel2, UastcLevel3};
+        let profile = Profile::Balanced;
+        let rgba = hard_block_page(128, 10);
+        let chain = chain(&rgba, 128);
+        let run = |steps: &[Step], level0_sampled: bool| {
+            escalate(
+                &chain,
+                TextureSlot::BaseColor,
+                profile,
+                MEMORY,
+                None,
+                Ladder {
+                    level0_sampled,
+                    check: &no_check,
+                },
+                |_| Ok(Value::Null),
+                &corrupt_at(steps),
+            )
+        };
+        // Unmodified: delivered at level 2.
+        assert_eq!(
+            run(&[], true).unwrap().escalation.unwrap().step,
+            UastcLevel2
+        );
+        // A corrupted level-2 decode is refused and the ladder climbs on.
+        for (steps, delivered) in [
+            (&[UastcLevel2][..], UastcLevel3),
+            (&[UastcLevel2, UastcLevel3][..], LosslessPng),
+        ] {
+            let out = run(steps, true).unwrap();
+            let escalation = out.escalation.as_ref().unwrap();
+            assert_eq!(escalation.step, delivered);
+            for &step in steps {
+                let miss = escalation.misses.iter().find(|m| m.step == step).unwrap();
+                assert_eq!(miss.mip, Some(0));
+                assert!(miss.gate.contains("blockRMSE"), "{miss:?}");
+            }
+            independently_gated(&out, &chain, profile);
+        }
+        // A PNG that does not decode to its input is a hard failure, never
+        // delivered, and names the level.
+        let error = run(&[UastcLevel2, UastcLevel3, LosslessPng], true).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::InvalidState);
+        assert!(error.message().contains("mip0"), "{error}");
+        // Mip-sampled pages have no PNG step: the refusal names every step.
+        let error = run(&[UastcLevel2, UastcLevel3], false).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        for text in [
+            "profile mip0",
+            "uastc_level2 mip0",
+            "uastc_level3 mip0",
+            "no lossless PNG step",
+        ] {
+            assert!(error.message().contains(text), "{text}: {error}");
+        }
+    }
+    #[test]
+    fn escalation_polls_cancellation_before_every_re_encode() {
+        let polls = std::cell::Cell::new(0);
+        let cancelled = || {
+            polls.set(polls.get() + 1);
+            Err(JobError::new(JobErrorKind::Cancelled, "cancelled"))
+        };
+        let ladder = Ladder {
+            level0_sampled: true,
+            check: &cancelled,
+        };
+        let rgba = hard_block_page(128, 10);
+        let error = encode(
+            [128; 2],
+            &rgba,
+            &[1; 128 * 128],
+            TextureSlot::BaseColor,
+            Profile::Balanced,
+            MEMORY,
+            None,
+            ladder,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Cancelled);
+        assert_eq!(polls.get(), 1);
+        // A page that passes at the profile step never re-encodes.
+        let rgba = photo_page(64);
+        encode(
+            [64; 2],
+            &rgba,
+            &[1; 64 * 64],
+            TextureSlot::BaseColor,
+            Profile::Balanced,
+            MEMORY,
+            None,
+            ladder,
+        )
+        .unwrap();
+        assert_eq!(polls.get(), 1);
+    }
+    /// Every step runs under the page's one lease: the lossy charge covers
+    /// the PNG step's workspace too.
+    #[test]
+    fn lossy_page_charge_covers_the_png_step() {
+        for w in (2..=13).map(|e| 1u32 << e) {
+            for h in (2..=13).map(|e| 1u32 << e) {
+                for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+                    assert!(
+                        workspace_charge([w, h], profile).unwrap()
+                            >= workspace_charge([w, h], Profile::Lossless).unwrap()
+                    );
                 }
             }
         }
