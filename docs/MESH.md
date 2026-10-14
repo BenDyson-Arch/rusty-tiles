@@ -149,6 +149,20 @@ Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
+In a lossy profile, a texture page that misses any decoded-image gate at the
+profile's own encoder setting (per-level channel and normal floors, MASK
+coverage, the source-sampler check) is re-encoded one step stronger instead of
+failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
+again by the same gates; gates are never loosened. If level 3 also misses and
+the page's sampler reads level 0 only (no mipmap minification), the page is
+delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
+that still misses at level 3 fails the run, because glTF PNG cannot carry its
+authored coarse levels. Escalation costs output size: an ETC1S page re-encoded
+as UASTC is several times larger, and a PNG fallback page is typically the
+largest form of the page (up to 4 bytes per texel). The ladder depends only on
+the page, so output is identical for any worker count. Cancellation is polled
+before every re-encode step, so a run can stop between steps of one page.
+
 `--jobs auto` is memory-aware. A positive `--jobs N` is a **maximum**, also capped
 by available cores and each stage's memory plan. The diagnostics report the
 requested choice and actual workers independently for capture and leaf
@@ -248,7 +262,15 @@ snake_case and equals Python's `result.report` and the published report.
 The semantic report includes profile, source/resource counts, leaf/triangle/GLB
 counts and maximum leaf geometry error, hierarchy/implicit/document counts,
 depth and packed/synthetic leaf counts, member limits, separate root/tileset
-errors, and normalized placement. `source_coordinates` is `local-gltf` or
+errors, and normalized placement. Escalation is reported as `escalated_pages`
+(`uastc_level2` and `uastc_level3` counts, by the step that delivered the page),
+`lossless_fallback_pages` (pages delivered as exact PNG), and
+`escalation_diagnostics`: the first 32 escalated pages in leaf order, each with
+its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
+(`image`, `material`), delivering `step`, and every gate it missed on the way
+(`misses`: `step`, `mip` or null for the all-level sampler check, `gate`).
+`escalation_diagnostics_omitted` counts escalated pages beyond that bounded
+list. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
 `native` operation, the chosen origin, `jacobian_lattice_cells` and
