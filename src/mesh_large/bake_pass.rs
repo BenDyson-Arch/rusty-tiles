@@ -890,21 +890,23 @@ pub(in crate::mesh_large) fn assemble(
             let Some(attribute) = set.get("attribute").and_then(Value::as_u64) else {
                 continue;
             };
-            let mut bytes = Vec::with_capacity(count * 4);
-            for &f in &p.faces {
-                let id = frozen.faces[f as usize]
-                    .features
-                    .get(slot)
-                    .ok_or_else(|| state("frozen face lacks a feature-ID set"))?
-                    .0;
-                for _ in 0..3 {
-                    bytes.extend_from_slice(&(id as f32).to_le_bytes());
-                }
-            }
+            let ids = p
+                .faces
+                .iter()
+                .map(|&f| {
+                    frozen.faces[f as usize]
+                        .features
+                        .get(slot)
+                        .map(|s| s.0)
+                        .ok_or_else(|| state("frozen face lacks a feature-ID set"))
+                })
+                .collect::<Result<Vec<u32>, JobError>>()?;
             slot += 1;
+            let (component, bytes) = feature_id_stream(&ids)?;
             let v = w.view(&bytes, Some(MeshoptStream::Attributes { count, stride: 4 }));
-            w.accessors
-                .push(json!({"bufferView":v,"componentType":5126,"count":count,"type":"SCALAR"}));
+            w.accessors.push(
+                json!({"bufferView":v,"componentType":component,"count":count,"type":"SCALAR"}),
+            );
             attributes[format!("_FEATURE_ID_{attribute}")] = json!(w.accessors.len() - 1);
         }
         if let Some(n) = &p.normals {
@@ -1059,6 +1061,45 @@ fn check_faces(frozen: &FrozenNode, glb: &[u8]) -> Result<(), JobError> {
         ));
     }
     Ok(())
+}
+
+/// A feature-ID attribute stream holding `ids` (one per face, three corners each)
+/// EXACTLY, in the narrowest type glTF admits for a feature-ID vertex attribute:
+/// UNSIGNED_BYTE up to 255, UNSIGNED_SHORT up to 65535, FLOAT up to 2^24 (every integer
+/// there is exact). glTF forbids UNSIGNED_INT for application attributes, so an ID above
+/// 2^24 has no exact attribute encoding and is refused rather than rounded. Elements are
+/// padded to a four-byte stride (vertex-attribute alignment, meshopt streams).
+fn feature_id_stream(ids: &[u32]) -> Result<(u32, Vec<u8>), JobError> {
+    let max = ids.iter().copied().max().unwrap_or(0);
+    let component = match max {
+        0..=255 => 5121,
+        256..=65535 => 5123,
+        _ if max <= 1 << 24 => 5126,
+        _ => {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "feature ID {max} exceeds 2^24: glTF feature-ID attributes cannot hold it \
+                     exactly (UNSIGNED_INT is not allowed for application attributes)"
+                ),
+            ))
+        }
+    };
+    let mut bytes = Vec::with_capacity(ids.len() * 12);
+    for &id in ids {
+        let element: [u8; 4] = match component {
+            5121 => [id as u8, 0, 0, 0],
+            5123 => {
+                let [a, b] = (id as u16).to_le_bytes();
+                [a, b, 0, 0]
+            }
+            _ => (id as f32).to_le_bytes(),
+        };
+        for _ in 0..3 {
+            bytes.extend_from_slice(&element);
+        }
+    }
+    Ok((component, bytes))
 }
 
 /// Read the assembled member back from its bytes and compare every requested value.
@@ -1263,6 +1304,41 @@ pub(in crate::mesh_large) type Level = PreencodeLevel;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feature_id_streams_are_exact_and_narrowest() {
+        let decode = |component: u32, bytes: &[u8]| -> Vec<u32> {
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|e| match component {
+                    5121 => u32::from(e[0]),
+                    5123 => u32::from(u16::from_le_bytes([e[0], e[1]])),
+                    _ => f32::from_le_bytes(*e) as u32,
+                })
+                .collect()
+        };
+        for (ids, component) in [
+            (vec![0u32, 7, 255], 5121),
+            (vec![0, 256], 5123),
+            (vec![65_535], 5123),
+            (vec![65_536, 3], 5126),
+            (vec![16_777_215], 5126),
+            (vec![16_777_216, 0], 5126),
+        ] {
+            let (c, bytes) = feature_id_stream(&ids).unwrap();
+            assert_eq!(c, component, "{ids:?}");
+            let expected: Vec<u32> = ids.iter().flat_map(|&i| [i; 3]).collect();
+            assert_eq!(decode(c, &bytes), expected);
+        }
+        for id in [16_777_217u32, u32::MAX] {
+            assert_eq!(
+                feature_id_stream(&[id]).unwrap_err().kind(),
+                JobErrorKind::Unsupported
+            );
+        }
+    }
     use crate::{
         mesh_large::{
             delivery::{mesh_leaves_to_3tz, MeshTilesetRequest},
@@ -1833,6 +1909,34 @@ mod tests {
                 let mut table = frozen.clone();
                 table.tables[0].columns[0].2[0] ^= 1;
                 assert!(verify(&table, &good, &glb).is_err());
+                // Feature IDs are exact integers: values past f32's integer range up to
+                // 2^24 read back unchanged, and anything above 2^24 is refused, not rounded.
+                // (A third, table-less attribute set carries the probed value.)
+                let with_id = |id: u32| {
+                    let mut high = frozen.clone();
+                    for g in &mut high.gltf {
+                        g.feature_ids.as_array_mut().unwrap().push(
+                            json!({"featureCount": 1u64 << 25, "attribute": 7, "label": "high"}),
+                        );
+                    }
+                    for (k, f) in high.faces.iter_mut().enumerate() {
+                        f.features.push((if k == 0 { id } else { 1 }, None));
+                    }
+                    high
+                };
+                for id in [255u32, 256, 65_535, 65_536, 16_777_215, 16_777_216] {
+                    let high = with_id(id);
+                    let Assembly::Fit { decoded, .. } = assemble(&high, &good, u64::MAX)? else {
+                        panic!("fits")
+                    };
+                    let face = decoded.iter().find(|d| d.face == 0).unwrap();
+                    assert_eq!(face.features[2].0, id);
+                }
+                let high = with_id(16_777_217);
+                assert_eq!(
+                    assemble(&high, &good, u64::MAX).unwrap_err().kind(),
+                    JobErrorKind::Unsupported
+                );
                 // One mutant per remaining verify branch.
                 let mut frozen_mutants: Vec<(&str, FrozenNode)> = Vec::new();
                 let mut m = frozen.clone();
