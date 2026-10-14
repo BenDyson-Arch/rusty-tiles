@@ -37,6 +37,10 @@ pub(crate) enum Mutation {
     ForcedFailures,
     /// Fills may close loops through seam vertices (control: must be caught).
     FillAcrossSeams,
+    /// Control: the first tile of each depth also claims one of its seam edges under a
+    /// second, fictitious owner, so the edge has more than two owners (overlapping seam
+    /// coverage); the audit must refuse it rather than pass it.
+    OverclaimSeam,
 }
 
 /// The rounding direction of upper bounds; inward only under the C1 mutation.
