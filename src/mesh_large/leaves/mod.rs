@@ -12,6 +12,7 @@ pub(in crate::mesh_large) mod prepared;
 pub(crate) mod producer;
 mod schedule;
 pub(in crate::mesh_large) mod sparse_mips;
+pub(in crate::mesh_large) mod witness;
 mod writer;
 
 #[cfg(test)]

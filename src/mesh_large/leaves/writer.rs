@@ -23,6 +23,9 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
+    /// Decoded published POSITION per primitive, in corner order (the lattice decode the
+    /// writer proves client-order exact).
+    pub positions: Vec<Vec<[f32; 3]>>,
 }
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]
@@ -368,6 +371,7 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
+    let mut decoded_positions = Vec::with_capacity(atlas.primitives.len());
     for primitive in &atlas.primitives {
         let flags = primitive.triangles[0].flags;
         if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
@@ -379,7 +383,7 @@ pub(super) fn encode(
             .flat_map(|t| t.triangle.positions)
             .collect();
         let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
-        let position = lattice.encode(&points, &depths, u32::from(depth))?;
+        let mut position = lattice.encode(&points, &depths, u32::from(depth))?;
         bounds.union(&position.bounds);
         geometry_error = geometry_error.max(position.correspondence_error);
         let count = points.len();
@@ -420,6 +424,7 @@ pub(super) fn encode(
                 id
             }
         };
+        decoded_positions.push(std::mem::take(&mut position.decoded));
         let mut attributes = json!({"POSITION":pos});
         for (flag, name, shape) in [
             (NORMAL, "NORMAL", "VEC3"),
@@ -584,6 +589,7 @@ pub(super) fn encode(
         glb: output,
         bounds,
         geometry_error,
+        positions: decoded_positions,
     })
 }
 
