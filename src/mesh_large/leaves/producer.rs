@@ -513,6 +513,21 @@ fn leaf_encode(
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
+    // The bake witness names each face by its global sorted rank: the leaf's records are
+    // read in rank order from `node.first`.
+    let ranks: std::collections::HashMap<_, _> = if preencode.is_some() {
+        input
+            .records
+            .iter()
+            .zip(node.first..)
+            .map(|(row, rank)| {
+                let s = row.triangle.source;
+                ((s.node, s.mesh, s.primitive, s.triangle), rank)
+            })
+            .collect()
+    } else {
+        Default::default()
+    };
     let ((glb, appearance), density_drop, density_reasons) = encode_with_density_budget(
         config.profile,
         u32::from(input.plan.density_drop),
@@ -528,7 +543,7 @@ fn leaf_encode(
                     index,
                 ),
                 |atlas| {
-                    let leaf = timing::time(Stage::GlbWrite, || {
+                    let mut leaf = timing::time(Stage::GlbWrite, || {
                         writer::encode(
                             atlas,
                             &captured.lattice,
@@ -537,8 +552,11 @@ fn leaf_encode(
                         )
                     })?;
                     // Only the accepted density attempt reaches here.
+                    let positions = std::mem::take(&mut leaf.positions);
+                    let normals = std::mem::take(&mut leaf.normals);
                     if let Some(store) = preencode {
-                        store.write_leaf(index, density_drop, atlas)?;
+                        let witness = super::witness::build(atlas, &positions, &normals, &ranks)?;
+                        store.write_leaf(index, density_drop, atlas, &witness)?;
                     }
                     Ok(leaf)
                 },

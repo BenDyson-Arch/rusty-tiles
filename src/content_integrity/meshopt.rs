@@ -140,6 +140,29 @@ pub(crate) fn decode_filtered(
     }
     copy_words(&decoded, length)
 }
+/// The OCTAHEDRAL filter alone on uncompressed filtered bytes: the same element checks
+/// and linked decoder filter [`decode_filtered`] applies after decompression. Meshopt
+/// compression is lossless, so this is what a consumer decodes from the stream.
+pub(crate) fn unfilter_octahedral(
+    filtered: &[u8],
+    count: usize,
+    stride: usize,
+) -> Result<Vec<u8>, FormatError> {
+    if (stride != 4 && stride != 8) || count.checked_mul(stride) != Some(filtered.len()) {
+        return Err(invalid("meshopt OCTAHEDRAL input shape"));
+    }
+    let mut words = Vec::<u32>::new();
+    words
+        .try_reserve_exact(filtered.len().div_ceil(4))
+        .map_err(|_| limit("allocation failed"))?;
+    words.extend(filtered.chunks(4).map(|c| {
+        let mut b = [0u8; 4];
+        b[..c.len()].copy_from_slice(c);
+        u32::from_ne_bytes(b)
+    }));
+    octahedral(&mut words, count, stride)?;
+    copy_words(&words, filtered.len())
+}
 /// Checks every octahedral element, then applies the linked decoder's filter in place
 /// (no further allocation, so the decode peak bound is unchanged).
 fn octahedral(words: &mut [u32], count: usize, stride: usize) -> Result<(), FormatError> {

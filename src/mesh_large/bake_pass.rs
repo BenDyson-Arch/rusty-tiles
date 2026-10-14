@@ -15,6 +15,7 @@ use super::{
     config::Profile,
     full::FullCaptured,
     leaves::prepared::{PreencodeLevel, PreencodePage, PreparedAtlas},
+    leaves::witness::{LeafWitness, VERSION as WITNESS_VERSION},
     lod::{
         codec,
         handoff::{read_bounded, FrozenNode, HandoffSink, Lease, ScratchBudget},
@@ -74,6 +75,17 @@ pub(in crate::mesh_large) struct LeafPreencode {
     pub primitives: Vec<LeafPrimitivePreencode>,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
+    /// Published decoded renderer attributes, source identity, literal bindings and
+    /// measured texel spacing of the accepted leaf (H27 requests #3 and #4).
+    pub witness: LeafWitness,
+}
+
+/// Where a leaf's binary witness lives: `leaf-<index>.wit`, `bytes` long, in format
+/// `version` (the magic of [`LeafWitness::encode`]).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+struct WitnessHead {
+    version: u32,
+    bytes: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -85,10 +97,12 @@ struct LeafHead {
     primitives: Vec<LeafPrimitivePreencode>,
     textures: Vec<Value>,
     samplers: Vec<Value>,
+    witness: WitnessHead,
 }
 
 const PAGE_MAGIC: &[u8; 8] = b"H17PAG\x01\0";
-const LEAF_MAGIC: &[u8; 8] = b"H17PRE\x02\0";
+// Version 3: the head names the leaf's witness file.
+const LEAF_MAGIC: &[u8; 8] = b"H17PRE\x03\0";
 
 /// A page's pixel bytes: every level's RGBA, then the support mask as u32 LE.
 fn page_pixel_bytes(page: &PreencodePage) -> u64 {
@@ -245,6 +259,9 @@ impl PreencodeStore {
     fn leaf_path(&self, index: u64) -> PathBuf {
         self.dir.join(format!("leaf-{index:012}.pre"))
     }
+    fn witness_path(&self, index: u64) -> PathBuf {
+        self.dir.join(format!("leaf-{index:012}.wit"))
+    }
     fn page_path(&self, index: u64, drop: u32, page: u32) -> PathBuf {
         self.dir
             .join(format!("leaf-{index:012}-d{drop}-p{page}.pag"))
@@ -298,7 +315,10 @@ impl PreencodeStore {
         index: u64,
         drop: u32,
         atlas: &PreparedAtlas,
+        witness: &LeafWitness,
     ) -> Result<(), JobError> {
+        let witness_bytes = witness.encode()?;
+        self.put(&self.witness_path(index), &witness_bytes)?;
         let head = serde_json::to_vec(&LeafHead {
             drop,
             pages: atlas.preencode.clone(),
@@ -321,6 +341,10 @@ impl PreencodeStore {
                 .collect(),
             textures: atlas.textures.clone(),
             samplers: atlas.samplers.clone(),
+            witness: WitnessHead {
+                version: WITNESS_VERSION,
+                bytes: witness_bytes.len() as u64,
+            },
         })
         .map_err(|e| state(e.to_string()))?;
         let mut bytes = Vec::with_capacity(16 + head.len());
@@ -380,11 +404,28 @@ impl PreencodeStore {
             let path = self.page_path(index, head.drop, page.page);
             pages.push(read_page(page, &path, &mut lease, check)?);
         }
+        // The witness file is read under the same lease and cancellation, pinned to the
+        // size its head records; its decode is bounded by what the lease has left.
+        if head.witness.version != WITNESS_VERSION {
+            return Err(bad());
+        }
+        let path = self.witness_path(index);
+        let bytes = read_bounded(
+            &path,
+            Some(head.witness.bytes),
+            &mut lease,
+            check,
+            "read leaf witness",
+        )?;
+        check()?;
+        let witness = LeafWitness::decode(&bytes, lease.limit() - lease.used())?;
+        lease.charge(witness.owned_bytes())?;
         Ok(LeafPreencode {
             pages,
             primitives: head.primitives,
             textures: head.textures,
             samplers: head.samplers,
+            witness,
         })
     }
     pub(in crate::mesh_large) fn release_leaf(&self, index: u64) -> Result<(), JobError> {
@@ -399,6 +440,7 @@ impl PreencodeStore {
         for page in &head.pages {
             self.remove(&self.page_path(index, head.drop, page.page))?;
         }
+        self.remove(&self.witness_path(index))?;
         self.remove(&path)
     }
     /// A bake-produced proxy packet (pages + source support), opaque to the root.
