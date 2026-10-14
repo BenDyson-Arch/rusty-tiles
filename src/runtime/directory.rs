@@ -363,6 +363,43 @@ mod tests {
         DirectoryTarget::prepare(&root.join("output"), OutputPolicy::CreateNew).unwrap()
     }
 
+    /// The producer sequence (prepare with a canonical parent, stage, seal, publish) lands
+    /// each output at exactly its name for every name length: Windows read past an
+    /// unterminated rename target for some lengths (the bake adapter test's `out`).
+    #[test]
+    fn publication_lands_at_every_output_name_length() {
+        let root = platform::test_directory();
+        for n in 1..=12usize {
+            let name: String = (0..n).map(|i| char::from(b'a' + (i % 26) as u8)).collect();
+            let run = RunControl::default();
+            let attempt = run.begin().unwrap();
+            let stage = DirectoryTarget::prepare(&root.path().join(&name), OutputPolicy::CreateNew)
+                .unwrap()
+                .stage(&attempt)
+                .unwrap();
+            fs::create_dir(stage.path().join("leaves")).unwrap();
+            fs::write(stage.path().join("leaves/tile"), b"complete").unwrap();
+            attempt.close_events().unwrap();
+            let published = stage.seal().unwrap().publish().unwrap();
+            assert_eq!(published.output.file_name().unwrap(), name.as_str());
+            assert_eq!(
+                fs::read(root.path().join(&name).join("leaves/tile")).unwrap(),
+                b"complete"
+            );
+            let mut names: Vec<_> = fs::read_dir(root.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name().into_string().unwrap())
+                .collect();
+            names.sort();
+            assert!(names.contains(&name), "length {n}: {names:?}");
+            assert!(
+                names
+                    .iter()
+                    .all(|e| e.len() <= 12 && !e.starts_with(".tiles-")),
+                "length {n}: {names:?}"
+            );
+        }
+    }
     #[test]
     fn tree_is_invisible_until_single_commit_and_control_is_terminal() {
         let root = platform::test_directory();
