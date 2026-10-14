@@ -121,20 +121,13 @@ pub(crate) struct SortStats {
 /// default `F = 64` an intermediate merge holds at most `F` partly read chunks (512 MiB).
 pub(crate) const CHUNK_BYTES: usize = 8 << 20;
 
-#[cfg(test)]
-thread_local! {
-    /// Test-only chunk size, so small inputs exercise multi-chunk runs.
-    pub(crate) static CHUNK_OVERRIDE: std::cell::Cell<Option<usize>> =
-        const { std::cell::Cell::new(None) };
+/// Records per chunk file for `T` at the production [`CHUNK_BYTES`] (the scratch model).
+pub(crate) fn chunk_records<T: Record>() -> u64 {
+    chunk_records_of::<T>(CHUNK_BYTES)
 }
 
-/// Records per chunk file for `T`.
-pub(crate) fn chunk_records<T: Record>() -> u64 {
-    #[cfg(test)]
-    let bytes = CHUNK_OVERRIDE.with(|c| c.get()).unwrap_or(CHUNK_BYTES);
-    #[cfg(not(test))]
-    let bytes = CHUNK_BYTES;
-    (bytes / T::SIZE).max(1) as u64
+fn chunk_records_of<T: Record>(chunk_bytes: usize) -> u64 {
+    (chunk_bytes / T::SIZE).max(1) as u64
 }
 
 struct Chunk {
@@ -244,10 +237,13 @@ impl<T: Record> RunReader<T> {
                 match reader.read(&mut probe) {
                     Ok(0) => break,
                     Ok(_) => {
-                        let records = self.records;
-                        return Err(
-                            self.corrupt(format!("bytes follow the expected {records} records"))
+                        let (chunk, records) = (
+                            self.chunks.front().map_or(0, |chunk| chunk.records),
+                            self.records,
                         );
+                        return Err(self.corrupt(format!(
+                            "bytes follow the expected {chunk} records of a chunk (run of {records} records)"
+                        )));
                     }
                     Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                     Err(e) => return Err(SpillError::io("read spill run", self.path(), e)),
@@ -378,7 +374,7 @@ fn write_run<T: Record>(
     buffer_bytes: usize,
     records: &mut impl Cursor<T>,
 ) -> Result<Run, SpillError> {
-    let per_chunk = chunk_records::<T>();
+    let per_chunk = chunk_records_of::<T>(scratch.chunk_bytes());
     let mut chunks = VecDeque::new();
     let mut open: Option<OpenChunk> = None;
     let mut encoded = vec![0; T::SIZE];
@@ -597,15 +593,24 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     }
 
     /// Upper bound for descriptor inventory and its Vec reallocations, including owned
-    /// paths. The owning producer adds this to its resident-memory declaration.
-    pub(crate) fn inventory_memory_bound(config: SortConfig, scratch_path_bytes: usize) -> u64 {
-        (config.fan_in as u64)
-            .saturating_mul(128)
+    /// paths: fewer than `128F` run descriptors (two generations while merging), and one
+    /// chunk descriptor per live chunk file of `spill_bytes` (the sort's live spill, a merge's
+    /// output included), at the production [`CHUNK_BYTES`]. The owning producer adds this to
+    /// its resident-memory declaration.
+    pub(crate) fn inventory_memory_bound(
+        config: SortConfig,
+        scratch_path_bytes: usize,
+        spill_bytes: u64,
+    ) -> u64 {
+        let paths = (scratch_path_bytes as u64)
             .saturating_mul(2)
-            .saturating_mul(
-                (size_of::<Run>() as u64)
-                    .saturating_add((scratch_path_bytes as u64).saturating_mul(2))
-                    .saturating_add(64),
+            .saturating_add(64);
+        let runs = (config.fan_in as u64).saturating_mul(128).saturating_mul(2);
+        let chunk_bytes = chunk_records::<T>().saturating_mul(T::SIZE as u64).max(1);
+        let chunks = spill_bytes.div_ceil(chunk_bytes).saturating_add(runs);
+        runs.saturating_mul((size_of::<Run>() as u64).saturating_add(paths))
+            .saturating_add(
+                chunks.saturating_mul((size_of::<Chunk>() as u64).saturating_add(paths)),
             )
     }
 
@@ -646,7 +651,8 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                     let mut merger = Merger::new(readers)?;
                     let run = write_run(self.scratch, self.config.buffer_bytes, &mut merger)?;
                     self.stats.spilled_bytes += run.file_bytes();
-                    // Inputs are removed only now, after the output is complete.
+                    // Inputs were removed chunk by chunk as the merge read them; dropping
+                    // the merger removes any remainder (e.g. after an error).
                     drop(merger);
                     merged.push(run);
                 }

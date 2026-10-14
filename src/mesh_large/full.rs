@@ -87,6 +87,8 @@ pub(crate) struct FullMemoryBound {
     pub owned_metadata_bytes: u64,
     pub decoder_allowance_bytes: u64,
     pub planning_allowance_bytes: u64,
+    /// Descriptors of live spill chunk files (grows with spilled bytes).
+    pub chunk_descriptor_bytes: u64,
     pub bound_bytes: u64,
 }
 impl FullMemoryBound {
@@ -453,6 +455,7 @@ fn memory_bound(
     json_bytes: u64,
     image_count: u64,
     jobs: usize,
+    spill_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
     let sorter = config.sorter(jobs);
@@ -501,13 +504,24 @@ fn memory_bound(
             )?,
         )?,
     )?;
+    // Chunk descriptors of every live spill file (runs are 8 MiB chunk files), on top of the
+    // run descriptor inventories already in `geometry.descriptor_bytes`.
+    let chunk_descriptor_bytes = ExternalSorter::<FullTriangle>::inventory_memory_bound(
+        config.sort,
+        path as usize,
+        spill_bytes,
+    );
     let bound_bytes = add(
-        add(geometry.bound_bytes, owned_metadata_bytes)?,
+        add(
+            add(geometry.bound_bytes, owned_metadata_bytes)?,
+            chunk_descriptor_bytes,
+        )?,
         add(DECODER_ALLOWANCE, PLANNING_ALLOWANCE)?,
     )?;
     Ok(FullMemoryBound {
         geometry,
         owned_metadata_bytes,
+        chunk_descriptor_bytes,
         decoder_allowance_bytes: DECODER_ALLOWANCE,
         planning_allowance_bytes: PLANNING_ALLOWANCE,
         bound_bytes,
@@ -570,7 +584,14 @@ pub(crate) fn capture_admitted(
         image_bytes,
     )
     .map_err(super::failure)?;
-    let one = memory_bound(config, source.json_bytes, image_count, 1).map_err(super::failure)?;
+    let one = memory_bound(
+        config,
+        source.json_bytes,
+        image_count,
+        1,
+        need.logical_need_bytes,
+    )
+    .map_err(super::failure)?;
     let jobs = config::plan_jobs(
         config.jobs,
         std::thread::available_parallelism().map_or(1, |n| n.get()),
@@ -585,8 +606,14 @@ pub(crate) fn capture_admitted(
     );
     let workers = usize::try_from(jobs.jobs)
         .map_err(|_| super::failure(exhausted("full worker count overflow")))?;
-    let memory =
-        memory_bound(config, source.json_bytes, image_count, workers).map_err(super::failure)?;
+    let memory = memory_bound(
+        config,
+        source.json_bytes,
+        image_count,
+        workers,
+        need.logical_need_bytes,
+    )
+    .map_err(super::failure)?;
     let required_memory =
         add(memory.bound_bytes, jobs.memory_backed_scratch_bytes).map_err(super::failure)?;
     if jobs
@@ -609,6 +636,10 @@ pub(crate) fn capture_admitted(
     .map_err(super::failure)?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), scratch_admission)
         .map_err(|e| super::failure(e.into()))?;
+    #[cfg(test)]
+    if let Some(chunk) = config.test_chunk_bytes {
+        scratch.set_chunk_bytes(chunk);
+    }
     let source_totals = (
         source.source_bytes,
         source.external_files,
@@ -746,10 +777,7 @@ pub(crate) fn capture_admitted(
         })?;
         let output_reserve_bytes =
             texture_output_reserve(scan.triangles, image_bytes, texels, config.profile)?;
-        let scratch_remaining = need
-            .need_bytes
-            .checked_sub(scratch.live_bytes())
-            .unwrap_or(0);
+        let scratch_remaining = need.need_bytes.saturating_sub(scratch.live_bytes());
         let scratch_total = output_admission(
             &parent,
             scratch_remaining,
@@ -1508,12 +1536,18 @@ pub(super) mod tests {
             jobs: 1,
         };
         let row = size_of::<FullTriangle>();
+        let chunk = std::cell::Cell::new(crate::spill::CHUNK_BYTES);
         let spill = |records, run_records: usize, fan_in| {
-            config::sort_spill::<FullTriangle>(records, sorter(run_records * row, fan_in)).unwrap()
+            config::sort_spill_with::<FullTriangle>(
+                records,
+                sorter(run_records * row, fan_in),
+                chunk.get(),
+            )
+            .unwrap()
         };
         let s = |records: u64| records * FullTriangle::SIZE as u64;
         // Two records per chunk file, so F partly read chunks are smaller than S.
-        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(Some(2 * FullTriangle::SIZE)));
+        chunk.set(2 * FullTriangle::SIZE);
         let chunks = |fan_in: u64| fan_in * s(2);
         // At most F runs: no intermediate merge; the stream holds partly read chunks.
         let one = spill(40, 10, 4);
@@ -1533,7 +1567,7 @@ pub(super) mod tests {
         assert_eq!(compacting.push_peak, s(2560) + chunks(4));
         // The flow of a stream into proportional output: the larger side plus the slack.
         assert_eq!(one.flow(s(100)), Some(s(100) + chunks(4)));
-        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(None));
+        chunk.set(crate::spill::CHUNK_BYTES);
         // Unchunked-size data: slack never exceeds S.
         let small = spill(60, 10, 4);
         assert_eq!(small.finish_peak, 2 * s(60));
@@ -1621,7 +1655,10 @@ pub(super) mod tests {
                 .kind(),
             JobErrorKind::ResourceLimit
         );
-        let memory = memory_bound(&cfg, 1000, 2, 1).unwrap();
+        let memory = memory_bound(&cfg, 1000, 2, 1, 0).unwrap();
+        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30).unwrap();
+        // 150 GiB of live spill is about 19k chunk descriptors.
+        assert!(large.chunk_descriptor_bytes > memory.chunk_descriptor_bytes + 19_000 * 64);
         assert_eq!(memory.decoder_allowance_bytes, 192 << 20);
         assert!(memory.bound_bytes > memory.geometry.bound_bytes + memory.decoder_allowance_bytes);
     }

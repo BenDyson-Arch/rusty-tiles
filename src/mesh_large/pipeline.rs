@@ -75,6 +75,9 @@ pub struct TilerRequest {
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
     policy: OutputPolicy,
+    /// Test seam: sort configuration and largest spill chunk, so small inputs spill.
+    #[cfg(test)]
+    test_spill: Option<(crate::spill::SortConfig, usize)>,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -87,7 +90,14 @@ impl TilerRequest {
             placement: MeshPlacement::Local,
             source_crs: None,
             policy: OutputPolicy::CreateNew,
+            #[cfg(test)]
+            test_spill: None,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
+        self.test_spill = Some((sort, chunk));
+        self
     }
     pub fn with_profile(mut self, profile: TilerProfile) -> Self {
         self.profile = profile;
@@ -315,6 +325,11 @@ pub fn mesh_to_tileset(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    #[cfg(test)]
+    if let Some((sort, chunk)) = request.test_spill {
+        config.sort = sort;
+        config.test_chunk_bytes = Some(chunk);
+    }
     config.scratch_dir = request
         .scratch_dir
         .as_deref()

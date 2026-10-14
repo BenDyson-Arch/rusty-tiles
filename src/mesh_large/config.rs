@@ -75,6 +75,9 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
+    /// Test seam: largest spill chunk of the capture scratch.
+    #[cfg(test)]
+    pub test_chunk_bytes: Option<usize>,
 }
 
 impl TreeConfig {
@@ -112,6 +115,8 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            #[cfg(test)]
+            test_chunk_bytes: None,
         }
     }
 
@@ -536,17 +541,32 @@ impl SortSpill {
     /// Consuming this sort's stream while writing `outputs` bytes in proportion to progress:
     /// the unread input and the written output trade off linearly, so the larger of the two
     /// plus the partly read chunks bounds the stage.
+    ///
+    /// Assumption: output grows proportionally to the records consumed (each input record
+    /// emits a fixed amount, as every capture join and projection here does). A consumer that
+    /// emits its output in bursts late in the stream (e.g. buffering, or output per group of
+    /// variable size) can exceed this; such stages must be charged as `bytes + outputs`.
     pub(crate) fn flow(&self, outputs: u64) -> Option<u64> {
         self.bytes.max(outputs).checked_add(self.stream_slack)
     }
 }
 
 pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
+    sort_spill_with::<T>(records, sorter, crate::spill::CHUNK_BYTES)
+}
+
+/// [`sort_spill`] for a given largest chunk file (a scratch with smaller chunks is bounded by
+/// the production figure too, because slack only shrinks with the chunk).
+pub(crate) fn sort_spill_with<T: Record>(
+    records: u64,
+    sorter: SortConfig,
+    chunk_bytes: usize,
+) -> Option<SortSpill> {
     let bytes = records.checked_mul(T::SIZE as u64)?;
     let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
     let runs = records.div_ceil(run_records);
     let fan_in = sorter.fan_in as u64;
-    let chunk_bytes = crate::spill::chunk_records::<T>().checked_mul(T::SIZE as u64)?;
+    let chunk_bytes = ((chunk_bytes / T::SIZE).max(1) as u64).checked_mul(T::SIZE as u64)?;
     let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
     let push_peak = if runs >= fan_in.checked_mul(64)? {
         bytes.checked_add(slack)?
