@@ -45,6 +45,17 @@ impl Profile {
             Self::Fast | Self::Balanced | Self::Quality | Self::Lossless => CONSUMER_TABLE_ROWS,
         }
     }
+
+    /// Leaf `NORMAL` storage (provisional): `Some(K)` stores K-bit octahedral codes through
+    /// the `EXT_meshopt_compression` OCTAHEDRAL filter, decoded by clients to normalized
+    /// SHORT VEC3 (KHR_mesh_quantization); `None` keeps the source f32 values. 12 bits keep
+    /// the angular error near 0.06 degrees; `lossless` keeps f32.
+    pub(crate) fn leaf_normal_octahedral_bits(self) -> Option<u8> {
+        match self {
+            Self::Fast | Self::Balanced | Self::Quality => Some(12),
+            Self::Lossless => None,
+        }
+    }
 }
 
 /// `--jobs`: `auto` (the default) or an explicit worker count.

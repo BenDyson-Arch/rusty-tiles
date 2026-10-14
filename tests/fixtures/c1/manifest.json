@@ -1355,6 +1355,69 @@
       "exitCode": 0,
       "analyticFact": "Signatureless descriptor CRC equals 0x08074b50; four stored bytes ac0a7ad5 have that independently checked CRC.",
       "sha256": "1efec1a49ba11a9c7300eb01421830520296ec1822cd510126b3180809f60a60"
+    },
+    {
+      "name": "meshopt_metadata_octahedral",
+      "path": "meshopt_metadata_octahedral.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Upstream golden NONE POSITION and OCTAHEDRAL NORMAL streams (declared NORMAL bounds are the published decoded int16 values) plus UINT64/UINT32 property-table columns as spec-written raw-group ATTRIBUTES streams and a raw UINT8 column.",
+      "sha256": "d7a340380b3065255191390c148a623e725d648a51efc962465320eb206e5a61"
+    },
+    {
+      "name": "meshopt_table_truncated",
+      "path": "meshopt_table_truncated.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The UINT64 property-table stream loses its final byte, so its tail baseline is misplaced.",
+      "sha256": "f7bb554bfd64ff8d2d0cb12a8258591d26f2575619e9ea15fe860c13401d715a",
+      "messageIncludes": [
+        "meshopt"
+      ]
+    },
+    {
+      "name": "meshopt_table_wrong_count",
+      "path": "meshopt_table_wrong_count.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The UINT64 property-table stream declares five elements for a 32-byte parent view.",
+      "sha256": "da829469bef646b982376e04ccadcb48f3df9df21ec2dedacb2889580980bd40",
+      "messageIncludes": [
+        "meshopt"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_filter_mismatch",
+      "path": "meshopt_octahedral_filter_mismatch.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "OCTAHEDRAL NORMAL elements store 2048 as 1.0, which is (1 << (K - 1)) - 1 for no K.",
+      "sha256": "f477b80a5970e569c7cc8dd8fe1dee6e9b252e1d17132c40cb9a6ab2ad6f4a4d",
+      "messageIncludes": [
+        "OCTAHEDRAL"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_stride",
+      "path": "meshopt_octahedral_stride.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The OCTAHEDRAL filter is declared on a 12-byte stride; the extension admits only 4 or 8.",
+      "sha256": "c9ae536a5a27f6a104178bfb42fbfce73e102e665c187a8e03ab082f503d5347",
+      "messageIncludes": [
+        "OCTAHEDRAL"
+      ]
+    },
+    {
+      "name": "meshopt_quaternion_unsupported",
+      "path": "meshopt_quaternion_unsupported.3tz",
+      "expectedKind": "unsupported",
+      "exitCode": 2,
+      "analyticFact": "QUATERNION stays outside the decoder: Unsupported, never a decoded guess.",
+      "sha256": "90e27945cca89e5b9194e5460e1ad90b32ac56a8287cce6651c9b2e93fd4922b",
+      "messageIncludes": [
+        "meshopt filters"
+      ]
     }
   ]
 }

@@ -77,12 +77,15 @@ impl Reader<'_> {
                 Some("INDICES") => Mode::Indices,
                 _ => return Err(invalid("meshopt view mode")),
             };
+            let filter = codec::Filter::parse(ext["filter"].as_str().unwrap_or("NONE"))
+                .ok_or_else(|| invalid("meshopt view filter"))?;
             let bytes = self
                 .bin
                 .get(start..start + length)
                 .ok_or_else(|| invalid("meshopt view outside BIN"))?;
             codec::check_header(bytes, mode).map_err(|e| invalid(e.to_string()))?;
-            return codec::decode(bytes, count, stride, mode).map_err(|e| invalid(e.to_string()));
+            return codec::decode_filtered(bytes, count, stride, mode, filter)
+                .map_err(|e| invalid(e.to_string()));
         }
         let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
         let length = view["byteLength"]
@@ -516,7 +519,14 @@ pub(crate) fn encode(
             for v in &values[rows.clone()] {
                 bytes.extend_from_slice(&v.to_le_bytes()[..width]);
             }
+            // Tightly packed column; 4/8-byte values are a lossless meshopt stream.
             let id = wire.view(&bytes, None);
+            if width.is_multiple_of(4) && !bytes.is_empty() {
+                wire.streams[id] = Some(MeshoptStream::Attributes {
+                    count: rows.len(),
+                    stride: width,
+                });
+            }
             properties.insert((*name).into(), json!({"values":id}));
             schema.insert(
                 (*name).into(),

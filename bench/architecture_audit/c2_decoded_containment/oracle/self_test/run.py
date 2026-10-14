@@ -66,6 +66,23 @@ def test_meshopt():
     stream = _encode_raw_attributes(payload, 6, 16)
     check("meshopt ATTRIBUTES raw-group round trip",
           meshopt.decode_attributes(stream, 6, 16) == payload)
+    # Upstream decodeFilterOct8/Oct12 (pinned meshopt_decoder.test.js): within the
+    # specified one-ULP output tolerance of the published values.
+    for case in vectors["octahedral"]:
+        stream = bytes.fromhex(case["encoded"])
+        raw = meshopt.decode_attributes(stream, case["count"], case["stride"])
+        fmt = "<%d%s" % (case["count"] * 4, "b" if case["stride"] == 4 else "h")
+        got = struct.unpack(fmt, meshopt.octahedral(raw, case["count"], case["stride"]))
+        want = [v - 65536 if case["stride"] == 8 and v > 32767 else v - 256 if case["stride"] == 4 and v > 127 else v
+                for v in case["decoded"]]
+        check("meshopt OCTAHEDRAL " + case["name"],
+              all(abs(a - b) <= 1 for a, b in zip(got, want)) and len(got) == len(want), got)
+    bad = struct.pack("<4h", 0, 1, 2048, 0)
+    try:
+        meshopt.octahedral(bad, 1, 8)
+        check("meshopt OCTAHEDRAL refuses a non-(2^(K-1)-1) one", False)
+    except meshopt.MeshoptError:
+        check("meshopt OCTAHEDRAL refuses a non-(2^(K-1)-1) one", True)
 
 
 def _encode_raw_attributes(data, count, stride):

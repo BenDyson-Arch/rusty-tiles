@@ -299,11 +299,17 @@ fn decode_meshopt(
     let filter = e
         .filter
         .map_or_else(|| Ok("NONE".to_owned()), |v| string(Some(v)))?;
-    if filter != "NONE" {
-        return Err(unsupported("meshopt filters other than NONE"));
-    }
+    let filter = super::meshopt::Filter::parse(&filter)
+        .ok_or_else(|| unsupported("meshopt filters other than NONE and OCTAHEDRAL"))?;
     let mode = string(e.mode)?;
+    let octahedral = filter == super::meshopt::Filter::Octahedral;
     match mode.as_str() {
+        "ATTRIBUTES" if octahedral && stride != 4 && stride != 8 => {
+            return Err(invalid("meshopt OCTAHEDRAL filter needs byteStride 4 or 8"))
+        }
+        "TRIANGLES" | "INDICES" if octahedral => {
+            return Err(invalid("meshopt index modes admit only the NONE filter"))
+        }
         "ATTRIBUTES" if stride > 0 && stride <= 256 && stride % 4 == 0 => {}
         "TRIANGLES" if [2, 4].contains(&stride) && count % 3 == 0 => {}
         "INDICES" if [2, 4].contains(&stride) => {}
@@ -318,7 +324,7 @@ fn decode_meshopt(
         _ => super::meshopt::Mode::Indices,
     };
     super::meshopt::check_header(compressed, mode)?;
-    let out = super::meshopt::decode(compressed, count, stride, mode)?;
+    let out = super::meshopt::decode_filtered(compressed, count, stride, mode, filter)?;
     Ok((out, stride))
 }
 // Extension declarations are semantic checks. Opaque extras and extension bodies
