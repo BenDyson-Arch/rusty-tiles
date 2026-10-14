@@ -125,6 +125,16 @@ pub struct TilerReport {
     pub maximum_glb_bytes: u64,
     pub maximum_leaf_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// Lossy pages a stronger UASTC step delivered after a gate miss.
+    pub escalated_pages: producer::EscalatedPages,
+    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    pub lossless_fallback_pages: u64,
+    /// Escalated pages by what the profile step missed: `gate` or `codec_verify`.
+    pub escalation_reasons: producer::EscalationReasons,
+    /// The first escalated pages in leaf order, naming leaf, slot, sources,
+    /// step and each missed gate with its level.
+    pub escalation_diagnostics: Vec<producer::EscalationDiagnostic>,
+    pub escalation_diagnostics_omitted: u64,
     pub tiles: u64,
     pub explicit_tiles: u64,
     pub implicit_roots: u64,
@@ -163,6 +173,11 @@ impl TilerReport {
             maximum_glb_bytes: leaf.maximum_glb_bytes,
             maximum_leaf_geometry_error: leaf.maximum_geometry_error,
             density_reduced_leaves: leaf.density_reduced_leaves,
+            escalated_pages: leaf.escalated_pages,
+            lossless_fallback_pages: leaf.lossless_fallback_pages,
+            escalation_reasons: leaf.escalation_reasons,
+            escalation_diagnostics: leaf.escalation_diagnostics.clone(),
+            escalation_diagnostics_omitted: leaf.escalation_diagnostics_omitted,
             tiles: facts.tiles,
             explicit_tiles: facts.explicit_tiles,
             implicit_roots: facts.implicit_roots,
@@ -196,6 +211,12 @@ pub struct CaptureDiagnostics {
     pub scratch_logical_need_bytes: u64,
     pub scratch_logical_peak_bytes: u64,
     pub scratch_memory_backed: bool,
+    /// Declared largest working set of each capture stage, retained files included.
+    pub scratch_stage_bytes: super::full::ScratchStages,
+    /// Measured peak of each capture stage (`lod_prepass` runs later and reads 0).
+    pub scratch_stage_peak_bytes: super::full::ScratchStages,
+    /// Output-side admission reservation on the work directory and output filesystems.
+    pub output_reserve_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -292,6 +313,8 @@ pub fn mesh_to_tileset(
         }
     };
     let work_path = work.path().to_owned();
+    // Capture admission also reserves output-side space where leaves and the archive stage.
+    config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
     let captured = match attempt
         .emit(&RunEvent::Progress {
             phase: "capture",
@@ -371,6 +394,9 @@ pub fn mesh_to_tileset(
                 scratch_logical_need_bytes: c.scratch.logical_need_bytes,
                 scratch_logical_peak_bytes: c.scratch_logical_peak_bytes,
                 scratch_memory_backed: c.scratch_memory_backed,
+                scratch_stage_bytes: c.scratch.stages,
+                scratch_stage_peak_bytes: c.scratch_stage_peaks,
+                output_reserve_bytes: c.scratch.output_reserve_bytes,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,

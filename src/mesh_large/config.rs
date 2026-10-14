@@ -81,6 +81,9 @@ pub(crate) struct TreeConfig {
     pub(crate) tile_bytes: u64,
     pub(crate) height_cap: u32,
     pub(crate) member_ceiling: u64,
+    /// Parents of the private leaf/forest work directory and of the output, whose
+    /// filesystems receive the admission output reservation; `None` reserves nothing.
+    pub output_parents: Option<(PathBuf, PathBuf)>,
 }
 
 impl TreeConfig {
@@ -116,6 +119,7 @@ impl TreeConfig {
             tile_bytes: TILE_BYTES,
             height_cap: HEIGHT_CAP,
             member_ceiling: MEMBER_CEILING_3TZ,
+            output_parents: None,
         }
     }
 
@@ -488,14 +492,11 @@ pub(crate) fn scratch_need_parts(
         .checked_add(32)?;
     let max_live_files = inventory_files.min(counted_files);
     // Record bytes are not physical allocation. Reserve one rounding unit plus 64KiB per
-    // live file, 1MiB directory metadata and another logical generation for extent overhead.
-    // These conservative reserves need measured filesystem acceptance; they are not a
-    // theorem about arbitrary filesystems, quotas or concurrent writers.
-    let reserve = allocation_unit_bytes
-        .checked_add(64 << 10)?
-        .checked_mul(max_live_files)?
-        .checked_add(1 << 20)?
-        .checked_add(logical)?;
+    // live file and 1MiB directory metadata. The logical sum already counts a second
+    // generation for every sort, so no further extent-overhead generation is added.
+    // These reserves need measured filesystem acceptance; they are not a theorem about
+    // arbitrary filesystems, quotas or concurrent writers.
+    let reserve = file_rounding(allocation_unit_bytes, max_live_files)?;
     let need = logical.checked_add(reserve)?;
     Some(ScratchNeed {
         corner_sort_bytes: a.checked_mul(2)?,
@@ -510,6 +511,73 @@ pub(crate) fn scratch_need_parts(
         need_bytes: need,
     })
 }
+
+/// Per-file allocation rounding: one allocation unit plus 64 KiB per live file, and 1 MiB of
+/// directory metadata.
+pub(crate) fn file_rounding(allocation_unit_bytes: u64, live_files: u64) -> Option<u64> {
+    allocation_unit_bytes
+        .checked_add(64 << 10)?
+        .checked_mul(live_files)?
+        .checked_add(1 << 20)
+}
+
+/// Scratch held by one external sort of `records`, from the sorter's file lifetimes
+/// (spill/sort.rs). Runs of `run_bytes / size_of::<T>()` records are written as chunk files of
+/// [`crate::spill::chunk_records`] records, and every reader removes a chunk once consumed. An
+/// intermediate merge (more than `F` runs at `finish`, or inventory compaction from `64F` runs
+/// while pushing) therefore holds its unconsumed inputs plus its output, which never exceeds
+/// `S` plus one partly read chunk per input: `F × chunk`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SortSpill {
+    /// `S`: every record once.
+    pub bytes: u64,
+    /// While pushing: `S`, plus merge slack once inventory compaction can run.
+    pub push_peak: u64,
+    /// Through `finish`: `S`, plus merge slack when an intermediate merge runs.
+    pub finish_peak: u64,
+    /// While the sorted stream is consumed: partly read chunks still on disk, at most one
+    /// per merged run (`min(S, F × chunk)`).
+    pub stream_slack: u64,
+}
+
+impl SortSpill {
+    /// Consuming this sort's stream while writing `outputs` bytes in proportion to progress:
+    /// the unread input and the written output trade off linearly, so the larger of the two
+    /// plus the partly read chunks bounds the stage.
+    pub(crate) fn flow(&self, outputs: u64) -> Option<u64> {
+        self.bytes.max(outputs).checked_add(self.stream_slack)
+    }
+}
+
+pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
+    let bytes = records.checked_mul(T::SIZE as u64)?;
+    let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
+    let runs = records.div_ceil(run_records);
+    let fan_in = sorter.fan_in as u64;
+    let chunk_bytes = crate::spill::chunk_records::<T>().checked_mul(T::SIZE as u64)?;
+    let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
+    let push_peak = if runs >= fan_in.checked_mul(64)? {
+        bytes.checked_add(slack)?
+    } else {
+        bytes
+    };
+    let finish_peak = if runs > fan_in {
+        push_peak.max(bytes.checked_add(slack)?)
+    } else {
+        push_peak
+    };
+    Some(SortSpill {
+        bytes,
+        push_peak,
+        finish_peak,
+        stream_slack: slack,
+    })
+}
+
+/// Published bytes per source triangle used to reserve output-side space at admission:
+/// the pohnpei 24.36M-triangle archive measured 118.96 B/tri (2026-10-14 scale findings).
+/// An estimate, not a bound: texture payloads are charged separately from image bytes.
+pub(crate) const OUTPUT_BYTES_PER_TRIANGLE: u64 = 119;
 
 /// Stage-1 sound lower bound on tiles: `⌈N/L⌉` leaves, plus the root when it must be internal.
 pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {
