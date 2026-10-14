@@ -18,7 +18,7 @@ legacy mesh explicit output retires with its replaced writer. This does not
 remove W1's bounded single-model explicit manifest/wrapping envelope, tiny
 explicit fixtures, shared external-document/skeleton machinery, or validation
 of third-party explicit tilesets. W1 and general packaging remain retained.
-0.4 emits Tiles 1.1/glTF 2.0; the official format transition belongs to 0.5.
+0.4 emits Tiles 1.1/glTF 2.0; the official format transition belongs to 0.6.
 
 Ownership/proof references: #113 release completeness; #120 numerical and
 coordinate kernels; #121 broader mesh; #122 spatial/source pipelines; #123
