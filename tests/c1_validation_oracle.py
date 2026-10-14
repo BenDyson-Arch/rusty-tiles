@@ -9,6 +9,7 @@ import base64
 import copy
 import hashlib
 import json
+import math
 import pathlib
 import struct
 import subprocess
@@ -122,6 +123,53 @@ OCT12_ENCODED = bytes.fromhex('a0010f0000003d5a010f0000000e0d013f0000009a9926013
 OCT12_DECODED = [[0, 16, 32767, 0], [0, 32621, 3088, 1], [32764, 16, 471, 0], [307, 28541, 16093, 1]]
 
 
+def _varint(value):
+    out = bytearray()
+    while True:
+        out.append((value & 0x7F) | (0x80 if value > 0x7F else 0))
+        value >>= 7
+        if not out[-1] & 0x80:
+            return bytes(out)
+
+
+def meshopt_indices(values):
+    """An INDICES stream from the pinned text (Appendix A, mode 2): baseline 0 deltas only."""
+    out, last = bytearray([0xd1]), 0
+    for v in values:
+        delta = (v - last + (1 << 31)) % (1 << 32) - (1 << 31)
+        assert -(1 << 30) <= delta < (1 << 30)
+        out += _varint(((delta << 2) if delta >= 0 else ((~delta) << 2) | 2) & 0xFFFFFFFF); last = v
+    return bytes(out + bytes(4))
+
+
+def meshopt_triangles_explicit(triangles):
+    """A TRIANGLES stream from the pinned text (Appendix A, mode 1): every triangle uses the
+    explicit 0xff code with data byte 0xff (all three indices via decodeIndex varints)."""
+    codes, data, last = bytearray([0xe1]), bytearray(), 0
+    for triangle in triangles:
+        codes.append(0xff); data.append(0xff)
+        for v in triangle:
+            delta = (v - last + (1 << 31)) % (1 << 32) - (1 << 31)
+            data += _varint(((delta << 1) if delta >= 0 else ((~delta) << 1) | 1) & 0xFFFFFFFF); last = v
+    return bytes(codes + data + bytes(16))
+
+
+def _f32(value):
+    return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
+def spec_octahedral(code, bits):
+    """Appendix B filter 1 pseudocode in binary32 (each operation rounded to f32; binary64
+    division and square root of binary32 operands round correctly), C99 round()."""
+    intmax = 127 if bits == 8 else 32767
+    one = _f32(code[2]); x = _f32(code[0] / one); y = _f32(code[1] / one)
+    z = _f32(_f32(1.0 - abs(x)) - abs(y)); t = min(z, 0.0)
+    x = _f32(x - (abs(t) if x >= 0 else -abs(t))); y = _f32(y - (abs(t) if y >= 0 else -abs(t)))
+    length = _f32(math.sqrt(_f32(_f32(_f32(x * x) + _f32(y * y)) + _f32(z * z))))
+    rounded = lambda v: int(math.copysign(math.floor(abs(_f32(_f32(v / length) * intmax)) + 0.5), v))
+    return [rounded(x), rounded(y), rounded(z), code[3]]
+
+
 def metadata_octahedral_cases(emit, position_stream, points):
     """Leaf-shaped GLBs: a NONE-filter POSITION stream, an OCTAHEDRAL NORMAL stream and
     property-table columns that are meshopt ATTRIBUTES streams (UINT64/UINT32) or raw
@@ -129,26 +177,37 @@ def metadata_octahedral_cases(emit, position_stream, points):
     triangle = struct.pack('<4Q', (1 << 53) + 7, (1 << 60) + 3, 5, (1 << 64) - 1)
     primitive = struct.pack('<4I', 3, 3, 3, 4)
     flags, ids = bytes([31, 31, 31, 23]), struct.pack('<4f', 0, 1, 2, 3)
+    oct12_bounds = ([min(v[i] for v in OCT12_DECODED) for i in range(3)], [max(v[i] for v in OCT12_DECODED) for i in range(3)])
 
-    def build(normal_stream=OCT12_ENCODED, normal_filter='OCTAHEDRAL', normal_stride=8, truncate=0, count=4):
-        streams = [(position_stream, 48, 12, 'NONE', 4), (normal_stream, 32, normal_stride, normal_filter, 4),
-                   (meshopt_raw_attributes(triangle, 8)[:len(meshopt_raw_attributes(triangle, 8)) - truncate], 32, 8, 'NONE', count),
-                   (meshopt_raw_attributes(primitive, 4), 16, 4, 'NONE', 4)]
+    def codes(values, bits=16):
+        return meshopt_raw_attributes(struct.pack('<%d%s' % (len(values) * 4, 'h' if bits == 16 else 'b'),
+                                                  *[c for v in values for c in v]), 8 if bits == 16 else 4)
+
+    def build(normal_stream=OCT12_ENCODED, normal_filter='OCTAHEDRAL', normal_stride=8, truncate=0, count=4,
+              normal_bounds=oct12_bounds, normal_component=5122, extra=()):
+        """`extra`: unreferenced compressed views (stream, decoded length, stride, mode, filter, count)."""
+        table_stream = meshopt_raw_attributes(triangle, 8)
+        streams = [(position_stream, 48, 12, 'NONE', 4, 'ATTRIBUTES'), (normal_stream, 4 * normal_stride, normal_stride, normal_filter, 4, 'ATTRIBUTES'),
+                   (table_stream[:len(table_stream) - truncate], 32, 8, 'NONE', count, 'ATTRIBUTES'),
+                   (meshopt_raw_attributes(primitive, 4), 16, 4, 'NONE', 4, 'ATTRIBUTES')]
+        streams += [(data, length, stride, flt, n, mode) for data, length, stride, mode, flt, n in extra]
         binary, views, fallback = bytearray(), [], 0
-        for data, length, stride, flt, n in streams:
+        for data, length, stride, flt, n, mode in streams:
             binary += bytes(-len(binary) % 8); start = len(binary); binary += data
             view = {'buffer': 1, 'byteOffset': fallback, 'byteLength': length,
                     'extensions': {'EXT_meshopt_compression': {'buffer': 0, 'byteOffset': start, 'byteLength': len(data),
-                                                               'byteStride': stride, 'count': n, 'mode': 'ATTRIBUTES', 'filter': flt}}}
+                                                               'byteStride': stride, 'count': n, 'mode': mode, 'filter': flt}}}
             if len(views) < 2:
                 view.update(byteStride=stride, target=34962)
-            views.append(view); fallback += length
-        for data, extra in [(flags, {}), (ids, {'byteStride': 4, 'target': 34962})]:
+            views.append(view); fallback += length + (-length % 8)
+        flag_view, id_view = len(views), len(views) + 1
+        for data, extra_fields in [(flags, {}), (ids, {'byteStride': 4, 'target': 34962})]:
             binary += bytes(-len(binary) % 8)
-            views.append({'buffer': 0, 'byteOffset': len(binary), 'byteLength': len(data), **extra}); binary += data
+            views.append({'buffer': 0, 'byteOffset': len(binary), 'byteLength': len(data), **extra_fields}); binary += data
         binary += bytes(-len(binary) % 8)
-        normal_min = [min(v[i] for v in OCT12_DECODED) for i in range(3)]
-        normal_max = [max(v[i] for v in OCT12_DECODED) for i in range(3)]
+        normal = {'bufferView': 1, 'componentType': normal_component, 'normalized': True, 'count': 4, 'type': 'VEC3'}
+        if normal_bounds:
+            normal.update(min=normal_bounds[0], max=normal_bounds[1])
         doc = {'asset': {'version': '2.0'}, 'scene': 0, 'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0}],
                'extensionsUsed': ['EXT_meshopt_compression', 'KHR_mesh_quantization', 'EXT_mesh_features', 'EXT_structural_metadata'],
                'extensionsRequired': ['EXT_meshopt_compression', 'KHR_mesh_quantization'],
@@ -156,9 +215,7 @@ def metadata_octahedral_cases(emit, position_stream, points):
                'bufferViews': views,
                'accessors': [{'bufferView': 0, 'componentType': 5126, 'count': 4, 'type': 'VEC3',
                               'min': [min(p[i] for p in points) for i in range(3)], 'max': [max(p[i] for p in points) for i in range(3)]},
-                             {'bufferView': 1, 'componentType': 5122, 'normalized': True, 'count': 4, 'type': 'VEC3',
-                              'min': normal_min, 'max': normal_max},
-                             {'bufferView': 5, 'componentType': 5126, 'count': 4, 'type': 'SCALAR'}],
+                             normal, {'bufferView': id_view, 'componentType': 5126, 'count': 4, 'type': 'SCALAR'}],
                'meshes': [{'primitives': [{'attributes': {'POSITION': 0, 'NORMAL': 1, '_FEATURE_ID_0': 2}, 'mode': 0,
                                            'extensions': {'EXT_mesh_features': {'featureIds': [{'featureCount': 4, 'attribute': 0, 'propertyTable': 0}]}}}]}],
                'extensions': {'EXT_structural_metadata': {
@@ -167,27 +224,67 @@ def metadata_octahedral_cases(emit, position_stream, points):
                        'primitive_index': {'type': 'SCALAR', 'componentType': 'UINT32', 'required': True},
                        'flags': {'type': 'SCALAR', 'componentType': 'UINT8', 'required': True}}}}},
                    'propertyTables': [{'class': 'source', 'count': 4, 'properties': {
-                       'triangle_index': {'values': 2}, 'primitive_index': {'values': 3}, 'flags': {'values': 4}}}]}}}
+                       'triangle_index': {'values': 2}, 'primitive_index': {'values': 3}, 'flags': {'values': flag_view}}}]}}}
         return glb(doc, bytes(binary))
 
     emit('meshopt_metadata_octahedral', build(), None,
          'Upstream golden NONE POSITION and OCTAHEDRAL NORMAL streams (declared NORMAL bounds are the published decoded int16 values) '
          'plus UINT64/UINT32 property-table columns as spec-written raw-group ATTRIBUTES streams and a raw UINT8 column.')
-    invalid_octahedral = meshopt_raw_attributes(struct.pack('<16h', *([0, 1, 2048, 0] * 4)), 8)
+    # Codes where the binary32 pseudocode and meshoptimizer's SIMD filter (rsqrt) differ by
+    # one unit on x86-64: declared spec-exact bounds must pass on every host.
+    one_unit = {8: [[71, 33, 127, 0], [-26, -5, 63, 0], [25, 19, 63, 0], [5, 32, 127, 0]],
+                16: [[7942, -95, 8191, 0], [0, 1, 2047, 0], [0, 1870, 2047, 0], [14, 1300, 2047, 0]]}
+    for bits, values in one_unit.items():
+        exact = [spec_octahedral(v, bits) for v in values]
+        bounds = ([min(e[i] for e in exact) for i in range(3)], [max(e[i] for e in exact) for i in range(3)])
+        assert bounds[1][0] == (110 if bits == 8 else 32759), bounds  # SIMD output there: 111 / 32758
+        component = 5120 if bits == 8 else 5122
+        emit('meshopt_octahedral_bounds_one_unit_%d' % bits,
+             build(codes(values, bits), normal_stride=4 if bits == 8 else 8, normal_bounds=bounds, normal_component=component), None,
+             'Declared NORMAL bounds are the spec pseudocode values in binary32; meshoptimizer SIMD output differs by one unit '
+             '(the extension specifies filter output to one ULP), so C1 admits bounds within one unit on filtered views.')
+        off = ([b - 3 for b in bounds[0]], bounds[1])
+        emit('meshopt_octahedral_bounds_beyond_one_unit_%d' % bits,
+             build(codes(values, bits), normal_stride=4 if bits == 8 else 8, normal_bounds=off, normal_component=component), 'invalid_input',
+             'Declared minima three units below the spec values are at least two units from any conforming decoder, beyond the one-unit tolerance.',
+             includes=['declared accessor bounds'])
+    raw_codes = [[0, 1, 2047, 0], [0, 1870, 2047, 1], [2017, 1, 2047, 0], [14, 1300, 2047, 1]]
+    raw_bounds = ([min(v[i] for v in raw_codes) for i in range(3)], [max(v[i] for v in raw_codes) for i in range(3)])
+    emit('meshopt_none_bounds_one_unit', build(normal_filter='NONE', normal_bounds=(raw_bounds[0], [raw_bounds[1][0] + 1] + raw_bounds[1][1:])), 'invalid_input',
+         'The golden octahedral stream read with filter NONE (raw codes): bounds one unit off stay exact-checked off filtered views.',
+         includes=['declared accessor bounds'])
+    emit('meshopt_octahedral_boundary', build(codes([[2047, 0, 2047, 0], [-2047, 0, 2047, 0], [0, 2047, 2047, 0], [0, -2047, 2047, 0]]), normal_bounds=None), None,
+         'Valid 12-bit codes with |x| or |y| exactly equal to the encoded 1.0 (2047).')
+    # The stride-12/16 elements hold valid codes as int16 both at the offsets a stride/4
+    # component reading would use (0, 3, 6 / 0, 4, 8) and as leading int16 x, y, 1.0, so
+    # only the stride rule refuses them.
+    stride12 = meshopt_raw_attributes(bytes.fromhex('00000000ff07ff0700000000') * 4, 12)
+    stride16 = meshopt_raw_attributes(bytes.fromhex('0000000000000000ff07000000000000') * 4, 16)
     for name, arguments, kind, fact, includes in [
         ('meshopt_table_truncated', {'truncate': 1}, 'invalid_input',
          'The UINT64 property-table stream loses its final byte, so its tail baseline is misplaced.', ['meshopt']),
         ('meshopt_table_wrong_count', {'count': 5}, 'invalid_input',
          'The UINT64 property-table stream declares five elements for a 32-byte parent view.', ['meshopt']),
-        ('meshopt_octahedral_filter_mismatch', {'normal_stream': invalid_octahedral}, 'invalid_input',
-         'OCTAHEDRAL NORMAL elements store 2048 as 1.0, which is (1 << (K - 1)) - 1 for no K.', ['OCTAHEDRAL']),
-        ('meshopt_octahedral_stride', {'normal_stream': position_stream, 'normal_stride': 12}, 'invalid_input',
-         'The OCTAHEDRAL filter is declared on a 12-byte stride; the extension admits only 4 or 8.', ['OCTAHEDRAL']),
+        ('meshopt_octahedral_filter_mismatch', {'normal_stream': codes([[0, 1, 2048, 0]] * 4)}, 'invalid_input',
+         'OCTAHEDRAL NORMAL elements store 2048 as 1.0, which is (1 << (K - 1)) - 1 for no K.', ['not a valid K-bit']),
+        ('meshopt_octahedral_x_over_one', {'normal_stream': codes([[0, 0, 2047, 0], [2048, 0, 2047, 0], [0, 0, 2047, 0], [0, 0, 2047, 0]]), 'normal_bounds': None},
+         'invalid_input', 'Element 1 has a valid 1.0 (2047) but |x| = 2048 exceeds it.', ['element 1 is not a valid K-bit']),
+        ('meshopt_octahedral_y_over_one', {'normal_stream': codes([[0, 0, 2047, 0], [0, -2048, 2047, 0], [0, 0, 2047, 0], [0, 0, 2047, 0]]), 'normal_bounds': None},
+         'invalid_input', 'Element 1 has a valid 1.0 (2047) but |y| = 2048 exceeds it.', ['element 1 is not a valid K-bit']),
+        ('meshopt_octahedral_stride', {'normal_stream': stride12, 'normal_stride': 12, 'normal_bounds': None}, 'invalid_input',
+         'The OCTAHEDRAL filter is declared on a 12-byte stride; the extension admits only 4 or 8.', ['byteStride 4 or 8']),
+        ('meshopt_octahedral_stride16', {'normal_stream': stride16, 'normal_stride': 16, 'normal_bounds': None}, 'invalid_input',
+         'The OCTAHEDRAL filter is declared on a 16-byte stride; the extension admits only 4 or 8.', ['byteStride 4 or 8']),
+        ('meshopt_octahedral_triangles', {'extra': [(meshopt_triangles_explicit([[0x007F0000] * 3]), 12, 4, 'TRIANGLES', 'OCTAHEDRAL', 3)]},
+         'invalid_input', 'An extra TRIANGLES view declares OCTAHEDRAL; its indices are valid 8-bit codes, so only the mode rule refuses it.',
+         ['index modes']),
+        ('meshopt_octahedral_indices', {'extra': [(meshopt_indices([0x007F0000] * 3), 12, 4, 'INDICES', 'OCTAHEDRAL', 3)]},
+         'invalid_input', 'An extra INDICES view declares OCTAHEDRAL; its indices are valid 8-bit codes, so only the mode rule refuses it.',
+         ['index modes']),
         ('meshopt_quaternion_unsupported', {'normal_filter': 'QUATERNION'}, 'unsupported',
          'QUATERNION stays outside the decoder: Unsupported, never a decoded guess.', ['meshopt filters']),
     ]:
         emit(name, build(**arguments), kind, fact, includes=includes)
-
 
 def generate(directory):
     directory = pathlib.Path(directory); directory.mkdir(parents=True, exist_ok=True)

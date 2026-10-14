@@ -58,11 +58,21 @@ R4. The filter runs in the linked meshoptimizer decoder after the existing heade
 mode, stride, count and allocation checks. Peak memory and byte charges are unchanged:
 the filter works in place.
 
-R5. Declared accessor bounds on a filtered view are compared exactly with this
-decoder's output, as for every view. The text specifies filter output only to one unit
-in the last place, so a producer that declares `min`/`max` for a filtered attribute can
-disagree with C1 by one unit. The tiler declares no `NORMAL` bounds. This limit is
-recorded here and is not relaxed.
+R5. Declared accessor bounds on an OCTAHEDRAL-filtered view, for BYTE or SHORT
+components, are admitted within one unit of this decoder's output. Appendix B specifies
+filter results "to one unit in the last place", and conforming decoders differ there:
+meshoptimizer's SIMD paths (including an rsqrt-based 8-bit path) and the scalar pseudocode
+can disagree by one unit depending on the host. An exact comparison would make the verdict
+depend on the host and would refuse spec-valid files. Every other view, including
+meshopt NONE views and unfiltered integer data, is still compared exactly. The tiler
+declares no `NORMAL` bounds on filtered views, so its output does not rely on the
+tolerance.
+
+R6. Mode is checked before the decoder runs: OCTAHEDRAL on a TRIANGLES or INDICES view is
+InvalidInput ("meshopt index modes admit only the NONE filter"), as is any stride other
+than 4 or 8 ("needs byteStride 4 or 8"), whatever the stream's content. On a big-endian
+host the filter is Unsupported, because the element checks and the linked filter assume
+little-endian storage.
 
 C1 still does not inspect metadata or feature semantics (`notInspected`). A compressed
 property-table view is decoded, sized and charged like any other view.
@@ -70,23 +80,40 @@ property-table view is decoded, sized and charged like any other view.
 ## Acceptance
 
 - C1 corpus (`tests/c1_validation_oracle.py`, standard library only; run by
-  `tests/c1_validate.rs` and CI). `meshopt_metadata_octahedral` is positive. It uses the
-  upstream golden NONE POSITION stream and the golden `decodeFilterOct12` NORMAL stream.
-  Its declared NORMAL bounds are the published decoded int16 values. It has UINT64 and
-  UINT32 property-table columns written as raw-group ATTRIBUTES streams from the spec
-  text, plus a raw UINT8 column. The hostile cases are:
-  - `meshopt_table_truncated`, `meshopt_table_wrong_count`,
-    `meshopt_octahedral_filter_mismatch` and `meshopt_octahedral_stride`: each
-    InvalidInput.
-  - `meshopt_quaternion_unsupported`: Unsupported.
-
-  None of them panics.
+  `tests/c1_validate.rs` and CI).
+  - Positive cases:
+    - `meshopt_metadata_octahedral` uses the upstream golden NONE POSITION and
+      `decodeFilterOct12` NORMAL streams. Its declared NORMAL bounds are the published
+      int16 values, and its UINT64/UINT32 property-table columns are raw-group
+      ATTRIBUTES streams written from the spec text, plus a raw UINT8 column.
+    - `meshopt_octahedral_boundary` has |x| and |y| equal to 1.0.
+    - `meshopt_octahedral_bounds_one_unit_{8,16}` declares bounds computed by the
+      pseudocode in binary32. These are one unit from meshoptimizer's SIMD output on
+      x86-64: 110 against 111, and 32759 against 32758.
+  - InvalidInput cases:
+    - `meshopt_table_truncated` and `meshopt_table_wrong_count`.
+    - `meshopt_octahedral_filter_mismatch`: no valid K.
+    - `meshopt_octahedral_x_over_one` and `_y_over_one`: a valid 1.0, but |x| or |y| is
+      greater.
+    - `meshopt_octahedral_stride` and `_stride16`: valid codes where a stride/4 reading
+      would look, so only the stride rule refuses them.
+    - `meshopt_octahedral_triangles` and `_indices`: spec-written index streams whose
+      values are valid 8-bit codes, so only the mode rule refuses them.
+    - `meshopt_octahedral_bounds_beyond_one_unit_{8,16}`.
+    - `meshopt_none_bounds_one_unit`: the tolerance does not reach NONE views.
+  - Unsupported: `meshopt_quaternion_unsupported`.
+  - None of these cases panics.
 - The C2 oracle's meshopt decoder (`c2o/meshopt.py`, re-pinned) implements filter 1
-  independently from the pseudocode. Its self-test reproduces the upstream
-  `decodeFilterOct8`/`Oct12` outputs within one unit and refuses an invalid "1.0". It
-  reports Contained for the positive case and Undecided for each hostile case.
-- Production mutants
-  ([mesh_archive_size/mutants.py](../../bench/architecture_audit/mesh_archive_size/mutants.py)):
-  skipping the filter, skipping the K-bit check, skipping table decoding in the LOD
-  reader, misreading UINT64 columns, writing raw columns and swapping octahedral inputs.
-  The named tests catch each one.
+  independently from the pseudocode. Its self-test calls `decode_view` for:
+  - the upstream `decodeFilterOct8`/`Oct12` outputs, within one unit;
+  - the |x| = |y| = 1.0 boundary;
+  - the 1.0, |x| and |y| refusals;
+  - stride 12;
+  - TRIANGLES and INDICES views that carry the filter.
+
+  It reports Contained for the positive cases and Undecided for each stream-level
+  hostile case. It does not check declared NORMAL bounds; C1 refuses those first.
+- Production and oracle mutants
+  ([mesh_archive_size/mutants.py](../../bench/architecture_audit/mesh_archive_size/mutants.py))
+  include the independent audit's mutants A–H and the oracle survivors. Each one is
+  killed by its named tests; the record is in the evidence store.

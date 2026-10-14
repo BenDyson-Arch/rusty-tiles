@@ -105,9 +105,9 @@ impl Reader<'_> {
             };
             let filter = codec::Filter::parse(ext["filter"].as_str().unwrap_or("NONE"))
                 .ok_or_else(|| invalid("meshopt view filter"))?;
-            let bytes = self
-                .bin
-                .get(start..start + length)
+            let bytes = start
+                .checked_add(length)
+                .and_then(|end| self.bin.get(start..end))
                 .ok_or_else(|| invalid("meshopt view outside BIN"))?;
             codec::check_header(bytes, mode).map_err(|e| invalid(e.to_string()))?;
             return codec::decode_filtered(bytes, count, stride, mode, filter)
@@ -117,9 +117,9 @@ impl Reader<'_> {
         let length = view["byteLength"]
             .as_u64()
             .ok_or_else(|| invalid("view without length"))? as usize;
-        Ok(self
-            .bin
-            .get(start..start + length)
+        Ok(start
+            .checked_add(length)
+            .and_then(|end| self.bin.get(start..end))
             .ok_or_else(|| invalid("view outside BIN"))?
             .to_vec())
     }

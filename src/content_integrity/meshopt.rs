@@ -143,6 +143,13 @@ pub(crate) fn decode_filtered(
 /// Checks every octahedral element, then applies the linked decoder's filter in place
 /// (no further allocation, so the decode peak bound is unchanged).
 fn octahedral(words: &mut [u32], count: usize, stride: usize) -> Result<(), FormatError> {
+    // The element checks read little-endian glTF bytes from native words and the native
+    // filter works on native-endian integers: both agree only on little-endian hosts.
+    if cfg!(target_endian = "big") {
+        return Err(FormatError::Unsupported(
+            "meshopt OCTAHEDRAL decoding on a big-endian host".into(),
+        ));
+    }
     let component = stride / 4;
     let byte = |at: usize| words[at / 4].to_ne_bytes()[at % 4];
     let read = |at: usize| -> i32 {

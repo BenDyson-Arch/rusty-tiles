@@ -132,7 +132,7 @@ pub(crate) fn encode_octahedral(vectors: &[[f32; 3]], bits: u8) -> Result<Vec<u8
         return Err(Error::msg("octahedral bits outside 2..=16"));
     }
     if vectors.iter().flatten().any(|v| !v.is_finite()) {
-        return Err(Error::msg("non-finite octahedral input"));
+        return Err(Error::Data("non-finite octahedral input vector".into()));
     }
     let input: Vec<f32> = vectors
         .iter()

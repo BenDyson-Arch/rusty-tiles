@@ -66,24 +66,49 @@ def test_meshopt():
     stream = _encode_raw_attributes(payload, 6, 16)
     check("meshopt ATTRIBUTES raw-group round trip",
           meshopt.decode_attributes(stream, 6, 16) == payload)
-    # Upstream decodeFilterOct8/Oct12 (pinned meshopt_decoder.test.js): within the
-    # specified one-ULP output tolerance of the published values.
+    # Upstream decodeFilterOct8/Oct12 (pinned meshopt_decoder.test.js) through the view-level
+    # entry point: within the specified one-ULP output tolerance of the published values.
+    def view(stream, stride, count, mode="ATTRIBUTES", flt="OCTAHEDRAL"):
+        ext = {"buffer": 0, "byteLength": len(stream), "byteStride": stride, "count": count,
+               "mode": mode, "filter": flt}
+        return meshopt.decode_view(ext, {"byteLength": stride * count}, stream)
+
+    def refused(name, thunk):
+        try:
+            thunk()
+            check(name, False)
+        except meshopt.MeshoptError:
+            check(name, True)
+
     for case in vectors["octahedral"]:
-        stream = bytes.fromhex(case["encoded"])
-        raw = meshopt.decode_attributes(stream, case["count"], case["stride"])
-        fmt = "<%d%s" % (case["count"] * 4, "b" if case["stride"] == 4 else "h")
-        got = struct.unpack(fmt, meshopt.octahedral(raw, case["count"], case["stride"]))
-        want = [v - 65536 if case["stride"] == 8 and v > 32767 else v - 256 if case["stride"] == 4 and v > 127 else v
+        stride = case["stride"]
+        fmt = "<%d%s" % (case["count"] * 4, "b" if stride == 4 else "h")
+        got = struct.unpack(fmt, view(bytes.fromhex(case["encoded"]), stride, case["count"]))
+        want = [v - 65536 if stride == 8 and v > 32767 else v - 256 if stride == 4 and v > 127 else v
                 for v in case["decoded"]]
         check("meshopt OCTAHEDRAL " + case["name"],
               all(abs(a - b) <= 1 for a, b in zip(got, want)) and len(got) == len(want), got)
-    bad = struct.pack("<4h", 0, 1, 2048, 0)
-    try:
-        meshopt.octahedral(bad, 1, 8)
-        check("meshopt OCTAHEDRAL refuses a non-(2^(K-1)-1) one", False)
-    except meshopt.MeshoptError:
-        check("meshopt OCTAHEDRAL refuses a non-(2^(K-1)-1) one", True)
-
+    codes = lambda *elements: _encode_raw_attributes(
+        struct.pack("<%dh" % (4 * len(elements)), *[c for e in elements for c in e]), len(elements), 8)
+    edge = view(codes((2047, 0, 2047, 0), (-2047, 0, 2047, 0), (0, 2047, 2047, 0), (0, -2047, 2047, 0)), 8, 4)
+    check("meshopt OCTAHEDRAL admits |x| = |y| = 1.0",
+          struct.unpack("<16h", edge) == (32767, 0, 0, 0, -32767, 0, 0, 0, 0, 32767, 0, 0, 0, -32767, 0, 0), edge)
+    refused("meshopt OCTAHEDRAL refuses a non-(2^(K-1)-1) one", lambda: view(codes((0, 1, 2048, 0)), 8, 1))
+    refused("meshopt OCTAHEDRAL refuses |x| > 1.0", lambda: view(codes((2048, 0, 2047, 0)), 8, 1))
+    refused("meshopt OCTAHEDRAL refuses |y| > 1.0", lambda: view(codes((0, -2048, 2047, 0)), 8, 1))
+    # Valid codes both as leading int16 x, y, 1.0 and at the int16 offsets a stride/4 reading
+    # would use (0, 3, 6): only the stride rule refuses.
+    refused("meshopt OCTAHEDRAL refuses byteStride 12",
+            lambda: view(_encode_raw_attributes(bytes.fromhex("00000000ff07ff0700000000"), 1, 12), 12, 1))
+    # Index streams whose values are valid 8-bit codes (0x007f0000): only the mode rule refuses.
+    triangles = bytes.fromhex("e1ffff" + "8080f807" + "0000") + bytes(16)
+    check("meshopt TRIANGLES explicit-code vector decodes", view(triangles, 4, 3, "TRIANGLES", "NONE")
+          == struct.pack("<3I", *[0x7F0000] * 3))
+    refused("meshopt OCTAHEDRAL refuses TRIANGLES", lambda: view(triangles, 4, 3, "TRIANGLES"))
+    indices = bytes([0xD1]) + bytes.fromhex("8080f00f") + bytes(2) + bytes(4)
+    check("meshopt INDICES vector decodes", view(indices, 4, 3, "INDICES", "NONE")
+          == struct.pack("<3I", *[0x7F0000] * 3))
+    refused("meshopt OCTAHEDRAL refuses INDICES", lambda: view(indices, 4, 3, "INDICES"))
 
 def _encode_raw_attributes(data, count, stride):
     """Minimal encoder: one block, every group in mode 3, baseline = zeros."""

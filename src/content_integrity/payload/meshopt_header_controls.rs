@@ -78,7 +78,7 @@ fn owner(stream: &[u8], count: usize, stride: usize, mode: Mode) -> FormatResult
     .unwrap();
     let extension: records::Meshopt<'_> = record(Some(admitted.raw())).unwrap();
     let buffers = [Cow::Borrowed(stream)];
-    decode_meshopt(&extension, 0, &buffers, 4096).map(|(out, _)| out)
+    decode_meshopt(&extension, 0, &buffers, 4096).map(|(out, _, _)| out)
 }
 fn is_header_error(result: &FormatResult<Vec<u8>>) -> bool {
     matches!(result, Err(FormatError::InvalidInput(m)) if m.starts_with("meshopt stream header"))

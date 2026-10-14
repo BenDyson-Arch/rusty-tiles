@@ -148,6 +148,11 @@ impl Wire {
     /// Unit normals as `bits`-bit octahedral codes behind the meshopt OCTAHEDRAL filter;
     /// clients decode them to normalized SHORT VEC3 (KHR_mesh_quantization).
     fn octahedral(&mut self, normals: &[[f32; 3]], bits: u8) -> Result<usize, JobError> {
+        // Capture refuses non-finite normals, so one here is a broken prepared leaf: a
+        // typed state failure, as for non-finite float attributes, never a budget retry.
+        if normals.iter().flatten().any(|v| !v.is_finite()) {
+            return Err(invalid("non-finite prepared leaf NORMAL"));
+        }
         let bytes = glb::encode_octahedral(normals, bits).map_err(|e| invalid(&e.to_string()))?;
         let count = normals.len();
         let view = self.view(&bytes, Some(MeshoptStream::Octahedral { count, stride: 8 }))?;
@@ -1022,6 +1027,29 @@ mod tests {
             let lossless = profile == Profile::Lossless;
             assert_eq!(normal["componentType"], if lossless { 5126 } else { 5122 });
             assert_eq!(normal["normalized"], !lossless);
+            // Filter output is specified to one unit, so octahedral NORMAL declares no
+            // bounds a decoder on another host could miss by that unit.
+            assert!(normal.get("min").is_none() && normal.get("max").is_none());
+        }
+    }
+    /// A non-finite prepared NORMAL is a typed state failure in every profile (the octahedral
+    /// encoder refuses it as data), never a budget retry or a silently encoded vector.
+    #[test]
+    fn non_finite_normals_are_typed_failures() {
+        assert!(matches!(
+            glb::encode_octahedral(&[[0., f32::NAN, 1.]], 12),
+            Err(crate::error::Error::Data(_))
+        ));
+        for profile in [Profile::Balanced, Profile::Lossless] {
+            let mut input = atlas();
+            input.primitives[0].triangles[1].corners[2].normal = [f32::INFINITY, 0., 0.];
+            match encode(&input, &plan(profile), 1, TILE_LIMIT) {
+                Err(WriteError::Failure(error)) => {
+                    assert_eq!(error.kind(), JobErrorKind::InvalidState, "{profile:?}");
+                    assert!(error.message().contains("finite"), "{error}");
+                }
+                other => panic!("{profile:?}: {other:?}"),
+            }
         }
     }
     /// The 12-bit octahedral NORMAL bound over a dense sphere: decoded through the same

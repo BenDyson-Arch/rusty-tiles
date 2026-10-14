@@ -1365,6 +1365,63 @@
       "sha256": "d7a340380b3065255191390c148a623e725d648a51efc962465320eb206e5a61"
     },
     {
+      "name": "meshopt_octahedral_bounds_one_unit_8",
+      "path": "meshopt_octahedral_bounds_one_unit_8.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Declared NORMAL bounds are the spec pseudocode values in binary32; meshoptimizer SIMD output differs by one unit (the extension specifies filter output to one ULP), so C1 admits bounds within one unit on filtered views.",
+      "sha256": "07aad2fbe0698b64cd50681dbea63b57126b8390be9ba6e4cd6bfd5c91b86339"
+    },
+    {
+      "name": "meshopt_octahedral_bounds_beyond_one_unit_8",
+      "path": "meshopt_octahedral_bounds_beyond_one_unit_8.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Declared minima three units below the spec values are at least two units from any conforming decoder, beyond the one-unit tolerance.",
+      "sha256": "9a6a8a6152d3e7ebe08fd9893f8e90623973e941ebedf01345fdee2c2635b451",
+      "messageIncludes": [
+        "declared accessor bounds"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_bounds_one_unit_16",
+      "path": "meshopt_octahedral_bounds_one_unit_16.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Declared NORMAL bounds are the spec pseudocode values in binary32; meshoptimizer SIMD output differs by one unit (the extension specifies filter output to one ULP), so C1 admits bounds within one unit on filtered views.",
+      "sha256": "4b14f07b8900c411086b768397d2b793c35b9b840711746e0a33e899e2589d59"
+    },
+    {
+      "name": "meshopt_octahedral_bounds_beyond_one_unit_16",
+      "path": "meshopt_octahedral_bounds_beyond_one_unit_16.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Declared minima three units below the spec values are at least two units from any conforming decoder, beyond the one-unit tolerance.",
+      "sha256": "31d32fc4eb13f932cb0c02bef7e63329aa9fcc1a8616b75ff7df27382383943a",
+      "messageIncludes": [
+        "declared accessor bounds"
+      ]
+    },
+    {
+      "name": "meshopt_none_bounds_one_unit",
+      "path": "meshopt_none_bounds_one_unit.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The golden octahedral stream read with filter NONE (raw codes): bounds one unit off stay exact-checked off filtered views.",
+      "sha256": "1ba14f04e16c9bc219c0e8949f852754c6f0b2d8ab2b06829291e20529a162dd",
+      "messageIncludes": [
+        "declared accessor bounds"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_boundary",
+      "path": "meshopt_octahedral_boundary.3tz",
+      "expectedKind": null,
+      "exitCode": 0,
+      "analyticFact": "Valid 12-bit codes with |x| or |y| exactly equal to the encoded 1.0 (2047).",
+      "sha256": "23ff7d250ce8a28ecc4da8e2ec91492a86d4be8cca3573bc6a72565e072f5e5c"
+    },
+    {
       "name": "meshopt_table_truncated",
       "path": "meshopt_table_truncated.3tz",
       "expectedKind": "invalid_input",
@@ -1394,7 +1451,29 @@
       "analyticFact": "OCTAHEDRAL NORMAL elements store 2048 as 1.0, which is (1 << (K - 1)) - 1 for no K.",
       "sha256": "f477b80a5970e569c7cc8dd8fe1dee6e9b252e1d17132c40cb9a6ab2ad6f4a4d",
       "messageIncludes": [
-        "OCTAHEDRAL"
+        "not a valid K-bit"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_x_over_one",
+      "path": "meshopt_octahedral_x_over_one.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Element 1 has a valid 1.0 (2047) but |x| = 2048 exceeds it.",
+      "sha256": "2fbd4f488845628ad00cd386a436d188f81f08965605263a9059a9ceb01cf48f",
+      "messageIncludes": [
+        "element 1 is not a valid K-bit"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_y_over_one",
+      "path": "meshopt_octahedral_y_over_one.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "Element 1 has a valid 1.0 (2047) but |y| = 2048 exceeds it.",
+      "sha256": "1866cbd211c3779a93c10d9036fdb4d48870ac2a14c3aaf0d36fb87359fe0bb7",
+      "messageIncludes": [
+        "element 1 is not a valid K-bit"
       ]
     },
     {
@@ -1403,9 +1482,42 @@
       "expectedKind": "invalid_input",
       "exitCode": 3,
       "analyticFact": "The OCTAHEDRAL filter is declared on a 12-byte stride; the extension admits only 4 or 8.",
-      "sha256": "c9ae536a5a27f6a104178bfb42fbfce73e102e665c187a8e03ab082f503d5347",
+      "sha256": "2bb85eb4b8ebe4a33c714b1979fc85c161c548af49a6dca08f62a1ad951cec51",
       "messageIncludes": [
-        "OCTAHEDRAL"
+        "byteStride 4 or 8"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_stride16",
+      "path": "meshopt_octahedral_stride16.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "The OCTAHEDRAL filter is declared on a 16-byte stride; the extension admits only 4 or 8.",
+      "sha256": "d4be20776b03ccec5461bd0ef9c639562396cc4502c2c2b7c40b6a4184318296",
+      "messageIncludes": [
+        "byteStride 4 or 8"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_triangles",
+      "path": "meshopt_octahedral_triangles.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "An extra TRIANGLES view declares OCTAHEDRAL; its indices are valid 8-bit codes, so only the mode rule refuses it.",
+      "sha256": "f8dc6a2a28c6fd755f7377e7131a3140244c8b8ebb6f8b8229afb323caeb79e5",
+      "messageIncludes": [
+        "index modes"
+      ]
+    },
+    {
+      "name": "meshopt_octahedral_indices",
+      "path": "meshopt_octahedral_indices.3tz",
+      "expectedKind": "invalid_input",
+      "exitCode": 3,
+      "analyticFact": "An extra INDICES view declares OCTAHEDRAL; its indices are valid 8-bit codes, so only the mode rule refuses it.",
+      "sha256": "c862e94f5fe23c400eefd4c42f5d4c5540347e91f4b1fafdcbc79cee255a1c87",
+      "messageIncludes": [
+        "index modes"
       ]
     },
     {

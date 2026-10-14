@@ -21,8 +21,15 @@ about 50 MB on pohnpei.
 
 ## Tooling kept here
 
-`mutants.py` holds the production mutants. Each one patches a single site; the run passes
-only if the named tests fail, and it restores the source by hash.
+`mutants.py` holds 22 production and oracle mutants:
+
+- 6 slice mutants.
+- The independent #226 audit's mutants A to H.
+- 3 mutants for the one-unit bound tolerance.
+- 5 mutants for the C2 oracle's meshopt decoder.
+
+A mutant passes only if its named check fails: a test, an aborted test process or the oracle
+self-test. The runner restores every source by hash.
 
 ## Evidence (outside git)
 
@@ -32,7 +39,7 @@ The evidence is in `~/.cache/rusty-tiles-evidence/mesh-size-20261014/`:
 - `nerr/`: the archive comparison tool.
 - `nerr-pohnpei.json`: pohnpei compared leaf by leaf. Tables, positions and feature IDs
   are byte-identical. It holds the normal error and the per-tier bytes.
-- `mutants-report.json`.
+- `mutants-report.json` (first round) and `mutants-report-audit.json` (all 22 after the audit fixes).
 - `pick/`: the Cesium 1.146 pick proof over CDP, with leaf and proxy picks and their
   checks.
 - `h8/` and `scripts/oracle_geometry_subset.py`: leaf-oracle decode, provenance and

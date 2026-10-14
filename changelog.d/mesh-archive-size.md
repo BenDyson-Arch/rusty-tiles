@@ -11,4 +11,5 @@
   remain provisional.
 - Validation decodes the `EXT_meshopt_compression` OCTAHEDRAL filter: invalid
   octahedral codes, non-ATTRIBUTES modes and strides other than 4 or 8 are
-  invalid input; QUATERNION and EXPONENTIAL remain unsupported.
+  invalid input; declared bounds on filtered accessors may differ by one unit (the
+  filter's specified precision); QUATERNION and EXPONENTIAL remain unsupported.
