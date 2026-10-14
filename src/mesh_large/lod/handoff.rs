@@ -251,7 +251,7 @@ impl Lease {
         count: u64,
         size: usize,
     ) -> Result<(), JobError> {
-        self.charge(count.checked_mul(size as u64).unwrap_or(u64::MAX))
+        self.charge(count.saturating_mul(size as u64))
     }
     pub(in crate::mesh_large) fn used(&self) -> u64 {
         self.used
@@ -780,7 +780,7 @@ mod tests {
                 material: u32::MAX,
                 row: 0,
                 error: 1.,
-                donor_ranges: vec![0..4],
+                donor_ranges: std::iter::once(0..4).collect(),
             }],
             gltf: vec![FrozenGltfPrimitive {
                 node: 0,

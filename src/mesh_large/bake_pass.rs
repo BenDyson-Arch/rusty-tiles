@@ -23,12 +23,14 @@ use super::{
 };
 use crate::{
     glb::{self, MeshoptLayout, MeshoptStream},
+    gltf_source::source::Material,
     JobError, JobErrorKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     fs,
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -477,6 +479,10 @@ pub(in crate::mesh_large) struct PreparedPrimitive {
     /// Texture-based feature-ID sets (categorical ID pages), appended after the copied
     /// attribute sets; any number.
     pub extra_feature_ids: Vec<Value>,
+    /// Its faces have no raster support (zero-area or no page): its material, if any,
+    /// must bind no texture and it carries no UV sets. Raster primitives keep every slot
+    /// their source materials bind.
+    pub no_raster: bool,
 }
 
 /// Everything the baker asks the root to assemble.
@@ -660,7 +666,13 @@ impl<'a> BakePass<'a> {
         memory_limit: u64,
     ) -> Result<Assembly, JobError> {
         (self.check)()?;
-        assemble(frozen, prepared, self.tile_bytes, memory_limit)
+        assemble(
+            frozen,
+            prepared,
+            &self.captured.materials,
+            self.tile_bytes,
+            memory_limit,
+        )
     }
 
     /// Publish an accepted member over the tile's untextured proxy (geometric error
@@ -913,6 +925,7 @@ pub(in crate::mesh_large) fn assembly_bytes(frozen: &FrozenNode, prepared: &Prep
 pub(in crate::mesh_large) fn assemble(
     frozen: &FrozenNode,
     prepared: &PreparedNode,
+    source_materials: &[Material],
     tile_bytes: u64,
     memory_limit: u64,
 ) -> Result<Assembly, JobError> {
@@ -927,6 +940,8 @@ pub(in crate::mesh_large) fn assemble(
         ));
     }
     frozen.validate()?;
+    check_transforms(frozen)?;
+    audit_materials(frozen, prepared, source_materials)?;
     // Every frozen face exactly once, each within its declared glTF primitive.
     let mut seen = vec![false; frozen.faces.len()];
     for p in &prepared.primitives {
@@ -1189,6 +1204,171 @@ fn check_faces(frozen: &FrozenNode, glb: &[u8]) -> Result<(), JobError> {
         return Err(state(
             "a committed member does not decode to its frozen faces",
         ));
+    }
+    Ok(())
+}
+
+/// The supported H17 transform, checked at the owner before anything is assembled: every
+/// frozen glTF primitive has a finite translation and a bit-identical, positive, finite
+/// uniform scale (identity included). Anything else is a contract error.
+fn check_transforms(frozen: &FrozenNode) -> Result<(), JobError> {
+    for g in &frozen.gltf {
+        let t = g.translation.map(f32::from_bits);
+        let scale = f32::from_bits(g.scale[0]);
+        if t.iter().any(|v| !v.is_finite())
+            || g.scale.iter().any(|&b| b != g.scale[0])
+            || !(scale.is_finite() && scale > 0.)
+        {
+            return Err(state(format!(
+                "frozen glTF primitive {}/{}: transform is not a finite translation with a \
+                 positive uniform scale",
+                g.mesh, g.index
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The literal (non-texture) factors a baked material must keep from its source material,
+/// with glTF defaults filled in.
+fn literal_factors(material: &Value) -> [Value; 7] {
+    let pbr = |k: &str, default: Value| {
+        material
+            .get("pbrMetallicRoughness")
+            .and_then(|p| p.get(k))
+            .cloned()
+            .unwrap_or(default)
+    };
+    let top = |k: &str, default: Value| material.get(k).cloned().unwrap_or(default);
+    let alpha = top("alphaMode", json!("OPAQUE"));
+    let mask = alpha == json!("MASK");
+    [
+        pbr("baseColorFactor", json!([1.0, 1.0, 1.0, 1.0])),
+        pbr("metallicFactor", json!(1.0)),
+        pbr("roughnessFactor", json!(1.0)),
+        top("emissiveFactor", json!([0.0, 0.0, 0.0])),
+        top("doubleSided", json!(false)),
+        alpha,
+        if mask {
+            top("alphaCutoff", json!(0.5))
+        } else {
+            Value::Null
+        },
+    ]
+}
+
+/// Material, remap and no-raster semantics at the owner, independent of the baker:
+/// every texture, image, sampler and UV-set reference resolves; a normal texture is
+/// published with scale 1 (the source scale is absorbed into the baked normals); each
+/// output material keeps its faces' source literal factors; a raster primitive keeps every
+/// slot its sources bind, and a no-raster primitive binds none and carries no UVs.
+fn audit_materials(
+    frozen: &FrozenNode,
+    prepared: &PreparedNode,
+    sources: &[Material],
+) -> Result<(), JobError> {
+    let bad = |what: String| Err(state(format!("prepared appearance: {what}")));
+    for (i, t) in prepared.textures.iter().enumerate() {
+        let source = t
+            .get("source")
+            .or_else(|| t.pointer("/extensions/KHR_texture_basisu/source"))
+            .and_then(Value::as_u64);
+        if source.is_none_or(|s| s as usize >= prepared.images.len()) {
+            return bad(format!("texture {i} names no image"));
+        }
+        if t.get("sampler")
+            .and_then(Value::as_u64)
+            .is_some_and(|s| s as usize >= prepared.samplers.len())
+        {
+            return bad(format!("texture {i} names no sampler"));
+        }
+    }
+    let infos = |m: &Value| -> Vec<(String, Value)> {
+        Material::slot_pointers()
+            .filter_map(|p| m.pointer(&p).map(|v| (p, v.clone())))
+            .collect()
+    };
+    for (i, m) in prepared.materials.iter().enumerate() {
+        for (slot, info) in infos(m) {
+            if info
+                .get("index")
+                .and_then(Value::as_u64)
+                .is_none_or(|t| t as usize >= prepared.textures.len())
+            {
+                return bad(format!("material {i} {slot} names no texture"));
+            }
+            if slot.ends_with("normalTexture")
+                && info.get("scale").is_some_and(|s| s.as_f64() != Some(1.0))
+            {
+                return bad(format!(
+                    "material {i} publishes normalTexture.scale {} (the source scale must be \
+                     absorbed and published as 1)",
+                    info["scale"]
+                ));
+            }
+        }
+    }
+    for (k, p) in prepared.primitives.iter().enumerate() {
+        let material = p.material.and_then(|m| prepared.materials.get(m as usize));
+        let bound = material.map(infos).unwrap_or_default();
+        for (slot, info) in &bound {
+            let uv = info.get("texCoord").and_then(Value::as_u64).unwrap_or(0) as usize;
+            if uv >= p.uvs.len() {
+                return bad(format!("primitive {k} {slot} reads TEXCOORD_{uv} it lacks"));
+            }
+        }
+        for set in &p.extra_feature_ids {
+            if let Some(texture) = set.get("texture") {
+                let uv = texture.get("texCoord").and_then(Value::as_u64).unwrap_or(0) as usize;
+                if texture
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .is_none_or(|t| t as usize >= prepared.textures.len())
+                    || uv >= p.uvs.len()
+                {
+                    return bad(format!("primitive {k} has a dangling feature-ID texture"));
+                }
+            }
+        }
+        if p.no_raster && (!bound.is_empty() || !p.uvs.is_empty()) {
+            return bad(format!(
+                "no-raster primitive {k} binds a texture or carries UVs"
+            ));
+        }
+        // Source materials of the primitive's faces (identity survives local splits).
+        let mut seen = BTreeSet::new();
+        for &f in &p.faces {
+            let Some(face) = frozen.faces.get(f as usize) else {
+                return bad(format!("primitive {k} names no frozen face {f}"));
+            };
+            let id = frozen
+                .primitives
+                .get(face.source as usize)
+                .map_or(u32::MAX, |s| s.material);
+            if !seen.insert(id) || id == u32::MAX {
+                continue;
+            }
+            let Some(source) = sources.get(id as usize) else {
+                return bad(format!("source material {id} is unknown"));
+            };
+            let Some(material) = material else {
+                return bad(format!("primitive {k} drops source material {id}"));
+            };
+            if literal_factors(material) != literal_factors(source.literal()) {
+                return bad(format!(
+                    "primitive {k} changes literal factors of source material {id}"
+                ));
+            }
+            if !p.no_raster {
+                for slot in source.bound_slot_pointers() {
+                    if material.pointer(&slot).is_none() {
+                        return bad(format!(
+                            "raster primitive {k} detaches {slot} of source material {id}"
+                        ));
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1563,17 +1743,42 @@ mod tests {
 
     /// The prepared node a minimal baker would hand over: every frozen glTF primitive as one
     /// output primitive, a flat 2x2 page, UV and normal per corner.
-    fn flat(frozen: &FrozenNode) -> PreparedNode {
+    /// A flat textured member: per frozen glTF primitive, its sources' material with every
+    /// bound slot pointing at one page (literal factors kept, normal scale published as 1).
+    fn flat(frozen: &FrozenNode, sources: &[Material]) -> PreparedNode {
+        let mut materials = Vec::new();
         let primitives = frozen
             .gltf
             .iter()
             .enumerate()
             .map(|(i, g)| {
                 let n = (g.faces.end - g.faces.start) as usize * 3;
+                let ids: Vec<u32> = g
+                    .sources
+                    .clone()
+                    .map(|s| frozen.primitives[s as usize].material)
+                    .filter(|&m| m != u32::MAX)
+                    .collect();
+                let material = ids.first().map(|&first| {
+                    let mut value = sources[first as usize].literal().clone();
+                    for &id in &ids {
+                        for slot in sources[id as usize].bound_slot_pointers() {
+                            let (parent, last) = slot.rsplit_once('/').unwrap();
+                            let parent = if parent.is_empty() {
+                                &mut value
+                            } else {
+                                value.pointer_mut(parent).unwrap()
+                            };
+                            parent[last] = json!({"index": 0});
+                        }
+                    }
+                    materials.push(value);
+                    (materials.len() - 1) as u32
+                });
                 PreparedPrimitive {
                     gltf: i as u32,
                     faces: g.faces.clone().collect(),
-                    material: Some(0),
+                    material,
                     uvs: vec![vec![[0.25, 0.75]; n]],
                     normals: Some(vec![[0., 1., 0.]; n]),
                     ..Default::default()
@@ -1582,9 +1787,7 @@ mod tests {
             .collect();
         PreparedNode {
             primitives,
-            materials: vec![
-                json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0.0}}),
-            ],
+            materials,
             textures: vec![json!({"source":0,"sampler":0})],
             samplers: vec![json!({"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071})],
             images: vec![PreparedImage {
@@ -1752,9 +1955,9 @@ mod tests {
                 }
                 check_packet(pass, &frozen).unwrap();
                 *self.fills.lock().unwrap() += frozen.fills.len();
-                let prepared = flat(&frozen);
+                let prepared = flat(&frozen, &pass.captured.materials);
                 // The physical budget path: a tiny budget reports the actual size.
-                match assemble(&frozen, &prepared, 64, u64::MAX)? {
+                match assemble(&frozen, &prepared, &pass.captured.materials, 64, u64::MAX)? {
                     Assembly::PhysicalBudget { actual_bytes } => assert!(actual_bytes > 64),
                     Assembly::Fit { .. } => panic!("a 64-byte member cannot fit"),
                 }
@@ -1818,9 +2021,9 @@ mod tests {
                 })?;
                 assert!(pass.commit(&frozen, uv).is_err(), "UV mutation");
                 let material = mutate(&|glb| {
-                    let needle = b"\"metallicFactor\":0.0";
+                    let needle = b"\"metallicFactor\":0";
                     let at = glb.windows(needle.len()).position(|w| w == needle).unwrap();
-                    glb[at + needle.len() - 3] = b'1';
+                    glb[at + needle.len() - 1] = b'1';
                 })?;
                 assert!(pass.commit(&frozen, material).is_err(), "material mutation");
                 pass.read_certified_proxy(first, depth, 1 << 30)?;
@@ -2041,7 +2244,7 @@ mod tests {
                 for f in &frozen.faces {
                     assert!(!frozen.donor_ranges(f).is_empty());
                 }
-                let good = flat(&frozen);
+                let good = flat(&frozen, &pass.captured.materials);
                 let mut missing = good.clone();
                 missing.primitives[0].faces.pop();
                 let corners = missing.primitives[0].faces.len() * 3;
@@ -2052,23 +2255,90 @@ mod tests {
                     .unwrap()
                     .truncate(corners);
                 assert_eq!(
-                    assemble(&frozen, &missing, u64::MAX, u64::MAX)
-                        .unwrap_err()
-                        .kind(),
+                    assemble(
+                        &frozen,
+                        &missing,
+                        &pass.captured.materials,
+                        u64::MAX,
+                        u64::MAX
+                    )
+                    .unwrap_err()
+                    .kind(),
                     JobErrorKind::InvalidState
                 );
+                // Owner checks: transform domain, materials, remaps and no-raster rules.
+                let materials = &pass.captured.materials;
+                let refused = |f: &FrozenNode, p: &PreparedNode| {
+                    assemble(f, p, materials, u64::MAX, u64::MAX).is_err()
+                };
+                let mut f = frozen.clone();
+                f.gltf[0].scale[1] = 2f32.to_bits();
+                assert!(refused(&f, &good), "non-uniform scale");
+                let mut f = frozen.clone();
+                f.gltf[0].scale = [(-1f32).to_bits(); 3];
+                assert!(refused(&f, &good), "reflecting scale");
+                let mut f = frozen.clone();
+                f.gltf[0].translation[0] = f32::NAN.to_bits();
+                assert!(refused(&f, &good), "non-finite translation");
+                let mut p = good.clone();
+                p.materials[0]["normalTexture"] = json!({"index": 0, "scale": 0.5});
+                assert!(refused(&frozen, &p), "unabsorbed normal scale");
+                let mut p = good.clone();
+                p.materials[0]["normalTexture"] = json!({"index": 0, "scale": 1.0});
+                assert!(!refused(&frozen, &p), "normal scale 1 is accepted");
+                let mut p = good.clone();
+                p.materials[0]["pbrMetallicRoughness"]["roughnessFactor"] = json!(0.25);
+                assert!(refused(&frozen, &p), "changed literal factor");
+                let mut p = good.clone();
+                p.textures[0]["source"] = json!(9);
+                assert!(refused(&frozen, &p), "texture names no image");
+                let mut p = good.clone();
+                p.materials[0]["pbrMetallicRoughness"]["baseColorTexture"]["texCoord"] = json!(1);
+                assert!(refused(&frozen, &p), "binding reads a missing UV set");
+                let mut p = good.clone();
+                p.materials[0]["pbrMetallicRoughness"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("baseColorTexture");
+                assert!(
+                    refused(&frozen, &p),
+                    "raster primitive detaches a source slot"
+                );
+                let mut p = good.clone();
+                p.primitives[0].no_raster = true;
+                assert!(refused(&frozen, &p), "no-raster primitive keeps a binding");
+                // A no-raster primitive with its bindings detached and no UVs is accepted.
+                let mut p = good.clone();
+                let mut detached = p.materials[p.primitives[0].material.unwrap() as usize].clone();
+                for slot in Material::slot_pointers() {
+                    let (parent, last) = slot.rsplit_once('/').unwrap();
+                    let parent = if parent.is_empty() {
+                        Some(&mut detached)
+                    } else {
+                        detached.pointer_mut(parent)
+                    };
+                    if let Some(object) = parent.and_then(Value::as_object_mut) {
+                        object.remove(last);
+                    }
+                }
+                p.materials.push(detached);
+                p.primitives[0].material = Some((p.materials.len() - 1) as u32);
+                p.primitives[0].no_raster = true;
+                p.primitives[0].uvs.clear();
+                assert!(!refused(&frozen, &p), "detached no-raster primitive");
                 // The memory lease is checked before anything is built, on both paths.
                 let needed = assembly_bytes(&frozen, &good);
                 for tile in [u64::MAX, 64] {
                     assert_eq!(
-                        assemble(&frozen, &good, tile, needed - 1)
+                        assemble(&frozen, &good, &pass.captured.materials, tile, needed - 1)
                             .unwrap_err()
                             .kind(),
                         JobErrorKind::ResourceLimit
                     );
                 }
-                assert!(assemble(&frozen, &good, 64, needed).is_ok());
-                let Assembly::Fit { glb, .. } = assemble(&frozen, &good, u64::MAX, u64::MAX)?
+                assert!(assemble(&frozen, &good, &pass.captured.materials, 64, needed).is_ok());
+                let Assembly::Fit { glb, .. } =
+                    assemble(&frozen, &good, &pass.captured.materials, u64::MAX, u64::MAX)?
                 else {
                     panic!()
                 };
@@ -2116,7 +2386,8 @@ mod tests {
                 };
                 for id in [255u32, 256, 65_535, 65_536, 16_777_215, 16_777_216] {
                     let high = with_id(id);
-                    let Assembly::Fit { decoded, .. } = assemble(&high, &good, u64::MAX, u64::MAX)?
+                    let Assembly::Fit { decoded, .. } =
+                        assemble(&high, &good, &pass.captured.materials, u64::MAX, u64::MAX)?
                     else {
                         panic!("fits")
                     };
@@ -2125,7 +2396,7 @@ mod tests {
                 }
                 let high = with_id(16_777_217);
                 assert_eq!(
-                    assemble(&high, &good, u64::MAX, u64::MAX)
+                    assemble(&high, &good, &pass.captured.materials, u64::MAX, u64::MAX)
                         .unwrap_err()
                         .kind(),
                     JobErrorKind::Unsupported
