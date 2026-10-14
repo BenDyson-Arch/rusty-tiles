@@ -651,13 +651,16 @@ impl<'a> BakePass<'a> {
         self.handoff.release(first, depth)
     }
 
-    /// The complete-member adapter.
+    /// The complete-member adapter, within `memory_limit` bytes for every buffer it owns
+    /// (see [`assembly_bytes`]); refused with `ResourceLimit` before any allocation.
     pub(in crate::mesh_large) fn assemble(
         &self,
         frozen: &FrozenNode,
         prepared: &PreparedNode,
+        memory_limit: u64,
     ) -> Result<Assembly, JobError> {
-        assemble(frozen, prepared, self.tile_bytes)
+        (self.check)()?;
+        assemble(frozen, prepared, self.tile_bytes, memory_limit)
     }
 
     /// Publish an accepted member over the tile's untextured proxy (geometric error
@@ -806,12 +809,123 @@ fn component_width(component: &str) -> Result<usize, JobError> {
     })
 }
 
-/// Build the complete member for `prepared` and verify it from its own bytes.
+/// Upper bound of the memory [`assemble`] owns at once for `prepared`, summed over every
+/// buffer it may hold: the face partition map, per-stream corner copies and wire bytes
+/// (each stream twice: built, then appended), property tables, images, the JSON document,
+/// meshopt output, the GLB, and the readback (decoded faces, streams, attributes, tables,
+/// image copies and identities). Computed from sizes alone, without allocating.
+pub(in crate::mesh_large) fn assembly_bytes(frozen: &FrozenNode, prepared: &PreparedNode) -> u64 {
+    fn json_len(value: &impl Serialize) -> u64 {
+        struct Count(u64);
+        impl Write for Count {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0 += b.len() as u64;
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut count = Count(0);
+        let _ = serde_json::to_writer(&mut count, value);
+        count.0
+    }
+    let s = |v: u64, w: u64| v.saturating_mul(w);
+    let mut total = frozen.faces.len() as u64; // partition map
+    let mut streams = 0u64; // accessor/view count for the JSON estimate
+    let mut wire = 0u64;
+    let mut readback = 0u64;
+    let sets = |g: u32| {
+        frozen
+            .gltf
+            .get(g as usize)
+            .map_or(0, |g| g.feature_ids.as_array().map_or(0, Vec::len)) as u64
+    };
+    for p in &prepared.primitives {
+        let faces = p.faces.len() as u64;
+        let corners = 3 * faces;
+        let sets = sets(p.gltf);
+        // Corner copies, then per corner: POSITION (12), feature IDs (4 each, plus the
+        // per-face ID list), NORMAL (12), TANGENT (16), COLOR (16), each UV set (8).
+        total = total.saturating_add(s(
+            corners,
+            std::mem::size_of::<super::lod::handoff::FrozenCorner>() as u64,
+        ));
+        let per_corner = 12
+            + 4 * sets
+            + 12 * u64::from(p.normals.is_some())
+            + 16 * u64::from(p.tangents.is_some())
+            + 16 * u64::from(p.colors.is_some())
+            + 8 * p.uvs.len() as u64;
+        wire = wire.saturating_add(s(corners, per_corner) + s(faces, 4 * sets));
+        streams += 1 + sets + 3 + p.uvs.len() as u64;
+        // Readback: decoded faces with their feature lists, decoded/raw positions,
+        // identities, and float attributes read back.
+        readback = readback
+            .saturating_add(s(
+                faces,
+                std::mem::size_of::<codec::DecodedFace>() as u64 + 16 * sets,
+            ))
+            .saturating_add(s(
+                faces,
+                std::mem::size_of::<FaceIdentity>() as u64 + 8 * sets,
+            ))
+            .saturating_add(s(corners, 24 + per_corner));
+        total = total.saturating_add(json_len(&p.extra_feature_ids));
+    }
+    for t in &frozen.tables {
+        for (_, _, values) in &t.columns {
+            // Wire bytes (at most 8 per value) and the decoded u64 column.
+            wire = wire.saturating_add(s(values.len() as u64, 8));
+            readback = readback.saturating_add(s(values.len() as u64, 8));
+            streams += 1;
+        }
+    }
+    let images: u64 = prepared.images.iter().map(|i| i.bytes.len() as u64).sum();
+    wire = wire.saturating_add(images);
+    readback = readback.saturating_add(images);
+    // JSON: the document tree and its text, generously per stream plus the literal
+    // materials, textures, samplers and feature-ID declarations.
+    let literal = json_len(&prepared.materials)
+        + json_len(&prepared.textures)
+        + json_len(&prepared.samplers)
+        + frozen
+            .gltf
+            .iter()
+            .map(|g| json_len(&g.feature_ids))
+            .sum::<u64>();
+    let json = s(streams + prepared.images.len() as u64 + 8, 1024).saturating_add(s(literal, 8));
+    // Each stream is built then appended (2x); meshopt output is bounded by twice its
+    // input plus block headers; the GLB holds the JSON text and the compressed buffer;
+    // the readback decodes meshopt streams into buffers of the original size.
+    total
+        .saturating_add(s(wire, 2))
+        .saturating_add(s(wire, 2).saturating_add(1 << 16))
+        .saturating_add(s(wire, 2).saturating_add(json))
+        .saturating_add(json)
+        .saturating_add(s(wire, 2))
+        .saturating_add(readback)
+}
+
+/// Build the complete member for `prepared` and verify it from its own bytes. Refused
+/// with `ResourceLimit`, before any allocation, when [`assembly_bytes`] exceeds
+/// `memory_limit` (on the PhysicalBudget path too).
 pub(in crate::mesh_large) fn assemble(
     frozen: &FrozenNode,
     prepared: &PreparedNode,
     tile_bytes: u64,
+    memory_limit: u64,
 ) -> Result<Assembly, JobError> {
+    let needed = assembly_bytes(frozen, prepared);
+    if needed > memory_limit {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!(
+                "assembling this member may hold {needed} bytes, above its {memory_limit} byte \
+                 memory lease"
+            ),
+        ));
+    }
     frozen.validate()?;
     // Every frozen face exactly once, each within its declared glTF primitive.
     let mut seen = vec![false; frozen.faces.len()];
@@ -1640,11 +1754,11 @@ mod tests {
                 *self.fills.lock().unwrap() += frozen.fills.len();
                 let prepared = flat(&frozen);
                 // The physical budget path: a tiny budget reports the actual size.
-                match assemble(&frozen, &prepared, 64)? {
+                match assemble(&frozen, &prepared, 64, u64::MAX)? {
                     Assembly::PhysicalBudget { actual_bytes } => assert!(actual_bytes > 64),
                     Assembly::Fit { .. } => panic!("a 64-byte member cannot fit"),
                 }
-                let fit = pass.assemble(&frozen, &prepared)?;
+                let fit = pass.assemble(&frozen, &prepared, 1 << 30)?;
                 let Assembly::Fit { decoded, .. } = &fit else {
                     panic!("the flat member fits");
                 };
@@ -1656,7 +1770,7 @@ mod tests {
                 }
                 // Commit consumes only a verified Fit for this very tile whose bytes are
                 // unchanged since verification; every refusal leaves the member alone.
-                let fresh = || pass.assemble(&frozen, &prepared);
+                let fresh = || pass.assemble(&frozen, &prepared, 1 << 30);
                 let budget = Assembly::PhysicalBudget { actual_bytes: 1 };
                 assert!(pass.commit(&frozen, budget).is_err());
                 let mut other = frozen.clone();
@@ -1938,12 +2052,30 @@ mod tests {
                     .unwrap()
                     .truncate(corners);
                 assert_eq!(
-                    assemble(&frozen, &missing, u64::MAX).unwrap_err().kind(),
+                    assemble(&frozen, &missing, u64::MAX, u64::MAX)
+                        .unwrap_err()
+                        .kind(),
                     JobErrorKind::InvalidState
                 );
-                let Assembly::Fit { glb, .. } = assemble(&frozen, &good, u64::MAX)? else {
+                // The memory lease is checked before anything is built, on both paths.
+                let needed = assembly_bytes(&frozen, &good);
+                for tile in [u64::MAX, 64] {
+                    assert_eq!(
+                        assemble(&frozen, &good, tile, needed - 1)
+                            .unwrap_err()
+                            .kind(),
+                        JobErrorKind::ResourceLimit
+                    );
+                }
+                assert!(assemble(&frozen, &good, 64, needed).is_ok());
+                let Assembly::Fit { glb, .. } = assemble(&frozen, &good, u64::MAX, u64::MAX)?
+                else {
                     panic!()
                 };
+                assert!(
+                    needed >= 2 * glb.len() as u64,
+                    "the bound covers the member"
+                );
                 // The readback catches a writer that ignored a requested value.
                 let mut uv = good.clone();
                 uv.primitives[0].uvs[0][0] = [0.5, 0.5];
@@ -1984,7 +2116,8 @@ mod tests {
                 };
                 for id in [255u32, 256, 65_535, 65_536, 16_777_215, 16_777_216] {
                     let high = with_id(id);
-                    let Assembly::Fit { decoded, .. } = assemble(&high, &good, u64::MAX)? else {
+                    let Assembly::Fit { decoded, .. } = assemble(&high, &good, u64::MAX, u64::MAX)?
+                    else {
                         panic!("fits")
                     };
                     let face = decoded.iter().find(|d| d.face == 0).unwrap();
@@ -1992,7 +2125,9 @@ mod tests {
                 }
                 let high = with_id(16_777_217);
                 assert_eq!(
-                    assemble(&high, &good, u64::MAX).unwrap_err().kind(),
+                    assemble(&high, &good, u64::MAX, u64::MAX)
+                        .unwrap_err()
+                        .kind(),
                     JobErrorKind::Unsupported
                 );
                 // One mutant per remaining verify branch.
