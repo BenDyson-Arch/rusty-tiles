@@ -1,10 +1,11 @@
 //! Private streamed mesh foundation. Tile producers will consume these owned spill records.
 //! Full capture owns attributes, images and the frozen lattice; H8 publishes full-detail
-//! leaves and H16 (`delivery`) their hierarchy as a `.3tz`. Coarse levels and approximation
-//! certificates remain downstream work.
+//! leaves, H17 (`lod`) certifies the coarse tiles inside the H8 producer while the capture is
+//! live, and H16 (`delivery`) publishes their hierarchy as a `.3tz`.
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
 mod attributes;
+pub(in crate::mesh_large) mod bake_pass;
 mod capture;
 mod config;
 mod delivery;
@@ -12,6 +13,7 @@ mod full;
 mod images;
 mod input;
 mod leaves;
+mod lod;
 mod pipeline;
 mod records;
 mod tree;

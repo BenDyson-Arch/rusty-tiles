@@ -12,7 +12,7 @@ use crate::{JobError, JobErrorKind};
 use std::mem::size_of;
 
 #[derive(Debug)]
-pub(super) struct Level {
+pub(in crate::mesh_large) struct Level {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
@@ -22,7 +22,7 @@ pub(super) struct Level {
 /// feature-ID set reads its own `nullFeatureId` (2^(8*bytes) - 1).
 pub(super) const ID_NO_FEATURE: [u8; 4] = [255; 4];
 #[derive(Debug)]
-pub(super) struct Chain {
+pub(in crate::mesh_large) struct Chain {
     pub class: Class,
     pub levels: Vec<Level>,
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
@@ -160,7 +160,7 @@ fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
     }
 }
 
-pub(super) fn build(
+pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,
     rgba: &[u8],

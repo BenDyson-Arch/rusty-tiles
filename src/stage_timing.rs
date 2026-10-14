@@ -34,9 +34,10 @@ pub(crate) enum Stage {
     GlbWrite,
     MemberWrite,
     Capture,
+    Lod,
 }
 
-const STAGES: [(Stage, &str); 20] = [
+const STAGES: [(Stage, &str); 21] = [
     (Stage::SourceReconstruct, "source_reconstruct"),
     (Stage::SourceDecode, "source_decode"),
     (Stage::SourceCacheHit, "source_cache_hit"),
@@ -57,6 +58,7 @@ const STAGES: [(Stage, &str); 20] = [
     (Stage::GlbWrite, "glb_write"),
     (Stage::MemberWrite, "member_write"),
     (Stage::Capture, "capture"),
+    (Stage::Lod, "lod"),
 ];
 
 #[derive(Clone, Copy, Debug)]

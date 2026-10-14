@@ -329,6 +329,10 @@ pub fn mesh_to_tileset(
             &config,
             &plan,
             request.profile,
+            super::lod::Mutation::None,
+            super::lod::TARGET_FACES,
+            // No production proxy baker yet (H27 plugs in here); proxies stay untextured.
+            None,
             &|| attempt.check(),
         )?;
         attempt.emit(&RunEvent::Progress {
@@ -336,7 +340,8 @@ pub fn mesh_to_tileset(
             done: leaf.report.leaves,
             total: Some(leaf.report.leaves),
         })?;
-        // H17 consumes the same live capture here when its coarse-content hook lands.
+        // H17 certified the coarse tiles inside the producer, while the capture was live;
+        // delivery publishes them with the leaves.
         let delivery_request = MeshTilesetRequest::new(work.path(), &output);
         let prepared = delivery::prepare_tiler(
             &delivery_request,

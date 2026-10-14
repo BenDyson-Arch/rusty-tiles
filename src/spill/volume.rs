@@ -25,6 +25,8 @@ impl SpaceRole {
 pub(crate) enum PreflightStage {
     Geometry,
     Texture,
+    /// H17 coarse levels: the vertex incidence join, slim source and proxy sidecars.
+    Lod,
 }
 
 impl PreflightStage {
@@ -32,6 +34,7 @@ impl PreflightStage {
         match self {
             Self::Geometry => "geometry",
             Self::Texture => "texture",
+            Self::Lod => "lod",
         }
     }
 }
