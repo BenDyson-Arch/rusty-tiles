@@ -50,7 +50,7 @@ fn class(slot: TextureSlot) -> Class {
 }
 /// Support-weighted error statistics of one channel of one decoded level.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct ChannelStats {
+pub(in crate::mesh_large) struct ChannelStats {
     /// Weighted PSNR in dB; infinite when exact.
     pub psnr: f64,
     /// Weighted 99.9th-percentile absolute error.
@@ -61,7 +61,7 @@ pub(super) struct ChannelStats {
     /// Texels with positive support.
     pub texels: u64,
 }
-pub(super) fn channel_stats(
+pub(in crate::mesh_large) fn channel_stats(
     expected: &[u8],
     decoded: &[u8],
     support: &[u32],
@@ -126,7 +126,7 @@ pub(super) fn channel_stats(
 
 /// Per-channel decoded-image floors of one slot class and profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct ChannelGate {
+pub(in crate::mesh_large) struct ChannelGate {
     pub psnr: f64,
     /// 99.9th-percentile cap (calibrated colour channels of large levels).
     pub p999: Option<u8>,
@@ -136,7 +136,7 @@ pub(super) struct ChannelGate {
     pub max: Option<u8>,
 }
 impl ChannelGate {
-    pub(super) fn accepts(&self, stats: &ChannelStats) -> bool {
+    pub(in crate::mesh_large) fn accepts(&self, stats: &ChannelStats) -> bool {
         stats.psnr >= self.psnr
             && self.p999.is_none_or(|cap| stats.p999 <= cap)
             && self.block_rmse.is_none_or(|cap| stats.block_rmse <= cap)
@@ -148,7 +148,7 @@ impl ChannelGate {
 /// at extreme minification. Small colour levels of packed island pages mix
 /// neighbouring islands inside codec blocks; they keep the block corruption
 /// guard and a PSNR floor 4 dB lower, without a percentile cap.
-pub(super) const SMALL_LEVEL_TEXELS: u64 = 1024;
+pub(in crate::mesh_large) const SMALL_LEVEL_TEXELS: u64 = 1024;
 /// Colour channels: PSNR bounds mean quality, the 99.9th percentile bounds
 /// the error tail without being decided by one outlier texel, and the worst
 /// 4x4 codec-block RMSE catches one localized corrupted block that neither
@@ -156,7 +156,7 @@ pub(super) const SMALL_LEVEL_TEXELS: u64 = 1024;
 /// 10M-triangle photogrammetry mesh (bench/architecture_audit/mesh_large_h8/
 /// throughput.md). Alpha, data and normal channels have no real-data
 /// calibration yet and keep their previous PSNR floors and maximum caps.
-pub(super) fn channel_gate(
+pub(in crate::mesh_large) fn channel_gate(
     slot: TextureSlot,
     profile: Profile,
     channel: usize,
@@ -324,11 +324,14 @@ pub(in crate::mesh_large) fn check_level(
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
 /// Quality is excluded on purpose: its occlusion gate (p99.9 <= 8, against 80
 /// elsewhere) is far tighter than ETC1S can meet, so Quality keeps UASTC.
-pub(super) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
+pub(in crate::mesh_large) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
     slot == TextureSlot::Occlusion && profile != Profile::Quality
 }
 /// Encoder mode and parameters of one slot and lossy profile.
-pub(super) fn codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
+pub(in crate::mesh_large) fn codec_settings(
+    slot: TextureSlot,
+    profile: Profile,
+) -> (codec::Mode, codec::Params) {
     let scalar = scalar_occlusion(slot, profile);
     // Quality's effort of 2 is deliberately not pinned by a test: lowering it
     // only changes encoder time and size, while every output is still held to
@@ -393,7 +396,7 @@ pub(in crate::mesh_large) fn workspace_charge(
     Ok(charge)
 }
 
-pub(super) fn encode(
+pub(in crate::mesh_large) fn encode(
     dimensions: [u32; 2],
     rgba: &[u8],
     support: &[u32],
@@ -693,12 +696,12 @@ pub(in crate::mesh_large) fn encode_authored(
 /// coarse proxies. Every level is decoded independently and must equal the
 /// authored bytes; `validate` then sees each decoded level.
 #[derive(Debug)]
-pub(super) struct IdDelivery {
+pub(in crate::mesh_large) struct IdDelivery {
     /// PNG bytes per level, level 0 first.
     pub levels: Vec<Vec<u8>>,
     pub receipts: Vec<Value>,
 }
-pub(super) fn encode_id_chain(
+pub(in crate::mesh_large) fn encode_id_chain(
     chain: &sparse_mips::Chain,
     memory_limit: u64,
     mut validate: impl FnMut(usize, &mips::Level) -> Result<Value, JobError>,
