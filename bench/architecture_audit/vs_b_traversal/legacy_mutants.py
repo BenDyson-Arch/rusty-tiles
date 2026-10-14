@@ -238,6 +238,15 @@ def main(argv):
         applied = True
         if kind == "patch":
             applied = sh(["git", "apply", spec]).returncode == 0
+            if not applied:
+                # A patch whose context names the removed tile arena or the former direct
+                # registration is applied with those names mapped to the path stack.
+                text = open(spec).read().replace("self.c2.tile(TileFact {", "self.path_tile(TileFact {")
+                text = text.replace("self.c2.tiles[", "self.c2.path[").replace("self.tiles[", "self.path[")
+                applied = subprocess.run(["git", "apply", "-"], input=text, text=True,
+                                         capture_output=True).returncode == 0
+                if applied:
+                    name = name + " (mapped)"
         else:
             helper = name in ("port:c2:slice3/units-per-URI", "port:c2:reuse-URI-cache-for-verdicts")
             edits = list(spec) + ([HELPER] if helper else [])
