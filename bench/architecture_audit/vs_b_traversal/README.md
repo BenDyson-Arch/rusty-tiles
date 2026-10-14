@@ -69,9 +69,9 @@ marked.
 261/261 (large fixtures generated), C2-WB classes 90/90 (with `@large`), H11 16/16,
 slice-3 controls 80/80 (with `C2S3_EVIDENCE_DIR`), S3-18 sweep 188/188, forest 34/34 (with
 `C2S3_FOREST_DIR`, all W twins and mf2-lod3), I1 controls 187/187 (large controls
-generated), W corpus 41/41, at `d3d0fd8` (develop through #213 merged). Every
+generated), W corpus 41/41, at `ee2c60f` (develop through #226 merged). Every
 `validate::`, `archive3tz::`, `content_integrity::` and `spill::` test passes in both
-profiles (340 resident, 325 forced;
+profiles (341 resident, 326 forced;
 the two pinned context/stride acceptance modules run resident only, as their reports
 gain `scratch` when forced).
 
@@ -126,7 +126,38 @@ runs): mf2-lod3 −3%, W5-vec-perf −7%, W2 −4%, W3 −1%; byte-heavy `large-
 byte-heavy payloads, but replay removes only a few percent here: the containment walk, not
 the C1 value pass, dominates the stream on these archives.
 
-**Mutants.** MUTANT_RESULTS
+**Mutants.** Two drivers, both release, under the shared Cargo lock:
+`mutants.py` (VS-B) and `legacy_mutants.py` (the existing C2, I1, EM, VS-A and H23 sets).
+The legacy driver uses ports for mutants whose code VS-B removed. A port is the same defect
+on the new code, named `port:<original>`, and it is listed in the driver. Logs and
+`report.json` files are in `mutants-final/` and `mutants-legacy/final-*/`.
+
+- **VS-B set.** Run on the audit-fixed source, `e09801c`. All 26 mutants are caught.
+  - Two controls were added after the first run so that `memo-budget-ignored` and
+    `replay-flat-parent` are caught.
+  - Some single edits are equivalent, and the driver documents why:
+    - the uniqueness hash-set checks: either the `bits` bucket or `same_bits` alone
+      separates `0` from `-0.0`;
+    - each of the two stream guards alone.
+  - The recorded mutants therefore change both checks, or both guards.
+- **Legacy sets.** Re-run on the audit-fixed source, `e09801c` through `55b78d6`, 101 mutants:
+  - every C2 patch and port (slice 1, H11, slice 3);
+  - every EM, H23 and port mutant;
+  - the VS-A and I1 mutants not caught in the earlier run.
+
+  Results:
+  - 98 caught, after rerunning `vsa:scratch-ram-silent` with the spill tests included. They
+    hold VS-A's placement control.
+  - `c2:slice3/subtree-tileMetadata-is-tileMetadata` was applied with its arena context
+    mapped, and is caught.
+  - `em:memo-on-active-path` is equivalent; the EM amendment proves it.
+  - `em:cached-placement-link` has no form without an arena. Its defect is now the VS-B
+    mutants `replay-no-external` and `replay-flat-parent`.
+  - 35 I1 and VS-A mutants were caught on the pre-fix source (`chunk-1` to `chunk-3`).
+    The audit fixes do not touch their modules.
+  - Every port is caught.
+- **Not re-run after the `ee2c60f` merge of develop's #226.** That merge changes no
+  VS-B-owned line. Its payload change is covered by parity and the payload tests.
 
 ## Not established
 
