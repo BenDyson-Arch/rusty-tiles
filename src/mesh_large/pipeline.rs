@@ -125,6 +125,14 @@ pub struct TilerReport {
     pub maximum_glb_bytes: u64,
     pub maximum_leaf_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// Lossy pages a stronger UASTC step delivered after a gate miss.
+    pub escalated_pages: producer::EscalatedPages,
+    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    pub lossless_fallback_pages: u64,
+    /// The first escalated pages in leaf order, naming leaf, slot, sources,
+    /// step and each missed gate with its level.
+    pub escalation_diagnostics: Vec<producer::EscalationDiagnostic>,
+    pub escalation_diagnostics_omitted: u64,
     pub tiles: u64,
     pub explicit_tiles: u64,
     pub implicit_roots: u64,
@@ -163,6 +171,10 @@ impl TilerReport {
             maximum_glb_bytes: leaf.maximum_glb_bytes,
             maximum_leaf_geometry_error: leaf.maximum_geometry_error,
             density_reduced_leaves: leaf.density_reduced_leaves,
+            escalated_pages: leaf.escalated_pages,
+            lossless_fallback_pages: leaf.lossless_fallback_pages,
+            escalation_diagnostics: leaf.escalation_diagnostics.clone(),
+            escalation_diagnostics_omitted: leaf.escalation_diagnostics_omitted,
             tiles: facts.tiles,
             explicit_tiles: facts.explicit_tiles,
             implicit_roots: facts.implicit_roots,
