@@ -92,6 +92,35 @@ pub(crate) struct TreeOutput {
     pub stats: TreeStats,
 }
 
+/// The tree a full capture retains for leaves and coarse levels. Its rank-ordered triangle
+/// projection is released once capture has verified rank alignment and joined corner depths:
+/// later stages read the rank-aligned full-triangle sequence, which embeds every
+/// [`TriangleRecord`] field.
+pub(crate) struct RetainedTree {
+    /// Preorder, sorted by (first rank, depth).
+    pub nodes: Sequence<NodeRecord>,
+    pub weld_depths: Sequence<WeldDepth>,
+    pub stats: TreeStats,
+}
+
+impl TreeOutput {
+    /// Removes the triangle projection's file now; the rest stays owned.
+    pub(crate) fn release_triangles(self) -> RetainedTree {
+        let Self {
+            triangles,
+            nodes,
+            weld_depths,
+            stats,
+        } = self;
+        drop(triangles);
+        RetainedTree {
+            nodes,
+            weld_depths,
+            stats,
+        }
+    }
+}
+
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.into())
 }

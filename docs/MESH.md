@@ -96,10 +96,11 @@ intermediates use the output parent. Final archive staging remains on the output
 filesystem beside the destination. Disk-backed scratch is usually
 preferable for large sources; memory-backed scratch consumes memory in the
 worker plan and is reported. Admission requires free scratch for the largest
-declared stage working set (each external sort's runs plus at most one
-intermediate merge group, files retained from earlier stages, and H17's
-pre-pass), plus a 10% margin and per-file rounding: about 1 KB per source
-triangle at scale. It also reserves output-side space for leaf staging, archive
+declared stage working set (files retained from earlier stages, H17's pre-pass,
+and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
+they are read, so a sorted stream and the output it feeds share space, with at
+most `F` partly read chunks of slack. A 10% margin and per-file rounding are
+added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
 staging and a replaced destination (an estimate of 3 × 119 bytes per triangle
 plus image bytes), added to the scratch figure when they share a filesystem.
 Each capture stage rechecks free space for its own working set on entry and

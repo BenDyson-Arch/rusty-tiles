@@ -12,7 +12,7 @@ use super::{
         planning::{self, LeafPlan},
     },
     records::TriangleRecord,
-    tree::{self, TreeOutput},
+    tree::{self, RetainedTree, TreeOutput},
 };
 use crate::{
     gltf_source::source::{self, ImageInfo, Material},
@@ -114,7 +114,7 @@ pub(crate) struct FullCaptureReport {
 }
 
 pub(crate) struct FullCaptured {
-    pub tree: TreeOutput,
+    pub tree: RetainedTree,
     pub triangles: Sequence<FullTriangle>,
     pub corner_depths: Sequence<CornerDepth>,
     pub leaf_plans: Sequence<LeafPlan>,
@@ -253,47 +253,75 @@ fn scratch_need(
     let corner_depth_bytes = mul(n, CornerDepth::SIZE as u64)?;
     // Every leaf holds at least one triangle and is a tree node.
     let leaf_plan_bytes = mul(n.min(nodes), LeafPlan::SIZE as u64)?;
-    let lod_prepass = super::lod::incidence::scratch_need(n).ok_or_else(overflow)?;
-    let max = |values: &[u64]| values.iter().copied().max().unwrap_or(0);
+    let incidences = config::sort_spill::<super::lod::incidence::Incidence>(corners, sorter)
+        .ok_or_else(overflow)?;
+    let corner_infos = config::sort_spill::<super::lod::incidence::CornerInfo>(corners, sorter)
+        .ok_or_else(overflow)?;
+    let lod_sources = mul(n, super::lod::incidence::LodSource::SIZE as u64)?;
+    let max = |values: &[Option<u64>]| -> Result<u64, JobError> {
+        values
+            .iter()
+            .try_fold(0, |m: u64, v| v.map(|v| m.max(v)))
+            .ok_or_else(overflow)
+    };
     let t = full.bytes;
     let q = projection.bytes;
     let capture = max(&[
-        corner_refs.finish_peak,
-        add(corner_refs.bytes, positioned.push_peak)?,
-        positioned.finish_peak,
-        add(positioned.bytes, full.push_peak)?,
-        full.finish_peak,
-    ]);
-    // The sorted stream keeps its runs until it ends, beside the retained sequence.
-    let projection_stage = add(mul(t, 2)?, projection.push_peak)?;
+        Some(corner_refs.finish_peak),
+        corner_refs.flow(positioned.push_peak),
+        Some(positioned.finish_peak),
+        positioned.flow(full.push_peak),
+        Some(full.finish_peak),
+    ])?;
+    // The full-triangle stream feeds its retained sequence and the projection sort.
+    let projection_stage = full
+        .flow(add(t, projection.push_peak)?)
+        .ok_or_else(overflow)?;
     let images = add(add(t, q)?, image_bytes)?;
     let retained = add(t, image_bytes)?;
+    let welding = max(&[
+        Some(vertex_depths.finish_peak),
+        vertex_depths.flow(weld_bytes),
+    ])?;
     let tree = add(
         retained,
         max(&[
-            projection.finish_peak,
-            add(add(mul(q, 2)?, node_sort.push_peak)?, span_bytes)?,
-            add(add(add(q, node_sort.finish_peak)?, node_bytes)?, span_bytes)?,
-            add(
-                add(q, node_bytes)?,
-                max(&[
-                    vertex_depths.finish_peak,
-                    add(vertex_depths.bytes, weld_bytes)?,
-                ]),
-            )?,
-        ]),
+            Some(projection.finish_peak),
+            projection
+                .flow(add(q, node_sort.push_peak)?)
+                .and_then(|v| v.checked_add(span_bytes)),
+            node_sort
+                .flow(node_bytes)
+                .and_then(|v| v.checked_add(q)?.checked_add(span_bytes)),
+            welding
+                .checked_add(q)
+                .and_then(|v| v.checked_add(node_bytes)?.checked_add(span_bytes)),
+        ])?,
     )?;
     let base = add(add(add(retained, q)?, node_bytes)?, weld_bytes)?;
     let corner_depths = add(
         base,
         max(&[
-            rank_corners.finish_peak,
-            add(rank_corners.bytes, rank_depths.push_peak)?,
-            rank_depths.finish_peak,
-            add(rank_depths.bytes, corner_depth_bytes)?,
-        ]),
+            Some(rank_corners.finish_peak),
+            rank_corners.flow(rank_depths.push_peak),
+            Some(rank_depths.finish_peak),
+            rank_depths.flow(corner_depth_bytes),
+        ])?,
     )?;
-    let leaf_plans = add(add(base, corner_depth_bytes)?, leaf_plan_bytes)?;
+    // After the corner join the rank-ordered projection is released (RetainedTree).
+    let kept = add(add(retained, node_bytes)?, weld_bytes)?;
+    let leaf_plans = add(add(kept, corner_depth_bytes)?, leaf_plan_bytes)?;
+    // H17's pre-pass (lod/incidence.rs): an incidence sort streamed into a corner-info sort,
+    // streamed with the retained sequences into the slim LOD source.
+    let lod_prepass = add(
+        leaf_plans,
+        max(&[
+            Some(incidences.finish_peak),
+            incidences.flow(corner_infos.push_peak),
+            Some(corner_infos.finish_peak),
+            corner_infos.flow(lod_sources),
+        ])?,
+    )?;
     let stages = ScratchStages {
         capture,
         projection: projection_stage,
@@ -301,7 +329,7 @@ fn scratch_need(
         tree,
         corner_depths,
         leaf_plans,
-        lod_prepass: add(leaf_plans, lod_prepass)?,
+        lod_prepass,
     };
     let h1 =
         config::scratch_need_parts(n, scan.geometry_bytes, config, unit).ok_or_else(overflow)?;
@@ -314,6 +342,9 @@ fn scratch_need(
         add(add(inventory.min(counted), image_count)?, 5)?,
     )?;
     let logical_need_bytes = stages.max();
+    // Runs are chunk files of about CHUNK_BYTES each (at least half of it, for any record).
+    let chunk_files = logical_need_bytes.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
+    let max_live_files = add(max_live_files, chunk_files)?;
     let file_rounding_bytes = config::file_rounding(unit, max_live_files).ok_or_else(overflow)?;
     let allocation_reserve_bytes = add(logical_need_bytes.div_ceil(10), file_rounding_bytes)?;
     let need_bytes = add(logical_need_bytes, allocation_reserve_bytes)?;
@@ -681,6 +712,9 @@ pub(crate) fn capture_admitted(
         begin_stage(&scratch, &need, stages.corner_depths)?;
         let corner_depths = join_corner_depths(&scratch, &tree, config, workers, check)?;
         peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
+        // The rank-ordered projection's last reader is done; the full-triangle sequence
+        // carries the same records in the same rank order (verified above).
+        let tree = tree.release_triangles();
         let height = usize::try_from(tree.stats.height)
             .map_err(|_| invariant("tree height conversion failed"))?;
         if height == 0 || height > 32 {
@@ -1113,7 +1147,6 @@ pub(super) mod tests {
         assert_eq!(output.triangles.len(), 19);
         assert_eq!(output.corner_depths.len(), 19);
         assert!(output.tree.stats.height > 22);
-        verify_rank_alignment(&output.triangles, &output.tree.triangles, &mut || Ok(())).unwrap();
         for (rank, row) in output.triangles.reader().unwrap().enumerate() {
             let row = row.unwrap();
             assert_eq!(row.triangle.source.triangle, rank as u64);
@@ -1130,13 +1163,12 @@ pub(super) mod tests {
             .map(Result::unwrap)
             .collect();
         for (triangle, depths) in output
-            .tree
             .triangles
             .reader()
             .unwrap()
             .zip(output.corner_depths.reader().unwrap())
         {
-            let triangle = triangle.unwrap();
+            let triangle = triangle.unwrap().triangle;
             let depths = depths.unwrap();
             for a in 0..3 {
                 let key = triangle.positions[a].map(f32::to_bits);
@@ -1294,13 +1326,12 @@ pub(super) mod tests {
                 .map(Result::unwrap)
                 .collect();
             let ranks: Vec<_> = output
-                .tree
                 .triangles
                 .reader()
                 .unwrap()
                 .map(|t| {
                     let mut bytes = vec![0; TriangleRecord::SIZE];
-                    t.unwrap().encode(&mut bytes);
+                    t.unwrap().triangle.encode(&mut bytes);
                     bytes
                 })
                 .collect();
@@ -1312,8 +1343,8 @@ pub(super) mod tests {
                 .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
                 .collect();
             let lookup: std::collections::BTreeMap<_, _> = weld.iter().copied().collect();
-            for (triangle, depths) in output.tree.triangles.reader().unwrap().zip(&depths) {
-                let triangle = triangle.unwrap();
+            for (triangle, depths) in output.triangles.reader().unwrap().zip(&depths) {
+                let triangle = triangle.unwrap().triangle;
                 for corner in 0..3 {
                     let key = triangle.positions[corner].map(f32::to_bits);
                     assert_eq!(depths.depths[corner], lookup[&key]);
@@ -1405,21 +1436,31 @@ pub(super) mod tests {
             config::sort_spill::<FullTriangle>(records, sorter(run_records * row, fan_in)).unwrap()
         };
         let s = |records: u64| records * FullTriangle::SIZE as u64;
-        // At most F runs: the final merge streams; no second generation.
+        // Two records per chunk file, so F partly read chunks are smaller than S.
+        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(Some(2 * FullTriangle::SIZE)));
+        let chunks = |fan_in: u64| fan_in * s(2);
+        // At most F runs: no intermediate merge; the stream holds partly read chunks.
         let one = spill(40, 10, 4);
         assert_eq!((one.push_peak, one.finish_peak), (s(40), s(40)));
-        // F < runs <= F²: one group of at most F runs is rewritten before its inputs go.
+        assert_eq!(one.stream_slack, chunks(4));
+        // More than F runs: an intermediate merge frees inputs while writing its output.
         let some = spill(60, 10, 4);
-        assert_eq!((some.push_peak, some.finish_peak), (s(60), s(60) + s(40)));
-        // Beyond F² runs merged runs exceed one buffer: a whole second generation.
-        let deep = spill(170, 10, 4);
-        assert_eq!(deep.finish_peak, 2 * s(170));
-        // Inventory compaction from 64F runs also rewrites while pushing.
-        let compacting = spill(2560, 10, 4);
         assert_eq!(
-            (compacting.push_peak, compacting.finish_peak),
-            (2 * s(2560), 2 * s(2560))
+            (some.push_peak, some.finish_peak),
+            (s(60), s(60) + chunks(4))
         );
+        // Multi-level passes are bounded the same way, group by group.
+        let deep = spill(170, 10, 4);
+        assert_eq!(deep.finish_peak, s(170) + chunks(4));
+        // Inventory compaction from 64F runs merges while pushing.
+        let compacting = spill(2560, 10, 4);
+        assert_eq!(compacting.push_peak, s(2560) + chunks(4));
+        // The flow of a stream into proportional output: the larger side plus the slack.
+        assert_eq!(one.flow(s(100)), Some(s(100) + chunks(4)));
+        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(None));
+        // Unchunked-size data: slack never exceeds S.
+        let small = spill(60, 10, 4);
+        assert_eq!(small.finish_peak, 2 * s(60));
     }
     #[test]
     fn checked_full_scratch_and_decoder_memory_charges() {
@@ -1436,12 +1477,15 @@ pub(super) mod tests {
         // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860, projection 930. One
         // run per sort, so no merge slack: the positioned stream beside the full-triangle sort
         // bounds capture; the full stream, its sequence and the projection bound projection.
-        assert_eq!(need.stages.capture, 2910 + 2860);
+        // Chunks free as they are read, so a stream and its consumer's output trade off.
+        assert_eq!(need.stages.capture, 2910 + 2910);
         assert_eq!(need.stages.projection, 2 * 2860 + 930);
         assert_eq!(need.stages.images, 2860 + 930 + 8192);
+        // One chunk per sort here: a stream holds all of its chunk until read through, so the
+        // incidence stream (63 B per corner) and its partly read chunk bound H17.
         assert_eq!(
             need.stages.lod_prepass,
-            need.stages.leaf_plans + super::super::lod::incidence::scratch_need(10).unwrap()
+            need.stages.leaf_plans + 2 * 30 * 63
         );
         assert_eq!(need.logical_need_bytes, need.stages.max());
         // Control: the old reserve re-added the whole logical need as extent overhead. Now the
