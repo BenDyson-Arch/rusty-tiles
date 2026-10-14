@@ -14,6 +14,7 @@ import numpy as np
 from osgeo import ogr, osr
 from test_vector_lod import vector, read, parts
 from cli_bin import requires_bin
+from vector_test_support import portable_vectors
 
 
 
@@ -52,6 +53,11 @@ class GeoPackageTests(unittest.TestCase):
                     p=root/f'{epsg}.gpkg';coordinates=[12.,50.,120.] if epsg==4937 else [153.,-27.,120.]
                     gpkg(p,[('sites',epsg,[(1,dict(type='Point',coordinates=coordinates),None)])])
                     args=types.SimpleNamespace(input=str(p),output=str(root/f'out-{epsg}'),max_features=1)
+                    if portable_vectors():
+                        with self.assertRaisesRegex(ValueError, '2D horizontal CRS'):
+                            vector.run(args)
+                        self.assertFalse(pathlib.Path(args.output).exists())
+                        continue
                     vector.run(args)
                     decoded=details(args.output)
                     self.assertEqual(len(decoded),1)
@@ -86,10 +92,8 @@ class GeoPackageTests(unittest.TestCase):
                 self.assertEqual(read(out/leaf['content']['uri'])[2],['7'])
             report=json.loads((out/'conversion.json').read_text())
             self.assertEqual(report['features'],8);self.assertEqual(report['fragments'],8)
-            previous=root/'previous.3tz'
-            with zipfile.ZipFile(previous,'w') as archive:
-                for file in out.rglob('*'):
-                    if file.is_file():archive.write(file,file.relative_to(out).as_posix())
+            from vector_test_support import published
+            previous=published(out)
             # Every surviving row moves to one side of the saved cuts. They
             # must be recomputed while retaining duplicate source identities.
             features=features[:3]
@@ -192,34 +196,84 @@ class GeoPackageTests(unittest.TestCase):
                 for content in node.get('contents',[node.get('content')]):
                     file=out/content['uri'];doc,positions,ids=read(file)
                     self.assertTrue(all(i=='9' for i in ids));vertex_count+=sum(map(len,positions));byte_count+=file.stat().st_size
-                    if 'extensions' not in content:
-                        for _,_,tri in parts(file):
-                            area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
-                    else:
-                        # Every outline edge belongs to an original outer/hole edge.
-                        source_edges=[(np.array(a),np.array(b)) for ring in rings for a,b in zip(ring[:-1],ring[1:])]
-                        translation=np.zeros(3)
-                        # This small fixture has root origin (0,0,0); recover each
-                        # leaf's absolute translation through the hierarchy below.
-                        def locate(current,delta):
-                            delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
-                            if current is node:return delta
-                            for c in current.get('children',[]):
-                                result=locate(c,delta)
-                                if result is not None:return result
-                        translation=locate(root,np.zeros(3))
-                        for _,_,line in parts(file):
-                            xyz=line[:,[0,2,1]]*[1,-1,1]+translation
-                            def on_edge(a,b):
-                                ab=b-a;t=(xyz-a)@ab/max(np.dot(ab,ab),1e-30)
-                                return ((t>=-1e-7)&(t<=1+1e-7)).all() and np.linalg.norm(xyz-a-t[:,None]*ab,axis=1).max()<1e-6
-                            self.assertTrue(any(on_edge(a,b) for a,b in source_edges))
-                            outline_length+=np.linalg.norm(np.diff(xyz,axis=0),axis=1).sum()
+                    # Fill triangles (one polygon each) and boundary lines share one GLB.
+                    self.assertEqual(content['extensions'],{'3DTILES_content_gltf_vector':{'vector':True}})
+                    for mode,_,tri in parts(file):
+                        if mode!=4:continue
+                        self.assertEqual(len(tri),3)
+                        area+=np.linalg.norm(np.cross(tri[1]-tri[0],tri[2]-tri[0]))/2
+                    # Every outline segment lies on an original outer/hole edge.
+                    source_edges=[(np.array(a),np.array(b)) for ring in rings for a,b in zip(ring[:-1],ring[1:])]
+                    translation=np.zeros(3)
+                    # This small fixture has root origin (0,0,0); recover each
+                    # leaf's absolute translation through the hierarchy below.
+                    def locate(current,delta):
+                        delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
+                        if current is node:return delta
+                        for c in current.get('children',[]):
+                            result=locate(c,delta)
+                            if result is not None:return result
+                    translation=locate(root,np.zeros(3))
+                    for mode,_,line in parts(file):
+                        if mode!=3:continue
+                        xyz=line[:,[0,2,1]]*[1,-1,1]+translation
+                        def on_edge(segment,a,b):
+                            ab=b-a;t=(segment-a)@ab/max(np.dot(ab,ab),1e-30)
+                            return ((t>=-1e-7)&(t<=1+1e-7)).all() and np.linalg.norm(segment-a-t[:,None]*ab,axis=1).max()<1e-6
+                        for k in range(len(xyz)-1):
+                            self.assertTrue(any(on_edge(xyz[k:k+2],a,b) for a,b in source_edges))
+                        # Each ring fits one leaf, so it is one closed strip
+                        # (four corners plus a collinear seam vertex, closed).
+                        self.assertEqual(len(xyz),6);np.testing.assert_array_equal(xyz[0],xyz[-1])
+                        outline_length+=np.linalg.norm(np.diff(xyz,axis=0),axis=1).sum()
                 self.assertLessEqual(vertex_count,8);self.assertLessEqual(byte_count,8192)
             self.assertAlmostEqual(area,84,places=5)
             self.assertAlmostEqual(outline_length,56,places=5)
             r=json.loads((out/'conversion.json').read_text());self.assertEqual(r['fragmentedPolygons'],1)
             self.assertIn('no internal',r['polygonFragmentPolicy'])
+
+    def test_partitioned_polygon_outline_is_contiguous_ring_runs_across_tiles(self):
+        # A 64-gon whose outline (66 vertices with its seam) the line splitter
+        # cuts into four pieces. Every leaf draws its share as strips that
+        # follow the ring, not one strip per edge, and together the leaves
+        # draw every source edge exactly once.
+        n=64;a=np.linspace(0,2*np.pi,n,endpoint=False)
+        ring=[[float(100*np.cos(t)),float(100*np.sin(t)),0.] for t in a]
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'big.gpkg'
+            gpkg(p,[('land',3857,[(5,dict(type='Polygon',coordinates=[ring+[ring[0]]]),None)])])
+            args=types.SimpleNamespace(input=str(p),output=str(pathlib.Path(tmp)/'out'),max_features=1,
+                source_crs='local',max_vertices=24,max_bytes=8192)
+            vector.run(args);out=pathlib.Path(args.output);root=json.loads((out/'tileset.json').read_text())['root']
+            def locate(current,node,delta):
+                delta=delta+np.array(current.get('transform',np.eye(4).T.flatten())[12:15])
+                if current is node:return delta
+                for c in current.get('children',[]):
+                    result=locate(c,node,delta)
+                    if result is not None:return result
+            source=np.array(ring);strips=[];drawn=[]
+            for node in nodes(root):
+                if node.get('children'):continue
+                translation=locate(root,node,np.zeros(3))
+                for content in node.get('contents',[node.get('content')]):
+                    for mode,_,line in parts(out/content['uri']):
+                        if mode!=3:continue
+                        xyz=line[:,[0,2,1]]*[1,-1,1]+translation;strips.append(len(xyz))
+                        # Map each vertex to its ring position (the seam is
+                        # the midpoint of one edge, position i + 0.5).
+                        where=[]
+                        for v in xyz:
+                            d=np.linalg.norm(source-v,axis=1);i=int(d.argmin())
+                            if d[i]<1e-4:where.append(float(i));continue
+                            mid=(source+np.roll(source,-1,axis=0))/2;j=int(np.linalg.norm(mid-v,axis=1).argmin())
+                            self.assertLess(np.linalg.norm(mid[j]-v),1e-4);where.append(j+.5)
+                        for u,v in zip(where[:-1],where[1:]):
+                            step=(v-u)%n
+                            self.assertIn(step,(.5,1.,n-.5,n-1.),'consecutive strip vertices are ring neighbours')
+                            drawn.append(u if step<1.5 else v)  # the edge's forward start
+            self.assertLessEqual(len(strips),4,strips);self.assertTrue(all(k>=3 for k in strips),strips)
+            # Each source edge once; the bisected edge as its two halves.
+            self.assertEqual(len(drawn),n+1);self.assertEqual(len(set(drawn)),n+1)
 
     def test_irreducible_metadata_fails_instead_of_violating_budget(self):
         with tempfile.TemporaryDirectory() as tmp:

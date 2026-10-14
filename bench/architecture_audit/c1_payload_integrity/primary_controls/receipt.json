@@ -1,0 +1,1102 @@
+{
+  "binarySha256": "3328487c2920e07b291eebec8072954f11b0d20a39181ccbc0c4287e2f765524",
+  "driverSha256": "6ae3697e1fd07e5bce0809d16dd1fac4f9a78a5e6f4b9e2c6e9f355496023fb9",
+  "executions": 14,
+  "fixtureSnapshot": {
+    "buffer-length-decimal/input.3tz": "2ed174d9b2954dd8fd3179f38880757ba71518dfb95701f8d5abbf016e33b18b",
+    "buffer-length-decimal/literal-source.json": "91707467d918da01d67686ad059b087db61f994b96cb066ca16bd8fa881c755b",
+    "buffer-length-decimal/point.glb": "3131ae0acf048689660aa128272d376bf5606f44cd02e055489aea7e38b9a689",
+    "buffer-length-decimal/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "component-exponent/input.3tz": "b0cac28741de7c67634f8b8f60c1b5aad2ef3c2e78be902af26541408e6d05ac",
+    "component-exponent/literal-source.json": "4c9b898c28a336ccffc58747b24e3fc76a69eaeed9769bf81f5d40b11d91463a",
+    "component-exponent/point.glb": "438a677725fed570a4d69d073369f539199b9ca20b0849f50be539a2045a9440",
+    "component-exponent/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "component-fractional/input.3tz": "fdf3f3dc64d38427d9aa3767270e200dc3a292e527ecbb2dd5dcb24376359261",
+    "component-fractional/literal-source.json": "b7fc84f4053069375110cefc7c7915d82b714642e7859969e69a81b19bd312a4",
+    "component-fractional/point.glb": "9d31079f1b0421509f0c03a50e6b0d9f458c181e8ef3bd037570a60ecd2792fe",
+    "component-fractional/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "count-decimal/input.3tz": "180e74e41fce0ac62450899b901adf32b28db442a6058d98de5f3407e92d5ea3",
+    "count-decimal/literal-source.json": "6258691e35ba5e2289ee38c83bc3d7725c053dddffa788cca92f96e0f71a5255",
+    "count-decimal/point.glb": "0dddb8adf7d8e0b8e9d08302c552a467df27dfd53744d80621a4b3c99cbaf00f",
+    "count-decimal/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "count-fraction-exponent-rounds-to-integer/input.3tz": "895ce0f572706b8cfe091a1798776780fbc6f8f4c8dc8800bed902b1fdc24d16",
+    "count-fraction-exponent-rounds-to-integer/literal-source.json": "385529f307865c499ef4ded2d5474deb1409a40fb4cfdc49263d525046a3bb89",
+    "count-fraction-exponent-rounds-to-integer/point.glb": "2ff2987c32433221ff5025b6ce5c734421778717f4a8f4addcd5b96a6fb3de74",
+    "count-fraction-exponent-rounds-to-integer/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "count-fraction-rounds-to-integer/input.3tz": "d819e66ad2beaf306871040f2eaf91b8d468dc74c26e17974ae9281849a7c41b",
+    "count-fraction-rounds-to-integer/literal-source.json": "ca7e331f104cc9acf952c26ec53f7219ceaa8592122fe731bd6fc440eea02da9",
+    "count-fraction-rounds-to-integer/point.glb": "5ef54da38367d1a0f57803a33d60080b9777fcad3d696100c096605ce0f14d3d",
+    "count-fraction-rounds-to-integer/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "count-fractional/input.3tz": "42f0543e21e6ce282de0dea8533ab550f17c79829787c0c3ad0c2c0b9d474306",
+    "count-fractional/literal-source.json": "3277876206225460e12cdfc081668294544948313e022571f5cdafdf97b3d610",
+    "count-fractional/point.glb": "2d089ae5a0b787612ff8bdfc6bded02a18c17eabbd45a0326fab260b4281325c",
+    "count-fractional/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "local-gltf-integer-representations/input.3tz": "09aff1ed29529ae25459ae9e5f15dede445a01c3923468ccb788eafb73510c3f",
+    "local-gltf-integer-representations/literal-source.json": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72",
+    "local-gltf-integer-representations/point.gltf": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72",
+    "local-gltf-integer-representations/tileset.json": "ddaa02052668a5c0d5912dee0882af48e70bb1203d46a397995c04ec95afd525",
+    "local-gltf-integer-representations/zero.bin": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b",
+    "position-reference-exponent/input.3tz": "013568b8005d76e16d208a0179ba85239aef07b6eb8a513171d2d42eb590ec28",
+    "position-reference-exponent/literal-source.json": "cca9e04608f830f9c72bd83eba7b1978f066583dc031ff8f0375c3827c299276",
+    "position-reference-exponent/point.glb": "88a1d35d0b3b4701b349c0f75a753867ff315215d30e46e2d5b4f5ee5a9f341d",
+    "position-reference-exponent/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "position-reference-fractional/input.3tz": "040fa9264bd8695bb883cfcfa65c1e5f1cd82a289706012db5ee330859f5a02b",
+    "position-reference-fractional/literal-source.json": "a2898d0c063ae9ab418477ae11f9e5192a16a23e01b10b2689953b97c3e1b552",
+    "position-reference-fractional/point.glb": "b0115827d225df3b957bf21522870762aeb717b42561c13283e3d5e32cde3436",
+    "position-reference-fractional/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "stored-zero-arbitrary-bounds/input.3tz": "14495efa4efb9b735276137430be901bd2a444c7dc1da16636fe9f54257ae4e7",
+    "stored-zero-arbitrary-bounds/literal-source.json": "221572636d4e12d948c96309dc99d9c04d8c05789961cb653f69a8269a42834b",
+    "stored-zero-arbitrary-bounds/point.glb": "7ecf98c300105dc4dc518ca174c79312786d38bb03b77a910fd6ad036a0bc043",
+    "stored-zero-arbitrary-bounds/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "stored-zero-control/input.3tz": "2fbf007e0eeae384a41cbb9e6d801fdf2ef19514a2f7d30e6ac82f625ce30504",
+    "stored-zero-control/literal-source.json": "230e1e4c06354ed59ed8347c2b6937085077c0dfe8fc4e2d1e557cebc3a905a1",
+    "stored-zero-control/point.glb": "e80968342a1b7d18d0360c2aa0dcdaa495fa1141965191bd97856fc0acffa951",
+    "stored-zero-control/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "viewless-arbitrary-bounds/input.3tz": "f5a115a89a63de018cf4ab0e9f3766a617861d37df6ca137cda75c4d9c0db00a",
+    "viewless-arbitrary-bounds/literal-source.json": "651ce9596f8f1233826b33522f02ea76f402031f732fab5389bec2f2074a5e00",
+    "viewless-arbitrary-bounds/point.glb": "aa086035e4443fa7a942b4ac1362ce1c8187085396bc57135a1bf79221d195e8",
+    "viewless-arbitrary-bounds/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60",
+    "viewless-zero-control/input.3tz": "6de3bf1cf6a61197cd0c6e0dc441a59d547180a7b72ecaacfe932f914b5ffdb4",
+    "viewless-zero-control/literal-source.json": "344529932aeadb30de0838a2f1dad9111ecc3ffee5d75e5ecd078bb575180ef2",
+    "viewless-zero-control/point.glb": "ad460d7a072fe9e3933ad8dc5b04ac665816b45a091d7d19bea5b83fb43c9313",
+    "viewless-zero-control/tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+  },
+  "launcherSha256": "17e3c79ef19f95158612fc8e5b7cb15aa2c4c9b0249d5b4b9b391271fbaebfd7",
+  "primaryPin": {
+    "bytes": 148064,
+    "cacheMatches": true,
+    "sha256": "10aebb6a8362a155b196448912bf6250bf046f150431fa73c6cd657c44185aff",
+    "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/8e798b02d254cea97659a333cfcb20875b62bdd4/specification/2.0/Specification.adoc",
+    "work": "/tmp/rusty-tiles-c1-primary-controls-qrndemti"
+  },
+  "rawSnapshot": {
+    "buffer-length-decimal.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "buffer-length-decimal.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "buffer-length-decimal.stdout": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734",
+    "component-exponent.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "component-exponent.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "component-exponent.stdout": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734",
+    "component-fractional.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "component-fractional.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "component-fractional.stdout": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734",
+    "count-decimal.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "count-decimal.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "count-decimal.stdout": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb",
+    "count-fraction-exponent-rounds-to-integer.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "count-fraction-exponent-rounds-to-integer.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "count-fraction-exponent-rounds-to-integer.stdout": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb",
+    "count-fraction-rounds-to-integer.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "count-fraction-rounds-to-integer.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "count-fraction-rounds-to-integer.stdout": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb",
+    "count-fractional.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "count-fractional.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "count-fractional.stdout": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb",
+    "local-gltf-integer-representations.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "local-gltf-integer-representations.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "local-gltf-integer-representations.stdout": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb",
+    "position-reference-exponent.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "position-reference-exponent.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "position-reference-exponent.stdout": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734",
+    "position-reference-fractional.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "position-reference-fractional.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "position-reference-fractional.stdout": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734",
+    "stored-zero-arbitrary-bounds.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "stored-zero-arbitrary-bounds.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored-zero-arbitrary-bounds.stdout": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2",
+    "stored-zero-control.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "stored-zero-control.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored-zero-control.stdout": "79cb25e4c4d5fcf2424cb1e804add68c53650e44e1d38f0a50a503976254e37d",
+    "viewless-arbitrary-bounds.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "viewless-arbitrary-bounds.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "viewless-arbitrary-bounds.stdout": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2",
+    "viewless-zero-control.runtime.json": "1a383db100b4cc7e8d6c10150062439b69b0bcd5178d4307f7bad4b250725197",
+    "viewless-zero-control.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "viewless-zero-control.stdout": "e37daccf87cda7c534235ffe36bc143f8fc85049b6eb3cd58be38ad2fd58b7b8"
+  },
+  "receipts": [
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "2fbf007e0eeae384a41cbb9e6d801fdf2ef19514a2f7d30e6ac82f625ce30504",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/stored-zero-control.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/stored-zero-control/input.3tz"
+      ],
+      "elapsedSeconds": 0.03905487600059132,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 0,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "stored-zero-control",
+      "literalSourceSha256": "230e1e4c06354ed59ed8347c2b6937085077c0dfe8fc4e2d1e557cebc3a905a1",
+      "memberSha256": {
+        "point.glb": "e80968342a1b7d18d0360c2aa0dcdaa495fa1141965191bd97856fc0acffa951",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "admitted",
+      "rationale": "Core stored f32 zero POINTS control.",
+      "readOnly": true,
+      "response": {
+        "archive": "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/stored-zero-control/input.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "79cb25e4c4d5fcf2424cb1e804add68c53650e44e1d38f0a50a503976254e37d"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "180e74e41fce0ac62450899b901adf32b28db442a6058d98de5f3407e92d5ea3",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/count-decimal.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/count-decimal/input.3tz"
+      ],
+      "elapsedSeconds": 0.03864052499920945,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "count-decimal",
+      "literalSourceSha256": "6258691e35ba5e2289ee38c83bc3d7725c053dddffa788cca92f96e0f71a5255",
+      "memberSha256": {
+        "point.glb": "0dddb8adf7d8e0b8e9d08302c552a467df27dfd53744d80621a4b3c99cbaf00f",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Integer count encoded as zero-fraction decimal.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor count must be unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "b0cac28741de7c67634f8b8f60c1b5aad2ef3c2e78be902af26541408e6d05ac",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/component-exponent.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/component-exponent/input.3tz"
+      ],
+      "elapsedSeconds": 0.03939513200020883,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "component-exponent",
+      "literalSourceSha256": "4c9b898c28a336ccffc58747b24e3fc76a69eaeed9769bf81f5d40b11d91463a",
+      "memberSha256": {
+        "point.glb": "438a677725fed570a4d69d073369f539199b9ca20b0849f50be539a2045a9440",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Integer componentType encoded as exponent.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "expected host-range unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "013568b8005d76e16d208a0179ba85239aef07b6eb8a513171d2d42eb590ec28",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/position-reference-exponent.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/position-reference-exponent/input.3tz"
+      ],
+      "elapsedSeconds": 0.03813726600128575,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "position-reference-exponent",
+      "literalSourceSha256": "cca9e04608f830f9c72bd83eba7b1978f066583dc031ff8f0375c3827c299276",
+      "memberSha256": {
+        "point.glb": "88a1d35d0b3b4701b349c0f75a753867ff315215d30e46e2d5b4f5ee5a9f341d",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Nonnegative integer accessor index encoded as exponent.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "expected host-range unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "2ed174d9b2954dd8fd3179f38880757ba71518dfb95701f8d5abbf016e33b18b",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/buffer-length-decimal.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/buffer-length-decimal/input.3tz"
+      ],
+      "elapsedSeconds": 0.04378169799747411,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "buffer-length-decimal",
+      "literalSourceSha256": "91707467d918da01d67686ad059b087db61f994b96cb066ca16bd8fa881c755b",
+      "memberSha256": {
+        "point.glb": "3131ae0acf048689660aa128272d376bf5606f44cd02e055489aea7e38b9a689",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Integer buffer byteLength encoded as zero-fraction decimal.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "expected host-range unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    {
+      "archiveBytes": 1027,
+      "archiveSha256": "09aff1ed29529ae25459ae9e5f15dede445a01c3923468ccb788eafb73510c3f",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/local-gltf-integer-representations.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/local-gltf-integer-representations/input.3tz"
+      ],
+      "elapsedSeconds": 0.038275797000096645,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "local-gltf-integer-representations",
+      "literalSourceSha256": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72",
+      "memberSha256": {
+        "point.gltf": "d1cb5dad452a410e38679c97fdbf790483bf47870643bf7d921d11d633730a72",
+        "tileset.json": "ddaa02052668a5c0d5912dee0882af48e70bb1203d46a397995c04ec95afd525",
+        "zero.bin": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+      },
+      "observed": "invalid_input",
+      "rationale": "Archive-local glTF control with literal integer-valued decimal/exponent properties.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor count must be unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "42f0543e21e6ce282de0dea8533ab550f17c79829787c0c3ad0c2c0b9d474306",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/count-fractional.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/count-fractional/input.3tz"
+      ],
+      "elapsedSeconds": 0.039577784002176486,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "count-fractional",
+      "literalSourceSha256": "3277876206225460e12cdfc081668294544948313e022571f5cdafdf97b3d610",
+      "memberSha256": {
+        "point.glb": "2d089ae5a0b787612ff8bdfc6bded02a18c17eabbd45a0326fab260b4281325c",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Nonzero fractional integer count is forbidden.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor count must be unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "040fa9264bd8695bb883cfcfa65c1e5f1cd82a289706012db5ee330859f5a02b",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/position-reference-fractional.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/position-reference-fractional/input.3tz"
+      ],
+      "elapsedSeconds": 0.03759851799986791,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "position-reference-fractional",
+      "literalSourceSha256": "a2898d0c063ae9ab418477ae11f9e5192a16a23e01b10b2689953b97c3e1b552",
+      "memberSha256": {
+        "point.glb": "b0115827d225df3b957bf21522870762aeb717b42561c13283e3d5e32cde3436",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Nonzero fractional accessor index is forbidden.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "expected host-range unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    {
+      "archiveBytes": 900,
+      "archiveSha256": "fdf3f3dc64d38427d9aa3767270e200dc3a292e527ecbb2dd5dcb24376359261",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/component-fractional.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/component-fractional/input.3tz"
+      ],
+      "elapsedSeconds": 0.037311284002498724,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "component-fractional",
+      "literalSourceSha256": "b7fc84f4053069375110cefc7c7915d82b714642e7859969e69a81b19bd312a4",
+      "memberSha256": {
+        "point.glb": "9d31079f1b0421509f0c03a50e6b0d9f458c181e8ef3bd037570a60ecd2792fe",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Nonzero fractional componentType is forbidden.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "expected host-range unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "934cafc1f7d31cdff9eeae4a996fe2faf48835f35adbfdf57e9660f1440ca734"
+    },
+    {
+      "archiveBytes": 916,
+      "archiveSha256": "d819e66ad2beaf306871040f2eaf91b8d468dc74c26e17974ae9281849a7c41b",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/count-fraction-rounds-to-integer.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/count-fraction-rounds-to-integer/input.3tz"
+      ],
+      "elapsedSeconds": 0.041648076999990735,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "count-fraction-rounds-to-integer",
+      "literalSourceSha256": "ca7e331f104cc9acf952c26ec53f7219ceaa8592122fe731bd6fc440eea02da9",
+      "memberSha256": {
+        "point.glb": "5ef54da38367d1a0f57803a33d60080b9777fcad3d696100c096605ce0f14d3d",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Exact nonzero fractional count is forbidden even when f64 rounds it to 1.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor count must be unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    {
+      "archiveBytes": 920,
+      "archiveSha256": "895ce0f572706b8cfe091a1798776780fbc6f8f4c8dc8800bed902b1fdc24d16",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/count-fraction-exponent-rounds-to-integer.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/count-fraction-exponent-rounds-to-integer/input.3tz"
+      ],
+      "elapsedSeconds": 0.038995695002085995,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "count-fraction-exponent-rounds-to-integer",
+      "literalSourceSha256": "385529f307865c499ef4ded2d5474deb1409a40fb4cfdc49263d525046a3bb89",
+      "memberSha256": {
+        "point.glb": "2ff2987c32433221ff5025b6ce5c734421778717f4a8f4addcd5b96a6fb3de74",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Exact exponent count is 1.0000000000000001 and remains fractional despite f64 rounding.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "accessor count must be unsigned integer"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "bad3c02782a9c93f9e39339a7f11d0f7c48efcb8485e232f66909d71f4a96fdb"
+    },
+    {
+      "archiveBytes": 788,
+      "archiveSha256": "6de3bf1cf6a61197cd0c6e0dc441a59d547180a7b72ecaacfe932f914b5ffdb4",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/viewless-zero-control.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/viewless-zero-control/input.3tz"
+      ],
+      "elapsedSeconds": 0.03943306699875393,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 0,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Viewless core zero initialization",
+        "storedBytes": null,
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "viewless-zero-control",
+      "literalSourceSha256": "344529932aeadb30de0838a2f1dad9111ecc3ffee5d75e5ecd078bb575180ef2",
+      "memberSha256": {
+        "point.glb": "ad460d7a072fe9e3933ad8dc5b04ac665816b45a091d7d19bea5b83fb43c9313",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "admitted",
+      "rationale": "Viewless non-sparse accessor initializes one f32 VEC3 to zero.",
+      "readOnly": true,
+      "response": {
+        "archive": "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/viewless-zero-control/input.3tz",
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "contentReferences": 1,
+        "entries": 3,
+        "limits": {
+          "accessorElements": 4000000,
+          "archiveEntries": 65536,
+          "archiveStoredBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentDecodedBytes": 67108864,
+          "documentItems": 65536,
+          "hierarchyDepth": 128,
+          "hierarchyVisits": 65536,
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "references": 262144,
+          "sourceArchiveBytes": 1073741824,
+          "totalBytesRead": 2147483648,
+          "totalPayloadElements": 16000000
+        },
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "ok": true,
+        "payloads": [
+          {
+            "accessorsChecked": 1,
+            "primitivesChecked": 1,
+            "uri": "point.glb",
+            "vertices": 1
+          }
+        ],
+        "tiles": 1
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "e37daccf87cda7c534235ffe36bc143f8fc85049b6eb3cd58be38ad2fd58b7b8"
+    },
+    {
+      "archiveBytes": 792,
+      "archiveSha256": "f5a115a89a63de018cf4ab0e9f3766a617861d37df6ca137cda75c4d9c0db00a",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/viewless-arbitrary-bounds.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/viewless-arbitrary-bounds/input.3tz"
+      ],
+      "elapsedSeconds": 0.04148202400028822,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "admitted",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Viewless core zero initialization",
+        "storedBytes": null,
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "viewless-arbitrary-bounds",
+      "literalSourceSha256": "651ce9596f8f1233826b33522f02ea76f402031f732fab5389bec2f2074a5e00",
+      "memberSha256": {
+        "point.glb": "aa086035e4443fa7a942b4ac1362ce1c8187085396bc57135a1bf79221d195e8",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "No sparse/view: primary explicitly permits arbitrary min/max independently of initialized zero values.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "declared accessor bounds differ from decoded values"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2"
+    },
+    {
+      "archiveBytes": 904,
+      "archiveSha256": "14495efa4efb9b735276137430be901bd2a444c7dc1da16636fe9f54257ae4e7",
+      "command": [
+        "/usr/bin/python3",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/controlled-launch.py",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/raw/stored-zero-arbitrary-bounds.runtime.json",
+        "/tmp/rusty-tiles-archive-read-final-evidence/rusty-tiles-portable-5c68f7b",
+        "--json",
+        "validate",
+        "/tmp/rusty-tiles-c1-primary-controls-qrndemti/fixtures/stored-zero-arbitrary-bounds/input.3tz"
+      ],
+      "elapsedSeconds": 0.03853492900088895,
+      "execution": {
+        "affinity": [
+          0,
+          1
+        ],
+        "nice": 10,
+        "rayon": "2"
+      },
+      "exitCode": 3,
+      "expectation": "invalid_input",
+      "independentDecodedPosition": {
+        "declaredBoundsAreSeparate": true,
+        "method": "Little-endian f32 zero bytes",
+        "storedBytes": "000000000000000000000000",
+        "values": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "label": "stored-zero-arbitrary-bounds",
+      "literalSourceSha256": "221572636d4e12d948c96309dc99d9c04d8c05789961cb653f69a8269a42834b",
+      "memberSha256": {
+        "point.glb": "7ecf98c300105dc4dc518ca174c79312786d38bb03b77a910fd6ad036a0bc043",
+        "tileset.json": "9e90479baedd8ed1f2c990ea318927091b187801adf84e7f3541053f79cf7d60"
+      },
+      "observed": "invalid_input",
+      "rationale": "Same arbitrary bounds on stored zero bytes violate actual binary extrema agreement.",
+      "readOnly": true,
+      "response": {
+        "error": {
+          "code": "invalid_input",
+          "message": "declared accessor bounds differ from decoded values"
+        },
+        "exitCode": 3,
+        "ok": false
+      },
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutSha256": "4dfe48438655c43fc3e972c19f0c762cf00edbf3ced926287479c58697a7aba2"
+    }
+  ],
+  "schemaVersion": 1,
+  "scope": "Finite independent primary controls; no full C1, A2, release or universal glTF conformance acceptance.",
+  "sourcePin": {
+    "acceptance_inputs_sha256": {
+      ".github/workflows/ci.yml": "5ae1977094c03ea15bab92751f19d2e6f1455949bac05c2080b9c3a3d80fccfd",
+      "bench/architecture_audit/implicit_rewrite/archive_read_acceptance/catalog_resource_probe.py": "d5801a49bf5f9d5e5f00f52ea9a084aafb93b1caf048b56bbde89de3009cbb54",
+      "bench/architecture_audit/implicit_rewrite/archive_read_acceptance/probe.py": "f55837402c63c61241934fd5ce510fece38ba71f208b80f8e6f9c824b905cd89",
+      "tests/archive_read_oracle.py": "2341fa4d45929d1221f251b27820eff874faf52beacc8db2c57d9a57f568bbb2"
+    },
+    "execution_policy": {
+      "cargo_build_jobs": 2,
+      "cpu_affinity": [
+        0,
+        1
+      ],
+      "nice": 10,
+      "rayon_num_threads": 2,
+      "rust_test_threads": 2
+    },
+    "production_sha256": {
+      "Cargo.lock": "e9d0627a218223d932db7c865443b1b8182df27d28084ff7e28e46822cfaa673",
+      "Cargo.toml": "c8f1567854a5683cbb2c9c7d231cf8fb4541d69d3d4fe32748eea251fea3d5a4",
+      "bindings/python/Cargo.toml": "54622c51485220c589b692b9cdd1c5065b51caefc68d7304dd1a646efa862d77",
+      "bindings/python/src/lib.rs": "f0acdf647c5c1f06c6f564b7a19d517aba1f7be59c98a2f7aa9dc2e83e3d3fd9",
+      "build.rs": "659563cb8338709c46dfa50636cf49ecc367a3a6e98e7fdd5728e318c2033931",
+      "src/archive3tz.rs": "02cf420d342057ac106e7f1bac9f4b891e361fa969b54ce788ad9584b74d84ef",
+      "src/archive3tz/read.rs": "01870325ae4e9cea52f466cab1b6b30cc14c6ef79ba0cc51a3e95c03751b4838",
+      "src/bbox.rs": "236853be2986b6319ab505293c0e31f3e363453350b60b32f398d81601c61f25",
+      "src/convert_implicit.rs": "8a65db2aea73d3fc9b977a8421970a051c675dea15b8946682aaf65158f323ee",
+      "src/crs.rs": "501cf6cf1f5d1ba13d8ff4617da1cba0f840a11921686910d9dfb595f5778666",
+      "src/doctor.rs": "8e70d0a99621147619913686819807290293a8428d8d065b233efcd0c57454a7",
+      "src/error.rs": "3d92c79a63a6d47001792bd6af339ebf2099b5f523e4e26bb47e13d3b60de5dc",
+      "src/fixtures.rs": "f9bfa76f5c0cca5d7e32c6f4619933a5cd2f08673240f00184578efa816f30cb",
+      "src/georef.rs": "e1ca5354e64885f1ee62d11ad534abefc3a346ff484959006c2e3800033b8675",
+      "src/geospatial.rs": "a1378663420adff468415272f700947f81369a120c3041b0915c9b6db411d557",
+      "src/geospatial/native.rs": "0d020d2923d83a4b1973e63470a054faa0bda6d76ae8ed9e46d7e980feb55a47",
+      "src/glb.rs": "b8a1851dc8c3ab7fdbb287160245c89febd09a70b46518c50356b03284248880",
+      "src/glb_write.rs": "af9a3f9c661865c79019b55cfd0deb4d13984d12b61691759778ea5469bb0549",
+      "src/gpu_texture.rs": "73e43cbbc1b86268c6c0223b5b200e2c40289e11d76bacbf4ae57f6399406a12",
+      "src/grid.rs": "7565f21f8bc43561ddcf7055a1d603b350abe90d4f1f377c101295f4c222d408",
+      "src/hlod.rs": "f0990da0d2fc213f60a4cc0d49fffb9883688f33704a89a77d46d800e5ccd57e",
+      "src/implicit.rs": "63aab5d4f1be45ffd51fd95f9b4def4cb8a8579b2dd3e23e69097d8d8f13a38b",
+      "src/implicit/tileset.rs": "184c61cec313cc69001b3b1cbe11914948542a2df6499439ff1839c848ee75d7",
+      "src/jpeg.rs": "e324300e633a48f6722bdae7fb86f37d9c8e79624dad2a63d0a284a2c806a34c",
+      "src/lib.rs": "a60c4790e5c339065fbac535c8974cbdbbd2f81496932eab5fa1ca4604d7b3fc",
+      "src/lossless.rs": "061441c82ed419416c3363a387c91a2636b76101d7f75f7e39837de9638885a7",
+      "src/main.rs": "a12499f6b5694932facb8b3757113533cadce524ef4f0aff064d0dd63ecad4e8",
+      "src/mesh.rs": "3d288b1c9b02ca34c8c59d1b4706922e6dc30f0afab4a5374bedb64c8cb24b18",
+      "src/mesh_archive.rs": "444b03b063f2426b8f664a269e3cd4694deb805becb2783307540678decd8e11",
+      "src/mesh_archive/approximation.rs": "522302d9b537ed74a9d6878380258f1b03270f6981b2c250db52cf702cddeb5d",
+      "src/mesh_archive/approximation/certificate.rs": "b444b74efc8924cca43e009e247653202afdfe9bb08dec20251d6e0abd191aa7",
+      "src/mesh_archive/binding.rs": "6dd702fddac043d0472db3037b5758cf8b09dae28580330cba141175e215bdfa",
+      "src/mesh_archive/encode.rs": "aec6bc9c9356a54c0607a79431e3d9bfa339acc9ee75c5a6f9289ca5bb87c2d0",
+      "src/mesh_archive/encode/identity.rs": "6f02a571c6170fae321b02edacc48a4129e977127af118cac849c8eab4a41278",
+      "src/mesh_archive/encode/proxy_identity.rs": "d2ebc12586c0ba6f6716d5203df1d7c0e31461d41604eb39d994a1548ea2a647",
+      "src/mesh_archive/model.rs": "cd5eb981603a81fe8aa12cb99d2e205b90875fbaf97c307351ead82d4d978e50",
+      "src/mesh_archive/partition.rs": "4f2a5f2cd02efc1071e262dd3ba377dc5dcfa428c726ca11a5458e52b50cc594",
+      "src/mesh_archive/placement.rs": "56e9f9011ea65257c565a39b9c699e5d5e71a117d923e1f9dfca10a37e22568e",
+      "src/mesh_archive/source.rs": "9f4991c91060f55cfb974b2121c0f3aa490372e3efb8c76594782741b355ba35",
+      "src/mesh_archive/source/json.rs": "507e43a6448915f7a6a200f601378eaed73a1e1fbb541fb70d84356942dca512",
+      "src/mesh_archive/source/material.rs": "f3ea05702708e8acf067f4e4584d3d5755020aaed483cccc66baef28b6825ba4",
+      "src/mesh_archive/source/original_bounds.rs": "c5deb31a0cf3ce80c0ba512c417a9bac7549a5ac14195f49a31b27a654223be3",
+      "src/mesh_archive/source/texture.rs": "c003c890ce148a754e32f6225540f0f0d5ecd41a504cefc7f53bce68d6b71b03",
+      "src/mesh_crs.rs": "8a542543636acb5cae480e079c172974f58c835be26a4631bf984c515579ca2b",
+      "src/metadata.rs": "9f77549e28b6acdf7a1d97ec2b2c5267e7f8a7cb868dc30b8d50fc4ebfe0056b",
+      "src/output.rs": "2472d89d52d5c0fdfacd5108e1701b004cd1186aa65f6ba27f7991ed1900c800",
+      "src/output_path.rs": "921fd71712bda61c81b666e62e8f249d0a354d05c24642d0121109768b0a6353",
+      "src/pack.rs": "7823ef0a626e44b1c539508b202cca7cb5c970b31bce91e4ea211283b1cbaa45",
+      "src/package.rs": "fa84f680bfcb5ec62711e44dfe0af545f5dbdd07f62b1e8af9a6c1a4722f907f",
+      "src/point_cloud.rs": "e06a42ec9b09370d4409137c9c6abc784d0661c0c8653c3923e81ffefb7590a9",
+      "src/point_cloud/source.rs": "34914401c78b44a839f931bb398a25b5d60030f72d38b140da256b13b0646319",
+      "src/point_cloud/tiles.rs": "13149a1514395da1d9aedf67b05a3a5b95d398ef2c1e82fa0c29374a6b5ae577",
+      "src/point_sampling.rs": "a29c325c32b2adaf58333c6385dcb195a6ee9944caefc87ec624727fed1b89f3",
+      "src/preview.rs": "19b070cc5ff98525b5141ecf94f1779dbe26eace16030f4f4248ac61a44d52fd",
+      "src/raster.rs": "bffc3fae21e0e220f804b6d6dcffa16ded02e0ae7391390b6b5d0c79eeed650d",
+      "src/raster/native.rs": "31760b48342684893d64d7267dbc22ad7437c4c44a8befaabd901c73a47fcc5f",
+      "src/raster_directory.rs": "436512c11d7ffdf8f7f78e3cb949a2541b8eca849ef5ff0d83ac7ba4fbb22b88",
+      "src/raster_directory/native.rs": "86641def9304196bc8ee52a60dd41968a09bd64e7bfb575b14e91717f6d104cb",
+      "src/report.rs": "e8bb07d81399657828df3d22be422aee775dd31e6d8ea399053eb8744c076ed4",
+      "src/runtime.rs": "a85118f9f31a162be65c78fa01a027e47e38258a3ac19646ac30dc4c6411fcc8",
+      "src/runtime/directory.rs": "0ece95d715601244c0c3a61c10a19731d3b924d7c89caa96b95d41eafc55fefc",
+      "src/runtime/directory_platform.rs": "afd2e24f0d87769873aa42ee9444bd22743e106efd6461fc6254d0ccc5becb64",
+      "src/runtime/tests.rs": "e6619b812a284a82a5de42587a33708819ddecaccaab87756d10423099acfcb4",
+      "src/terrain.rs": "5056ebbb31ffe5f0dd9b828a2074d4ef9e90f1e8614e998abfb789e7a99b3e03",
+      "src/terrain/glb.rs": "e62676a3cc826cd7e016cd4b0e6973226839cd24dfc4810282524431c90607d6",
+      "src/terrain/raster.rs": "156cf1b8146afef52f122bdb92ca6e0332b1da8b595f8d63663f9db4a0018e7d",
+      "src/texture.rs": "7c48e2efb3c1d86c6d4173bf373dec0d26e71a8690be039571bde9625c2cf6a3",
+      "src/tile.rs": "799b3ffb935fbd6924cff6a5f7458998d530592fb97eb366017ce3a9f53836fc",
+      "src/tileset.rs": "7895b8985373474a827a95c9675381c181bfef0c19308467222b161436a60ca2",
+      "src/tileset/resources.rs": "d3ab356097f040d40ca68edc46fcb956b7416d86ad4266c0041ccc80b23d8223",
+      "src/tileset_node.rs": "95809150c9e16f8673b3d129471abb8fcef017fcb6eae66c5abaea20dcd48ac0",
+      "src/validate.rs": "9772bfb1f0a14b96db1cfd49818c545635dbc8f83041e224b33e94745baf36ff",
+      "src/validate/json.rs": "d9a7758368502adbb4c29c23c9c9bcbe53aad11ff571df7b1d54f916f3cdefe8",
+      "src/validate/payload.rs": "5489f90890955bd4a89410d64ff2983eac211752d12d9b365dc8612c579db8e5",
+      "src/validate/types.rs": "3f8ecaca0132f8d6b4c5ef9975ba1acdc29e4063667e6eac42989251a0522817",
+      "src/vec3.rs": "2519e2e55a6b6ef3a032386c1e901cc59cda639563a72057134d142c9f70cc27",
+      "src/vector.rs": "670e658712d0713273efbe3af94e63f350bc61dbc591dace20b374a627dd9f95",
+      "src/vector/model.rs": "2d53e3df5aa3bcf6149696c92da3851c1bc38ffa9c720c2f597da3b2e157f58d",
+      "src/vector/pipeline.rs": "69c3826484675cb0b3b45ad491c0e55e0bb089ea4c2a21382f08be06850c58a9",
+      "src/vector/pipeline/acceptance.rs": "dc0a5e3b12d7c00139f767deb9a0c7bae0145e0e2b3e3fae4992b1faa5583d1d",
+      "src/vector/pipeline/aggregation.rs": "06a81459d66958c2d2fb6521c9f88a25c82fdad2814640530186586ed16a7f98",
+      "src/vector/pipeline/encoding.rs": "e8c440654507a90aeec2c733783e02a63a6ded334f4e8b87e23c59bc1a4514c6",
+      "src/vector/pipeline/geometry.rs": "3f4e52b78a2f62fdf32320a3d7bd1b743f64139368a738a7f3c7c7910618ed10",
+      "src/vector/pipeline/geometry/countries_tests.rs": "b575075db6a65a40663afcc814eee13415c702eab365313d6304108345d13787",
+      "src/vector/pipeline/geometry/native.rs": "1305846a733b812147723904ddef16a8fdde407c573ee1c610c9ba0a0414d1cd",
+      "src/vector/pipeline/geometry/portable.rs": "f9897b97e34ffd402fcd08b3d6b6d93cd263735fe2a9929b820f6356c53eeaee",
+      "src/vector/pipeline/reuse.rs": "62cddb085f2115bb103e704eb13357069c2f9346a0c14f1e5d5b8b4cb4bfac21",
+      "src/vector/pipeline/source.rs": "1df456f447d7d9534cc09e8d33b27b06ede84ab5beba1f1ac9f7686ffee6c3d6",
+      "src/vector/pipeline/source_native.rs": "4ae1659221add9507856bf3f8e91faec62fcea97091162d38fbcce981ad4666e",
+      "src/vector/pipeline/store.rs": "28969baad113cf8b4f959c256179ae7d0ede2a665ab99c9c04c171b8576fe398",
+      "src/vector/portable.rs": "33fd2f11ce0be89e6d7c933bd51404acfadb229955df5a258031fe5ae0e0e6a7",
+      "src/vector/source_fields.rs": "e962f51e7ff41d393677beca8fa16e7296e776c32cc3f7f39d626f7486101fac",
+      "src/vector_encoding.rs": "5094aeafa9ff75c939954d69aa3274d5181ac60d573c461bbea40379695cec4a"
+    },
+    "scope": "Bounded stored archive read owner and current C1 inspector; no A2 or release acceptance.",
+    "source_commit": "5c68f7b52b72e2f6e72096e930f85d27f2897448",
+    "source_tree": "9b813ec13fb232b857f545b22f0b69e201b58201"
+  },
+  "sourcePinSha256": "913e15540cfe4b387905fdaf00aff270614285ba88d9e12acfe4ffccaa18aa13"
+}

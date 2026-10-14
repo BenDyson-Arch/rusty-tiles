@@ -1,12 +1,20 @@
 [package]
 name = "rusty-tiles"
-version = "0.3.0"
+version.workspace = true
 edition = "2021"
 description = "Standalone geospatial tiling: textured meshes, imagery, terrain, LAS/LAZ point clouds and glTF vectors."
-license = "MIT"
+license = "MIT AND Apache-2.0 AND BSD-3-Clause"
 repository = "https://github.com/BenDyson-Arch/rusty-tiles"
 readme = "README.md"
-include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/support/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**", "/bench/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/Dockerfile", "/.dockerignore", "/LICENSE", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/build.rs", "/src/**", "/vendor/**", "/scripts/*.sh", "/scripts/*requirements.txt", "/preview/**", "/tests/*.rs", "/tests/support/*.rs", "/tests/*.py", "/tests/fixtures/**", "/docs/**", "/bench/**", "!/bench/**/__pycache__/**", "!/bench/architecture_audit/c2_decoded_containment/controls/large/**", "!/bench/architecture_audit/c2_decoded_containment/wb/large/**", "!/bench/architecture_audit/implicit_read/controls/large/**"]
+
+[workspace]
+members = ["bindings/python"]
+default-members = ["."]
+resolver = "2"
+
+[workspace.package]
+version = "0.4.0"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
@@ -21,19 +29,29 @@ pkg-fmt = "zip"
 name = "rusty-tiles"
 path = "src/main.rs"
 
+[[example]]
+name = "demodata-suite"
+path = "bench/demodata_suite.rs"
+required-features = ["native-geospatial"]
+
 [features]
 default = []
-native-geospatial = ["dep:gdal-sys", "dep:pkg-config", "dep:rusqlite"]
+native-jpeg = []
+native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
+# Test-only: `RUSTY_TILES_FORCED_SPILL=1` puts the validator catalog on scratch (parity runs).
+validate-forced-spill = []
 
 [dependencies]
+base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
 gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names"] }
 gltf-json = { version = "=1.4.1", features = ["extensions"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value", "unbounded_depth"] }
 thiserror = "2"
 zip = { version = "2", default-features = false }
 walkdir = "2"
+same-file = "1"
 crc32fast = "1"
 md5 = "0.7"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
@@ -49,13 +67,31 @@ sha2 = "0.10"
 jsonschema = { version = "0.33", default-features = false }
 gdal-sys = { version = "0.12", features = ["bindgen"], optional = true }
 las = { version = "0.11.1", features = ["laz"] }
-rusqlite = { version = "0.40", optional = true }
-tiny_http = "0.12.0"
+rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
+geozero = { version = "0.15.1", default-features = false, features = ["with-geojson", "with-wkb"] }
+geo = { version = "0.33.1", default-features = false, features = ["spade"] }
+spade = "2.15"
+rstar = { version = "0.12.2", default-features = false }
+hyper = { version = "1", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "fs", "io-util"] }
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 percent-encoding = "2.3.2"
+bitvec = { version = "1.1", default-features = false, features = ["std"] }
+morton-encoding = "2.0"
+proj4rs = { version = "0.2.0", default-features = false }
+proj4wkt = "0.1.1"
 
 [build-dependencies]
+cc = { version = "1.2", features = ["parallel"] }
 pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
+basisu = "=0.1.0"
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 zip = { version = "2", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

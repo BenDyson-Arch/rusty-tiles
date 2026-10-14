@@ -35,8 +35,11 @@ fn summary(stderr: &[u8], command: &str, output: &Path) -> Vec<String> {
 #[test]
 fn every_converter_prints_wrote_reports_and_next_lines() {
     let work = tempfile::tempdir().unwrap();
+    // Resolve output identity; input recipes append URI-style separators and
+    // therefore must not receive Windows verbatim paths from canonicalize.
+    let root = std::fs::canonicalize(work.path()).unwrap();
     let inputs = work.path().join("inputs");
-    let outputs = work.path().join("outputs with spaces");
+    let outputs = root.join("outputs with spaces");
     std::fs::create_dir_all(&outputs).unwrap();
     write_inputs(&inputs);
     let mut covered = std::collections::BTreeSet::new();
@@ -52,11 +55,88 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
         let lines = summary(&result.stderr, recipe.command, &output);
         let first = &lines[0];
         match recipe.command {
-            "point-cloud" => assert!(first.ends_with(" (3000 points, 15 tiles)"), "{first}"),
+            // The octree splits in each recipe's own frame (ECEF or local metres).
+            "point-cloud" => {
+                let tiles = if recipe.name == "point-cloud-local" {
+                    9
+                } else {
+                    37
+                };
+                assert!(
+                    first.ends_with(&format!(" (3000 points, {tiles} tiles)")),
+                    "{first}"
+                )
+            }
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
-            "terrain" => assert!(first.ends_with(" (16 tiles)"), "{first}"),
-            // Directories without counts name only the path.
-            "raster" => assert_eq!(first, &format!("raster: wrote {}", output.display())),
+            "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
+            "glb-to-3tz" | "createTilesetJson" => {
+                assert!(first.ends_with(" (1152 triangles)"), "{first}")
+            }
+            "raster" => {
+                // Both literal WGS84 fixtures cover four requested z9..11 tiles.
+                assert_eq!(
+                    first,
+                    &format!("raster: wrote {} (4 tiles)", output.display())
+                );
+                let report: Value =
+                    serde_json::from_slice(&std::fs::read(output.join("report.json")).unwrap())
+                        .unwrap();
+                assert_eq!(report["profile"], "r2-source-cog-direct-nearest-pyramid");
+                assert_eq!(report["tiles"], 4);
+                let pngs = walkdir::WalkDir::new(output.join("tiles"))
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|entry| entry.file_type().is_file())
+                    .collect::<Vec<_>>();
+                assert_eq!(pngs.len(), 4);
+                assert!(pngs
+                    .iter()
+                    .all(|entry| entry.path().extension().is_some_and(|x| x == "png")));
+                assert!(output.join("source.cog.tif").is_file());
+                assert!(output.join("tilejson.json").is_file());
+                assert!(!output.join("conversion.json").exists());
+
+                let json_outputs = outputs.join("machine summary");
+                std::fs::create_dir_all(&json_outputs).unwrap();
+                let machine = run(&recipe, &inputs, &json_outputs, &["--json"]);
+                assert!(
+                    machine.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&machine.stderr)
+                );
+                assert!(!String::from_utf8_lossy(&machine.stderr).contains("next:"));
+                let summary: Value = serde_json::from_slice(&machine.stdout).unwrap();
+                let json_output = json_outputs.join(recipe.output);
+                let published: Value = serde_json::from_slice(
+                    &std::fs::read(json_output.join("report.json")).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(summary["ok"], true);
+                assert_eq!(summary["rasterReport"], published);
+                assert_eq!(
+                    summary["conversionReport"],
+                    serde_json::json!({
+                        "path": json_output.join("report.json").to_string_lossy()
+                    })
+                );
+                assert_eq!(
+                    summary["counts"],
+                    serde_json::json!({
+                        "tiles": 4, "sourceBands": if recipe.name == "raster-gray" { 1 } else { 3 }
+                    })
+                );
+                // Documented resolution: min(requested --jobs 2, available
+                // CPUs); the child inherits this process's CPU affinity.
+                let workers = std::thread::available_parallelism().map_or(1, |n| n.get().min(2));
+                assert_eq!(
+                    summary["settings"],
+                    serde_json::json!({
+                        "minZoom": 9, "maxZoom": 11, "workers": workers
+                    })
+                );
+                assert_eq!(published["requested_workers"], 2);
+                assert_eq!(published["resolved_workers"], workers);
+            }
             // Single files without counts report their size.
             _ => assert!(first.ends_with(" MiB)"), "{first}"),
         }
@@ -98,6 +178,33 @@ fn json_mode_prints_no_human_summary() {
     assert_eq!(report["ok"], true);
 }
 
+#[test]
+fn sibling_manifest_json_returns_inline_report_without_claiming_a_report_file() {
+    let work = tempfile::tempdir().unwrap();
+    let inputs = work.path().join("inputs");
+    let outputs = work.path().join("outputs");
+    std::fs::create_dir(&outputs).unwrap();
+    write_inputs(&inputs);
+    let recipe = recipes()
+        .into_iter()
+        .find(|r| r.command == "createTilesetJson")
+        .unwrap();
+    let result = run(&recipe, &inputs, &outputs, &["--json"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let summary: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let output = outputs.join(recipe.output);
+    assert!(output.is_file());
+    assert!(summary["conversionReport"].is_null());
+    assert_eq!(summary["modelReport"]["product"], "manifest");
+    assert_eq!(summary["modelReport"]["triangles"], 1152);
+    assert_eq!(summary["counts"]["triangles"], 1152);
+    assert!(!outputs.join("conversion.json").exists());
+}
+
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
@@ -120,7 +227,7 @@ fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
         (
             "--repair",
             "(2 features, 1 tile)",
-            "warnings: 1 feature without geometry, 5 geometry reports; see conversion.json and geometry-reports.jsonl",
+            "warnings: 1 feature without geometry, 2 geometry reports; see conversion.json and geometry-reports.jsonl",
         ),
     ] {
         let output = work.path().join(format!("out {flag}.3tz"));
@@ -151,7 +258,7 @@ fn vector_warnings_line_lists_skipped_missing_and_reported_features() {
 }
 
 #[test]
-fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
+fn validate_rejects_directories_non_archives_and_missing_paths_with_typed_outcomes() {
     let work = tempfile::tempdir().unwrap();
     let directory = work.path().join("tiles");
     std::fs::create_dir(&directory).unwrap();
@@ -159,10 +266,12 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
     std::fs::write(&not_zip, b"not a zip archive").unwrap();
     let missing = work.path().join("missing.3tz");
     let unsupported = "validate currently checks .3tz archives only; raster and terrain output directories are not validated yet";
-    for (path, message) in [
+    for (path, message, exit_code, category) in [
         (
             &directory,
             format!("{} is a directory: {unsupported}", directory.display()),
+            3,
+            "invalid_input",
         ),
         (
             &not_zip,
@@ -170,15 +279,22 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
                 "{} is not a ZIP/.3tz archive: {unsupported}",
                 not_zip.display()
             ),
+            3,
+            "invalid_input",
         ),
-        (&missing, format!("input not found: {}", missing.display())),
+        (
+            &missing,
+            format!("input not found: {}", missing.display()),
+            1,
+            "io",
+        ),
     ] {
         let human = Command::new(bin())
             .arg("validate")
             .arg(path)
             .output()
             .unwrap();
-        assert_eq!(human.status.code(), Some(3), "{}", path.display());
+        assert_eq!(human.status.code(), Some(exit_code), "{}", path.display());
         assert!(human.stdout.is_empty());
         let stderr = String::from_utf8_lossy(&human.stderr);
         assert!(stderr.starts_with(&message), "{stderr}");
@@ -188,17 +304,54 @@ fn validate_rejects_directories_non_archives_and_missing_paths_with_exit_3() {
             .arg(path)
             .output()
             .unwrap();
-        assert_eq!(json.status.code(), Some(3), "{}", path.display());
+        assert_eq!(json.status.code(), Some(exit_code), "{}", path.display());
         let error: Value = serde_json::from_slice(&json.stdout).unwrap();
         assert_eq!(error["ok"], false);
-        assert_eq!(error["exitCode"], 3);
-        assert_eq!(error["error"]["code"], "data");
+        assert_eq!(error["exitCode"], exit_code);
+        assert_eq!(error["error"]["code"], category);
         assert!(
             error["error"]["message"]
                 .as_str()
                 .unwrap()
                 .starts_with(&message),
             "{error}"
+        );
+    }
+}
+
+/// Explicit vector and point-cloud output retired in 0.4.0 (H6): `--explicit`
+/// is an unknown argument, refused as a usage error before any input or output
+/// work, and no longer advertised in help.
+#[test]
+fn vector_and_point_cloud_reject_retired_explicit_flag() {
+    let work = tempfile::tempdir().unwrap();
+    for (command, input) in [("vector", "in.geojson"), ("point-cloud", "in.las")] {
+        let output = work.path().join(format!("{command}.3tz"));
+        let result = Command::new(bin())
+            .arg(command)
+            .arg("--explicit")
+            .arg("-i")
+            .arg(work.path().join(input))
+            .arg("-o")
+            .arg(&output)
+            .args(["--sourceCrs", "local"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert_eq!(result.status.code(), Some(2), "{command}: {stderr}");
+        assert!(
+            stderr.contains("unexpected argument '--explicit'"),
+            "{command}: {stderr}"
+        );
+        assert!(!output.exists(), "{command} wrote output");
+        let help = Command::new(bin())
+            .args([command, "--help"])
+            .output()
+            .unwrap();
+        assert!(help.status.success());
+        assert!(
+            !String::from_utf8_lossy(&help.stdout).contains("--explicit"),
+            "{command} help still lists --explicit"
         );
     }
 }

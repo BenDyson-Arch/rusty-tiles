@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1040" height="252" viewBox="0 0 1040 252" role="img" aria-labelledby="title desc">
   <title id="title">Input formats and tile outputs</title>
-  <desc id="desc">Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles; elevation becomes quantized-mesh terrain.</desc>
+  <desc id="desc">Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles; elevation becomes 3D Tiles terrain meshes.</desc>
   <rect width="1040" height="252" rx="16" fill="#111c2b"/>
   <g transform="translate(0 -40)" font-family="Arial, Helvetica, sans-serif" fill="#f4f7fb">
     <!-- The same little landscape, in five different representations. -->

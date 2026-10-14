@@ -1,0 +1,13 @@
+diff --git a/src/content_integrity/implicit/subtree.rs b/src/content_integrity/implicit/subtree.rs
+index 833b82a..c18a5f8 100644
+--- a/src/content_integrity/implicit/subtree.rs
++++ b/src/content_integrity/implicit/subtree.rs
+@@ -160,7 +160,7 @@ pub(super) fn admit<E>(
+ ) -> Result<Subtree, ImplicitError<E>> {
+     let name = root.subtrees.substitute(level, coords)?;
+     // OD-7: a subtree member resolved twice in one validation.
+-    if limits.subtrees.contains(&name) {
++    if false && limits.subtrees.contains(&name) {
+         return Err(unsupported(format!("repeated subtree member {name}")).into());
+     }
+     let start = *live;

@@ -43,10 +43,6 @@ pub fn root_transform(pos: Cartographic, rot: Option<RotationDegrees>) -> [f64; 
 }
 
 /// WGS84 geodetic → ECEF metres; also the origin of [`east_north_up`].
-///
-/// The quantized-mesh terrain encoder keeps its own formula (e² from the
-/// semi-minor axis, a different evaluation order): its published `.terrain`
-/// bytes differ from this one in the last ulp.
 pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
     let lon = pos.lon_deg.to_radians();
     let lat = pos.lat_deg.to_radians();
@@ -59,6 +55,39 @@ pub fn geodetic_to_ecef(pos: Cartographic) -> [f64; 3] {
         (n + pos.height_m) * cos_lat * lon.sin(),
         (n * (1.0 - e2) + pos.height_m) * sin_lat,
     ]
+}
+
+/// WGS84 ECEF metres to longitude/latitude in degrees and ellipsoidal metres.
+/// This fixed-datum inverse is also used to orient portable vector frames;
+/// it does not select or perform a source datum transformation.
+/// Longitude is conventionally zero at a pole, where it is indeterminate.
+pub fn ecef_to_cartographic(point: [f64; 3]) -> Result<Cartographic, crate::Error> {
+    if !point.iter().all(|value| value.is_finite()) || point.iter().all(|value| value.abs() < 1e-12)
+    {
+        return Err(crate::Error::Data(
+            "cannot orient a nonfinite or Earth-centre ECEF position".into(),
+        ));
+    }
+    let source = proj4rs::Proj::from_proj_string("+proj=geocent +datum=WGS84 +units=m")
+        .map_err(|error| crate::Error::Environment(error.to_string()))?;
+    let target = proj4rs::Proj::from_proj_string("+proj=longlat +datum=WGS84")
+        .map_err(|error| crate::Error::Environment(error.to_string()))?;
+    let mut position = (point[0], point[1], point[2]);
+    proj4rs::transform::transform(&source, &target, &mut position)
+        .map_err(|error| crate::Error::Data(format!("cannot orient ECEF position: {error}")))?;
+    if ![position.0, position.1, position.2]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return Err(crate::Error::Data(
+            "ECEF inverse produced nonfinite coordinates".into(),
+        ));
+    }
+    Ok(Cartographic::new(
+        position.0.to_degrees(),
+        position.1.to_degrees(),
+        position.2,
+    ))
 }
 
 /// ECEF origin plus ENU basis, reused when baking many vertices.
@@ -307,6 +336,29 @@ pub enum SourceCrs {
     WebMercator,
 }
 
+/// Axes of general mesh POSITION after glTF node transforms.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum SourceAxes {
+    /// X=easting/longitude, Y=northing/latitude, Z=height in metres.
+    Xyz,
+    /// X=easting/longitude, Y=height in metres, Z=negative northing/latitude.
+    YUp,
+}
+
+impl SourceAxes {
+    pub(crate) fn coordinates(self, point: [f64; 3], offset: SourceOffset) -> [f64; 3] {
+        let [east, north, height] = match self {
+            Self::Xyz => point,
+            Self::YUp => [point[0], -point[2], point[1]],
+        };
+        [
+            east + offset.easting,
+            north + offset.northing,
+            height + offset.height,
+        ]
+    }
+}
+
 impl SourceCrs {
     pub fn parse_cli(s: &str) -> Result<Self, crate::error::Error> {
         match s.trim().to_ascii_lowercase().as_str() {
@@ -321,7 +373,8 @@ impl SourceCrs {
     }
 }
 
-/// Metashape Shift / offset.txt: world = local + (E, N, A).
+/// Source-coordinate shift: E/N use the declared horizontal CRS units, A is
+/// metres. Legacy Web Mercator adapters use metres for all three values.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SourceOffset {
     pub easting: f64,
@@ -471,6 +524,36 @@ pub(crate) fn mul4(a: [f64; 16], b: [f64; 16]) -> [f64; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_wgs84_inverse_orients_surface_poles_and_high_altitude_frames() {
+        for lon in [-180., 0., 153., 180.] {
+            for lat in [-90., -89.99, -27., 0., 75., 90.] {
+                for height in [-500., 0., 10000., 35_786_000.] {
+                    let original = Cartographic::new(lon, lat, height);
+                    let xyz = geodetic_to_ecef(original);
+                    let inverse = ecef_to_cartographic(xyz).unwrap();
+                    assert!((inverse.lat_deg - lat).abs() < 1e-9);
+                    assert!((inverse.height_m - height).abs() < 0.001);
+                    let frame = root_transform(inverse, None);
+                    let expected = root_transform(
+                        if lat.abs() == 90. {
+                            Cartographic::new(0., lat, height)
+                        } else {
+                            original
+                        },
+                        None,
+                    );
+                    for i in [0, 1, 2, 4, 5, 6, 8, 9, 10] {
+                        assert!((frame[i] - expected[i]).abs() < 1e-11);
+                    }
+                }
+            }
+        }
+        for point in [[0.; 3], [f64::NAN, 1., 2.], [1., f64::INFINITY, 2.]] {
+            assert!(ecef_to_cartographic(point).is_err());
+        }
+    }
 
     fn assert_mat(got: [f64; 16], want: [f64; 16], trans_eps: f64) {
         for i in 0..16 {

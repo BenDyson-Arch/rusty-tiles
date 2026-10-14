@@ -1,0 +1,25 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index b10acb5..3c72534 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -716,14 +716,12 @@ pub(crate) fn walk(
+             }
+             std::mem::swap(&mut p, &mut next);
+         }
+-        for want in 0..4 {
+-            for (role, v) in level.volumes.iter().flatten() {
+-                if rank(*role) == want && !inside(arena, p, w, v) {
+-                    return Verdict::Outside {
+-                        role: *role,
+-                        level: l as u32,
+-                    };
+-                }
++        for (role, v) in level.volumes.iter().flatten() {
++            if !inside(arena, p, w, v) {
++                return Verdict::Outside {
++                    role: *role,
++                    level: l as u32,
++                };
+             }
+         }
+     }

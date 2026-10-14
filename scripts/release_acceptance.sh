@@ -6,26 +6,39 @@
 # Required steps (any failure exits non-zero):
 #   1. build    cargo build --release --locked --features native-geospatial
 #               (skipped when RUSTY_TILES_BIN names an existing binary)
-#   2. doctor   doctor --json reports ok
+#   2. doctor   README mesh/validate/preview commands report status ready,
+#               and the full report obeys the status/exit contract: each
+#               not-ready command has the refusal its own run returns, and the
+#               first in name order sets error.code and the exit status
 #   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
 #   4. validate validate --json on the archive
-#   5. preview  preview --json starts on a free port, serves config.json and
-#               the extracted tileset manifest (curl), then stops on SIGTERM
+#   5. preview  preview --json starts on a free loopback port, serves
+#               config.json and the extracted tileset manifest (curl), refuses
+#               traversal, an outside symlink, an unselected layer and a
+#               foreign Host, then stops on SIGTERM and releases the port
+#               (strict browser mode also renders/picks this README pyramid
+#               before and after a cache-disabled reload)
 # Optional browser steps, run only when everything they need is present:
-#   6. layers   tests/fixtures/preview_layers.py writes all five preview layers
-#   7. probes   preview_layers.cjs, point_cloud.cjs, terrain.cjs and
+#   6. imagery  raster writes a tile-aligned R2 pyramid from
+#               tests/fixtures/d1-rgb.tif; raster_preview.cjs loads it through
+#               preview with no page errors and a render probe (needs node,
+#               playwright, Chromium, Cesium and a binary with raster ready)
+#   7. layers   tests/fixtures/preview_layers.py writes all five preview layers
+#   8. probes   preview_layers.cjs, point_cloud.cjs, terrain.cjs and
 #               vector_compat.cjs (each repeats its checks
 #               after a cache-disabled reload)
 # Skipped steps are listed at the end; they never fail the run.
 #
 # Environment:
-#   RUSTY_TILES_BIN  use this binary instead of building
-#   CESIUM_DIR       Cesium 1.143 Build/Cesium directory (default
+#   RUSTY_TILES_BIN  use this default or native binary instead of building
+#   CESIUM_DIR       Cesium 1.146 Build/Cesium directory (default
 #                    target/preview-runtime/node_modules/cesium/Build/Cesium)
 #   NODE_PATH        directory exposing the playwright module to node
 #   CHROMIUM         Chromium executable for the probes (default /usr/bin/chromium)
 #   PYTHON           Python with GDAL, NumPy, laspy and pyproj (default python3)
 #   ACCEPTANCE_WORK  scratch directory (default: a new temporary directory)
+#   ACCEPTANCE_REQUIRE_BROWSER  1 requires all five layers and browser probes;
+#                              0 (default) permits missing prerequisites locally
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,6 +49,7 @@ CESIUM_DIR=${CESIUM_DIR:-$REPO/target/preview-runtime/node_modules/cesium/Build/
 export CHROMIUM=${CHROMIUM:-/usr/bin/chromium}
 PASSED=() SKIPPED=()
 SERVER=
+REQUIRE_BROWSER=${ACCEPTANCE_REQUIRE_BROWSER:-0}
 
 fail() {
   echo "FAIL: $1" >&2
@@ -53,9 +67,91 @@ stop_server() {
 }
 trap stop_server EXIT
 
+case $REQUIRE_BROWSER in
+  0|1) ;;
+  *) fail "ACCEPTANCE_REQUIRE_BROWSER must be 0 or 1" ;;
+esac
+
+browser_prerequisites() {
+  missing=()
+  command -v node >/dev/null || missing+=("node")
+  [[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
+  node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")
+  [[ -x $CHROMIUM ]] || missing+=("Chromium at CHROMIUM=$CHROMIUM")
+  "$PYTHON" -c "import osgeo, numpy, laspy, pyproj" >/dev/null 2>&1 \
+    || missing+=("$PYTHON with GDAL, NumPy, laspy and pyproj")
+}
+
+missing_browser_reason() {
+  reason="missing: $(printf '%s; ' "${missing[@]}")"
+  reason=${reason%; }
+}
+
+browser_converter_prerequisites() {
+  env PATH="" "$BIN" doctor --command vector --command point-cloud --command raster --command terrain --json \
+    >"$WORK/browser-readiness.json" 2>"$WORK/browser-readiness.err" \
+    || missing+=("selected binary's vector/point-cloud/raster/terrain capabilities")
+}
+
+# Fail before a potentially expensive build when a release gate cannot run.
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  browser_prerequisites
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    missing_browser_reason
+    fail "required browser acceptance prerequisites: $reason"
+  fi
+fi
+
 # json_field FILE EXPRESSION: evaluate a Python expression on the JSON `d`.
 json_field() {
   "$PYTHON" -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"
+}
+
+# doctor_contract FILE EXIT [SELECTED...]: check a doctor --json report and its
+# process exit status against the T1 status contract. With SELECTED, the
+# report must list exactly those commands, all ready.
+doctor_contract() {
+  "$PYTHON" - "$@" <<'PY'
+import json, sys
+path, code, selected = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
+d = json.load(open(path))
+refused = []
+for name, c in d["commands"].items():  # JSON keys are in name order
+    assert c["status"] in ("ready", "unavailable", "unsupported"), (name, c)
+    assert c["ready"] == (c["status"] == "ready"), (name, c)
+    if c["ready"]:
+        assert "refusal" not in c, (name, c)
+    else:
+        assert set(c["refusal"]) == {"code", "exitCode"}, (name, c)
+        refused.append(c["refusal"])
+values = {c["status"] for c in d["commands"].values()}
+status = "unavailable" if "unavailable" in values else "unsupported" if "unsupported" in values else "ready"
+assert d["status"] == status and d["ready"] == d["ok"] == (not refused), d["status"]
+if refused:
+    first = refused[0]
+    assert code == first["exitCode"] == d["exitCode"], f"exit {code}, first refusal {first}"
+    assert d["error"]["code"] == first["code"], d["error"]
+else:
+    assert code == 0 and "error" not in d, code
+assert d["proj"]["networkEnabled"] is False
+assert set(d["probes"]) <= {"linked-versions", "proj-offline-policy", "proj-database",
+    "proj-directory-listing", "gdal-driver-registry", "geos-triangulation", "cesium-runtime"}, d["probes"]
+if selected:
+    assert d["selectedCommands"] == selected, d["selectedCommands"]
+    assert sorted(d["commands"]) == sorted(selected) and not refused, d["commands"]
+PY
+}
+
+# url_path TEXT: percent-encode a path for a literal request line.
+url_path() {
+  "$PYTHON" -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"
+}
+
+# http_status PATH [HOST]: literal request path (no client normalization).
+http_status() {
+  local host=()
+  [[ -n ${2:-} ]] && host=(-H "Host: $2")
+  curl -s --path-as-is -o /dev/null -w '%{http_code}' ${host[@]+"${host[@]}"} "${URL%/}$1"
 }
 
 # start_preview LOG ARGS...: start preview --json on a free port; sets URL.
@@ -79,16 +175,29 @@ if [[ -n ${RUSTY_TILES_BIN:-} ]]; then
   BIN=$RUSTY_TILES_BIN
   skip build "using RUSTY_TILES_BIN=$BIN"
 else
-  cargo build --manifest-path "$REPO/Cargo.toml" --release --locked \
+  LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo build --manifest-path "$REPO/Cargo.toml" --release --locked \
     --features native-geospatial >"$WORK/build.log" 2>&1 || fail build "$WORK/build.log"
   BIN=$REPO/target/release/rusty-tiles
   pass build
 fi
 
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  browser_converter_prerequisites
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    missing_browser_reason
+    fail "required browser acceptance prerequisites: $reason" "$WORK/browser-readiness.json"
+  fi
+fi
+
 # 2. doctor
-env PATH="" "$BIN" doctor --json >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
-  || fail "doctor --json (exit $?)" "$WORK/doctor.json"
-[[ $(json_field "$WORK/doctor.json" 'd["ok"]') == True ]] || fail "doctor not ok" "$WORK/doctor.json"
+env PATH="" "$BIN" doctor --command mesh-to-3tz --command validate --command preview --json \
+  >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
+  || fail "doctor for README commands (exit $?)" "$WORK/doctor.json"
+doctor_contract "$WORK/doctor.json" 0 mesh-to-3tz validate preview >>"$WORK/doctor.err" 2>&1 \
+  || fail "README commands are not all ready" "$WORK/doctor.err"
+env PATH="" "$BIN" doctor --json >"$WORK/doctor-all.json" 2>>"$WORK/doctor.err"
+doctor_contract "$WORK/doctor-all.json" $? >>"$WORK/doctor.err" 2>&1 \
+  || fail "full doctor report violates the status/exit contract" "$WORK/doctor.err"
 pass doctor
 
 # 3. convert (README example)
@@ -119,23 +228,56 @@ curl -fsS "${URL}config.json" -o "$WORK/config.json" || fail "curl config.json"
   || fail "config.json does not name the mesh manifest" "$WORK/config.json"
 curl -fsS "${URL}mesh/tileset.json" -o "$WORK/served-tileset.json" || fail "curl tileset.json"
 cmp -s "$WORK/served-tileset.json" "$WORK/output/example/tileset.json" || fail "served manifest differs"
+[[ $(json_field "$WORK/preview.json" 'd["loopback"]') == True && $URL == http://127.0.0.1:* ]] \
+  || fail "preview did not default to a loopback listener" "$WORK/preview.json"
+# Read-only fence: the work directory holds unselected files beside the root.
+ln -s "$WORK/convert.log" "$WORK/output/example/escape.log" || fail "create escape symlink"
+for target in /mesh/../../convert.log /mesh/%2e%2e/%2e%2e/convert.log /mesh/escape.log \
+  "/mesh/$(url_path "$WORK/convert.log")" /terrain/tileset.json /mesh/ /mesh/tileset.json/; do
+  [[ $(http_status "$target") == 404 ]] || fail "preview served unselected path $target"
+done
+PORT=${URL%/}
+[[ $(http_status /mesh/tileset.json "evil.example:${PORT##*:}") == 421 ]] \
+  || fail "loopback preview answered a foreign Host"
+rm "$WORK/output/example/escape.log"
+if [[ $REQUIRE_BROWSER == 1 ]]; then
+  node "$REPO/tests/fixtures/quick_start.cjs" "$URL" >"$WORK/quick-start-browser.log" 2>&1 \
+    || fail "README quick-start browser probe" "$WORK/quick-start-browser.log"
+fi
 PREVIEW_PID=$SERVER
 stop_server
 kill -0 "$PREVIEW_PID" 2>/dev/null && fail "preview still running after SIGTERM"
 curl -fsS --max-time 2 "${URL}config.json" -o /dev/null 2>/dev/null && fail "preview port still answering"
 pass preview
 
-# 6-7. optional browser acceptance
+# 6. R2 imagery through preview (Cesium 1.146 tile-aligned bounds regression)
 missing=()
 command -v node >/dev/null || missing+=("node")
 [[ -f $CESIUM_DIR/Cesium.js ]] || missing+=("Cesium runtime at CESIUM_DIR=$CESIUM_DIR")
 node -e "require('playwright')" >/dev/null 2>&1 || missing+=("playwright on NODE_PATH")
 [[ -x $CHROMIUM ]] || missing+=("Chromium at CHROMIUM=$CHROMIUM")
-"$PYTHON" -c "import osgeo, numpy, laspy, pyproj" >/dev/null 2>&1 \
-  || missing+=("$PYTHON with GDAL, NumPy, laspy and pyproj")
+env PATH="" "$BIN" doctor --command raster --json >"$WORK/raster-readiness.json" 2>&1 \
+  || missing+=("selected binary's raster capability")
 if [[ ${#missing[@]} -gt 0 ]]; then
-  reason="missing: $(printf '%s; ' "${missing[@]}")"
-  reason=${reason%; }
+  missing_browser_reason
+  [[ $REQUIRE_BROWSER == 0 ]] || fail "required browser acceptance prerequisites: $reason"
+  skip "preview imagery" "$reason"
+else
+  env PATH="" "$BIN" raster -i "$REPO/tests/fixtures/d1-rgb.tif" -o "$WORK/r2-imagery" --maxZoom 5 \
+    >"$WORK/r2-imagery.log" 2>&1 || fail "raster for preview imagery" "$WORK/r2-imagery.log"
+  start_preview "$WORK/preview-imagery.json" --cesium "$CESIUM_DIR" --imagery "$WORK/r2-imagery"
+  node "$REPO/tests/fixtures/raster_preview.cjs" "$URL" >"$WORK/raster_preview.log" 2>&1 \
+    || fail "browser probe raster_preview.cjs" "$WORK/raster_preview.log"
+  pass "browser probe raster_preview.cjs"
+  stop_server
+fi
+
+# 7-8. optional browser acceptance
+browser_prerequisites
+browser_converter_prerequisites
+if [[ ${#missing[@]} -gt 0 ]]; then
+  missing_browser_reason
+  [[ $REQUIRE_BROWSER == 0 ]] || fail "required browser acceptance prerequisites: $reason"
   skip "preview layers" "$reason"
   skip "browser probes" "$reason"
 else
@@ -143,18 +285,21 @@ else
   RUSTY_TILES_BIN=$BIN "$PYTHON" "$REPO/tests/fixtures/preview_layers.py" "$CASE" \
     >"$WORK/layers.log" 2>&1 || fail "preview_layers.py" "$WORK/layers.log"
   pass "preview layers"
+  "$PYTHON" "$REPO/tests/t1_terrain_oracle.py" "$CASE/terrain" --browser-oracle "$CASE/terrain-oracle.json" --browser-imagery \
+    >"$WORK/terrain-oracle.log" 2>&1 || fail "terrain GLB oracle" "$WORK/terrain-oracle.log"
   for probe in preview_layers point_cloud terrain "vector_compat --require-native --require-aggregates"; do
     read -r script flags <<<"$probe"
     case $script in
       preview_layers) layers=(--mesh "$CASE/mesh" --point-cloud "$CASE/cloud"
         --annotations "$CASE/annotations" --imagery "$CASE/imagery" --terrain "$CASE/terrain") ;;
       point_cloud) layers=(--point-cloud "$CASE/cloud") ;;
-      terrain) layers=(--terrain "$CASE/terrain") ;;
+      terrain) layers=(--terrain "$CASE/terrain" --imagery "$CASE/imagery") ;;
       vector_compat) layers=(--annotations "$CASE/annotations") ;;
     esac
     start_preview "$WORK/preview-$script.json" --cesium "$CESIUM_DIR" "${layers[@]}"
-    # shellcheck disable=SC2086 # flags are intentionally split
-    node "$REPO/tests/fixtures/$script.cjs" "$URL" $flags >"$WORK/$script.log" 2>&1 \
+    read -r -a browser_flags <<<"$flags"
+    if [[ $script == terrain ]]; then browser_flags=("$CASE/terrain-oracle.json"); fi
+    node "$REPO/tests/fixtures/$script.cjs" "$URL" "${browser_flags[@]}" >"$WORK/$script.log" 2>&1 \
       || fail "browser probe $script.cjs" "$WORK/$script.log"
     pass "browser probe $script.cjs"
     stop_server

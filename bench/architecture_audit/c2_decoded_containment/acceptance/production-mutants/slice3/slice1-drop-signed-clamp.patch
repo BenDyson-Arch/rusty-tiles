@@ -1,0 +1,12 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index e59fa24..40a0428 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -749,7 +749,6 @@ pub(crate) fn walk(
+     for c in 0..3 {
+         match raw {
+             RawVertex::F32(v) => finite &= arena.d.float(x[c], f64::from(v[c])),
+-            RawVertex::Int(v) if signed && v[c] <= -k => arena.d.int(x[c], i64::from(-k)),
+             RawVertex::Int(v) => arena.d.int(x[c], i64::from(v[c])),
+         }
+     }

@@ -74,7 +74,10 @@ fn missing_python_modules_do_not_hide_invalid_input() {
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(!result.status.success());
     assert!(!out.exists());
-    assert!(stderr.contains("OGR cannot open vector input"), "{stderr}");
+    assert!(
+        stderr.contains("invalid GeoJSON root type or features array"),
+        "{stderr}"
+    );
     assert!(!stderr.contains("Python dependency import failed"));
     assert!(!stderr.contains("Traceback"));
 }
@@ -112,8 +115,8 @@ fn option_errors_name_the_flag() {
             .output()
             .unwrap();
         let report: Value = serde_json::from_slice(&result.stdout).unwrap();
-        assert_eq!(result.status.code(), Some(3), "{extra:?}");
-        assert_eq!(report["error"]["code"], "data");
+        assert_eq!(result.status.code(), Some(2), "{extra:?}");
+        assert_eq!(report["error"]["code"], "invalid_request");
         assert!(
             report["error"]["message"]
                 .as_str()

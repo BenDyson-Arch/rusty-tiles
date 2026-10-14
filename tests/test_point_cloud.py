@@ -14,6 +14,7 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 from cli_bin import BIN, requires_bin
+from p1_point_oracle import IDENTITY, expand_forest
 
 
 def run(args):
@@ -40,7 +41,33 @@ def run(args):
     return report
 
 
+def tree(out):
+    """The extracted archive's tile tree with its implicit forest expanded by the
+    independent P1 reader. Tiles below an implicit root carry no transform; their
+    frame is the implicit root's and their payloads hold a scene-root translation."""
+    manifest = json.loads((out / 'tileset.json').read_text())
+    members = {str(p.relative_to(out).as_posix()): p.read_bytes() for p in out.rglob('*') if p.is_file()}
+    stats = {'explicit': 0, 'implicit_roots': 0, 'documents': 1}
+    def prune(node):
+        children = [prune(child) for child in node.get('children', [])]
+        node = {key: value for key, value in node.items() if key != 'children'}
+        if children:
+            node['children'] = children
+        return node
+    return prune(expand_forest(manifest['root'], members, set(), 'schema' in manifest, stats))
+
+
+def translation(node):
+    return np.asarray(node.get('transform', IDENTITY)[12:15], dtype=float)
+
+
+def box_centre(node):
+    return np.asarray(node['boundingVolume']['box'][:3], dtype=float)
+
+
 def read_glb(path):
+    """Decoded z-up positions in the tile frame (scene-root translation applied) and
+    the property table columns."""
     data = path.read_bytes()
     magic, version, length = struct.unpack_from('<4sII', data)
     assert (magic, version, length) == (b'glTF', 2, len(data))
@@ -53,7 +80,8 @@ def read_glb(path):
         return a.reshape(-1, width) if width != 1 else a
     primitive = doc['meshes'][0]['primitives'][0]
     accessor = doc['accessors'][primitive['attributes']['POSITION']]
-    positions = view(accessor['bufferView'], '<f4', 3)[:, [0, 2, 1]] * [1, -1, 1]
+    root = doc['nodes'][doc['scenes'][doc.get('scene', 0)]['nodes'][0]].get('translation', [0., 0., 0.])
+    positions = (view(accessor['bufferView'], '<f4', 3).astype(float) + root)[:, [0, 2, 1]] * [1, -1, 1]
     metadata = doc['extensions']['EXT_structural_metadata']
     table = metadata['propertyTables'][0]
     mapping = {'UINT8': '<u1', 'UINT16': '<u2', 'UINT32': '<u4', 'UINT64': '<u8',
@@ -103,7 +131,17 @@ def evlr_fixture(path, extended_extra=False):
         wkt,
     ])
     if extended_extra:
-        data.evlrs.append(data.header.vlrs.extract('ExtraBytesVlr')[0])
+        extra = data.header.vlrs.extract('ExtraBytesVlr')[0]
+        # Moving this VLR to an EVLR removes it from laspy's write-time bounds
+        # update. Serialize explicit bounds for the actual float64 temperature
+        # records rather than retaining laspy's reset min/max sentinels.
+        descriptor = bytearray(extra.record_data_bytes())
+        assert len(descriptor) == 192 and descriptor[2] == 10
+        descriptor[3] |= 2 | 4
+        struct.pack_into('<d', descriptor, 64, float(np.min(data.temperature)))
+        struct.pack_into('<d', descriptor, 88, float(np.max(data.temperature)))
+        data.evlrs.append(laspy.VLR(user_id='LASF_Spec', record_id=4,
+                                  record_data=bytes(descriptor)))
     data.write(path)
     return data
 
@@ -123,11 +161,10 @@ class PointCloudTests(unittest.TestCase):
         for suffix in ('.las', '.laz'):
             with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as tmp:
                 data, out, report = self.convert(tmp, suffix)
-                manifest = json.loads((out / 'tileset.json').read_text())
                 originals = np.column_stack([data.x, data.y, data.z])
                 seen = []
                 def walk(node, parent_center):
-                    center = parent_center + np.array(node['transform'][12:15])
+                    center = parent_center + translation(node)
                     positions, props = read_glb(out / node['content']['uri'])
                     global_points = positions + center
                     ids = props['source_index'].astype(int)
@@ -138,7 +175,7 @@ class PointCloudTests(unittest.TestCase):
                     self.assertLessEqual(len(ids), 16)
                     box = node['boundingVolume']['box']
                     half = np.array([box[3], box[7], box[11]])
-                    self.assertTrue((np.abs(positions) <= half + 1e-8).all())
+                    self.assertTrue((np.abs(positions - box_centre(node)) <= half + 1e-8).all())
                     if 'children' not in node:
                         self.assertEqual(node['geometricError'], 0)
                         seen.extend(ids.tolist())
@@ -158,9 +195,9 @@ class PointCloudTests(unittest.TestCase):
                     distances = np.linalg.norm(originals[child_ids, None, :] - global_points[None, :, :], axis=2).min(axis=1)
                     self.assertLessEqual(float(distances.max()), node['geometricError'] + 2e-6)
                     self.assertTrue(all(node['geometricError'] >= c['geometricError'] for c in node['children']))
-                    self.assertTrue((np.abs(originals[child_ids] - center) <= half + 1e-8).all())
+                    self.assertTrue((np.abs(originals[child_ids] - center - box_centre(node)) <= half + 1e-8).all())
                     return child_ids
-                walk(manifest['root'], np.zeros(3))
+                walk(tree(out), np.zeros(3))
                 self.assertEqual(sorted(seen), list(range(len(data.points))))
                 self.assertFalse((out / 'scratch').exists())
                 self.assertGreater(report['tiles'], 1)
@@ -175,7 +212,7 @@ class PointCloudTests(unittest.TestCase):
                         walk(child)
                 else:
                     ids.extend(read_glb(out / node['content']['uri'])[1]['source_index'].tolist())
-            walk(json.loads((out / 'tileset.json').read_text())['root'])
+            walk(tree(out))
             self.assertEqual(sorted(ids), list(range(len(data.points))))
 
     def test_projected_crs_and_explicit_height(self):
@@ -208,7 +245,7 @@ class PointCloudTests(unittest.TestCase):
             expected = np.column_stack(operation.transform(data.x, data.y, np.asarray(data.z) + 10., errcheck=True))
             seen = []
             def walk(node, origin):
-                center = origin + np.asarray(node['transform'][12:15])
+                center = origin + translation(node)
                 positions, props = read_glb(out / node['content']['uri'])
                 ids = props['source_index'].astype(int)
                 np.testing.assert_allclose(positions + center, expected[ids], atol=2e-6, rtol=0)
@@ -219,7 +256,7 @@ class PointCloudTests(unittest.TestCase):
                         walk(child, center)
                 else:
                     seen.extend(ids.tolist())
-            walk(json.loads((out / 'tileset.json').read_text())['root'], np.zeros(3))
+            walk(tree(out), np.zeros(3))
             self.assertEqual(sorted(seen), list(range(len(data.points))))
 
     def test_errors_clean_staging_and_do_not_replace_output(self):
@@ -229,7 +266,7 @@ class PointCloudTests(unittest.TestCase):
             out = pathlib.Path(tmp) / 'tiles'
             args = types.SimpleNamespace(input=str(source), output=str(out), source_crs='EPSG:32632',
                                          height_offset=None, max_points=16, chunk_points=11)
-            with self.assertRaisesRegex(ValueError, 'explicit finite'):
+            with self.assertRaisesRegex(ValueError, 'heightOffset'):
                 run(args)
             self.assertFalse(out.exists())
             out.mkdir()
@@ -248,8 +285,7 @@ class PointCloudTests(unittest.TestCase):
             out = pathlib.Path(tmp) / 'tiles'
             run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='local',
                 height_offset=None, max_points=16, chunk_points=11))
-            root = json.loads((out / 'tileset.json').read_text())['root']
-            props = read_glb(out / root['content']['uri'])[1]
+            props = read_glb(out / tree(out)['content']['uri'])[1]
             np.testing.assert_array_equal(props['scaled'], np.asarray(data.scaled))
 
     def test_reject_vector_extra_dimensions(self):
@@ -291,8 +327,7 @@ class PointCloudTests(unittest.TestCase):
                     out = pathlib.Path(tmp) / 'tiles'
                     run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='local',
                         height_offset=None, max_points=30, chunk_points=3))
-                    doc = json.loads((out / 'tileset.json').read_text())
-                    props = read_glb(out / doc['root']['content']['uri'])[1]
+                    props = read_glb(out / tree(out)['content']['uri'])[1]
                     for name in data.point_format.dimension_names:
                         np.testing.assert_array_equal(props[name], np.asarray(data[name]), err_msg=f'{fmt} {name}')
 
@@ -323,7 +358,7 @@ class PointCloudTests(unittest.TestCase):
                 out = pathlib.Path(tmp) / 'tiles'
                 run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='local',
                     height_offset=None, max_points=30, chunk_points=1))
-                props = read_glb(out / 't/0.glb')[1]
+                props = read_glb(out / tree(out)['content']['uri'])[1]
                 for name in data.point_format.extra_dimension_names:
                     np.testing.assert_array_equal(props[name], np.asarray(data[name]), err_msg=name)
                 for name in ('both', 'scale_only', 'offset_only'):
@@ -338,14 +373,14 @@ class PointCloudTests(unittest.TestCase):
             report = run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                 height_offset=10., max_points=16, chunk_points=11))
             self.assertIn('WGS 84', report['resolvedCrs'])
-            props = read_glb(out / 't/0.glb')[1]
+            props = read_glb(out / tree(out)['content']['uri'])[1]
             np.testing.assert_array_equal(props['source_z'], np.asarray(data.z))
         for definition in ('EPSG:4979', 'EPSG:4978', 'EPSG:4326+5773'):
             with self.subTest(definition=definition), tempfile.TemporaryDirectory() as tmp:
                 source = pathlib.Path(tmp) / 'cloud.las'
                 fixture(source, count=1, point_format=7, crs=CRS.from_user_input(definition))
                 out = pathlib.Path(tmp) / 'tiles'
-                with self.assertRaisesRegex(ValueError, '2D horizontal CRS'):
+                with self.assertRaisesRegex(ValueError, '2D horizontal CRS|COMPOUNDCRS'):
                     run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                         height_offset=0., max_points=16, chunk_points=11))
                 self.assertFalse(out.exists())
@@ -361,14 +396,22 @@ class PointCloudTests(unittest.TestCase):
                     independent = laspy.read(source)
                     self.assertEqual(len(independent.evlrs), 3 if extended_extra else 2)
                     self.assertEqual(independent.header.parse_crs(), CRS.from_epsg(32632))
+                    if extended_extra:
+                        extra = next(v for v in independent.evlrs
+                                     if v.user_id == 'LASF_Spec' and v.record_id == 4)
+                        descriptor = extra.record_data_bytes()
+                        self.assertEqual(struct.unpack_from('<d', descriptor, 64)[0],
+                                         float(np.min(data.temperature)))
+                        self.assertEqual(struct.unpack_from('<d', descriptor, 88)[0],
+                                         float(np.max(data.temperature)))
                     out = pathlib.Path(tmp) / 'tiles'
                     report = run(types.SimpleNamespace(input=str(source), output=str(out), source_crs='header',
                         height_offset=7., max_points=16, chunk_points=2))
                     self.assertEqual(CRS.from_wkt(report['resolvedCrs']), CRS.from_epsg(32632))
                     self.assertEqual(report['points'], len(data.points))
-                    manifest = json.loads((out / 'tileset.json').read_text())
-                    positions, props = read_glb(out / 't/0.glb')
-                    placed = positions + np.array(manifest['root']['transform'][12:15])
+                    root = tree(out)
+                    positions, props = read_glb(out / root['content']['uri'])
+                    placed = positions + translation(root)
                     expected = np.column_stack(transform.transform(data.x, data.y, np.asarray(data.z) + 7.))
                     np.testing.assert_allclose(placed, expected, atol=2e-6, rtol=0)
                     for name in data.point_format.dimension_names:
@@ -393,11 +436,12 @@ class PointCloudTests(unittest.TestCase):
                         capture_output=True, text=True, env=dict(os.environ, PATH=''))
                     response = json.loads(result.stdout)
                     self.assertEqual(result.returncode, 3, result.stdout)
-                    self.assertEqual(response['error']['code'], 'data')
+                    self.assertEqual(response['error']['code'], 'invalid_input')
                     if case == 'duplicate_wkt':
                         self.assertIn('multiple LAS WKT', response['error']['message'])
                     else:
-                        self.assertIn('invalid LAS/LAZ', response['error']['message'])
+                        self.assertIn('EVLR', response['error']['message'])
+                        self.assertIn('source extent', response['error']['message'])
                     self.assertEqual(output.read_bytes(), b'original')
                     self.assertEqual(set(pathlib.Path(tmp).iterdir()), before)
 
@@ -447,17 +491,19 @@ class PointCloudTests(unittest.TestCase):
                         content[227 + 54 + 3] |= 8
                         struct.pack_into('<d', content, 227 + 54 + 112, float('nan'))
                     else:
-                        # Explicit invalid CRS exercises native diagnostics.
+                        # A malformed EPSG code exercises invalid-input parsing on both builds.
                         pass
                     source.write_bytes(content)
                 out = pathlib.Path(tmp) / 'out.3tz'
-                options = ['--sourceCrs', 'invalid CRS', '--heightOffset', '0'] if case == 'crs' else ['--sourceCrs', 'local']
+                options = ['--sourceCrs', 'EPSG:not-a-code', '--heightOffset', '0'] if case == 'crs' else ['--sourceCrs', 'local']
                 before = set(pathlib.Path(tmp).iterdir())
                 result = subprocess.run([BIN, '--json', 'point-cloud', '-i', str(source), '-o', str(out), *options],
                     capture_output=True, text=True, env=dict(os.environ, PATH=''))
                 response = json.loads(result.stdout)
-                self.assertEqual(result.returncode, 3, result.stdout)
-                self.assertEqual(response['error']['code'], 'data')
+                expected_kind = 'unsupported' if case == 'tail' else 'invalid_input'
+                self.assertEqual(result.returncode, 2 if case == 'tail' else 3, result.stdout)
+                self.assertEqual(response['error']['code'], expected_kind)
+                self.assertEqual(response['error']['kind'], expected_kind)
                 self.assertEqual(set(pathlib.Path(tmp).iterdir()), before)
 
     def test_native_point_cloud_doctor_needs_no_python(self):

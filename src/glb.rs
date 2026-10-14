@@ -1,6 +1,6 @@
 //! Shared GLB container plumbing: chunk framing, alignment, buffer-view
 //! appends, extension declarations and the one `EXT_meshopt_compression`
-//! view rewriter used by mesh and vector content.
+//! view rewriter used by lossless mesh tiles.
 //!
 //! Every writer keeps its glTF document and binary buffer in memory and
 //! serialises exactly once through [`encode_glb`].
@@ -38,7 +38,6 @@ pub(crate) fn glb_len(json_len: usize, bin_len: usize) -> Result<usize, Error> {
 }
 
 /// Serialised JSON length of `document`, without materialising it.
-#[cfg(any(test, feature = "native-geospatial"))]
 pub(crate) fn json_len<T: Serialize + ?Sized>(document: &T) -> Result<usize, Error> {
     struct Count(usize);
     impl std::io::Write for Count {
@@ -118,23 +117,47 @@ pub(crate) enum MeshoptStream {
     /// IDs and polygon offsets/loop indices including their restart values,
     /// which must keep exact element bytes rather than triangle semantics.
     Attributes { count: usize, stride: usize },
+    /// Octahedral unit vectors already encoded by [`encode_octahedral`]
+    /// (`mode: ATTRIBUTES`, `filter: OCTAHEDRAL`; stride 4 or 8). The filter
+    /// is the one lossy step here and belongs to the producer's profile.
+    Octahedral { count: usize, stride: usize },
 }
 
-/// Where compressed views point in the uncompressed fallback buffer.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum FallbackOffsets {
-    /// Keep each view's source `byteOffset`; the fallback spans the source.
-    Source,
-    /// Repack compressed views contiguously at the layout alignment.
-    Packed,
+/// Encode unit vectors as `bits`-bit octahedral codes for the
+/// `EXT_meshopt_compression` OCTAHEDRAL filter, 16-bit storage (stride 8):
+/// `[x, y, one, 0]` per vector, which clients decode to normalized SHORT VEC3
+/// (plus a zero fourth component). Inputs must be finite.
+pub(crate) fn encode_octahedral(vectors: &[[f32; 3]], bits: u8) -> Result<Vec<u8>, Error> {
+    if !(2..=16).contains(&bits) {
+        return Err(Error::msg("octahedral bits outside 2..=16"));
+    }
+    if vectors.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(Error::Data("non-finite octahedral input vector".into()));
+    }
+    let input: Vec<f32> = vectors
+        .iter()
+        .flat_map(|v| [v[0], v[1], v[2], 0.])
+        .collect();
+    let mut codes = vec![0i16; vectors.len() * 4];
+    // SAFETY: `codes` holds count * 4 aligned i16 (stride 8) and `input`
+    // count * 4 floats, as the encoder requires.
+    unsafe {
+        meshopt::ffi::meshopt_encodeFilterOct(
+            codes.as_mut_ptr().cast(),
+            vectors.len(),
+            8,
+            i32::from(bits),
+            input.as_ptr(),
+        );
+    }
+    Ok(codes.iter().flat_map(|c| c.to_le_bytes()).collect())
 }
 
 /// Container layout for one family of meshopt-compressed content.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct MeshoptLayout {
-    /// Alignment of every view in the compressed (and packed fallback) buffer.
+    /// Alignment of every view in the compressed buffer.
     pub align: usize,
-    pub fallback: FallbackOffsets,
     /// Write `"filter":"NONE"` explicitly on compressed views.
     pub explicit_filter: bool,
 }
@@ -142,7 +165,8 @@ pub(crate) struct MeshoptLayout {
 /// Compress buffer views of `document` (whose binary is `source`) with
 /// `EXT_meshopt_compression`. `classify(view, byte_length)` selects the
 /// stream role of each view; `None` copies the view verbatim. Accessors,
-/// view identities and element order are unchanged. Returns the new binary.
+/// view identities and element order are unchanged. Compressed views retain
+/// source offsets in a fallback buffer spanning `source`. Returns the new binary.
 pub(crate) fn meshopt_compress(
     document: &mut Value,
     source: &[u8],
@@ -153,7 +177,6 @@ pub(crate) fn meshopt_compress(
         .as_array_mut()
         .ok_or_else(|| Error::msg("missing views"))?;
     let mut binary = Vec::with_capacity(source.len());
-    let mut packed_size = 0usize;
     let mut indices = Vec::new();
     for (index, view) in views.iter_mut().enumerate() {
         let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
@@ -205,26 +228,26 @@ pub(crate) fn meshopt_compress(
                 encode_attributes(&mut binary, bytes, count, stride)?;
                 (count, stride, "ATTRIBUTES")
             }
+            MeshoptStream::Octahedral { count, stride } => {
+                if stride != 4 && stride != 8 {
+                    return Err(Error::msg("octahedral meshopt stride must be 4 or 8"));
+                }
+                encode_attributes(&mut binary, bytes, count, stride)?;
+                (count, stride, "ATTRIBUTES")
+            }
         };
         view["buffer"] = json!(1);
-        if let FallbackOffsets::Packed = layout.fallback {
-            packed_size = packed_size.next_multiple_of(layout.align);
-            view["byteOffset"] = json!(packed_size);
-            packed_size += length;
-        }
         let mut extension = json!({"buffer":0,"byteOffset":start,"byteLength":binary.len() - start,
             "byteStride":stride,"count":count,"mode":mode});
-        if layout.explicit_filter {
+        if let MeshoptStream::Octahedral { .. } = stream {
+            extension["filter"] = json!("OCTAHEDRAL");
+        } else if layout.explicit_filter {
             extension["filter"] = json!("NONE");
         }
         view["extensions"] = json!({ MESHOPT: extension });
     }
-    let fallback = match layout.fallback {
-        FallbackOffsets::Source => source.len(),
-        FallbackOffsets::Packed => packed_size,
-    };
     document["buffers"] = json!([{"byteLength":binary.len()},
-        {"byteLength":fallback,"extensions":{MESHOPT:{"fallback":true}}}]);
+        {"byteLength":source.len(),"extensions":{MESHOPT:{"fallback":true}}}]);
     add_extension(document, MESHOPT, true)?;
     Ok(binary)
 }
@@ -286,7 +309,7 @@ fn encode_attributes(
 /// Small GLB builder for feature attributes and structural metadata. Views are
 /// eight-byte aligned so numeric property tables can retain 64-bit source values.
 #[derive(Clone)]
-pub(crate) struct MetadataGlb {
+pub struct MetadataGlb {
     pub document: Value,
     binary: Vec<u8>,
 }
@@ -305,6 +328,11 @@ impl MetadataGlb {
         }
     }
 
+    /// Continue authoring an existing glTF document and its binary buffer.
+    pub fn from_parts(document: Value, binary: Vec<u8>) -> Self {
+        Self { document, binary }
+    }
+
     pub fn view(&mut self, bytes: &[u8]) -> usize {
         let offset = append_aligned(&mut self.binary, Self::ALIGN, bytes);
         let views = self.document["bufferViews"].as_array_mut().unwrap();
@@ -319,14 +347,12 @@ impl MetadataGlb {
     }
 
     /// Replace a generated view while retaining accessor/metadata identities.
-    #[cfg(feature = "native-geospatial")]
     pub fn replace_view(&mut self, index: usize, bytes: &[u8]) {
         let offset = append_aligned(&mut self.binary, Self::ALIGN, bytes);
         self.document["bufferViews"][index]["byteOffset"] = offset.into();
         self.document["bufferViews"][index]["byteLength"] = bytes.len().into();
     }
 
-    #[cfg(feature = "native-geospatial")]
     pub fn compact_views(&mut self) {
         let mut binary = Vec::with_capacity(self.binary.len());
         for view in self.document["bufferViews"].as_array_mut().unwrap() {
@@ -345,7 +371,6 @@ impl MetadataGlb {
 
     /// Length of the GLB [`Self::finish`] would produce now, without
     /// serialising or copying the binary.
-    #[cfg(feature = "native-geospatial")]
     pub fn encoded_len(&mut self) -> Result<usize, Error> {
         self.record_buffer_length();
         glb_len(json_len(&self.document)?, self.binary.len())
@@ -353,7 +378,6 @@ impl MetadataGlb {
 
     /// The finished document and its four-byte padded binary buffer, for
     /// callers that rewrite views (e.g. meshopt) before [`encode_glb`].
-    #[cfg(feature = "native-geospatial")]
     pub fn into_parts(mut self) -> (Value, Vec<u8>) {
         self.record_buffer_length();
         pad_to(&mut self.binary, 4);

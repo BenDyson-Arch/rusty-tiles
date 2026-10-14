@@ -1,8 +1,9 @@
 //! Conversion job lifecycle: input/output preflight, a private work directory
 //! beside the output, no-clobber publication and cleanup of failed jobs.
-use crate::{report::ConversionResult, Error};
+use crate::{archive3tz::TZ_INDEX_NAME, report::ConversionResult, Error};
 use serde_json::Value;
 use std::{
+    collections::HashSet,
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
@@ -17,15 +18,6 @@ pub(crate) fn parent_dir(output: &Path) -> &Path {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."))
-}
-
-/// Converters that read one source file reject anything else up front.
-pub(crate) fn require_file(input: &Path) -> Result<(), Error> {
-    if input.is_file() {
-        Ok(())
-    } else {
-        Err(Error::InputNotFound(input.into()))
-    }
 }
 
 /// Refuse to touch an existing output unless replacement was requested.
@@ -65,7 +57,7 @@ impl Job {
     pub fn begin(output: &Path, force: bool) -> Result<Self, Error> {
         check_output(output, force)?;
         let parent = parent_dir(output);
-        fs::create_dir_all(parent)?;
+        crate::dir_sync::create_dir_all_durable(parent)?;
         let work = tempfile::Builder::new()
             .prefix(".tiles-work-")
             .tempdir_in(parent)?;
@@ -96,26 +88,25 @@ impl Job {
         }
     }
 
-    /// Publish a staged directory as the output directory.
-    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
-    pub fn publish_dir(
-        self,
-        staging: &Path,
-        report: Option<Value>,
-    ) -> Result<ConversionResult, Error> {
-        publish_directory(staging, &self.output, self.force)?;
-        Ok(self.result(false, report))
-    }
-
     /// Pack named member files into a `.3tz` and publish it.
     pub fn publish_3tz(
         self,
         files: &[(String, PathBuf)],
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
-        crate::pack::check_members(files, &self.output)?;
-        let mut temp = crate::pack::temp_archive(self.work.path())?;
-        crate::pack::write_archive(files, temp.as_file_mut())?;
+        self.publish_3tz_with(files, report, crate::dir_sync::sync_parent)
+    }
+
+    /// `sync_parent` makes the install rename durable; it is a seam for tests.
+    fn publish_3tz_with(
+        self,
+        files: &[(String, PathBuf)],
+        report: Option<Value>,
+        sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+    ) -> Result<ConversionResult, Error> {
+        check_members(files, &self.output)?;
+        let mut temp = temp_archive(self.work.path())?;
+        crate::archive3tz::write_archive(files, temp.as_file_mut())?;
         temp.as_file().sync_all()?;
         let persisted = if self.force {
             temp.persist(&self.output)
@@ -129,6 +120,11 @@ impl Job {
             }
             _ => Error::Io(e.error),
         })?;
+        // The archive is installed. `ConversionResult` has no diagnostics
+        // channel, and returning an error would make a retry hit OutputExists
+        // for a published output, so a failed directory sync is ignored like
+        // the typed publishers' non-fatal cleanup diagnostics.
+        let _ = sync_parent(&self.output);
         Ok(self.result(true, report))
     }
 
@@ -138,48 +134,98 @@ impl Job {
         root: &Path,
         report: Option<Value>,
     ) -> Result<ConversionResult, Error> {
-        let files = crate::pack::tree_members(root, &self.output)?;
+        self.publish_tree_with_resources_3tz(root, &[], report)
+    }
+
+    /// Include source dependencies alongside staged files. The common publisher
+    /// rejects duplicate archive names before writing or replacing the output.
+    pub(crate) fn publish_tree_with_resources_3tz(
+        self,
+        root: &Path,
+        resources: &[(String, PathBuf)],
+        report: Option<Value>,
+    ) -> Result<ConversionResult, Error> {
+        let mut files = tree_members(root, &self.output)?;
+        files.extend_from_slice(resources);
         self.publish_3tz(&files, report)
     }
 }
 
-/// Rename `staging` to `output`. An existing output is moved aside first and
-/// restored if the rename fails.
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
-pub(crate) fn publish_directory(staging: &Path, output: &Path, force: bool) -> Result<(), Error> {
-    if !output.exists() {
-        std::fs::rename(staging, output)?;
-        return Ok(());
-    }
-    if !force {
-        return Err(Error::OutputExists(output.into()));
-    }
-    let backup = tempfile::tempdir_in(parent_dir(output))?;
-    let previous = backup.path().join("previous");
-    std::fs::rename(output, &previous)?;
-    if let Err(error) = std::fs::rename(staging, output) {
-        if let Err(restore) = std::fs::rename(&previous, output) {
-            let retained = backup.keep();
-            return Err(Error::msg(format!("publication failed ({error}); restore failed ({restore}); previous output retained at {}", retained.join("previous").display())));
+// Legacy converter selection/staging policy; not used by the F0 package request.
+/// Every file below `root` as `(archive name, path)`, `tileset.json` first,
+/// skipping the archive being written and any stale 3TZ index.
+pub(crate) fn tree_members(root: &Path, output: &Path) -> Result<Vec<(String, PathBuf)>, Error> {
+    let absolute_output = std::path::absolute(output)?;
+    let mut files = Vec::new();
+    for entry in walkdir::WalkDir::new(root) {
+        let entry = entry.map_err(|e| Error::msg(e.to_string()))?;
+        if !entry.file_type().is_file() {
+            continue;
         }
-        return Err(Error::Io(error));
+        if std::path::absolute(entry.path())? == absolute_output {
+            continue;
+        }
+        let name = entry
+            .path()
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if name != TZ_INDEX_NAME {
+            files.push((name, entry.into_path()));
+        }
+    }
+    files.sort_by(|a, b| (a.0 != "tileset.json", &a.0).cmp(&(b.0 != "tileset.json", &b.0)));
+    Ok(files)
+}
+/// Reject archives without a root manifest and unsafe, duplicate or missing
+/// member paths before any bytes are written.
+pub(crate) fn check_members(files: &[(String, PathBuf)], output: &Path) -> Result<(), Error> {
+    if !files.iter().any(|(n, _)| n == "tileset.json") {
+        return Err(Error::MissingTilesetJson);
+    }
+    let absolute_output = std::path::absolute(output)?;
+    let mut seen = HashSet::new();
+    for (name, path) in files {
+        if name.is_empty()
+            || name == TZ_INDEX_NAME
+            || name.contains('\\')
+            || name.starts_with('/')
+            || name
+                .split('/')
+                .any(|s| s == ".." || s == "." || s.is_empty())
+            || !seen.insert(name)
+        {
+            return Err(Error::msg(format!(
+                "invalid or duplicate archive path: {name}"
+            )));
+        }
+        if !path.is_file() {
+            return Err(Error::InputNotFound(path.clone()));
+        }
+        if std::path::absolute(path)? == absolute_output {
+            return Err(Error::msg("archive output cannot be an input member"));
+        }
     }
     Ok(())
+}
+
+/// Create the temporary archive inside `dir`. tempfile creates files with
+/// mode 0600 and `persist` keeps that mode. Ask for 0666 instead so the
+/// process umask decides, as it does for any other new file.
+pub(crate) fn temp_archive(dir: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    builder.tempfile_in(dir)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn failed_directory_publication_restores_original() {
-        let tmp = tempfile::tempdir().unwrap();
-        let output = tmp.path().join("output");
-        std::fs::create_dir(&output).unwrap();
-        std::fs::write(output.join("original"), b"keep me").unwrap();
-        assert!(publish_directory(&tmp.path().join("missing"), &output, true).is_err());
-        assert_eq!(std::fs::read(output.join("original")).unwrap(), b"keep me");
-        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
-    }
 
     #[test]
     fn dropped_job_removes_work_and_keeps_output() {
@@ -308,5 +354,49 @@ mod tests {
         let entries = archive_entries(&output);
         assert!(entries.contains(&("tileset.json".into(), b"{\"new\":true}".to_vec())));
         assert_eq!(leftovers(tmp.path(), &["out.3tz"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn archive_publication_syncs_the_output_parent_after_the_rename() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let job = Job::begin(&output, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        let mut synced = Vec::new();
+        job.publish_3tz_with(&[("tileset.json".into(), manifest)], None, |path| {
+            synced.push((path.to_owned(), path.is_file()));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(synced, [(output, true)]);
+    }
+
+    #[test]
+    fn archive_publication_keeps_the_output_when_the_parent_sync_fails_and_skips_it_on_conflict() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out.3tz");
+        let job = Job::begin(&output, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        let result = job
+            .publish_3tz_with(&[("tileset.json".into(), manifest)], None, |_| {
+                Err(std::io::Error::other("injected directory sync failure"))
+            })
+            .unwrap();
+        assert_eq!(result.output, output);
+        assert!(output.is_file());
+
+        let other = tmp.path().join("other.3tz");
+        let job = Job::begin(&other, false).unwrap();
+        let manifest = job.path().join("tileset.json");
+        fs::write(&manifest, b"{}").unwrap();
+        fs::write(&other, b"raced").unwrap();
+        let error = job
+            .publish_3tz_with(&[("tileset.json".into(), manifest)], None, |_| {
+                panic!("a refused install must not sync")
+            })
+            .unwrap_err();
+        assert!(matches!(error, Error::OutputExists(_)), "{error}");
     }
 }

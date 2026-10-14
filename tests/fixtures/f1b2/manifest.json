@@ -1,0 +1,240 @@
+{
+  "author": "tests/f1b2_oracle.py raw JSON/struct buffers; F1b independent PNG/JPEG author and decoded receipts",
+  "variants": {
+    "multibuffer": {
+      "source": "multibuffer/source.gltf",
+      "source_sha256": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268",
+      "source_bytes": 5952,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "multibuffer/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "multibuffer/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "multibuffer/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "multibuffer/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "multibuffer/source.gltf": "545b57b8e968b82a1f60cffde45b12fa5edd1b8c9e1b07c0740fd4fce6b59268"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "glb-mixed": {
+      "source": "glb-mixed/source.glb",
+      "source_sha256": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed",
+      "source_bytes": 6444,
+      "external_files": 3,
+      "external_bytes": 531,
+      "files": {
+        "glb-mixed/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "glb-mixed/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "glb-mixed/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "glb-mixed/source.glb": "8fcdc7dba879e0d01a21818c8aca99776b36618e1309df104b98f3fc4d3b26ed"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "glb-json-only": {
+      "source": "glb-json-only/source.glb",
+      "source_sha256": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76",
+      "source_bytes": 5972,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "glb-json-only/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "glb-json-only/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "glb-json-only/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "glb-json-only/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "glb-json-only/source.glb": "3e8fc595c9a54d873391c21889b73c9596578eb9c5f35c1cd17de864c08a2e76"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "external-view-image": {
+      "source": "external-view-image/source.gltf",
+      "source_sha256": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe",
+      "source_bytes": 6029,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "external-view-image/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "external-view-image/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "external-view-image/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "external-view-image/images/view.bin": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "external-view-image/source.gltf": "7ccbb629f2e660da35c6aee7fecb7a54cded942b6d2a4b07b3b5563e9b00c3fe"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "space-percent": {
+      "source": "space-percent/source.gltf",
+      "source_sha256": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d",
+      "source_bytes": 5956,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "space-percent/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "space-percent/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "space-percent/images/a 25%.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "space-percent/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "space-percent/source.gltf": "6fd8b1790b33b58a3ac1fa9af808500ab1d03b60d4cfb2fb5aedb4a1857a1e7d"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "encoded-unicode": {
+      "source": "encoded-unicode/source.gltf",
+      "source_sha256": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d",
+      "source_bytes": 5958,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "encoded-unicode/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "encoded-unicode/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "encoded-unicode/images/sphère.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "encoded-unicode/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "encoded-unicode/source.gltf": "dd147c1dbf2ce8d949df7ea4f8e7b3b6d5802bdfb5e8b85b5f7f7236f2fa633d"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "encoded-hash": {
+      "source": "encoded-hash/source.gltf",
+      "source_sha256": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52",
+      "source_bytes": 5960,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "encoded-hash/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "encoded-hash/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "encoded-hash/images/color#alpha.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "encoded-hash/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "encoded-hash/source.gltf": "6ed88969096cffdbfbab79753aa2d6040db2083616616b86951d09abd2bffb52"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "once-percent": {
+      "source": "once-percent/source.gltf",
+      "source_sha256": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5",
+      "source_bytes": 5957,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "once-percent/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "once-percent/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "once-percent/images/%2e%2e.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "once-percent/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "once-percent/source.gltf": "328e776c8fa6d9bacb746af44687c6957697fe367f1c61aa693fc1176971bab5"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "distinct-basename": {
+      "source": "distinct-basename/source.gltf",
+      "source_sha256": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d",
+      "source_bytes": 5925,
+      "external_files": 4,
+      "external_bytes": 973,
+      "files": {
+        "distinct-basename/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "distinct-basename/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "distinct-basename/left/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "distinct-basename/right/color.png": "02a505a377f2ce0fb8245a7c5cfb154016a71fd656568c08470abd41bf9f2509",
+        "distinct-basename/source.gltf": "de76580ee191f7944557e5b7cd35bf2772db82e1802d2062394da725403f297d"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0,
+        1
+      ]
+    },
+    "mime-inferred": {
+      "source": "mime-inferred/source.gltf",
+      "source_sha256": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd",
+      "source_bytes": 5929,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "mime-inferred/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "mime-inferred/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "mime-inferred/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "mime-inferred/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "mime-inferred/source.gltf": "8d1eacbe36692eb54500557f429145370e9599789ff725f10f9a328acfa67abd"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "plus": {
+      "source": "plus/source.gltf",
+      "source_sha256": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd",
+      "source_bytes": 5952,
+      "external_files": 4,
+      "external_bytes": 1011,
+      "files": {
+        "plus/geom/a.bin": "50e4f7fa9a26777e0299dfcc498678452232b62491a5f4c8e81b9ff6e49069fe",
+        "plus/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "plus/images/a+b.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "plus/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "plus/source.gltf": "777fbc5030cfad40ea39907954e4fde6360f628768651d32db0ecec0ae8c55dd"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "uv-u8-bounds": {
+      "source": "uv-u8-bounds/source.gltf",
+      "source_sha256": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e",
+      "source_bytes": 6439,
+      "external_files": 4,
+      "external_bytes": 915,
+      "files": {
+        "uv-u8-bounds/geom/a.bin": "db016a9d332bb5f625fb7d8aa0fee0ca51c29921e9902b64035ad3ba0d142997",
+        "uv-u8-bounds/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "uv-u8-bounds/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "uv-u8-bounds/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "uv-u8-bounds/source.gltf": "90e571a6521ed61b6fef113ecea0e0c3e379678bb21d7d7228224db8ffaa404e"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    },
+    "uv-u16-bounds": {
+      "source": "uv-u16-bounds/source.gltf",
+      "source_sha256": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52",
+      "source_bytes": 6351,
+      "external_files": 4,
+      "external_bytes": 915,
+      "files": {
+        "uv-u16-bounds/geom/a.bin": "b77380c0fee1074be45f46cb77bda54e2848954611d11e8deede936989be017a",
+        "uv-u16-bounds/geom/b.bin": "0f019818a1b2073212fd5a7115fe6484342234515fb10d87937cc929bbce3550",
+        "uv-u16-bounds/images/color.png": "c6f8aa9d5a95bc6431c2cdb5fd0236a955637727afec07025c3e0b86519ca6ab",
+        "uv-u16-bounds/images/unused.png": "486e6d630e4486afa3474e76db67f28c61c1e2fec1e0b4995d2cdc17de2be1f6",
+        "uv-u16-bounds/source.gltf": "7fc6a3e263ebc69bb9015b110104bafafac2b19ca8b8adb0ea7dbf89e3a3aa52"
+      },
+      "geometry_triangles": 8,
+      "published_image_ids": [
+        0
+      ]
+    }
+  },
+  "URI_policy": "Reserved data must be percent encoded before exactly-once per-segment decoding; plus variant uses %2b and a literal plus native filename."
+}

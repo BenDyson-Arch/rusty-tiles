@@ -1,0 +1,808 @@
+//! In-process KTX2 encoding with the vendored Basis Universal v2.50 encoder
+//! (`vendor/basis_universal`, provenance in `vendor/README.md`), with a
+//! mandatory post-encode verification.
+//!
+//! The H8 leaf producer supplies complete class-correct mip chains; PNG lossless
+//! leaves bypass this codec. Semantic quality floors belong to that caller.
+//!
+//! Contract:
+//! - Supported domain: one 2D RGBA8 image, rows tightly packed, each edge
+//!   1..=16384 texels and at most 8192 x 8192 texels in total. ETC1S (BasisLZ) or UASTC LDR 4x4 (optionally Zstd
+//!   supercompressed). UASTC never uses RDO; ETC1S takes a quality of 1..=100.
+//!   Mips are supplied by the caller as one base image or a complete pyramid;
+//!   the encoder never generates or substitutes a level. Total chain texels
+//!   are bounded by twice MAX_TEXELS (also covering one-dimensional pyramids).
+//! - `Transfer` selects the colour or data class as one decision: sRGB means
+//!   perceptual metrics and an sRGB DFD transfer; linear disables those.
+//!   Transfer does not filter pixels: callers own color/data/normal/alpha mips.
+//! - Every call is single-threaded and silent: the encoder's thread pool is
+//!   never enabled, and library text aimed at stdout/stderr is captured and
+//!   attached to the returned error instead.
+//! - Library failures upstream ends the process for (its internal
+//!   consistency checks, failed container allocations) come back as
+//!   `InvalidState`; requests outside the domain are refused before the
+//!   library sees them, in Rust and again in the shim. The process-ending
+//!   paths that remain are listed in `vendor/README.md`.
+//! - Every encode is verified before it is returned: the container is
+//!   re-parsed independently of the encoder, every level is decoded, and the
+//!   each decoded level must be within the mode's error floor of its input
+//!   ([`ErrorFloor`]) and, where the input has enough within-block detail,
+//!   reproduce it ([`DetailFloor`]).
+//!   Any failure is `InvalidState`.
+// Keep the bounded calibration/diagnostic entry points alongside the production API.
+#![allow(dead_code)]
+
+mod container;
+mod ffi;
+#[cfg(test)]
+mod tests;
+
+use crate::{JobError, JobErrorKind};
+
+/// Largest supported edge, from the vendored encoder.
+pub(crate) const MAX_EDGE: u32 = 16_384;
+/// Largest supported texel count. It bounds the encoder's memory (about 55
+/// bytes per texel for ETC1S, 40 for UASTC) and keeps every library container
+/// far below size overflow; the shim enforces the same limit.
+pub(crate) const MAX_TEXELS: u64 = 8_192 * 8_192;
+const MAX_EFFORT: u8 = 10;
+
+/// Per-mode error floor for the decoded base level, relative to the
+/// reconstruction that replaces every 4x4 block by its per-channel mean:
+/// `SSE(decoded) <= ratio * SSE(block mean) + slack * bytes`. Integer-only, so
+/// the verdict is identical on every target. These detect a broken encode,
+/// container or decoder; they are not a quality contract. Measured worst
+/// cases are in `tests::measure_floors`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ErrorFloor {
+    pub ratio: u64,
+    pub slack_per_byte: u64,
+}
+
+pub(crate) const ETC1S_FLOOR: ErrorFloor = ErrorFloor {
+    ratio: 4,
+    slack_per_byte: 16,
+};
+
+/// ETC1S shares a palette across the chain. Tiny nonbase levels can therefore
+/// exceed the standalone base-image allowance. Independent caller-mip measurements
+/// needed at most 158.75 squared-error slack per byte; use 256 for <=16 texels.
+/// This remains a corruption guard, not a per-class/profile quality floor.
+const ETC1S_SMALL_MIP_FLOOR: ErrorFloor = ErrorFloor {
+    ratio: 4,
+    slack_per_byte: 256,
+};
+pub(crate) const UASTC_FLOOR: ErrorFloor = ErrorFloor {
+    ratio: 1,
+    slack_per_byte: 4,
+};
+
+/// Second base-level check: the decoded within-block detail must correlate
+/// with the input's ([`detail`]: luma and alpha). The error floor alone
+/// cannot tell a broken decode from a good one on high-entropy content: on
+/// pure noise a good ETC1S decode measures 0.7-1.2x the block-mean error and
+/// an unrelated image 1.1-1.3x. The correlation separates them (good ETC1S
+/// at least 0.38, good UASTC at least 0.82, unrelated at most 0.03 in
+/// `tests::measure_floors`). Applied when the image has at least
+/// `min_texels` texels, so an unrelated decode's correlation is sampled
+/// tightly, and the input's mean within-block variance is at least
+/// `min_variance`; below that a codec may legitimately drop the detail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DetailFloor {
+    pub min_texels: u64,
+    pub min_variance: u128,
+    pub numerator: u128,
+    pub denominator: u128,
+}
+
+pub(crate) const ETC1S_DETAIL: DetailFloor = DetailFloor {
+    min_texels: 1024,
+    min_variance: 64,
+    numerator: 1,
+    denominator: 5,
+};
+pub(crate) const UASTC_DETAIL: DetailFloor = DetailFloor {
+    min_texels: 1024,
+    min_variance: 64,
+    numerator: 1,
+    denominator: 2,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// ETC1S with BasisLZ supercompression. `quality` is 1..=100.
+    Etc1s { quality: u8 },
+    /// UASTC LDR 4x4 without RDO, optionally Zstd supercompressed.
+    Uastc { zstd: bool },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Transfer {
+    Srgb,
+    Linear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Params {
+    /// Encoder effort, 0..=10.
+    pub effort: u8,
+    pub transfer: Transfer,
+    /// Legacy flag: base-only calls must set false; supplied chains use the mip API.
+    pub mipmaps: bool,
+}
+
+/// One caller-authored tightly packed RGBA8 level. All levels are borrowed
+/// through the synchronous single-threaded encode and verification call.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct MipLevel<'a> {
+    pub rgba: &'a [u8],
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Encode either a base-only image or its complete caller-authored pyramid.
+/// No level is generated or replaced by the encoder. Semantic filtering and
+/// per-class quality floors belong to the caller; corruption floors apply here
+/// independently to every supplied level.
+pub(crate) fn encode_ktx2_mips(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    encode_ktx2_mips_decoded(mips, mode, params).map(|(bytes, _)| bytes)
+}
+
+/// [`encode_ktx2_mips`], also returning every level as decoded by the
+/// mandatory verification, so callers need not decode the container again.
+pub(crate) fn encode_ktx2_mips_decoded(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<(Vec<u8>, Vec<Vec<u8>>), JobError> {
+    encode_ktx2_mips_floor_checked(mips, mode, params)?.map_err(|miss| miss.error)
+}
+
+/// A decoded level that missed the verification's error floor ([`ErrorFloor`])
+/// or detail floor ([`DetailFloor`]): the container is well formed and decodes,
+/// but this encode does not reproduce the input closely enough. A caller may
+/// try a stronger encoder setting; the check itself is never relaxed.
+#[derive(Debug)]
+pub(crate) struct FloorMiss {
+    pub level: u32,
+    /// The same `InvalidState` error [`encode_ktx2_mips_decoded`] returns.
+    pub error: JobError,
+}
+/// A verified KTX2 file and every level as decoded by its verification.
+pub(crate) type EncodedLevels = (Vec<u8>, Vec<Vec<u8>>);
+enum VerifyFailure {
+    Floor(FloorMiss),
+    Hard(JobError),
+}
+impl From<JobError> for VerifyFailure {
+    fn from(error: JobError) -> Self {
+        Self::Hard(error)
+    }
+}
+impl VerifyFailure {
+    fn into_error(self) -> JobError {
+        match self {
+            Self::Floor(miss) => miss.error,
+            Self::Hard(error) => error,
+        }
+    }
+}
+
+/// [`encode_ktx2_mips_decoded`] with its verification floor misses typed apart:
+/// `Ok(Err(miss))` when only a decoded-level floor failed. Every other
+/// verification failure (container fields, level sizes, decode) stays an error.
+pub(crate) fn encode_ktx2_mips_floor_checked(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Result<EncodedLevels, FloorMiss>, JobError> {
+    check_mips(mips, mode, params)?;
+    let base = u64::from(mips[0].width) * u64::from(mips[0].height);
+    let chain = mips
+        .iter()
+        .map(|m| u64::from(m.width) * u64::from(m.height))
+        .sum();
+    let encoded =
+        crate::stage_timing::encode(base, chain, || encode_mips_unverified(mips, mode, params))?;
+    match crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
+        verify_levels(&encoded, mips, mode, params, true)
+    }) {
+        Ok((_, decoded)) => Ok(Ok((encoded, decoded))),
+        Err(VerifyFailure::Floor(miss)) => Ok(Err(miss)),
+        Err(VerifyFailure::Hard(error)) => Err(error),
+    }
+}
+
+fn check_mips(mips: &[MipLevel<'_>], mode: Mode, params: Params) -> Result<(), JobError> {
+    if params.mipmaps {
+        return Err(JobError::new(
+            JobErrorKind::InvalidRequest,
+            "automatic mip generation is unsupported; supply explicit levels with mipmaps=false",
+        ));
+    }
+    let Some(base) = mips.first() else {
+        return Err(JobError::new(
+            JobErrorKind::InvalidInput,
+            "empty RGBA mip chain",
+        ));
+    };
+    check_request(base.rgba, base.width, base.height, mode, params)?;
+    let full = expected_levels(base.width, base.height, true) as usize;
+    if mips.len() != 1 && mips.len() != full {
+        return Err(JobError::new(
+            JobErrorKind::InvalidInput,
+            format!(
+                "mip chain must contain one base level or all {full} levels, got {}",
+                mips.len()
+            ),
+        ));
+    }
+    let mut total_texels = 0u64;
+    for (i, mip) in mips.iter().enumerate() {
+        let (w, h) = ((base.width >> i).max(1), (base.height >> i).max(1));
+        if (mip.width, mip.height) != (w, h) {
+            return Err(JobError::new(
+                JobErrorKind::InvalidInput,
+                format!(
+                    "mip {i} dimensions must be {w}x{h}, got {}x{}",
+                    mip.width, mip.height
+                ),
+            ));
+        }
+        check_request(mip.rgba, w, h, mode, params)?;
+        total_texels += u64::from(w) * u64::from(h);
+    }
+    if total_texels > 2 * MAX_TEXELS {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            "mip chain exceeds the total texel limit",
+        ));
+    }
+    Ok(())
+}
+
+/// What a successful verification established.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Verified {
+    pub levels: u32,
+    /// Sum of squared byte errors of the decoded base level.
+    pub base_sse: u64,
+    /// The same for the 4x4 block-mean reconstruction of the input.
+    pub block_mean_sse: u64,
+}
+
+/// Encodes `rgba` to KTX2 and returns the bytes only after they pass
+/// [`verify_ktx2`].
+pub(crate) fn encode_ktx2(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    encode_ktx2_mips(
+        &[MipLevel {
+            rgba,
+            width,
+            height,
+        }],
+        mode,
+        params,
+    )
+}
+
+fn check_request(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<(), JobError> {
+    if !(1..=MAX_EDGE).contains(&width) || !(1..=MAX_EDGE).contains(&height) {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!("KTX2 encoding supports edges 1..={MAX_EDGE}, got {width}x{height}"),
+        ));
+    }
+    if u64::from(width) * u64::from(height) > MAX_TEXELS {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!("KTX2 encoding supports at most {MAX_TEXELS} texels, got {width}x{height}"),
+        ));
+    }
+    if rgba.len() as u64 != u64::from(width) * u64::from(height) * 4 {
+        return Err(JobError::new(
+            JobErrorKind::InvalidInput,
+            format!(
+                "RGBA8 buffer for {width}x{height} must be {} bytes, got {}",
+                u64::from(width) * u64::from(height) * 4,
+                rgba.len()
+            ),
+        ));
+    }
+    if let Mode::Etc1s { quality } = mode {
+        if !(1..=100).contains(&quality) {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                format!("ETC1S quality must be 1..=100, got {quality}"),
+            ));
+        }
+    }
+    if params.effort > MAX_EFFORT {
+        return Err(JobError::new(
+            JobErrorKind::InvalidRequest,
+            format!(
+                "encoder effort must be 0..={MAX_EFFORT}, got {}",
+                params.effort
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn encode_unverified(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    check_mips(
+        &[MipLevel {
+            rgba,
+            width,
+            height,
+        }],
+        mode,
+        params,
+    )?;
+    encode_mips_unverified(
+        &[MipLevel {
+            rgba,
+            width,
+            height,
+        }],
+        mode,
+        params,
+    )
+}
+
+fn encode_mips_unverified(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Vec<u8>, JobError> {
+    let (format, quality, mut flags) = match mode {
+        Mode::Etc1s { quality } => (ffi::FORMAT_ETC1S, i32::from(quality), 0),
+        // Quality 100 is the encoder's "no RDO" setting.
+        Mode::Uastc { zstd } => (
+            ffi::FORMAT_UASTC_LDR_4X4,
+            100,
+            if zstd { ffi::FLAG_ZSTD } else { 0 },
+        ),
+    };
+    if params.transfer == Transfer::Srgb {
+        flags |= ffi::FLAG_SRGB;
+    }
+    let native_mips: Vec<ffi::MipLevel> = mips
+        .iter()
+        .map(|mip| ffi::MipLevel {
+            rgba: mip.rgba.as_ptr(),
+            length: mip.rgba.len(),
+            width: mip.width,
+            height: mip.height,
+        })
+        .collect();
+    let mut data = std::ptr::null_mut();
+    let mut length = 0usize;
+    // SAFETY: every mip holds width * height * 4 bytes (checked by the caller);
+    // the out-pointers are valid for writes.
+    let status = unsafe {
+        ffi::rt_basisu_encode_mips(
+            native_mips.as_ptr(),
+            native_mips.len(),
+            format,
+            quality,
+            i32::from(params.effort),
+            flags,
+            &mut data,
+            &mut length,
+        )
+    };
+    if status != ffi::STATUS_OK || data.is_null() {
+        let what = match status {
+            ffi::STATUS_INVALID_ARGUMENT => "the shim refused the request",
+            ffi::STATUS_OUT_OF_MEMORY => "out of memory",
+            ffi::STATUS_INVARIANT_FAILED => "an internal consistency check failed",
+            ffi::STATUS_CONTAINER_FAILED => "a library container failed (allocation or size)",
+            _ => "encode failed",
+        };
+        return Err(JobError::new(
+            JobErrorKind::InvalidState,
+            format!(
+                "Basis Universal: {what} (status {status}): {}",
+                ffi::diagnostics()
+            ),
+        ));
+    }
+    // SAFETY: on success the shim returns `length` initialized bytes owned
+    // by the encoder's allocator, released immediately after the copy.
+    let encoded = unsafe { std::slice::from_raw_parts(data, length) }.to_vec();
+    unsafe { ffi::rt_basisu_free(data) };
+    Ok(encoded)
+}
+
+fn floor_miss(level: u32, message: String) -> VerifyFailure {
+    VerifyFailure::Floor(FloorMiss {
+        level,
+        error: invalid_state(message),
+    })
+}
+
+fn invalid_state(message: String) -> JobError {
+    JobError::new(
+        JobErrorKind::InvalidState,
+        format!("KTX2 verification failed: {message}"),
+    )
+}
+
+/// Expected number of levels for the request.
+fn expected_levels(width: u32, height: u32, mipmaps: bool) -> u32 {
+    if mipmaps {
+        32 - width.max(height).leading_zeros()
+    } else {
+        1
+    }
+}
+
+/// Decodes one level with the vendored transcoder.
+pub(crate) fn decode_level_rgba(
+    ktx2: &[u8],
+    level: u32,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, JobError> {
+    let mut out = vec![0u8; width as usize * height as usize * 4];
+    let (mut decoded_width, mut decoded_height) = (0u32, 0u32);
+    // SAFETY: both buffers are valid for the lengths passed.
+    let status = unsafe {
+        ffi::rt_basisu_decode_level_rgba(
+            ktx2.as_ptr(),
+            ktx2.len(),
+            level,
+            out.as_mut_ptr(),
+            out.len(),
+            &mut decoded_width,
+            &mut decoded_height,
+        )
+    };
+    if status != ffi::STATUS_OK {
+        return Err(invalid_state(format!(
+            "level {level} did not decode (status {status}, decoder reports {decoded_width}x{decoded_height}): {}",
+            ffi::diagnostics()
+        )));
+    }
+    if (decoded_width, decoded_height) != (width, height) {
+        return Err(invalid_state(format!(
+            "level {level} decoded as {decoded_width}x{decoded_height}, expected {width}x{height}"
+        )));
+    }
+    Ok(out)
+}
+
+/// Sum of squared byte differences of two equal-length buffers.
+pub(crate) fn sse(a: &[u8], b: &[u8]) -> u64 {
+    debug_assert_eq!(a.len(), b.len());
+    a.iter()
+        .zip(b)
+        .map(|(&x, &y)| u64::from(x.abs_diff(y)).pow(2))
+        .sum()
+}
+
+/// Sum of squared errors of the reconstruction that replaces each 4x4 block
+/// (clipped at the edges) by its rounded per-channel mean.
+pub(crate) fn block_mean_sse(rgba: &[u8], width: u32, height: u32) -> u64 {
+    let (w, h) = (width as usize, height as usize);
+    let mut total = 0u64;
+    for by in (0..h).step_by(4) {
+        for bx in (0..w).step_by(4) {
+            let rows = by..(by + 4).min(h);
+            let cols = bx..(bx + 4).min(w);
+            let count = (rows.len() * cols.len()) as u64;
+            for channel in 0..4 {
+                let texel = |y: usize, x: usize| u64::from(rgba[(y * w + x) * 4 + channel]);
+                let (mut sum, mut squares) = (0u64, 0u64);
+                for y in rows.clone() {
+                    for x in cols.clone() {
+                        sum += texel(y, x);
+                        squares += texel(y, x).pow(2);
+                    }
+                }
+                // Rounded mean m; SSE = sum(v^2) - 2 m sum(v) + n m^2 >= 0.
+                let mean = (2 * sum + count) / (2 * count);
+                total += squares + count * mean * mean - 2 * mean * sum;
+            }
+        }
+    }
+    total
+}
+
+/// Within-block detail statistics of a decoded image against its input, for
+/// two signals: luma `R + G + B` and alpha. Both codecs carry the colour
+/// channels' detail mostly as luma (ETC1S only as luma), so per-channel or
+/// chroma detail is deliberately not compared. Over 4x4 blocks (clipped at
+/// the edges) of `n` texels, a texel's residual is `n * signal - block sum`,
+/// which is `n` times its deviation from the block mean.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Detail {
+    /// Sum of input residual x decoded residual.
+    pub covariance: i128,
+    /// Sum of squared input residuals.
+    pub input: u128,
+    /// Sum of squared decoded residuals.
+    pub decoded: u128,
+    /// Sum of n^2 over texels and both signals, so `input / scale` is the
+    /// input's mean within-block variance per signal.
+    pub scale: u128,
+}
+
+impl Detail {
+    /// Whether the correlation `covariance / sqrt(input * decoded)` is
+    /// positive and at least `numerator / denominator`. Integer-only.
+    pub(crate) fn correlation_at_least(&self, numerator: u128, denominator: u128) -> bool {
+        if self.covariance <= 0 {
+            return false;
+        }
+        let covariance = self.covariance as u128;
+        covariance * covariance * denominator * denominator
+            >= numerator * numerator * self.input * self.decoded
+    }
+
+    /// Whether the input's mean within-block variance per signal is at least
+    /// `variance`.
+    pub(crate) fn input_variance_at_least(&self, variance: u128) -> bool {
+        self.input >= variance * self.scale
+    }
+}
+
+pub(crate) fn detail(rgba: &[u8], decoded: &[u8], width: u32, height: u32) -> Detail {
+    debug_assert_eq!(rgba.len(), decoded.len());
+    let (w, h) = (width as usize, height as usize);
+    let signal = |image: &[u8], texel: usize, which: usize| -> i64 {
+        let p = &image[texel * 4..texel * 4 + 4];
+        if which == 0 {
+            i64::from(p[0]) + i64::from(p[1]) + i64::from(p[2])
+        } else {
+            i64::from(p[3])
+        }
+    };
+    let mut out = Detail {
+        covariance: 0,
+        input: 0,
+        decoded: 0,
+        scale: 0,
+    };
+    for by in (0..h).step_by(4) {
+        for bx in (0..w).step_by(4) {
+            let rows = by..(by + 4).min(h);
+            let cols = bx..(bx + 4).min(w);
+            let count = (rows.len() * cols.len()) as i64;
+            let texels = || {
+                rows.clone()
+                    .flat_map(|y| cols.clone().map(move |x| y * w + x))
+            };
+            for which in 0..2 {
+                let sum_in: i64 = texels().map(|t| signal(rgba, t, which)).sum();
+                let sum_out: i64 = texels().map(|t| signal(decoded, t, which)).sum();
+                for t in texels() {
+                    let r_in = count * signal(rgba, t, which) - sum_in;
+                    let r_out = count * signal(decoded, t, which) - sum_out;
+                    out.covariance += i128::from(r_in * r_out);
+                    out.input += (r_in * r_in) as u128;
+                    out.decoded += (r_out * r_out) as u128;
+                    out.scale += (count * count) as u128;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The mandatory post-encode verification of [`encode_ktx2`].
+pub(crate) fn verify_ktx2(
+    ktx2: &[u8],
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    mode: Mode,
+    params: Params,
+) -> Result<Verified, JobError> {
+    verify_ktx2_mips(
+        ktx2,
+        &[MipLevel {
+            rgba,
+            width,
+            height,
+        }],
+        mode,
+        params,
+    )
+}
+
+pub(crate) fn verify_ktx2_mips(
+    ktx2: &[u8],
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Verified, JobError> {
+    verify_levels(ktx2, mips, mode, params, false)
+        .map(|(verified, _)| verified)
+        .map_err(VerifyFailure::into_error)
+}
+
+fn verify_levels(
+    ktx2: &[u8],
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+    keep: bool,
+) -> Result<(Verified, Vec<Vec<u8>>), VerifyFailure> {
+    check_mips(mips, mode, params)?;
+    let mut kept = Vec::new();
+    let MipLevel {
+        rgba,
+        width,
+        height,
+    } = mips[0];
+    let parsed = container::parse(ktx2).map_err(invalid_state)?;
+    let levels = mips.len() as u32;
+    let (model, supercompression, floor, detail_floor) = match mode {
+        Mode::Etc1s { .. } => (
+            container::MODEL_ETC1S,
+            container::SUPERCOMPRESSION_BASIS_LZ,
+            ETC1S_FLOOR,
+            ETC1S_DETAIL,
+        ),
+        Mode::Uastc { zstd } => (
+            container::MODEL_UASTC,
+            if zstd {
+                container::SUPERCOMPRESSION_ZSTD
+            } else {
+                container::SUPERCOMPRESSION_NONE
+            },
+            UASTC_FLOOR,
+            UASTC_DETAIL,
+        ),
+    };
+    let transfer = match params.transfer {
+        Transfer::Srgb => container::TRANSFER_SRGB,
+        Transfer::Linear => container::TRANSFER_LINEAR,
+    };
+    let fields = [
+        ("vkFormat", u64::from(parsed.vk_format), 0),
+        ("typeSize", u64::from(parsed.type_size), 1),
+        ("pixelWidth", u64::from(parsed.width), u64::from(width)),
+        ("pixelHeight", u64::from(parsed.height), u64::from(height)),
+        ("pixelDepth", u64::from(parsed.depth), 0),
+        ("layerCount", u64::from(parsed.layers), 0),
+        ("faceCount", u64::from(parsed.faces), 1),
+        (
+            "levelCount",
+            u64::from(parsed.level_count),
+            u64::from(levels),
+        ),
+        (
+            "supercompressionScheme",
+            u64::from(parsed.supercompression),
+            u64::from(supercompression),
+        ),
+        (
+            "DFD colorModel",
+            u64::from(parsed.color_model),
+            u64::from(model),
+        ),
+        (
+            "DFD transferFunction",
+            u64::from(parsed.transfer),
+            u64::from(transfer),
+        ),
+    ];
+    for (name, found, expected) in fields {
+        if found != expected {
+            return Err(VerifyFailure::Hard(invalid_state(format!(
+                "{name} is {found}, expected {expected}"
+            ))));
+        }
+    }
+    let has_global_data = parsed.global_data_length != 0;
+    if has_global_data != (supercompression == container::SUPERCOMPRESSION_BASIS_LZ) {
+        return Err(VerifyFailure::Hard(invalid_state(format!(
+            "supercompression global data length {} does not match scheme {supercompression}",
+            parsed.global_data_length
+        ))));
+    }
+    let block_mean = block_mean_sse(rgba, width, height);
+    let mut base_sse = 0;
+    for (index, entry) in parsed.levels.iter().enumerate() {
+        let level = index as u32;
+        let (w, h) = ((width >> level).max(1), (height >> level).max(1));
+        if let Mode::Uastc { .. } = mode {
+            let blocks = u64::from(w.div_ceil(4)) * u64::from(h.div_ceil(4)) * 16;
+            let stored_ok =
+                supercompression != container::SUPERCOMPRESSION_NONE || entry.length == blocks;
+            if entry.uncompressed_length != blocks || !stored_ok {
+                return Err(VerifyFailure::Hard(invalid_state(format!(
+                    "UASTC level {level} holds {} bytes ({} uncompressed), expected {blocks}",
+                    entry.length, entry.uncompressed_length
+                ))));
+            }
+        }
+        let decoded = decode_level_rgba(ktx2, level, w, h)?;
+        {
+            let input = mips[index].rgba;
+            let level_sse = sse(input, &decoded);
+            let level_block_mean = if level == 0 {
+                block_mean
+            } else {
+                block_mean_sse(input, w, h)
+            };
+            if level == 0 {
+                base_sse = level_sse;
+            }
+            let floor = if level != 0
+                && u64::from(w) * u64::from(h) <= 16
+                && matches!(mode, Mode::Etc1s { .. })
+            {
+                ETC1S_SMALL_MIP_FLOOR
+            } else {
+                floor
+            };
+            let allowed =
+                floor.ratio * level_block_mean + floor.slack_per_byte * input.len() as u64;
+            if level_sse > allowed {
+                return Err(floor_miss(
+                    level,
+                    format!(
+                        "decoded mip {level} error {level_sse} exceeds the floor {allowed} \
+                     ({} x block-mean error {level_block_mean} + {} per byte)",
+                        floor.ratio, floor.slack_per_byte
+                    ),
+                ));
+            }
+            let texels = u64::from(w) * u64::from(h);
+            let stats = detail(input, &decoded, w, h);
+            if texels >= detail_floor.min_texels
+                && stats.input_variance_at_least(detail_floor.min_variance)
+                && !stats.correlation_at_least(detail_floor.numerator, detail_floor.denominator)
+            {
+                return Err(floor_miss(
+                    level,
+                    format!(
+                        "decoded mip {level} detail does not follow the input: covariance {}, \
+                     input {}, decoded {} (correlation floor {}/{})",
+                        stats.covariance,
+                        stats.input,
+                        stats.decoded,
+                        detail_floor.numerator,
+                        detail_floor.denominator
+                    ),
+                ));
+            }
+        }
+        if keep {
+            kept.push(decoded);
+        }
+    }
+    Ok((
+        Verified {
+            levels,
+            base_sse,
+            block_mean_sse: block_mean,
+        },
+        kept,
+    ))
+}

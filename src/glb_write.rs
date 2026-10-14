@@ -8,8 +8,6 @@ use gltf_json::{accessor, buffer, image as gimage, material, mesh, scene, textur
 use crate::error::Error;
 use crate::glb::{self, pad_to};
 
-pub(crate) use crate::glb::MetadataGlb;
-
 #[derive(Clone, Debug, Default)]
 pub struct TilePrimitive {
     pub positions: Vec<[f32; 3]>,

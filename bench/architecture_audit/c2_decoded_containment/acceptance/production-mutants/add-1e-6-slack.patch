@@ -1,0 +1,13 @@
+diff --git a/src/validate/containment.rs b/src/validate/containment.rs
+index b10acb5..e3e532b 100644
+--- a/src/validate/containment.rs
++++ b/src/validate/containment.rs
+@@ -638,7 +638,7 @@ fn inside(a: &mut Arena, p: [D; 3], w: D, v: &VolumeFacts) -> bool {
+         d.sub(dd, p[j], cw);
+         match (v, sphere) {
+             (VolumeFacts::Box(b), _) => {
+-                d.float(input, half(b, j).abs());
++                d.float(input, half(b, j).abs() + 1e-6);
+                 d.mul(hw, input, w);
+                 if d.cmp_abs(dd, hw) == Ordering::Greater {
+                     return false;

@@ -86,6 +86,10 @@ pub struct Scene {
     pub images: Vec<EncodedImage>,
     pub source_bytes: u64,
     pub materials: Vec<serde_json::Value>,
+    /// Source node index for each triangle when loaded with node features.
+    pub triangle_nodes: Vec<u32>,
+    /// Node names when loaded with node features (unnamed nodes use `node_<index>`).
+    pub node_names: std::collections::BTreeMap<u32, String>,
 }
 
 impl Scene {
@@ -99,16 +103,31 @@ impl Scene {
 }
 
 pub fn load(path: &Path) -> Result<Scene, Error> {
+    load_impl(path, false)
+}
+
+/// Load geometry together with source node identities for feature metadata.
+/// The ordinary loader avoids storing an extra node ID for every triangle.
+pub fn load_with_node_features(path: &Path) -> Result<Scene, Error> {
+    load_impl(path, true)
+}
+
+fn load_impl(path: &Path, node_features: bool) -> Result<Scene, Error> {
     if !path.is_file() {
         return Err(Error::InputNotFound(path.to_path_buf()));
     }
     let source_bytes = std::fs::metadata(path)?.len();
     let file = File::open(path)?;
     let mmap = unsafe { Mmap::map(&file)? };
-    load_bytes(path, &mmap, source_bytes)
+    load_bytes(path, &mmap, source_bytes, node_features)
 }
 
-fn load_bytes(path: &Path, bytes: &[u8], source_bytes: u64) -> Result<Scene, Error> {
+fn load_bytes(
+    path: &Path,
+    bytes: &[u8],
+    source_bytes: u64,
+    node_features: bool,
+) -> Result<Scene, Error> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -121,12 +140,26 @@ fn load_bytes(path: &Path, bytes: &[u8], source_bytes: u64) -> Result<Scene, Err
         let bin_start = 20 + json_len + 8;
         let g = gltf::Gltf::from_slice(&glb.json)?;
         let bin = glb.bin.as_ref().map(|c| c.as_ref()).unwrap_or(&[]);
-        extract(&g.document, path, &[bin], Some(bin_start), source_bytes)
+        extract(
+            &g.document,
+            path,
+            &[bin],
+            Some(bin_start),
+            source_bytes,
+            node_features,
+        )
     } else {
         let g = gltf::Gltf::from_slice(bytes)?;
         let buffers = gltf::import_buffers(&g.document, path.parent(), g.blob)?;
         let slices: Vec<&[u8]> = buffers.iter().map(|b| b.0.as_slice()).collect();
-        extract(&g.document, path, &slices, None, source_bytes)
+        extract(
+            &g.document,
+            path,
+            &slices,
+            None,
+            source_bytes,
+            node_features,
+        )
     }
 }
 
@@ -136,10 +169,15 @@ fn extract(
     buffers: &[&[u8]],
     glb_bin_start: Option<u64>,
     source_bytes: u64,
+    node_features: bool,
 ) -> Result<Scene, Error> {
     let images = load_images(document, path, buffers, glb_bin_start)?;
     let mut vertices = Vec::new();
     let mut triangles = Vec::new();
+    let mut features = NodeFeatures {
+        enabled: node_features,
+        ..Default::default()
+    };
 
     if document.scenes().len() == 0 {
         collect_nodes(
@@ -149,6 +187,7 @@ fn extract(
             &images,
             &mut vertices,
             &mut triangles,
+            &mut features,
         )?;
     } else {
         for scene in document.default_scene().into_iter().chain(
@@ -163,6 +202,7 @@ fn extract(
                 &images,
                 &mut vertices,
                 &mut triangles,
+                &mut features,
             )?;
         }
     }
@@ -176,6 +216,8 @@ fn extract(
         triangles,
         images,
         source_bytes,
+        triangle_nodes: features.triangles,
+        node_names: features.names,
         materials: document
             .materials()
             .map(|m| {
@@ -377,6 +419,13 @@ fn load_images(
     Ok(out)
 }
 
+#[derive(Default)]
+struct NodeFeatures {
+    enabled: bool,
+    triangles: Vec<u32>,
+    names: std::collections::BTreeMap<u32, String>,
+}
+
 fn collect_nodes<'a>(
     nodes: impl Iterator<Item = gltf::Node<'a>>,
     buffers: &[&[u8]],
@@ -384,15 +433,39 @@ fn collect_nodes<'a>(
     images: &[EncodedImage],
     vertices: &mut Vec<Vertex>,
     triangles: &mut Vec<Triangle>,
+    features: &mut NodeFeatures,
 ) -> Result<(), Error> {
     for node in nodes {
         let world = mul4(parent, node.transform().matrix());
         if let Some(mesh) = node.mesh() {
+            if features.enabled {
+                features.names.insert(
+                    node.index() as u32,
+                    node.name()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| format!("node_{}", node.index())),
+                );
+            }
             for prim in mesh.primitives() {
+                let start = triangles.len();
                 ingest_primitive(prim, buffers, world, images, vertices, triangles)?;
+                if features.enabled {
+                    features.triangles.extend(std::iter::repeat_n(
+                        node.index() as u32,
+                        triangles.len() - start,
+                    ));
+                }
             }
         }
-        collect_nodes(node.children(), buffers, world, images, vertices, triangles)?;
+        collect_nodes(
+            node.children(),
+            buffers,
+            world,
+            images,
+            vertices,
+            triangles,
+            features,
+        )?;
     }
     Ok(())
 }

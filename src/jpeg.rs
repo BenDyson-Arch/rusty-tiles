@@ -1,5 +1,5 @@
-//! Full-chroma JPEG delivery. Native libjpeg-turbo is selected at build time
-//! when available; the portable encoder keeps the CLI usable without it.
+//! Full-chroma JPEG delivery. The default encoder is portable; the
+//! `native-jpeg` feature opts into a system libjpeg-turbo dependency.
 use crate::Error;
 use image::RgbaImage;
 

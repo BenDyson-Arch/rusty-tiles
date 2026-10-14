@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "status": "One independently authored unmasked parent-gate negative, predictions frozen before target execution",
+  "generatorSha256": "72e150566c2ad2445301e2abc96b3248f49c3a4a22be54a5d2feda11e7ad977f",
+  "runnerSha256": "e410c293748e3c0e2eacb3b5f7e84201109cebe0c4a7cc2493e6e943eb95efd0",
+  "referencePins": [
+    {
+      "file": "meshopt_decoder.test.js",
+      "bytes": 16220,
+      "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+      "url": "https://raw.githubusercontent.com/zeux/meshoptimizer/3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d/js/meshopt_decoder.test.js",
+      "revision": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d"
+    },
+    {
+      "file": "EXT_meshopt_compression.md",
+      "bytes": 35576,
+      "sha256": "602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3/extensions/2.0/Vendor/EXT_meshopt_compression/README.md",
+      "revision": "5ccac1cb0f85197c4f78c3ddff0b12cdccd79da3"
+    },
+    {
+      "file": "glTF-core.adoc",
+      "bytes": 148067,
+      "sha256": "77e2f07e8f705d10e9c1201a31d398994f45aa08cc91545ee378c5aff9d46175",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF/70b5e4101725950fb8f3f94dd72c37e758ce5daf/specification/2.0/Specification.adoc",
+      "revision": "70b5e4101725950fb8f3f94dd72c37e758ce5daf"
+    }
+  ],
+  "cases": [
+    {
+      "name": "unmasked-parent-stride-disagreement",
+      "path": "unmasked-parent-stride-disagreement/input.3tz",
+      "expectedCategory": "invalid_input",
+      "expectedExitCode": 3,
+      "expectedReport": null,
+      "expectedErrorReport": {
+        "ok": false,
+        "exitCode": 3,
+        "error": {
+          "code": "invalid_input",
+          "message": "meshopt and bufferView stride disagree"
+        }
+      },
+      "hypotheticalGateRemovedReport": {
+        "ok": true,
+        "archive": "$INPUT",
+        "tiles": 1,
+        "contentReferences": 1,
+        "entries": 3,
+        "checks": [
+          "archiveIndex",
+          "archiveCrc",
+          "archiveStoredRecordLayout",
+          "contentHashes",
+          "tilesetSchema",
+          "payloadEnvelope",
+          "bufferRanges",
+          "accessorValues",
+          "primitiveIndices",
+          "hierarchyBounds",
+          "geometricErrorOrder",
+          "resourceReferences",
+          "recordedBudgets"
+        ],
+        "notInspected": [
+          "decodedContentBounds",
+          "geometricErrorAccuracy",
+          "materialAndImageSemantics",
+          "metadata and feature semantics",
+          "metadataSemantics",
+          "scene transforms, skins, animations, morph targets and rendered bounds"
+        ],
+        "limits": {
+          "jsonBytes": 8388608,
+          "jsonDepth": 64,
+          "memberBytes": 67108864,
+          "archiveStoredBytes": 1073741824,
+          "archiveEntries": 65536,
+          "accessorElements": 4000000,
+          "documentDecodedBytes": 67108864,
+          "hierarchyVisits": 65536,
+          "hierarchyDepth": 128,
+          "references": 262144,
+          "totalPayloadElements": 16000000,
+          "totalBytesRead": 2147483648,
+          "sourceArchiveBytes": 1073741824,
+          "centralDirectoryBytes": 16777216,
+          "documentItems": 65536
+        },
+        "payloads": [
+          {
+            "uri": "tile.glb",
+            "accessorsChecked": 2,
+            "primitivesChecked": 1,
+            "vertices": 4
+          }
+        ]
+      },
+      "rationale": "Defined parent8 disagrees with physical extension12. All remaining C1 background gates admit: POSITION is viewless zero, only unused SCALAR references view with stride8 and end28 within48; finite values. Thus deleting parent agreement should admit rather than hitting ordinary POSITION stride rejection.",
+      "components": 16,
+      "physicalViews": 1,
+      "decodedPhysicalBytes": 48,
+      "scalarWindow": {
+        "offset": 0,
+        "effectiveStride": 8,
+        "count": 4,
+        "occupiedBytes": 4,
+        "end": 28,
+        "rawValues": [
+          0.0,
+          0.0,
+          0.0,
+          3.1591410678348977e-38
+        ]
+      },
+      "sha256": "d531e9121633f31af896b836b86685e66843397d650a1f0a14f450a0d8acc40b",
+      "bytes": 1385,
+      "memberSha256": {
+        "tileset.json": "b56a75278d16ef8dc24aabfd730c8409ea0df1924a018da610089cbe9f59c81f",
+        "tile.glb": "373cba739c81ac96464a910a0ef0a1a2e28ba87ccc5ca5809ffed863b1196038"
+      },
+      "literalSha256": "1151c70125fc2eeca80659b4755ec87bfb0489c48515de2265104a8e56adfd45"
+    }
+  ],
+  "decodedOracle": {
+    "method": "Literal primary expected Uint8Array; independent little-endian struct float32 offsets0/8/16/24; no production encoder/decoder/numeric helper",
+    "compressedSha256": "c1c311df6033a0900eb605c2ad3e5ca631e076f7cf120595fd41d4ba157eab6a",
+    "expectedSha256": "820994b9ed8bf83e8c38f9f6ce0c6b0afb889ecb5e07f4e580add9ae462eab89",
+    "unusedScalarValues": [
+      0.0,
+      0.0,
+      0.0,
+      3.1591410678348977e-38
+    ],
+    "viewlessPositionValues": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "staticCaps": {
+    "sourcePayloadBytes": 860,
+    "jsonBytes": 741,
+    "decodedPhysicalBytes": 48,
+    "components": 16,
+    "defaultDecodedCap": 67108864,
+    "defaultAccessorCap": 4000000,
+    "defaultAggregateComponents": 16000000
+  }
+}

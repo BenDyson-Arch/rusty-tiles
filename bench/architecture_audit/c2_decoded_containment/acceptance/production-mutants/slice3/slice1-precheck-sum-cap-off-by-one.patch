@@ -1,0 +1,13 @@
+diff --git a/src/validate.rs b/src/validate.rs
+index 88ee84a..b1027ee 100644
+--- a/src/validate.rs
++++ b/src/validate.rs
+@@ -731,7 +731,7 @@ impl Containment {
+         });
+         let within = |total: u64, add: Option<u64>, cap: u64| {
+             add.and_then(|add| total.checked_add(add))
+-                .filter(|sum| *sum <= cap)
++                .filter(|sum| *sum < cap)
+         };
+         let (Some(units), Some(bytes), Some(decoded)) = (
+             within(self.units, units, self.work_cap),

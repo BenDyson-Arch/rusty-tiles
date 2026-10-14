@@ -1,0 +1,1653 @@
+{
+ "coverageAtDefaultCap": {
+  "byWitness": {
+   "F-MF2": "Contained",
+   "F-W1": "Contained",
+   "F-W2": "Contained",
+   "F-W3": "Contained",
+   "F-W4-points-lines": "Contained",
+   "F-W4-points-lines-meshopt": "Contained",
+   "F-W4-points-lines-quantize": "Contained",
+   "F-W4-polygons": "Contained",
+   "F-W4-polygons-meshopt": "Contained",
+   "F-W4-polygons-quantize": "Contained",
+   "F-W5": "Contained",
+   "F-W5-meshopt": "Contained",
+   "F-W5-quantize": "Contained",
+   "F-W6": "Contained",
+   "F-W6d": "Contained",
+   "F-W6dn": "Contained",
+   "F-W7": "Contained"
+  },
+  "cap": 536870912,
+  "workLimit": []
+ },
+ "defaultLimits": {
+  "containmentBytesRead": 2147483648,
+  "containmentDecodedBytes": 2147483648,
+  "containmentNodeDepth": 64,
+  "containmentSpanBits": 4096,
+  "containmentWorkUnits": 536870912
+ },
+ "generator": "corpus/slice3.py",
+ "pairs": {
+  "F-MF2.containmentBytesRead (precheck-only arm)": {
+   "atOutcome": "PrecheckPassed",
+   "atValue": 59330992,
+   "limit": "containmentBytesRead",
+   "pass": true,
+   "references": 12527,
+   "stopsAtLastReference": true,
+   "underOutcome": "NotInspected",
+   "underReasons": [
+    "workLimit"
+   ],
+   "underStop": {
+    "exceeded": [
+     "containmentBytesRead"
+    ],
+    "member": "implicit-content/r12519-3-7-0-0.glb",
+    "reason": "workLimit",
+    "reference": 12526
+   },
+   "underValue": 59330991
+  },
+  "F-MF2.containmentSpanBits": {
+   "atOutcome": "PrecheckPassed",
+   "atValue": 290,
+   "limit": "containmentSpanBits",
+   "pass": true,
+   "references": 12527,
+   "underOutcome": "NotInspected",
+   "underReasons": [
+    "numericSpan"
+   ],
+   "underStop": {
+    "member": "implicit-content/r2921-0-0-0-0.glb",
+    "reason": "numericSpan",
+    "reference": 2919
+   },
+   "underValue": 289
+  },
+  "F-MF2.containmentWorkUnits": {
+   "atOutcome": "Contained",
+   "atValue": 447082855,
+   "limit": "containmentWorkUnits",
+   "pass": true,
+   "references": 12527,
+   "underOutcome": "NotInspected",
+   "underReasons": [
+    "workLimit"
+   ],
+   "underStop": {
+    "exceeded": [
+     "containmentWorkUnits"
+    ],
+    "member": "implicit-content/r12519-3-7-0-0.glb",
+    "reason": "workLimit",
+    "reference": 12526
+   },
+   "underValue": 447082854
+  },
+  "F-W6d.containmentDecodedBytes": {
+   "atOutcome": "Contained",
+   "atValue": 57736,
+   "limit": "containmentDecodedBytes",
+   "pass": true,
+   "references": 314,
+   "underOutcome": "NotInspected",
+   "underReasons": [
+    "workLimit"
+   ],
+   "underStop": {
+    "exceeded": [
+     "containmentDecodedBytes"
+    ],
+    "member": "implicit-content/r289-3-7-0-7-0.glb",
+    "reason": "workLimit",
+    "reference": 313
+   },
+   "underValue": 57735
+  },
+  "repeated-uri.containmentWorkUnits": {
+   "atOutcome": "Contained",
+   "atValue": 20562,
+   "fixture": "controls/slice3/fixtures/repeated-uri.base.3tz",
+   "limit": "containmentWorkUnits",
+   "pass": true,
+   "perReference": [
+    {
+     "member": "c/0-0-0.glb",
+     "units": 2264
+    },
+    {
+     "member": "c/0-0-0.glb",
+     "units": 2264
+    },
+    {
+     "member": "c/0-0-0.glb",
+     "units": 2264
+    },
+    {
+     "member": "c/1-0-0.glb",
+     "units": 2293
+    },
+    {
+     "member": "c/1-0-0.glb",
+     "units": 2293
+    },
+    {
+     "member": "c/1-0-0.glb",
+     "units": 2293
+    },
+    {
+     "member": "c/1-1-1.glb",
+     "units": 2297
+    },
+    {
+     "member": "c/1-1-1.glb",
+     "units": 2297
+    },
+    {
+     "member": "c/1-1-1.glb",
+     "units": 2297
+    }
+   ],
+   "references": 9,
+   "sha256": "65a3b27f44711aae503d4df9240cf8251aab9cc327864158f152e7cc2177404f",
+   "underOutcome": "NotInspected",
+   "underReasons": [
+    "workLimit"
+   ],
+   "underStop": {
+    "exceeded": [
+     "containmentWorkUnits"
+    ],
+    "member": "c/1-1-1.glb",
+    "reason": "workLimit",
+    "reference": 8
+   },
+   "underValue": 20561
+  }
+ },
+ "producer": "2d85208 (R's forest corpus after merging develop a4f14e6)",
+ "witnesses": {
+  "F-MF2": {
+   "archive": "mf2-lod3.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 11300,
+    "implicitTiles": 11300,
+    "maxChainLevels": 19,
+    "roots": 1225
+   },
+   "maxLevels": 19,
+   "maxSpan": 290,
+   "oracleWallSeconds": 30.73,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 12527,
+   "sha256": "2c526cbcb6171fe107b8f409db31139d74f922dd92d412a88e1d7745f9dede87",
+   "terms": {
+    "1152": 14431104,
+    "160Res": 0,
+    "16J": 43561888,
+    "4Prim": 80592,
+    "8levels": 1470872,
+    "B": 59330992,
+    "Dec": 0,
+    "E": 3340716,
+    "Idx": 808249,
+    "Nodes": 2397287,
+    "vertex": 321661155
+   },
+   "totals": {
+    "bytes": 59330992,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 447082855
+   },
+   "why": null
+  },
+  "F-W1": {
+   "archive": "W1.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 73,
+    "implicitTiles": 73,
+    "maxChainLevels": 4,
+    "roots": 1
+   },
+   "maxLevels": 4,
+   "maxSpan": 279,
+   "oracleWallSeconds": 0.137,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 73,
+   "sha256": "ffb3eccbab629f34e18a4b111eb1e9d18211b8d6cedd6c35953f40a893d2c900",
+   "terms": {
+    "1152": 84096,
+    "160Res": 0,
+    "16J": 357344,
+    "4Prim": 292,
+    "8levels": 2256,
+    "B": 3047020,
+    "Dec": 0,
+    "E": 226784,
+    "Idx": 28348,
+    "Nodes": 18433,
+    "vertex": 3309800
+   },
+   "totals": {
+    "bytes": 3047020,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 7074373
+   },
+   "why": null
+  },
+  "F-W2": {
+   "archive": "W2.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 427,
+    "implicitTiles": 427,
+    "maxChainLevels": 6,
+    "roots": 8
+   },
+   "maxLevels": 6,
+   "maxSpan": 279,
+   "oracleWallSeconds": 1.24,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 428,
+   "sha256": "29ac8851a677eb948dae6f75cb68d06219299f7d15c002f96116e34d23af8ae9",
+   "terms": {
+    "1152": 493056,
+    "160Res": 0,
+    "16J": 2094784,
+    "4Prim": 1712,
+    "8levels": 18520,
+    "B": 23551472,
+    "Dec": 0,
+    "E": 1803288,
+    "Idx": 225411,
+    "Nodes": 106763,
+    "vertex": 42287805
+   },
+   "totals": {
+    "bytes": 23551472,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 70582811
+   },
+   "why": null
+  },
+  "F-W3": {
+   "archive": "W3-pc-deep.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 2232,
+    "implicitTiles": 2232,
+    "maxChainLevels": 6,
+    "roots": 8
+   },
+   "maxLevels": 6,
+   "maxSpan": 279,
+   "oracleWallSeconds": 1.609,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 2233,
+   "sha256": "3628339df5c680f56d045436e8133f157d804401d0c77b2d2fcd46cf3691a007",
+   "terms": {
+    "1152": 2572416,
+    "160Res": 0,
+    "16J": 10932192,
+    "4Prim": 8932,
+    "8levels": 101832,
+    "B": 12285132,
+    "Dec": 0,
+    "E": 212200,
+    "Idx": 26525,
+    "Nodes": 569353,
+    "vertex": 4950715
+   },
+   "totals": {
+    "bytes": 12285132,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 31659297
+   },
+   "why": null
+  },
+  "F-W4-points-lines": {
+   "archive": "W4-points-lines.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "1b652c087d2e29ed69744b954c93e898319d0f183dd5d11adbfd57ff7f5456f0",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 4400,
+    "4Prim": 12,
+    "8levels": 16,
+    "B": 4392,
+    "Dec": 0,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 1,
+    "vertex": 1200
+   },
+   "totals": {
+    "bytes": 4392,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 11323
+   },
+   "why": null
+  },
+  "F-W4-points-lines-meshopt": {
+   "archive": "W4-points-lines-meshopt.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.002,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "85e3664ba454ec9dacb7ea7f83607d48bd37e379f9c8a7d93a9a1d0696ebff64",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 5824,
+    "4Prim": 12,
+    "8levels": 16,
+    "B": 6064,
+    "Dec": 392,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 1,
+    "vertex": 1200
+   },
+   "totals": {
+    "bytes": 6064,
+    "decoded": 392,
+    "maxNodeDepth": 1,
+    "units": 14811
+   },
+   "why": null
+  },
+  "F-W4-points-lines-quantize": {
+   "archive": "W4-points-lines-quantize.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 69,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "29df0e16e53167008327f72d61cf2f53586abec2900a27362e5ddbfb2d361461",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 4672,
+    "4Prim": 12,
+    "8levels": 16,
+    "B": 4368,
+    "Dec": 0,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 256,
+    "vertex": 1120
+   },
+   "totals": {
+    "bytes": 4368,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 11746
+   },
+   "why": null
+  },
+  "F-W4-polygons": {
+   "archive": "W4-polygons.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.004,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "5cc559a671e8c170d914d9f824e75b336b739edf0b6b3a1a2d53d8fdb0dcd757",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2560,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 24072,
+    "Dec": 0,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 1,
+    "vertex": 54975
+   },
+   "totals": {
+    "bytes": 24072,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 90755
+   },
+   "why": null
+  },
+  "F-W4-polygons-meshopt": {
+   "archive": "W4-polygons-meshopt.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.007,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "c9f996173239f26dae4a4c1f96f34a4cc9259b9f9599dea3575309182f4a79b6",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 3120,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 12416,
+    "Dec": 20296,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 1,
+    "vertex": 54975
+   },
+   "totals": {
+    "bytes": 12416,
+    "decoded": 20296,
+    "maxNodeDepth": 1,
+    "units": 99955
+   },
+   "why": null
+  },
+  "F-W4-polygons-quantize": {
+   "archive": "W4-polygons-quantize.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 69,
+   "oracleWallSeconds": 0.003,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "8b0f6da41c51fb00fa54f17cd410ff3baefa3b5d16d93f8aa1c7ffee3484f89b",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2768,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 21288,
+    "Dec": 0,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 256,
+    "vertex": 51310
+   },
+   "totals": {
+    "bytes": 21288,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 84769
+   },
+   "why": null
+  },
+  "F-W5": {
+   "archive": "W5-vec-perf.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 499,
+    "implicitTiles": 499,
+    "maxChainLevels": 13,
+    "roots": 45
+   },
+   "maxLevels": 13,
+   "maxSpan": 285,
+   "oracleWallSeconds": 4.299,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "b67c411cddac63738896fc1049c593630e33078789f6724399c614dd9d10868a",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2200928,
+    "4Prim": 4376,
+    "8levels": 39896,
+    "B": 17381480,
+    "Dec": 0,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 107134,
+    "vertex": 178546150
+   },
+   "totals": {
+    "bytes": 17381480,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 202075102
+   },
+   "why": null
+  },
+  "F-W5-meshopt": {
+   "archive": "W5-vec-perf-meshopt.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 499,
+    "implicitTiles": 499,
+    "maxChainLevels": 13,
+    "roots": 45
+   },
+   "maxLevels": 13,
+   "maxSpan": 285,
+   "oracleWallSeconds": 5.437,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "e9a08bd250bed928439c2902027ace5cd9a345d9de0db59ade912151a08159d7",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2741968,
+    "4Prim": 4376,
+    "8levels": 39896,
+    "B": 13256912,
+    "Dec": 9384500,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 107134,
+    "vertex": 178546150
+   },
+   "totals": {
+    "bytes": 13256912,
+    "decoded": 9384500,
+    "maxNodeDepth": 1,
+    "units": 207876074
+   },
+   "why": null
+  },
+  "F-W5-quantize": {
+   "archive": "W5-vec-perf-quantize.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 499,
+    "implicitTiles": 499,
+    "maxChainLevels": 13,
+    "roots": 45
+   },
+   "maxLevels": 13,
+   "maxSpan": 78,
+   "oracleWallSeconds": 3.678,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "057a79103f1bbce10bbb25c7bd67337b32163b29090a4ecf9abd705f58b7780b",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2303728,
+    "4Prim": 4376,
+    "8levels": 39896,
+    "B": 15659752,
+    "Dec": 0,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 139264,
+    "vertex": 176364950
+   },
+   "totals": {
+    "bytes": 15659752,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 198307104
+   },
+   "why": null
+  },
+  "F-W6": {
+   "archive": "W6.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 73,
+    "implicitTiles": 73,
+    "maxChainLevels": 4,
+    "roots": 1
+   },
+   "maxLevels": 4,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.099,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 73,
+   "sha256": "751e6fbbe86cb18b1f7c71135edc72b307db55bb054aae93945de478f34187dd",
+   "terms": {
+    "1152": 84096,
+    "160Res": 0,
+    "16J": 112128,
+    "4Prim": 292,
+    "8levels": 2256,
+    "B": 205524,
+    "Dec": 245292,
+    "E": 79932,
+    "Idx": 37218,
+    "Nodes": 73,
+    "vertex": 1663750
+   },
+   "totals": {
+    "bytes": 205524,
+    "decoded": 245292,
+    "maxNodeDepth": 1,
+    "units": 2430561
+   },
+   "why": null
+  },
+  "F-W6d": {
+   "archive": "W6d.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 313,
+    "implicitTiles": 313,
+    "maxChainLevels": 6,
+    "roots": 8
+   },
+   "maxLevels": 6,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.153,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 314,
+   "sha256": "9af81d4242850b5dd3c4601d596a69cf60b6f36592e8b04030483d64f9d1cbe0",
+   "terms": {
+    "1152": 361728,
+    "160Res": 0,
+    "16J": 788768,
+    "4Prim": 1256,
+    "8levels": 13024,
+    "B": 1131700,
+    "Dec": 57736,
+    "E": 15772,
+    "Idx": 2676,
+    "Nodes": 314,
+    "vertex": 229950
+   },
+   "totals": {
+    "bytes": 1131700,
+    "decoded": 57736,
+    "maxNodeDepth": 1,
+    "units": 2602924
+   },
+   "why": null
+  },
+  "F-W6dn": {
+   "archive": "W6d-nomeshopt.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 313,
+    "implicitTiles": 313,
+    "maxChainLevels": 6,
+    "roots": 8
+   },
+   "maxLevels": 6,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.125,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 314,
+   "sha256": "b701588a3ad72929c93f5beed2de4d0b4811756757bcf0baa419fb738de16283",
+   "terms": {
+    "1152": 361728,
+    "160Res": 0,
+    "16J": 562688,
+    "4Prim": 1256,
+    "8levels": 13024,
+    "B": 862876,
+    "Dec": 0,
+    "E": 15772,
+    "Idx": 2676,
+    "Nodes": 314,
+    "vertex": 229950
+   },
+   "totals": {
+    "bytes": 862876,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 2050284
+   },
+   "why": null
+  },
+  "F-W7": {
+   "archive": "W7.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Accepted",
+    "limit": null,
+    "reason": null,
+    "stage": null
+   },
+   "implicit": {
+    "implicitReferences": 1,
+    "implicitTiles": 1,
+    "maxChainLevels": 2,
+    "roots": 1
+   },
+   "maxLevels": 2,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "1f8ec4df9356557b8663dfa5a085c77f290c4dbb876cfa0181f57a20ecd99ffe",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 1024,
+    "4Prim": 4,
+    "8levels": 16,
+    "B": 1474,
+    "Dec": 96,
+    "E": 33,
+    "Idx": 18,
+    "Nodes": 1,
+    "vertex": 375
+   },
+   "totals": {
+    "bytes": 1474,
+    "decoded": 96,
+    "maxNodeDepth": 1,
+    "units": 4193
+   },
+   "why": null
+  },
+  "T-MF2": {
+   "archive": "mf2-lod3-explicit.3tz",
+   "facts": {
+    "limit": "document_items",
+    "why": "JSON exceeds document_items"
+   },
+   "i1": {
+    "kind": "ResourceLimit",
+    "limit": "document_items",
+    "reason": "JSON exceeds document_items",
+    "stage": "tileset tileset.json"
+   },
+   "implicit": null,
+   "maxLevels": null,
+   "maxSpan": null,
+   "oracleWallSeconds": 0.308,
+   "outcome": "ResourceLimit",
+   "phase": "I1",
+   "reasons": null,
+   "references": null,
+   "sha256": "91ba9ce90fb3cb8c884559af9d331a7a7403c766b4d4fb958d782300d226f17b",
+   "terms": null,
+   "totals": null,
+   "why": null
+  },
+  "T-W1": {
+   "archive": "W1-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 6,
+   "maxSpan": 282,
+   "oracleWallSeconds": 0.222,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 63,
+   "sha256": "828e1010b881074ab3916577fef0c35d93d24b54da7764896ac0986388ee4b38",
+   "terms": {
+    "1152": 72576,
+    "160Res": 0,
+    "16J": 304416,
+    "4Prim": 252,
+    "8levels": 2568,
+    "B": 4661848,
+    "Dec": 0,
+    "E": 365360,
+    "Idx": 45670,
+    "Nodes": 63,
+    "vertex": 12039675
+   },
+   "totals": {
+    "bytes": 4661848,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 17492428
+   },
+   "why": null
+  },
+  "T-W2": {
+   "archive": "W2-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 11,
+   "maxSpan": 287,
+   "oracleWallSeconds": 1.749,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 309,
+   "sha256": "5e3259b5eaae4ad2f7178ea03836cac4d7faaa112dd2a4126a9aa2cd22083844",
+   "terms": {
+    "1152": 355968,
+    "160Res": 0,
+    "16J": 1493088,
+    "4Prim": 1236,
+    "8levels": 18856,
+    "B": 25143436,
+    "Dec": 0,
+    "E": 1981648,
+    "Idx": 247706,
+    "Nodes": 309,
+    "vertex": 110543690
+   },
+   "totals": {
+    "bytes": 25143436,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 139785937
+   },
+   "why": null
+  },
+  "T-W3": {
+   "archive": "W3-pc-deep-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 11,
+   "maxSpan": 287,
+   "oracleWallSeconds": 1.627,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1443,
+   "sha256": "045ed532797e42b496da5c52502fa5af7a8087f6c834da6462f70b10f2473388",
+   "terms": {
+    "1152": 1662336,
+    "160Res": 0,
+    "16J": 6972576,
+    "4Prim": 5772,
+    "8levels": 110696,
+    "B": 9915176,
+    "Dec": 0,
+    "E": 304416,
+    "Idx": 38052,
+    "Nodes": 1443,
+    "vertex": 19772485
+   },
+   "totals": {
+    "bytes": 9915176,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 38782952
+   },
+   "why": null
+  },
+  "T-W4-points-lines": {
+   "archive": "W4-points-lines-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "99add025ce16b7f9295527f7849618b7cde28ae9c0d362e50fe498c7e0f16008",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 4400,
+    "4Prim": 12,
+    "8levels": 8,
+    "B": 4392,
+    "Dec": 0,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 1,
+    "vertex": 800
+   },
+   "totals": {
+    "bytes": 4392,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 10915
+   },
+   "why": null
+  },
+  "T-W4-points-lines-meshopt": {
+   "archive": "W4-points-lines-meshopt-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "d58212469a532253407db81d74e85ab5cbce1eb782f4e659a3ce9fb22207609f",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 5824,
+    "4Prim": 12,
+    "8levels": 8,
+    "B": 6064,
+    "Dec": 392,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 1,
+    "vertex": 800
+   },
+   "totals": {
+    "bytes": 6064,
+    "decoded": 392,
+    "maxNodeDepth": 1,
+    "units": 14403
+   },
+   "why": null
+  },
+  "T-W4-points-lines-quantize": {
+   "archive": "W4-points-lines-quantize-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 69,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "8ff2f32010235e0c9ca5b2b0cb8b3657aa1549ff296b022d7f76111ec96a9f6d",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 4672,
+    "4Prim": 12,
+    "8levels": 8,
+    "B": 4368,
+    "Dec": 0,
+    "E": 116,
+    "Idx": 34,
+    "Nodes": 256,
+    "vertex": 720
+   },
+   "totals": {
+    "bytes": 4368,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 11338
+   },
+   "why": null
+  },
+  "T-W4-polygons": {
+   "archive": "W4-polygons-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.003,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "51a4f7d399d920e467b5e167a59fc6c77652b65a05c8ebbf307275ec8b6e7a48",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2560,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 24072,
+    "Dec": 0,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 1,
+    "vertex": 36650
+   },
+   "totals": {
+    "bytes": 24072,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 72422
+   },
+   "why": null
+  },
+  "T-W4-polygons-meshopt": {
+   "archive": "W4-polygons-meshopt-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 277,
+   "oracleWallSeconds": 0.007,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "814c96a6e6a870c6318b73ae9bc69ec451b6e48f4be180534c9846505e0ec53b",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 3120,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 12416,
+    "Dec": 20296,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 1,
+    "vertex": 36650
+   },
+   "totals": {
+    "bytes": 12416,
+    "decoded": 20296,
+    "maxNodeDepth": 1,
+    "units": 81622
+   },
+   "why": null
+  },
+  "T-W4-polygons-quantize": {
+   "archive": "W4-polygons-quantize-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 69,
+   "oracleWallSeconds": 0.005,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "bdeb66862e1981ff5c7b0e0d92f9759c7976d298c55ff3b72736fd87e8c3cdde",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 2768,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 21288,
+    "Dec": 0,
+    "E": 5833,
+    "Idx": 2142,
+    "Nodes": 256,
+    "vertex": 32985
+   },
+   "totals": {
+    "bytes": 21288,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 66436
+   },
+   "why": null
+  },
+  "T-W5": {
+   "archive": "W5-vec-perf-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 12,
+   "maxSpan": 285,
+   "oracleWallSeconds": 3.986,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "26d870602957eaea18f046f1c8c720e61b62f5c51aa9e12c5b09f62844e43ded",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2174176,
+    "4Prim": 4376,
+    "8levels": 35904,
+    "B": 17351072,
+    "Dec": 0,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 544,
+    "vertex": 183807955
+   },
+   "totals": {
+    "bytes": 17351072,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 207169165
+   },
+   "why": null
+  },
+  "T-W5-meshopt": {
+   "archive": "W5-vec-perf-meshopt-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 12,
+   "maxSpan": 285,
+   "oracleWallSeconds": 5.121,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "98850b3c640ac72454dada822724ef5bc89d983cc87b36c5370b75d42e52eaa0",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2715216,
+    "4Prim": 4376,
+    "8levels": 35904,
+    "B": 13226672,
+    "Dec": 9384500,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 544,
+    "vertex": 183807955
+   },
+   "totals": {
+    "bytes": 13226672,
+    "decoded": 9384500,
+    "maxNodeDepth": 1,
+    "units": 212970305
+   },
+   "why": null
+  },
+  "T-W5-quantize": {
+   "archive": "W5-vec-perf-quantize-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 12,
+   "maxSpan": 79,
+   "oracleWallSeconds": 3.439,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 544,
+   "sha256": "430de98a746f27d3ecb0ff2341ae9c2b209161e983200425aba7241746d0dafb",
+   "terms": {
+    "1152": 626688,
+    "160Res": 0,
+    "16J": 2303728,
+    "4Prim": 4376,
+    "8levels": 35904,
+    "B": 15659864,
+    "Dec": 0,
+    "E": 2567285,
+    "Idx": 601165,
+    "Nodes": 139264,
+    "vertex": 181626755
+   },
+   "totals": {
+    "bytes": 15659864,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 203565029
+   },
+   "why": null
+  },
+  "T-W6": {
+   "archive": "W6-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 3,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.045,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 25,
+   "sha256": "67d5f6e92e896f9a2dc0b10bf0f525befc7b5a510112a225c0417ad5813a0b41",
+   "terms": {
+    "1152": 28800,
+    "160Res": 0,
+    "16J": 38400,
+    "4Prim": 100,
+    "8levels": 520,
+    "B": 98264,
+    "Dec": 141612,
+    "E": 51531,
+    "Idx": 32256,
+    "Nodes": 25,
+    "vertex": 587850
+   },
+   "totals": {
+    "bytes": 98264,
+    "decoded": 141612,
+    "maxNodeDepth": 1,
+    "units": 979358
+   },
+   "why": null
+  },
+  "T-W6d": {
+   "archive": "W6d-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 4,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.105,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 233,
+   "sha256": "c2b6bfde9d50d651ee8a63f58cb519a4bbea9b090818441acf739e6a5fbc8193",
+   "terms": {
+    "1152": 268416,
+    "160Res": 0,
+    "16J": 585296,
+    "4Prim": 932,
+    "8levels": 6792,
+    "B": 847124,
+    "Dec": 46320,
+    "E": 12720,
+    "Idx": 2280,
+    "Nodes": 233,
+    "vertex": 140125
+   },
+   "totals": {
+    "bytes": 847124,
+    "decoded": 46320,
+    "maxNodeDepth": 1,
+    "units": 1910238
+   },
+   "why": null
+  },
+  "T-W6dn": {
+   "archive": "W6d-nomeshopt-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 4,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.084,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 233,
+   "sha256": "5d9bdd7c0e7707fd30c1ea79e27ee163d92d2940119cfeb61600822fc92c3de3",
+   "terms": {
+    "1152": 268416,
+    "160Res": 0,
+    "16J": 417536,
+    "4Prim": 932,
+    "8levels": 6792,
+    "B": 648436,
+    "Dec": 0,
+    "E": 12720,
+    "Idx": 2280,
+    "Nodes": 233,
+    "vertex": 140125
+   },
+   "totals": {
+    "bytes": 648436,
+    "decoded": 0,
+    "maxNodeDepth": 1,
+    "units": 1497470
+   },
+   "why": null
+  },
+  "T-W7": {
+   "archive": "W7-explicit.3tz",
+   "facts": null,
+   "i1": {
+    "kind": "Undecided",
+    "limit": null,
+    "reason": "archive has no implicit root (explicit-only archives are outside I1)",
+    "stage": "archive"
+   },
+   "implicit": {
+    "implicitReferences": 0,
+    "implicitTiles": 0,
+    "maxChainLevels": 0,
+    "roots": 0
+   },
+   "maxLevels": 1,
+   "maxSpan": 278,
+   "oracleWallSeconds": 0.001,
+   "outcome": "Contained",
+   "phase": null,
+   "reasons": null,
+   "references": 1,
+   "sha256": "51aded3b22301a34af545ab2aa8dcba4f9547357e6af4b4d1aa49b9e77b203f9",
+   "terms": {
+    "1152": 1152,
+    "160Res": 0,
+    "16J": 1024,
+    "4Prim": 4,
+    "8levels": 8,
+    "B": 1474,
+    "Dec": 96,
+    "E": 33,
+    "Idx": 18,
+    "Nodes": 1,
+    "vertex": 250
+   },
+   "totals": {
+    "bytes": 1474,
+    "decoded": 96,
+    "maxNodeDepth": 1,
+    "units": 4060
+   },
+   "why": null
+  }
+ }
+}
