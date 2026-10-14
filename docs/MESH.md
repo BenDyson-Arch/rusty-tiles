@@ -167,11 +167,22 @@ and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon 
 they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
 added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
-staging and a replaced destination (an estimate of 3 × 119 bytes per triangle
-plus image bytes), added to the scratch figure when they share a filesystem.
+staging and a replaced destination: three copies of an estimate of 119 bytes per
+triangle plus the encoded image bytes at admission, raised once image dimensions
+are known to 4 bytes per source texel for `lossless` PNG pages or 1 byte per
+texel for KTX2 profiles, each with a 4/3 mip allowance (a texture-stage
+recheck). These are estimates, not bounds. Output demands are added to the
+scratch figure when they share a filesystem, told apart by device id: btrfs
+subvolumes of one pool report different ids, so their demands are checked
+separately against the same free space. Memory-backed (tmpfs) scratch is charged
+to the worker memory plan, but a work directory or output on tmpfs is not.
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
-report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). A preflight is
+report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The H17
+pre-pass is measured the same way, and the whole-run spill peak
+(`run_scratch_peak_bytes`) must stay within the declared need. LOD proxy
+sidecars and bake handoff files are budgeted by their own stages and are not in
+these spill figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
 and does not replace the original cause.

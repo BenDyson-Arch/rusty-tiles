@@ -231,6 +231,8 @@ pub struct CaptureDiagnostics {
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
+    /// Whole-run spill peak, including H17 and the bake; at most `scratch_logical_need_bytes`.
+    pub run_scratch_peak_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -408,6 +410,19 @@ pub fn mesh_to_tileset(
             work.path(),
         )?;
         let c = &captured.report;
+        // Every spill stage after capture (H17 pre-pass, coarse levels, bake) shares the
+        // admitted scratch: the whole-run peak must stay within the declared need. LOD proxy
+        // sidecars and bake handoff files are budgeted by their owners and not counted here.
+        let run_scratch_peak_bytes = captured.scratch.peak_bytes();
+        if run_scratch_peak_bytes > c.scratch.logical_need_bytes {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "mesh run spill peak {run_scratch_peak_bytes} bytes exceeded the declared scratch need {}",
+                    c.scratch.logical_need_bytes
+                ),
+            ));
+        }
         let diagnostics = TilerDiagnostics {
             requested_jobs: c.jobs.requested.clone(),
             capture: CaptureDiagnostics {
@@ -422,6 +437,7 @@ pub fn mesh_to_tileset(
                 scratch_stage_bytes: c.scratch.stages,
                 scratch_stage_peak_bytes: c.scratch_stage_peaks,
                 output_reserve_bytes: c.scratch.output_reserve_bytes,
+                run_scratch_peak_bytes,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,

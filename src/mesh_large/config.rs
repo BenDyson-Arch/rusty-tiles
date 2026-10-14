@@ -571,6 +571,20 @@ pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<
 /// An estimate, not a bound: texture payloads are charged separately from image bytes.
 pub(crate) const OUTPUT_BYTES_PER_TRIANGLE: u64 = 119;
 
+/// Estimated published texture bytes for `texels` admitted source texels: lossless leaf pages
+/// are PNG (up to 4 bytes per RGBA8 texel), lossy profiles KTX2/Basis (about 1 byte per texel
+/// for UASTC, less for ETC1S), each with a 4/3 mip chain. Atlas repacking keeps texels at
+/// source resolution; gutters and texels shared by several leaves are covered by the mip
+/// allowance, not proven. mgal 2048 (10M triangles, 373M texels) published 2.25 GB lossless
+/// against a 3.18 GB per-copy estimate.
+pub(crate) fn output_texture_bytes(profile: Profile, texels: u64) -> Option<u64> {
+    let per_texel = match profile {
+        Profile::Lossless => 4,
+        Profile::Fast | Profile::Balanced | Profile::Quality => 1,
+    };
+    Some(texels.checked_mul(per_texel)?.checked_mul(4)?.div_ceil(3))
+}
+
 /// Stage-1 sound lower bound on tiles: `⌈N/L⌉` leaves, plus the root when it must be internal.
 pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {
     triangles

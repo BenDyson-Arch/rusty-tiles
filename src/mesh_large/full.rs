@@ -375,16 +375,20 @@ fn scratch_need(
 /// Returns the bytes the scratch filesystem must hold (its preflight figure).
 fn output_admission(
     parent: &Path,
-    need: &FullScratchNeed,
+    scratch_bytes: u64,
+    output_reserve_bytes: u64,
     config: &TreeConfig,
+    stage: crate::spill::PreflightStage,
 ) -> Result<u64, JobError> {
     let Some((work, output)) = &config.output_parents else {
-        return Ok(need.need_bytes);
+        return Ok(scratch_bytes);
     };
-    let copy = need.output_reserve_bytes / 3;
+    let copy = output_reserve_bytes / 3;
     // (path, bytes): leaf staging beside the work directory, archive staging and a replaced
-    // destination beside the output.
-    let mut demands: Vec<(&Path, u64)> = vec![(parent, need.need_bytes)];
+    // destination beside the output. Filesystems are told apart by device id
+    // (`same_filesystem`): btrfs subvolumes of one pool report distinct ids, so their demands
+    // are checked separately against the same free space and can be under-reserved.
+    let mut demands: Vec<(&Path, u64)> = vec![(parent, scratch_bytes)];
     for (path, bytes) in [(work.as_path(), copy), (output.as_path(), mul(copy, 2)?)] {
         let mut placed = false;
         for demand in &mut demands {
@@ -401,14 +405,29 @@ fn output_admission(
         }
     }
     for (path, bytes) in &demands[1..] {
-        crate::spill::preflight(
-            path,
-            *bytes,
-            crate::spill::SpaceRole::Output,
-            crate::spill::PreflightStage::Geometry,
-        )?;
+        crate::spill::preflight(path, *bytes, crate::spill::SpaceRole::Output, stage)?;
     }
     Ok(demands[0].1)
+}
+
+/// Output reservation once image dimensions are admitted: three copies (leaf staging,
+/// archive staging, a replaced destination) of the geometry estimate plus the larger of the
+/// encoded source images and the profile's texel estimate.
+fn texture_output_reserve(
+    n: u64,
+    image_bytes: u64,
+    texels: u64,
+    profile: config::Profile,
+) -> Result<u64, JobError> {
+    let textures = config::output_texture_bytes(profile, texels)
+        .ok_or_else(|| exhausted("output reservation arithmetic overflow"))?;
+    mul(
+        add(
+            mul(n, config::OUTPUT_BYTES_PER_TRIANGLE)?,
+            image_bytes.max(textures),
+        )?,
+        3,
+    )
 }
 
 /// Ends a stage: its measured peak, which must stay within the declared stage bound.
@@ -580,7 +599,14 @@ pub(crate) fn capture_admitted(
     }
     // All checked counts, memory and physical allocation happen before creation.
     check().map_err(super::failure)?;
-    let scratch_admission = output_admission(&parent, &need, config).map_err(super::failure)?;
+    let scratch_admission = output_admission(
+        &parent,
+        need.need_bytes,
+        need.output_reserve_bytes,
+        config,
+        crate::spill::PreflightStage::Geometry,
+    )
+    .map_err(super::failure)?;
     let scratch = Scratch::create(config.scratch_dir.as_deref(), scratch_admission)
         .map_err(|e| super::failure(e.into()))?;
     let source_totals = (
@@ -713,6 +739,30 @@ pub(crate) fn capture_admitted(
             }
         }
         check()?;
+        // Second output admission now that texel counts are known: lossless PNG pages can be
+        // far larger than the encoded source images.
+        let texels = image_info.iter().try_fold(0_u64, |sum, info| {
+            add(sum, mul(u64::from(info.width), u64::from(info.height))?)
+        })?;
+        let output_reserve_bytes =
+            texture_output_reserve(scan.triangles, image_bytes, texels, config.profile)?;
+        let scratch_remaining = need
+            .need_bytes
+            .checked_sub(scratch.live_bytes())
+            .unwrap_or(0);
+        let scratch_total = output_admission(
+            &parent,
+            scratch_remaining,
+            output_reserve_bytes,
+            config,
+            crate::spill::PreflightStage::Texture,
+        )?;
+        crate::spill::preflight(
+            &parent,
+            scratch_total,
+            crate::spill::SpaceRole::Scratch,
+            crate::spill::PreflightStage::Texture,
+        )?;
         let materials = source.document.materials().to_vec();
         let textures = source.document.textures().to_vec();
         let samplers = source.document.samplers().to_vec();
@@ -780,7 +830,10 @@ pub(crate) fn capture_admitted(
             memory,
             scratch_logical_peak_bytes: scratch.peak_bytes(),
             scratch_memory_backed: scratch.memory_backed(),
-            scratch: need,
+            scratch: FullScratchNeed {
+                output_reserve_bytes,
+                ..need
+            },
             scratch_stage_peaks: peaks,
             image_capture,
             lattice_version: 1,
@@ -1484,6 +1537,33 @@ pub(super) mod tests {
         // Unchunked-size data: slack never exceeds S.
         let small = spill(60, 10, 4);
         assert_eq!(small.finish_peak, 2 * s(60));
+    }
+    /// mgal 2048 (10M triangles, 89 images of 2048x2048, 367 MB source) published lossless
+    /// needed 4.51 GB of output-side space at once (leaf staging and archive staging). The flat
+    /// per-triangle reservation (3 x (119 B/tri + encoded image bytes)) covered only 3.86 GB;
+    /// the texel term covers it, scaled by profile.
+    #[test]
+    fn output_reservation_covers_textured_lossless_and_scales_by_profile() {
+        let n = 10_000_000;
+        let image_bytes = 98_000_000; // the 2048 copy's JPEG images, rounded down
+        let texels = 89 * 2048 * 2048;
+        let measured = 4_510_000_000;
+        let flat = 3 * (n * config::OUTPUT_BYTES_PER_TRIANGLE + image_bytes);
+        assert!(
+            flat < measured,
+            "control: the flat reservation under-reserves"
+        );
+        let lossless = texture_output_reserve(n, image_bytes, texels, Profile::Lossless).unwrap();
+        assert!(lossless >= measured, "{lossless}");
+        // Two copies are live at once; the third is a replaced destination.
+        assert!(lossless / 3 * 2 >= measured);
+        let balanced = texture_output_reserve(n, image_bytes, texels, Profile::Balanced).unwrap();
+        assert!(balanced < lossless && balanced > flat);
+        // Untextured inputs keep the geometry estimate.
+        assert_eq!(
+            texture_output_reserve(n, 0, 0, Profile::Lossless).unwrap(),
+            3 * n * config::OUTPUT_BYTES_PER_TRIANGLE
+        );
     }
     #[test]
     fn checked_full_scratch_and_decoder_memory_charges() {
