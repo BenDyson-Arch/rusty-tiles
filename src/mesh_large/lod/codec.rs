@@ -20,6 +20,29 @@ fn invalid(message: impl Into<String>) -> JobError {
 pub(crate) struct DecodedFace {
     pub p: [[f32; 3]; 3],
     pub features: Vec<(u32, Option<usize>)>,
+    /// Exact POSITION storage words per corner: u16 codes widened, or f32 bit patterns.
+    pub raw: [[u32; 3]; 3],
+    /// The decoded glTF primitive this face belongs to (index into `Decoded::primitives`).
+    pub primitive: u32,
+    /// Every feature-ID set has the same value at the face's three corners (`features`
+    /// holds corner 0's).
+    pub uniform_features: bool,
+}
+
+/// One decoded glTF primitive: its scene node TRS bits and declared feature-ID sets.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DecodedPrimitive {
+    pub node: u32,
+    pub mesh: u32,
+    pub index: u32,
+    /// Node translation and scale as f32 bit patterns (identity when absent).
+    pub translation: [u32; 3],
+    pub scale: [u32; 3],
+    /// Quantized (u16) or float POSITION storage.
+    pub quantized: bool,
+    /// The `EXT_mesh_features.featureIds` array exactly as published.
+    pub feature_ids: Value,
+    pub material: Option<u32>,
 }
 
 impl DecodedFace {
@@ -38,12 +61,15 @@ pub(crate) struct Table {
     pub class: String,
     pub count: usize,
     pub columns: BTreeMap<String, Vec<u64>>,
+    /// Column component types (`UINT8`, `UINT32`, `UINT64`, `FLOAT64`, ...).
+    pub components: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Decoded {
     pub faces: Vec<DecodedFace>,
     pub tables: Vec<Table>,
+    pub primitives: Vec<DecodedPrimitive>,
 }
 
 struct Reader<'a> {
@@ -182,6 +208,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
     let reader = Reader { doc, bin };
     let doc = &reader.doc;
     let mut faces = Vec::new();
+    let mut decoded_primitives = Vec::new();
     let scene = doc["scene"].as_u64().unwrap_or(0) as usize;
     for root in doc["scenes"][scene]["nodes"]
         .as_array()
@@ -199,9 +226,12 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
         let Some(mesh) = node.get("mesh").and_then(Value::as_u64) else {
             continue;
         };
-        for primitive in doc["meshes"][mesh as usize]["primitives"]
+        let node_index = root.as_u64().unwrap_or(0) as u32;
+        for (primitive_index, primitive) in doc["meshes"][mesh as usize]["primitives"]
             .as_array()
             .ok_or_else(|| invalid("mesh without primitives"))?
+            .iter()
+            .enumerate()
         {
             if primitive.get("mode").and_then(Value::as_u64).unwrap_or(4) != 4 {
                 return Err(invalid("non-triangle primitive"));
@@ -212,6 +242,15 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
                     .as_u64()
                     .ok_or_else(|| invalid("no POSITION"))? as usize,
             )?;
+            let raw: Vec<[u32; 3]> = positions
+                .iter()
+                .map(|e| {
+                    std::array::from_fn(|a| match component {
+                        5123 => u32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]])),
+                        _ => u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap()),
+                    })
+                })
+                .collect();
             let decoded: Vec<[f32; 3]> = positions
                 .iter()
                 .map(|e| {
@@ -294,10 +333,34 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
             if !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i >= decoded.len()) {
                 return Err(invalid("triangle indices out of range"));
             }
+            let primitive_slot = decoded_primitives.len() as u32;
+            decoded_primitives.push(DecodedPrimitive {
+                node: node_index,
+                mesh: mesh as u32,
+                index: primitive_index as u32,
+                translation: translation.map(f32::to_bits),
+                scale: scale.map(f32::to_bits),
+                quantized: component == 5123,
+                feature_ids: primitive
+                    .get("extensions")
+                    .and_then(|e| e.get("EXT_mesh_features"))
+                    .and_then(|e| e.get("featureIds"))
+                    .cloned()
+                    .unwrap_or(Value::Array(Vec::new())),
+                material: primitive
+                    .get("material")
+                    .and_then(Value::as_u64)
+                    .map(|m| m as u32),
+            });
             for t in indices.as_chunks::<3>().0 {
                 faces.push(DecodedFace {
                     p: [decoded[t[0]], decoded[t[1]], decoded[t[2]]],
                     features: sets.iter().map(|(v, table)| (v[t[0]], *table)).collect(),
+                    raw: [raw[t[0]], raw[t[1]], raw[t[2]]],
+                    primitive: primitive_slot,
+                    uniform_features: sets
+                        .iter()
+                        .all(|(v, _)| v[t[0]] == v[t[1]] && v[t[1]] == v[t[2]]),
                 });
             }
         }
@@ -312,6 +375,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
             let class = table["class"].as_str().unwrap_or_default().to_owned();
             let count = table["count"].as_u64().unwrap_or(0) as usize;
             let mut columns = BTreeMap::new();
+            let mut components = BTreeMap::new();
             for (name, property) in table["properties"].as_object().into_iter().flatten() {
                 let component = classes[&class]["properties"][name]["componentType"]
                     .as_str()
@@ -341,15 +405,21 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
                     })
                     .collect();
                 columns.insert(name.clone(), values);
+                components.insert(name.clone(), component.to_owned());
             }
             tables.push(Table {
                 class,
                 count,
                 columns,
+                components,
             });
         }
     }
-    Ok(Decoded { faces, tables })
+    Ok(Decoded {
+        faces,
+        tables,
+        primitives: decoded_primitives,
+    })
 }
 
 /// One primitive of a proxy: its identity and indexed geometry over source positions.
@@ -831,4 +901,92 @@ pub(crate) fn same_face(a: &[[f32; 3]; 3], b: &[[f32; 3]; 3]) -> bool {
     let bits = |f: &[[f32; 3]; 3]| f.map(|p| p.map(f32::to_bits));
     let (a, b) = (bits(a), bits(b));
     (0..3).any(|r| (0..3).all(|i| a[i] == b[(i + r) % 3]))
+}
+
+/// Everything a complete-member check reads back beside [`decode`]: the JSON document, the
+/// float vertex attributes of every glTF primitive (scene order, as [`decode`]), and the
+/// bytes of every image.
+pub(crate) struct Readback {
+    pub doc: Value,
+    pub attributes: Vec<BTreeMap<String, Vec<f32>>>,
+    pub images: Vec<Vec<u8>>,
+}
+
+pub(crate) fn readback(bytes: &[u8]) -> Result<Readback, JobError> {
+    let u32_at = |i: usize| -> Result<usize, JobError> {
+        Ok(u32::from_le_bytes(
+            bytes
+                .get(i..i + 4)
+                .ok_or_else(|| invalid("GLB truncated"))?
+                .try_into()
+                .unwrap(),
+        ) as usize)
+    };
+    let json_length = u32_at(12)?;
+    let doc: Value = serde_json::from_slice(
+        bytes
+            .get(20..20 + json_length)
+            .ok_or_else(|| invalid("GLB JSON"))?,
+    )
+    .map_err(|e| invalid(format!("GLB JSON: {e}")))?;
+    let bin_start = 20 + json_length;
+    let bin = if bin_start + 8 <= bytes.len() {
+        let length = u32_at(bin_start)?;
+        bytes
+            .get(bin_start + 8..bin_start + 8 + length)
+            .ok_or_else(|| invalid("GLB BIN"))?
+    } else {
+        &[][..]
+    };
+    let reader = Reader { doc, bin };
+    let doc = &reader.doc;
+    let mut attributes = Vec::new();
+    let scene = doc["scene"].as_u64().unwrap_or(0) as usize;
+    for root in doc["scenes"][scene]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        let node = &doc["nodes"][root.as_u64().unwrap_or(0) as usize];
+        let Some(mesh) = node.get("mesh").and_then(Value::as_u64) else {
+            continue;
+        };
+        for primitive in doc["meshes"][mesh as usize]["primitives"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let mut map = BTreeMap::new();
+            for (name, index) in primitive["attributes"].as_object().into_iter().flatten() {
+                if name == "POSITION" || name.starts_with("_FEATURE_ID_") {
+                    continue;
+                }
+                let (values, component, _) = reader
+                    .accessor(index.as_u64().ok_or_else(|| invalid("attribute index"))? as usize)?;
+                if component != 5126 {
+                    return Err(invalid(format!("attribute {name} is not FLOAT")));
+                }
+                map.insert(
+                    name.clone(),
+                    values
+                        .iter()
+                        .flat_map(|e| e.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)))
+                        .collect(),
+                );
+            }
+            attributes.push(map);
+        }
+    }
+    let mut images = Vec::new();
+    for image in doc["images"].as_array().into_iter().flatten() {
+        let view = image["bufferView"]
+            .as_u64()
+            .ok_or_else(|| invalid("image without view"))?;
+        images.push(reader.view(view as usize)?);
+    }
+    Ok(Readback {
+        doc: reader.doc.clone(),
+        attributes,
+        images,
+    })
 }

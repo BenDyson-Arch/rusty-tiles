@@ -3,6 +3,7 @@
 //! existing source vertices (half-edge collapse), so a proxy vertex is a source vertex and
 //! quantizes on the frozen lattice exactly as every neighbour does.
 use super::incidence::VertexInfo;
+use crate::{JobError, JobErrorKind};
 use std::{
     cmp::{Ordering, Reverse},
     collections::{BTreeMap, BTreeSet, BinaryHeap},
@@ -31,8 +32,8 @@ pub(crate) struct Vertex {
 pub(crate) struct Face {
     pub v: [u32; 3],
     pub label: u32,
-    /// Index of the input face this one descends from (collapses keep it); `u32::MAX` for
-    /// a fill face.
+    /// Index of the input face this one descends from (collapses keep it). A fill face
+    /// carries `u32::MAX - k` for its fill record `k` (never a valid input index).
     pub id: u32,
 }
 
@@ -64,7 +65,13 @@ pub(crate) struct KeyFace {
 
 impl KeyMesh {
     /// Weld faces by key; faces keep their order.
-    pub(crate) fn build(faces: &[KeyFace]) -> Self {
+    ///
+    /// Keys (`[u32; 3]` bit patterns) and labels (integer tuples) have total orders, so
+    /// every lookup below succeeds for any input. A miss can therefore only mean that
+    /// memory changed under the computation (a hardware fault or undefined behaviour
+    /// elsewhere in the process); it is reported as a typed `InvalidState`, never a panic
+    /// in a worker, and the indices are checked to be strictly increasing first.
+    pub(crate) fn build(faces: &[KeyFace]) -> Result<Self, JobError> {
         let mut keys: Vec<(Key, VertexInfo)> = faces
             .iter()
             .flat_map(|f| (0..3).map(move |i| (f.keys[i], f.info[i])))
@@ -74,25 +81,56 @@ impl KeyMesh {
         let mut labels: Vec<Label> = faces.iter().map(|f| f.label).collect();
         labels.sort_unstable();
         labels.dedup();
-        let vertex = |k: &Key| keys.binary_search_by(|x| x.0.cmp(k)).unwrap() as u32;
-        let label = |l: &Label| labels.binary_search(l).unwrap() as u32;
+        let inconsistent = |what: &str| {
+            JobError::new(
+                JobErrorKind::InvalidState,
+                format!(
+                    "LOD key mesh: {what} (inputs and orders are total and immutable here, so \
+                     this indicates memory corruption; rerun, and check the host's memory)"
+                ),
+            )
+        };
+        if keys.windows(2).any(|w| w[0].0 >= w[1].0) || labels.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(inconsistent(
+                "the sorted vertex or label index is not strictly increasing",
+            ));
+        }
+        let vertex = |k: &Key| -> Result<u32, JobError> {
+            keys.binary_search_by(|x| x.0.cmp(k))
+                .map(|i| i as u32)
+                .map_err(|_| {
+                    inconsistent(&format!("vertex key {k:?} is missing from its own index"))
+                })
+        };
+        let label = |l: &Label| -> Result<u32, JobError> {
+            labels
+                .binary_search(l)
+                .map(|i| i as u32)
+                .map_err(|_| inconsistent(&format!("label {l:?} is missing from its own index")))
+        };
         let faces = faces
             .iter()
             .enumerate()
-            .map(|(i, f)| Face {
-                v: [vertex(&f.keys[0]), vertex(&f.keys[1]), vertex(&f.keys[2])],
-                label: label(&f.label),
-                id: i as u32,
+            .map(|(i, f)| {
+                Ok(Face {
+                    v: [
+                        vertex(&f.keys[0])?,
+                        vertex(&f.keys[1])?,
+                        vertex(&f.keys[2])?,
+                    ],
+                    label: label(&f.label)?,
+                    id: i as u32,
+                })
             })
-            .collect();
-        Self {
+            .collect::<Result<Vec<_>, JobError>>()?;
+        Ok(Self {
             vertices: keys
                 .into_iter()
                 .map(|(key, info)| Vertex { key, info })
                 .collect(),
             labels,
             faces,
-        }
+        })
     }
 
     pub(crate) fn face_area(&self, f: &Face) -> f64 {
@@ -929,6 +967,107 @@ mod tests {
         super::super::incidence::weld([x, y, z])
     }
 
+    /// Property: for adversarial keys (NaN payloads, infinities, -0.0 next to +0.0 bit
+    /// patterns, subnormals, equal-valued different bit patterns) and labels (extremes,
+    /// near-duplicates), in any order and multiplicity, every face's vertices and label
+    /// resolve to entries with exactly its own key and label, and both indices are strictly
+    /// increasing. Also with the keys as `weld` produces them (signed zeros unified).
+    #[test]
+    fn key_mesh_lookups_are_total_for_adversarial_keys_and_labels() {
+        let pool: Vec<u32> = vec![
+            0,
+            0x8000_0000, // -0.0
+            0x0000_0001, // smallest subnormal
+            0x8000_0001,
+            0x007f_ffff, // largest subnormal
+            0x3f80_0000, // 1.0
+            0x3f80_0001,
+            0xbf80_0000,
+            0x7f80_0000, // +inf
+            0xff80_0000, // -inf
+            0x7fc0_0000, // quiet NaN
+            0x7f80_0001, // signalling NaN
+            0xffc0_0000, // negative NaN
+            0xffff_ffff,
+            0x7fff_ffff,
+            u32::MAX - 1,
+        ];
+        let labels = [
+            Label {
+                key: (0, 0, 0),
+                expanded_ordinal: 0,
+                material: u32::MAX,
+            },
+            Label {
+                key: (0, 0, 0),
+                expanded_ordinal: 1,
+                material: u32::MAX,
+            },
+            Label {
+                key: (0, 0, 0),
+                expanded_ordinal: 0,
+                material: 0,
+            },
+            Label {
+                key: (u32::MAX, u32::MAX, u32::MAX),
+                expanded_ordinal: u64::MAX,
+                material: u32::MAX,
+            },
+            Label {
+                key: (1, 0, 0),
+                expanded_ordinal: u64::MAX,
+                material: 7,
+            },
+            Label {
+                key: (0, 1, 0),
+                expanded_ordinal: 0,
+                material: 7,
+            },
+        ];
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..400 {
+            let welded = round % 2 == 1;
+            let n = 1 + (next() % 64) as usize;
+            let faces: Vec<KeyFace> = (0..n)
+                .map(|_| {
+                    let mut corner = || -> Key {
+                        let k = [0; 3].map(|_| pool[(next() % pool.len() as u64) as usize]);
+                        if welded {
+                            super::super::incidence::weld(k.map(f32::from_bits))
+                        } else {
+                            k
+                        }
+                    };
+                    KeyFace {
+                        keys: [corner(), corner(), corner()],
+                        info: [VertexInfo::default(); 3],
+                        label: labels[(next() % labels.len() as u64) as usize],
+                        origin: Origin::default(),
+                    }
+                })
+                .collect();
+            let mesh = KeyMesh::build(&faces).unwrap();
+            assert!(mesh.vertices.windows(2).all(|w| w[0].key < w[1].key));
+            assert!(mesh.labels.windows(2).all(|w| w[0] < w[1]));
+            for (face, built) in faces.iter().zip(&mesh.faces) {
+                for c in 0..3 {
+                    assert_eq!(mesh.vertices[built.v[c] as usize].key, face.keys[c]);
+                }
+                assert_eq!(mesh.labels[built.label as usize], face.label);
+            }
+            if welded {
+                // weld unifies the signed zeros: no key keeps a -0.0 component.
+                assert!(mesh.vertices.iter().all(|v| !v.key.contains(&0x8000_0000)));
+            }
+        }
+    }
+
     fn grid(n: usize, label: Label, info: impl Fn(usize, usize) -> VertexInfo) -> Vec<KeyFace> {
         let mut out = Vec::new();
         let p = |i: usize, j: usize| key(i as f32, j as f32, ((i * 7 + j * 3) % 5) as f32 * 0.1);
@@ -957,7 +1096,7 @@ mod tests {
     #[test]
     fn simplification_keeps_locked_vertices_labels_and_reaches_its_target() {
         let faces = grid(16, L, |_, _| VertexInfo::default());
-        let mesh = KeyMesh::build(&faces);
+        let mesh = KeyMesh::build(&faces).unwrap();
         let locked: Vec<bool> = mesh
             .vertices
             .iter()
@@ -983,7 +1122,7 @@ mod tests {
     #[test]
     fn forced_border_vertices_leave_the_kept_chain() {
         let faces = grid(8, L, |_, _| VertexInfo::default());
-        let mesh = KeyMesh::build(&faces);
+        let mesh = KeyMesh::build(&faces).unwrap();
         // Border x = 0: keep even y, force odd y.
         let on = |v: &Vertex| f32::from_bits(v.key[0]) == 0.;
         let locked: Vec<bool> = mesh
@@ -1028,7 +1167,7 @@ mod tests {
         let mut faces = grid(4, L, |_, _| VertexInfo::default());
         let hole = 2 * (4 + 1); // quad (1, 1): faces 10 and 11
         faces.drain(hole..hole + 2);
-        let mesh = KeyMesh::build(&faces);
+        let mesh = KeyMesh::build(&faces).unwrap();
         let boundary: BTreeSet<u32> = mesh
             .vertices
             .iter()
