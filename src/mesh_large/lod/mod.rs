@@ -12,10 +12,11 @@
 //!
 //! Proxies are untextured: flat material factors, smooth normals. Texture baking is H13.
 mod certify;
-mod codec;
+pub(in crate::mesh_large) mod codec;
 mod geom;
+pub(in crate::mesh_large) mod handoff;
 pub(crate) mod incidence;
-mod mesh;
+pub(in crate::mesh_large) mod mesh;
 #[cfg(test)]
 mod tests;
 
@@ -296,6 +297,71 @@ impl Record for ForcedKey {
     }
 }
 
+/// A maximal run of consecutive source ranks `[start, end)` of one source primitive: the
+/// bake handoff's donor-range index (built once, read per tile by binary search).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct DonorRun {
+    start: u64,
+    end: u64,
+    key: (u32, u32, u32),
+}
+impl Record for DonorRun {
+    const SIZE: usize = 28;
+    fn encode(&self, out: &mut [u8]) {
+        out[..8].copy_from_slice(&self.start.to_le_bytes());
+        out[8..16].copy_from_slice(&self.end.to_le_bytes());
+        out[16..20].copy_from_slice(&self.key.0.to_le_bytes());
+        out[20..24].copy_from_slice(&self.key.1.to_le_bytes());
+        out[24..28].copy_from_slice(&self.key.2.to_le_bytes());
+    }
+    fn decode(b: &[u8]) -> Self {
+        let u = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        Self {
+            start: u64::from_le_bytes(b[..8].try_into().unwrap()),
+            end: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            key: (u(16), u(20), u(24)),
+        }
+    }
+}
+
+/// The run-length index of source primitives over ranks (one pass, cancellable).
+fn donor_runs(
+    scratch: &Scratch,
+    source: &Sequence<LodSource>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Sequence<DonorRun>, JobError> {
+    let mut out =
+        crate::spill::SequenceWriter::<DonorRun>::new(scratch, "lod-donor-runs", 1 << 16)?;
+    let mut run: Option<DonorRun> = None;
+    for (rank, s) in (0u64..).zip(source.reader()?) {
+        let key = s?.primitive_key();
+        if rank.is_multiple_of(1 << 16) {
+            check()?;
+        }
+        match &mut run {
+            Some(r) if r.key == key => r.end = rank + 1,
+            _ => {
+                if let Some(r) = run.take() {
+                    out.push(&r)?;
+                }
+                run = Some(DonorRun {
+                    start: rank,
+                    end: rank + 1,
+                    key,
+                });
+            }
+        }
+    }
+    if let Some(r) = run {
+        out.push(&r)?;
+    }
+    Ok(out.finish()?)
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
+}
+
 /// What the LOD stage reports into the leaf manifest.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -304,6 +370,13 @@ pub(crate) struct LodReport {
     pub proxies: u64,
     pub proxy_faces: u64,
     pub proxy_bytes: u64,
+    /// After a bake pass: the certified untextured proxies' bytes (`proxy_bytes` is then
+    /// the published, baked total). Absent without a baker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub untextured_proxy_bytes: Option<u64>,
+    /// Bytes of frozen bake-handoff packets written (absent without a baker).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub handoff_bytes: u64,
     pub target_faces: u64,
     pub max_proxy_faces: u64,
     pub retention: Vec<u8>,
@@ -364,6 +437,7 @@ enum Child {
         node: NodeRecord,
         index: u64,
         error: f64,
+        density_drop: u32,
     },
     Proxy {
         node: NodeRecord,
@@ -407,6 +481,12 @@ struct Ctx<'a> {
     mutation: Mutation,
     ar: Arith,
     check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    /// The bake handoff sink, when a bake pass will consume the tiles.
+    handoff: Option<&'a handoff::HandoffSink>,
+    /// Source-primitive runs over ranks (present with `handoff`).
+    donor_runs: Option<&'a Sequence<DonorRun>>,
+    profile: String,
+    lattice_sha256: String,
 }
 
 fn slot_of(node: &NodeRecord) -> u8 {
@@ -760,6 +840,7 @@ struct Outcome {
     forced_keys: Vec<Key>,
     failed_keys: Vec<Key>,
     over_budget: bool,
+    handoff_bytes: u64,
 }
 
 /// Faces of a mesh grouped by flat material, then label (stable): the GLB face order.
@@ -832,7 +913,9 @@ fn process(
     let mut children = Vec::with_capacity(job.children.len());
     for child in &job.children {
         children.push(match child {
-            Child::Leaf { node, index, error } => load_leaf(ctx, node, *index, *error)?,
+            Child::Leaf {
+                node, index, error, ..
+            } => load_leaf(ctx, node, *index, *error)?,
             Child::Proxy { node } => load_proxy(ctx, node)?,
         });
     }
@@ -1342,6 +1425,8 @@ fn process(
                 mask |= 1 << slot;
             }
         }
+        // Fill faces carry their record index as `u32::MAX - index` (never a T face id).
+        let fill_id = u32::MAX - fill_rows.len() as u32;
         fill_rows.push((
             l.label,
             min_key,
@@ -1354,7 +1439,7 @@ fn process(
             fill_faces.push(Face {
                 v: t,
                 label: l.label,
-                id: u32::MAX,
+                id: fill_id,
             });
         }
     }
@@ -1509,6 +1594,24 @@ fn process(
         }
     }
 
+    if let Some(sink) = ctx.handoff {
+        let packet = frozen_packet(
+            ctx,
+            job,
+            &mesh,
+            &key_faces,
+            &final_order,
+            &check,
+            &encoded.glb,
+            &label_error,
+            &fill_rows,
+            &v_rows,
+            published,
+            to_filled,
+            from,
+        )?;
+        out.handoff_bytes = sink.write(&packet, ctx.check)?;
+    }
     // Sidecar (key space, GLB face order) and the published member.
     let mut used: BTreeMap<u32, u32> = BTreeMap::new();
     let mut vertices = Vec::new();
@@ -1579,6 +1682,276 @@ fn process(
     lap(&mut phases[6]);
     out.phases = phases;
     Ok(out)
+}
+
+/// The frozen bake packet of a finished tile, from its key-space mesh (original weld keys,
+/// lineage, fills) and its DECODED published bytes (raw POSITION words, TRS, features,
+/// tables). Faces are paired by published order and must decode bit-identically.
+#[allow(clippy::too_many_arguments)]
+fn frozen_packet(
+    ctx: &Ctx,
+    job: &Job,
+    mesh: &KeyMesh,
+    key_faces: &[KeyFace],
+    faces: &[Face],
+    published: &codec::Decoded,
+    glb: &[u8],
+    label_error: &BTreeMap<u32, f64>,
+    fill_rows: &[(u32, Key, u32, u32, f64, u8)],
+    v_rows: &[[u64; 9]],
+    geometric_error: f64,
+    proxy_to_source: f64,
+    source_to_proxy: f64,
+) -> Result<handoff::FrozenNode, JobError> {
+    use handoff::*;
+    let node = &job.node;
+    if published.faces.len() != faces.len() {
+        return Err(state(
+            "frozen packet: published faces differ from the tile's faces",
+        ));
+    }
+    // Source primitives in published order (the source_primitive rows).
+    let mut order: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut primitives: Vec<FrozenPrimitive> = Vec::new();
+    for f in faces {
+        if let std::collections::btree_map::Entry::Vacant(slot) = order.entry(f.label) {
+            let l = mesh.labels[f.label as usize];
+            slot.insert(primitives.len() as u32);
+            primitives.push(FrozenPrimitive {
+                node: l.key.0,
+                mesh: l.key.1,
+                primitive: l.key.2,
+                expanded_ordinal: l.expanded_ordinal,
+                material: l.material,
+                row: primitives.len() as u32,
+                error: label_error
+                    .get(&f.label)
+                    .copied()
+                    .unwrap_or(geometric_error),
+                donor_ranges: Vec::new(),
+            });
+        }
+    }
+    let by_key: BTreeMap<(u32, u32, u32), u32> = primitives
+        .iter()
+        .enumerate()
+        .map(|(i, p)| ((p.node, p.mesh, p.primitive), i as u32))
+        .collect();
+    // Donor ranges from the run index: binary search for the first run reaching past
+    // `first`, then the runs overlapping `[first, end)` only (cost O(log R + runs in range),
+    // cancellable), each clipped to the tile.
+    let runs = ctx
+        .donor_runs
+        .ok_or_else(|| state("bake handoff without its donor-run index"))?;
+    let run_at = |i: u64| -> Result<DonorRun, JobError> {
+        runs.range(i, i + 1, DonorRun::SIZE)?
+            .next()
+            .ok_or_else(|| state("donor-run index ends early"))?
+            .map_err(JobError::from)
+    };
+    let (mut lo, mut hi) = (0u64, runs.len());
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if run_at(mid)?.end <= node.first {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (k, run) in (0u64..).zip(runs.range(lo, runs.len(), 1 << 16)?) {
+        let run = run?;
+        if run.start >= node.end {
+            break;
+        }
+        if k.is_multiple_of(1 << 12) {
+            (ctx.check)()?;
+        }
+        if let Some(&i) = by_key.get(&run.key) {
+            let piece = run.start.max(node.first)..run.end.min(node.end);
+            let ranges = &mut primitives[i as usize].donor_ranges;
+            match ranges.last_mut() {
+                Some(r) if r.end == piece.start => r.end = piece.end,
+                _ => ranges.push(piece),
+            }
+        }
+    }
+    let fill_base = u32::MAX - fill_rows.len() as u32;
+    let mut frozen_faces = Vec::with_capacity(faces.len());
+    for (f, d) in faces.iter().zip(&published.faces) {
+        let source = order[&f.label];
+        let fill = (f.id > fill_base).then(|| u32::MAX - f.id);
+        let origin = match key_faces.get(f.id as usize) {
+            Some(k) if fill.is_none() => k.origin,
+            _ => {
+                let p = &primitives[source as usize];
+                Origin {
+                    node: p.node,
+                    mesh: p.mesh,
+                    primitive: p.primitive,
+                    triangle: u64::MAX,
+                }
+            }
+        };
+        let corners = std::array::from_fn(|c| {
+            let v = mesh.vertices[f.v[c] as usize];
+            handoff::FrozenCorner {
+                raw: d.raw[c],
+                decoded: d.p[c].map(f32::to_bits),
+                weld: v.key,
+                ell: v.info.ell,
+            }
+        });
+        frozen_faces.push(FrozenFace {
+            gltf: d.primitive,
+            source,
+            corners,
+            origin,
+            fill,
+            features: d
+                .features
+                .iter()
+                .map(|(id, table)| (*id, table.map(|t| t as u32)))
+                .collect(),
+        });
+    }
+    // Every frozen corner decodes to the certified position of its weld key at this depth.
+    let mut seen: BTreeMap<Key, [u32; 3]> = BTreeMap::new();
+    for f in &frozen_faces {
+        for c in &f.corners {
+            let expected = match seen.get(&c.weld) {
+                Some(p) => *p,
+                None => {
+                    let p =
+                        decode_vertex(ctx.lattice, c.weld, c.ell, node.depth())?.map(f32::to_bits);
+                    seen.insert(c.weld, p);
+                    p
+                }
+            };
+            if expected != c.decoded {
+                return Err(state(
+                    "frozen packet: a published corner is not its weld key's lattice point",
+                ));
+            }
+        }
+    }
+    let mut gltf = Vec::with_capacity(published.primitives.len());
+    let mut start = 0u32;
+    for (i, p) in published.primitives.iter().enumerate() {
+        let end = start
+            + frozen_faces[start as usize..]
+                .iter()
+                .take_while(|f| f.gltf == i as u32)
+                .count() as u32;
+        let run = &frozen_faces[start as usize..end as usize];
+        let (Some(first), Some(last)) = (run.first(), run.last()) else {
+            return Err(state("frozen packet: an empty glTF primitive"));
+        };
+        gltf.push(FrozenGltfPrimitive {
+            node: p.node,
+            mesh: p.mesh,
+            index: p.index,
+            sources: first.source..last.source + 1,
+            material: p.material,
+            translation: p.translation,
+            scale: p.scale,
+            quantized: p.quantized,
+            feature_ids: p.feature_ids.clone(),
+            faces: start..end,
+        });
+        start = end;
+    }
+    let fills = fill_rows
+        .iter()
+        .map(|r| FrozenFill {
+            source: order[&r.0],
+            loop_key: r.1,
+            loop_vertices: r.2,
+            fan_faces: r.3,
+            bound: r.4,
+            reopen_children: r.5,
+        })
+        .collect();
+    let vanished = v_rows
+        .iter()
+        .map(|r| FrozenVanished {
+            node: r[0] as u32,
+            mesh: r[1] as u32,
+            primitive: r[2] as u32,
+            component_key: [r[3] as u32, r[4] as u32, r[5] as u32],
+            faces: r[6] as u32,
+            reopen_children: r[7] as u8,
+            reason: r[8] as u8,
+        })
+        .collect();
+    let children = job
+        .children
+        .iter()
+        .map(|c| {
+            let n = c.node();
+            FrozenChild {
+                first: n.first,
+                end: n.end,
+                depth: n.depth(),
+                slot: n.slot(),
+                leaf: match c {
+                    Child::Leaf {
+                        index,
+                        density_drop,
+                        ..
+                    } => Some(LeafChild {
+                        index: *index,
+                        density_drop: *density_drop,
+                    }),
+                    Child::Proxy { .. } => None,
+                },
+            }
+        })
+        .collect();
+    let tables = published
+        .tables
+        .iter()
+        .map(|t| FrozenTable {
+            class: t.class.clone(),
+            count: t.count as u64,
+            columns: t
+                .columns
+                .iter()
+                .map(|(name, values)| {
+                    (
+                        name.clone(),
+                        t.components.get(name).cloned().unwrap_or_default(),
+                        values.clone(),
+                    )
+                })
+                .collect(),
+        })
+        .collect();
+    Ok(FrozenNode {
+        identity: NodeIdentity {
+            cell_depth: node.cell_depth,
+            cell: node.cell,
+            path_len: node.path_len,
+            path: node.path,
+            last_octant: node.last_octant,
+            depth: node.depth(),
+            first: node.first,
+            end: node.end,
+        },
+        profile: ctx.profile.clone(),
+        geometric_error,
+        proxy_to_source,
+        source_to_proxy,
+        lattice_sha256: ctx.lattice_sha256.clone(),
+        glb_sha256: Sha256::digest(glb).into(),
+        glb_bytes: glb.len() as u64,
+        primitives,
+        gltf,
+        faces: frozen_faces,
+        fills,
+        vanished,
+        children,
+        tables,
+    })
 }
 
 /// Cache of a tile's simplified faces (scratch), written by its latest topology run.
@@ -1811,17 +2184,20 @@ fn audit(
 struct LeafFact {
     first: u64,
     error_bits: u64,
+    density_drop: u32,
 }
 impl Record for LeafFact {
-    const SIZE: usize = 16;
+    const SIZE: usize = 20;
     fn encode(&self, out: &mut [u8]) {
         out[..8].copy_from_slice(&self.first.to_le_bytes());
-        out[8..].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[8..16].copy_from_slice(&self.error_bits.to_le_bytes());
+        out[16..].copy_from_slice(&self.density_drop.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
         Self {
             first: u64::from_le_bytes(b[..8].try_into().unwrap()),
-            error_bits: u64::from_le_bytes(b[8..].try_into().unwrap()),
+            error_bits: u64::from_le_bytes(b[8..16].try_into().unwrap()),
+            density_drop: u32::from_le_bytes(b[16..20].try_into().unwrap()),
         }
     }
 }
@@ -1835,6 +2211,8 @@ pub(crate) struct LodInput<'a> {
     pub mutation: Mutation,
     /// Proxy face target `P` ([`TARGET_FACES`] in production).
     pub target: usize,
+    /// Write one frozen packet per final tile for the bake pass (H13).
+    pub handoff: Option<&'a handoff::HandoffSink>,
 }
 
 /// Build, certify and write every coarse tile; returns the report. Writes `proxies/` and
@@ -1886,6 +2264,7 @@ pub(crate) fn produce(
                     .as_u64()
                     .ok_or_else(|| state("leaf row without first"))?,
                 error_bits: error.to_bits(),
+                density_drop: row["densityDrop"].as_u64().unwrap_or(0) as u32,
             })?;
         }
         writer.finish()?
@@ -1947,6 +2326,10 @@ pub(crate) fn produce(
         .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
+    let runs = match input.handoff {
+        Some(_) => Some(donor_runs(input.scratch, &source, check)?),
+        None => None,
+    };
     let ctx = Ctx {
         stage: input.stage,
         sidecars: &sidecars,
@@ -1959,6 +2342,13 @@ pub(crate) fn produce(
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
         check,
+        handoff: input.handoff,
+        donor_runs: runs.as_ref(),
+        profile: serde_json::to_value(captured.lattice.profile())
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default(),
+        lattice_sha256: report.lattice_sha256.clone(),
     };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(input.jobs.max(1))
@@ -2060,6 +2450,7 @@ pub(crate) fn produce(
                                 node: n,
                                 index: leaf_index,
                                 error: f64::from_bits(fact.error_bits),
+                                density_drop: fact.density_drop,
                             });
                         }
                     }
@@ -2228,6 +2619,7 @@ pub(crate) fn produce(
             report.fills_rejected_bound += o.fills_rejected_bound;
             report.fills_rejected_topology += o.fills_rejected_topology;
             report.fills_rejected_budget += o.fills_rejected_budget;
+            report.handoff_bytes += o.handoff_bytes;
             report.forced_collapses += o.forced;
             report.forced_unchecked += o.forced_unchecked;
             report.relaxed_tiles += u64::from(o.relaxed);

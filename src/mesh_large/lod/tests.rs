@@ -69,9 +69,28 @@ fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
     path
 }
 
+/// The fixture's surface. Platform `sin`/`cos` (libm) may differ by an ulp between
+/// targets, which would change the INPUT bytes; this uses only IEEE `+ - * /` and `round`, so
+/// the fixture (and the pinned output digest) is identical on every platform.
 fn height(x: f32, z: f32) -> f32 {
-    3. * (x / 7.).sin() * (z / 9.).cos()
+    (3. * portable_sin(f64::from(x) / 7.) * portable_sin(f64::from(z) / 9. + FRAC_PI_2)) as f32
 }
+
+/// `sin` by range reduction to `[-pi, pi]` and a Taylor series to `x^25` (error below
+/// 1e-15 there); exactly reproducible across platforms.
+fn portable_sin(x: f64) -> f64 {
+    let tau = 2. * std::f64::consts::PI;
+    let r = x - (x / tau).round() * tau;
+    let r2 = r * r;
+    let (mut term, mut sum) = (r, r);
+    for n in 1..13u32 {
+        let k = f64::from(2 * n);
+        term *= -r2 / (k * (k + 1.));
+        sum += term;
+    }
+    sum
+}
+const FRAC_PI_2: f64 = std::f64::consts::FRAC_PI_2;
 
 /// A wavy terrain over three primitives with shared seams, small interior holes (one
 /// quad each, fillable), a larger hole, small islands floating 0.3 m above the surface, and
@@ -794,7 +813,7 @@ fn audit(source: &[Mesh], dir: &Path) -> Audit {
 /// The terrain through H8 + H17 + H16: every internal tile has certified content, the
 /// independent auditor finds no crack and no sampled distance above a published error,
 /// islands vanish and holes are filled with records that reopen, the archive validates
-/// with decoded containment, and two worker counts give identical bytes.
+/// with decoded containment, and two worker counts give identical archive bytes.
 #[test]
 fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
     let work = tempfile::tempdir().unwrap();
@@ -814,40 +833,44 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         assert_eq!(manifest["proxyManifest"], "proxies.jsonl");
         let lod = &manifest["lod"];
-        let audit = audit(&source, &dir);
-        eprintln!("terrain jobs {jobs}: {audit:?}\nlod {lod}");
-        assert!(audit.proxies >= 3 && audit.max_depth >= 1, "{audit:?}");
-        assert_eq!(audit.cracks, 0, "{audit:?}");
-        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
-        assert!(audit.matched_edges > 0);
-        assert!(audit.vanished > 0, "islands should vanish at the root");
-        assert!(
-            audit.fills > 0,
-            "small holes should be filled at a coarse depth"
-        );
-        assert!(lod["seamMatched"].as_u64().unwrap() > 0);
         let (report, members) = archive(&dir, &work.path().join(format!("t{jobs}.3tz")));
-        assert_eq!(report.proxies as usize, audit.proxies);
-        for r in rows(&dir.join("proxies.jsonl")) {
-            let bytes = fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap();
+        // The second worker count only has to reproduce the first's bytes (checked below);
+        // the audit and validation of those bytes run once (debug CI runs are serial).
+        if jobs == 1 {
+            let audit = audit(&source, &dir);
+            eprintln!("terrain jobs {jobs}: {audit:?}\nlod {lod}");
+            assert!(audit.proxies >= 3 && audit.max_depth >= 1, "{audit:?}");
+            assert_eq!(audit.cracks, 0, "{audit:?}");
+            assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
+            assert!(audit.matched_edges > 0);
+            assert!(audit.vanished > 0, "islands should vanish at the root");
             assert!(
-                members.values().any(|m| *m == bytes),
-                "proxy {} not published",
-                r["uri"]
+                audit.fills > 0,
+                "small holes should be filled at a coarse depth"
+            );
+            assert!(lod["seamMatched"].as_u64().unwrap() > 0);
+            assert_eq!(report.proxies as usize, audit.proxies);
+            for r in rows(&dir.join("proxies.jsonl")) {
+                let bytes = fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap();
+                assert!(
+                    members.values().any(|m| *m == bytes),
+                    "proxy {} not published",
+                    r["uri"]
+                );
+            }
+            let checked = inspect(ValidationRequest::new(
+                work.path().join(format!("t{jobs}.3tz")),
+            ))
+            .unwrap();
+            assert!(
+                checked
+                    .checks
+                    .iter()
+                    .any(|c| c == "decodedContentContainment"),
+                "{:?}",
+                checked.not_inspected
             );
         }
-        let checked = inspect(ValidationRequest::new(
-            work.path().join(format!("t{jobs}.3tz")),
-        ))
-        .unwrap();
-        assert!(
-            checked
-                .checks
-                .iter()
-                .any(|c| c == "decodedContentContainment"),
-            "{:?}",
-            checked.not_inspected
-        );
         archives.push(fs::read(work.path().join(format!("t{jobs}.3tz"))).unwrap());
     }
     assert!(archives[0] == archives[1], "archives differ across jobs");
@@ -963,13 +986,16 @@ fn seam_consensus_reruns_are_audited() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let lod = &manifest["lod"];
-        let audit = audit(&source, &dir);
-        eprintln!("consensus jobs {jobs}: {audit:?}\nlod {lod}");
         assert!(lod["seamRounds"].as_u64().unwrap() > 0, "{lod}");
         assert!(lod["seamKeptExtra"].as_u64().unwrap() > 0, "{lod}");
-        assert_eq!(audit.cracks, 0, "{audit:?}");
-        assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
-        assert!(audit.matched_edges > 0);
+        // Audited once; the other worker count must reproduce the same bytes.
+        if jobs == 1 {
+            let audit = audit(&source, &dir);
+            eprintln!("consensus jobs {jobs}: {audit:?}\nlod {lod}");
+            assert_eq!(audit.cracks, 0, "{audit:?}");
+            assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
+            assert!(audit.matched_edges > 0);
+        }
         let mut bytes = Vec::new();
         for r in rows(&dir.join("proxies.jsonl")) {
             bytes.push(fs::read(dir.join(r["uri"].as_str().unwrap())).unwrap());
@@ -1003,12 +1029,65 @@ fn control_fill_across_seams_is_caught() {
     );
 }
 
+/// Every published file of a leaf directory except the timing record, hashed in name order.
+fn tree_digest(dir: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    fn walk(dir: &Path, root: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, root, out);
+            } else {
+                // Names joined with `/` on every platform (not the OS separator).
+                let name = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                if name != "resources.json" {
+                    out.push((name, fs::read(&path).unwrap()));
+                }
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(dir, dir, &mut files);
+    files.sort();
+    let mut hash = Sha256::new();
+    for (name, bytes) in &files {
+        hash.update(name.as_bytes());
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(bytes);
+    }
+    hash.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The no-baker output is pinned: leaves, proxies, rows and manifest of the terrain run are
+/// byte-identical to the H17 branch without the bake handoff (golden taken there).
+#[test]
+fn no_baker_output_matches_the_pre_handoff_golden() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = leaves(&input, &work.path().join("leaves"), 2, Mutation::None, 1024).unwrap();
+    let digest = tree_digest(&dir);
+    eprintln!("no-baker digest {digest}");
+    assert_eq!(digest, NO_BAKER_GOLDEN);
+}
+
+/// `tree_digest` of the terrain run on develop at 0072977 (#209, before the bake handoff),
+/// with the platform-independent fixture. Regenerate it only for an intended change of the
+/// LOD or leaf output.
+const NO_BAKER_GOLDEN: &str = "d96a0d4db0df7694c31f3fb46d7080a63ad582de74165f9167507b3ee4cb6007";
+
 /// The public `mesh_to_tileset` path carries the certified coarse tiles: the published
 /// archive holds one member per proxy row beside the leaves and validates.
 #[test]
 fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
     let work = tempfile::tempdir().unwrap();
-    let source = terrain(150);
+    let source = terrain(90);
     let input = write_gltf(&work.path().join("src"), &source);
     let output = work.path().join("public.3tz");
     crate::mesh_large::mesh_to_tileset(

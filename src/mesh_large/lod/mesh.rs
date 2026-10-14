@@ -31,8 +31,8 @@ pub(crate) struct Vertex {
 pub(crate) struct Face {
     pub v: [u32; 3],
     pub label: u32,
-    /// Index of the input face this one descends from (collapses keep it); `u32::MAX` for
-    /// a fill face.
+    /// Index of the input face this one descends from (collapses keep it). A fill face
+    /// carries `u32::MAX - k` for its fill record `k` (never a valid input index).
     pub id: u32,
 }
 
