@@ -312,6 +312,8 @@ pub(super) fn prepare(
             gltf: group.gltf,
             faces,
             material: Some(material_index),
+            // The owner checks this flag: only a no-raster group may detach source slots.
+            no_raster: group.no_raster,
             normals: Some(Vec::new()),
             tangents: Some(Vec::new()),
             colors: Some(Vec::new()),
@@ -635,7 +637,25 @@ mod tests {
                 .sum::<u64>()
             + 4096;
         assert!(input.checked_mul(128).unwrap() + (1 << 20) <= packet.writer_memory_bytes);
-        root::assemble(frozen, &packet.node, tile_bytes).unwrap()
+        // Source material 5 with the fixture's literal factors (bindings to texture 0).
+        let mut materials = vec![json!({}); 5];
+        materials.push(json!({
+            "pbrMetallicRoughness":{"baseColorFactor":[0.3,0.4,0.5,1.],"baseColorTexture":{"index":0},
+                "metallicFactor":0.7,"roughnessFactor":0.3,"metallicRoughnessTexture":{"index":0}},
+            "normalTexture":{"index":0,"scale":1.},"occlusionTexture":{"index":0,"strength":0.6},
+            "emissiveTexture":{"index":0},"emissiveFactor":[0.1,0.2,0.3]
+        }));
+        let sources = crate::gltf_source::source::parse_materials_for_tests(
+            &json!({"materials":materials,"textures":[{"source":0}]}),
+        );
+        root::assemble(
+            frozen,
+            &packet.node,
+            &sources,
+            tile_bytes,
+            packet.writer_memory_bytes,
+        )
+        .unwrap()
     }
     #[test]
     fn structural_packet_runs_real_complete_writer_and_independent_pbr_attribute_readback() {

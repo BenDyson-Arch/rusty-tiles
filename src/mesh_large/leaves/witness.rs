@@ -837,9 +837,9 @@ mod tests {
         fn bake(&self, pass: &BakePass<'_>) -> Result<(), JobError> {
             for node in pass.nodes()? {
                 let (first, depth) = node?;
-                for child in pass.frozen(first, depth)?.children {
+                for child in pass.frozen(first, depth, 1 << 30)?.children {
                     if let Some(leaf) = child.leaf {
-                        let packet = pass.preencode.read_leaf(leaf.index)?;
+                        let packet = pass.preencode.read_leaf(leaf.index, 1 << 30, pass.check)?;
                         self.leaves.lock().unwrap().insert(leaf.index, packet);
                     }
                 }

@@ -359,7 +359,9 @@ pub(super) fn load_children(
         .unwrap();
     for child in &frozen.children {
         check()?;
-        let bytes = pass.preencode.read_proxy(child.first, child.depth)?;
+        let bytes = pass
+            .preencode
+            .read_proxy(child.first, child.depth, share, pass.check)?;
         let decoded = packet::decode(&bytes, share, check)?;
         if decoded.node.first != child.first
             || decoded.node.end != child.end
@@ -467,6 +469,10 @@ mod tests {
                 serde_json::json!({"minFilter":9728,"magFilter":9728,"wrapS":33071,"wrapT":33071}),
                 serde_json::json!({"minFilter":9987,"magFilter":9728,"wrapS":33071,"wrapT":33071}),
             ],
+            witness: crate::mesh_large::leaves::witness::LeafWitness {
+                texel_spacing: None,
+                primitives: Vec::new(),
+            },
         };
         let witness = LeafRendererWitness {
             node: NodeRecord {
