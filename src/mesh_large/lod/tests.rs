@@ -1081,8 +1081,9 @@ fn no_baker_output_matches_the_pre_handoff_golden() {
 /// with the platform-independent fixture. Regenerate it only for an intended change of the
 /// LOD or leaf output. Regenerated for the H8 gate escalation report: the untextured
 /// terrain's `manifest.json` leaf report gained `escalated_pages`,
-/// `lossless_fallback_pages`, `escalation_diagnostics` and `escalation_diagnostics_omitted`.
-const NO_BAKER_GOLDEN: &str = "48965e4ed3e1cd95cc47bd920fd159c6f48fcec8da863a6d08667ac7aef35adf";
+/// `lossless_fallback_pages`, `escalation_diagnostics` and `escalation_diagnostics_omitted`,
+/// then `escalation_reasons` (codec verification escalation).
+const NO_BAKER_GOLDEN: &str = "6d20d7d70bbb4ad961277f02dbb7c4dad672fb4f50f14c3fb4b3b0d4e18a31f0";
 
 /// The public `mesh_to_tileset` path carries the certified coarse tiles: the published
 /// archive holds one member per proxy row beside the leaves and validates.

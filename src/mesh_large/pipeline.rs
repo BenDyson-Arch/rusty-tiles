@@ -129,6 +129,8 @@ pub struct TilerReport {
     pub escalated_pages: producer::EscalatedPages,
     /// Pages delivered as exact level-0 PNG after every lossy step missed.
     pub lossless_fallback_pages: u64,
+    /// Escalated pages by what the profile step missed: `gate` or `codec_verify`.
+    pub escalation_reasons: producer::EscalationReasons,
     /// The first escalated pages in leaf order, naming leaf, slot, sources,
     /// step and each missed gate with its level.
     pub escalation_diagnostics: Vec<producer::EscalationDiagnostic>,
@@ -173,6 +175,7 @@ impl TilerReport {
             density_reduced_leaves: leaf.density_reduced_leaves,
             escalated_pages: leaf.escalated_pages,
             lossless_fallback_pages: leaf.lossless_fallback_pages,
+            escalation_reasons: leaf.escalation_reasons,
             escalation_diagnostics: leaf.escalation_diagnostics.clone(),
             escalation_diagnostics_omitted: leaf.escalation_diagnostics_omitted,
             tiles: facts.tiles,
