@@ -92,6 +92,17 @@ provisional; constants will be calibrated together after coarse levels and
 baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf
 texture exception; JPEG source decoding remains supported.
 
+A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
+level 2, then level 3, and, for pages sampled at level 0 only, delivered as an
+exact PNG; a mip-sampled page still failing at level 3 fails the call. Escalated
+pages are larger than the profile's own encoding (PNG fallback pages most of
+all). `result.report["escalated_pages"]` (`uastc_level2`, `uastc_level3`),
+`["lossless_fallback_pages"]`, `["escalation_diagnostics"]` (the first 32 pages:
+leaf, first, depth, page, slot, sources, step, misses) and
+`["escalation_diagnostics_omitted"]` describe them. Cancellation through the
+callback is polled before every re-encode step. See the
+[mesh guide](../../docs/MESH.md#profiles-and-resources).
+
 `jobs=None` means memory-aware auto. A positive integer is a maximum capped by
 cores and the stage's memory admission. Unknown memory uses one worker; a
 mandatory item that cannot fit is still refused. Booleans/nonintegers are

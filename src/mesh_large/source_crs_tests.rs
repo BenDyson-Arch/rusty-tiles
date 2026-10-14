@@ -318,7 +318,8 @@ fn parameters_default_to_gltf_y_up_and_zero_height_and_local_admits_none() {
     }
 }
 
-/// The real Metashape files' exact format, as shipped beside the user's GLBs.
+/// The real Metashape files, byte for byte (31 and 28 bytes), as shipped beside the user's
+/// GLBs; tests never read machine paths.
 const MGAL_OFFSET: &str = "E: 14812000\nN: -1384000\nA: 100\n";
 const POHNPEI_OFFSET: &str = "E: 17620600\nN: 768700\nA: 70\n";
 
@@ -400,13 +401,20 @@ fn offset_files_parse_exactly_the_metashape_lines() {
             .kind(),
         JobErrorKind::InvalidRequest
     );
-    // The shipped files, when this machine has them.
-    for name in ["mgal_detail_offset.txt", "pohnpei_offset.txt"] {
-        let real = Path::new("/run/media/bend/projects/tinyowl-demodata/glb").join(name);
-        if let Ok(text) = fs::read_to_string(&real) {
-            parse_offset_file(&text).unwrap();
-        }
-    }
+    // Bytes that are not text are a malformed request, not an I/O failure: invalid UTF-8,
+    // and a valid file cut by the 4 KiB cap inside a multibyte character.
+    fs::write(&path, b"E: 1\nN: \xff2\nA: 3\n").unwrap();
+    let kind = |path: &Path| {
+        MeshSourceCrs::from_parameters(Some("EPSG:3857"), None, None, Some(path), None)
+            .unwrap_err()
+            .kind()
+    };
+    assert_eq!(kind(&path), JobErrorKind::InvalidRequest);
+    // Exactly 4 KiB, ending with the first byte of a two-byte character.
+    let mut cut = vec![b'#'; 4095];
+    cut.push("é".as_bytes()[0]);
+    fs::write(&path, &cut).unwrap();
+    assert_eq!(kind(&path), JobErrorKind::InvalidRequest);
 }
 
 #[test]
@@ -939,4 +947,80 @@ fn lattice_jacobian_normals_match_per_vertex_jacobians() {
             assert!(normal_angle(&lattice, &exact, n) < 1e-6);
         }
     }
+}
+
+/// The tolerance edge: EPSG:3857 at 60 degrees over a 150 km site. Cells are about 4.7 km
+/// (the 32-cell cap), so interpolation error approaches the centre check. Every interpolated
+/// cell's normal error stays within LATTICE_TOLERANCE x cond(J) (about 1/cos 60 = 2) with a
+/// factor of two for terms beyond the quadratic one the centre check estimates.
+#[test]
+fn lattice_tolerance_edge_at_sixty_degrees_over_150_km() {
+    let spec = MeshSourceCrs::from_parameters(
+        Some("EPSG:3857"),
+        Some(SourceAxes::YUp),
+        Some(&[1e6, 8_399_737.889, 0.]),
+        None,
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    let (min, max) = ([-75e3, 0., -75e3], [75e3, 500., 75e3]);
+    let SourceFrame::Crs(mut frame) = SourceFrame::resolve(&spec, [min, max]).unwrap() else {
+        unreachable!()
+    };
+    let lattice = &frame.lattice;
+    let cells = lattice.cells;
+    let (mut passing, mut largest_centre) = (0, 0_f64);
+    let mut centres = Vec::new();
+    for k in 0..cells[2] {
+        for j in 0..cells[1] {
+            for i in 0..cells[0] {
+                let cell = [i, j, k];
+                if lattice.exact[lattice.cell_index(cell)] {
+                    continue;
+                }
+                passing += 1;
+                let centre: V3 = std::array::from_fn(|a| {
+                    (lattice.coordinate(a, cell[a]) + lattice.coordinate(a, cell[a] + 1)) * 0.5
+                });
+                centres.push((cell, centre));
+            }
+        }
+    }
+    for (cell, centre) in &centres {
+        let got = frame.lattice.interpolate(*cell, [0.5; 3]).unwrap();
+        let want = frame.exact_jacobian(*centre).0;
+        largest_centre = largest_centre.max(relative_error(&want, &got));
+    }
+    let normals = [
+        unit([0.3, 1., -0.2]),
+        unit([1., 0.1, 0.]),
+        unit([0., 0.2, 1.]),
+    ];
+    let mut worst = 0_f64;
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    for _ in 0..2000 {
+        let world: V3 = std::array::from_fn(|i| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            min[i] + (state >> 11) as f64 / (1u64 << 53) as f64 * (max[i] - min[i])
+        });
+        let lattice = frame.vertex(world, true).unwrap().1.unwrap();
+        let exact = frame.exact_jacobian(world);
+        for n in normals {
+            worst = worst.max(normal_angle(&lattice, &exact, n));
+        }
+    }
+    let condition = 1. / 60_f64.to_radians().cos();
+    eprintln!(
+        "60 degrees, 150 km: lattice {cells:?}, {passing} interpolated cells, largest centre \
+         error {largest_centre:e} (tolerance {LATTICE_TOLERANCE:e}), worst normal error {worst:e} rad"
+    );
+    assert!(passing > 0 && largest_centre <= LATTICE_TOLERANCE);
+    assert!(
+        largest_centre > LATTICE_TOLERANCE / 100.,
+        "the site must exercise the check, not sit far inside it"
+    );
+    assert!(worst <= 2. * LATTICE_TOLERANCE * condition, "{worst}");
 }

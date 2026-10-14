@@ -77,14 +77,17 @@ pub fn parse_offset_file(text: &str) -> Result<[f64; 3]> {
 }
 
 fn read_offset_file(path: &Path) -> Result<[f64; 3]> {
-    let mut text = String::new();
+    let mut bytes = Vec::new();
     std::fs::File::open(path)
-        .and_then(|file| file.take(OFFSET_FILE_BYTES + 1).read_to_string(&mut text))
+        .and_then(|file| file.take(OFFSET_FILE_BYTES + 1).read_to_end(&mut bytes))
         .map_err(|error| JobError::io("read source offset file", path, error))?;
-    if text.len() as u64 > OFFSET_FILE_BYTES {
+    if bytes.len() as u64 > OFFSET_FILE_BYTES {
         return Err(invalid("source offset file exceeds 4 KiB"));
     }
-    parse_offset_file(&text)
+    // Content, not I/O: a non-UTF-8 file is a malformed request like any other bad line.
+    let text =
+        std::str::from_utf8(&bytes).map_err(|_| invalid("source offset file is not UTF-8 text"))?;
+    parse_offset_file(text)
 }
 
 impl MeshSourceCrs {
@@ -218,8 +221,12 @@ impl Jacobian {
 /// (1 km horizontally in metre units, 0.01 degree geographic, 100 m vertically).
 const LATTICE_CELLS: usize = 32;
 const LATTICE_PROBE_STEPS: f64 = 1000.;
-/// Largest relative Frobenius error of the interpolated Jacobian at a cell centre. With
-/// the Jacobian's condition number this keeps normal error well under 1e-6 rad.
+/// Largest relative Frobenius error of the interpolated Jacobian at a cell centre. The
+/// normal error that follows is about this times the Jacobian's condition number `cond(J)`
+/// (for EPSG:3857 about `1/cos(latitude)`, the horizontal-to-vertical scale ratio), so roughly
+/// 2e-7 rad at 60 degrees. The centre check estimates the quadratic (curvature) term of the
+/// interpolation error, which dominates for smooth projections; it is not a proof for higher
+/// order terms. Measured normal errors are given in the tests.
 const LATTICE_TOLERANCE: f64 = 1e-7;
 
 /// Exact Jacobians at the nodes of a regular lattice over the used post-node source bounds,

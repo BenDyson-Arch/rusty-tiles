@@ -47,7 +47,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Stream a local metre/Y-up mesh into a Tiles 1.1 implicit .3tz (profiles provisional)
+    /// Stream a static glTF/GLB mesh (local metres Y-up, or a declared --source-crs) into a Tiles 1.1 implicit .3tz
     Mesh(TilerArgs),
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {

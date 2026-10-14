@@ -75,6 +75,9 @@ pub struct TilerRequest {
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
     policy: OutputPolicy,
+    /// Test seam: sort configuration and largest spill chunk, so small inputs spill.
+    #[cfg(test)]
+    test_spill: Option<(crate::spill::SortConfig, usize)>,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -87,7 +90,14 @@ impl TilerRequest {
             placement: MeshPlacement::Local,
             source_crs: None,
             policy: OutputPolicy::CreateNew,
+            #[cfg(test)]
+            test_spill: None,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
+        self.test_spill = Some((sort, chunk));
+        self
     }
     pub fn with_profile(mut self, profile: TilerProfile) -> Self {
         self.profile = profile;
@@ -231,6 +241,8 @@ pub struct CaptureDiagnostics {
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
+    /// Whole-run spill peak, including H17 and the bake; at most `scratch_logical_need_bytes`.
+    pub run_scratch_peak_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -313,6 +325,11 @@ pub fn mesh_to_tileset(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    #[cfg(test)]
+    if let Some((sort, chunk)) = request.test_spill {
+        config.sort = sort;
+        config.test_chunk_bytes = Some(chunk);
+    }
     config.scratch_dir = request
         .scratch_dir
         .as_deref()
@@ -408,6 +425,19 @@ pub fn mesh_to_tileset(
             work.path(),
         )?;
         let c = &captured.report;
+        // Every spill stage after capture (H17 pre-pass, coarse levels, bake) shares the
+        // admitted scratch: the whole-run peak must stay within the declared need. LOD proxy
+        // sidecars and bake handoff files are budgeted by their owners and not counted here.
+        let run_scratch_peak_bytes = captured.scratch.peak_bytes();
+        if run_scratch_peak_bytes > c.scratch.logical_need_bytes {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "mesh run spill peak {run_scratch_peak_bytes} bytes exceeded the declared scratch need {}",
+                    c.scratch.logical_need_bytes
+                ),
+            ));
+        }
         let diagnostics = TilerDiagnostics {
             requested_jobs: c.jobs.requested.clone(),
             capture: CaptureDiagnostics {
@@ -422,6 +452,7 @@ pub fn mesh_to_tileset(
                 scratch_stage_bytes: c.scratch.stages,
                 scratch_stage_peak_bytes: c.scratch_stage_peaks,
                 output_reserve_bytes: c.scratch.output_reserve_bytes,
+                run_scratch_peak_bytes,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,

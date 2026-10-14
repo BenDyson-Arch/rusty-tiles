@@ -424,6 +424,9 @@ pub(crate) struct LodReport {
     pub jobs: u64,
     #[serde(skip)]
     pub prepass_seconds: f64,
+    /// Measured spill peak of the incidence pre-pass (retained capture files included).
+    #[serde(skip)]
+    pub prepass_scratch_peak_bytes: u64,
     #[serde(skip)]
     pub seconds: f64,
     #[serde(skip)]
@@ -2301,6 +2304,9 @@ pub(crate) fn produce(
         crate::spill::PreflightStage::Lod,
     )?;
     let prepass = std::time::Instant::now();
+    // The pre-pass is capture's declared `lod_prepass` stage (full::ScratchStages): measure it
+    // and fail closed above its bound, like every capture stage.
+    input.scratch.begin_stage();
     let source = incidence::build(
         input.scratch,
         input.sort,
@@ -2309,6 +2315,14 @@ pub(crate) fn produce(
         &captured.corner_depths,
         check,
     )?;
+    report.prepass_scratch_peak_bytes = input.scratch.stage_peak_bytes();
+    let bound = captured.report.scratch.stages.lod_prepass;
+    if report.prepass_scratch_peak_bytes > bound {
+        return Err(resource(format!(
+            "LOD pre-pass scratch {} bytes exceeded its declared stage bound {bound}",
+            report.prepass_scratch_peak_bytes
+        )));
+    }
     report.prepass_seconds = prepass.elapsed().as_secs_f64();
     // Flat proxy materials without names, so equal flat materials share a glTF primitive.
     let materials: Vec<Value> = captured

@@ -119,8 +119,12 @@ the nodes of a lattice over the source bounds (at most 32 cells per axis, each
 nominally 1 km horizontally or 0.01° geographic and 100 m vertically) and
 interpolated trilinearly. A cell whose interpolated Jacobian at its centre
 differs from the exact one by more than 1e-7 (relative), or that touches the
-CRS domain edge, uses per-vertex Jacobians instead; the measured normal error
-of interpolated cells is below 1e-7 rad. The report states the lattice and its
+CRS domain edge, uses per-vertex Jacobians instead. The resulting normal error
+is about 1e-7 times the Jacobian's condition number (for EPSG:3857 about
+1/cos(latitude), so about 2e-7 rad at 60°); the centre check estimates the
+quadratic interpolation term, not higher-order terms. Measured errors in the
+tests are below 1e-7 rad, including a 150 km site at 60° whose cells sit at the
+check's edge. The report states the lattice and its
 per-vertex cells. Sorting, leaves, coarse levels and delivery then work in local
 metres. Every source coordinate must lie in the CRS's verified domain; a vertex
 outside it is `invalid_input`, and a mapped position beyond ±1,000,000 local
@@ -145,6 +149,20 @@ Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
+In a lossy profile, a texture page that misses any decoded-image gate at the
+profile's own encoder setting (per-level channel and normal floors, MASK
+coverage, the source-sampler check) is re-encoded one step stronger instead of
+failing the run: UASTC pack level 2, then UASTC level 3. Every step is checked
+again by the same gates; gates are never loosened. If level 3 also misses and
+the page's sampler reads level 0 only (no mipmap minification), the page is
+delivered as an exact level-0 PNG, which keeps the sampler. A mip-sampled page
+that still misses at level 3 fails the run, because glTF PNG cannot carry its
+authored coarse levels. Escalation costs output size: an ETC1S page re-encoded
+as UASTC is several times larger, and a PNG fallback page is typically the
+largest form of the page (up to 4 bytes per texel). The ladder depends only on
+the page, so output is identical for any worker count. Cancellation is polled
+before every re-encode step, so a run can stop between steps of one page.
+
 `--jobs auto` is memory-aware. A positive `--jobs N` is a **maximum**, also capped
 by available cores and each stage's memory plan. The diagnostics report the
 requested choice and actual workers independently for capture and leaf
@@ -163,11 +181,22 @@ and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon 
 they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
 added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
-staging and a replaced destination (an estimate of 3 × 119 bytes per triangle
-plus image bytes), added to the scratch figure when they share a filesystem.
+staging and a replaced destination: three copies of an estimate of 119 bytes per
+triangle plus the encoded image bytes at admission, raised once image dimensions
+are known to 4 bytes per source texel for `lossless` PNG pages or 1 byte per
+texel for KTX2 profiles, each with a 4/3 mip allowance (a texture-stage
+recheck). These are estimates, not bounds. Output demands are added to the
+scratch figure when they share a filesystem, told apart by device id: btrfs
+subvolumes of one pool report different ids, so their demands are checked
+separately against the same free space. Memory-backed (tmpfs) scratch is charged
+to the worker memory plan, but a work directory or output on tmpfs is not.
 Each capture stage rechecks free space for its own working set on entry and
 fails closed if its measured peak exceeds its declared bound; the diagnostics
-report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). A preflight is
+report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). The H17
+pre-pass is measured the same way, and the whole-run spill peak
+(`run_scratch_peak_bytes`) must stay within the declared need. LOD proxy
+sidecars and bake handoff files are budgeted by their own stages and are not in
+these spill figures. A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
 and does not replace the original cause.
@@ -233,7 +262,15 @@ snake_case and equals Python's `result.report` and the published report.
 The semantic report includes profile, source/resource counts, leaf/triangle/GLB
 counts and maximum leaf geometry error, hierarchy/implicit/document counts,
 depth and packed/synthetic leaf counts, member limits, separate root/tileset
-errors, and normalized placement. `source_coordinates` is `local-gltf` or
+errors, and normalized placement. Escalation is reported as `escalated_pages`
+(`uastc_level2` and `uastc_level3` counts, by the step that delivered the page),
+`lossless_fallback_pages` (pages delivered as exact PNG), and
+`escalation_diagnostics`: the first 32 escalated pages in leaf order, each with
+its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
+(`image`, `material`), delivering `step`, and every gate it missed on the way
+(`misses`: `step`, `mip` or null for the all-level sampler check, `gate`).
+`escalation_diagnostics_omitted` counts escalated pages beyond that bounded
+list. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
 `native` operation, the chosen origin, `jacobian_lattice_cells` and
