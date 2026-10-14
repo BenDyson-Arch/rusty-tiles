@@ -159,14 +159,10 @@ pub(super) fn admit<E>(
     read: &mut Resolver<'_, E>,
 ) -> Result<Subtree, ImplicitError<E>> {
     let name = root.subtrees.substitute(level, coords)?;
-    // OD-7: a subtree member resolved twice in one validation.
-    if limits.subtrees.contains(&name) {
-        return Err(unsupported(format!("repeated subtree member {name}")).into());
-    }
     let start = *live;
+    // OD-7 (a subtree member resolved twice in one validation) is the resolver's rule for
+    // `Base::Resolved`, decided before any charge (A-I1-3).
     let member = read_charged(limits, live, &name, Base::Resolved, read)?;
-    limits.subtrees.try_reserve(1).map_err(|_| refused())?;
-    limits.subtrees.insert(name.clone());
     // 1. Header.
     if !member.starts_with(b"subt") {
         if is_json_format(&member) {
@@ -322,7 +318,7 @@ pub(super) fn admit<E>(
         global: level,
         slots: root.contents.len(),
     };
-    let availability = Availability::admit(subtree, &storage, shape, limits)?;
+    let availability = Availability::admit(subtree, &storage, shape, limits, live)?;
     // 7. Property tables (§5).
     let tables = subtree.get("propertyTables");
     let columns = match subtree.get("tileMetadata") {

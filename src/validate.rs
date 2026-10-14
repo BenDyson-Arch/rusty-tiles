@@ -10,11 +10,16 @@ use crate::content_integrity::{
 #[cfg(test)]
 mod catalog_controls;
 mod containment;
+mod facts;
 #[cfg(test)]
 mod memo_controls;
 mod rows;
 #[cfg(test)]
 mod scale_driver;
+mod schema;
+mod stream_log;
+#[cfg(test)]
+mod traversal_controls;
 mod types;
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
@@ -22,6 +27,7 @@ pub use types::{
     ValidationRequest,
 };
 type Error = ValidationFailure;
+use facts::{FactStore, Stored};
 #[cfg(test)]
 use serde_json::json;
 use serde_json::Value;
@@ -562,7 +568,7 @@ fn payload_kind(name: &str) -> Result<payload::PayloadKind, Error> {
 
 /// Per-URI static facts, aggregated over every instance during the first C1
 /// inspection (D4). Never a verdict.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct UriFacts {
     /// Hull over every (instance, distinct POSITION accessor); None without instances.
     bounds: Option<UriBounds>,
@@ -576,7 +582,8 @@ struct UriFacts {
     max_depth: u64,
     exclusions: u16,
 }
-/// One tile of the traversed hierarchy: f64 facts only.
+/// One tile of the traversal path (VS-B-3): f64 facts only.
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct TileFact {
     /// The tile's own transform into its parent frame, when present.
     transform: Option<[f64; 16]>,
@@ -585,6 +592,7 @@ struct TileFact {
     volume: Option<VolumeFacts>,
     /// For an external-tileset root: the referencing content's boundingVolume.
     external: Option<VolumeFacts>,
+    /// The parent's position on the path stack; `None` only for the root.
     parent: Option<usize>,
     depth: usize,
     /// Inherited chain exclusions (C2-WB §3.3): the caller's own bits, ORed at
@@ -593,6 +601,9 @@ struct TileFact {
     /// the parent's `chain`. Every level of a reference's chain except its
     /// content volume is covered, so `Containment::reference` needs no walk.
     chain: u16,
+    /// EM (VS-B-6): the recorder serial and the local index of a tile recorded for its
+    /// document's summary.
+    owner: Option<(u64, usize)>,
 }
 /// The reason bit of a volume's shape exclusion, if any.
 fn shape_bit(volume: &VolumeFacts) -> u16 {
@@ -601,12 +612,6 @@ fn shape_bit(volume: &VolumeFacts) -> u16 {
         Some(Exclusion::RotatedBox) => Reason::RotatedBox.bit(),
         Some(Exclusion::NumericSpan) | None => 0,
     }
-}
-/// One payload content reference, in traversal order.
-struct Reference {
-    tile: usize,
-    uri: usize,
-    content: Option<usize>,
 }
 struct Containment {
     caps: SpanCaps,
@@ -618,13 +623,19 @@ struct Containment {
     units: u64,
     bytes: u64,
     decoded: u64,
-    tiles: Vec<TileFact>,
-    references: Vec<Reference>,
-    content_volumes: Vec<VolumeFacts>,
-    uris: Vec<(String, UriFacts)>,
-    uri_index: HashMap<String, usize>,
+    /// The path stack (VS-B-3): the tiles of the current traversal path, root first.
+    path: Vec<TileFact>,
     levels: Vec<LevelFacts>,
+    /// The phase-1 arena (rotation admission).
     arena: Option<Arena>,
+}
+/// Phase 2 (VS-B-4): the state the stream carries across references, in traversal order.
+#[derive(Default)]
+struct Stream {
+    arena: Option<Arena>,
+    bitmap: Vec<u64>,
+    credit: Credit,
+    reread: u64,
 }
 impl Containment {
     fn new(limits: &ValidationLimits) -> Self {
@@ -641,11 +652,7 @@ impl Containment {
             units: 0,
             bytes: 0,
             decoded: 0,
-            tiles: Vec::new(),
-            references: Vec::new(),
-            content_volumes: Vec::new(),
-            uris: Vec::new(),
-            uri_index: HashMap::new(),
+            path: Vec::new(),
             levels: Vec::new(),
             arena: None,
         }
@@ -659,37 +666,48 @@ impl Containment {
         }
         Ok(arena.as_mut().unwrap())
     }
-    /// Register a tile; its `chain` gains its own shape bits and its parent's.
-    /// A rowless implicit tile (`volume: None`) carries `derivedImplicitVolume`
-    /// here, so any reference through it is excluded in O(1), whether or not
-    /// the precheck has already stopped (slice 3 §4 step 5).
+    fn on_path(&self, tile: usize) -> Result<&TileFact, Error> {
+        self.path.get(tile).ok_or_else(|| {
+            Error::InvalidState("internal containment invariant: tile is not on the path".into())
+        })
+    }
+    /// Register a tile on the path stack: the stack is cut to its parent and the tile pushed
+    /// above it, so its position is its parent's plus one (the root's is 0). Its `chain` gains
+    /// its own shape bits and its parent's. A rowless implicit tile (`volume: None`) carries
+    /// `derivedImplicitVolume` here, so any reference through it is excluded in O(1), whether
+    /// or not the precheck has already stopped (slice 3 §4 step 5).
     fn tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
+        let (position, inherited) = match fact.parent {
+            None => (0, 0),
+            Some(parent) => (parent + 1, self.on_path(parent)?.chain),
+        };
         fact.chain |= fact
             .volume
             .as_ref()
             .map_or(Reason::DerivedImplicitVolume.bit(), shape_bit)
             | fact.external.as_ref().map_or(0, shape_bit)
-            | fact.parent.map_or(0, |p| self.tiles[p].chain);
-        try_push(&mut self.tiles, fact)?;
-        Ok(self.tiles.len() - 1)
+            | inherited;
+        self.path.truncate(position);
+        try_push(&mut self.path, fact)?;
+        Ok(position)
     }
     /// A tile's volume on a level chain. A `None` (derived) volume never
     /// reaches a chain in domain: its chain bit excludes every reference
     /// through it before any level is built (slice 3 §4 step 5).
     fn chain_volume(&self, tile: usize) -> Result<VolumeFacts, Error> {
-        self.tiles[tile].volume.ok_or_else(|| {
+        self.on_path(tile)?.volume.ok_or_else(|| {
             Error::InvalidState(
                 "internal containment invariant: derived implicit volume on a level chain".into(),
             )
         })
     }
     /// The level chain of a reference: own tile and content volume at level 0,
-    /// then each ancestor through external-tileset roots (I1, I2). Implicit
-    /// levels have no transform; an implicit root's transform steps out of
+    /// then each ancestor through external-tileset roots (I1, I2), read from the path stack.
+    /// Implicit levels have no transform; an implicit root's transform steps out of
     /// its own level (slice 3 §4 table).
-    fn build_levels(&mut self, tile: usize, content: Option<usize>) -> Result<(), Error> {
+    fn build_levels(&mut self, tile: usize, content: Option<VolumeFacts>) -> Result<(), Error> {
         self.levels.clear();
-        let content = content.map(|c| (Role::Content, self.content_volumes[c]));
+        let content = content.map(|volume| (Role::Content, volume));
         let own = self.chain_volume(tile)?;
         try_push(
             &mut self.levels,
@@ -699,10 +717,10 @@ impl Containment {
             },
         )?;
         let mut current = tile;
-        while let Some(parent) = self.tiles[current].parent {
+        while let Some(parent) = self.on_path(current)?.parent {
             let level = self.levels.len() as u32;
             let volume = self.chain_volume(parent)?;
-            let child = &self.tiles[current];
+            let child = &self.path[current];
             let fact = LevelFacts {
                 to_parent: child.transform,
                 volumes: [
@@ -719,33 +737,25 @@ impl Containment {
     /// Collect chain exclusions in O(1) and run the precheck step for one
     /// reference, in traversal order. The precheck stops at its first violation;
     /// the level chain is built only when the precheck step runs (C2-WB §3.3).
+    /// Returns whether the precheck step passed: the reference joins the phase-2 stream
+    /// (VS-B-4). `self.levels` then holds its chain.
     fn reference(
         &mut self,
         tile: usize,
         content: Option<VolumeFacts>,
-        uri: usize,
-    ) -> Result<(), Error> {
-        let content = match content {
-            Some(volume) => {
-                try_push(&mut self.content_volumes, volume)?;
-                Some(self.content_volumes.len() - 1)
-            }
-            None => None,
-        };
-        try_push(&mut self.references, Reference { tile, uri, content })?;
-        let facts = self.uris[uri].1;
+        facts: &UriFacts,
+    ) -> Result<bool, Error> {
         // Chain bits are ORed even after the precheck has stopped: any exclusion
         // anywhere overrides the precheck reason.
-        self.exclusions |= facts.exclusions
-            | self.tiles[tile].chain
-            | content.map_or(0, |c| shape_bit(&self.content_volumes[c]));
+        self.exclusions |=
+            facts.exclusions | self.on_path(tile)?.chain | content.as_ref().map_or(0, shape_bit);
         // The precheck only runs while the archive is still entirely in domain.
         if self.exclusions != 0 || self.precheck.is_some() {
-            return Ok(());
+            return Ok(false);
         }
         self.build_levels(tile, content)?;
-        self.precheck = self.precheck_step(&facts);
-        Ok(())
+        self.precheck = self.precheck_step(facts);
+        Ok(self.precheck.is_none())
     }
     /// One reference's charge: `T·V + Nodes + Idx + E` plus the per-reference
     /// terms (C2-WB §3.1), against the work cap; `B` and `Dec` also against
@@ -955,13 +965,16 @@ struct ArchiveResources<'a> {
     archive: &'a mut Archive,
     /// Members reached by a reference, by catalog rank.
     used: Bits,
+    /// Members resolved as I1 subtrees, by catalog rank (OD-7, A-I1-3).
+    subtrees: Bits,
     limits: ValidationLimits,
     content_limits: PayloadLimits,
     bytes_read: u64,
     reference_visits: u64,
 }
 impl ArchiveResources<'_> {
-    fn read_json(&mut self, name: &str) -> Result<Value, Error> {
+    /// A JSON member and its live-document charge, `raw bytes + 128 · value nodes` (VS-B-7).
+    fn read_json(&mut self, name: &str) -> Result<(Value, u64), Error> {
         let bytes = read_member(
             self.archive,
             name,
@@ -969,7 +982,10 @@ impl ArchiveResources<'_> {
             &self.limits,
             self.limits.json_bytes,
         )?;
-        json::parse(&bytes, self.content_limits.json).map_err(format_error)
+        let (value, nodes) =
+            json::parse_counted(&bytes, self.content_limits.json).map_err(format_error)?;
+        let charge = (bytes.len() as u64).saturating_add((nodes as u64).saturating_mul(128));
+        Ok((value, charge))
     }
     fn reference(&mut self, name: String) -> Result<(), Error> {
         self.reference_visits = self
@@ -999,13 +1015,40 @@ impl ArchiveResources<'_> {
     fn reference_reserved(&mut self, name: &str) -> Result<(), Error> {
         self.mark(name)
     }
+    /// OD-7 (A-I1-3): a subtree member resolved twice in one validation is Unsupported,
+    /// before any charge. A missing member is left to the read that follows.
+    fn first_subtree(&mut self, name: &str) -> Result<(), Error> {
+        if let Some(member) = self.archive.find(name).map_err(archive_admission_error)? {
+            if self.subtrees.get(member.rank) {
+                return Err(Error::unsupported(format!(
+                    "repeated subtree member {name}"
+                )));
+            }
+            self.subtrees.set(member.rank);
+        }
+        Ok(())
+    }
 }
-/// A metadata schema document: inline schemas are keyed by their tileset
-/// member, `schemaUri` schemas by the schema member (DC-4).
-#[derive(PartialEq, Eq, Hash)]
-enum SchemaKey {
-    Inline(String),
-    Uri(String),
+/// VS-B-9: archive-named `notInspected` labels (declared glTF extensions): the 64
+/// byte-smallest distinct labels of at most 256 bytes; any other sets `truncated`.
+#[derive(Default)]
+struct Labels {
+    kept: BTreeSet<String>,
+    truncated: bool,
+}
+const LABELS_KEPT: usize = 64;
+const LABEL_BYTES: usize = 256;
+impl Labels {
+    fn add(&mut self, label: String) {
+        if label.len() > LABEL_BYTES {
+            self.truncated = true;
+            return;
+        }
+        if self.kept.insert(label) && self.kept.len() > LABELS_KEPT {
+            self.kept.pop_last();
+            self.truncated = true;
+        }
+    }
 }
 /// One visited implicit tile's facts, for the parity seam (RC-16).
 #[cfg(test)]
@@ -1031,26 +1074,51 @@ struct Check<'a> {
     /// Link tiles: explicit tiles whose contents are all external tilesets.
     links: usize,
     active: HashSet<String>,
-    schema: jsonschema::Validator,
+    schema: schema::TilesetSchema,
     task_visits: u64,
     elements: u64,
     /// Report rows of first-inspected payloads, in inspection order until the report.
     rows: rows::RowSink<'a>,
-    /// Counts of each first-inspected payload, by its C2 URI index (repeat references).
-    payload_counts: Vec<[u64; 3]>,
+    /// Per-URI facts by rank: the C2 facts and vertex count of every inspected payload.
+    facts: FactStore,
+    /// The catalog's scratch, for a spilled facts store.
+    scratch: std::sync::Arc<crate::spill::Scratch>,
     not_inspected: BTreeSet<String>,
-    /// One per validation: the I1 allowances and the OD-7 subtree set.
+    extension_labels: Labels,
+    /// Σ live-document charges of the documents being traversed (VS-B-7).
+    live_documents: u64,
+    /// The phase-2 stream log while the archive is in domain (VS-B-4).
+    stream_log: Option<stream_log::StreamLog>,
+    /// One per validation: the I1 allowances.
     implicit: ImplicitLimits,
     /// Implicit roots read in this validation (report labels, OD-4).
     implicit_roots: u64,
-    schemas: HashMap<SchemaKey, Rc<ImplicitSchema>>,
     #[cfg(test)]
     implicit_facts: Vec<ImplicitTileFact>,
+    /// Per-URI C2 facts in first-inspection order, for the work-facts seam.
+    #[cfg(test)]
+    uri_work: Vec<(String, UriFacts)>,
+    /// Whether the two per-tile and per-URI test seams above collect (off in the scale
+    /// driver, whose memory they would grow).
+    #[cfg(test)]
+    seams: bool,
+    /// The reference traversal of VS-B-4 (controls only): references whose precheck step
+    /// passed, with their level chains, streamed after traversal as the old phase 2 did.
+    #[cfg(test)]
+    #[allow(clippy::type_complexity)]
+    deferred: Option<Vec<(Vec<LevelFacts>, u64, u64, usize)>>,
     c2: Containment,
     /// EM: one summary per completed, implicit-free external-tileset document.
     memo: HashMap<String, Rc<Summary>>,
+    /// EM (VS-B-6): bytes held by summaries and by the events of recorders in progress.
+    memo_bytes: usize,
+    /// The largest `memo_bytes` of the validation (VS-B-6 controls).
+    #[cfg(test)]
+    memo_peak: usize,
     /// EM: the expansions being traversed in full, innermost last.
     recording: Vec<Recorder>,
+    /// The serial of the next recorder (owner tags of the path stack).
+    recorder_serial: u64,
     /// First-inspection payload charges (EM-2): never steady charges.
     once_references: u64,
     once_bytes: u64,
@@ -1060,6 +1128,15 @@ struct Check<'a> {
     /// Documents prepared (parsed and schema-checked), for the engagement control.
     #[cfg(test)]
     prepared: u64,
+}
+/// EM (VS-B-6): the memo budget for summaries and the events of recorders in progress.
+const MEMO_BYTES: usize = 64 << 20;
+fn memo_budget() -> usize {
+    #[cfg(test)]
+    if let Some(budget) = MEMO_BUDGET.with(std::cell::Cell::get) {
+        return budget;
+    }
+    MEMO_BYTES
 }
 /// EM: the memoized expansion of one external-tileset placement.
 struct Summary {
@@ -1079,24 +1156,39 @@ struct Summary {
     root_transform: [f64; 16],
     root_error: f64,
     document_error: f64,
+    /// The largest live-document charge of the expansion above the placement's own
+    /// (VS-B-7): a placement may use the summary only if it fits, so the limit's verdict
+    /// does not depend on the memo.
+    live_peak: u64,
     /// The document's own C2 registrations, in traversal order (EM-5.4).
     events: Vec<Event>,
 }
-/// One C2 registration of a document's expansion. Indices into `locals` are
-/// the document's own tiles in registration order; `first` indices name the
-/// first placement's facts in the C2 arena and reference list.
+/// One C2 registration of a document's expansion, with its facts by value (VS-B-6). Tile
+/// indices are the document's own tiles in registration order.
 enum Event {
     /// A tile; `parent: None` is the root, linked to the placement.
     Tile {
-        first: usize,
         parent: Option<usize>,
         depth: usize,
+        transform: Option<[f64; 16]>,
+        volume: Option<VolumeFacts>,
     },
     Reference {
         tile: usize,
-        first: usize,
+        rank: u64,
+        content: Option<VolumeFacts>,
     },
     Place(Box<Placement>),
+}
+impl Event {
+    /// Memo bytes of one event.
+    fn cost(&self) -> usize {
+        size_of::<Event>()
+            + match self {
+                Event::Place(_) => size_of::<Placement>(),
+                _ => 0,
+            }
+    }
 }
 struct Placement {
     summary: Rc<Summary>,
@@ -1106,6 +1198,7 @@ struct Placement {
 }
 /// EM: one placement traversed in full, measured for its summary.
 struct Recorder {
+    serial: u64,
     depth: usize,
     link: Link,
     visits: u64,
@@ -1120,19 +1213,21 @@ struct Recorder {
     node_depth: usize,
     document_error: f64,
     root: Option<(Volume, [f64; 16], f64)>,
-    /// Arena indices of the document's own tiles, ascending.
-    locals: Vec<usize>,
+    /// `live_documents` before this placement, and its largest value during the expansion,
+    /// replayed nested placements included (VS-B-7).
+    live_base: u64,
+    live_peak: u64,
+    /// The document's own tiles registered so far: local indices `0..locals`.
+    locals: usize,
     events: Vec<Event>,
-    /// An implicit root in the expansion (EM-3), or an unmapped registration.
+    /// Memo bytes of `events`.
+    held: usize,
+    /// An implicit root in the expansion (EM-3), an unmapped registration, or the memo
+    /// budget (VS-B-6): no summary, and no events are kept.
     opaque: bool,
 }
-impl Recorder {
-    fn local(&self, tile: Option<usize>) -> Option<usize> {
-        self.locals.binary_search(&tile?).ok()
-    }
-}
-/// The C2 level-chain link of a traversal task: the parent tile in the tile
-/// arena, and for an external-tileset root the referencing content volume.
+/// The C2 level-chain link of a traversal task: the parent tile's position on the path
+/// stack, and for an external-tileset root the referencing content volume.
 #[derive(Clone, Copy)]
 struct Link {
     parent: Option<usize>,
@@ -1149,19 +1244,24 @@ enum ValidationTask {
         refine: Option<&'static str>,
     },
     Node(NodeTask),
-    ExitTileset(String),
+    /// The end of a document traversed in full, releasing its live-document charge.
+    ExitTileset {
+        name: String,
+        charge: u64,
+    },
     /// A C2 payload reference that follows an external-tileset content of the
     /// same tile: registered after that tileset, in pre-order (v3.3 item 4).
     /// Not a hierarchy traversal step, so not charged to `hierarchy_visits`.
     Reference {
         tile: usize,
         content: Option<VolumeFacts>,
-        uri: usize,
+        rank: u64,
     },
 }
 struct NodeTask {
     node: Value,
-    base: String,
+    /// The document's member name, shared by its pending tiles (VS-B-7).
+    base: Rc<str>,
     parent: Option<Volume>,
     parent_error: f64,
     depth: usize,
@@ -1177,7 +1277,7 @@ struct NodeTask {
 struct ImplicitParent {
     #[cfg(test)]
     base: String,
-    /// R's index in the C2 tile arena: the parent of I_0's `TileFact`.
+    /// R's position on the path stack: the parent of I_0's `TileFact`.
     tile: usize,
     bounds: Volume,
     error: f64,
@@ -1186,33 +1286,40 @@ struct ImplicitParent {
     refine: Option<&'static str>,
 }
 impl Check<'_> {
-    /// The single payload classifier (H7 INV-4): every payload caller comes here.
-    fn payload(&mut self, name: &str) -> Result<PayloadReport, Error> {
-        if let Some(&uri) = self.c2.uri_index.get(name) {
-            let [accessors_checked, primitives_checked, vertices] = self.payload_counts[uri];
-            return Ok(PayloadReport {
-                uri: name.into(),
-                accessors_checked,
-                primitives_checked,
-                vertices,
-            });
-        }
+    /// The single payload classifier (H7 INV-4): every payload caller comes here. Returns
+    /// the member's rank and its facts record; a repeat reference reads the record, never
+    /// re-inspects and never re-charges (VS-B-5).
+    fn payload(&mut self, name: &str) -> Result<(u64, Stored), Error> {
         // L0 is the caller's: every caller has already established that the
         // member exists (`Resources::reference` or the catalog lookup for the
         // tile byte count), so a missing member stays InvalidInput.
+        let rank = self
+            .resources
+            .archive
+            .member(name)
+            .map_err(archive_admission_error)?
+            .rank;
+        if self.facts.inspected(rank) {
+            return Ok((rank, self.facts.get(rank)?));
+        }
         // L1: a legacy suffix is Unsupported before any payload byte is read.
         if let Some(format) = payload::legacy_suffix(name) {
             return Err(legacy(format, name, false));
         }
         let references_before = self.resources.reference_visits;
         let bytes_before = self.resources.bytes_read;
-        let report = self.inspect_payload(name, bytes_before)?;
+        let stored = self.inspect_payload(name, rank, bytes_before)?;
         // EM-2: a payload's first inspection is charged once per validation.
         self.once_references += self.resources.reference_visits - references_before;
         self.once_bytes += self.resources.bytes_read - bytes_before;
-        Ok(report)
+        Ok((rank, stored))
     }
-    fn inspect_payload(&mut self, name: &str, bytes_before: u64) -> Result<PayloadReport, Error> {
+    fn inspect_payload(
+        &mut self,
+        name: &str,
+        rank: u64,
+        bytes_before: u64,
+    ) -> Result<Stored, Error> {
         let bytes = read_member(
             self.resources.archive,
             name,
@@ -1258,6 +1365,7 @@ impl Check<'_> {
             &mut consumer,
         )
         .map_err(scene_error)?;
+        drop(bytes);
         let mut exclusions = content_reasons(&facts.exclusions);
         if consumer.quaternion_window {
             exclusions |= Reason::QuaternionWindow.bit();
@@ -1283,11 +1391,16 @@ impl Check<'_> {
             max_depth: consumer.max_depth,
             exclusions,
         };
-        self.c2.uri_index.try_reserve(1).map_err(|_| refused())?;
-        try_push(&mut self.c2.uris, (name.to_owned(), uri_facts))?;
-        self.c2
-            .uri_index
-            .insert(name.to_owned(), self.c2.uris.len() - 1);
+        let stored = Stored {
+            facts: uri_facts,
+            vertices: facts.vertices,
+            replay: facts.replay,
+        };
+        self.facts.insert(rank, &stored, &self.scratch)?;
+        #[cfg(test)]
+        if self.seams {
+            try_push(&mut self.uri_work, (name.to_owned(), uri_facts))?;
+        }
         self.elements = self
             .elements
             .checked_add(facts.elements_checked)
@@ -1297,91 +1410,112 @@ impl Check<'_> {
             self.schema_uri(name, value)?;
         }
         self.not_inspected.extend(facts.not_inspected);
+        for label in facts.extensions {
+            self.extension_labels.add(label);
+        }
         let report = PayloadReport {
             uri: name.into(),
             accessors_checked: facts.accessors_checked,
             primitives_checked: facts.primitives_checked,
             vertices: facts.vertices,
         };
-        self.record_payload(&report)?;
-        Ok(report)
-    }
-    /// The report row and repeat counts of a first-inspected payload, whose C2 URI facts
-    /// were just registered.
-    fn record_payload(&mut self, report: &PayloadReport) -> Result<(), Error> {
         let member = self
             .resources
             .archive
-            .member(&report.uri)
+            .member(name)
             .map_err(archive_admission_error)?;
-        self.rows.push(&report.uri, member.name_ref, report)?;
-        self.payload_counts.try_reserve(1).map_err(|_| refused())?;
-        self.payload_counts.push([
-            report.accessors_checked,
-            report.primitives_checked,
-            report.vertices,
-        ]);
-        // Repeat references find their counts by C2 URI index: the two tables must align.
-        if self.payload_counts.len() != self.c2.uris.len() {
-            return Err(Error::InvalidState(
-                "payload counts are not aligned with the C2 URI facts".into(),
-            ));
-        }
-        Ok(())
+        self.rows.push(&report.uri, member.name_ref, &report)?;
+        Ok(stored)
     }
-    /// Phase 2 (outcome 4): serial per-reference streaming, in traversal order.
-    /// Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
-    fn stream(&mut self) -> Result<(), Error> {
-        let mut arena = match self.c2.arena.take() {
-            Some(arena) => arena,
-            None => Arena::reserve(self.c2.caps).map_err(|_| refused())?,
-        };
-        let mut bitmap = Vec::new();
-        let mut credit = Credit::default();
-        let mut reread = 0u64;
-        let cap = self.resources.limits.containment_bytes_read;
-        let limits = self.resources.content_limits;
-        let references = std::mem::take(&mut self.c2.references);
-        for reference in &references {
-            self.c2.build_levels(reference.tile, reference.content)?;
-            credit.accrue(self.c2.uris[reference.uri].1.t);
-            let name = self.c2.uris[reference.uri].0.as_str();
-            let archive = &mut *self.resources.archive;
-            let bytes = read_rerun(archive, name, &mut reread, cap, limits.member_bytes as u64)?;
-            let mut consumer = StreamConsumer {
-                arena: &mut arena,
-                bitmap: &mut bitmap,
-                levels: &self.c2.levels,
-                member: name,
-                depth: self.c2.tiles[reference.tile].depth,
-                credit: &mut credit,
-            };
-            payload::inspect_scene(
-                payload_kind(name)?,
-                &bytes,
-                limits,
-                limits.accessor_components,
-                |value, maximum| {
-                    read_rerun(
-                        archive,
-                        &uri(name, value)?,
-                        &mut reread,
-                        cap,
-                        maximum as u64,
-                    )
-                },
-                &mut consumer,
-            )
-            .map_err(scene_error)?;
-        }
-        Ok(())
-    }
-    /// The `schemaUri` document of a tileset, read once per preparation.
-    fn metadata_schema(
+    /// One C2 reference: registration and precheck step; a reference whose step passed is
+    /// logged for the phase-2 stream (VS-B-4).
+    fn c2_ref(
         &mut self,
-        base: &str,
-        doc: &Value,
-    ) -> Result<Option<(String, Value)>, Error> {
+        tile: usize,
+        content: Option<VolumeFacts>,
+        rank: u64,
+        stored: &Stored,
+    ) -> Result<(), Error> {
+        if !self.c2.reference(tile, content, &stored.facts)? {
+            return self.log(None);
+        }
+        #[cfg(test)]
+        if let Some(deferred) = &mut self.deferred {
+            // The reference traversal: the old phase 2 over in-memory chains, with a full
+            // C1 re-inspection per reference.
+            let levels = self.c2.levels.clone();
+            let depth = self.c2.on_path(tile)?.depth;
+            return try_push(deferred, (levels, rank, stored.facts.t, depth));
+        }
+        self.log(Some(stream_log::Entry::Reference {
+            tile,
+            content,
+            rank,
+        }))
+    }
+    /// A tile on the path stack, logged for the phase-2 stream while in domain (VS-B-4).
+    fn path_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        let index = self.c2.tile(fact)?;
+        self.log(Some(stream_log::Entry::Tile(fact)))?;
+        Ok(index)
+    }
+    /// Appends to the phase-2 stream log while the archive is in domain; the log is dropped
+    /// as soon as it is not, since no stream will then run.
+    fn log(&mut self, entry: Option<stream_log::Entry>) -> Result<(), Error> {
+        if self.c2.exclusions != 0 || self.c2.precheck.is_some() {
+            self.stream_log = None;
+            return Ok(());
+        }
+        match (entry, &mut self.stream_log) {
+            (Some(entry), Some(log)) => log.push(&entry, &self.scratch),
+            _ => Ok(()),
+        }
+    }
+    /// Phase 2 (VS-B-4), after whole-archive C1, exclusion and precheck admission: the
+    /// logged tiles rebuild the path stack in traversal order, and each logged reference is
+    /// streamed along its level chain as a replay of its payload's own first admission
+    /// (H23, VS-B-11). The first failure is the result.
+    fn stream(&mut self) -> Result<(), Error> {
+        let Some(log) = self.stream_log.take() else {
+            return Err(Error::InvalidState(
+                "phase-2 stream log missing for an archive in domain".into(),
+            ));
+        };
+        let log = log.finish(&self.scratch)?;
+        let mut stream = Stream {
+            arena: match self.c2.arena.take() {
+                Some(arena) => Some(arena),
+                None => Some(Arena::reserve(self.c2.caps).map_err(|_| refused())?),
+            },
+            ..Stream::default()
+        };
+        self.c2.path = Vec::new();
+        log.for_each(|entry| match entry {
+            stream_log::Entry::Tile(fact) => self.c2.tile(fact).map(|_| ()),
+            stream_log::Entry::Reference {
+                tile,
+                content,
+                rank,
+            } => {
+                self.c2.build_levels(tile, content)?;
+                let stored = self.facts.get(rank)?;
+                let depth = self.c2.on_path(tile)?.depth;
+                stream_member(
+                    &mut self.resources,
+                    &mut stream,
+                    self.c2.caps,
+                    &self.c2.levels,
+                    depth,
+                    rank,
+                    stored.facts.t,
+                    Some(&stored.replay),
+                )
+            }
+        })
+    }
+    /// The `schemaUri` document of a tileset, read once per preparation, with its
+    /// live-document charge.
+    fn metadata_schema(&mut self, base: &str, doc: &Value) -> Result<Option<(Value, u64)>, Error> {
         let Some(value) = doc.get("schemaUri") else {
             return Ok(None);
         };
@@ -1390,11 +1524,23 @@ impl Check<'_> {
             .ok_or_else(|| invalid("schemaUri must be a string"))?;
         self.schema_uri(base, value).map(Some)
     }
-    fn schema_uri(&mut self, base: &str, value: &str) -> Result<(String, Value), Error> {
+    fn schema_uri(&mut self, base: &str, value: &str) -> Result<(Value, u64), Error> {
         let name = uri(base, value)?;
         self.resources.reference(name.clone())?;
-        let schema = self.resources.read_json(&name)?;
-        Ok((name, schema))
+        self.resources.read_json(&name)
+    }
+    /// VS-B-7: charge a document held while its tiles are traversed.
+    fn hold_document(&mut self, charge: u64) -> Result<(), Error> {
+        let limit = self.resources.limits.live_document_bytes;
+        self.live_documents = self
+            .live_documents
+            .checked_add(charge)
+            .filter(|&n| n <= limit)
+            .ok_or_else(|| Error::limit(format!("live tileset documents exceed {limit} bytes")))?;
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.live_peak = recorder.live_peak.max(self.live_documents);
+        }
+        Ok(())
     }
     fn tileset(
         &mut self,
@@ -1416,8 +1562,14 @@ impl Check<'_> {
             refine: None,
         }];
         while let Some(task) = pending.pop() {
-            if let ValidationTask::Reference { tile, content, uri } = task {
-                self.c2_reference(tile, content, uri)?;
+            if let ValidationTask::Reference {
+                tile,
+                content,
+                rank,
+            } = task
+            {
+                let stored = self.facts.get(rank)?;
+                self.c2_reference(tile, content, rank, &stored)?;
                 continue;
             }
             if let ValidationTask::Tileset {
@@ -1461,14 +1613,17 @@ impl Check<'_> {
                         return Err(invalid("cyclic external tileset reference"));
                     }
                     self.begin(depth, link)?;
-                    let (mut doc, error, schema) = self.prepare_tileset(&name)?;
+                    let (mut doc, error, schema, charge) = self.prepare_tileset(&name)?;
                     if let Some(recorder) = self.recording.last_mut() {
                         recorder.document_error = error;
                     }
-                    pending.push(ValidationTask::ExitTileset(name.clone()));
+                    let root = doc["root"].take();
+                    drop(doc);
+                    let base: Rc<str> = Rc::from(name.as_str());
+                    pending.push(ValidationTask::ExitTileset { name, charge });
                     pending.push(ValidationTask::Node(NodeTask {
-                        node: doc["root"].take(),
-                        base: name,
+                        node: root,
+                        base,
                         parent,
                         parent_error: parent_error.map_or(error, |parent| parent.min(error)),
                         depth,
@@ -1481,8 +1636,9 @@ impl Check<'_> {
                 ValidationTask::Node(task) => {
                     self.node(task, &mut pending)?;
                 }
-                ValidationTask::ExitTileset(name) => {
+                ValidationTask::ExitTileset { name, charge } => {
                     self.active.remove(&name);
+                    self.live_documents -= charge;
                     self.finish(name)?;
                 }
                 ValidationTask::Reference { .. } => unreachable!("handled before charging"),
@@ -1521,6 +1677,11 @@ impl Check<'_> {
                 summary.bytes,
                 limits.total_bytes_read,
             )
+            && within(
+                self.live_documents,
+                summary.live_peak,
+                limits.live_document_bytes,
+            )
             && deep(summary.tileset_depth, 128)
             && deep(summary.node_depth, limits.hierarchy_depth))
         .then(|| summary.clone())
@@ -1556,32 +1717,34 @@ impl Check<'_> {
         self.tiles += summary.tiles;
         self.contents += summary.contents;
         self.links += summary.links;
-        if let Some(recorder) = self.recording.last_mut() {
+        let live = self.live_documents + summary.live_peak;
+        let recording = self.recording.last_mut().map(|recorder| {
+            recorder.live_peak = recorder.live_peak.max(live);
             recorder.tileset_depth = recorder.tileset_depth.max(depth + summary.tileset_depth);
             recorder.node_depth = recorder.node_depth.max(depth + summary.node_depth);
-            match recorder.local(link.parent) {
-                Some(parent) => {
-                    let placement = Placement {
-                        summary: summary.clone(),
-                        parent,
-                        external: link.external,
-                        depth: depth - recorder.depth,
-                    };
-                    recorder.events.try_reserve(1).map_err(|_| refused())?;
-                    recorder.events.push(Event::Place(Box::new(placement)));
-                }
-                None => recorder.opaque = true,
+            (recorder.opaque, depth - recorder.depth)
+        });
+        if let Some((false, relative)) = recording {
+            match self.local(link.parent) {
+                Some(parent) => self.record(Event::Place(Box::new(Placement {
+                    summary: summary.clone(),
+                    parent,
+                    external: link.external,
+                    depth: relative,
+                })))?,
+                None => self.make_opaque(),
             }
         }
         self.replay(summary, link, depth)
     }
     /// EM-5.4: register a summary's C2 facts again under this placement's link
-    /// and depth, in the reference traversal's order. Not recorded: an
-    /// enclosing recorder holds the placement itself.
+    /// and depth, in the reference traversal's order, streaming each reference inline
+    /// while in domain. Not recorded: an enclosing recorder holds the placement itself.
     fn replay(&mut self, summary: &Rc<Summary>, link: Link, depth: usize) -> Result<(), Error> {
         struct Frame {
             summary: Rc<Summary>,
             next: usize,
+            /// Path-stack positions of the document's own tiles, by local index.
             locals: Vec<usize>,
             link: Link,
             depth: usize,
@@ -1601,30 +1764,34 @@ impl Check<'_> {
             frame.next += 1;
             let nested = match event {
                 Event::Tile {
-                    first,
                     parent,
                     depth,
+                    transform,
+                    volume,
                 } => {
                     let (parent, external) = match parent {
                         None => (frame.link.parent, frame.link.external),
                         Some(local) => (Some(frame.locals[*local]), None),
                     };
-                    let fact = &self.c2.tiles[*first];
-                    let index = self.c2.tile(TileFact {
-                        transform: fact.transform,
-                        volume: fact.volume,
+                    let index = self.path_tile(TileFact {
+                        transform: *transform,
+                        volume: *volume,
                         external,
                         parent,
                         depth: frame.depth + depth,
                         chain: 0,
+                        owner: None,
                     })?;
                     try_push(&mut frame.locals, index)?;
                     None
                 }
-                Event::Reference { tile, first } => {
-                    let Reference { uri, content, .. } = self.c2.references[*first];
-                    let content = content.map(|c| self.c2.content_volumes[c]);
-                    self.c2.reference(frame.locals[*tile], content, uri)?;
+                Event::Reference {
+                    tile,
+                    rank,
+                    content,
+                } => {
+                    let stored = self.facts.get(*rank)?;
+                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;
                     None
                 }
                 Event::Place(placement) => Some(Frame {
@@ -1644,10 +1811,54 @@ impl Check<'_> {
         }
         Ok(())
     }
+    /// EM: the local index of the innermost recorder's own tile at path position `tile`.
+    fn local(&self, tile: Option<usize>) -> Option<usize> {
+        let recorder = self.recording.last()?;
+        let (serial, local) = self.c2.path.get(tile?)?.owner?;
+        (serial == recorder.serial).then_some(local)
+    }
+    /// EM (VS-B-6): append an event to the innermost recorder within the memo budget. A
+    /// recorder whose event would exceed it becomes opaque.
+    fn record(&mut self, event: Event) -> Result<(), Error> {
+        let cost = event.cost();
+        if self.recording.last().is_none_or(|recorder| recorder.opaque) {
+            return Ok(());
+        }
+        if self
+            .memo_bytes
+            .checked_add(cost)
+            .is_none_or(|n| n > memo_budget())
+        {
+            self.make_opaque();
+            return Ok(());
+        }
+        let Some(recorder) = self.recording.last_mut() else {
+            return Ok(());
+        };
+        recorder.events.try_reserve(1).map_err(|_| refused())?;
+        recorder.events.push(event);
+        recorder.held += cost;
+        self.memo_bytes += cost;
+        #[cfg(test)]
+        {
+            self.memo_peak = self.memo_peak.max(self.memo_bytes);
+        }
+        Ok(())
+    }
+    /// EM: the innermost recorder's document gets no summary; its events are freed.
+    fn make_opaque(&mut self) {
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.opaque = true;
+            recorder.events = Vec::new();
+            self.memo_bytes -= recorder.held;
+            recorder.held = 0;
+        }
+    }
     /// EM: start measuring a placement traversed in full. Its `Tileset` visit
     /// is already charged.
     fn begin(&mut self, depth: usize, link: Link) -> Result<(), Error> {
         let recorder = Recorder {
+            serial: self.recorder_serial,
             depth,
             link,
             visits: self.task_visits - 1,
@@ -1662,24 +1873,38 @@ impl Check<'_> {
             node_depth: depth,
             document_error: 0.,
             root: None,
-            locals: Vec::new(),
+            live_base: self.live_documents,
+            live_peak: self.live_documents,
+            locals: 0,
             events: Vec::new(),
+            held: 0,
             opaque: false,
         };
+        self.recorder_serial += 1;
         try_push(&mut self.recording, recorder)
     }
     /// EM: a placement traversed in full has completed: summarize its document
-    /// unless its expansion is opaque (EM-3), and enter it in the enclosing one.
+    /// unless its expansion is opaque (EM-3, VS-B-6), and enter it in the enclosing one.
     fn finish(&mut self, name: String) -> Result<(), Error> {
         let Some(recorder) = self.recording.pop() else {
             return Err(Error::InvalidState(
                 "external tileset exit without a recorder".into(),
             ));
         };
+        let header = size_of::<Summary>() + name.len();
+        let fits = self
+            .memo_bytes
+            .checked_add(header)
+            .is_some_and(|n| n <= memo_budget());
         let summary = match recorder.root {
-            Some((root_bounds, root_transform, root_error)) if !recorder.opaque => {
+            Some((root_bounds, root_transform, root_error)) if !recorder.opaque && fits => {
                 let once_references = self.once_references - recorder.once_references;
                 let once_bytes = self.once_bytes - recorder.once_bytes;
+                self.memo_bytes += header;
+                #[cfg(test)]
+                {
+                    self.memo_peak = self.memo_peak.max(self.memo_bytes);
+                }
                 Some(Rc::new(Summary {
                     visits: self.task_visits - recorder.visits,
                     references: self.resources.reference_visits
@@ -1695,63 +1920,74 @@ impl Check<'_> {
                     root_transform,
                     root_error,
                     document_error: recorder.document_error,
+                    live_peak: recorder.live_peak - recorder.live_base,
                     events: recorder.events,
                 }))
             }
-            _ => None,
+            _ => {
+                self.memo_bytes -= recorder.held;
+                None
+            }
         };
         if let Some(summary) = &summary {
             self.memo.try_reserve(1).map_err(|_| refused())?;
             self.memo.insert(name, summary.clone());
         }
-        if let Some(outer) = self.recording.last_mut() {
+        let outer = self.recording.last_mut().map(|outer| {
+            outer.live_peak = outer.live_peak.max(recorder.live_peak);
             outer.tileset_depth = outer.tileset_depth.max(recorder.tileset_depth);
             outer.node_depth = outer.node_depth.max(recorder.node_depth);
-            match (summary, outer.local(recorder.link.parent)) {
+            (outer.opaque, recorder.depth - outer.depth)
+        });
+        if let Some((false, relative)) = outer {
+            match (summary, self.local(recorder.link.parent)) {
                 (Some(summary), Some(parent)) => {
-                    let placement = Placement {
+                    self.record(Event::Place(Box::new(Placement {
                         summary,
                         parent,
                         external: recorder.link.external,
-                        depth: recorder.depth - outer.depth,
-                    };
-                    outer.events.try_reserve(1).map_err(|_| refused())?;
-                    outer.events.push(Event::Place(Box::new(placement)));
+                        depth: relative,
+                    })))?
                 }
-                _ => outer.opaque = true,
+                _ => self.make_opaque(),
             }
         }
         Ok(())
     }
     /// A C2 tile registration of the full traversal, recorded for the summary
     /// of the innermost document being traversed.
-    fn c2_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+    fn c2_tile(&mut self, mut fact: TileFact) -> Result<usize, Error> {
         let (parent, external, depth) = (fact.parent, fact.external, fact.depth);
-        let index = self.c2.tile(fact)?;
-        if let Some(recorder) = self.recording.last_mut() {
-            // The first registration is the root, linked to the placement;
-            // every other tile's parent is one of the document's own tiles.
-            let parent = if recorder.locals.is_empty() {
+        let (transform, volume) = (fact.transform, fact.volume);
+        // The first registration is the root, linked to the placement; every other
+        // tile's parent is one of the document's own tiles.
+        let mapped = match self.recording.last() {
+            Some(recorder) if !recorder.opaque => Some(if recorder.locals == 0 {
                 (parent == recorder.link.parent && external == recorder.link.external)
                     .then_some(None)
             } else {
-                recorder
-                    .local(parent)
-                    .filter(|_| external.is_none())
-                    .map(Some)
-            };
-            match parent {
-                Some(parent) => {
-                    recorder.events.try_reserve(1).map_err(|_| refused())?;
-                    recorder.events.push(Event::Tile {
-                        first: index,
-                        parent,
-                        depth: depth - recorder.depth,
-                    });
-                    try_push(&mut recorder.locals, index)?;
-                }
-                None => recorder.opaque = true,
+                self.local(parent).filter(|_| external.is_none()).map(Some)
+            }),
+            _ => None,
+        };
+        if let (Some(Some(_)), Some(recorder)) = (mapped, self.recording.last()) {
+            fact.owner = Some((recorder.serial, recorder.locals));
+        }
+        let index = self.path_tile(fact)?;
+        match mapped {
+            None => {}
+            Some(Some(parent)) => {
+                let recorder = self.recording.last_mut().unwrap();
+                recorder.locals += 1;
+                let depth = depth - recorder.depth;
+                self.record(Event::Tile {
+                    parent,
+                    depth,
+                    transform,
+                    volume,
+                })?;
             }
+            Some(None) => self.make_opaque(),
         }
         Ok(index)
     }
@@ -1760,34 +1996,37 @@ impl Check<'_> {
         &mut self,
         tile: usize,
         content: Option<VolumeFacts>,
-        uri: usize,
+        rank: u64,
+        stored: &Stored,
     ) -> Result<(), Error> {
-        self.c2.reference(tile, content, uri)?;
-        if let Some(recorder) = self.recording.last_mut() {
-            match recorder.local(Some(tile)) {
-                Some(tile) => {
-                    recorder.events.try_reserve(1).map_err(|_| refused())?;
-                    recorder.events.push(Event::Reference {
-                        tile,
-                        first: self.c2.references.len() - 1,
-                    });
-                }
-                None => recorder.opaque = true,
+        self.c2_ref(tile, content, rank, stored)?;
+        if self.recording.last().is_some_and(|r| !r.opaque) {
+            match self.local(Some(tile)) {
+                Some(tile) => self.record(Event::Reference {
+                    tile,
+                    rank,
+                    content,
+                })?,
+                None => self.make_opaque(),
             }
         }
         Ok(())
     }
 
+    /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
+    /// metadata schema of an implicit root, and its live-document charge.
+    #[allow(clippy::type_complexity)]
     fn prepare_tileset(
         &mut self,
         name: &str,
-    ) -> Result<(Value, f64, Option<Rc<ImplicitSchema>>), Error> {
+    ) -> Result<(Value, f64, Option<Rc<ImplicitSchema>>, u64), Error> {
         #[cfg(test)]
         {
             self.prepared += 1;
         }
         self.resources.reference(name.into())?;
-        let mut doc = self.resources.read_json(name)?;
+        let (mut doc, mut charge) = self.resources.read_json(name)?;
+        self.hold_document(charge)?;
         self.schema
             .validate(&doc)
             .map_err(|error| invalid(format!("tileset schema: {error}")))?;
@@ -1797,36 +2036,25 @@ impl Check<'_> {
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         let schema_uri = self.metadata_schema(name, &doc)?;
         self.tileset_exclusions(&doc);
-        // One ImplicitSchema per schema document, kept only for documents that
-        // hold an implicit root (§5, DC-4). `schema` and `schemaUri` are
-        // mutually exclusive in the tileset schema.
+        // One ImplicitSchema per preparation, kept only for documents that hold an
+        // implicit root and only while their tiles are pending (§5, DC-4, VS-B-8).
+        // `schema` and `schemaUri` are mutually exclusive in the tileset schema.
         let schema = if holds_implicit_root(&doc["root"]) {
-            let (key, value) = match schema_uri {
-                Some((member, value)) => (SchemaKey::Uri(member), Some(value)),
-                None => (
-                    SchemaKey::Inline(name.to_owned()),
-                    doc.get_mut("schema").map(Value::take),
-                ),
-            };
-            match value {
-                Some(value) => {
-                    self.schemas.try_reserve(1).map_err(|_| refused())?;
-                    Some(
-                        self.schemas
-                            .entry(key)
-                            .or_insert_with(|| Rc::new(ImplicitSchema::new(value)))
-                            .clone(),
-                    )
+            let value = match schema_uri {
+                Some((value, held)) => {
+                    // A kept `schemaUri` document is live with its tileset.
+                    self.hold_document(held)?;
+                    charge += held;
+                    Some(value)
                 }
-                None => None,
-            }
+                None => doc.get_mut("schema").map(Value::take),
+            };
+            value.map(|value| Rc::new(ImplicitSchema::new(value)))
         } else {
             None
         };
         if doc["root"].get("implicitTiling").is_some() {
-            if let Some(recorder) = self.recording.last_mut() {
-                recorder.opaque = true;
-            }
+            self.make_opaque();
             // Raw immutable vector payloads remain reachable through the native
             // reuse state; display content uses implicit URI templates.
             if let Some(sources) = doc["extras"]["rustyTilesSourceContents"].as_array() {
@@ -1842,7 +2070,7 @@ impl Check<'_> {
                 }
             }
         }
-        Ok((doc, error, schema))
+        Ok((doc, error, schema, charge))
     }
 
     /// Document-level C2 exclusion facts.
@@ -1934,9 +2162,7 @@ impl Check<'_> {
         };
         if implicit.is_some() {
             // EM-3: an implicit root is walked once per validation (OD-7).
-            if let Some(recorder) = self.recording.last_mut() {
-                recorder.opaque = true;
-            }
+            self.make_opaque();
         }
         if let Some(refine) = node.get("refine") {
             if !matches!(refine.as_str(), Some("ADD" | "REPLACE")) {
@@ -1963,6 +2189,7 @@ impl Check<'_> {
             parent: link.parent,
             depth,
             chain: 0,
+            owner: None,
         })?;
         if let Some(parent) = &parent {
             if !contains(parent, &bounds, &m)? {
@@ -1979,7 +2206,7 @@ impl Check<'_> {
         }
         if let Some(recorder) = self.recording.last_mut() {
             // The document's root is its first registered tile (EM-5.2, EM-5.3).
-            if recorder.root.is_none() && recorder.locals.first() == Some(&tile) {
+            if recorder.root.is_none() && self.c2.path[tile].owner == Some((recorder.serial, 0)) {
                 recorder.root = Some((bounds.clone(), std::array::from_fn(|i| m[i]), error));
             }
         }
@@ -1999,7 +2226,7 @@ impl Check<'_> {
                 &root,
                 ImplicitParent {
                     #[cfg(test)]
-                    base,
+                    base: base.to_string(),
                     tile,
                     bounds,
                     error,
@@ -2076,18 +2303,21 @@ impl Check<'_> {
                 )
                 .ok_or_else(|| invalid("tile byte count overflow"))?;
             payload_seen = true;
-            let inspected = self.payload(&name)?;
-            let uri = self.c2.uri_index[&name];
+            let (rank, stored) = self.payload(&name)?;
             let content = content_volume.as_ref().map(volume_facts);
             // C1 inspects inline; the C2 reference keeps contents in array order
             // with each external tileset expanded in place.
             if external_seen {
-                descendants.push(ValidationTask::Reference { tile, content, uri });
+                descendants.push(ValidationTask::Reference {
+                    tile,
+                    content,
+                    rank,
+                });
             } else {
-                self.c2_reference(tile, content, uri)?;
+                self.c2_reference(tile, content, rank, &stored)?;
             }
             vertices = vertices
-                .checked_add(inspected.vertices)
+                .checked_add(stored.vertices)
                 .ok_or_else(|| invalid("tile vertex count overflow"))?;
         }
         // Amendment D-1: a link tile (external tileset content only) is
@@ -2139,7 +2369,7 @@ impl Check<'_> {
         self.implicit_roots += 1;
         let mut walk = root.walk();
         // Level-indexed path stack (RC-21): entry `l` is the tile at level `l`,
-        // with its C1 volume, its error and its C2 tile index.
+        // with its C1 volume, its error and its C2 path position.
         let mut path: Vec<(Volume, f64, usize)> = Vec::new();
         loop {
             // Counter sync around every `Walk::next` (owner charging protocol).
@@ -2154,7 +2384,10 @@ impl Check<'_> {
                 &mut self.implicit,
                 &mut |name: &str, base: Base<'_>, maximum: u64| -> Result<Vec<u8>, Error> {
                     let member = match base {
-                        Base::Resolved => name.to_owned(),
+                        Base::Resolved => {
+                            resources.first_subtree(name)?;
+                            name.to_owned()
+                        }
                         Base::Relative(from) => uri(from, name)?,
                     };
                     resources.reference(member.clone())?;
@@ -2210,7 +2443,7 @@ impl Check<'_> {
             }
             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
             // a rowless I_0, and no volume for a derived cell (I5).
-            let index = self.c2.tile(TileFact {
+            let index = self.path_tile(TileFact {
                 transform: None,
                 volume: match &tile.volume {
                     EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
@@ -2221,6 +2454,7 @@ impl Check<'_> {
                 parent: Some(parent_tile),
                 depth,
                 chain: 0,
+                owner: None,
             })?;
             path.truncate(level);
             try_push(&mut path, (volume, error, index))?;
@@ -2243,36 +2477,112 @@ impl Check<'_> {
                     )
                     .ok_or_else(|| invalid("tile byte count overflow"))?;
                 // JSON detection at admission leaves only payload members here.
-                let inspected = self.payload(name)?;
+                let (rank, stored) = self.payload(name)?;
                 // C2 registration only: C1 already counted this reference at
                 // subtree admission (`reference_reserved` above).
-                let uri = self.c2.uri_index[name.as_str()];
-                self.c2.reference(index, None, uri)?;
+                self.c2_ref(index, None, rank, &stored)?;
                 vertices = vertices
-                    .checked_add(inspected.vertices)
+                    .checked_add(stored.vertices)
                     .ok_or_else(|| invalid("tile vertex count overflow"))?;
             }
             if bytes > 0 {
                 self.tile_budgets(bytes, vertices)?;
             }
             #[cfg(test)]
-            try_push(
-                &mut self.implicit_facts,
-                ImplicitTileFact {
-                    doc: r.base.clone(),
-                    level: tile.level,
-                    coords: tile.coords,
-                    depth,
-                    parent_level: tile.level.checked_sub(1),
-                    volume: tile.volume,
-                    error: tile.error,
-                    refine: r.refine,
-                    contents: tile.contents,
-                },
-            )?;
+            if self.seams {
+                try_push(
+                    &mut self.implicit_facts,
+                    ImplicitTileFact {
+                        doc: r.base.clone(),
+                        level: tile.level,
+                        coords: tile.coords,
+                        depth,
+                        parent_level: tile.level.checked_sub(1),
+                        volume: tile.volume,
+                        error: tile.error,
+                        refine: r.refine,
+                        contents: tile.contents,
+                    },
+                )?;
+            }
         }
         walk.finish().map_err(|e| implicit_error(e.widen()))
     }
+}
+/// One reference's phase-2 stream: a serial pass over a re-read of its member along its level
+/// chain, continuing `stream`'s arena, bitmap, corner credit and re-read count in traversal
+/// order. Re-reads are charged only to `containmentBytesRead`; C1 counters are untouched.
+///
+/// With `replay`, the member and its external resources are replayed against the receipt of
+/// their own successful first admission (H23): byte identity is checked before any consumer
+/// event, and the accessor-value and KTX2-container passes are not repeated. Without it the
+/// payload is inspected in full again (the reference traversal of the controls).
+#[allow(clippy::too_many_arguments)]
+fn stream_member(
+    resources: &mut ArchiveResources<'_>,
+    stream: &mut Stream,
+    caps: SpanCaps,
+    levels: &[LevelFacts],
+    depth: usize,
+    rank: u64,
+    t: u64,
+    replay: Option<&payload::ReplayAdmission>,
+) -> Result<(), Error> {
+    if stream.arena.is_none() {
+        stream.arena = Some(Arena::reserve(caps).map_err(|_| refused())?);
+    }
+    stream.credit.accrue(t);
+    let name = resources
+        .archive
+        .name(rank)
+        .map_err(archive_admission_error)?;
+    let cap = resources.limits.containment_bytes_read;
+    let limits = resources.content_limits;
+    let archive = &mut *resources.archive;
+    let bytes = read_rerun(
+        archive,
+        &name,
+        &mut stream.reread,
+        cap,
+        limits.member_bytes as u64,
+    )?;
+    let Some(arena) = stream.arena.as_mut() else {
+        return Err(containment_fault());
+    };
+    let mut consumer = StreamConsumer {
+        arena,
+        bitmap: &mut stream.bitmap,
+        levels,
+        member: &name,
+        depth,
+        credit: &mut stream.credit,
+    };
+    let reread = &mut stream.reread;
+    let kind = payload_kind(&name)?;
+    let resolve = |value: &str, maximum: usize| {
+        read_rerun(archive, &uri(&name, value)?, reread, cap, maximum as u64)
+    };
+    match replay {
+        Some(admission) => payload::replay_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+            admission,
+        ),
+        None => payload::inspect_scene(
+            kind,
+            &bytes,
+            limits,
+            limits.accessor_components,
+            resolve,
+            &mut consumer,
+        ),
+    }
+    .map_err(scene_error)?;
+    Ok(())
 }
 /// Whether a document's tile tree holds a tile declaring an implicit root.
 fn holds_implicit_root(root: &Value) -> bool {
@@ -2335,17 +2645,45 @@ fn open_archive(path: &Path) -> Result<File, Error> {
 
 /// Inspect a bounded archive using only declared archive-local resources.
 /// Success certifies the named checks, not uninspected scene/source semantics.
+/// The amplification budgets scale with the archive's stored bytes (VS-B-2).
 pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
-    inspect_selected(request, ValidationLimits::default())
+    inspect_facts(request, Budgets::Scaled(ValidationLimits::default()))
+        .map(|inspection| inspection.report)
 }
 
 // C1 selects its profile above. Explicit limits also permit bounded internal
 // controls to exercise the actual operation and every resource/parser consumer.
+#[cfg(test)]
 pub(crate) fn inspect_selected(
     request: ValidationRequest,
     limits: ValidationLimits,
 ) -> Result<ValidationReport, Error> {
-    inspect_facts(request, limits).map(|inspection| inspection.report)
+    inspect_facts(request, Budgets::Absolute(limits)).map(|inspection| inspection.report)
+}
+
+/// How the limits of one validation are selected, once at the operation boundary (VS-B-2).
+#[derive(Clone, Debug)]
+pub(crate) enum Budgets {
+    /// Every limit exactly as given (the in-crate controls; VS-C's explicit overrides).
+    #[cfg_attr(not(test), allow(dead_code))]
+    Absolute(ValidationLimits),
+    /// The seven amplification budgets at `max(given, κ·S)`; every other limit as given.
+    Scaled(ValidationLimits),
+}
+impl Budgets {
+    /// The limits before the catalog exists: per-item and volume limits only are read.
+    fn admission(&self) -> &ValidationLimits {
+        match self {
+            Self::Absolute(limits) | Self::Scaled(limits) => limits,
+        }
+    }
+    /// The effective limits for `stored_bytes` admitted stored bytes.
+    fn resolve(self, stored_bytes: u64) -> ValidationLimits {
+        match self {
+            Self::Absolute(limits) => limits,
+            Self::Scaled(floors) => floors.scaled(stored_bytes),
+        }
+    }
 }
 
 /// Per-URI C2 work facts of one successful inspection (v3.3 item 7). Test-only:
@@ -2370,7 +2708,7 @@ pub(crate) fn containment_work_facts(
     request: ValidationRequest,
     limits: ValidationLimits,
 ) -> Result<Vec<UriWork>, Error> {
-    let uris = inspect_facts(request, limits)?.uris;
+    let uris = inspect_facts(request, Budgets::Absolute(limits))?.uris;
     Ok(uris
         .into_iter()
         .map(|(uri, f)| UriWork {
@@ -2396,7 +2734,7 @@ pub(crate) fn containment_work_total(
     request: ValidationRequest,
     limits: ValidationLimits,
 ) -> Result<u64, Error> {
-    inspect_facts(request, limits).map(|inspection| inspection.units)
+    inspect_facts(request, Budgets::Absolute(limits)).map(|inspection| inspection.units)
 }
 
 /// The implicit tiles of one successful inspection, in traversal order (RC-16).
@@ -2406,13 +2744,19 @@ pub(crate) fn implicit_tile_facts(
     request: ValidationRequest,
     limits: ValidationLimits,
 ) -> Result<Vec<ImplicitTileFact>, Error> {
-    Ok(inspect_facts(request, limits)?.implicit)
+    Ok(inspect_facts(request, Budgets::Absolute(limits))?.implicit)
 }
 
 #[cfg(test)]
 thread_local! {
     /// Off selects the reference traversal (EM terms) on this thread.
     static MEMOIZE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// A memo budget other than `MEMO_BYTES` on this thread (VS-B-6 controls).
+    static MEMO_BUDGET: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// Off stops the test seams (implicit tile facts, per-URI work facts) on this thread.
+    pub(crate) static SEAMS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// On selects the reference traversal of VS-B-4 (phase 2 after traversal) on this thread.
+    static DEFERRED_STREAM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 /// Names shown in an unreferenced-entries message; the rest are counted.
 const UNREFERENCED_SHOWN: usize = 16;
@@ -2454,6 +2798,8 @@ struct Inspection {
     units: u64,
     #[cfg(test)]
     prepared: u64,
+    #[cfg(test)]
+    memo_peak: usize,
     /// `task_visits`, `reference_visits` and `bytes_read` at the end.
     #[cfg(test)]
     counters: [u64; 3],
@@ -2461,14 +2807,12 @@ struct Inspection {
     implicit: Vec<ImplicitTileFact>,
 }
 
-fn inspect_facts(
-    request: ValidationRequest,
-    limits: ValidationLimits,
-) -> Result<Inspection, Error> {
+fn inspect_facts(request: ValidationRequest, budgets: Budgets) -> Result<Inspection, Error> {
     let path = request.input();
     let source = open_archive(path)?;
     let before = source.metadata()?;
     let identity = same_file::Handle::from_file(source.try_clone()?)?;
+    let limits = budgets.admission().clone();
     let content_limits = content_limits(&limits)?;
     let archive_limits = crate::archive3tz::ReadLimits {
         source_archive_bytes: limits.source_archive_bytes,
@@ -2487,6 +2831,8 @@ fn inspect_facts(
         crate::spill::Placement::disk(true),
     )
     .map_err(archive_admission_error)?;
+    // VS-B-2: S is fixed by the admitted catalog before any budgeted work.
+    let limits = budgets.resolve(archive.stored_bytes());
     // Count the exact index bytes already consumed by the format owner. Later
     // index/member hashing and repeated content reads consume this same budget.
     let mut bytes_read = archive.index_read_bytes();
@@ -2549,26 +2895,42 @@ fn inspect_facts(
             .map_err(archive_admission_error)?
             .rank,
     );
+    let subtrees = Bits::new(entries)?;
     let scratch = archive.scratch();
     let names = archive.names();
     let config = *archive.config();
     let mut check = Check {
         implicit: ImplicitLimits::new(limits.document_decoded_bytes, content_limits.json),
         implicit_roots: 0,
-        schemas: HashMap::new(),
         #[cfg(test)]
         implicit_facts: Vec::new(),
+        #[cfg(test)]
+        uri_work: Vec::new(),
+        #[cfg(test)]
+        seams: SEAMS.with(std::cell::Cell::get),
+        #[cfg(test)]
+        deferred: DEFERRED_STREAM.with(std::cell::Cell::get).then(Vec::new),
         memo: HashMap::new(),
+        memo_bytes: 0,
+        #[cfg(test)]
+        memo_peak: 0,
         recording: Vec::new(),
+        recorder_serial: 0,
         once_references: 0,
         once_bytes: 0,
         #[cfg(test)]
         memoize: MEMOIZE.with(std::cell::Cell::get),
         #[cfg(test)]
         prepared: 0,
+        facts: FactStore::new(entries, &config)?,
+        scratch: scratch.clone(),
+        extension_labels: Labels::default(),
+        live_documents: 0,
+        stream_log: Some(stream_log::StreamLog::new(&config)),
         resources: ArchiveResources {
             archive: &mut archive,
             used,
+            subtrees,
             limits,
             content_limits,
             bytes_read,
@@ -2582,14 +2944,13 @@ fn inspect_facts(
         task_visits: 0,
         elements: 0,
         rows: rows::RowSink::new(&scratch, &config)?,
-        payload_counts: Vec::new(),
         not_inspected: BTreeSet::from([
             "decodedContentBounds".into(),
             "metadataSemantics".into(),
             "materialAndImageSemantics".into(),
             "geometricErrorAccuracy".into(),
         ]),
-        schema: jsonschema::validator_for(&serde_json::from_str(include_str!(
+        schema: schema::TilesetSchema::new(&serde_json::from_str(include_str!(
             "../docs/schema/tileset.schema.json"
         ))?)
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
@@ -2618,11 +2979,14 @@ fn inspect_facts(
             }
         }
     }
-    let manifest = check.resources.read_json("tileset.json")?;
-    if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
-        check.resources.reference("vector-build.json".into())?;
-        if vector_build.as_deref() != Some(expected) {
-            return Err(invalid("vector build-state checksum mismatch"));
+    {
+        // Only the vector build check reads this copy; it is dropped before traversal.
+        let (manifest, _) = check.resources.read_json("tileset.json")?;
+        if let Some(expected) = manifest["asset"]["extras"]["vectorBuildStateSha256"].as_str() {
+            check.resources.reference("vector-build.json".into())?;
+            if vector_build.as_deref() != Some(expected) {
+                return Err(invalid("vector build-state checksum mismatch"));
+            }
         }
     }
     check.tileset("tileset.json", None, None, 0)?;
@@ -2647,8 +3011,22 @@ fn inspect_facts(
             .not_inspected
             .insert("recordedBudgets.implicitTileExtras".into());
     }
+    // VS-B-9: the kept archive-named labels join the list before Contained edits it.
+    let labels = std::mem::take(&mut check.extension_labels);
+    check.not_inspected.extend(labels.kept);
     if contained {
         check.stream()?;
+        #[cfg(test)]
+        if let Some(deferred) = check.deferred.take() {
+            let mut stream = Stream {
+                arena: check.c2.arena.take(),
+                ..Stream::default()
+            };
+            for (levels, rank, t, depth) in deferred {
+                let (caps, resources) = (check.c2.caps, &mut check.resources);
+                stream_member(resources, &mut stream, caps, &levels, depth, rank, t, None)?;
+            }
+        }
         check.not_inspected.remove("decodedContentBounds");
         check.not_inspected.remove("scene transforms");
     } else {
@@ -2669,19 +3047,12 @@ fn inspect_facts(
     // The walk's working storage is released before the report rows are ordered: the
     // sorts and the walk are never live together (design §1.4).
     check.memo = HashMap::new();
-    check.schemas = HashMap::new();
-    check.payload_counts = Vec::new();
     check.recording = Vec::new();
-    check.c2.tiles = Vec::new();
-    check.c2.references = Vec::new();
-    check.c2.content_volumes = Vec::new();
-    check.c2.uri_index = HashMap::new();
+    check.c2.path = Vec::new();
     check.c2.levels = Vec::new();
     check.c2.arena = None;
-    #[cfg(not(test))]
-    {
-        check.c2.uris = Vec::new();
-    }
+    check.stream_log = None;
+    check.facts = FactStore::new(0, &config)?;
     let payloads = check.rows.finish(names, scratch.clone())?;
     let report = ValidationReport {
         ok: true,
@@ -2718,15 +3089,18 @@ fn inspect_facts(
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
+        not_inspected_truncated: labels.truncated,
     };
     Ok(Inspection {
         report,
         #[cfg(test)]
-        uris: std::mem::take(&mut check.c2.uris),
+        uris: check.uri_work,
         #[cfg(test)]
         units: check.c2.units,
         #[cfg(test)]
         prepared: check.prepared,
+        #[cfg(test)]
+        memo_peak: check.memo_peak,
         #[cfg(test)]
         counters: [
             check.task_visits,
@@ -5134,7 +5508,6 @@ mod containment_controls {
             max_depth: 0,
             exclusions: 0,
         };
-        c.uris.push(("a.glb".into(), facts));
         let fact = |volume, parent, chain| TileFact {
             transform: None,
             volume,
@@ -5142,30 +5515,28 @@ mod containment_controls {
             parent,
             depth: 0,
             chain,
+            owner: None,
         };
         let plain = VolumeFacts::Box([0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0., 1.]);
         let root = c.tile(fact(Some(plain), None, 0)).unwrap();
         let child = c.tile(fact(Some(plain), Some(root), 0)).unwrap();
-        assert_eq!(c.tiles[child].chain, 0);
-        c.reference(child, None, 0).unwrap();
+        assert_eq!((root, child), (0, 1));
+        assert_eq!(c.path[child].chain, 0);
+        assert!(c.reference(child, None, &facts).unwrap());
         assert_eq!((c.levels.len(), c.units), (2, 1152 + 16));
         // Slice 3 §4 step 5: a rowless implicit tile (`None`) carries the
-        // derived bit, inherited and ORed without building levels.
+        // derived bit, inherited and ORed without building levels. A sibling takes
+        // its predecessor's place on the path stack (VS-B-3).
         c.levels.clear();
         let derived = c.tile(fact(None, Some(root), 0)).unwrap();
-        assert_eq!(c.tiles[derived].chain, Reason::DerivedImplicitVolume.bit());
+        assert_eq!(derived, child);
+        assert_eq!(c.path[derived].chain, Reason::DerivedImplicitVolume.bit());
         let below = c.tile(fact(Some(plain), Some(derived), 0)).unwrap();
-        assert_eq!(c.tiles[below].chain, Reason::DerivedImplicitVolume.bit());
-        c.reference(below, None, 0).unwrap();
+        assert_eq!(c.path[below].chain, Reason::DerivedImplicitVolume.bit());
+        assert!(!c.reference(below, None, &facts).unwrap());
         assert_eq!(c.exclusions, Reason::DerivedImplicitVolume.bit());
         assert!(c.levels.is_empty());
         assert_eq!(c.units, 1152 + 16);
-        // A caller-supplied chain bit is inherited too.
-        let marked = c
-            .tile(fact(Some(plain), Some(root), Reason::Skin.bit()))
-            .unwrap();
-        let below_marked = c.tile(fact(Some(plain), Some(marked), 0)).unwrap();
-        assert_eq!(c.tiles[below_marked].chain, Reason::Skin.bit());
         // `build_levels` never sees a `None` in domain; reaching one, as own
         // volume or as an ancestor's, is an internal invariant failure.
         for tile in [derived, below] {
@@ -5174,13 +5545,25 @@ mod containment_controls {
                 Err(Error::InvalidState(_))
             ));
         }
+        // A caller-supplied chain bit is inherited too.
+        let marked = c
+            .tile(fact(Some(plain), Some(root), Reason::Skin.bit()))
+            .unwrap();
+        let below_marked = c.tile(fact(Some(plain), Some(marked), 0)).unwrap();
+        assert_eq!(c.path[below_marked].chain, Reason::Skin.bit());
         // A region tile's bit reaches its descendants' chains.
         let region = c
             .tile(fact(Some(VolumeFacts::Region), Some(root), 0))
             .unwrap();
         let leaf = c.tile(fact(Some(plain), Some(region), 0)).unwrap();
-        assert_eq!(c.tiles[leaf].chain, Reason::RegionVolume.bit());
-        assert_eq!(c.tiles[root].chain, 0);
+        assert_eq!(c.path[leaf].chain, Reason::RegionVolume.bit());
+        assert_eq!(c.path[root].chain, 0);
+        assert_eq!(c.path.len(), 3);
+        // A parent that is not on the path is an internal invariant failure.
+        assert!(matches!(
+            c.tile(fact(Some(plain), Some(3), 0)),
+            Err(Error::InvalidState(_))
+        ));
     }
 
     #[test]

@@ -17,7 +17,7 @@ mod volume;
 pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sequence::{
-    ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter,
+    ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
 #[allow(unused_imports)]
 pub(crate) use sort::{

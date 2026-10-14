@@ -348,6 +348,37 @@ hash is identical, and generation stays byte-reproducible.
    - **R:** re-run I1 parity (`production_matches_every_i1_oracle_witness_and_control`) on the new manifest before
      any C2 parity run.
 
+## Amendment 7 (VS-B-8, 2026-10-14)
+
+Models `docs/architecture/validator-traversal-scale-amendment.md` VS-B-8 (first two bullets). Read from the contract
+texts only; nothing under `src/`, `tests/` or `bindings/` was read. OD-7 is unchanged in meaning.
+
+- **Oracle.** After the §2a step-10 reservation and before any allocation, `admit_subtree` charges the availability
+  index tables to the live-path limit `document_decoded_bytes`:
+  `4*ceil(T/64)` if the tile source is a bitstream, plus, only when `E > 0`,
+  `4*(P_t+1) + 2*E + 4*sum(popcount(v))` over the distinct bitstream content sources (distinct `(bufferView, bits)`
+  sources; aliasing slots count once; constant sources add no position term). A charge above
+  `limit - live` (live already includes this subtree's member and external buffers) is
+  ResourceLimit `document_decoded_bytes`, "subtree availability index exceeds the live subtree byte limit", stage
+  `subtree NAME §2a.10`. Otherwise it is added to `live` and to the subtree's held bytes, released with the subtree,
+  and raises `maxLivePathBytes`. `cumulativeSubtreeBytes` still counts member and external-buffer bytes only.
+- **Self-test.** 65 checks (3 new: tables join live bytes, cap accepts, cap - 1 refuses at the charge).
+- **Existing pairs recomputed.** R2: each of the 6 live subtrees also holds a 4 B rank table (T = 1, E = 0), so the cap
+  is `6(S+4) = 395064` (was 395040); R2-1 is refused at the sixth subtree's charge, not its read. R2b.mid becomes
+  2271492. R2b.cum-1 stays `63S - 1 = 4147919` (member-only cumulative, below any cumulative sum that includes tables).
+  No other case sets `document_decoded_bytes`; no other fixture hash changed.
+- **New pairs** (cap = member bytes + tables, cap - 1 refused at the charge; fixtures in `controls/fixtures`):
+  - `VSB8.rank` / `VSB8.rank-1`: QUADTREE L=4, T=85, bitstream tiles, no content: tables 8 B, cap 4440 / 4439.
+  - `VSB8.alias` / `VSB8.alias-1`: QUADTREE L=3, P_t=6, three slots, two aliasing one source (popcount 3), one other
+    (popcount 2), E=8: tables `4+28+16+20 = 68` B, cap 4644 / 4643. Not deduplicating would add 12 B.
+  - `VSB8.const` / `VSB8.const-1`: constant-1 tiles (L=2, P_t=5), one bitstream content source, E=3: no rank table,
+    tables `24+6+12 = 42` B, cap 4426 / 4425.
+- **Re-run.** `generate.py` (small and `--large`) and `check.py` (small and `--large`): 187 cases, 0 disagreements;
+  `generate.py --large --check` reports no mismatch.
+- **sha256.** `oracle/i1_oracle.py` `51c791a703c6696c31a51a1979c1e7ccd12d915349d68b904e5b20adf93babd9`;
+  `witnesses/generate.py` `c73b97060e8ada47da6d3046ab877f3388a4c338533e721392276464e07beab0`
+  (`oracle/self_test/test_oracle.py` `6bde64c3e267b8550c3dbe366742e59b83c7514bd3687870153a11bd63e6b6df`).
+
 ## Contract questions (my readings; please confirm or correct)
 
 - **Q1 (D-4 magic).** Resolved by v3.2 ruling 1.
