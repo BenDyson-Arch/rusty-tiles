@@ -34,6 +34,8 @@ STALE = {
     # These two apply textually but name the removed tile arena (they do not compile).
     "c2:reverse-tile-order", "c2:slice3/R-transform-before-V_R",
     "c2:slice3/external-content-at-R-level", "c2:slice3/slice1-reverse-tile-order",
+    # Their context lines name the former direct tile registration.
+    "c2:slice3/archive-scoped-derived", "c2:slice3/float32-rows-via-shortest-decimal",
     # Develop's H7 moved this check into a shared suffix helper.
     "i1:case-sensitive-suffix",
 }
@@ -97,6 +99,18 @@ PORTS = [
     ("port:i1:case-sensitive-suffix", [("src/content_integrity/implicit.rs",
         "        ends_with_suffix(self.static_tail(), \"json\")",
         "        { let tail = self.static_tail(); tail.len() >= 5 && &tail[tail.len() - 5..] == b\".json\" }")]),
+    ("port:c2:slice3/archive-scoped-derived", [(V,
+        "            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for",
+        "            if matches!(tile.volume, EffectiveVolume::Derived(_)) {\n"
+        "                self.c2.exclude(Reason::DerivedImplicitVolume);\n            }\n"
+        "            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for")]),
+    ("port:c2:slice3/float32-rows-via-shortest-decimal", [(V,
+        "                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),",
+        "                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(b.map(|v| {\n"
+        "                        if (v as f32) as f64 == v && v.is_finite() {\n"
+        "                            format!(\"{}\", v as f32).parse().unwrap()\n"
+        "                        } else {\n                            v\n                        }\n"
+        "                    }))),")]),
     ("port:c2:skip-ancestors", [(V, "                    Some((Role::Ancestor(level), volume)),",
                                  "                    None,")]),
     ("port:c2:skip-content-volume", [(V, "                volumes: [Some((Role::Own, own)), content, None],",
