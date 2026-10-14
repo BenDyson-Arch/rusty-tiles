@@ -1238,8 +1238,8 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
     };
     let total = (input.len() * Wide::SIZE) as u64;
     // 5 records per chunk: each 100-record run is 20 chunk files.
-    super::sort::CHUNK_OVERRIDE.with(|c| c.set(Some(5 * Wide::SIZE)));
     let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    scratch.set_chunk_bytes(5 * Wide::SIZE);
     let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
     sorter.extend(input.iter().copied()).unwrap();
     // The last 100 records stay buffered until finish.
@@ -1268,7 +1268,6 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
             freed_midway = scratch.live_bytes() <= remaining + fan_in * chunk;
         }
     }
-    super::sort::CHUNK_OVERRIDE.with(|c| c.set(None));
     assert!(freed_midway, "consumed chunks are removed while streaming");
     assert_eq!(got, expected, "chunking changes no order or content");
     assert_eq!(scratch.live_bytes(), 0);

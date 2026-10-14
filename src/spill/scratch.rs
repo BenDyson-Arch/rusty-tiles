@@ -103,6 +103,8 @@ pub(crate) struct Scratch {
     io: Arc<dyn SpillIo>,
     accounting: Arc<Accounting>,
     next_file: AtomicU64,
+    /// Largest sort run chunk file ([`super::CHUNK_BYTES`]; tests may shrink it).
+    chunk_bytes: std::sync::atomic::AtomicUsize,
 }
 
 struct Created {
@@ -231,6 +233,7 @@ impl Scratch {
             io,
             accounting: Arc::default(),
             next_file: AtomicU64::new(0),
+            chunk_bytes: std::sync::atomic::AtomicUsize::new(super::CHUNK_BYTES),
         }
     }
 
@@ -381,6 +384,18 @@ impl Scratch {
     /// Largest number of bytes held by live spill files at once.
     pub(crate) fn peak_bytes(&self) -> u64 {
         self.accounting.peak.load(Ordering::Relaxed)
+    }
+
+    /// Largest sort run chunk file written in this scratch.
+    pub(crate) fn chunk_bytes(&self) -> usize {
+        self.chunk_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Test seam: smaller chunks exercise multi-chunk runs on small inputs. Chunking changes
+    /// no sorted order or content, only when scratch is freed.
+    #[cfg(test)]
+    pub(crate) fn set_chunk_bytes(&self, bytes: usize) {
+        self.chunk_bytes.store(bytes.max(1), Ordering::Relaxed);
     }
 
     /// Starts a stage: its peak restarts from the bytes currently live (retained files).

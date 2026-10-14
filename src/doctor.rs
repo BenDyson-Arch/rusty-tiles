@@ -355,15 +355,15 @@ impl Resolver<'_> {
         match command {
             Command::Mesh => built_in(details(json!({
                 "inputs":["glTF 2.0","GLB 2.0"],
-                "sourceCoordinates":"local metres, glTF Y-up",
-                "placement":"optional rigid WGS84 ellipsoidal anchor, ENU XYZW quaternion and source scene offset",
+                "sourceCoordinates":"local metres, glTF Y-up; or a declared 2D horizontal EPSG/WKT/PROJ source CRS (axes y-up by default or xyz, f64 E/N/A offset or Metashape offset file, ellipsoidal height offset default 0), mapped exactly per vertex at capture (grid-free CRS portable; others need native-geospatial)",
+                "placement":"optional rigid WGS84 ellipsoidal anchor, ENU XYZW quaternion and source scene offset for local sources; a source CRS derives an ENU root at its source-bounds centre",
                 "output":"3D Tiles 1.1 implicit forest in .3tz",
                 "profiles":["fast","balanced","quality","lossless"],
                 "profilesProvisional":true,
                 "encoding":"in-process meshopt and KTX2/Basis; PNG for lossless leaf textures",
                 "workers":"auto or a positive maximum; cores and available memory cap actual workers per stage; unknown available memory admits one worker",
                 "memberCeiling":crate::archive3tz::MEMBER_CEILING,
-                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or conversion. Current output has full-detail leaves; certified coarse levels are a separate downstream slice. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
+                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Current output has full-detail leaves; certified coarse levels are a separate downstream slice. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
                 "note":"Readiness is build capability, not admission of a source, output filesystem, memory plan or viewer. No external encoder or system geospatial library is required."
             }))),
             Command::MeshLocalTo3tz
