@@ -34,6 +34,9 @@ STALE = {
     # These two apply textually but name the removed tile arena (they do not compile).
     "c2:reverse-tile-order", "c2:slice3/R-transform-before-V_R",
     "c2:slice3/external-content-at-R-level", "c2:slice3/slice1-reverse-tile-order",
+    # The replayed root keeping the first placement's arena link: there is no arena link to
+    # keep; the VS-B mutants `replay-no-external` and `replay-flat-parent` are its defects now.
+    "em:cached-placement-link",
     # Their context lines name the former direct tile registration.
     "c2:slice3/archive-scoped-derived", "c2:slice3/float32-rows-via-shortest-decimal",
     # Develop's H7 moved this check into a shared suffix helper.
@@ -177,7 +180,7 @@ H23 = [
                                     "        if false {\n            let mut min = allocation(parsed.components, f64::INFINITY)?;")]),
 ]
 TESTS = ["validate::", "content_integrity::", "c2_oracle_parity", "i1_oracle_parity", "archive3tz",
-         "payload_context_acceptance"]
+         "payload_context_acceptance", "spill::"]
 
 
 def sh(cmd, **kw):
