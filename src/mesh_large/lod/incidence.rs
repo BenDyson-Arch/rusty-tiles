@@ -68,7 +68,7 @@ impl Address {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Incidence {
+pub(crate) struct Incidence {
     key: [u32; 3],
     rank: u64,
     corner: u8,
@@ -119,7 +119,7 @@ impl Record for Incidence {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct CornerInfo {
+pub(crate) struct CornerInfo {
     rank: u64,
     corner: u8,
     c2: u8,

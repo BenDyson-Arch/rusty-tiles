@@ -975,6 +975,67 @@ struct EncodedPage {
     preencode: Option<super::prepared::PreencodePage>,
 }
 
+/// glTF material property of a texture slot, for diagnostics.
+pub(super) fn slot_property(slot: TextureSlot) -> &'static str {
+    match slot {
+        TextureSlot::BaseColor => "baseColorTexture",
+        TextureSlot::MetallicRoughness => "metallicRoughnessTexture",
+        TextureSlot::Normal => "normalTexture",
+        TextureSlot::Occlusion => "occlusionTexture",
+        TextureSlot::Emissive => "emissiveTexture",
+    }
+}
+/// A page that left its profile's encoder setting, with what it was cut from.
+#[derive(Clone, Debug)]
+pub(super) struct PageEscalation {
+    pub page: usize,
+    pub slot: TextureSlot,
+    /// Distinct (source image, source material) pairs on the page, in binding order.
+    pub sources: Vec<(usize, u32)>,
+    pub escalation: delivery::Escalation,
+}
+/// A leaf's appearance receipts and its escalated pages, in page order.
+#[derive(Debug, Default)]
+pub(super) struct Appearance {
+    pub receipts: Vec<Value>,
+    pub escalations: Vec<PageEscalation>,
+}
+fn page_sources(layout: &Layout, page: &PagePlan) -> Vec<(usize, u32)> {
+    let mut sources = Vec::new();
+    for &bi in &page.bindings {
+        let b = &layout.bindings[bi];
+        let material = layout.primitives[b.primitive].triangles[0].material;
+        if !sources.contains(&(b.image, material)) {
+            sources.push((b.image, material));
+        }
+    }
+    sources
+}
+/// Names the page, slot and sources in any page failure except cancellation.
+fn page_error(
+    error: JobError,
+    page_id: usize,
+    slot: TextureSlot,
+    sources: &[(usize, u32)],
+) -> JobError {
+    if error.kind() == JobErrorKind::Cancelled {
+        return error;
+    }
+    let sources: Vec<String> = sources
+        .iter()
+        .map(|(image, material)| format!("image {image} material {material}"))
+        .collect();
+    JobError::with_cause(
+        error.kind(),
+        format!(
+            "page {page_id} {} (source {}): {error}",
+            slot_property(slot),
+            sources.join(", ")
+        ),
+        error,
+    )
+}
+
 /// Ends the `MaskDelivery` borrow of the page's surface samples before the page buffers
 /// move into the retained pre-encode record.
 fn drop_mask_borrow(_mask: Option<MaskDelivery<'_>>) {}
@@ -1013,6 +1074,11 @@ fn encode_page(
     let memory = services.memory;
     let check = &mut || (services.check)();
     check()?;
+    // Mipmap minification is the only way a sampler reads a coarser level.
+    let ladder = delivery::Ladder {
+        level0_sampled: !matches!(page.sampler.min_filter, 9984..=9987),
+        check: services.check,
+    };
     let _permit = services.gate.acquire(page_charge(
         page,
         &layout.bindings,
@@ -1104,6 +1170,7 @@ fn encode_page(
             profile,
             memory,
             mask,
+            ladder,
             |decoded| {
                 let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
                 Ok(
@@ -1227,6 +1294,7 @@ fn encode_page(
             profile,
             memory,
             mask,
+            ladder,
         )?;
         drop_mask_borrow(mask);
         if let Some(store) = services.preencode {
@@ -1278,7 +1346,7 @@ pub(super) fn prepare(
     depth: u8,
     drop: u32,
     leaf: u64,
-) -> Result<(PreparedAtlas, Vec<Value>), PrepareError> {
+) -> Result<(PreparedAtlas, Appearance), PrepareError> {
     let captured = services.captured;
     let resources = AtlasResources {
         materials: &captured.materials,
@@ -1291,12 +1359,18 @@ pub(super) fn prepare(
             (services.check)()
         })
     })?;
+    let sources: Vec<_> = layout
+        .pages
+        .iter()
+        .map(|page| page_sources(&layout, page))
+        .collect();
     let encoded: Vec<Result<EncodedPage, JobError>> = layout
         .pages
         .par_iter()
         .enumerate()
         .map(|(page_id, page)| {
             encode_page(services, &layout, page, page_id, profile, depth, drop, leaf)
+                .map_err(|e| page_error(e, page_id, page.slot, &sources[page_id]))
         })
         .collect();
     let Layout {
@@ -1313,8 +1387,9 @@ pub(super) fn prepare(
         preencode: Vec::new(),
     };
     let mut receipts = Vec::new();
+    let mut escalations = Vec::new();
     let mut encoded_bytes = 0u64;
-    for (page_id, (page, result)) in plans.iter().zip(encoded).enumerate() {
+    for (page_id, ((page, result), sources)) in plans.iter().zip(encoded).zip(sources).enumerate() {
         let EncodedPage {
             delivered,
             binding_receipts,
@@ -1322,6 +1397,17 @@ pub(super) fn prepare(
         } = result?;
         atlas.preencode.extend(preencode);
         receipts.extend(binding_receipts);
+        let escalation = delivered.escalation.as_ref().map(|e| {
+            json!({"step":e.step.name(),"misses":e.misses.iter().map(delivery::GateMiss::to_json).collect::<Vec<_>>()})
+        });
+        if let Some(escalation) = delivered.escalation.clone() {
+            escalations.push(PageEscalation {
+                page: page_id,
+                slot: page.slot,
+                sources,
+                escalation,
+            });
+        }
         encoded_bytes = encoded_bytes
             .checked_add(delivered.bytes.len() as u64)
             .ok_or_else(resource)?;
@@ -1331,7 +1417,7 @@ pub(super) fn prepare(
                 "encoded leaf pages exceed 96 MiB member budget",
             )));
         }
-        receipts.push(json!({"page":page_id,"width":page.width,"height":page.height,"mime":delivered.mime,"levels":delivered.mip_count,"bytes":delivered.bytes.len(),"quality":delivered.receipts}));
+        receipts.push(json!({"page":page_id,"width":page.width,"height":page.height,"mime":delivered.mime,"levels":delivered.mip_count,"bytes":delivered.bytes.len(),"quality":delivered.receipts,"escalation":escalation}));
         atlas.pages.push(PreparedPage {
             bytes: delivered.bytes,
             mime: delivered.mime,
@@ -1355,7 +1441,13 @@ pub(super) fn prepare(
             .collect();
         p.material = Some(captured.materials[id as usize].remap_slots(&patches)?);
     }
-    Ok((atlas, receipts))
+    Ok((
+        atlas,
+        Appearance {
+            receipts,
+            escalations,
+        },
+    ))
 }
 
 #[cfg(test)]

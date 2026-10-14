@@ -108,6 +108,9 @@ pub(super) fn encode(
             }
             coverage = serde_json::json!({"target":optimum.target,"optimumGap":optimum.optimum_gap,"actual":actual,"scale":optimum.scale});
         }
+        // The gate ladder polls cancellation through a shared `Fn`; route it to `check`.
+        let cell = std::cell::RefCell::new(&mut *check);
+        let poll = || (cell.borrow_mut())();
         let mut output = delivery::encode(
             [page.width, page.height],
             &rgba,
@@ -116,7 +119,13 @@ pub(super) fn encode(
             profile,
             codec_memory,
             None,
+            delivery::Ladder {
+                // A non-mipmapped minification filter reads level 0 only.
+                level0_sampled: matches!(page.sampler["minFilter"].as_u64(), Some(9728 | 9729)),
+                check: &poll,
+            },
         )?;
+        drop(cell);
         let decoded = image::load_from_memory_with_format(&output.bytes, image::ImageFormat::Png)
             .map_err(|e| invalid(format!("proxy PNG independent readback {e}")))?
             .into_rgba8()
@@ -133,14 +142,21 @@ pub(super) fn encode(
         output.receipts.push(serde_json::json!({"proxyApproximation":true,"decodedBaseExact":true,"pngProtectedGutterTexels":4,"viewerGeneratedMips":"finite padding cannot isolate terminal1x1","mask":coverage}));
         output
     } else {
+        let level0_sampled = matches!(page.sampler["minFilter"].as_u64(), Some(9728 | 9729));
+        let cell = std::cell::RefCell::new(&mut *check);
+        let poll = || (cell.borrow_mut())();
         delivery::encode_authored(
             &chain,
             page.slot,
             profile,
             codec_memory,
             context,
-            |decoded| {
-                check()?;
+            delivery::Ladder {
+                level0_sampled,
+                check: &poll,
+            },
+            |decoded: &[crate::mesh_large::leaves::mips::Level]| {
+                poll()?;
                 if decoded.len() != page.levels.len() {
                     return Err(invalid("proxy missing decoded mip"));
                 }
@@ -148,7 +164,7 @@ pub(super) fn encode(
                 // channel and normal length/angle on every emitted level. Preserve
                 // their receipts; no caller regenerates mips or exempts 1x1.
                 let slices: Vec<&[u8]> = decoded.iter().map(|l| l.rgba.as_slice()).collect();
-                let normal = mips::normal_floor(page, &slices, work_limit, check)?;
+                let normal = mips::normal_floor(page, &slices, work_limit, &mut || poll())?;
                 Ok(
                     serde_json::json!({"proxyDecodedCompleteChain":decoded.len(),"terminal1x1":decoded.last().map(|l|[l.width,l.height]),"sourceSamplerPreserved":page.sampler,"normalRendererFrames":normal}),
                 )
