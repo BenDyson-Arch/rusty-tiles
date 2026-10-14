@@ -131,6 +131,49 @@ pub struct LeafOutputReport {
     /// H17 coarse tiles (untextured certified proxies) written beside the leaves.
     pub proxies: u64,
     pub proxy_bytes: u64,
+    /// Lossy pages delivered by a stronger UASTC step after their profile's
+    /// own setting missed a decoded-image gate, by the step that passed.
+    pub escalated_pages: EscalatedPages,
+    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    pub lossless_fallback_pages: u64,
+    /// The first [`ESCALATION_DIAGNOSTICS`] escalated pages in leaf order.
+    pub escalation_diagnostics: Vec<EscalationDiagnostic>,
+    /// Escalated pages beyond the bounded diagnostics list.
+    pub escalation_diagnostics_omitted: u64,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalatedPages {
+    pub uastc_level2: u64,
+    pub uastc_level3: u64,
+}
+/// Bound of [`LeafOutputReport::escalation_diagnostics`].
+pub const ESCALATION_DIAGNOSTICS: usize = 32;
+/// One escalated page: its leaf, slot, sources, delivering step and every
+/// gate it missed on the way.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationDiagnostic {
+    /// Leaf member, `leaves/<index>.glb` in the leaf stage.
+    pub leaf: String,
+    /// The leaf's first source triangle rank and depth: archive tile
+    /// `content/f<first>-d<depth>.glb` when explicit.
+    pub first: u64,
+    pub depth: u32,
+    pub page: u64,
+    pub slot: &'static str,
+    pub sources: Vec<EscalationSource>,
+    pub step: &'static str,
+    pub misses: Vec<EscalationMiss>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationSource {
+    pub image: u64,
+    pub material: u32,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationMiss {
+    pub step: &'static str,
+    pub mip: Option<u64>,
+    pub gate: String,
 }
 #[derive(Debug)]
 pub struct LeafOutputResult {
@@ -372,6 +415,7 @@ struct LeafEncoded {
     bounds: super::super::records::Bounds,
     geometry_error: f64,
     appearance: Vec<serde_json::Value>,
+    escalations: Vec<atlas::PageEscalation>,
     density_drop: u32,
     density_reasons: Vec<serde_json::Value>,
 }
@@ -423,7 +467,32 @@ fn read_leaf(
         corner_depths,
     })
 }
+/// Any leaf failure but cancellation names the leaf member and its rank.
 fn encode_leaf(
+    input: &LeafInput,
+    services: &atlas::Services<'_>,
+    config: &TreeConfig,
+    leaves: &Path,
+    index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
+) -> Result<LeafEncoded, JobError> {
+    let node = &input.node;
+    leaf_encode(input, services, config, leaves, index, preencode).map_err(|error| {
+        if error.kind() == JobErrorKind::Cancelled {
+            return error;
+        }
+        JobError::with_cause(
+            error.kind(),
+            format!(
+                "leaf {index:012} (first {}, depth {}): {error}",
+                node.first,
+                node.depth()
+            ),
+            error,
+        )
+    })
+}
+fn leaf_encode(
     input: &LeafInput,
     services: &atlas::Services<'_>,
     config: &TreeConfig,
@@ -493,7 +562,8 @@ fn encode_leaf(
         bytes: glb.glb.len() as u64,
         bounds: glb.bounds,
         geometry_error: glb.geometry_error,
-        appearance,
+        appearance: appearance.receipts,
+        escalations: appearance.escalations,
         density_drop,
         density_reasons,
     })
@@ -558,6 +628,10 @@ pub(crate) fn produce(
         density_reduced_leaves: 0,
         proxies: 0,
         proxy_bytes: 0,
+        escalated_pages: EscalatedPages::default(),
+        lossless_fallback_pages: 0,
+        escalation_diagnostics: Vec::new(),
+        escalation_diagnostics_omitted: 0,
     };
     let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
     let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
@@ -803,6 +877,7 @@ fn write_leaf(
         bounds,
         geometry_error,
         appearance,
+        escalations,
         density_drop,
         density_reasons,
     } = encoded;
@@ -828,6 +903,45 @@ fn write_leaf(
     report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
     report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
+    for page in escalations {
+        use super::delivery::Step;
+        match page.escalation.step {
+            Step::UastcLevel2 => report.escalated_pages.uastc_level2 += 1,
+            Step::UastcLevel3 => report.escalated_pages.uastc_level3 += 1,
+            Step::LosslessPng => report.lossless_fallback_pages += 1,
+            Step::Profile => return Err(invariant("unescalated page reported as escalated")),
+        }
+        if report.escalation_diagnostics.len() >= ESCALATION_DIAGNOSTICS {
+            report.escalation_diagnostics_omitted += 1;
+            continue;
+        }
+        report.escalation_diagnostics.push(EscalationDiagnostic {
+            leaf: format!("leaves/{name}"),
+            first: node.first,
+            depth: node.depth(),
+            page: page.page as u64,
+            slot: atlas::slot_property(page.slot),
+            sources: page
+                .sources
+                .iter()
+                .map(|&(image, material)| EscalationSource {
+                    image: image as u64,
+                    material,
+                })
+                .collect(),
+            step: page.escalation.step.name(),
+            misses: page
+                .escalation
+                .misses
+                .iter()
+                .map(|m| EscalationMiss {
+                    step: m.step.name(),
+                    mip: m.mip.map(|mip| mip as u64),
+                    gate: m.gate.clone(),
+                })
+                .collect(),
+        });
+    }
     Ok(())
 }
 
@@ -1100,6 +1214,18 @@ mod tests {
     /// texture, like a photogrammetry atlas: a leaf's hull covers most of the
     /// texture while its charts are a small part of it.
     fn scattered_fixture(parent: &Path, count: usize, min_filter: u32) -> PathBuf {
+        textured_fixture(parent, count, min_filter, None, 1024)
+    }
+    /// [`scattered_fixture`]; `hard_every` replaces every n-th 4x4 texture
+    /// block with four scattered random colours (1: every block), so pages
+    /// miss the colour gate at the profile's encoder setting.
+    fn textured_fixture(
+        parent: &Path,
+        count: usize,
+        min_filter: u32,
+        hard_every: Option<u64>,
+        edge: u32,
+    ) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
         let mut next = || {
@@ -1135,8 +1261,22 @@ mod tests {
         }
         fs::write(parent.join("attributes.bin"), &bytes).unwrap();
         // Smooth gradients with mild texel detail, like photographed surfaces.
-        let texture = image::RgbaImage::from_fn(1024, 1024, |x, y| {
-            // Every channel stays below 256 for x, y < 1024.
+        let hash = |x: u32, y: u32, s: u32| {
+            let mut h = u64::from(x).wrapping_mul(0x9E37_79B9)
+                ^ u64::from(y).wrapping_mul(0x85EB_CA6B)
+                ^ u64::from(s).wrapping_mul(0x27D4_EB2F);
+            h ^= h >> 13;
+            h = h.wrapping_mul(0xC2B2_AE35);
+            h ^ (h >> 16)
+        };
+        let texture = image::RgbaImage::from_fn(edge, edge, |x, y| {
+            if let Some(every) = hard_every {
+                if hash(x / 4, y / 4, 77).is_multiple_of(every) {
+                    let c = hash(x / 4, y / 4, (hash(x, y, 9) % 4) as u32);
+                    return image::Rgba([c as u8, (c >> 8) as u8, (c >> 16) as u8, 255]);
+                }
+            }
+            // Every channel stays below 256 for x, y < 1024 (`edge` <= 1024).
             let detail = (x * 37 + y * 91) % 13;
             image::Rgba([
                 (x / 8 + detail) as u8,
@@ -1283,5 +1423,117 @@ mod tests {
             .file_name()
             .to_string_lossy()
             .starts_with(".tiles-dir-")));
+    }
+
+    /// Pages that miss the colour gate at the profile setting escalate; the
+    /// report counts them by step, agrees with the leaf manifest and lists
+    /// them with leaf, slot, sources and the missed level, and the published
+    /// bytes and report are the same for any worker count.
+    #[test]
+    fn escalated_pages_are_reported_and_identical_across_jobs() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(&work.path().join("source"), 9_000, 9729, Some(4), 256);
+        let mut previous = None;
+        for jobs in [1, 3] {
+            let output = work.path().join(format!("balanced{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let report = &result.report;
+            let total = report.escalated_pages.uastc_level2
+                + report.escalated_pages.uastc_level3
+                + report.lossless_fallback_pages;
+            assert!(total > 0, "{report:?}");
+            let mut manifest = BTreeMap::<String, u64>::new();
+            let mut pages = 0;
+            for row in fs::read_to_string(output.join("leaves.jsonl"))
+                .unwrap()
+                .lines()
+            {
+                let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                for page in row["appearance"].as_array().unwrap() {
+                    if page.get("levels").is_none() {
+                        continue;
+                    }
+                    pages += 1;
+                    if let Some(step) = page["escalation"]["step"].as_str() {
+                        *manifest.entry(step.to_owned()).or_default() += 1;
+                        assert_eq!(page["escalation"]["misses"][0]["step"], "profile");
+                        assert_eq!(
+                            page["mime"],
+                            if step == "lossless_png" {
+                                "image/png"
+                            } else {
+                                "image/ktx2"
+                            }
+                        );
+                    }
+                }
+            }
+            println!(
+                "escalation jobs{jobs} pages{pages} level2 {} level3 {} png {}",
+                report.escalated_pages.uastc_level2,
+                report.escalated_pages.uastc_level3,
+                report.lossless_fallback_pages
+            );
+            let count = |step: &str| manifest.get(step).copied().unwrap_or(0);
+            assert_eq!(count("uastc_level2"), report.escalated_pages.uastc_level2);
+            assert_eq!(count("uastc_level3"), report.escalated_pages.uastc_level3);
+            assert_eq!(count("lossless_png"), report.lossless_fallback_pages);
+            assert_eq!(
+                report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
+                total
+            );
+            assert!(report.escalation_diagnostics.len() <= ESCALATION_DIAGNOSTICS);
+            for diagnostic in &report.escalation_diagnostics {
+                assert!(diagnostic.leaf.starts_with("leaves/"));
+                assert_eq!(diagnostic.slot, "baseColorTexture");
+                assert_eq!(
+                    diagnostic.sources,
+                    [EscalationSource {
+                        image: 0,
+                        material: 0
+                    }]
+                );
+                assert_eq!(diagnostic.misses[0].step, "profile");
+                assert!(diagnostic.misses.iter().all(|m| m.mip.is_some()));
+            }
+            let files = output_files(&output);
+            let report = serde_json::to_value(report).unwrap();
+            if let Some((prior_files, prior_report)) = &previous {
+                assert_eq!(prior_files, &files, "jobs {jobs} changed published bytes");
+                assert_eq!(prior_report, &report, "jobs {jobs} changed the report");
+            } else {
+                previous = Some((files, report));
+            }
+        }
+    }
+    /// A mip-sampled page has no lossless step; when every lossy step misses,
+    /// the refusal names the leaf, page, slot, source image and material, and
+    /// each step's missed level.
+    #[test]
+    fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(&work.path().join("source"), 640, 9987, Some(1), 256);
+        let failure = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        let message = failure.error.to_string();
+        assert_eq!(failure.error.kind(), JobErrorKind::Unsupported, "{message}");
+        for text in [
+            "leaf 000000000000 (first 0, depth ",
+            "page 0 baseColorTexture (source image 0 material 0)",
+            "profile mip",
+            "uastc_level3 mip",
+            "no lossless PNG step",
+        ] {
+            assert!(message.contains(text), "{text}: {message}");
+        }
     }
 }

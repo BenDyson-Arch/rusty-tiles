@@ -66,6 +66,21 @@ fn validate_volume(volume: Volume) -> io::Result<Volume> {
     Ok(volume)
 }
 
+/// Whether two existing paths are on one filesystem, so their space demands add up.
+/// Unix compares device ids; elsewhere every pair is conservatively one filesystem.
+pub(crate) fn same_filesystem(a: &Path, b: &Path) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(std::fs::metadata(a)?.dev() == std::fs::metadata(b)?.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        Ok(true)
+    }
+}
+
 /// Refuses before any workspace exists when `available < needed`.
 pub(crate) fn preflight(
     path: &Path,

@@ -318,24 +318,6 @@ impl LeafWitness {
         }
         n
     }
-    /// Largest encoding of a leaf of at most `faces` faces: each face its own
-    /// primitive with every slot bound and NORMAL and TANGENT present.
-    pub(in crate::mesh_large) fn max_encoded_len(faces: u64) -> u64 {
-        21 + faces
-            * (PRIMITIVE_BYTES
-                + SLOTS.len() as u64 * BINDING_BYTES
-                + FACE_BYTES
-                + 3 * corner_bytes(KNOWN_FLAGS))
-    }
-    /// The memory lease of reading one leaf witness of at most `faces` faces: its
-    /// encoded bytes plus the largest decoded ownership they can describe.
-    pub(in crate::mesh_large) fn read_lease(faces: u64) -> u64 {
-        let owned = size_of::<PrimitiveWitness>()
-            + SLOTS.len() * size_of::<BindingWitness>()
-            + size_of::<FaceWitness>()
-            + 3 * (12 + 12 + 16);
-        Self::max_encoded_len(faces) + faces * owned as u64
-    }
     pub(in crate::mesh_large) fn encode(&self) -> Result<Vec<u8>, JobError> {
         let length =
             usize::try_from(self.encoded_len()).map_err(|_| resource("witness encoding size"))?;
@@ -834,8 +816,6 @@ mod tests {
                 "{what}"
             );
         }
-        assert!(LeafWitness::max_encoded_len(8192) < LeafWitness::read_lease(8192));
-        assert!(sample().encoded_len() + sample().owned_bytes() <= LeafWitness::read_lease(3));
     }
 
     /// `build` on a 8x2 page and a sheared triangle: metres per texel along the worst
@@ -940,19 +920,22 @@ mod tests {
         let path = dir.path().join("pre").join(format!("leaf-{:012}.wit", 3));
         let write = || store.write_leaf(3, 0, &atlas, &witness).unwrap();
         write();
-        assert_eq!(store.read_leaf(3).unwrap().witness, witness);
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap().witness,
+            witness
+        );
         let bytes = fs::read(&path).unwrap();
         // Truncated, and stale-length (one byte longer than the head says).
         fs::write(&path, &bytes[..bytes.len() - 1]).unwrap();
         assert_eq!(
-            store.read_leaf(3).unwrap_err().kind(),
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
             JobErrorKind::InvalidState
         );
         let mut longer = bytes.clone();
         longer.push(0);
         fs::write(&path, &longer).unwrap();
         assert_eq!(
-            store.read_leaf(3).unwrap_err().kind(),
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
             JobErrorKind::InvalidState
         );
         // Same length but corrupt content.
@@ -960,12 +943,43 @@ mod tests {
         flipped[45] |= 0x80;
         fs::write(&path, &flipped).unwrap();
         assert_eq!(
-            store.read_leaf(3).unwrap_err().kind(),
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
             JobErrorKind::InvalidState
         );
         // Missing.
         fs::remove_file(&path).unwrap();
-        assert_eq!(store.read_leaf(3).unwrap_err().kind(), JobErrorKind::Io);
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
+            JobErrorKind::Io
+        );
+        // The witness file and its decode are charged to the reader's lease: the
+        // smallest lease that reads the leaf grows by at least the witness bytes, and one
+        // byte less is a typed resource refusal.
+        fs::write(&path, &bytes).unwrap();
+        let threshold = |index: u64| {
+            let (mut lo, mut hi) = (0u64, 1 << 30);
+            while lo < hi {
+                let mid = (lo + hi) / 2;
+                match store.read_leaf(index, mid, &|| Ok(())) {
+                    Ok(_) => hi = mid,
+                    Err(e) => {
+                        assert_eq!(e.kind(), JobErrorKind::ResourceLimit);
+                        lo = mid + 1;
+                    }
+                }
+            }
+            lo
+        };
+        let small = LeafWitness {
+            texel_spacing: None,
+            primitives: Vec::new(),
+        };
+        store.write_leaf(4, 0, &atlas, &small).unwrap();
+        let (full, empty) = (threshold(3), threshold(4));
+        assert!(
+            full - empty >= witness.encoded_len() + witness.owned_bytes() - small.encoded_len()
+        );
+        store.release_leaf(4).unwrap();
         // Released with its leaf, and the store returns to empty.
         fs::write(&path, &bytes).unwrap();
         store.release_leaf(3).unwrap();
@@ -1138,9 +1152,9 @@ mod tests {
             }
             for node in pass.nodes()? {
                 let (first, depth) = node?;
-                for child in pass.frozen(first, depth)?.children {
+                for child in pass.frozen(first, depth, 1 << 30)?.children {
                     if let Some(leaf) = child.leaf {
-                        let packet = pass.preencode.read_leaf(leaf.index)?;
+                        let packet = pass.preencode.read_leaf(leaf.index, 1 << 30, pass.check)?;
                         self.leaves.lock().unwrap().insert(leaf.index, packet);
                     }
                 }

@@ -1154,6 +1154,7 @@ fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
                 profile,
                 128 * 1024 * 1024,
                 None,
+                super::delivery::LADDER,
             )
             .unwrap();
             let decoder = basisu::Transcoder::new(&output.bytes).unwrap();

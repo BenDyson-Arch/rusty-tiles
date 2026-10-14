@@ -3,7 +3,7 @@
 use super::{
     attributes::{self, FullTriangle},
     capture::{self, SourceScan},
-    config::{self, JobsPlan, MemoryBound, ScratchNeed, TreeConfig},
+    config::{self, JobsPlan, MemoryBound, TreeConfig},
     images::{self, ImageCaptureBounds, ImageSnapshot},
     input::StreamSource,
     leaves::{
@@ -12,7 +12,7 @@ use super::{
         planning::{self, LeafPlan},
     },
     records::TriangleRecord,
-    tree::{self, TreeOutput},
+    tree::{self, RetainedTree, TreeOutput},
 };
 use crate::{
     gltf_source::source::{self, ImageInfo, Material},
@@ -27,18 +27,58 @@ const DECODER_ALLOWANCE: u64 = 192 << 20;
 const PLANNING_ALLOWANCE: u64 = 128 << 20;
 const SORT_THREAD_BYTES: u64 = 8_000_000;
 
+/// Scratch bytes live at each capture stage's peak, from declared counts and the sorter's file
+/// lifetimes ([`config::sort_spill`]). Each figure includes the files retained from earlier
+/// stages. As a measurement (`scratch_stage_peaks`) the same fields hold observed peaks;
+/// `lod_prepass` is then 0 because H17 runs after capture.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ScratchStages {
+    /// Corner, positioned-corner and full-triangle sorts of the attribute capture.
+    pub capture: u64,
+    /// The sorted full-triangle stream, its retained sequence and the projection sort.
+    pub projection: u64,
+    pub images: u64,
+    /// The projection merge, cell tree and node sort, and the weld-depth pass.
+    pub tree: u64,
+    pub corner_depths: u64,
+    pub leaf_plans: u64,
+    /// Everything retained for leaves plus H17's own declared pre-pass need.
+    pub lod_prepass: u64,
+}
+impl ScratchStages {
+    fn max(&self) -> u64 {
+        [
+            self.capture,
+            self.projection,
+            self.images,
+            self.tree,
+            self.corner_depths,
+            self.leaf_plans,
+            self.lod_prepass,
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+    }
+}
+
+/// Upfront scratch admission: the largest declared stage working set, a 10% model margin and
+/// per-file allocation rounding. Stage entries recheck their own working set.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct FullScratchNeed {
-    pub h1: ScratchNeed,
-    pub full_capture_bytes: u64,
-    pub retained_full_bytes: u64,
-    pub corner_join_bytes: u64,
-    pub leaf_plan_bytes: u64,
+    pub stages: ScratchStages,
     pub image_bytes: u64,
-    pub extra_live_files: u64,
+    pub max_live_files: u64,
+    /// Largest declared stage working set (logical spill bytes).
     pub logical_need_bytes: u64,
+    /// The 10% model margin plus per-file allocation rounding and directory metadata.
     pub allocation_reserve_bytes: u64,
+    /// Per-file rounding alone, added to each stage-entry recheck.
+    pub file_rounding_bytes: u64,
     pub need_bytes: u64,
+    /// Output-side admission reservation (leaf staging, archive staging and a replaced
+    /// destination), checked on the filesystems holding the work directory and output.
+    pub output_reserve_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct FullMemoryBound {
@@ -65,13 +105,16 @@ pub(crate) struct FullCaptureReport {
     pub scratch: FullScratchNeed,
     pub image_capture: ImageCaptureBounds,
     pub scratch_logical_peak_bytes: u64,
+    /// Measured peak live scratch of each capture stage (the declared bounds are
+    /// `scratch.stages`); `lod_prepass` is 0 here.
+    pub scratch_stage_peaks: ScratchStages,
     pub scratch_memory_backed: bool,
     /// Local encoding contract version: dataset-wide zero origin/aligned lattice.
     pub lattice_version: u32,
 }
 
 pub(crate) struct FullCaptured {
-    pub tree: TreeOutput,
+    pub tree: RetainedTree,
     pub triangles: Sequence<FullTriangle>,
     pub corner_depths: Sequence<CornerDepth>,
     pub leaf_plans: Sequence<LeafPlan>,
@@ -186,52 +229,200 @@ fn scratch_need(
     image_count: u64,
     image_bytes: u64,
 ) -> Result<FullScratchNeed, JobError> {
-    let h1 = config::scratch_need_parts(scan.triangles, scan.geometry_bytes, config, unit)
-        .ok_or_else(|| exhausted("full capture H1 scratch arithmetic overflow"))?;
-    let full_capture_bytes = mul(scan.triangles, 863)?;
-    let retained_full_bytes = mul(scan.triangles, FullTriangle::SIZE as u64)?;
-    let corner_join_bytes = mul(
-        scan.triangles,
-        6 * (RankCorner::SIZE + RankDepth::SIZE) as u64 + CornerDepth::SIZE as u64,
+    use super::{
+        records::{CornerRef, NodeRecord, Span},
+        tree::{VertexDepth, WeldDepth},
+    };
+    let overflow = || exhausted("full capture scratch arithmetic overflow");
+    let sorter = config.sorter(1); // Run sizes do not depend on the worker count.
+    let n = scan.triangles;
+    let corners = mul(n, 3)?;
+    let corner_refs = config::sort_spill::<CornerRef>(corners, sorter).ok_or_else(overflow)?;
+    let positioned =
+        config::sort_spill::<attributes::FullCorner>(corners, sorter).ok_or_else(overflow)?;
+    let full = config::sort_spill::<FullTriangle>(n, sorter).ok_or_else(overflow)?;
+    let projection = config::sort_spill::<TriangleRecord>(n, sorter).ok_or_else(overflow)?;
+    let nodes = config::node_bound(n, scan.geometry_bytes, config);
+    let node_sort = config::sort_spill::<NodeRecord>(nodes, sorter).ok_or_else(overflow)?;
+    let node_bytes = mul(nodes, NodeRecord::SIZE as u64)?;
+    let span_bytes = mul(nodes, Span::SIZE as u64)?;
+    let vertex_depths = config::sort_spill::<VertexDepth>(corners, sorter).ok_or_else(overflow)?;
+    let weld_bytes = mul(corners, WeldDepth::SIZE as u64)?;
+    let rank_corners = config::sort_spill::<RankCorner>(corners, sorter).ok_or_else(overflow)?;
+    let rank_depths = config::sort_spill::<RankDepth>(corners, sorter).ok_or_else(overflow)?;
+    let corner_depth_bytes = mul(n, CornerDepth::SIZE as u64)?;
+    // Every leaf holds at least one triangle and is a tree node.
+    let leaf_plan_bytes = mul(n.min(nodes), LeafPlan::SIZE as u64)?;
+    let incidences = config::sort_spill::<super::lod::incidence::Incidence>(corners, sorter)
+        .ok_or_else(overflow)?;
+    let corner_infos = config::sort_spill::<super::lod::incidence::CornerInfo>(corners, sorter)
+        .ok_or_else(overflow)?;
+    let lod_sources = mul(n, super::lod::incidence::LodSource::SIZE as u64)?;
+    let max = |values: &[Option<u64>]| -> Result<u64, JobError> {
+        values
+            .iter()
+            .try_fold(0, |m: u64, v| v.map(|v| m.max(v)))
+            .ok_or_else(overflow)
+    };
+    let t = full.bytes;
+    let q = projection.bytes;
+    let capture = max(&[
+        Some(corner_refs.finish_peak),
+        corner_refs.flow(positioned.push_peak),
+        Some(positioned.finish_peak),
+        positioned.flow(full.push_peak),
+        Some(full.finish_peak),
+    ])?;
+    // The full-triangle stream feeds its retained sequence and the projection sort.
+    let projection_stage = full
+        .flow(add(t, projection.push_peak)?)
+        .ok_or_else(overflow)?;
+    let images = add(add(t, q)?, image_bytes)?;
+    let retained = add(t, image_bytes)?;
+    let welding = max(&[
+        Some(vertex_depths.finish_peak),
+        vertex_depths.flow(weld_bytes),
+    ])?;
+    let tree = add(
+        retained,
+        max(&[
+            Some(projection.finish_peak),
+            projection
+                .flow(add(q, node_sort.push_peak)?)
+                .and_then(|v| v.checked_add(span_bytes)),
+            node_sort
+                .flow(node_bytes)
+                .and_then(|v| v.checked_add(q)?.checked_add(span_bytes)),
+            welding
+                .checked_add(q)
+                .and_then(|v| v.checked_add(node_bytes)?.checked_add(span_bytes)),
+        ])?,
     )?;
-    // Every leaf holds at least one triangle. Include the owned plan sequence
-    // before the immutable lattice and published leaf bytes exist.
-    let leaf_plan_bytes = mul(scan.triangles, LeafPlan::SIZE as u64)?;
-    let extra_logical = add(
-        add(
-            add(full_capture_bytes, retained_full_bytes)?,
-            corner_join_bytes,
-        )?,
-        add(image_bytes, leaf_plan_bytes)?,
+    let base = add(add(add(retained, q)?, node_bytes)?, weld_bytes)?;
+    let corner_depths = add(
+        base,
+        max(&[
+            Some(rank_corners.finish_peak),
+            rank_corners.flow(rank_depths.push_peak),
+            Some(rank_depths.finish_peak),
+            rank_depths.flow(corner_depth_bytes),
+        ])?,
     )?;
+    // After the corner join the rank-ordered projection is released (RetainedTree).
+    let kept = add(add(retained, node_bytes)?, weld_bytes)?;
+    let leaf_plans = add(add(kept, corner_depth_bytes)?, leaf_plan_bytes)?;
+    // H17's pre-pass (lod/incidence.rs): an incidence sort streamed into a corner-info sort,
+    // streamed with the retained sequences into the slim LOD source.
+    let lod_prepass = add(
+        leaf_plans,
+        max(&[
+            Some(incidences.finish_peak),
+            incidences.flow(corner_infos.push_peak),
+            Some(corner_infos.finish_peak),
+            corner_infos.flow(lod_sources),
+        ])?,
+    )?;
+    let stages = ScratchStages {
+        capture,
+        projection: projection_stage,
+        images,
+        tree,
+        corner_depths,
+        leaf_plans,
+        lod_prepass,
+    };
+    let h1 =
+        config::scratch_need_parts(n, scan.geometry_bytes, config, unit).ok_or_else(overflow)?;
     let capacity = ((config.sort.run_bytes / 2) / size_of::<FullTriangle>()).max(1) as u64;
-    let counted = add(
-        mul(add(mul(scan.triangles, 16)?.div_ceil(capacity), 5)?, 2)?,
-        32,
-    )?;
+    let counted = add(mul(add(mul(n, 16)?.div_ceil(capacity), 5)?, 2)?, 32)?;
     let inventory = add(mul(config.sort.fan_in as u64, 256)?, 32)?;
-    // Add image sequences and retained full/depth sequences outside run inventory.
-    let extra_live_files = add(add(inventory.min(counted), image_count)?, 5)?;
-    let extra_reserve = add(
-        add(mul(add(unit, 64 << 10)?, extra_live_files)?, 1 << 20)?,
-        extra_logical,
+    // H1 run inventory plus full-capture runs, image sequences and retained sequences.
+    let max_live_files = add(
+        h1.max_live_files,
+        add(add(inventory.min(counted), image_count)?, 5)?,
     )?;
-    let logical_need_bytes = add(h1.logical_need_bytes, extra_logical)?;
-    let allocation_reserve_bytes = add(h1.allocation_reserve_bytes, extra_reserve)?;
+    let logical_need_bytes = stages.max();
+    // Runs are chunk files of about CHUNK_BYTES each (at least half of it, for any record).
+    let chunk_files = logical_need_bytes.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
+    let max_live_files = add(max_live_files, chunk_files)?;
+    let file_rounding_bytes = config::file_rounding(unit, max_live_files).ok_or_else(overflow)?;
+    let allocation_reserve_bytes = add(logical_need_bytes.div_ceil(10), file_rounding_bytes)?;
     let need_bytes = add(logical_need_bytes, allocation_reserve_bytes)?;
+    // One copy each of leaf staging, archive staging and a replaced destination.
+    let output_reserve_bytes = mul(
+        add(mul(n, config::OUTPUT_BYTES_PER_TRIANGLE)?, image_bytes)?,
+        3,
+    )?;
     Ok(FullScratchNeed {
-        h1,
-        full_capture_bytes,
-        retained_full_bytes,
-        corner_join_bytes,
-        leaf_plan_bytes,
+        stages,
         image_bytes,
-        extra_live_files,
+        max_live_files,
         logical_need_bytes,
         allocation_reserve_bytes,
+        file_rounding_bytes,
         need_bytes,
+        output_reserve_bytes,
     })
 }
+
+/// Admission of the upfront scratch need and output reservation, summed per filesystem.
+/// Returns the bytes the scratch filesystem must hold (its preflight figure).
+fn output_admission(
+    parent: &Path,
+    need: &FullScratchNeed,
+    config: &TreeConfig,
+) -> Result<u64, JobError> {
+    let Some((work, output)) = &config.output_parents else {
+        return Ok(need.need_bytes);
+    };
+    let copy = need.output_reserve_bytes / 3;
+    // (path, bytes): leaf staging beside the work directory, archive staging and a replaced
+    // destination beside the output.
+    let mut demands: Vec<(&Path, u64)> = vec![(parent, need.need_bytes)];
+    for (path, bytes) in [(work.as_path(), copy), (output.as_path(), mul(copy, 2)?)] {
+        let mut placed = false;
+        for demand in &mut demands {
+            if crate::spill::same_filesystem(demand.0, path)
+                .map_err(|e| JobError::io("inspect output filesystem", path, e))?
+            {
+                demand.1 = add(demand.1, bytes)?;
+                placed = true;
+                break;
+            }
+        }
+        if !placed {
+            demands.push((path, bytes));
+        }
+    }
+    for (path, bytes) in &demands[1..] {
+        crate::spill::preflight(
+            path,
+            *bytes,
+            crate::spill::SpaceRole::Output,
+            crate::spill::PreflightStage::Geometry,
+        )?;
+    }
+    Ok(demands[0].1)
+}
+
+/// Ends a stage: its measured peak, which must stay within the declared stage bound.
+fn end_stage(scratch: &Scratch, bound: u64, name: &'static str) -> Result<u64, JobError> {
+    let peak = scratch.stage_peak_bytes();
+    if peak > bound {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!("full capture {name} scratch {peak} bytes exceeded its declared stage bound {bound}"),
+        ));
+    }
+    Ok(peak)
+}
+/// Starts a stage: rechecks free space for its own working set plus file rounding.
+fn begin_stage(scratch: &Scratch, need: &FullScratchNeed, bound: u64) -> Result<(), JobError> {
+    config::preflight_remaining(scratch, add(bound, need.file_rounding_bytes)?)?;
+    scratch.begin_stage();
+    Ok(())
+}
+
 fn memory_bound(
     config: &TreeConfig,
     json_bytes: u64,
@@ -374,7 +565,8 @@ pub(crate) fn capture_admitted(
     }
     // All checked counts, memory and physical allocation happen before creation.
     check().map_err(super::failure)?;
-    let scratch = Scratch::create(config.scratch_dir.as_deref(), need.need_bytes)
+    let scratch_admission = output_admission(&parent, &need, config).map_err(super::failure)?;
+    let scratch = Scratch::create(config.scratch_dir.as_deref(), scratch_admission)
         .map_err(|e| super::failure(e.into()))?;
     let source_totals = (
         source.source_bytes,
@@ -390,9 +582,13 @@ pub(crate) fn capture_admitted(
                 "scratch volume changed after full capture preflight",
             ));
         }
-        config::preflight_remaining(&scratch, need.need_bytes)?;
+        let stages = need.stages;
+        let mut peaks = ScratchStages::default();
+        begin_stage(&scratch, &need, stages.capture)?;
         let mut full_stream =
             attributes::capture_full(&source, &scratch, config.sorter(workers), &scan, check)?;
+        peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
+        begin_stage(&scratch, &need, stages.projection)?;
         let mut full_writer = SequenceWriter::<FullTriangle>::new(
             &scratch,
             "full-triangles",
@@ -425,8 +621,11 @@ pub(crate) fn capture_admitted(
         if count != scan.triangles {
             return Err(invariant("full capture rank count differs from scan"));
         }
+        peaks.projection = end_stage(&scratch, stages.projection, "projection")?;
+        begin_stage(&scratch, &need, stages.images)?;
         let (images, image_capture) =
             images::capture_images(&source, &scratch, config.sort.buffer_bytes, check)?;
+        peaks.images = end_stage(&scratch, stages.images, "image capture")?;
         if image_capture.scratch_bytes != image_bytes || image_capture.images != image_count {
             return Err(invariant("image capture disagrees with preflight"));
         }
@@ -498,23 +697,24 @@ pub(crate) fn capture_admitted(
         let samplers = source.document.samplers().to_vec();
         source.verify_unchanged()?;
         drop(source); // All subsequent operations read owned snapshot records only.
-        config::preflight_remaining(&scratch, need.need_bytes)?;
-        let retained_allowance = need
-            .need_bytes
-            .checked_sub(need.h1.need_bytes)
-            .ok_or_else(|| invariant("full capture retained scratch allowance underflow"))?;
+        begin_stage(&scratch, &need, stages.tree)?;
         let tree = tree::build(
             &scratch,
             projection.finish()?,
             config,
             workers,
-            retained_allowance,
+            Some(add(stages.tree, need.file_rounding_bytes)?),
             check,
         )?;
+        peaks.tree = end_stage(&scratch, stages.tree, "cell tree")?;
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
         verify_rank_alignment(&triangles, &tree.triangles, check)?;
-        config::preflight_remaining(&scratch, need.need_bytes)?;
+        begin_stage(&scratch, &need, stages.corner_depths)?;
         let corner_depths = join_corner_depths(&scratch, &tree, config, workers, check)?;
+        peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
+        // The rank-ordered projection's last reader is done; the full-triangle sequence
+        // carries the same records in the same rank order (verified above).
+        let tree = tree.release_triangles();
         let height = usize::try_from(tree.stats.height)
             .map_err(|_| invariant("tree height conversion failed"))?;
         if height == 0 || height > 32 {
@@ -535,13 +735,14 @@ pub(crate) fn capture_admitted(
             samplers: &samplers,
             image_info: &image_info,
         };
+        begin_stage(&scratch, &need, stages.leaf_plans)?;
         let leaf_plans =
             planning::preflight(&scratch, &triangles, &tree.nodes, resources, config, check)?;
+        peaks.leaf_plans = end_stage(&scratch, stages.leaf_plans, "leaf planning")?;
         if leaf_plans.len() != tree.stats.leaves {
             return Err(invariant("leaf plan count differs from immutable tree"));
         }
         let lattice = LatticePlan::new(config.profile, scan.bounds, &extents)?;
-        config::preflight_remaining(&scratch, need.need_bytes)?;
         check()?;
         if scratch.peak_bytes() > need.logical_need_bytes {
             return Err(exhausted(
@@ -559,6 +760,7 @@ pub(crate) fn capture_admitted(
             scratch_logical_peak_bytes: scratch.peak_bytes(),
             scratch_memory_backed: scratch.memory_backed(),
             scratch: need,
+            scratch_stage_peaks: peaks,
             image_capture,
             lattice_version: 1,
         };
@@ -901,10 +1103,13 @@ pub(super) mod tests {
         let captured = capture(&input, &config, &mut || Ok(())).unwrap();
         assert_eq!(captured.scan.triangles, 1);
         assert_eq!(captured.images.len(), 2);
+        let scratch = &captured.report.scratch;
         assert!(
-            captured.report.image_capture.scratch_bytes > captured.report.scratch.h1.need_bytes,
-            "control must exceed the H1-only owner allowance"
+            captured.report.image_capture.scratch_bytes > scratch.stages.capture,
+            "control must exceed the geometry-only stage"
         );
+        assert!(scratch.stages.images >= captured.report.image_capture.scratch_bytes);
+        assert!(captured.report.scratch_stage_peaks.images <= scratch.stages.images);
         assert!(
             captured.report.scratch_logical_peak_bytes
                 <= captured.report.scratch.logical_need_bytes
@@ -942,7 +1147,6 @@ pub(super) mod tests {
         assert_eq!(output.triangles.len(), 19);
         assert_eq!(output.corner_depths.len(), 19);
         assert!(output.tree.stats.height > 22);
-        verify_rank_alignment(&output.triangles, &output.tree.triangles, &mut || Ok(())).unwrap();
         for (rank, row) in output.triangles.reader().unwrap().enumerate() {
             let row = row.unwrap();
             assert_eq!(row.triangle.source.triangle, rank as u64);
@@ -959,13 +1163,12 @@ pub(super) mod tests {
             .map(Result::unwrap)
             .collect();
         for (triangle, depths) in output
-            .tree
             .triangles
             .reader()
             .unwrap()
             .zip(output.corner_depths.reader().unwrap())
         {
-            let triangle = triangle.unwrap();
+            let triangle = triangle.unwrap().triangle;
             let depths = depths.unwrap();
             for a in 0..3 {
                 let key = triangle.positions[a].map(f32::to_bits);
@@ -1123,13 +1326,12 @@ pub(super) mod tests {
                 .map(Result::unwrap)
                 .collect();
             let ranks: Vec<_> = output
-                .tree
                 .triangles
                 .reader()
                 .unwrap()
                 .map(|t| {
                     let mut bytes = vec![0; TriangleRecord::SIZE];
-                    t.unwrap().encode(&mut bytes);
+                    t.unwrap().triangle.encode(&mut bytes);
                     bytes
                 })
                 .collect();
@@ -1141,8 +1343,8 @@ pub(super) mod tests {
                 .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
                 .collect();
             let lookup: std::collections::BTreeMap<_, _> = weld.iter().copied().collect();
-            for (triangle, depths) in output.tree.triangles.reader().unwrap().zip(&depths) {
-                let triangle = triangle.unwrap();
+            for (triangle, depths) in output.triangles.reader().unwrap().zip(&depths) {
+                let triangle = triangle.unwrap().triangle;
                 for corner in 0..3 {
                     let key = triangle.positions[corner].map(f32::to_bits);
                     assert_eq!(depths.depths[corner], lookup[&key]);
@@ -1168,6 +1370,98 @@ pub(super) mod tests {
         }
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
     }
+    /// Every capture stage's measured peak stays within its declared bound across sorter
+    /// regimes: one run, intermediate merges with slack, and inventory compaction. A
+    /// violation already fails capture closed; the asserts state the contract.
+    #[test]
+    fn measured_stage_peaks_stay_within_the_stage_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let smallest = 2 * size_of::<FullTriangle>();
+        for (count, run_bytes, fan_in) in [
+            (19, 160 << 20, 64),
+            (300, smallest, 2),
+            (300, 4096, 3),
+            (1200, 1 << 16, 4),
+        ] {
+            let source = dir
+                .path()
+                .join(format!("source-{count}-{run_bytes}-{fan_in}"));
+            let parent = dir
+                .path()
+                .join(format!("scratch-{count}-{run_bytes}-{fan_in}"));
+            fs::create_dir(&parent).unwrap();
+            let input = fixture(&source, count);
+            let mut config = config(&parent);
+            config.sort.run_bytes = run_bytes;
+            config.sort.fan_in = fan_in;
+            let output = capture(&input, &config, &mut || Ok(())).unwrap();
+            let declared = output.report.scratch.stages;
+            let measured = output.report.scratch_stage_peaks;
+            let pairs = [
+                ("capture", measured.capture, declared.capture),
+                ("projection", measured.projection, declared.projection),
+                ("images", measured.images, declared.images),
+                ("tree", measured.tree, declared.tree),
+                (
+                    "corner_depths",
+                    measured.corner_depths,
+                    declared.corner_depths,
+                ),
+                ("leaf_plans", measured.leaf_plans, declared.leaf_plans),
+            ];
+            for (name, peak, bound) in pairs {
+                assert!(
+                    peak <= bound,
+                    "{count}/{run_bytes}/{fan_in} {name}: {peak} > {bound}"
+                );
+            }
+            assert!(measured.projection > 0 && measured.tree > 0);
+            assert!(
+                output.report.scratch_logical_peak_bytes
+                    <= output.report.scratch.logical_need_bytes
+            );
+            output.close().unwrap();
+        }
+    }
+    #[test]
+    fn sort_spill_slack_follows_the_merge_regime() {
+        let sorter = |run_bytes, fan_in| crate::spill::SortConfig {
+            run_bytes,
+            fan_in,
+            buffer_bytes: 64,
+            jobs: 1,
+        };
+        let row = size_of::<FullTriangle>();
+        let spill = |records, run_records: usize, fan_in| {
+            config::sort_spill::<FullTriangle>(records, sorter(run_records * row, fan_in)).unwrap()
+        };
+        let s = |records: u64| records * FullTriangle::SIZE as u64;
+        // Two records per chunk file, so F partly read chunks are smaller than S.
+        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(Some(2 * FullTriangle::SIZE)));
+        let chunks = |fan_in: u64| fan_in * s(2);
+        // At most F runs: no intermediate merge; the stream holds partly read chunks.
+        let one = spill(40, 10, 4);
+        assert_eq!((one.push_peak, one.finish_peak), (s(40), s(40)));
+        assert_eq!(one.stream_slack, chunks(4));
+        // More than F runs: an intermediate merge frees inputs while writing its output.
+        let some = spill(60, 10, 4);
+        assert_eq!(
+            (some.push_peak, some.finish_peak),
+            (s(60), s(60) + chunks(4))
+        );
+        // Multi-level passes are bounded the same way, group by group.
+        let deep = spill(170, 10, 4);
+        assert_eq!(deep.finish_peak, s(170) + chunks(4));
+        // Inventory compaction from 64F runs merges while pushing.
+        let compacting = spill(2560, 10, 4);
+        assert_eq!(compacting.push_peak, s(2560) + chunks(4));
+        // The flow of a stream into proportional output: the larger side plus the slack.
+        assert_eq!(one.flow(s(100)), Some(s(100) + chunks(4)));
+        crate::spill::CHUNK_OVERRIDE.with(|c| c.set(None));
+        // Unchunked-size data: slack never exceeds S.
+        let small = spill(60, 10, 4);
+        assert_eq!(small.finish_peak, 2 * s(60));
+    }
     #[test]
     fn checked_full_scratch_and_decoder_memory_charges() {
         let cfg = TreeConfig::new(Profile::Balanced);
@@ -1180,10 +1474,40 @@ pub(super) mod tests {
             geometry_bytes: 2000,
         };
         let need = scratch_need(scan, &cfg, 4096, 2, 8192).unwrap();
-        assert_eq!(need.full_capture_bytes, 8630);
-        assert_eq!(need.retained_full_bytes, 2860);
-        assert_eq!(need.corner_join_bytes, 1890);
-        assert!(need.need_bytes > need.logical_need_bytes);
+        // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860, projection 930. One
+        // run per sort, so no merge slack: the positioned stream beside the full-triangle sort
+        // bounds capture; the full stream, its sequence and the projection bound projection.
+        // Chunks free as they are read, so a stream and its consumer's output trade off.
+        assert_eq!(need.stages.capture, 2910 + 2910);
+        assert_eq!(need.stages.projection, 2 * 2860 + 930);
+        assert_eq!(need.stages.images, 2860 + 930 + 8192);
+        // One chunk per sort here: a stream holds all of its chunk until read through, so the
+        // incidence stream (63 B per corner) and its partly read chunk bound H17.
+        assert_eq!(
+            need.stages.lod_prepass,
+            need.stages.leaf_plans + 2 * 30 * 63
+        );
+        assert_eq!(need.logical_need_bytes, need.stages.max());
+        // Control: the old reserve re-added the whole logical need as extent overhead. Now the
+        // reserve is a 10% model margin plus per-file rounding only.
+        assert_eq!(
+            need.allocation_reserve_bytes,
+            need.logical_need_bytes.div_ceil(10) + need.file_rounding_bytes
+        );
+        assert_eq!(
+            need.file_rounding_bytes,
+            config::file_rounding(4096, need.max_live_files).unwrap()
+        );
+        assert_eq!(
+            need.need_bytes,
+            need.logical_need_bytes + need.allocation_reserve_bytes
+        );
+        let h1 = config::scratch_need_parts(10, 2000, &cfg, 4096).unwrap();
+        assert_eq!(
+            h1.need_bytes - h1.logical_need_bytes,
+            config::file_rounding(4096, h1.max_live_files).unwrap()
+        );
+        assert_eq!(need.output_reserve_bytes, 3 * (10 * 119 + 8192));
         let overflow = SourceScan {
             triangles: u64::MAX,
             ..scan
