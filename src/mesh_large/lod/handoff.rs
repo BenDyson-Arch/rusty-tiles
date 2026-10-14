@@ -208,7 +208,97 @@ struct Head {
     tables: Vec<FrozenTable>,
 }
 
-const MAGIC: &[u8; 8] = b"H17FRZ\x01\0";
+/// Wire v2: magic; the certified member's length (u64) and SHA-256 (a fixed prefix, so
+/// it is read without the head); head length and JSON head; face count and faces, each
+/// with a u32 feature-ID set count (v1 capped it at 255 in a u8).
+const MAGIC: &[u8; 8] = b"H17FRZ\x02\0";
+
+/// A caller's memory allowance for one bounded read, decode or assembly. Every owned
+/// allocation is charged BEFORE it is made; beyond the limit is `ResourceLimit`.
+#[derive(Debug)]
+pub(in crate::mesh_large) struct Lease {
+    limit: u64,
+    used: u64,
+    what: &'static str,
+}
+
+impl Lease {
+    pub(in crate::mesh_large) fn new(limit: u64, what: &'static str) -> Self {
+        Self {
+            limit,
+            used: 0,
+            what,
+        }
+    }
+    pub(in crate::mesh_large) fn charge(&mut self, bytes: u64) -> Result<(), JobError> {
+        match self.used.checked_add(bytes) {
+            Some(used) if used <= self.limit => {
+                self.used = used;
+                Ok(())
+            }
+            _ => Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "{} needs more than its {} byte memory lease",
+                    self.what, self.limit
+                ),
+            )),
+        }
+    }
+    /// Charge `count` items of `size` bytes each (overflow is over the lease).
+    pub(in crate::mesh_large) fn charge_items(
+        &mut self,
+        count: u64,
+        size: usize,
+    ) -> Result<(), JobError> {
+        self.charge(count.checked_mul(size as u64).unwrap_or(u64::MAX))
+    }
+    pub(in crate::mesh_large) fn used(&self) -> u64 {
+        self.used
+    }
+    pub(in crate::mesh_large) fn limit(&self) -> u64 {
+        self.limit
+    }
+}
+
+/// Read a whole file under `lease`: its size is queried and charged before any
+/// allocation, it is read in bounded chunks with `check` between them, and a file that
+/// changes size while read is `InvalidState`. `expected` pins the size when known.
+pub(in crate::mesh_large) fn read_bounded(
+    path: &Path,
+    expected: Option<u64>,
+    lease: &mut Lease,
+    check: &dyn Fn() -> Result<(), JobError>,
+    what: &str,
+) -> Result<Vec<u8>, JobError> {
+    use std::io::Read;
+    check()?;
+    let io = |e| JobError::io(what, path, e);
+    let mut file = fs::File::open(path).map_err(io)?;
+    let size = file.metadata().map_err(io)?.len();
+    if expected.is_some_and(|e| e != size) {
+        return Err(state(format!(
+            "{what}: {} holds {size} bytes, not the {} its owner recorded",
+            path.display(),
+            expected.unwrap_or_default()
+        )));
+    }
+    lease.charge(size)?;
+    let size = usize::try_from(size).map_err(|_| state(format!("{what}: file too large")))?;
+    let mut out = vec![0u8; size];
+    let mut at = 0;
+    while at < size {
+        check()?;
+        let end = (at + (1 << 20)).min(size);
+        file.read_exact(&mut out[at..end]).map_err(io)?;
+        at = end;
+    }
+    let mut probe = [0u8; 1];
+    if file.read(&mut probe).map_err(io)? != 0 {
+        return Err(state(format!("{what}: {} grew while read", path.display())));
+    }
+    Ok(out)
+}
 
 impl FrozenNode {
     /// The same-primitive donor intervals of a face (its owning primitive's ranges).
@@ -304,6 +394,8 @@ impl FrozenNode {
         let head = serde_json::to_vec(&head).map_err(|e| state(e.to_string()))?;
         let mut b = Vec::with_capacity(head.len() + self.faces.len() * 140 + 32);
         b.extend_from_slice(MAGIC);
+        b.extend_from_slice(&self.glb_bytes.to_le_bytes());
+        b.extend_from_slice(&self.glb_sha256);
         b.extend_from_slice(&(head.len() as u64).to_le_bytes());
         b.extend_from_slice(&head);
         b.extend_from_slice(&(self.faces.len() as u64).to_le_bytes());
@@ -325,7 +417,11 @@ impl FrozenNode {
             );
             b.extend_from_slice(&f.origin.triangle.to_le_bytes());
             u32s(&mut b, &[f.fill.unwrap_or(u32::MAX)]);
-            b.push(u8::try_from(f.features.len()).map_err(|_| state("too many feature-ID sets"))?);
+            u32s(
+                &mut b,
+                &[u32::try_from(f.features.len())
+                    .map_err(|_| state("too many feature-ID sets"))?],
+            );
             for (id, table) in &f.features {
                 u32s(&mut b, &[*id, table.unwrap_or(u32::MAX)]);
             }
@@ -339,24 +435,43 @@ impl FrozenNode {
         Ok(b)
     }
 
-    pub(in crate::mesh_large) fn decode(b: &[u8]) -> Result<Self, JobError> {
+    /// Decode a packet, charging every owned allocation to `lease` before it is made and
+    /// checking for cancellation as faces are read.
+    pub(in crate::mesh_large) fn decode(
+        b: &[u8],
+        lease: &mut Lease,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<Self, JobError> {
         let bad = || state("frozen tile packet is corrupt");
         if b.get(..8) != Some(MAGIC) {
             return Err(bad());
         }
-        let mut at = 8usize;
+        let mut at = 48usize;
         let take = |at: &mut usize, n: usize| -> Result<&[u8], JobError> {
-            let s = b.get(*at..*at + n).ok_or_else(bad)?;
+            let s = b
+                .get(*at..at.checked_add(n).ok_or_else(bad)?)
+                .ok_or_else(bad)?;
             *at += n;
             Ok(s)
         };
         let u64_ = |s: &[u8]| u64::from_le_bytes(s.try_into().unwrap());
         let u32_ = |s: &[u8]| u32::from_le_bytes(s.try_into().unwrap());
-        let n = u64_(take(&mut at, 8)?) as usize;
+        let n = usize::try_from(u64_(take(&mut at, 8)?)).map_err(|_| bad())?;
+        // Decoded head structures: every JSON value is at least one byte of text and
+        // decodes into at most eight bytes plus its container share.
+        lease.charge_items(n as u64, 16)?;
         let head: Head = serde_json::from_slice(take(&mut at, n)?).map_err(|_| bad())?;
-        let count = u64_(take(&mut at, 8)?) as usize;
-        let mut faces = Vec::with_capacity(count.min(1 << 22));
-        for _ in 0..count {
+        let count = u64_(take(&mut at, 8)?);
+        // Each face is at least its fixed wire size, so a forged count fails here.
+        if count > (b.len() - at) as u64 / 147 {
+            return Err(bad());
+        }
+        lease.charge_items(count, std::mem::size_of::<FrozenFace>())?;
+        let mut faces = Vec::with_capacity(count as usize);
+        for k in 0..count {
+            if k.is_multiple_of(1 << 14) {
+                check()?;
+            }
             let s = take(&mut at, 20)?;
             let (gltf, source) = (u32_(&s[0..4]), u32_(&s[4..8]));
             let origin = Origin {
@@ -366,7 +481,11 @@ impl FrozenNode {
                 triangle: u64_(take(&mut at, 8)?),
             };
             let fill = u32_(take(&mut at, 4)?);
-            let sets = take(&mut at, 1)?[0] as usize;
+            let sets = u32_(take(&mut at, 4)?) as usize;
+            if sets > (b.len() - at) / 8 {
+                return Err(bad());
+            }
+            lease.charge_items(sets as u64, std::mem::size_of::<(u32, Option<u32>)>())?;
             let mut features = Vec::with_capacity(sets);
             for _ in 0..sets {
                 let s = take(&mut at, 8)?;
@@ -414,6 +533,12 @@ impl FrozenNode {
         for (i, byte) in sha.iter_mut().enumerate() {
             *byte =
                 u8::from_str_radix(&head.glb_sha256[2 * i..2 * i + 2], 16).map_err(|_| bad())?;
+        }
+        // The fixed prefix must agree with the head.
+        if b.get(8..16) != Some(&head.glb_bytes.to_le_bytes()[..])
+            || b.get(16..48) != Some(&sha[..])
+        {
+            return Err(bad());
         }
         let node = Self {
             identity: head.identity,
@@ -542,14 +667,49 @@ impl HandoffSink {
         Ok(size)
     }
 
+    /// Read and decode one packet within `memory_limit` bytes (file bytes plus decoded
+    /// structures), cancellable throughout.
     pub(in crate::mesh_large) fn read(
         &self,
         first: u64,
         depth: u32,
+        memory_limit: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<FrozenNode, JobError> {
         let path = self.path(first, depth);
-        let bytes = fs::read(&path).map_err(|e| JobError::io("read bake handoff", &path, e))?;
-        FrozenNode::decode(&bytes)
+        let mut lease = Lease::new(memory_limit, "reading a frozen tile packet");
+        let bytes = read_bounded(&path, None, &mut lease, check, "read bake handoff")?;
+        FrozenNode::decode(&bytes, &mut lease, check)
+    }
+
+    /// Bytes of a packet on disk (a size query before any read).
+    pub(in crate::mesh_large) fn size(&self, first: u64, depth: u32) -> Result<u64, JobError> {
+        let path = self.path(first, depth);
+        Ok(fs::metadata(&path)
+            .map_err(|e| JobError::io("inspect bake handoff", &path, e))?
+            .len())
+    }
+
+    /// The certified untextured member's recorded length and SHA-256, from the packet's
+    /// fixed 48-byte prefix (no head parse, no allocation).
+    pub(in crate::mesh_large) fn certified(
+        &self,
+        first: u64,
+        depth: u32,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<(u64, [u8; 32]), JobError> {
+        use std::io::Read;
+        check()?;
+        let path = self.path(first, depth);
+        let io = |e| JobError::io("read bake handoff head", &path, e);
+        let mut file = fs::File::open(&path).map_err(io)?;
+        let mut prefix = [0u8; 48];
+        file.read_exact(&mut prefix).map_err(io)?;
+        if &prefix[..8] != MAGIC {
+            return Err(state("frozen tile packet is corrupt"));
+        }
+        let length = u64::from_le_bytes(prefix[8..16].try_into().unwrap());
+        Ok((length, prefix[16..48].try_into().unwrap()))
     }
 
     /// Drop a consumed packet and its charge.
@@ -575,5 +735,142 @@ impl HandoffSink {
 
     pub(in crate::mesh_large) fn dir(&self) -> &Path {
         &self.dir
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A one-face packet with `sets` attribute feature-ID sets (set 0 the primitive row).
+    fn packet(sets: usize) -> FrozenNode {
+        let feature_ids: Vec<Value> = (0..sets)
+            .map(|k| json!({"featureCount": 1 << 20, "attribute": k, "label": format!("set{k}")}))
+            .collect();
+        let corner = |x: u32| FrozenCorner {
+            raw: [x, 0, 0],
+            decoded: [x, 0, 0],
+            weld: [x, 0, 0],
+            ell: 3,
+        };
+        FrozenNode {
+            identity: NodeIdentity {
+                cell_depth: 0,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                depth: 0,
+                first: 0,
+                end: 4,
+            },
+            profile: "balanced".into(),
+            geometric_error: 1.,
+            proxy_to_source: 1.,
+            source_to_proxy: 1.,
+            lattice_sha256: "00".repeat(32),
+            glb_sha256: [7; 32],
+            glb_bytes: 1234,
+            primitives: vec![FrozenPrimitive {
+                node: 0,
+                mesh: 0,
+                primitive: 0,
+                expanded_ordinal: 0,
+                material: u32::MAX,
+                row: 0,
+                error: 1.,
+                donor_ranges: vec![0..4],
+            }],
+            gltf: vec![FrozenGltfPrimitive {
+                node: 0,
+                mesh: 0,
+                index: 0,
+                sources: 0..1,
+                material: Some(0),
+                translation: [0; 3],
+                scale: [1f32.to_bits(); 3],
+                quantized: false,
+                feature_ids: Value::Array(feature_ids),
+                faces: 0..1,
+            }],
+            faces: vec![FrozenFace {
+                gltf: 0,
+                source: 0,
+                corners: [corner(1), corner(2), corner(3)],
+                origin: Origin {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    triangle: 2,
+                },
+                fill: None,
+                // Values above 2^24 survive the wire exactly.
+                features: (0..sets)
+                    .map(|k| {
+                        let id = if k == 0 { 0 } else { (1 << 24) + k as u32 };
+                        (id, Some(k as u32))
+                    })
+                    .collect(),
+            }],
+            fills: vec![],
+            vanished: vec![],
+            children: vec![],
+            tables: vec![],
+        }
+    }
+
+    #[test]
+    fn packets_round_trip_more_than_255_feature_sets_and_refuse_short_leases() {
+        let check = || Ok(());
+        for sets in [1, 255, 256, 300] {
+            let node = packet(sets);
+            let bytes = node.encode().unwrap();
+            let mut lease = Lease::new(u64::MAX, "test");
+            assert_eq!(
+                FrozenNode::decode(&bytes, &mut lease, &check).unwrap(),
+                node
+            );
+            // The decoded structures are charged; a lease just below fails before them.
+            let needed = lease.used();
+            let mut short = Lease::new(needed - 1, "test");
+            assert_eq!(
+                FrozenNode::decode(&bytes, &mut short, &check)
+                    .unwrap_err()
+                    .kind(),
+                JobErrorKind::ResourceLimit
+            );
+        }
+    }
+
+    #[test]
+    fn forged_counts_prefix_and_cancellation_are_refused() {
+        let node = packet(3);
+        let bytes = node.encode().unwrap();
+        let check = || Ok(());
+        let head = u64::from_le_bytes(bytes[48..56].try_into().unwrap()) as usize;
+        let faces_at = 56 + head;
+        let decode = |b: &[u8]| FrozenNode::decode(b, &mut Lease::new(u64::MAX, "t"), &check);
+        // A forged face count far beyond the remaining bytes.
+        let mut forged = bytes.clone();
+        forged[faces_at..faces_at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(decode(&forged).is_err());
+        // A forged per-face set count.
+        let mut forged = bytes.clone();
+        let sets_at = faces_at + 8 + 20 + 8 + 4;
+        forged[sets_at..sets_at + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(decode(&forged).is_err());
+        // The certified prefix must agree with the head.
+        let mut forged = bytes.clone();
+        forged[20] ^= 1;
+        assert!(decode(&forged).is_err());
+        // Cancellation reaches the decode.
+        let cancelled = || Err(JobError::new(JobErrorKind::Cancelled, "cancelled"));
+        assert_eq!(
+            FrozenNode::decode(&bytes, &mut Lease::new(u64::MAX, "t"), &cancelled)
+                .unwrap_err()
+                .kind(),
+            JobErrorKind::Cancelled
+        );
     }
 }

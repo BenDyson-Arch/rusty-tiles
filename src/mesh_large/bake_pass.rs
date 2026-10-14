@@ -17,7 +17,7 @@ use super::{
     leaves::prepared::{PreencodeLevel, PreencodePage, PreparedAtlas},
     lod::{
         codec,
-        handoff::{FrozenNode, HandoffSink, ScratchBudget},
+        handoff::{read_bounded, FrozenNode, HandoffSink, Lease, ScratchBudget},
         mesh::Origin,
     },
 };
@@ -538,12 +538,53 @@ impl<'a> BakePass<'a> {
         }))
     }
 
+    /// A tile's frozen packet, read and decoded within `memory_limit` bytes (charged
+    /// before any allocation; [`BakePass::frozen_size`] gives the file size first).
     pub(in crate::mesh_large) fn frozen(
         &self,
         first: u64,
         depth: u32,
+        memory_limit: u64,
     ) -> Result<FrozenNode, JobError> {
-        self.handoff.read(first, depth)
+        self.handoff.read(first, depth, memory_limit, self.check)
+    }
+
+    /// Bytes of a tile's packet on disk.
+    pub(in crate::mesh_large) fn frozen_size(
+        &self,
+        first: u64,
+        depth: u32,
+    ) -> Result<u64, JobError> {
+        self.handoff.size(first, depth)
+    }
+
+    /// The certified untextured member of a tile, exactly as H17 published it: its length
+    /// and SHA-256 come from the tile's packet (the sink), the file size is checked
+    /// against them and charged to `memory_limit` before any allocation, the read is
+    /// bounded and cancellable, and a hash mismatch (e.g. after `commit`) is
+    /// `InvalidState`.
+    pub(in crate::mesh_large) fn read_certified_proxy(
+        &self,
+        first: u64,
+        depth: u32,
+        memory_limit: u64,
+    ) -> Result<Vec<u8>, JobError> {
+        let (length, sha) = self.handoff.certified(first, depth, self.check)?;
+        let path = self.stage.join(format!("proxies/f{first}-d{depth}.glb"));
+        let mut lease = Lease::new(memory_limit, "reading a certified proxy");
+        let bytes = read_bounded(
+            &path,
+            Some(length),
+            &mut lease,
+            self.check,
+            "read certified proxy",
+        )?;
+        if <[u8; 32]>::from(Sha256::digest(&bytes)) != sha {
+            return Err(state(format!(
+                "certified proxy f{first}-d{depth} no longer matches its frozen SHA-256"
+            )));
+        }
+        Ok(bytes)
     }
 
     /// Drop a tile's packet once it is baked.
@@ -1400,7 +1441,7 @@ mod tests {
             let mut done: Vec<(u64, u32)> = Vec::new();
             for node in pass.nodes()? {
                 let (first, depth) = node?;
-                let frozen = pass.frozen(first, depth)?;
+                let frozen = pass.frozen(first, depth, 1 << 30)?;
                 assert_eq!(
                     (frozen.identity.first, frozen.identity.depth),
                     (first, depth)
@@ -1608,13 +1649,37 @@ mod tests {
         impl ProxyBaker for Probe {
             fn bake(&self, pass: &BakePass<'_>) -> Result<(), JobError> {
                 let (first, depth) = pass.nodes()?.next().unwrap()?;
-                let frozen = pass.frozen(first, depth)?;
+                let frozen = pass.frozen(first, depth, 1 << 30)?;
                 // Packet round trip.
-                assert_eq!(FrozenNode::decode(&frozen.encode()?)?, frozen);
+                let check = || Ok(());
+                let mut lease = Lease::new(1 << 30, "test");
+                assert_eq!(
+                    FrozenNode::decode(&frozen.encode()?, &mut lease, &check)?,
+                    frozen
+                );
+                // A lease below the packet's size is refused before anything is read.
+                let size = pass.frozen_size(first, depth)?;
+                assert_eq!(
+                    pass.frozen(first, depth, size - 1).unwrap_err().kind(),
+                    JobErrorKind::ResourceLimit
+                );
+                // The certified member reads back by its frozen hash, within its lease.
+                let certified = pass.read_certified_proxy(first, depth, 1 << 30)?;
+                assert_eq!(certified.len() as u64, frozen.glb_bytes);
+                assert_eq!(
+                    <[u8; 32]>::from(Sha256::digest(&certified)),
+                    frozen.glb_sha256
+                );
+                assert_eq!(
+                    pass.read_certified_proxy(first, depth, frozen.glb_bytes - 1)
+                        .unwrap_err()
+                        .kind(),
+                    JobErrorKind::ResourceLimit
+                );
                 // Sink corruption controls: the independent packet check refuses each.
                 let filled = pass
                     .nodes()?
-                    .map(|n| n.and_then(|(f, d)| pass.frozen(f, d)))
+                    .map(|n| n.and_then(|(f, d)| pass.frozen(f, d, 1 << 30)))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
                     .find(|n| !n.fills.is_empty())
