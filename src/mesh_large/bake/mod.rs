@@ -280,6 +280,10 @@ pub(crate) fn bake_node(
         .checked_sub(borrowed)
         .ok_or_else(|| resource("bake borrowed packet lease"))?;
     source.begin(f.node, limits.query_work)?;
+    // Correspondence queries read the node's source triangles from memory when a quarter
+    // of the remaining lease holds them; the held bytes leave the lease.
+    let resident = source.make_resident(available / 4, check)?;
+    let available = available - resident;
     let k = match limits.profile {
         Profile::Fast => 2.,
         Profile::Balanced => 1.,
@@ -493,15 +497,16 @@ pub(crate) fn bake_node(
         }
         let receipts = serde_json::json!({"appearance":raster.receipt,"density":{"planned":planned,"actual":raster.texel_size,"schedule":texel,"drops":density_drop,"physicalBudgetAttempts":budget_receipts},
             "charts":layout.charts.iter().map(|c|serde_json::json!({"faces":c.faces.len(),"sigmaMin":c.sigma,"compensation":1./c.sigma,"pixelsPerMetre":c.pixels_per_metre,"page":c.page,"size":c.size})).collect::<Vec<_>>(),
-            "gutter":layout.gutter,"sourceQueryWork":source.work(),"completeOwnedProvisional":owned,"normalScaleAbsorbed":true,"geometryReencoded":false});
+            "gutter":layout.gutter,"subTexelNoRasterFaces":layout.subtexel_no_raster,"sourceQueryWork":source.work(),"completeOwnedProvisional":owned,"normalScaleAbsorbed":true,"geometryReencoded":false});
         let prepared = PreparedNode {
+            // Zero-area faces, and bound faces the layout demoted (sub-texel slivers).
             no_raster_faces: f
                 .faces
                 .iter()
                 .enumerate()
                 .filter_map(|(i, f)| {
-                    math::face_normal(f.positions.map(|p| p.map(f64::from)))
-                        .is_none()
+                    (math::face_normal(f.positions.map(|p| p.map(f64::from))).is_none()
+                        || (raster_faces[i] && !layout.raster_faces[i]))
                         .then_some(i)
                 })
                 .collect(),

@@ -35,6 +35,9 @@ pub(super) struct Layout {
     /// Source binding/ID-set participation resolved by the owning bake boundary.
     /// False faces keep normals/COLOR/corners without UV sampling obligations.
     pub raster_faces: Vec<bool>,
+    /// Bound faces whose exact page footprint is under one texel and whose 16-bit UVs
+    /// collapse: demoted to no-raster (geometry, corners and features kept).
+    pub subtexel_no_raster: usize,
     pub texel_size: f64,
     pub gutter: u32,
 }
@@ -290,16 +293,19 @@ pub(super) fn build(
         }
         let mut uv = vec![[[0.; 2]; 3]; n];
         let mut failed = Vec::new();
+        let mut demoted = Vec::new();
         for (ci, c) in charts.iter().enumerate() {
             let size = pages[c.page].size;
             for &i in &c.faces {
                 let p = f.faces[i].positions.map(|p| p.map(f64::from));
+                let mut texels = [[0.; 2]; 3];
                 for (j, point) in p.into_iter().enumerate() {
                     let q = project(point, c.x, c.y);
                     for a in 0..2 {
-                        let v = (f64::from(c.origin[a] + gutter + 1)
-                            + (q[a] - c.lo[a]) * c.pixels_per_metre)
-                            / f64::from(size[a]);
+                        let px = f64::from(c.origin[a] + gutter + 1)
+                            + (q[a] - c.lo[a]) * c.pixels_per_metre;
+                        texels[j][a] = px;
+                        let v = px / f64::from(size[a]);
                         uv[i][j][a] = if limits.profile == Profile::Lossless {
                             v as f32
                         } else {
@@ -310,7 +316,15 @@ pub(super) fn build(
                 if math::face_normal(p).is_some() {
                     let decoded = uv[i].map(|p| p.map(f64::from));
                     if orient(decoded[0], decoded[1], decoded[2]) <= 0. {
-                        failed.push(ci);
+                        // A sliver whose exact footprint is under one texel covers no
+                        // texel centre at any repack worth making: it keeps its geometry
+                        // and corner attributes as a no-raster face. A larger collapse
+                        // or inversion is a real chart defect and forces a repack.
+                        if orient(texels[0], texels[1], texels[2]).abs() < 2. {
+                            demoted.push(i);
+                        } else {
+                            failed.push(ci);
+                        }
                     }
                 }
             }
@@ -328,11 +342,19 @@ pub(super) fn build(
                 "nondegenerate proxy decoded UV collapsed/inverted after four repacks",
             ));
         }
+        let mut raster_faces = raster_faces.to_vec();
+        for &i in &demoted {
+            raster_faces[i] = false;
+        }
+        for c in &mut charts {
+            c.faces.retain(|&i| raster_faces[i]);
+        }
         return Ok(Layout {
             charts,
             pages,
             uv,
-            raster_faces: raster_faces.to_vec(),
+            raster_faces,
+            subtexel_no_raster: demoted.len(),
             texel_size: texel,
             gutter,
         });

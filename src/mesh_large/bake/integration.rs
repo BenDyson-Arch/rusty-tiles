@@ -34,8 +34,8 @@ impl ProxyTextureBaker {
     /// - memory: half of what the host reports available after the captured state's
     ///   owned scratch (memory-backed), metadata and the stage reserve; a host that cannot
     ///   report its memory gets a fixed 1 GiB, never an unbounded allowance;
-    /// - source cache: room for the largest decoded source image's mip chain (32 bytes
-    ///   per source pixel, at least 1 MiB), at most a quarter of the memory;
+    /// - source cache: the source sampler's peak for the largest image (24 bytes per
+    ///   pixel, its encoded bytes and 64 MiB), at most a quarter of the memory;
     /// - query work: a finite runaway guard of 2^40 index visits per tile;
     /// - page edge: the profile's leaf page edge; eight complete-member density drops.
     pub(crate) fn for_stage(
@@ -63,15 +63,20 @@ impl ProxyTextureBaker {
             }
             None => 1 << 30,
         };
-        let largest = captured
+        // The source sampler's own peak for its largest image: decoded chain at 24 bytes
+        // per pixel, the encoded bytes and a fixed 64 MiB codec allowance.
+        let source_cache_bytes = captured
             .image_info
             .iter()
-            .map(|i| u64::from(i.width) * u64::from(i.height))
+            .zip(&captured.images)
+            .map(|(i, snapshot)| {
+                (u64::from(i.width) * u64::from(i.height))
+                    .saturating_mul(24)
+                    .saturating_add(snapshot.identity.encoded_bytes)
+                    .saturating_add(64 << 20)
+            })
             .max()
-            .unwrap_or(0);
-        let source_cache_bytes = largest
-            .saturating_mul(32)
-            .max(1 << 20)
+            .unwrap_or(1 << 20)
             .min(memory_bytes / 4);
         if memory_bytes < 64 << 20 {
             return Err(resource(
@@ -104,64 +109,146 @@ impl ProxyTextureBaker {
     }
 }
 impl root::ProxyBaker for ProxyTextureBaker {
-    /// Bake every coarse tile in postorder (children before parents): read the frozen
-    /// packet and the certified member under exact leases, load the retained children,
-    /// run the core with the owner's leased assembler, commit the verified bytes, retain
-    /// this tile's exact packet for its parent, then release its children and packet.
+    /// Bake every coarse tile, children before parents. Tiles of one depth are independent
+    /// (each reads only its own packet, certified member and retained children), so each
+    /// depth runs on up to `pass.jobs` workers, deepest first; every worker owns its own
+    /// source index and an equal share of the memory lease.
     fn bake(&self, pass: &root::BakePass<'_>) -> Result<(), JobError> {
         (pass.check)()?;
         let limits = self.limits_for(pass);
         if limits.member_bytes == 0 || pass.jobs == 0 {
             return Err(invalid("live proxy bake pass policy"));
         }
-        let mut check = || (pass.check)();
-        let mut nodes = pass.nodes()?.peekable();
-        if nodes.peek().is_none() {
-            return Ok(());
-        }
-        let mut source = CapturedSource::new(pass.captured, limits.source_cache_bytes, &mut check)?;
-        for next in nodes {
-            check()?;
+        // (first, depth) of every coarse tile: 12 bytes each, grouped by depth.
+        let mut levels: std::collections::BTreeMap<u32, Vec<u64>> = Default::default();
+        for next in pass.nodes()? {
+            (pass.check)()?;
             let (first, depth) = next?;
             if first >= pass.captured.triangles.len() {
                 return Err(invalid("proxy row outside captured hierarchy"));
             }
-            // The decoded packet stays resident beside the core, so its exact lease comes
-            // off the stage allowance first; the core owns the remainder.
-            let lease = pass.frozen_lease_bytes(first, depth)?;
-            let core = limits
-                .memory_bytes
-                .checked_sub(lease)
-                .filter(|core| *core >= lease)
-                .ok_or_else(|| resource("frozen tile packet exceeds the bake memory lease"))?;
-            let frozen = pass.frozen(first, depth, lease)?;
-            let parent = node_record(&frozen)?;
-            let glb = pass.read_certified_proxy(first, depth, frozen.glb_bytes)?;
-            let children =
-                child_bridge::load_children(pass, &frozen, &parent, core / 2, &mut check)?;
-            let accepted = bake_one(
-                &frozen,
-                glb,
-                &mut source,
-                &children,
-                BakeLimits {
-                    memory_bytes: core,
-                    ..limits
-                },
-                &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
-                &mut check,
-            )?;
-            drop(children);
-            pass.commit(&frozen, accepted.assembly, core)?;
-            if depth > 0 {
-                child_bridge::persist(pass.preencode, &accepted.preencode, core, &mut check)?;
+            levels.entry(depth).or_default().push(first);
+        }
+        let Some(widest) = levels.values().map(Vec::len).max() else {
+            return Ok(());
+        };
+        let workers = pass.jobs.min(widest).max(1);
+        let share = BakeLimits {
+            memory_bytes: limits.memory_bytes / workers as u64,
+            ..limits
+        };
+        let failed = std::sync::atomic::AtomicBool::new(false);
+        let cancelled = || -> Result<(), JobError> {
+            if failed.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(JobError::new(
+                    crate::JobErrorKind::Cancelled,
+                    "another proxy bake worker failed",
+                ));
             }
-            drop(accepted.preencode);
-            child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
-            pass.release(first, depth)?;
+            (pass.check)()
+        };
+        for (depth, firsts) in levels.iter().rev() {
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            let results: Vec<Result<(), JobError>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..workers.min(firsts.len()))
+                    .map(|_| {
+                        scope.spawn(|| -> Result<(), JobError> {
+                            let mut check = || cancelled();
+                            let mut source = None;
+                            loop {
+                                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                let Some(&first) = firsts.get(i) else {
+                                    return Ok(());
+                                };
+                                let source = match &mut source {
+                                    Some(s) => s,
+                                    None => source.insert(CapturedSource::new(
+                                        pass.captured,
+                                        share.source_cache_bytes,
+                                        &mut check,
+                                    )?),
+                                };
+                                let outcome =
+                                    bake_tile(pass, share, source, first, *depth, &mut check);
+                                if outcome.is_err() {
+                                    failed.store(true, std::sync::atomic::Ordering::Relaxed);
+                                    return outcome;
+                                }
+                            }
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| {
+                        h.join()
+                            .unwrap_or_else(|_| Err(invalid("a proxy bake worker panicked")))
+                    })
+                    .collect()
+            });
+            // Report the first real failure, not a sibling's induced cancellation.
+            let induced = |e: &JobError| {
+                e.kind() == crate::JobErrorKind::Cancelled
+                    && e.message() == "another proxy bake worker failed"
+            };
+            let errors: Vec<JobError> = results.into_iter().filter_map(Result::err).collect();
+            if let Some(e) = errors
+                .iter()
+                .position(|e| !induced(e))
+                .or((!errors.is_empty()).then_some(0))
+            {
+                return Err(errors.into_iter().nth(e).unwrap());
+            }
         }
         Ok(())
     }
+}
+
+/// One coarse tile: read the frozen packet and the certified member under exact leases,
+/// load the retained children, run the core with the owner's leased assembler, commit
+/// the verified bytes, retain this tile's exact packet for its parent, then release its
+/// children and packet.
+fn bake_tile(
+    pass: &root::BakePass<'_>,
+    limits: BakeLimits,
+    source: &mut CapturedSource<'_>,
+    first: u64,
+    depth: u32,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<(), JobError> {
+    check()?;
+    // The decoded packet stays resident beside the core, so its exact lease comes off
+    // the worker's allowance first; the core owns the remainder.
+    let lease = pass.frozen_lease_bytes(first, depth)?;
+    let core = limits
+        .memory_bytes
+        .checked_sub(lease)
+        .filter(|core| *core >= lease)
+        .ok_or_else(|| resource("frozen tile packet exceeds the bake memory lease"))?;
+    let frozen = pass.frozen(first, depth, lease)?;
+    let parent = node_record(&frozen)?;
+    let glb = pass.read_certified_proxy(first, depth, frozen.glb_bytes)?;
+    let children = child_bridge::load_children(pass, &frozen, &parent, core / 2, check)?;
+    let accepted = bake_one(
+        &frozen,
+        glb,
+        source,
+        &children,
+        BakeLimits {
+            memory_bytes: core,
+            ..limits
+        },
+        &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
+        check,
+    )?;
+    drop(children);
+    pass.commit(&frozen, accepted.assembly, core)?;
+    if depth > 0 {
+        child_bridge::persist(pass.preencode, &accepted.preencode, core, check)?;
+    }
+    drop(accepted.preencode);
+    child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
+    pass.release(first, depth)
 }
 
 fn validate_transforms(frozen: &handoff::FrozenNode) -> Result<(), JobError> {

@@ -671,6 +671,7 @@ fn fan_layout(f: &FrozenNode, separate_charts: bool) -> super::charts::Layout {
         charts,
         pages,
         raster_faces: vec![true; f.faces.len()],
+        subtexel_no_raster: 0,
         uv: vec![
             [[0.25, 0.75], [0.75, 0.75], [0.25, 1.]],
             [[0.75, 0.75], [0.25, 0.75], [0.25, 0.25]],
@@ -923,6 +924,7 @@ fn transitive_eight_face_zero_sum_fan_falls_back_to_valid_flat_corner_frames() {
     let layout = Layout {
         charts,
         raster_faces: vec![true; frozen.faces.len()],
+        subtexel_no_raster: 0,
         pages: (0..8)
             .map(|i| Page {
                 material: u32::MAX,

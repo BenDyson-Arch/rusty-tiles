@@ -360,15 +360,31 @@ impl FrozenNode {
             {
                 return Err(state("frozen face feature IDs are inconsistent"));
             }
-            if !g.sources.contains(&f.source)
-                || f.fill.is_some_and(|i| {
-                    self.fills
-                        .get(i as usize)
-                        .is_none_or(|fill| fill.source != f.source)
-                })
-                || (f.fill.is_some()) != (f.origin.triangle == u64::MAX)
-            {
-                return Err(state("frozen face identity is inconsistent"));
+            if !g.sources.contains(&f.source) {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: source {} outside its glTF \
+                     primitive's sources {:?}",
+                    f.source, g.sources
+                )));
+            }
+            if f.fill.is_some_and(|i| {
+                self.fills
+                    .get(i as usize)
+                    .is_none_or(|fill| fill.source != f.source)
+            }) {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: fill {:?} is not owned by source {}",
+                    f.fill, f.source
+                )));
+            }
+            // A fill of this tile has no source triangle. The converse does not hold: a
+            // face descending from a CHILD proxy's fill also has none, but is no fill of
+            // this tile (its record lives in that child), so it carries no `fill` index.
+            if f.fill.is_some() && f.origin.triangle != u64::MAX {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: fill {:?} with origin triangle {}",
+                    f.fill, f.origin.triangle
+                )));
             }
         }
         Ok(())
@@ -903,6 +919,29 @@ mod tests {
                 JobErrorKind::ResourceLimit
             );
         }
+    }
+
+    /// A face inherited from a child proxy's fill has no source triangle and no fill
+    /// record of this tile; a fill of this tile must have no source triangle.
+    #[test]
+    fn inherited_fill_faces_validate_and_local_fills_need_no_triangle() {
+        let mut node = packet(1);
+        node.faces[0].origin.triangle = u64::MAX;
+        node.faces[0].fill = None;
+        node.validate().unwrap();
+        let mut node = packet(1);
+        node.fills.push(FrozenFill {
+            source: node.faces[0].source,
+            loop_key: [0; 3],
+            loop_vertices: 3,
+            fan_faces: 1,
+            bound: 0.,
+            reopen_children: 0,
+        });
+        node.faces[0].fill = Some(0);
+        assert!(node.validate().is_err());
+        node.faces[0].origin.triangle = u64::MAX;
+        node.validate().unwrap();
     }
 
     /// `lease_bytes` is exactly the lease `read` charges: that lease reads the packet and

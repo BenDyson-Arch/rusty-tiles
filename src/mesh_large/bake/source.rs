@@ -19,8 +19,22 @@ use crate::{
     spill::{Record, Sequence, SequenceWriter},
     JobError,
 };
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cell::Cell, cmp::Ordering, collections::BTreeMap};
 
+/// Source triangles of a rank range: a resident slice or a spill stream.
+enum Tris<'a> {
+    Resident(std::slice::Iter<'a, FullTriangle>),
+    Stream(crate::spill::SequenceReader<'a, FullTriangle>),
+}
+impl Iterator for Tris<'_> {
+    type Item = Result<FullTriangle, JobError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Tris::Resident(i) => i.next().map(|t| Ok(*t)),
+            Tris::Stream(r) => r.next().map(|t| t.map_err(JobError::from)),
+        }
+    }
+}
 #[derive(Clone, Copy)]
 struct QueryNode {
     first: u64,
@@ -123,10 +137,16 @@ struct Cache {
 pub(crate) struct CapturedSource<'a> {
     pub(super) captured: &'a FullCaptured,
     index: Sequence<QueryNode>,
+    /// The whole query index, resident when it fits a quarter of the cache lease.
+    nodes: Vec<QueryNode>,
+    /// The current node's source triangles `[resident_first, ..)`, when the bake granted
+    /// their residency (see [`CapturedSource::make_resident`]); else they are streamed.
+    resident: Vec<FullTriangle>,
+    resident_first: u64,
     root: u64,
     first: u64,
     end: u64,
-    work: u64,
+    work: Cell<u64>,
     limit: u64,
     cache_limit: u64,
     cache: Option<Cache>,
@@ -192,13 +212,31 @@ impl<'a> CapturedSource<'a> {
                 }
             }
         }
+        let index = writer.finish()?;
+        let mut nodes = Vec::new();
+        if index
+            .len()
+            .checked_mul(std::mem::size_of::<QueryNode>() as u64)
+            .is_some_and(|b| b <= cache_limit / 4)
+        {
+            nodes
+                .try_reserve_exact(index.len() as usize)
+                .map_err(|_| resource("resident source index"))?;
+            for n in index.range(0, index.len(), 1 << 16)? {
+                check()?;
+                nodes.push(n?);
+            }
+        }
         Ok(Self {
             captured,
-            index: writer.finish()?,
+            index,
+            nodes,
+            resident: Vec::new(),
+            resident_first: 0,
             root: root.ok_or_else(|| invalid("empty captured hierarchy"))?,
             first: 0,
             end: captured.triangles.len(),
-            work: 0,
+            work: Cell::new(0),
             limit: 0,
             cache_limit,
             cache: None,
@@ -210,16 +248,78 @@ impl<'a> CapturedSource<'a> {
         }
         self.first = node.first;
         self.end = node.end;
-        self.work = 0;
+        self.work.set(0);
         self.limit = limit;
+        self.resident = Vec::new();
         Ok(())
     }
-    fn charge(&mut self) -> Result<(), JobError> {
-        self.work = self
+    /// Hold the current node's source triangles in memory when they fit `budget` bytes,
+    /// so correspondence queries read memory instead of the spill. Returns the bytes
+    /// held (0 when they do not fit; queries then stream as before, same results).
+    pub(super) fn make_resident(
+        &mut self,
+        budget: u64,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<u64, JobError> {
+        self.resident = Vec::new();
+        let count = self.end - self.first;
+        let bytes = count.saturating_mul(std::mem::size_of::<FullTriangle>() as u64);
+        if bytes > budget {
+            return Ok(0);
+        }
+        let mut resident = Vec::new();
+        resident
+            .try_reserve_exact(count as usize)
+            .map_err(|_| resource("resident proxy source triangles"))?;
+        for (k, t) in self
+            .captured
+            .triangles
+            .range(self.first, self.end, 1 << 16)?
+            .enumerate()
+        {
+            if k.is_multiple_of(1 << 14) {
+                check()?;
+            }
+            resident.push(t?);
+        }
+        self.resident = resident;
+        self.resident_first = self.first;
+        Ok(bytes)
+    }
+    fn node(&self, i: u64) -> Result<QueryNode, JobError> {
+        if let Some(n) = self.nodes.get(i as usize) {
+            return Ok(*n);
+        }
+        self.index
+            .range(i, i + 1, 4096)?
+            .next()
+            .transpose()?
+            .ok_or_else(|| invalid("missing source query node"))
+    }
+    /// Source triangles `[first, end)` in rank order, from memory when resident.
+    fn tris(&self, first: u64, end: u64) -> Result<Tris<'_>, JobError> {
+        let offset = first.wrapping_sub(self.resident_first);
+        if !self.resident.is_empty()
+            && first >= self.resident_first
+            && end - self.resident_first <= self.resident.len() as u64
+        {
+            let n = (end - first) as usize;
+            return Ok(Tris::Resident(
+                self.resident[offset as usize..offset as usize + n].iter(),
+            ));
+        }
+        Ok(Tris::Stream(
+            self.captured.triangles.range(first, end, 4096)?,
+        ))
+    }
+    fn charge(&self) -> Result<(), JobError> {
+        let work = self
             .work
+            .get()
             .checked_add(1)
             .ok_or_else(|| resource("source query work overflow"))?;
-        if self.work > self.limit {
+        self.work.set(work);
+        if work > self.limit {
             return Err(resource("source correspondence work budget"));
         }
         Ok(())
@@ -237,7 +337,6 @@ impl<'a> CapturedSource<'a> {
         let lineage = face.source_triangle;
         let fill = face.fill_bound;
         let ranges = &face.donor_ranges;
-        let captured = self.captured;
         let mut best: Option<Witness> = None;
         let mut unfiltered: Option<Witness> = None;
         let mut stack = Vec::new();
@@ -248,12 +347,7 @@ impl<'a> CapturedSource<'a> {
         while let Some(i) = stack.pop() {
             check()?;
             self.charge()?;
-            let n = self
-                .index
-                .range(i, i + 1, 4096)?
-                .next()
-                .transpose()?
-                .ok_or_else(|| invalid("missing query node"))?;
+            let n = self.node(i)?;
             if n.end <= self.first
                 || n.first >= self.end
                 || !ranges.iter().any(|r| n.first < r.end && n.end > r.start)
@@ -281,7 +375,7 @@ impl<'a> CapturedSource<'a> {
             }
             let first = n.first.max(self.first);
             let end = n.end.min(self.end);
-            let mut r = captured.triangles.range(first, end, 4096)?;
+            let mut r = self.tris(first, end)?;
             let mut rank = first;
             while let Some(t) = r.next().transpose()? {
                 self.charge()?;
@@ -357,19 +451,13 @@ impl<'a> CapturedSource<'a> {
         weld: [u32; 3],
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<[f32; 4], JobError> {
-        let captured = self.captured;
         let q = weld.map(|v| f64::from(f32::from_bits(v)));
         let mut stack = vec![self.root];
         let mut best: Option<((bool, u64, u8), [f32; 4])> = None;
         while let Some(i) = stack.pop() {
             self.charge()?;
             check()?;
-            let n = self
-                .index
-                .range(i, i + 1, 4096)?
-                .next()
-                .transpose()?
-                .ok_or_else(|| invalid("missing colour query node"))?;
+            let n = self.node(i)?;
             if n.end <= self.first
                 || n.first >= self.end
                 || math::box_distance_lower(
@@ -389,10 +477,7 @@ impl<'a> CapturedSource<'a> {
                 }
                 continue;
             }
-            let mut r =
-                captured
-                    .triangles
-                    .range(n.first.max(self.first), n.end.min(self.end), 4096)?;
+            let mut r = self.tris(n.first.max(self.first), n.end.min(self.end))?;
             while let Some(t) = r.next().transpose()? {
                 self.charge()?;
                 check()?;
@@ -423,8 +508,72 @@ impl<'a> CapturedSource<'a> {
                 }
             }
         }
+        if let Some((_, c)) = best {
+            return Ok(c);
+        }
+        // Simplification welds by position across primitive boundaries, so a proxy
+        // corner can sit on a vertex its own primitive does not have. Its colour is then
+        // the nearest same-primitive source corner in the node (deterministic order).
+        self.nearest_color(k, q, check)
+    }
+    fn nearest_color(
+        &mut self,
+        k: SourceKey,
+        q: V3,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<[f32; 4], JobError> {
+        let mut stack = vec![self.root];
+        let mut best: Option<((f64, u64, u8), [f32; 4])> = None;
+        while let Some(i) = stack.pop() {
+            self.charge()?;
+            check()?;
+            let n = self.node(i)?;
+            if n.end <= self.first
+                || n.first >= self.end
+                || best.as_ref().is_some_and(|((d, _, _), _)| {
+                    math::box_distance_lower(
+                        q,
+                        n.lo.map(|v| f64::from(f32::from_bits(v))),
+                        n.hi.map(|v| f64::from(f32::from_bits(v))),
+                    ) > *d
+                })
+            {
+                continue;
+            }
+            if n.count > 0 {
+                for &c in n.children[..n.count as usize].iter().rev() {
+                    if stack.len() >= 8 * 65 {
+                        return Err(resource("colour query stack"));
+                    }
+                    stack.push(c);
+                }
+                continue;
+            }
+            let mut r = self.tris(n.first.max(self.first), n.end.min(self.end))?;
+            while let Some(t) = r.next().transpose()? {
+                self.charge()?;
+                check()?;
+                if key(&t) != k {
+                    continue;
+                }
+                for c in 0..3 {
+                    let d = math::distance2(q, t.triangle.positions[c].map(f64::from));
+                    let order = (d, t.triangle.source.triangle, c as u8);
+                    if best.as_ref().is_none_or(|(b, _)| order < *b) {
+                        best = Some((
+                            order,
+                            if t.flags & COLOR == 0 {
+                                [1.; 4]
+                            } else {
+                                t.corners[c].color
+                            },
+                        ));
+                    }
+                }
+            }
+        }
         best.map(|(_, c)| c)
-            .ok_or_else(|| invalid("proxy welded colour key has no source corner"))
+            .ok_or_else(|| invalid("proxy colour key has no same-primitive source corner"))
     }
     pub(super) fn material(&self, index: u32) -> Result<serde_json::Value, JobError> {
         if index == u32::MAX {
@@ -449,9 +598,7 @@ impl<'a> CapturedSource<'a> {
             return Err(invalid("terminal source witness"));
         }
         let triangle = self
-            .captured
-            .triangles
-            .range(rank, rank + 1, 4096)?
+            .tris(rank, rank + 1)?
             .next()
             .transpose()?
             .ok_or_else(|| invalid("terminal source rank"))?;
@@ -700,7 +847,7 @@ impl<'a> CapturedSource<'a> {
         )))
     }
     pub(super) fn work(&self) -> u64 {
-        self.work
+        self.work.get()
     }
     pub(super) fn cache_limit(&self) -> u64 {
         self.cache_limit
