@@ -362,14 +362,27 @@ impl PreencodeStore {
                 fs::read(&path).map_err(|e| JobError::io("read pre-encode page", &path, e))?;
             pages.push(read_page_pixels(page, &bytes)?);
         }
+        // The witness is size-checked against its head and the leaf lease before it is
+        // read; the bytes are charged to the lease and the rest bounds the decode.
         let path = self.witness_path(index);
-        let bytes = fs::read(&path).map_err(|e| JobError::io("read leaf witness", &path, e))?;
-        if head.witness.version != WITNESS_VERSION || bytes.len() as u64 != head.witness.bytes {
+        let length = fs::metadata(&path)
+            .map_err(|e| JobError::io("inspect leaf witness", &path, e))?
+            .len();
+        if head.witness.version != WITNESS_VERSION || length != head.witness.bytes {
             return Err(bad());
         }
-        // Decoding allocates at most a fixed multiple of the charged file bytes; the
-        // bounded reader of request #5 supplies the caller's lease here.
-        let witness = LeafWitness::decode(&bytes, u64::MAX)?;
+        let lease = LeafWitness::read_lease(super::config::CONSUMER_TABLE_ROWS);
+        let decode_limit = lease.checked_sub(length).ok_or_else(|| {
+            JobError::new(
+                JobErrorKind::ResourceLimit,
+                "retained leaf witness exceeds its read lease",
+            )
+        })?;
+        let bytes = fs::read(&path).map_err(|e| JobError::io("read leaf witness", &path, e))?;
+        if bytes.len() as u64 != length {
+            return Err(bad());
+        }
+        let witness = LeafWitness::decode(&bytes, decode_limit)?;
         Ok(LeafPreencode {
             pages,
             primitives: head.primitives,
