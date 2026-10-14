@@ -3,7 +3,7 @@
 ## Current continuation after the release split
 
 The user accepted a correction after PR #171: **0.4 ships Tiles 1.1/glTF 2.0;
-0.5 makes the official Tiles 2.0/glTF 2.1 transition**. The
+0.6 makes the official Tiles 2.0/glTF 2.1 transition**. The
 [roadmap](04-tiles2-roadmap.md) owns that sequence. Draft consumer support is
 not a 0.4 gate. The snapshot below remains historical recovery evidence, not
 an instruction to restore the superseded new-format shipping target.
