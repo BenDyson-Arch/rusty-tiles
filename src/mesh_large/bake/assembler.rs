@@ -654,6 +654,7 @@ mod tests {
             &sources,
             tile_bytes,
             packet.writer_memory_bytes,
+            &|| Ok(()),
         )
         .unwrap()
     }

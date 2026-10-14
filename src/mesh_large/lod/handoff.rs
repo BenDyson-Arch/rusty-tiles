@@ -905,6 +905,33 @@ mod tests {
         }
     }
 
+    /// `lease_bytes` is exactly the lease `read` charges: that lease reads the packet and
+    /// one byte less is refused before the decode completes.
+    #[test]
+    fn lease_bytes_is_the_exact_read_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let sink = HandoffSink::new(
+            dir.path().join("handoff"),
+            std::sync::Arc::new(ScratchBudget::new(1 << 30)),
+        )
+        .unwrap();
+        let check = || Ok(());
+        for sets in [1, 256] {
+            let node = packet(sets);
+            sink.write(&node, &check).unwrap();
+            let (first, depth) = (node.identity.first, node.identity.depth);
+            let lease = sink.lease_bytes(first, depth, &check).unwrap();
+            assert_eq!(sink.read(first, depth, lease, &check).unwrap(), node);
+            assert_eq!(
+                sink.read(first, depth, lease - 1, &check)
+                    .unwrap_err()
+                    .kind(),
+                JobErrorKind::ResourceLimit
+            );
+            sink.release(first, depth).unwrap();
+        }
+    }
+
     #[test]
     fn forged_counts_prefix_and_cancellation_are_refused() {
         let node = packet(3);

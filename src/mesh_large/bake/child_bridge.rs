@@ -571,10 +571,13 @@ pub(super) fn load_children(
 pub(super) fn release_children(
     store: &PreencodeStore,
     frozen: &handoff::FrozenNode,
+    memory: u64,
+    check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<(), JobError> {
     for child in &frozen.children {
+        check()?;
         if let Some(leaf) = &child.leaf {
-            store.release_leaf(leaf.index)?;
+            store.release_leaf(leaf.index, memory, check)?;
         } else {
             store.release_proxy(child.first, child.depth)?;
         }
@@ -748,5 +751,134 @@ mod tests {
         let (leaf, mut witness) = fixture();
         witness.primitives[0].faces[0].source_triangle = 12;
         assert!(from_leaf(&leaf, witness, 1 << 20, &mut || Ok(())).is_err());
+    }
+
+    /// The #233 leaf witness for the fixture leaf: one face of source triangle 11 at rank
+    /// 4, both slots bound (base colour on TEXCOORD 0, normal on TEXCOORD 1).
+    fn witness_leaf(positions: [[f32; 3]; 3], zero: u8) -> LeafPreencode {
+        use crate::mesh_large::leaves::witness::{
+            BindingWitness, FaceWitness, LeafWitness, PrimitiveWitness,
+        };
+        let (mut leaf, _) = fixture();
+        leaf.witness = LeafWitness {
+            texel_spacing: Some(2.5),
+            primitives: vec![PrimitiveWitness {
+                node: 7,
+                mesh: 8,
+                primitive: 9,
+                expanded_ordinal: 123,
+                material: 9,
+                flags: crate::mesh_large::attributes::NORMAL,
+                bindings: vec![
+                    BindingWitness {
+                        slot: 0,
+                        page: 0,
+                        texcoord: 0,
+                        sampler: Some(0),
+                        normal_scale: None,
+                        texel_spacing: Some(2.5),
+                    },
+                    BindingWitness {
+                        slot: 2,
+                        page: 1,
+                        texcoord: 1,
+                        sampler: Some(1),
+                        normal_scale: Some(2.),
+                        texel_spacing: Some(2.),
+                    },
+                ],
+                faces: vec![FaceWitness {
+                    triangle: 11,
+                    rank: 4,
+                    zero_raster: zero,
+                }],
+                positions: positions.to_vec(),
+                normals: vec![[0., 0., 2.]; 3],
+                tangents: Vec::new(),
+            }],
+        };
+        leaf
+    }
+    #[test]
+    fn witness_bridge_keeps_identity_frames_spacing_and_cross_checks_zero_raster() {
+        let parent = NodeRecord {
+            cell_depth: 2,
+            cell: 9,
+            path_len: 0,
+            path: 0,
+            last_octant: 0,
+            kind: NodeKind::Internal,
+            children: 1,
+            first: 4,
+            end: 5,
+            bytes: 0,
+            bounds: Bounds::EMPTY,
+        };
+        let child = handoff::FrozenChild {
+            first: 4,
+            end: 5,
+            depth: 3,
+            slot: 6,
+            leaf: Some(handoff::LeafChild {
+                index: 0,
+                density_drop: 0,
+            }),
+        };
+        let flat = [[0., 0., 0.], [2., 0., 0.], [0., 1., 0.]];
+        let ok = from_witness(
+            &parent,
+            &child,
+            &witness_leaf(flat, 0),
+            1 << 20,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(ok.node.parent(), Some(parent.identity()));
+        assert_eq!((ok.node.cell_depth, ok.node.cell), (3, 9 << 3 | 6));
+        assert_eq!(ok.texel_size, 2.5);
+        assert!(ok.pages.is_empty());
+        let face = &ok.faces[0];
+        assert_eq!((face.source.instance, face.source_triangle), (123, 11));
+        assert!(face.bindings.iter().all(Option::is_none));
+        assert_eq!(face.frames[0].normal, [0., 0., 1.]);
+        // A zero-raster bit on a face whose footprint rasterises is refused.
+        assert!(from_witness(
+            &parent,
+            &child,
+            &witness_leaf(flat, 1),
+            1 << 20,
+            &mut || Ok(())
+        )
+        .is_err());
+        // Zero geometric area (the bake's no-raster rule) requires the bits for every slot.
+        let line = [[0., 0., 0.], [1., 0., 0.], [2., 0., 0.]];
+        assert!(from_witness(
+            &parent,
+            &child,
+            &witness_leaf(line, 0),
+            1 << 20,
+            &mut || Ok(())
+        )
+        .is_err());
+        let zero = from_witness(
+            &parent,
+            &child,
+            &witness_leaf(line, 0b101),
+            1 << 20,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(zero.faces.len(), 1);
+        // Ranks outside the child and a too-small lease are refused.
+        let mut outside = witness_leaf(flat, 0);
+        outside.witness.primitives[0].faces[0].rank = 5;
+        assert!(from_witness(&parent, &child, &outside, 1 << 20, &mut || Ok(())).is_err());
+        assert_eq!(
+            from_witness(&parent, &child, &witness_leaf(flat, 0), 1, &mut || Ok(()))
+                .err()
+                .unwrap()
+                .kind(),
+            JobErrorKind::ResourceLimit
+        );
     }
 }

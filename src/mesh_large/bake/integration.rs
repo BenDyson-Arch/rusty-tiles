@@ -152,12 +152,12 @@ impl root::ProxyBaker for ProxyTextureBaker {
                 &mut check,
             )?;
             drop(children);
-            pass.commit(&frozen, accepted.assembly)?;
+            pass.commit(&frozen, accepted.assembly, core)?;
             if depth > 0 {
                 child_bridge::persist(pass.preencode, &accepted.preencode, core, &mut check)?;
             }
             drop(accepted.preencode);
-            child_bridge::release_children(pass.preencode, &frozen)?;
+            child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
             pass.release(first, depth)?;
         }
         Ok(())
