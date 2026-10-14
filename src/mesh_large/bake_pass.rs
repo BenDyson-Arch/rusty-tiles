@@ -15,6 +15,7 @@ use super::{
     config::Profile,
     full::FullCaptured,
     leaves::prepared::{PreencodeLevel, PreencodePage, PreparedAtlas},
+    leaves::witness::{LeafWitness, VERSION as WITNESS_VERSION},
     lod::{
         codec,
         handoff::{FrozenNode, HandoffSink, ScratchBudget},
@@ -72,6 +73,17 @@ pub(in crate::mesh_large) struct LeafPreencode {
     pub primitives: Vec<LeafPrimitivePreencode>,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
+    /// Published decoded renderer attributes, source identity, literal bindings and
+    /// measured texel spacing of the accepted leaf (H27 requests #3 and #4).
+    pub witness: LeafWitness,
+}
+
+/// Where a leaf's binary witness lives: `leaf-<index>.wit`, `bytes` long, in format
+/// `version` (the magic of [`LeafWitness::encode`]).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+struct WitnessHead {
+    version: u32,
+    bytes: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,10 +95,12 @@ struct LeafHead {
     primitives: Vec<LeafPrimitivePreencode>,
     textures: Vec<Value>,
     samplers: Vec<Value>,
+    witness: WitnessHead,
 }
 
 const PAGE_MAGIC: &[u8; 8] = b"H17PAG\x01\0";
-const LEAF_MAGIC: &[u8; 8] = b"H17PRE\x02\0";
+// Version 3: the head names the leaf's witness file.
+const LEAF_MAGIC: &[u8; 8] = b"H17PRE\x03\0";
 
 /// A page's pixel bytes: every level's RGBA, then the support mask as u32 LE.
 fn page_pixel_bytes(page: &PreencodePage) -> u64 {
@@ -214,6 +228,9 @@ impl PreencodeStore {
     fn leaf_path(&self, index: u64) -> PathBuf {
         self.dir.join(format!("leaf-{index:012}.pre"))
     }
+    fn witness_path(&self, index: u64) -> PathBuf {
+        self.dir.join(format!("leaf-{index:012}.wit"))
+    }
     fn page_path(&self, index: u64, drop: u32, page: u32) -> PathBuf {
         self.dir
             .join(format!("leaf-{index:012}-d{drop}-p{page}.pag"))
@@ -267,7 +284,10 @@ impl PreencodeStore {
         index: u64,
         drop: u32,
         atlas: &PreparedAtlas,
+        witness: &LeafWitness,
     ) -> Result<(), JobError> {
+        let witness_bytes = witness.encode()?;
+        self.put(&self.witness_path(index), &witness_bytes)?;
         let head = serde_json::to_vec(&LeafHead {
             drop,
             pages: atlas.preencode.clone(),
@@ -290,6 +310,10 @@ impl PreencodeStore {
                 .collect(),
             textures: atlas.textures.clone(),
             samplers: atlas.samplers.clone(),
+            witness: WitnessHead {
+                version: WITNESS_VERSION,
+                bytes: witness_bytes.len() as u64,
+            },
         })
         .map_err(|e| state(e.to_string()))?;
         let mut bytes = Vec::with_capacity(16 + head.len());
@@ -338,11 +362,20 @@ impl PreencodeStore {
                 fs::read(&path).map_err(|e| JobError::io("read pre-encode page", &path, e))?;
             pages.push(read_page_pixels(page, &bytes)?);
         }
+        let path = self.witness_path(index);
+        let bytes = fs::read(&path).map_err(|e| JobError::io("read leaf witness", &path, e))?;
+        if head.witness.version != WITNESS_VERSION || bytes.len() as u64 != head.witness.bytes {
+            return Err(bad());
+        }
+        // Decoding allocates at most a fixed multiple of the charged file bytes; the
+        // bounded reader of request #5 supplies the caller's lease here.
+        let witness = LeafWitness::decode(&bytes, u64::MAX)?;
         Ok(LeafPreencode {
             pages,
             primitives: head.primitives,
             textures: head.textures,
             samplers: head.samplers,
+            witness,
         })
     }
     pub(in crate::mesh_large) fn release_leaf(&self, index: u64) -> Result<(), JobError> {
@@ -357,6 +390,7 @@ impl PreencodeStore {
         for page in &head.pages {
             self.remove(&self.page_path(index, head.drop, page.page))?;
         }
+        self.remove(&self.witness_path(index))?;
         self.remove(&path)
     }
     /// A bake-produced proxy packet (pages + source support), opaque to the root.
