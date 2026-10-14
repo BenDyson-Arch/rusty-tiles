@@ -511,19 +511,31 @@ pub(crate) fn file_rounding(allocation_unit_bytes: u64, live_files: u64) -> Opti
 }
 
 /// Scratch held by one external sort of `records`, from the sorter's file lifetimes
-/// (spill/sort.rs): runs of `run_bytes / size_of::<T>()` records are written while pushing;
-/// `finish` merges until at most `F` runs remain, and each intermediate merge writes its
-/// group's output before removing the inputs; the final merge streams without writing.
+/// (spill/sort.rs). Runs of `run_bytes / size_of::<T>()` records are written as chunk files of
+/// [`crate::spill::chunk_records`] records, and every reader removes a chunk once consumed. An
+/// intermediate merge (more than `F` runs at `finish`, or inventory compaction from `64F` runs
+/// while pushing) therefore holds its unconsumed inputs plus its output, which never exceeds
+/// `S` plus one partly read chunk per input: `F × chunk`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SortSpill {
     /// `S`: every record once.
     pub bytes: u64,
-    /// While pushing: `S`, or `2S` once inventory compaction (at least `64F` runs) can run.
+    /// While pushing: `S`, plus merge slack once inventory compaction can run.
     pub push_peak: u64,
-    /// Through `finish`: `S` plus the largest intermediate group, at most `F` runs
-    /// (`min(S, F × run)`), or `2S` when compaction or a multi-level pass (`> F²` runs)
-    /// rewrites runs larger than one run buffer. No slack when at most `F` runs exist.
+    /// Through `finish`: `S`, plus merge slack when an intermediate merge runs.
     pub finish_peak: u64,
+    /// While the sorted stream is consumed: partly read chunks still on disk, at most one
+    /// per merged run (`min(S, F × chunk)`).
+    pub stream_slack: u64,
+}
+
+impl SortSpill {
+    /// Consuming this sort's stream while writing `outputs` bytes in proportion to progress:
+    /// the unread input and the written output trade off linearly, so the larger of the two
+    /// plus the partly read chunks bounds the stage.
+    pub(crate) fn flow(&self, outputs: u64) -> Option<u64> {
+        self.bytes.max(outputs).checked_add(self.stream_slack)
+    }
 }
 
 pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
@@ -531,27 +543,23 @@ pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<
     let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
     let runs = records.div_ceil(run_records);
     let fan_in = sorter.fan_in as u64;
-    let compacting = runs >= fan_in.checked_mul(64)?;
-    let push_peak = if compacting {
-        bytes.checked_mul(2)?
+    let chunk_bytes = crate::spill::chunk_records::<T>().checked_mul(T::SIZE as u64)?;
+    let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
+    let push_peak = if runs >= fan_in.checked_mul(64)? {
+        bytes.checked_add(slack)?
     } else {
         bytes
     };
-    let slack = if runs <= fan_in {
-        0
-    } else if compacting || runs > fan_in.checked_mul(fan_in)? {
-        bytes
+    let finish_peak = if runs > fan_in {
+        push_peak.max(bytes.checked_add(slack)?)
     } else {
-        bytes.min(
-            fan_in
-                .checked_mul(run_records)?
-                .checked_mul(T::SIZE as u64)?,
-        )
+        push_peak
     };
     Some(SortSpill {
         bytes,
         push_peak,
-        finish_peak: push_peak.max(bytes.checked_add(slack)?),
+        finish_peak,
+        stream_slack: slack,
     })
 }
 
