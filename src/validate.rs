@@ -1481,7 +1481,7 @@ impl Check<'_> {
                 "phase-2 stream log missing for an archive in domain".into(),
             ));
         };
-        let log = log.finish()?;
+        let log = log.finish(&self.scratch)?;
         let mut stream = Stream {
             arena: match self.c2.arena.take() {
                 Some(arena) => Some(arena),

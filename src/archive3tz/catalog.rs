@@ -130,7 +130,9 @@ impl CatalogConfig {
 
     /// Scratch estimate from the end record (design §1.3, labelled an estimate): two
     /// generations of row runs and the log, plus two of extents and of index rows, plus the
-    /// validator's rank-indexed facts file (VS-B-5).
+    /// validator's rank-indexed facts file (VS-B-5) and its phase-2 stream log (VS-B-4). The
+    /// log is bounded by the visit and reference budgets, not by N; the estimate assumes one
+    /// tile and one reference per member, and a larger log fails as typed scratch `io`.
     pub(crate) fn scratch_estimate(entries: u64, directory_bytes: u64) -> u64 {
         let rows = entries.saturating_mul(Row::SIZE as u64 + LOG_HEADER as u64);
         let sides = entries.saturating_mul(Extent32::SIZE as u64 + IndexRow::SIZE as u64);
@@ -138,6 +140,23 @@ impl CatalogConfig {
             .saturating_mul(2)
             .saturating_add(sides.saturating_mul(2))
             .saturating_add(entries.saturating_mul(FACTS_RECORD_BYTES))
+            .saturating_add(entries.saturating_mul(STREAM_LOG_BYTES_PER_MEMBER))
+    }
+
+    /// Test seam: the estimate's exact slope per member, every term written out, so that
+    /// dropping any term (the validator's facts file and stream log included) fails.
+    #[cfg(test)]
+    pub(crate) fn assert_estimate_slope() {
+        let per_member = 2 * (Row::SIZE as u64 + LOG_HEADER as u64)
+            + 2 * (Extent32::SIZE as u64 + IndexRow::SIZE as u64)
+            + FACTS_RECORD_BYTES
+            + STREAM_LOG_BYTES_PER_MEMBER;
+        for directory in [0, 4096] {
+            let slope =
+                Self::scratch_estimate(2000, directory) - Self::scratch_estimate(1000, directory);
+            assert_eq!(slope, 1000 * per_member);
+            assert_eq!(Self::scratch_estimate(0, directory), 2 * directory);
+        }
     }
 }
 
@@ -149,6 +168,9 @@ thread_local! {
 
 /// Bytes of one validator facts record (`validate::facts::WIDTH`), for the scratch estimate.
 pub(crate) const FACTS_RECORD_BYTES: u64 = 199;
+/// The largest framed tile record plus the largest framed reference record of the
+/// validator's stream log (`validate::stream_log`), for the scratch estimate.
+pub(crate) const STREAM_LOG_BYTES_PER_MEMBER: u64 = 348 + 120;
 
 /// Size stand-in for the extent record in the scratch estimate.
 struct Extent32;

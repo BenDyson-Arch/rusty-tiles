@@ -380,8 +380,7 @@ mod tests {
     #[test]
     fn the_scratch_estimate_counts_the_facts_file() {
         assert_eq!(crate::archive3tz::FACTS_RECORD_BYTES, WIDTH as u64);
-        let base = CatalogConfig::scratch_estimate(0, 0);
-        assert!(CatalogConfig::scratch_estimate(1000, 0) - base >= 1000 * WIDTH as u64);
+        crate::archive3tz::CatalogConfig::assert_estimate_slope();
     }
 
     #[test]

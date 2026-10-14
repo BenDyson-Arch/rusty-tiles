@@ -7,6 +7,10 @@
 //! the archive is in domain and dropped as soon as it leaves it. Records stay in memory up to
 //! [`CatalogConfig::stream_log_resident_bytes`], then go to an append-only scratch file read
 //! back once, in order.
+//!
+//! Each record is framed as `u16 length, payload, CRC-32 of the payload`, and the log ends
+//! with a trailer frame holding the entry count. A frame whose CRC does not match, an entry
+//! count that differs, or a log that ends without its trailer is corrupt scratch.
 use super::containment::VolumeFacts;
 use super::{spill_failure, Error, TileFact};
 use crate::archive3tz::CatalogConfig;
@@ -71,7 +75,21 @@ fn encode(entry: &Entry, out: &mut Vec<u8>) {
     }
 }
 
-/// Reads entries back; any malformed byte is corrupt scratch.
+/// Payload tag of the trailer frame.
+const TRAILER: u8 = 3;
+/// Largest framed tile and reference records (`2 + payload + 4`), for the scratch estimate.
+pub(super) const TILE_FRAME_MAX: u64 = 2 + (1 + 8 + 8 + 2 + 129 + 2 * 97) + 4;
+#[cfg(test)]
+pub(super) const REFERENCE_FRAME_MAX: u64 = 2 + (1 + 8 + 8 + 97) + 4;
+
+/// Appends `payload` framed with its length and CRC-32.
+fn frame(payload: &[u8], out: &mut Vec<u8>) {
+    out.extend((payload.len() as u16).to_le_bytes());
+    out.extend_from_slice(payload);
+    out.extend(crc32fast::hash(payload).to_le_bytes());
+}
+
+/// Reads one entry's fields from a frame's payload; any malformed byte is corrupt scratch.
 struct Reader<R: Read> {
     inner: R,
 }
@@ -109,15 +127,9 @@ impl<R: Read> Reader<R> {
     fn index(&mut self) -> Result<usize, Error> {
         usize::try_from(self.u64()?).map_err(|_| Self::corrupt())
     }
-    /// The next entry, or `None` at a clean end.
-    fn next(&mut self) -> Result<Option<Entry>, Error> {
-        let mut tag = [0u8; 1];
-        match self.inner.read(&mut tag) {
-            Ok(0) => return Ok(None),
-            Ok(_) => {}
-            Err(_) => return Err(Self::corrupt()),
-        }
-        Ok(Some(match tag[0] {
+    /// The entry of one frame payload, whose tag byte is already read.
+    fn entry(&mut self, tag: u8) -> Result<Entry, Error> {
+        Ok(match tag {
             1 => {
                 let parent = self.u64()?;
                 let parent = (parent != u64::MAX)
@@ -146,7 +158,47 @@ impl<R: Read> Reader<R> {
                 content: self.volume()?,
             },
             _ => return Err(Self::corrupt()),
-        }))
+        })
+    }
+}
+
+/// Reads frames until the trailer and checks the entry count.
+fn read_frames(
+    inner: &mut dyn Read,
+    each: &mut dyn FnMut(Entry) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let corrupt = Reader::<&[u8]>::corrupt;
+    let mut entries = 0u64;
+    let mut payload = Vec::new();
+    loop {
+        let mut length = [0u8; 2];
+        // A log always ends with its trailer: an end here is a truncation.
+        inner.read_exact(&mut length).map_err(|_| corrupt())?;
+        payload.resize(usize::from(u16::from_le_bytes(length)), 0);
+        let mut crc = [0u8; 4];
+        inner.read_exact(&mut payload).map_err(|_| corrupt())?;
+        inner.read_exact(&mut crc).map_err(|_| corrupt())?;
+        if payload.is_empty() || crc32fast::hash(&payload) != u32::from_le_bytes(crc) {
+            return Err(corrupt());
+        }
+        let mut reader = Reader {
+            inner: &payload[1..],
+        };
+        if payload[0] == TRAILER {
+            let count = reader.u64()?;
+            let mut extra = [0u8; 1];
+            let more = inner.read(&mut extra).map_err(|_| corrupt())?;
+            if count != entries || !reader.inner.is_empty() || more != 0 {
+                return Err(corrupt());
+            }
+            return Ok(());
+        }
+        let entry = reader.entry(payload[0])?;
+        if !reader.inner.is_empty() {
+            return Err(corrupt());
+        }
+        entries += 1;
+        each(entry)?;
     }
 }
 
@@ -156,6 +208,9 @@ pub(super) struct StreamLog {
     file: Option<ByteWriter>,
     resident: usize,
     buffer_bytes: usize,
+    entries: u64,
+    /// The framed record being appended.
+    record: Vec<u8>,
 }
 
 /// A completed log, read once in order.
@@ -171,15 +226,16 @@ impl StreamLog {
             file: None,
             resident: config.stream_log_resident_bytes,
             buffer_bytes: config.buffer_bytes,
+            entries: 0,
+            record: Vec::new(),
         }
     }
 
-    pub(super) fn push(&mut self, entry: &Entry, scratch: &Scratch) -> Result<(), Error> {
-        self.buffer
-            .try_reserve(1 + 8 + 8 + 2 + 129 + 2 * 97)
-            .map_err(|_| super::refused())?;
-        encode(entry, &mut self.buffer);
-        if self.buffer.len() > self.resident {
+    /// Appends the framed record. The resident buffer never holds or reserves more than
+    /// `resident` bytes: a record that would not fit flushes the buffer to scratch first.
+    fn append(&mut self, scratch: &Scratch) -> Result<(), Error> {
+        let needed = self.buffer.len() + self.record.len();
+        if needed > self.resident {
             let file = match &mut self.file {
                 Some(file) => file,
                 None => self.file.insert(
@@ -188,12 +244,35 @@ impl StreamLog {
                 ),
             };
             file.append(&self.buffer).map_err(spill_failure)?;
+            file.append(&self.record).map_err(spill_failure)?;
             self.buffer.clear();
+            return Ok(());
         }
+        if needed > self.buffer.capacity() {
+            let target = (self.buffer.capacity() * 2).clamp(needed, self.resident);
+            self.buffer
+                .try_reserve_exact(target - self.buffer.len())
+                .map_err(|_| super::refused())?;
+        }
+        self.buffer.extend_from_slice(&self.record);
         Ok(())
     }
 
-    pub(super) fn finish(self) -> Result<Written, Error> {
+    pub(super) fn push(&mut self, entry: &Entry, scratch: &Scratch) -> Result<(), Error> {
+        let mut payload = Vec::with_capacity(TILE_FRAME_MAX as usize);
+        encode(entry, &mut payload);
+        self.record.clear();
+        frame(&payload, &mut self.record);
+        self.entries += 1;
+        self.append(scratch)
+    }
+
+    pub(super) fn finish(mut self, scratch: &Scratch) -> Result<Written, Error> {
+        let mut trailer = vec![TRAILER];
+        trailer.extend(self.entries.to_le_bytes());
+        self.record.clear();
+        frame(&trailer, &mut self.record);
+        self.append(scratch)?;
         match self.file {
             None => Ok(Written::Resident(self.buffer)),
             Some(mut file) => {
@@ -213,18 +292,11 @@ impl Written {
         &self,
         mut each: impl FnMut(Entry) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut drain = |inner: &mut dyn Read| -> Result<(), Error> {
-            let mut reader = Reader { inner };
-            while let Some(entry) = reader.next()? {
-                each(entry)?;
-            }
-            Ok(())
-        };
         match self {
-            Written::Resident(bytes) => drain(&mut bytes.as_slice()),
+            Written::Resident(bytes) => read_frames(&mut bytes.as_slice(), &mut each),
             Written::Spilled(file, buffer) => {
                 let mut reader = file.reader(*buffer).map_err(spill_failure)?;
-                drain(&mut reader)
+                read_frames(&mut reader, &mut each)
             }
         }
     }
@@ -290,7 +362,7 @@ mod tests {
             for entry in &input {
                 log.push(entry, &scratch).unwrap();
             }
-            let written = log.finish().unwrap();
+            let written = log.finish(&scratch).unwrap();
             assert_eq!(
                 matches!(written, Written::Spilled(..)),
                 config == CatalogConfig::FORCED_SPILL
@@ -306,21 +378,119 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_truncated_or_unknown_record_is_corrupt_scratch() {
-        let mut bytes = Vec::new();
-        entries().iter().for_each(|e| encode(e, &mut bytes));
-        for cut in [1, 5, bytes.len() - 1] {
-            let written = Written::Resident(bytes[..cut].to_vec());
-            assert!(matches!(
-                written.for_each(|_| Ok(())),
-                Err(Error::InvalidState(_))
-            ));
+    /// A complete resident log of `entries()`, with the offsets where each frame ends.
+    fn log_bytes() -> (Vec<u8>, Vec<usize>) {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::deferred(crate::spill::Placement::In(dir.path().into()), 0);
+        let mut log = StreamLog::new(&CatalogConfig::DEFAULT);
+        let mut ends = Vec::new();
+        for entry in entries() {
+            log.push(&entry, &scratch).unwrap();
+            ends.push(log.buffer.len());
         }
-        let written = Written::Resident(vec![9]);
+        let Written::Resident(bytes) = log.finish(&scratch).unwrap() else {
+            unreachable!()
+        };
+        (bytes, ends)
+    }
+
+    fn corrupt(bytes: Vec<u8>) -> bool {
+        matches!(
+            Written::Resident(bytes).for_each(|_| Ok(())),
+            Err(Error::InvalidState(m)) if m.contains("stream log is corrupt")
+        )
+    }
+
+    #[test]
+    fn a_truncated_altered_or_unterminated_log_is_corrupt_scratch() {
+        let (bytes, ends) = log_bytes();
+        assert!(!corrupt(bytes.clone()));
+        // Truncation at every record boundary and inside records.
+        for cut in ends.iter().copied().chain([1, 5, bytes.len() - 1]) {
+            assert!(corrupt(bytes[..cut].to_vec()), "cut at {cut}");
+        }
+        // A flipped bit anywhere.
+        for at in 0..bytes.len() {
+            let mut flipped = bytes.clone();
+            flipped[at] ^= 0x04;
+            assert!(corrupt(flipped), "flip at {at}");
+        }
+        // A whole record removed keeps every frame valid but not the count.
+        let mut missing = bytes[..ends[1]].to_vec();
+        missing.extend_from_slice(&bytes[ends[2]..]);
+        assert!(corrupt(missing));
+        // Bytes after the trailer.
+        let mut extra = bytes.clone();
+        extra.push(0);
+        assert!(corrupt(extra));
+        // The spilled form checks the same.
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::deferred(crate::spill::Placement::In(dir.path().into()), 0);
+        let mut log = StreamLog::new(&CatalogConfig::FORCED_SPILL);
+        for entry in entries() {
+            log.push(&entry, &scratch).unwrap();
+        }
+        let written = log.finish(&scratch).unwrap();
+        let Written::Spilled(file, _) = &written else {
+            unreachable!()
+        };
+        let path = file.path().to_owned();
+        let len = std::fs::metadata(&path).unwrap().len();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(len - 15)
+            .unwrap();
         assert!(matches!(
             written.for_each(|_| Ok(())),
             Err(Error::InvalidState(_))
         ));
+    }
+
+    #[test]
+    fn the_resident_buffer_never_grows_past_its_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::deferred(crate::spill::Placement::In(dir.path().into()), 0);
+        let config = CatalogConfig {
+            stream_log_resident_bytes: 1000,
+            ..CatalogConfig::DEFAULT
+        };
+        let mut log = StreamLog::new(&config);
+        for entry in entries().repeat(50) {
+            log.push(&entry, &scratch).unwrap();
+            assert!(log.buffer.len() <= 1000 && log.buffer.capacity() <= 1000);
+        }
+        assert!(log.file.is_some());
+    }
+
+    #[test]
+    fn frames_fit_the_declared_maxima() {
+        let mut m = [0f64; 16];
+        m[0] = 1.;
+        let tile = Entry::Tile(TileFact {
+            transform: Some(m),
+            volume: Some(VolumeFacts::Box([1.; 12])),
+            external: Some(VolumeFacts::Box([2.; 12])),
+            parent: Some(1),
+            depth: 2,
+            chain: 3,
+            owner: None,
+        });
+        let reference = Entry::Reference {
+            tile: 1,
+            content: Some(VolumeFacts::Box([3.; 12])),
+            rank: 9,
+        };
+        for (entry, max) in [(tile, TILE_FRAME_MAX), (reference, REFERENCE_FRAME_MAX)] {
+            let (mut payload, mut framed) = (Vec::new(), Vec::new());
+            encode(&entry, &mut payload);
+            frame(&payload, &mut framed);
+            assert_eq!(framed.len() as u64, max);
+        }
+        assert_eq!(
+            crate::archive3tz::STREAM_LOG_BYTES_PER_MEMBER,
+            TILE_FRAME_MAX + REFERENCE_FRAME_MAX
+        );
     }
 }
