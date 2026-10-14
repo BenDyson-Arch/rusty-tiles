@@ -553,8 +553,9 @@ fn leaf_encode(
                     })?;
                     // Only the accepted density attempt reaches here.
                     let positions = std::mem::take(&mut leaf.positions);
+                    let normals = std::mem::take(&mut leaf.normals);
                     if let Some(store) = preencode {
-                        let witness = super::witness::build(atlas, &positions, &ranks)?;
+                        let witness = super::witness::build(atlas, &positions, &normals, &ranks)?;
                         store.write_leaf(index, density_drop, atlas, &witness)?;
                     }
                     Ok(leaf)

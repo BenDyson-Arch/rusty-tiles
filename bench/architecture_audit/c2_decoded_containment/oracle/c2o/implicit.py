@@ -53,10 +53,12 @@ I1_ORACLE_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "..", "implicit
 # self-test fails on it. Mutant copies of c2o are expected to drift.
 # H7 (legacy-content amendment, 2026-10-13) re-pinned check.py, gltf.py and
 # i1_oracle.py; the previous pins were e0209cb4…, 00afbf32… and 62fdc706….
+# The mesh-archive-size amendment (2026-10-14) re-pinned meshopt.py for the
+# OCTAHEDRAL filter; the previous pin was 946cbe81….
 PINS = {
     "c2o/check.py": "8850766e4919de66cf0a220f171ed6cf34b9a6dc49d5ddcae43df7807b174e2b",
     "c2o/gltf.py": "fbd466e5f480b34dbe22059727aa4f9eead94dd791df2222a4323cf8e0cf40b7",
-    "c2o/meshopt.py": "946cbe81bf3baedcd3c1adb6863d4fb6ff309e28defa53ad5f1b9dfa22ef21e6",
+    "c2o/meshopt.py": "14422abfe60e3dc37db34494edf873b39fc717851b8f1d2075659d87aa65f175",
     "c2o/numbers.py": "d28df9e87fa957a1a755bdbe409a2cf1e2c4fe4f76a0cc30075ad759ff06b40c",
     "c2o/scene.py": "dd06ea0593244280cfc9a9930c8ed4aae0aa94fc830006d0c46aab014dc710c5",
     "c2o/spans.py": "dadbebe2fba7bb132b906c98557606141e16215fa3b8959fe5afc1c0c01c82bb",

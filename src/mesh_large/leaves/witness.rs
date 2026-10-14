@@ -5,8 +5,10 @@
 //! - the decoded POSITION of every corner, in the leaf's local metres. These are the
 //!   writer's decoded lattice points: `u * s + t` in f32, which the writer proves equal
 //!   for fused and unfused client decode. Float storage holds the published f32 values.
-//! - the published NORMAL and TANGENT, when the primitive carries them. They are written
-//!   as FLOAT through a lossless meshopt stream, so they are stored exactly as written.
+//! - the NORMAL a renderer reads: in lossy profiles the 12-bit octahedral codes through
+//!   the reference meshopt OCTAHEDRAL decode, as normalized SHORT; in Lossless the
+//!   published f32. TANGENT is published as FLOAT through a lossless meshopt stream and
+//!   is stored exactly as written.
 //! - the source identity of each face: node, mesh, primitive, expanded instance ordinal,
 //!   material, source triangle and the face's global sorted rank.
 //! - each material slot binding exactly as published: page, TEXCOORD set, sampler and the
@@ -151,14 +153,16 @@ pub(in crate::mesh_large) fn texel_spacing(p: [[f64; 3]; 3], uv: [[f64; 2]; 3]) 
     (sigma.is_finite() && sigma > 0.).then_some(sigma.next_up())
 }
 
-/// The witness of an accepted leaf. `positions` are the writer's decoded positions per
-/// primitive; `ranks` maps a source triangle identity to its global sorted rank.
+/// The witness of an accepted leaf. `positions` and `normals` are what the writer
+/// published per primitive, as a renderer decodes them; `ranks` maps a source triangle
+/// identity to its global sorted rank.
 pub(in crate::mesh_large) fn build(
     atlas: &PreparedAtlas,
     positions: &[Vec<[f32; 3]>],
+    normals: &[Vec<[f32; 3]>],
     ranks: &HashMap<(u32, u32, u32, u64), u64>,
 ) -> Result<LeafWitness, JobError> {
-    if positions.len() != atlas.primitives.len() {
+    if positions.len() != atlas.primitives.len() || normals.len() != atlas.primitives.len() {
         return Err(invalid("witness decoded primitive count"));
     }
     let mut leaf_spacing: Option<f64> = None;
@@ -166,7 +170,9 @@ pub(in crate::mesh_large) fn build(
     primitives
         .try_reserve_exact(atlas.primitives.len())
         .map_err(|_| resource("witness primitives"))?;
-    for (primitive, decoded) in atlas.primitives.iter().zip(positions) {
+    for ((primitive, decoded), renderer_normals) in
+        atlas.primitives.iter().zip(positions).zip(normals)
+    {
         let first: &FullTriangle = primitive
             .triangles
             .first()
@@ -271,7 +277,10 @@ pub(in crate::mesh_large) fn build(
             faces,
             positions: decoded.clone(),
             normals: if flags & NORMAL != 0 {
-                corners().map(|c| c.normal).collect()
+                if renderer_normals.len() != count * 3 {
+                    return Err(invalid("witness renderer NORMAL count"));
+                }
+                renderer_normals.clone()
             } else {
                 Vec::new()
             },
@@ -578,6 +587,7 @@ impl Cursor<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content_integrity::meshopt::Filter;
     use crate::mesh_large::{
         bake_pass::{BakePass, LeafPreencode, ProxyBaker},
         leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
@@ -884,8 +894,9 @@ mod tests {
         };
         let ranks = HashMap::from([((1, 2, 3, 4), 7)]);
         let decoded = vec![positions.to_vec()];
+        let no_normals = vec![Vec::new()];
         let spacing = |w, h| {
-            let witness = build(&atlas(w, h), &decoded, &ranks).unwrap();
+            let witness = build(&atlas(w, h), &decoded, &no_normals, &ranks).unwrap();
             assert_eq!(witness.primitives[0].faces[0].rank, 7);
             assert_eq!(witness.primitives[0].expanded_ordinal, 9);
             let s = witness.primitives[0].bindings[0].texel_spacing.unwrap();
@@ -1181,11 +1192,18 @@ mod tests {
             let e = &v["extensions"]["EXT_meshopt_compression"];
             let start = e["byteOffset"].as_u64().unwrap() as usize;
             let length = e["byteLength"].as_u64().unwrap() as usize;
-            crate::content_integrity::meshopt::decode(
+            // The consumer path: decompress, then the view's declared filter.
+            let filter = e
+                .get("filter")
+                .and_then(Value::as_str)
+                .map_or(Some(Filter::None), Filter::parse)
+                .unwrap();
+            crate::content_integrity::meshopt::decode_filtered(
                 &bin[start..start + length],
                 e["count"].as_u64().unwrap() as usize,
                 e["byteStride"].as_u64().unwrap() as usize,
                 crate::content_integrity::meshopt::Mode::Attributes,
+                filter,
             )
             .unwrap()
         };
@@ -1233,13 +1251,30 @@ mod tests {
                     .map(|p| p.map(f32::to_bits))
                     .collect()
             };
+            // FLOAT normals as written; normalized SHORT (octahedral) as a renderer
+            // reads them: max(c / 32767, -1).
             let normals = attribute("NORMAL").map_or(Vec::new(), |a| {
-                floats(a)
-                    .as_chunks::<3>()
-                    .0
-                    .iter()
-                    .map(|p| p.map(f32::to_bits))
-                    .collect()
+                if a["componentType"] == 5122 {
+                    assert_eq!(a["normalized"], true);
+                    view(a["bufferView"].as_u64().unwrap() as usize)
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .map(|e| {
+                            std::array::from_fn(|c| {
+                                let v = i16::from_le_bytes([e[2 * c], e[2 * c + 1]]);
+                                (f32::from(v) / 32767.).max(-1.).to_bits()
+                            })
+                        })
+                        .collect()
+                } else {
+                    floats(a)
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
+                        .map(|p| p.map(f32::to_bits))
+                        .collect()
+                }
             });
             let tangents = attribute("TANGENT").map_or(Vec::new(), |a| {
                 floats(a)
@@ -1469,11 +1504,31 @@ mod tests {
     #[test]
     fn witness_matches_the_published_leaf_decode_and_tracks_a_mutated_leaf() {
         let work = tempfile::tempdir().unwrap();
-        for profile in [LeafProfile::Balanced, LeafProfile::Quality] {
+        // Balanced publishes oct12 NORMAL and quantized POSITION; Lossless f32 for both.
+        let mut octahedral = 0;
+        for profile in [LeafProfile::Balanced, LeafProfile::Lossless] {
             let name = format!("{profile:?}");
             let input = fixture(&work.path().join(&name).join("src"), 48, 0.);
             let (out, leaves, oracle) = run(&work.path().join(&name), &input, profile, true);
             let listed = rows(&out);
+            for row in &listed {
+                let glb = fs::read(out.join(row["uri"].as_str().unwrap())).unwrap();
+                let (doc, _) = published(&glb);
+                for mesh in doc["meshes"].as_array().unwrap() {
+                    let attributes = &mesh["primitives"][0]["attributes"];
+                    if let Some(n) = attributes.get("NORMAL") {
+                        let component =
+                            &doc["accessors"][n.as_u64().unwrap() as usize]["componentType"];
+                        let oct = *component == 5122;
+                        assert_eq!(
+                            oct,
+                            profile != LeafProfile::Lossless,
+                            "{name} NORMAL encoding"
+                        );
+                        octahedral += usize::from(oct);
+                    }
+                }
+            }
             // Byte identity: the published leaves are the same without a baker.
             let (plain, _, _) = run(
                 &work.path().join(format!("{name}-plain")),
@@ -1627,5 +1682,6 @@ mod tests {
                 "{name}: the original witness must not match the mutated leaf"
             );
         }
+        assert!(octahedral > 0, "Balanced leaves publish octahedral NORMAL");
     }
 }
