@@ -509,13 +509,17 @@ pub(in crate::mesh_large) struct FaceIdentity {
     pub features: Vec<(u32, Option<u32>)>,
 }
 
-/// Only [`assemble`] can make one: binds a `Fit` to the frozen tile it was verified for.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Only [`assemble`] can make one (private fields, not `Clone`): binds a `Fit` to the
+/// frozen tile and budget it was verified for AND to the exact bytes it read back
+/// (length and SHA-256), so any later change to those bytes is refused at commit.
+#[derive(Debug, PartialEq, Eq)]
 pub(in crate::mesh_large) struct Verified {
     first: u64,
     depth: u32,
     untextured: [u8; 32],
     tile_bytes: u64,
+    length: u64,
+    sha256: [u8; 32],
 }
 
 /// The adapter's verdict on one prepared node.
@@ -661,15 +665,18 @@ impl<'a> BakePass<'a> {
     /// Only a `Fit` that [`BakePass::assemble`] verified for this tile is accepted; its
     /// bytes are checked again against the tile budget and decoded against the frozen
     /// faces, then written atomically (temporary file and rename).
+    /// Consumes the assembly: only a `Fit` whose bytes are still exactly the bytes
+    /// [`BakePass::assemble`] read back (length and SHA-256), for this tile and budget.
     pub(in crate::mesh_large) fn commit(
         &self,
         frozen: &FrozenNode,
-        assembly: &Assembly,
+        assembly: Assembly,
     ) -> Result<(), JobError> {
         (self.check)()?;
         let Assembly::Fit { glb, verified, .. } = assembly else {
             return Err(state("only a Fit assembly may be committed"));
         };
+        let glb = &glb;
         let id = &frozen.identity;
         if verified.first != id.first
             || verified.depth != id.depth
@@ -677,6 +684,13 @@ impl<'a> BakePass<'a> {
             || verified.tile_bytes != self.tile_bytes
         {
             return Err(state("a Fit assembly committed to another tile or budget"));
+        }
+        if glb.len() as u64 != verified.length
+            || <[u8; 32]>::from(Sha256::digest(glb)) != verified.sha256
+        {
+            return Err(state(
+                "a Fit assembly's bytes changed after they were verified",
+            ));
         }
         if glb.len() as u64 > self.tile_bytes {
             return Err(state("a committed member exceeds the tile budget"));
@@ -1015,6 +1029,8 @@ pub(in crate::mesh_large) fn assemble(
         depth: frozen.identity.depth,
         untextured: frozen.glb_sha256,
         tile_bytes,
+        length: out.len() as u64,
+        sha256: Sha256::digest(&out).into(),
     };
     Ok(Assembly::Fit {
         glb: out,
@@ -1638,27 +1654,69 @@ mod tests {
                     assert_eq!(d.origin, f.origin);
                     assert_eq!(d.decoded, f.corners.map(|c| c.decoded));
                 }
-                // Commit accepts only a verified Fit for this very tile, whose bytes decode
-                // to its frozen faces.
+                // Commit consumes only a verified Fit for this very tile whose bytes are
+                // unchanged since verification; every refusal leaves the member alone.
+                let fresh = || pass.assemble(&frozen, &prepared);
                 let budget = Assembly::PhysicalBudget { actual_bytes: 1 };
-                assert!(pass.commit(&frozen, &budget).is_err());
+                assert!(pass.commit(&frozen, budget).is_err());
                 let mut other = frozen.clone();
                 other.identity.first += 1;
-                assert!(pass.commit(&other, &fit).is_err());
-                if let (Some(previous), Assembly::Fit { verified, .. }) =
-                    (self.last.lock().unwrap().as_ref(), &fit)
-                {
-                    let foreign = Assembly::Fit {
-                        glb: previous.clone(),
-                        decoded: Vec::new(),
-                        verified: verified.clone(),
+                assert!(pass.commit(&other, fresh()?).is_err());
+                let mutate = |edit: &dyn Fn(&mut Vec<u8>)| -> Result<Assembly, JobError> {
+                    let Assembly::Fit {
+                        mut glb,
+                        decoded,
+                        verified,
+                    } = fresh()?
+                    else {
+                        panic!("fits")
                     };
-                    assert!(pass.commit(&frozen, &foreign).is_err());
+                    edit(&mut glb);
+                    Ok(Assembly::Fit {
+                        glb,
+                        decoded,
+                        verified,
+                    })
+                };
+                let previous = self.last.lock().unwrap().clone();
+                if let Some(previous) = previous {
+                    let foreign = mutate(&|glb| *glb = previous.clone())?;
+                    assert!(pass.commit(&frozen, foreign).is_err(), "foreign bytes");
                 }
+                // Same-size mutations of the image, a UV and a material factor.
+                let image = mutate(&|glb| {
+                    let at = glb.windows(4).position(|w| w == b"\x89PNG").unwrap();
+                    glb[at + 40] ^= 1;
+                })?;
+                assert!(pass.commit(&frozen, image).is_err(), "image mutation");
+                let uv = mutate(&|glb| {
+                    let jl = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+                    let doc: Value = serde_json::from_slice(&glb[20..20 + jl]).unwrap();
+                    let accessor = doc["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_0"]
+                        .as_u64()
+                        .unwrap() as usize;
+                    let view = &doc["bufferViews"]
+                        [doc["accessors"][accessor]["bufferView"].as_u64().unwrap() as usize];
+                    let offset = view["extensions"]["EXT_meshopt_compression"]["byteOffset"]
+                        .as_u64()
+                        .unwrap_or(0) as usize;
+                    glb[28 + jl + offset + 1] ^= 1;
+                })?;
+                assert!(pass.commit(&frozen, uv).is_err(), "UV mutation");
+                let material = mutate(&|glb| {
+                    let needle = b"\"metallicFactor\":0.0";
+                    let at = glb.windows(needle.len()).position(|w| w == needle).unwrap();
+                    glb[at + needle.len() - 3] = b'1';
+                })?;
+                assert!(pass.commit(&frozen, material).is_err(), "material mutation");
+                pass.read_certified_proxy(first, depth, 1 << 30)?;
+                let fit = fresh()?;
                 if let Assembly::Fit { glb, .. } = &fit {
                     *self.last.lock().unwrap() = Some(glb.clone());
                 }
-                pass.commit(&frozen, &fit)?;
+                pass.commit(&frozen, fit)?;
+                // The member is now the baked one: the certified reader refuses it.
+                assert!(pass.read_certified_proxy(first, depth, 1 << 30).is_err());
                 pass.preencode.write_proxy(first, depth, b"pages")?;
                 pass.release(first, depth)?;
                 self.seen
