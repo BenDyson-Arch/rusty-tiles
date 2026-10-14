@@ -102,12 +102,15 @@ impl SpillIo for FileIo {
 pub(super) struct Accounting {
     live: AtomicU64,
     peak: AtomicU64,
+    /// Largest live bytes since the last [`Scratch::begin_stage`].
+    stage_peak: AtomicU64,
 }
 
 impl Accounting {
     fn add(&self, bytes: u64) {
         let live = self.live.fetch_add(bytes, Ordering::Relaxed) + bytes;
         self.peak.fetch_max(live, Ordering::Relaxed);
+        self.stage_peak.fetch_max(live, Ordering::Relaxed);
     }
     fn remove(&self, bytes: u64) {
         self.live.fetch_sub(bytes, Ordering::Relaxed);
@@ -406,6 +409,18 @@ impl Scratch {
     /// Largest number of bytes held by live spill files at once.
     pub(crate) fn peak_bytes(&self) -> u64 {
         self.accounting.peak.load(Ordering::Relaxed)
+    }
+
+    /// Starts a stage: its peak restarts from the bytes currently live (retained files).
+    pub(crate) fn begin_stage(&self) {
+        self.accounting
+            .stage_peak
+            .store(self.live_bytes(), Ordering::Relaxed);
+    }
+
+    /// Largest number of live bytes since the last [`Scratch::begin_stage`] (or creation).
+    pub(crate) fn stage_peak_bytes(&self) -> u64 {
+        self.accounting.stage_peak.load(Ordering::Relaxed)
     }
 
     /// Removes the directory, reporting failure rather than ignoring it as drop does.

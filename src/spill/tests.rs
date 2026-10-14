@@ -1312,3 +1312,59 @@ fn slot_file_faults_are_typed() {
         Err(SpillError::CorruptRun { .. })
     ));
 }
+
+/// Runs split into chunk files are read back in the same order, free their chunks as the
+/// stream advances, and keep every intermediate merge within `S + F × chunk`.
+#[test]
+fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
+    let input = spilling_input();
+    let config = spilling_config();
+    let (_parent, plain) = new_scratch(Arc::new(FileIo));
+    let expected: Vec<(u64, u32, u32)> = {
+        let mut sorter = ExternalSorter::new(&plain, config).unwrap();
+        sorter.extend(input.iter().copied()).unwrap();
+        sorter
+            .finish()
+            .unwrap()
+            .map(|r| r.unwrap())
+            .map(|w: Wide| (w.morton, w.a, w.b))
+            .collect()
+    };
+    let total = (input.len() * Wide::SIZE) as u64;
+    // 5 records per chunk: each 100-record run is 20 chunk files.
+    super::sort::CHUNK_OVERRIDE.with(|c| c.set(Some(5 * Wide::SIZE)));
+    let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
+    sorter.extend(input.iter().copied()).unwrap();
+    // The last 100 records stay buffered until finish.
+    assert_eq!(scratch.live_bytes(), total - 100 * Wide::SIZE as u64);
+    let mut stream = sorter.finish().unwrap();
+    let chunk = (5 * Wide::SIZE) as u64;
+    let fan_in = config.fan_in as u64;
+    assert!(
+        scratch.peak_bytes() <= total + fan_in * chunk,
+        "intermediate merges free inputs while writing: {} > {}",
+        scratch.peak_bytes(),
+        total + fan_in * chunk
+    );
+    let files = entries(scratch.path());
+    assert!(
+        files > 3 * 20 / 2,
+        "runs are split into chunk files ({files})"
+    );
+    let mut got = Vec::new();
+    let mut freed_midway = false;
+    for (i, record) in stream.by_ref().enumerate() {
+        let w = record.unwrap();
+        got.push((w.morton, w.a, w.b));
+        if i == input.len() / 2 {
+            let remaining = (input.len() - i - 1) as u64 * Wide::SIZE as u64;
+            freed_midway = scratch.live_bytes() <= remaining + fan_in * chunk;
+        }
+    }
+    super::sort::CHUNK_OVERRIDE.with(|c| c.set(None));
+    assert!(freed_midway, "consumed chunks are removed while streaming");
+    assert_eq!(got, expected, "chunking changes no order or content");
+    assert_eq!(scratch.live_bytes(), 0);
+    assert_eq!(entries(scratch.path()), 0);
+}

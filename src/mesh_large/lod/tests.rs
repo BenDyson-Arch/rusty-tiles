@@ -1079,8 +1079,12 @@ fn no_baker_output_matches_the_pre_handoff_golden() {
 
 /// `tree_digest` of the terrain run on develop at 0072977 (#209, before the bake handoff),
 /// with the platform-independent fixture. Regenerate it only for an intended change of the
-/// LOD or leaf output.
-const NO_BAKER_GOLDEN: &str = "d96a0d4db0df7694c31f3fb46d7080a63ad582de74165f9167507b3ee4cb6007";
+/// LOD or leaf output. Regenerated for the H8 gate escalation report: the untextured
+/// terrain's `manifest.json` leaf report gained `escalated_pages`,
+/// `lossless_fallback_pages`, `escalation_diagnostics` and `escalation_diagnostics_omitted`,
+/// then `escalation_reasons` (codec verification escalation); regenerated again by #226,
+/// whose leaf and proxy property tables are meshopt streams (decoded values unchanged).
+const NO_BAKER_GOLDEN: &str = "8535a539236f33e85be879ae974845eae6567df1c1353be9e9fab4e4d32832fd";
 
 /// The public `mesh_to_tileset` path carries the certified coarse tiles: the published
 /// archive holds one member per proxy row beside the leaves and validates.

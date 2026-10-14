@@ -83,6 +83,17 @@ Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
+Leaf normals are a profile property. `lossless` keeps the f32 source normal
+(after the node transform, renormalized at capture). `fast`, `balanced` and
+`quality` store 12-bit octahedral codes through the `EXT_meshopt_compression`
+OCTAHEDRAL filter; viewers decode them to normalized 16-bit `NORMAL`
+(`KHR_mesh_quantization`). The angle to the source normal is at most about 0.06°
+(0.0596° maximum and 0.020° mean over the 73 million leaf corners of a
+24-million-triangle scene). The bit count is provisional, like the other
+profile constants. The per-triangle provenance tables (`source_primitive`,
+`source_triangle`) are losslessly meshopt-compressed in every profile. Their
+schema, columns and decoded values are unchanged.
+
 `--jobs auto` is memory-aware. A positive `--jobs N` is a **maximum**, also capped
 by available cores and each stage's memory plan. The diagnostics report the
 requested choice and actual workers independently for capture and leaf
@@ -95,7 +106,17 @@ Without it, capture uses the platform scratch default and private leaf/forest
 intermediates use the output parent. Final archive staging remains on the output
 filesystem beside the destination. Disk-backed scratch is usually
 preferable for large sources; memory-backed scratch consumes memory in the
-worker plan and is reported. Capacity is checked by stage, but a preflight is
+worker plan and is reported. Admission requires free scratch for the largest
+declared stage working set (files retained from earlier stages, H17's pre-pass,
+and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
+they are read, so a sorted stream and the output it feeds share space, with at
+most `F` partly read chunks of slack. A 10% margin and per-file rounding are
+added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
+staging and a replaced destination (an estimate of 3 × 119 bytes per triangle
+plus image bytes), added to the scratch figure when they share a filesystem.
+Each capture stage rechecks free space for its own working set on entry and
+fails closed if its measured peak exceeds its declared bound; the diagnostics
+report both (`scratch_stage_bytes`, `scratch_stage_peak_bytes`). A preflight is
 not a reservation against unrelated writers. Owned intermediate files are
 cleaned on success and failure. Any cleanup failure carries actionable paths
 and does not replace the original cause.

@@ -19,10 +19,16 @@ pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 pub(crate) use sequence::{
     ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
+#[cfg(test)]
+pub(crate) use sort::CHUNK_OVERRIDE;
 #[allow(unused_imports)]
-pub(crate) use sort::{ExternalSorter, SortConfig, SortStats, SortedStream};
+pub(crate) use sort::{
+    chunk_records, ExternalSorter, SortConfig, SortStats, SortedStream, CHUNK_BYTES,
+};
 #[allow(unused_imports)]
-pub(crate) use volume::{inspect_volume, preflight, PreflightStage, SpaceRole, Volume};
+pub(crate) use volume::{
+    inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume,
+};
 
 use crate::{JobError, JobErrorKind};
 use std::{fmt, io, path::PathBuf};

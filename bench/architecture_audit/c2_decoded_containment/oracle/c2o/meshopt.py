@@ -1,8 +1,10 @@
-"""NONE-filter EXT_meshopt_compression decoder, written from the pinned spec
-primary/EXT_meshopt_compression.md (sha256 602608cb...), Appendix A.
+"""EXT_meshopt_compression decoder, written from the pinned spec
+primary/EXT_meshopt_compression.md (sha256 602608cb...), Appendices A and B.
 
 Modes: ATTRIBUTES (header 0xa0), TRIANGLES (header 0xe1), INDICES (header 0xd1).
-Filters other than NONE are not implemented (C1 refuses them).
+Filters: NONE and OCTAHEDRAL (Appendix B, filter 1; C1 decodes both since the
+mesh-archive-size amendment). QUATERNION and EXPONENTIAL are not implemented
+(C1 refuses them as Unsupported).
 Every malformed stream raises MeshoptError; nothing is guessed.
 """
 
@@ -286,8 +288,10 @@ def decode_view(ext, parent_view, source):
     for value in (count, stride, length, offset):
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise MeshoptError("EXT_meshopt_compression integer property is invalid")
-    if flt != "NONE":
-        raise MeshoptError("filter %r is not NONE (C1 Unsupported)" % (flt,))
+    if flt not in ("NONE", "OCTAHEDRAL"):
+        raise MeshoptError("filter %r is not NONE or OCTAHEDRAL (C1 Unsupported)" % (flt,))
+    if flt == "OCTAHEDRAL" and (mode != "ATTRIBUTES" or stride not in (4, 8)):
+        raise MeshoptError("OCTAHEDRAL needs ATTRIBUTES mode and byteStride 4 or 8")
     if "byteStride" in parent_view and parent_view["byteStride"] != stride:
         raise MeshoptError("parent byteStride differs from the extension byteStride")
     if parent_view.get("byteLength") != stride * count:
@@ -296,7 +300,8 @@ def decode_view(ext, parent_view, source):
         raise MeshoptError("compressed range overruns its buffer")
     blob = source[offset:offset + length]
     if mode == "ATTRIBUTES":
-        return decode_attributes(blob, count, stride)
+        raw = decode_attributes(blob, count, stride)
+        return octahedral(raw, count, stride) if flt == "OCTAHEDRAL" else raw
     if stride not in (2, 4):
         raise MeshoptError("index modes need byteStride 2 or 4")
     if mode == "TRIANGLES":
@@ -308,3 +313,36 @@ def decode_view(ext, parent_view, source):
     fmt = "<%d%s" % (count, "H" if stride == 2 else "I")
     mask = 0xFFFF if stride == 2 else 0xFFFFFFFF
     return struct.pack(fmt, *[v & mask for v in values])
+
+
+# ---------------------------------------------------------------- Filter 1
+
+def octahedral(raw, count, stride):
+    """Appendix B filter 1 on decoded ATTRIBUTES bytes (stride 4: int8, 8: int16).
+
+    The third input component must encode 1.0 as (1 << (K - 1)) - 1 for some
+    2 <= K <= N, and |x|, |y| must not exceed it; otherwise decoding is
+    unspecified, so this raises. Arithmetic follows the specified pseudocode in
+    binary64; the text allows one unit in the last place of the output."""
+    if stride not in (4, 8) or len(raw) != count * stride:
+        raise MeshoptError("OCTAHEDRAL needs byteStride 4 or 8")
+    fmt, bits = ("<4b", 8) if stride == 4 else ("<4h", 16)
+    limit = (1 << (bits - 1)) - 1
+    out = bytearray()
+    for i, (x, y, one, w) in enumerate(struct.iter_unpack(fmt, raw)):
+        if one < 1 or (one + 1) & one or abs(x) > one or abs(y) > one:
+            raise MeshoptError("OCTAHEDRAL element %d is not a valid K-bit code" % i)
+        fx, fy = x / one, y / one
+        fz = 1.0 - abs(fx) - abs(fy)
+        t = min(fz, 0.0)
+        # x -= copysign(t, x) with t <= 0: move |t| toward zero along x's sign.
+        fx += t if fx >= 0 else -t
+        fy += t if fy >= 0 else -t
+        length = (fx * fx + fy * fy + fz * fz) ** 0.5
+        out += struct.pack(fmt, *(_round(v / length * limit) for v in (fx, fy, fz)), w)
+    return bytes(out)
+
+
+def _round(v):
+    """C99 round(): halves away from zero."""
+    return int(v + 0.5) if v >= 0 else -int(-v + 0.5)

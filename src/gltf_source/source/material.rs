@@ -154,6 +154,28 @@ impl Material {
         self.bindings.iter().flatten()
     }
 
+    /// The material exactly as authored (literal factors and bindings).
+    pub(crate) fn literal(&self) -> &Value {
+        &self.value
+    }
+
+    /// JSON pointers of the texture slots this material binds.
+    pub(crate) fn bound_slot_pointers(&self) -> Vec<String> {
+        SLOTS
+            .iter()
+            .zip(&self.bindings)
+            .filter(|(_, b)| b.is_some())
+            .map(|(spec, _)| spec.path.iter().map(|k| format!("/{k}")).collect())
+            .collect()
+    }
+
+    /// JSON pointers of every texture slot a material may bind.
+    pub(crate) fn slot_pointers() -> impl Iterator<Item = String> {
+        SLOTS
+            .iter()
+            .map(|spec| spec.path.iter().map(|k| format!("/{k}")).collect())
+    }
+
     pub(crate) fn has_normal_texture(&self) -> bool {
         self.bindings()
             .any(|binding| binding.slot == TextureSlot::Normal)
