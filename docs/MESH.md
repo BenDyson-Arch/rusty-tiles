@@ -119,8 +119,12 @@ the nodes of a lattice over the source bounds (at most 32 cells per axis, each
 nominally 1 km horizontally or 0.01° geographic and 100 m vertically) and
 interpolated trilinearly. A cell whose interpolated Jacobian at its centre
 differs from the exact one by more than 1e-7 (relative), or that touches the
-CRS domain edge, uses per-vertex Jacobians instead; the measured normal error
-of interpolated cells is below 1e-7 rad. The report states the lattice and its
+CRS domain edge, uses per-vertex Jacobians instead. The resulting normal error
+is about 1e-7 times the Jacobian's condition number (for EPSG:3857 about
+1/cos(latitude), so about 2e-7 rad at 60°); the centre check estimates the
+quadratic interpolation term, not higher-order terms. Measured errors in the
+tests are below 1e-7 rad, including a 150 km site at 60° whose cells sit at the
+check's edge. The report states the lattice and its
 per-vertex cells. Sorting, leaves, coarse levels and delivery then work in local
 metres. Every source coordinate must lie in the CRS's verified domain; a vertex
 outside it is `invalid_input`, and a mapped position beyond ±1,000,000 local
