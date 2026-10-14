@@ -9,7 +9,15 @@
    "sha256": "365b75f5580b68656e3c3f56943e3d186c49fe206e8e0d248aea2c4a9d4ba70b",
    "use": "self-test only (R9); the decoder is written from primary/EXT_meshopt_compression.md"
   },
-  "spec": "primary/EXT_meshopt_compression.md sha256 602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0"
+  "spec": "primary/EXT_meshopt_compression.md sha256 602608cb4e3402f189e8c4b235be680093ea07c68aff87ab5d974992283555b0",
+  "octahedral": {
+   "repository": "https://github.com/zeux/meshoptimizer",
+   "commit": "3d8e9b8a2a2b9a5becfc6fbc512307b04207ab5d",
+   "file": "js/meshopt_decoder.test.js",
+   "copy": "bench/architecture_audit/c1_payload_integrity/primary_controls/2026-10-10-pinned-reference-verification/meshopt_decoder.test.js",
+   "sha256": "70488d804844802804fc8d4eb302779ea392f746f97df654cc2fabe0ca72c6ac",
+   "use": "self-test only; the filter is written from primary/EXT_meshopt_compression.md Appendix B"
+  }
  },
  "triangles": [
   {
@@ -139,5 +147,55 @@
     "note": "The third spec example is not unsigned LEB128 (it reads the first byte as the most significant group). The spec text, the other example and the upstream vectors (0xcd 0x01 -> 205, 0x98 0x1f -> 3992) are LEB128; the decoder follows LEB128."
    }
   }
- }
+ },
+ "octahedral": [
+  {
+   "name": "decodeFilterOct8",
+   "count": 4,
+   "stride": 4,
+   "encoded": "a001070000001e013f0000008b8cfd0001260000000000000000000000000000000000000000000000000000000000000000017f00",
+   "decoded": [
+    0,
+    1,
+    127,
+    0,
+    0,
+    159,
+    82,
+    1,
+    255,
+    1,
+    127,
+    0,
+    1,
+    130,
+    241,
+    1
+   ]
+  },
+  {
+   "name": "decodeFilterOct12",
+   "count": 4,
+   "stride": 8,
+   "encoded": "a0010f0000003d5a010f0000000e0d013f0000009a9926013f0000000e0d0a000001260000000000000000000000000000000000000000000000000000000000000100ff070000",
+   "decoded": [
+    0,
+    16,
+    32767,
+    0,
+    0,
+    32621,
+    3088,
+    1,
+    32764,
+    16,
+    471,
+    0,
+    307,
+    28541,
+    16093,
+    1
+   ]
+  }
+ ]
 }

@@ -83,6 +83,17 @@ Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
 
+Leaf normals are a profile property. `lossless` keeps the f32 source normal
+(after the node transform, renormalized at capture). `fast`, `balanced` and
+`quality` store 12-bit octahedral codes through the `EXT_meshopt_compression`
+OCTAHEDRAL filter; viewers decode them to normalized 16-bit `NORMAL`
+(`KHR_mesh_quantization`). The angle to the source normal is at most about 0.06°
+(0.0596° maximum and 0.020° mean over the 73 million leaf corners of a
+24-million-triangle scene). The bit count is provisional, like the other
+profile constants. The per-triangle provenance tables (`source_primitive`,
+`source_triangle`) are losslessly meshopt-compressed in every profile. Their
+schema, columns and decoded values are unchanged.
+
 `--jobs auto` is memory-aware. A positive `--jobs N` is a **maximum**, also capped
 by available cores and each stage's memory plan. The diagnostics report the
 requested choice and actual workers independently for capture and leaf

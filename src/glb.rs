@@ -117,6 +117,40 @@ pub(crate) enum MeshoptStream {
     /// IDs and polygon offsets/loop indices including their restart values,
     /// which must keep exact element bytes rather than triangle semantics.
     Attributes { count: usize, stride: usize },
+    /// Octahedral unit vectors already encoded by [`encode_octahedral`]
+    /// (`mode: ATTRIBUTES`, `filter: OCTAHEDRAL`; stride 4 or 8). The filter
+    /// is the one lossy step here and belongs to the producer's profile.
+    Octahedral { count: usize, stride: usize },
+}
+
+/// Encode unit vectors as `bits`-bit octahedral codes for the
+/// `EXT_meshopt_compression` OCTAHEDRAL filter, 16-bit storage (stride 8):
+/// `[x, y, one, 0]` per vector, which clients decode to normalized SHORT VEC3
+/// (plus a zero fourth component). Inputs must be finite.
+pub(crate) fn encode_octahedral(vectors: &[[f32; 3]], bits: u8) -> Result<Vec<u8>, Error> {
+    if !(2..=16).contains(&bits) {
+        return Err(Error::msg("octahedral bits outside 2..=16"));
+    }
+    if vectors.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(Error::Data("non-finite octahedral input vector".into()));
+    }
+    let input: Vec<f32> = vectors
+        .iter()
+        .flat_map(|v| [v[0], v[1], v[2], 0.])
+        .collect();
+    let mut codes = vec![0i16; vectors.len() * 4];
+    // SAFETY: `codes` holds count * 4 aligned i16 (stride 8) and `input`
+    // count * 4 floats, as the encoder requires.
+    unsafe {
+        meshopt::ffi::meshopt_encodeFilterOct(
+            codes.as_mut_ptr().cast(),
+            vectors.len(),
+            8,
+            i32::from(bits),
+            input.as_ptr(),
+        );
+    }
+    Ok(codes.iter().flat_map(|c| c.to_le_bytes()).collect())
 }
 
 /// Container layout for one family of meshopt-compressed content.
@@ -194,11 +228,20 @@ pub(crate) fn meshopt_compress(
                 encode_attributes(&mut binary, bytes, count, stride)?;
                 (count, stride, "ATTRIBUTES")
             }
+            MeshoptStream::Octahedral { count, stride } => {
+                if stride != 4 && stride != 8 {
+                    return Err(Error::msg("octahedral meshopt stride must be 4 or 8"));
+                }
+                encode_attributes(&mut binary, bytes, count, stride)?;
+                (count, stride, "ATTRIBUTES")
+            }
         };
         view["buffer"] = json!(1);
         let mut extension = json!({"buffer":0,"byteOffset":start,"byteLength":binary.len() - start,
             "byteStride":stride,"count":count,"mode":mode});
-        if layout.explicit_filter {
+        if let MeshoptStream::Octahedral { .. } = stream {
+            extension["filter"] = json!("OCTAHEDRAL");
+        } else if layout.explicit_filter {
             extension["filter"] = json!("NONE");
         }
         view["extensions"] = json!({ MESHOPT: extension });

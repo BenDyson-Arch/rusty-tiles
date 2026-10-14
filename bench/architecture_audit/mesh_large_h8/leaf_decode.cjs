@@ -30,7 +30,8 @@ const assert = (x, message) => { if (!x) throw new Error(message); };
       return range(view.byteOffset || 0, view.byteLength).toString('base64');
     }
     assert(document.extensionsRequired.includes('EXT_meshopt_compression'), 'meshopt required declaration');
-    assert(extension.buffer === 0 && extension.mode === 'ATTRIBUTES' && extension.filter === 'NONE', 'lossless meshopt mode');
+    // NONE is lossless wire compression; OCTAHEDRAL carries the profile's lossy leaf NORMAL.
+    assert(extension.buffer === 0 && extension.mode === 'ATTRIBUTES' && (extension.filter === 'NONE' || (extension.filter === 'OCTAHEDRAL' && extension.byteStride === 8)), 'meshopt mode/filter');
     const compressed = range(extension.byteOffset || 0, extension.byteLength);
     assert(compressed[0] === 0xa0, 'pinned ATTRIBUTES codec header');
     assert(extension.count * extension.byteStride === view.byteLength, 'decoded view size');
