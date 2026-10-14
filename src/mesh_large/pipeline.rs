@@ -343,6 +343,8 @@ pub fn mesh_to_tileset(
             request.profile,
             super::lod::Mutation::None,
             super::lod::TARGET_FACES,
+            // No production proxy baker yet (H27 plugs in here); proxies stay untextured.
+            None,
             &|| attempt.check(),
         )?;
         attempt.emit(&RunEvent::Progress {

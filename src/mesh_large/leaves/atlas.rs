@@ -899,6 +899,8 @@ pub(super) struct Services<'a> {
     /// Declared per-page workspace limit for internal allocation checks.
     pub memory: u64,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    /// Spill every page's pre-encode values for the bake pass (accepted attempts kept).
+    pub preencode: Option<&'a crate::mesh_large::bake_pass::PreencodeStore>,
 }
 
 /// Bytes leased from the memory gate for one page: page assembly, the
@@ -970,10 +972,11 @@ fn island_receipts(b: &Binding) -> Value {
 struct EncodedPage {
     delivered: delivery::Delivery,
     binding_receipts: Vec<Value>,
+    preencode: Option<super::prepared::PreencodePage>,
 }
 
 /// glTF material property of a texture slot, for diagnostics.
-pub(super) fn slot_name(slot: TextureSlot) -> &'static str {
+pub(super) fn slot_property(slot: TextureSlot) -> &'static str {
     match slot {
         TextureSlot::BaseColor => "baseColorTexture",
         TextureSlot::MetallicRoughness => "metallicRoughnessTexture",
@@ -1026,13 +1029,37 @@ fn page_error(
         error.kind(),
         format!(
             "page {page_id} {} (source {}): {error}",
-            slot_name(slot),
+            slot_property(slot),
             sources.join(", ")
         ),
         error,
     )
 }
 
+/// Ends the `MaskDelivery` borrow of the page's surface samples before the page buffers
+/// move into the retained pre-encode record.
+fn drop_mask_borrow(_mask: Option<MaskDelivery<'_>>) {}
+
+fn slot_name(slot: TextureSlot) -> &'static str {
+    match slot {
+        TextureSlot::BaseColor => "baseColor",
+        TextureSlot::MetallicRoughness => "metallicRoughness",
+        TextureSlot::Normal => "normal",
+        TextureSlot::Occlusion => "occlusion",
+        TextureSlot::Emissive => "emissive",
+    }
+}
+
+fn class_name(class: Class) -> &'static str {
+    match class {
+        Class::Colour => "colour",
+        Class::Normal => "normal",
+        Class::Data => "data",
+        Class::Id => "id",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn encode_page(
     services: &Services<'_>,
     layout: &Layout,
@@ -1041,6 +1068,7 @@ fn encode_page(
     profile: Profile,
     depth: u8,
     drop: u32,
+    leaf: u64,
 ) -> Result<EncodedPage, JobError> {
     let captured = services.captured;
     let memory = services.memory;
@@ -1062,6 +1090,7 @@ fn encode_page(
     let primitives = &layout.primitives;
     let masked = &layout.masked;
     let mut receipts = Vec::new();
+    let mut preencode = None;
     let delivered = if page.source_mips {
         if page.bindings.len() != 1 {
             return Err(invariant());
@@ -1135,7 +1164,7 @@ fn encode_page(
             source_sampler_mips::check_authored(&chain, &context)
         })?;
         receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
-        delivery::encode_authored(
+        let delivered = delivery::encode_authored(
             &chain.page,
             b.slot,
             profile,
@@ -1148,7 +1177,38 @@ fn encode_page(
                     json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
                 )
             },
-        )?
+        )?;
+        if let Some(store) = services.preencode {
+            preencode = Some(
+                store.write_page(
+                    leaf,
+                    drop,
+                    &super::prepared::PreencodePage {
+                        page: page_id as u32,
+                        slot: slot_name(b.slot).to_owned(),
+                        class: class_name(class).to_owned(),
+                        width: page.width,
+                        height: page.height,
+                        levels: chain
+                            .page
+                            .levels
+                            .into_iter()
+                            .map(|l| super::prepared::PreencodeLevel {
+                                width: l.width,
+                                height: l.height,
+                                rgba: l.rgba,
+                            })
+                            .collect(),
+                        support: None,
+                        min_filter: b.sampler.min_filter,
+                        mag_filter: b.sampler.mag_filter,
+                        density_drop: drop,
+                        source_mips: true,
+                    },
+                )?,
+            );
+        }
+        delivered
     } else {
         let pixels = (page.width as usize)
             .checked_mul(page.height as usize)
@@ -1226,7 +1286,7 @@ fn encode_page(
             linear,
             min_linear,
         });
-        delivery::encode(
+        let delivered = delivery::encode(
             [page.width, page.height],
             &rgba,
             &support,
@@ -1235,7 +1295,32 @@ fn encode_page(
             memory,
             mask,
             ladder,
-        )?
+        )?;
+        drop_mask_borrow(mask);
+        if let Some(store) = services.preencode {
+            preencode = Some(store.write_page(
+                leaf,
+                drop,
+                &super::prepared::PreencodePage {
+                    page: page_id as u32,
+                    slot: slot_name(page.slot).to_owned(),
+                    class: class_name(class(page.slot)).to_owned(),
+                    width: page.width,
+                    height: page.height,
+                    levels: vec![super::prepared::PreencodeLevel {
+                        width: page.width,
+                        height: page.height,
+                        rgba,
+                    }],
+                    support: Some(support),
+                    min_filter: page.sampler.min_filter,
+                    mag_filter: page.sampler.mag_filter,
+                    density_drop: drop,
+                    source_mips: false,
+                },
+            )?);
+        }
+        delivered
     };
     timing::count(Counter::Pages, 1);
     timing::count(
@@ -1246,6 +1331,7 @@ fn encode_page(
     Ok(EncodedPage {
         delivered,
         binding_receipts: receipts,
+        preencode,
     })
 }
 
@@ -1259,6 +1345,7 @@ pub(super) fn prepare(
     profile: Profile,
     depth: u8,
     drop: u32,
+    leaf: u64,
 ) -> Result<(PreparedAtlas, Appearance), PrepareError> {
     let captured = services.captured;
     let resources = AtlasResources {
@@ -1282,7 +1369,7 @@ pub(super) fn prepare(
         .par_iter()
         .enumerate()
         .map(|(page_id, page)| {
-            encode_page(services, &layout, page, page_id, profile, depth, drop)
+            encode_page(services, &layout, page, page_id, profile, depth, drop, leaf)
                 .map_err(|e| page_error(e, page_id, page.slot, &sources[page_id]))
         })
         .collect();
@@ -1297,6 +1384,7 @@ pub(super) fn prepare(
         pages: Vec::new(),
         textures: Vec::new(),
         samplers: Vec::new(),
+        preencode: Vec::new(),
     };
     let mut receipts = Vec::new();
     let mut escalations = Vec::new();
@@ -1305,7 +1393,9 @@ pub(super) fn prepare(
         let EncodedPage {
             delivered,
             binding_receipts,
+            preencode,
         } = result?;
+        atlas.preencode.extend(preencode);
         receipts.extend(binding_receipts);
         let escalation = delivered.escalation.as_ref().map(|e| {
             json!({"step":e.step.name(),"misses":e.misses.iter().map(delivery::GateMiss::to_json).collect::<Vec<_>>()})

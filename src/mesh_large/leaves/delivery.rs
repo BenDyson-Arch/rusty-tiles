@@ -14,7 +14,7 @@ use image::ImageEncoder;
 use serde_json::{json, Value};
 
 #[derive(Debug)]
-pub(super) struct Delivery {
+pub(in crate::mesh_large) struct Delivery {
     pub bytes: Vec<u8>,
     pub mime: &'static str,
     pub mip_count: u32,
@@ -78,7 +78,7 @@ pub(crate) struct Escalation {
 }
 /// Page-owned ladder facts, resolved by the atlas.
 #[derive(Clone, Copy)]
-pub(super) struct Ladder<'a> {
+pub(in crate::mesh_large) struct Ladder<'a> {
     /// The page sampler has no mipmap minification filter, so it reads level
     /// 0 only and an exact level-0 PNG is a complete lossless substitute that
     /// keeps the sampler. Mip-sampled pages end the ladder at UASTC level 3:
@@ -110,7 +110,7 @@ fn missed(error: JobError, step: Step, mip: Option<usize>) -> Result<GateMiss, J
     }
 }
 #[derive(Clone, Copy)]
-pub(super) struct MaskDelivery<'a> {
+pub(in crate::mesh_large) struct MaskDelivery<'a> {
     pub samples: &'a [super::mask::SurfaceSample],
     pub factor: f64,
     pub cutoff: f64,
@@ -298,7 +298,7 @@ pub(super) fn channel_gate(
         },
     }
 }
-pub(super) fn check_level(
+pub(in crate::mesh_large) fn check_level(
     expected: &[u8],
     decoded: &[u8],
     support: &[u32],
@@ -470,7 +470,10 @@ pub(super) fn step_settings(
     ))
 }
 
-pub(super) fn workspace_charge(dimensions: [u32; 2], profile: Profile) -> Result<u64, JobError> {
+pub(in crate::mesh_large) fn workspace_charge(
+    dimensions: [u32; 2],
+    profile: Profile,
+) -> Result<u64, JobError> {
     let [width, height] = dimensions;
     let base = u64::from(width)
         .checked_mul(u64::from(height))
@@ -588,7 +591,7 @@ fn png_round_trip(rgba: &[u8], width: u32, height: u32) -> Result<(Vec<u8>, Vec<
 }
 
 /// The atlas owner supplies the complete chain and the independent source-sampler check.
-pub(super) fn encode_authored(
+pub(in crate::mesh_large) fn encode_authored(
     chain: &sparse_mips::Chain,
     slot: TextureSlot,
     profile: Profile,

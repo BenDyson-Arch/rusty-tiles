@@ -2,10 +2,10 @@
 
 ## Current implementation direction — 2026-10-12
 
-The [0.4 delivery and 0.5 transition roadmap](04-tiles2-roadmap.md) governs new
+The [0.4 delivery and 0.6 transition roadmap](04-tiles2-roadmap.md) governs new
 work and sequencing. **0.4 ships Tiles 1.1 / glTF 2.0**, including implicit tiling
 and the certified textured large-mesh tiler. Its owned tile data and output
-boundaries prepare for **0.5's official Tiles 2.0 / glTF 2.1 transition**.
+boundaries prepare for **0.6's official Tiles 2.0 / glTF 2.1 transition**.
 Draft experiments may inform design, but draft-format viewer support does not
 block 0.4. The [interrupted-track ledger](04-track-dispositions.md) records what
 continues, what is superseded, and how unfinished source can be recovered.
@@ -83,7 +83,7 @@ wherever the concrete scope has not adopted them.
 
 ## Audit documents
 
-- [0.4 delivery and 0.5 format-transition roadmap](04-tiles2-roadmap.md)
+- [0.4 delivery and 0.6 format-transition roadmap](04-tiles2-roadmap.md)
 - [Interrupted-track dispositions and recovery](04-track-dispositions.md)
 - [H1 streamed mesh capture and tree contract](h1-capture-tree-contract.md)
 - [H1 independent capture, tree and resource evidence](../../bench/architecture_audit/mesh_large_h1/README.md)

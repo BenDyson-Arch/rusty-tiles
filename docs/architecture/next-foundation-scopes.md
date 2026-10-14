@@ -1,7 +1,7 @@
 # Post-F0 foundation scopes and disposition
 
-**Historical sequence.** As of 2026-10-12, the [0.4 delivery and 0.5 transition roadmap](04-tiles2-roadmap.md)
-governs new work: 0.4 ships Tiles 1.1/glTF 2.0; 0.5 makes the official format
+**Historical sequence.** As of 2026-10-12, the [0.4 delivery and 0.6 transition roadmap](04-tiles2-roadmap.md)
+governs new work: 0.4 ships Tiles 1.1/glTF 2.0; 0.6 makes the official format
 transition. The obligations and bounded evidence below remain relevant, but
 headings describing the "next" operation are historical. Consult the
 [track ledger](04-track-dispositions.md) before resuming an interrupted branch.

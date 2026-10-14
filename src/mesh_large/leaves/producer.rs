@@ -59,6 +59,9 @@ pub struct LeafOutputRequest {
     scratch_dir: Option<PathBuf>,
     lod_mutation: super::super::lod::Mutation,
     lod_target: usize,
+    baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
+    #[cfg(test)]
+    leaf_triangles: Option<u64>,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -74,6 +77,9 @@ impl LeafOutputRequest {
             scratch_dir: None,
             lod_mutation: super::super::lod::Mutation::None,
             lod_target: super::super::lod::TARGET_FACES,
+            baker: None,
+            #[cfg(test)]
+            leaf_triangles: None,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -90,10 +96,25 @@ impl LeafOutputRequest {
         self.lod_mutation = mutation;
         self
     }
+    /// Bake the coarse tiles' appearance (H13) after they are certified. Without a baker
+    /// the proxies stay untextured.
+    pub(in crate::mesh_large) fn with_baker(
+        mut self,
+        baker: std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>,
+    ) -> Self {
+        self.baker = Some(baker);
+        self
+    }
     /// Test fixtures: a smaller coarse-tile face target, so small inputs get deep LOD.
     #[cfg(test)]
     pub(crate) fn with_lod_target(mut self, target: usize) -> Self {
         self.lod_target = target;
+        self
+    }
+    /// Test fixtures: smaller leaves, so small inputs get several leaves and coarse levels.
+    #[cfg(test)]
+    pub(crate) fn with_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
+        self.leaf_triangles = Some(leaf_triangles);
         self
     }
 }
@@ -453,9 +474,10 @@ fn encode_leaf(
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
-    leaf_encode(input, services, config, leaves, index).map_err(|error| {
+    leaf_encode(input, services, config, leaves, index, preencode).map_err(|error| {
         if error.kind() == JobErrorKind::Cancelled {
             return error;
         }
@@ -476,6 +498,7 @@ fn leaf_encode(
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
@@ -491,16 +514,22 @@ fn leaf_encode(
                     config.profile,
                     node.depth() as u8,
                     density_drop,
+                    index,
                 ),
                 |atlas| {
-                    timing::time(Stage::GlbWrite, || {
+                    let leaf = timing::time(Stage::GlbWrite, || {
                         writer::encode(
                             atlas,
                             &captured.lattice,
                             node.depth() as u8,
                             config.tile_bytes(),
                         )
-                    })
+                    })?;
+                    // Only the accepted density attempt reaches here.
+                    if let Some(store) = preencode {
+                        store.write_leaf(index, density_drop, atlas)?;
+                    }
+                    Ok(leaf)
                 },
             )
         },
@@ -536,8 +565,32 @@ pub(crate) fn produce(
     profile: LeafProfile,
     mutation: super::super::lod::Mutation,
     target: usize,
+    baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
+    use super::super::{bake_pass, lod::handoff::HandoffSink};
+    // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
+    // tile packets.
+    let bake_dir = captured.scratch.path().join("bake");
+    // One allowance for both stores: half the scratch volume's free space, measured before
+    // the leaves are written (a failed probe is an error, never an allowance of zero). Both
+    // stores fill during H8 and H17 and drain only as the baker consumes them.
+    let (preencode, handoff) = match baker {
+        Some(_) => {
+            let volume = crate::spill::inspect_volume(captured.scratch.path())?;
+            let budget = std::sync::Arc::new(super::super::lod::handoff::ScratchBudget::new(
+                volume.available_bytes / 2,
+            ));
+            (
+                Some(bake_pass::PreencodeStore::new(
+                    bake_dir.join("preencode"),
+                    budget.clone(),
+                )?),
+                Some(HandoffSink::new(bake_dir.join("handoff"), budget)?),
+            )
+        }
+        None => (None, None),
+    };
     let leaves = path.join("leaves");
     fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
     let manifest_path = path.join("leaves.jsonl");
@@ -589,7 +642,9 @@ pub(crate) fn produce(
         gate: &gate,
         memory: stage.page_bytes,
         check: &leaf_check,
+        preencode: preencode.as_ref(),
     };
+    let preencode_ref = preencode.as_ref();
     let mut nodes = captured.tree.nodes.reader()?;
     let result = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Done = Result<(LeafEncoded, LeafInput), JobError>;
@@ -635,7 +690,14 @@ pub(crate) fn produce(
                         // writer never waits for a result that cannot come.
                         let encoded =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                encode_leaf(&input, services, config, leaves_dir, index)
+                                encode_leaf(
+                                    &input,
+                                    services,
+                                    config,
+                                    leaves_dir,
+                                    index,
+                                    preencode_ref,
+                                )
                             }))
                             .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
                         // The receiver outlives every task of this scope.
@@ -677,7 +739,7 @@ pub(crate) fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
-    let lod = timing::time(Stage::Lod, || {
+    let mut lod = timing::time(Stage::Lod, || {
         super::super::lod::produce(
             super::super::lod::LodInput {
                 stage: path,
@@ -687,12 +749,39 @@ pub(crate) fn produce(
                 jobs: stage.jobs as usize,
                 mutation,
                 target,
+                handoff: handoff.as_ref(),
             },
             check,
         )
     })?;
     report.proxies = lod.proxies;
     report.proxy_bytes = lod.proxy_bytes;
+    // The bake hook: capture and staging are still live here.
+    if let (Some(baker), Some(handoff), Some(preencode)) = (baker, &handoff, &preencode) {
+        let pass = bake_pass::BakePass::new(
+            captured,
+            config.profile,
+            config.tile_bytes(),
+            stage.jobs as usize,
+            path,
+            handoff,
+            preencode,
+            check,
+        );
+        baker.bake(&pass)?;
+        // The manifest reports the published (baked) proxy bytes, and keeps the certified
+        // untextured figure beside them.
+        let baked = pass.finish()?;
+        lod.untextured_proxy_bytes = Some(lod.proxy_bytes);
+        lod.proxy_bytes = baked;
+        report.proxy_bytes = baked;
+    }
+    drop(handoff);
+    drop(preencode);
+    if bake_dir.exists() {
+        fs::remove_dir_all(&bake_dir)
+            .map_err(|e| JobError::io("remove bake scratch", &bake_dir, e))?;
+    }
     let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","lod":lod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
     write_file(
         &path.join("manifest.json"),
@@ -814,7 +903,7 @@ fn write_leaf(
             first: node.first,
             depth: node.depth(),
             page: page.page as u64,
-            slot: atlas::slot_name(page.slot),
+            slot: atlas::slot_property(page.slot),
             sources: page
                 .sources
                 .iter()
@@ -849,6 +938,10 @@ pub fn mesh_to_leaf_payloads(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs;
     config.scratch_dir = request.scratch_dir;
+    #[cfg(test)]
+    if let Some(leaf_triangles) = request.leaf_triangles {
+        config = config.with_leaf_triangles(leaf_triangles);
+    }
     let captured = match timing::time(Stage::Capture, || {
         full::capture(&request.input, &config, &mut || attempt.check())
     }) {
@@ -885,6 +978,7 @@ pub fn mesh_to_leaf_payloads(
         request.profile,
         request.lod_mutation,
         request.lod_target,
+        request.baker.as_deref(),
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();
