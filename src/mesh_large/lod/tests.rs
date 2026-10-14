@@ -1124,3 +1124,93 @@ fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
         checked.not_inspected
     );
 }
+
+/// The seam audit from the composite crack's geometry (mgal x10, depth 6): tiles
+/// f88245879 and f89031639 both held the seam-vertex face L-H-P after their forced seam
+/// removals, so at depth 5 their parents disagreed about edge L-H. The audit now flags
+/// such a face held by two tiles, and an edge claimed by more than two tiles, for both
+/// owners; consensus then re-keeps their removed seam vertices (or fails typed).
+#[test]
+fn seam_audit_flags_duplicate_seam_faces_and_overclaimed_edges() {
+    use super::{audit, seam_face, Defect, SeamEdge};
+    let key = |p: [f32; 3]| super::incidence::weld(p);
+    let l = key([703.64294, 28.421944, 204.25375]);
+    let h = key([703.6449, 28.462814, 204.25786]);
+    let p = key([703.6427, 28.492601, 204.25209]);
+    let q = key([703.6497, 28.519394, 204.1919]);
+    let edge = |a: [u32; 3], b: [u32; 3], owner: u64| SeamEdge {
+        lo: a.min(b),
+        hi: a.max(b),
+        kind: 0,
+        third: [0; 3],
+        owner,
+        owner_depth: 6,
+        lo_dec: [1; 3],
+        hi_dec: [2; 3],
+        special: false,
+        round: 0,
+    };
+    let (a, b, c) = (88_245_879, 89_031_639, 89_523_094);
+    let mut records = vec![
+        seam_face([l, h, p], false, a, 6).unwrap(),
+        seam_face([p, l, h], false, b, 6).unwrap(),
+        edge(l, h, a),
+        edge(l, h, b),
+        edge(l, h, c),
+        edge(h, p, a),
+        edge(h, p, b),
+        edge(p, q, c),
+    ];
+    records.sort();
+    let counts = audit(records.into_iter().map(Ok), 6, false).unwrap();
+    assert_eq!(
+        counts.overlapping, 2,
+        "one duplicate face, one overclaimed edge"
+    );
+    assert_eq!(counts.matched, 1, "H-P is an ordinary two-tile seam edge");
+    let defect = |owner: u64| counts.unmatched.get(&(owner, 6)).map(|v| v.2);
+    assert!(
+        matches!(defect(a), Some(Defect::DuplicateFace(_))),
+        "{:?}",
+        counts.unmatched
+    );
+    assert!(
+        matches!(defect(b), Some(Defect::DuplicateFace(_))),
+        "{:?}",
+        counts.unmatched
+    );
+    // c's overclaimed L-H (or its partnerless P-Q) is reported too.
+    assert!(defect(c).is_some());
+    // A face whose vertices are all special (a repeated source face) is not flagged.
+    let mut special = vec![
+        seam_face([l, h, p], true, a, 6).unwrap(),
+        seam_face([l, h, p], true, b, 6).unwrap(),
+    ];
+    special.sort();
+    let counts = audit(special.into_iter().map(Ok), 6, false).unwrap();
+    assert!(counts.unmatched.is_empty() && counts.overlapping == 0);
+}
+
+/// Overlapping seam coverage never passes silently: with the first tile of each depth
+/// claiming a seam edge a second time, consensus cannot resolve it and the run fails
+/// with a typed error naming the overclaimed edge.
+#[test]
+fn control_overclaimed_seam_edge_is_refused() {
+    let work = tempfile::tempdir().unwrap();
+    let source = terrain(150);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let refused = leaves(
+        &input,
+        &work.path().join("leaves"),
+        2,
+        Mutation::OverclaimSeam,
+        1024,
+    )
+    .unwrap_err();
+    assert_eq!(refused.error.kind(), JobErrorKind::InvalidState);
+    assert!(
+        refused.error.message().contains("claimed by"),
+        "{}",
+        refused.error.message()
+    );
+}
