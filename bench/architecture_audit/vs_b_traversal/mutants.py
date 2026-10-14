@@ -34,9 +34,15 @@ MUTANTS = [
     # VS-B-4: passing references are not logged, so nothing is streamed.
     ("log-drops-references", [(V, "        self.log(Some(stream_log::Entry::Reference {\n            tile,\n            content,\n            rank,\n        }))",
                                "        let _ = (tile, content, rank);\n        self.log(None)")]),
-    # VS-B-4: the logged stream also runs when the archive left the domain.
+    # VS-B-4: the logged stream also runs when the archive left the domain. The stream is
+    # guarded twice: the log is dropped at the first event out of domain, and the stream runs
+    # only when contained. Removing one guard alone is equivalent (every exclusion or precheck
+    # stop precedes a log call; the first final run recorded the gate-only edit as not
+    # caught), so this mutant removes both.
     ("stream-ignores-domain", [(V, "    if contained {\n        check.stream()?;",
-                                "    if check.stream_log.is_some() {\n        check.stream()?;\n    }\n    if contained {")]),
+                                "    if check.stream_log.is_some() {\n        check.stream()?;\n    }\n    if contained {"),
+                               (V, "            self.stream_log = None;\n            return Ok(());",
+                                "            return Ok(());")]),
     # VS-B-4: the Outside message names the root's depth.
     ("stream-depth-root", [(V, "                let depth = self.c2.on_path(tile)?.depth;",
                             "                let depth = self.c2.on_path(0)?.depth;")]),
