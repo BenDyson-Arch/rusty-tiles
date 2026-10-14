@@ -125,8 +125,9 @@ pub(crate) fn retention(sums: &[(u128, u128)], target: u128) -> Vec<u8> {
     k
 }
 
-/// One proxy's published row (fixed size, external-sorted into postorder).
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// One proxy's published row (fixed size, external-sorted into postorder). Equality
+/// follows the sort order (`Ord`), so `Eq` and `Ord` agree even for NaN fields.
+#[derive(Clone, Copy, Debug)]
 struct Row {
     first: u64,
     end: u64,
@@ -154,6 +155,11 @@ const FLAG_DIRECT_SKIPPED: u8 = 4;
 impl Row {
     fn order(&self) -> (u64, u8, u64) {
         (self.end, u8::MAX - self.depth, self.first)
+    }
+}
+impl PartialEq for Row {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 impl Eq for Row {}
@@ -934,7 +940,7 @@ fn process(
     };
     let mut phases = [0f64; 10];
     lap(&mut phases[0]);
-    let mesh = KeyMesh::build(&key_faces);
+    let mesh = KeyMesh::build(&key_faces)?;
     let mut out = Outcome::default();
 
     // Islands: whole components with no cut vertex and a zero area-share target.
