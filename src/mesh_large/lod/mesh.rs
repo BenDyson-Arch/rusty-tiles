@@ -540,34 +540,20 @@ impl Simplifier {
         reason.is_none()
     }
 
-    /// Seam coverage guard (both passes). Collapsing a non-seam vertex `u` onto a seam
-    /// vertex `v` must not newly create a face `(v, a, b)` of seam vertices only that lies
-    /// along this tile's seam: `(a, b)` and one of `(v, a)`, `(v, b)` bordered by a single
-    /// face before the collapse. Such a sliver spans consecutive seam edges, and the tile
-    /// across the seam can build the same face from its side; the two then overlap over the
-    /// seam (a fold neither tile's own link check sees), and at the next depth the parents'
-    /// seams no longer agree. It also refuses capping a loop of seam edges.
+    /// Seam coverage guard (both passes; on for tiles the depth audit found overlapping a
+    /// neighbour). Collapsing a non-seam vertex `u` onto a seam vertex `v` must not create
+    /// a face `(v, a, b)` of seam vertices only. Such a face lies along the seam, and the
+    /// tile across it can build the same face from its side (the composite's depth-6 case:
+    /// a sliver L-H-P in both tiles, opposite windings, every seam edge still partnered);
+    /// the two then cover it twice, and at the next depth the parents' seams disagree.
     fn spans_seam(&self, u: u32, v: u32) -> bool {
         let cut = |x: u32| self.cut.get(x as usize).copied().unwrap_or(false);
         if !self.strict_seams || cut(u) || !cut(v) {
             return false;
         }
-        let border = |a: u32, b: u32| {
-            self.live(a)
-                .filter(|&g| self.faces[g as usize].v.contains(&b))
-                .count()
-                == 1
-        };
         self.live(u).any(|f| {
             let face = self.faces[f as usize];
-            if face.v.contains(&v) {
-                return false;
-            }
-            let mut others = face.v.iter().copied().filter(|&x| x != u);
-            let (Some(a), Some(b)) = (others.next(), others.next()) else {
-                return false;
-            };
-            cut(a) && cut(b) && border(a, b) && (border(v, a) || border(v, b))
+            !face.v.contains(&v) && face.v.iter().all(|&x| x == u || cut(x))
         })
     }
 
@@ -1131,10 +1117,10 @@ mod tests {
         material: u32::MAX,
     };
 
-    /// The seam-span guard: an interior vertex fanned against three consecutive seam
-    /// vertices may not collapse onto one of them under the guard (it would leave a
-    /// seam-vertex sliver spanning two seam edges, which the neighbouring tile can build
-    /// too), while the same collapse is unaffected without it or onto a non-seam vertex.
+    /// The seam guard: an interior vertex fanned against three consecutive seam vertices
+    /// may not collapse onto one of them under the guard (it would leave a face of seam
+    /// vertices only, which the neighbouring tile can build too), while the same collapse
+    /// is unaffected without the guard or onto a non-seam vertex.
     #[test]
     fn seam_span_guard_refuses_slivers_along_the_seam() {
         let k = |x: f32, z: f32| key(x, 0., z);

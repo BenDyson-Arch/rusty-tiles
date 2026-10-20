@@ -1157,6 +1157,8 @@ fn seam_record(from: [u32; 3], to: [u32; 3], owner: u64, special: bool) -> super
     super::SeamEdge {
         lo: from.min(to),
         hi: from.max(to),
+        kind: 0,
+        third: [0; 3],
         forward: from < to,
         owner,
         owner_depth: 6,
@@ -1168,17 +1170,20 @@ fn seam_record(from: [u32; 3], to: [u32; 3], owner: u64, special: bool) -> super
     }
 }
 
+/// A face-of-seam-vertices record for the audit tests.
+fn face_record(keys: [[u32; 3]; 3], owner: u64) -> super::SeamEdge {
+    super::seam_face(keys, false, owner, 6, false).unwrap()
+}
+
 fn run_audit(mut records: Vec<super::SeamEdge>) -> super::AuditCounts {
     records.sort();
     super::audit(records.into_iter().map(Ok), 6, false).unwrap()
 }
 
-/// The seam audit on the composite crack's geometry (mgal x10, depth 6): tiles f88245879
-/// (a) and f89031639 (b) both kept the sliver L-H-P along their seam, so both traverse L-H
-/// the same way, and f89523094 (c), the true partner, the other way. Directed records see
-/// the overlap for all three owners; an ordinary two-tile edge matches. Two owners on one
-/// side of an edge are caught too (an undirected count of two looked like a partner), and
-/// a tile's crack listed first does not hide its later overlap.
+/// Directed seam records: two tiles traversing a seam edge the same way cover the same
+/// side of it, for all owners, also when only two tiles claim it (an undirected count of
+/// two looked like a partner); an ordinary two-tile edge matches; and a tile's crack listed
+/// first does not hide its later overlap.
 #[test]
 fn seam_audit_flags_same_side_coverage() {
     use super::{incidence::weld, Defect};
@@ -1256,41 +1261,52 @@ fn seam_audit_marks_leaf_owners() {
     assert!(tile(leaf).leaf && !tile(proxy).leaf);
 }
 
-/// Control: duplicate faces alone are not a seam defect. A double-sided face whose two
-/// sides lie in different tiles (the composite source holds such opposite-winding pairs)
-/// has every edge traversed once each way, so every edge matches; the audit before the
-/// directed records flagged such a pair as an unresolvable "fold over the seam". Two tiles
-/// traversing an edge the same way are not flagged either when the source itself leaves
-/// that edge unoriented (special endpoints: a winding flip or a non-manifold edge).
+/// The composite's depth-6 fold (mgal x10, traced): tiles f88245879 (a) and f89031639 (b)
+/// each built the sliver L-H-P along their seam, a as (L, H, P) and b as (L, P, H). Every
+/// seam edge is still partnered (a's L->H by c, f89523094; a's H->P by b's P->H; L-H is
+/// interior to b), so neither edge rule sees it; the face both hold is the only evidence,
+/// and it is what cracked depth 5 when left alone. This is also the control for duplicate
+/// faces alone: they are a defect (the source never puts one face in two tiles; flagged
+/// owners re-run under the seam guard), except where the source itself repeats the face
+/// (special vertices).
 #[test]
-fn seam_audit_passes_double_sided_faces_and_special_edges() {
-    use super::incidence::weld;
-    let l = weld([1., 0., 0.]);
-    let h = weld([2., 0., 0.]);
-    let p = weld([1.5, 1., 0.]);
-    let (a, b) = (10, 20);
-    // Front (L, H, P) in a, back (L, P, H) in b.
+fn seam_audit_flags_folds_over_the_seam() {
+    use super::{incidence::weld, Defect};
+    let l = weld([703.64294, 28.421944, 204.25375]);
+    let h = weld([703.6449, 28.462814, 204.25786]);
+    let p = weld([703.6427, 28.492601, 204.25209]);
+    let (a, b, c) = (88_245_879, 89_031_639, 89_523_094);
     let counts = run_audit(vec![
         seam_record(l, h, a, false),
+        seam_record(h, l, c, false),
         seam_record(h, p, a, false),
-        seam_record(p, l, a, false),
-        seam_record(l, p, b, false),
         seam_record(p, h, b, false),
-        seam_record(h, l, b, false),
+        face_record([l, h, p], a),
+        face_record([l, p, h], b),
     ]);
-    assert_eq!((counts.matched, counts.overlapping), (3, 0));
-    assert!(counts.unmatched.is_empty(), "{:?}", counts.unmatched);
-    // Same direction over a source winding flip (special endpoints): not an overlap.
+    assert_eq!((counts.matched, counts.overlapping), (2, 1));
+    for owner in [a, b] {
+        let t = counts.unmatched[&(owner, 6)];
+        assert!(
+            matches!(t.overlap.unwrap().defect, Defect::DuplicateFace { .. }),
+            "{t:?}"
+        );
+        assert!(t.crack.is_none() && !t.leaf);
+    }
+    assert!(!counts.unmatched.contains_key(&(c, 6)));
+    // The source repeating the face (all three vertices special) is not flagged.
+    let special = |owner| super::seam_face([l, h, p], true, owner, 6, false).unwrap();
+    let counts = run_audit(vec![special(a), special(b)]);
+    assert!(counts.unmatched.is_empty() && counts.overlapping == 0);
+    // Same direction over a source winding flip (special endpoints) is not an overlap
+    // either; without the exception it is one.
     let counts = run_audit(vec![seam_record(l, h, a, true), seam_record(l, h, b, true)]);
     assert_eq!((counts.matched, counts.overlapping), (1, 0));
-    assert!(counts.unmatched.is_empty());
-    // The same pair without the source exception is one.
     let counts = run_audit(vec![
         seam_record(l, h, a, false),
         seam_record(l, h, b, false),
     ]);
-    assert_eq!(counts.overlapping, 1);
-    assert_eq!(counts.unmatched.len(), 2);
+    assert_eq!((counts.overlapping, counts.unmatched.len()), (1, 2));
 }
 
 /// Overlapping seam coverage never passes silently: with a fictitious second owner
