@@ -15,8 +15,9 @@ This slice makes two changes to the large-mesh tiler.
 
 The spec citations and the validator rules are in
 [c1-meshopt-octahedral-amendment.md](../../../docs/architecture/c1-meshopt-octahedral-amendment.md).
-The 4-byte feature-ID attributes are unchanged. glTF core forbids UNSIGNED_INT vertex
-attributes; UNSIGNED_SHORT would need a 4-byte stride and a per-leaf range argument, for
+The 4-byte feature-ID attributes are unchanged. glTF core says UNSIGNED_INT vertex
+attributes SHOULD NOT be used; that is advisory, and rusty-tiles does not write them as
+its own policy (feature IDs above 2^24 are refused). UNSIGNED_SHORT would need a 4-byte stride and a per-leaf range argument, for
 about 50 MB on pohnpei.
 
 ## Tooling kept here

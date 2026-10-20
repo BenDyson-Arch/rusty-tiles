@@ -8,10 +8,10 @@ external executable or system geospatial library in the standard CLI or wheel.
 
 The current pipeline captures the source, writes full-detail leaf GLBs, certifies
 coarse geometry for every parent tile (H17: simplified proxies whose geometric
-error bounds their two-way distance to the source), and publishes the hierarchy.
-Coarse tiles are untextured (flat material factors) until proxy texture baking
-lands; this interface will also serve that pipeline. A successful conversion does not establish the final
-tiler's resource, fidelity, scale or consumer acceptance.
+error bounds their two-way distance to the source), bakes proxy textures for
+those coarse tiles from the source appearance (H27), and publishes the hierarchy.
+A successful conversion does not establish the final tiler's resource, fidelity,
+scale or consumer acceptance.
 
 ## Convert a local scene
 
@@ -163,6 +163,39 @@ largest form of the page (up to 4 bytes per texel). The ladder depends only on
 the page, so output is identical for any worker count. Cancellation is polled
 before every re-encode step, so a run can stop between steps of one page.
 
+### Coarse tile textures
+
+Every coarse (proxy) tile is baked after its certified geometry is fixed. The
+bake keeps the proxy's exact POSITION words, node transform, face order, source
+and material identity and every feature-ID set, adds new chart UVs, and fills
+each present PBR slot (base colour, metallic-roughness, normal, occlusion,
+emissive) plus categorical ID pages by sampling the captured source images.
+Lossy profiles deliver proxy pages through the same KTX2/Basis gates and
+escalation ladder as leaves; `lossless` delivers a PNG base level. The complete
+proxy GLB is read back before it replaces the untextured one, and a tile that
+would exceed the per-tile byte budget is rebaked at a lower texel density.
+
+Appearance rules:
+
+- **Sub-texel slivers have no texture.** A face whose exact page footprint is
+  strictly under one square texel, and whose quantized UVs collapse or invert,
+  is published without a texture sampling obligation (a no-raster face). It
+  keeps its geometry, corner normals/colours and feature IDs; it covers no texel
+  centre, so it would have sampled the gutter or a neighbouring chart anyway. A
+  collapse at or above one square texel is a chart defect: the chart is
+  repacked at a higher density, and the run refuses after four attempts.
+  Zero-area faces are always no-raster.
+- **Feature IDs above 2^24 are refused.** glTF says UNSIGNED_INT vertex
+  attributes SHOULD NOT be used; that guidance is advisory, but rusty-tiles
+  chooses not to write them. A feature-ID attribute is therefore UNSIGNED_BYTE,
+  UNSIGNED_SHORT or FLOAT, and FLOAT holds every integer only up to 2^24. A
+  larger ID is `unsupported` rather than rounded.
+
+Known limitation (0.4): a proxy directly above leaf tiles samples the original
+source images, not the leaves' delivered pages, because leaf pages keep no
+per-texel terminal ledger. This is correct but slower than resampling the
+children; keeping that ledger is a planned 0.4.x follow-up.
+
 Leaf normals are a profile property. `lossless` keeps the f32 source normal
 (after the node transform, renormalized at capture). `fast`, `balanced` and
 `quality` store 12-bit octahedral codes through the `EXT_meshopt_compression`
@@ -289,8 +322,10 @@ list. `source_coordinates` is `local-gltf` or
 `wgs84` placement at that origin. `root_transform` is null for local
 output, whose root has no transform, or the exact emitted column-major matrix
 for placed output. A parent tile's geometric error is its proxy's certified
-error ([H17 contract](architecture/h17-lod-contract.md)). No appearance
-certificate is fabricated: coarse tiles are untextured.
+error ([H17 contract](architecture/h17-lod-contract.md)). Proxy textures are an
+appearance approximation (see [Coarse tile textures](#coarse-tile-textures)); no
+appearance certificate is fabricated, and baking never changes a proxy's
+geometry or geometric error.
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,

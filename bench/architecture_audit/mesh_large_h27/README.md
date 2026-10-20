@@ -158,3 +158,26 @@ The baseline and restored binary both hash to
 The full input manifest covers 2345 actual files. Historical ten-mutant and
 34-test receipts above are separate; this checkpoint adds six mutant controls
 and reruns all 44 focused tests against the concrete #216 API.
+
+## Production integration
+
+`ProxyTextureBaker::for_stage` resolves the bake policy from the actual run, and
+`pipeline::mesh_to_tileset` passes the real baker to the H17 finishing pass, so
+`rusty-tiles mesh` and `mesh_to_tileset` publish textured proxies. The driver bakes
+depths deepest first, each on up to `jobs` workers with a split memory allowance.
+Accepted leaves become children through their witness (`child_bridge::from_witness`).
+
+Two appearance rules are owner-accepted for 0.4 and pinned by tests:
+
+- **Sub-texel sliver demotion** (`charts::SUBTEXEL_DEMOTION_TEXELS`). A rasterising
+  face whose decoded UVs collapse or invert becomes a no-raster face only when its
+  exact page footprint is strictly under one square texel; at or above that bound the
+  chart is repacked, then refused. `charts::tests` pins the bound and the end-to-end
+  demotion.
+- **Leaf-adjacent proxies sample the source.** Leaf pages keep no per-texel terminal
+  ledger, so a proxy directly above leaves samples the captured source images instead
+  of resampling its children. This is a known performance limitation; keeping the H8
+  ledger is a 0.4.x follow-up.
+
+Feature IDs above 2^24 stay refused: glTF says UNSIGNED_INT vertex attributes SHOULD
+NOT be used (advisory), and rusty-tiles chooses not to write them.

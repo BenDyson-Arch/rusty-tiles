@@ -47,6 +47,19 @@ fn project(p: V3, x: V3, y: V3) -> P2 {
 fn orient(a: P2, b: P2, c: P2) -> f64 {
     (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 }
+/// Appearance-contract bound for sub-texel sliver demotion, in square texels of the
+/// face's exact (pre-quantization) page footprint.
+///
+/// A rasterising face whose decoded UVs collapse or invert is demoted to a no-raster
+/// face (geometry, corner attributes and feature IDs kept, no texture sampling
+/// obligation) only when that footprint is strictly under this bound. A collapse at
+/// or above it is a chart defect and forces a repack, then a refusal.
+pub(super) const SUBTEXEL_DEMOTION_TEXELS: f64 = 1.;
+/// True when a face whose decoded UVs collapsed may be demoted: its exact footprint
+/// `texels` (page pixel coordinates) covers strictly less than one square texel.
+fn subtexel_sliver(texels: [P2; 3]) -> bool {
+    orient(texels[0], texels[1], texels[2]).abs() / 2. < SUBTEXEL_DEMOTION_TEXELS
+}
 /// A separating axis proves no strict interior overlap. Near-zero arithmetic
 /// has no such proof and conservatively splits the chart.
 fn overlap(a: [P2; 3], b: [P2; 3]) -> bool {
@@ -320,7 +333,7 @@ pub(super) fn build(
                         // texel centre at any repack worth making: it keeps its geometry
                         // and corner attributes as a no-raster face. A larger collapse
                         // or inversion is a real chart defect and forces a repack.
-                        if orient(texels[0], texels[1], texels[2]).abs() < 2. {
+                        if subtexel_sliver(texels) {
                             demoted.push(i);
                         } else {
                             failed.push(ci);
@@ -360,4 +373,75 @@ pub(super) fn build(
         });
     }
     Err(unsupported("decoded proxy UV repack exhausted"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh_large::bake::types::{FrozenFace, PositionTransform, PositionWord, SourceKey};
+
+    #[test]
+    fn subtexel_demotion_bound_is_strictly_under_one_square_texel() {
+        assert_eq!(SUBTEXEL_DEMOTION_TEXELS, 1.);
+        // Right triangles with legs 1 x h texels: area h / 2.
+        let right = |h: f64| [[0., 0.], [1., 0.], [0., h]];
+        assert!(subtexel_sliver(right(0.)));
+        assert!(subtexel_sliver(right(1.)));
+        assert!(subtexel_sliver(right(2f64.next_down())));
+        // Exactly one square texel, and anything larger, is not a sliver.
+        assert!(!subtexel_sliver(right(2.)));
+        assert!(!subtexel_sliver(right(2f64.next_up())));
+        assert!(!subtexel_sliver(right(64.)));
+        // Orientation does not matter: an inverted footprint uses its magnitude.
+        assert!(subtexel_sliver([[0., 0.], [0., 1.9], [1., 0.]]));
+        assert!(!subtexel_sliver([[0., 0.], [0., 2.], [1., 0.]]));
+    }
+
+    fn face(ordinal: u64, primitive: u32, positions: [[f32; 3]; 3]) -> FrozenFace {
+        FrozenFace {
+            ordinal,
+            source: SourceKey {
+                node: 0,
+                mesh: 0,
+                primitive,
+                instance: 0,
+            },
+            source_triangle: ordinal,
+            material: 0,
+            positions,
+            words: positions.map(|p| PositionWord::Float(p.map(f32::to_bits))),
+            transform: PositionTransform::default(),
+            welds: positions.map(|p| p.map(f32::to_bits)),
+            features: Vec::new(),
+            fill_bound: None,
+            donor_ranges: std::iter::once(ordinal..ordinal + 1).collect(),
+        }
+    }
+
+    #[test]
+    fn collapsed_subtexel_sliver_is_demoted_to_no_raster_and_others_keep_charts() {
+        let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+        // A 1 m face, and a separate 1 m needle 1e-7 m wide: at 8 texels per metre its
+        // footprint is 3.2e-6 square texels and its 16-bit decoded UVs are collinear.
+        f.faces = vec![
+            face(0, 0, [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]),
+            face(1, 1, [[3., 0., 0.], [4., 0., 0.], [3.5, 1e-7, 0.]]),
+        ];
+        let limits = BakeLimits {
+            profile: Profile::Balanced,
+            memory_bytes: 64 << 20,
+            member_bytes: 16 << 20,
+            source_cache_bytes: 16 << 20,
+            query_work: 1_000_000,
+            max_page_edge: 2048,
+            max_density_drops: 4,
+        };
+        let layout = build(&f, &[true, true], limits, 0.125, &mut || Ok(())).unwrap();
+        assert_eq!(layout.subtexel_no_raster, 1);
+        assert_eq!(layout.raster_faces, [true, false]);
+        assert!(layout.charts.iter().all(|c| !c.faces.contains(&1)));
+        assert!(layout.charts.iter().any(|c| c.faces == [0]));
+        // The demoted face keeps finite decoded UVs for its retained corners.
+        assert!(layout.uv[1].iter().flatten().all(|v| v.is_finite()));
+    }
 }
