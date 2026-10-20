@@ -7,6 +7,8 @@ mod json;
 mod material;
 mod original_bounds;
 mod texture;
+#[cfg(test)]
+pub(crate) use material::parse_for_tests as parse_materials_for_tests;
 pub(crate) use material::{Material, TextureSlot};
 #[cfg(test)]
 pub(crate) use texture::decode_image;

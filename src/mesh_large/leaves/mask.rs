@@ -177,7 +177,7 @@ pub(in crate::mesh_large) fn coverage(
 /// Finite geometry-sample proof for a proposed delivery mutation. Coverage
 /// equality alone is insufficient: pass labels can swap while totals stay equal.
 /// Validates both full byte shapes; ignores only zero-weight sample labels.
-pub(super) fn preserves_classifications(
+pub(in crate::mesh_large) fn preserves_classifications(
     before: &[u8],
     after: &[u8],
     dimensions: [u32; 2],

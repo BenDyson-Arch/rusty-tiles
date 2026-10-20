@@ -360,15 +360,31 @@ impl FrozenNode {
             {
                 return Err(state("frozen face feature IDs are inconsistent"));
             }
-            if !g.sources.contains(&f.source)
-                || f.fill.is_some_and(|i| {
-                    self.fills
-                        .get(i as usize)
-                        .is_none_or(|fill| fill.source != f.source)
-                })
-                || (f.fill.is_some()) != (f.origin.triangle == u64::MAX)
-            {
-                return Err(state("frozen face identity is inconsistent"));
+            if !g.sources.contains(&f.source) {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: source {} outside its glTF \
+                     primitive's sources {:?}",
+                    f.source, g.sources
+                )));
+            }
+            if f.fill.is_some_and(|i| {
+                self.fills
+                    .get(i as usize)
+                    .is_none_or(|fill| fill.source != f.source)
+            }) {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: fill {:?} is not owned by source {}",
+                    f.fill, f.source
+                )));
+            }
+            // A fill of this tile has no source triangle. The converse does not hold: a
+            // face descending from a CHILD proxy's fill also has none, but is no fill of
+            // this tile (its record lives in that child), so it carries no `fill` index.
+            if f.fill.is_some() && f.origin.triangle != u64::MAX {
+                return Err(state(format!(
+                    "frozen face identity is inconsistent: fill {:?} with origin triangle {}",
+                    f.fill, f.origin.triangle
+                )));
             }
         }
         Ok(())
@@ -682,6 +698,68 @@ impl HandoffSink {
         FrozenNode::decode(&bytes, &mut lease, check)
     }
 
+    /// The exact lease [`HandoffSink::read`] charges for a packet: its file bytes, the
+    /// decoded head allowance and every face and feature-set allocation. Computed by a
+    /// streaming scan of the fixed-size face records (no head parse, no per-face
+    /// allocation, cancellable); a malformed packet is `InvalidState`.
+    pub(in crate::mesh_large) fn lease_bytes(
+        &self,
+        first: u64,
+        depth: u32,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<u64, JobError> {
+        use std::io::{BufReader, Read, Seek, SeekFrom};
+        check()?;
+        let path = self.path(first, depth);
+        let io = |e| JobError::io("scan bake handoff", &path, e);
+        let file = fs::File::open(&path).map_err(io)?;
+        let length = file.metadata().map_err(io)?.len();
+        let mut r = BufReader::new(file);
+        let bad = || state("frozen tile packet is corrupt");
+        let word = |r: &mut BufReader<fs::File>, n: usize| -> Result<u64, JobError> {
+            let mut b = [0u8; 8];
+            r.read_exact(&mut b[..n]).map_err(|_| bad())?;
+            Ok(u64::from_le_bytes(b))
+        };
+        let mut magic = [0u8; 8];
+        r.read_exact(&mut magic).map_err(|_| bad())?;
+        if &magic != MAGIC {
+            return Err(bad());
+        }
+        r.seek(SeekFrom::Start(48)).map_err(io)?;
+        let n = word(&mut r, 8)?;
+        let count = {
+            r.seek(SeekFrom::Current(i64::try_from(n).map_err(|_| bad())?))
+                .map_err(io)?;
+            word(&mut r, 8)?
+        };
+        let pair = std::mem::size_of::<(u32, Option<u32>)>() as u64;
+        let mut total = length
+            .checked_add(n.checked_mul(16).ok_or_else(bad)?)
+            .and_then(|t| {
+                t.checked_add(count.checked_mul(std::mem::size_of::<FrozenFace>() as u64)?)
+            })
+            .ok_or_else(bad)?;
+        for k in 0..count {
+            if k.is_multiple_of(1 << 14) {
+                check()?;
+            }
+            // gltf, source, origin node/mesh/primitive, triangle, fill: 32 bytes.
+            r.seek(SeekFrom::Current(32)).map_err(io)?;
+            let sets = word(&mut r, 4)?;
+            total = total
+                .checked_add(sets.checked_mul(pair).ok_or_else(bad)?)
+                .ok_or_else(bad)?;
+            let skip = sets
+                .checked_mul(8)
+                .and_then(|b| b.checked_add(3 * 37))
+                .ok_or_else(bad)?;
+            r.seek(SeekFrom::Current(i64::try_from(skip).map_err(|_| bad())?))
+                .map_err(io)?;
+        }
+        Ok(total)
+    }
+
     /// Bytes of a packet on disk (a size query before any read).
     pub(in crate::mesh_large) fn size(&self, first: u64, depth: u32) -> Result<u64, JobError> {
         let path = self.path(first, depth);
@@ -840,6 +918,56 @@ mod tests {
                     .kind(),
                 JobErrorKind::ResourceLimit
             );
+        }
+    }
+
+    /// A face inherited from a child proxy's fill has no source triangle and no fill
+    /// record of this tile; a fill of this tile must have no source triangle.
+    #[test]
+    fn inherited_fill_faces_validate_and_local_fills_need_no_triangle() {
+        let mut node = packet(1);
+        node.faces[0].origin.triangle = u64::MAX;
+        node.faces[0].fill = None;
+        node.validate().unwrap();
+        let mut node = packet(1);
+        node.fills.push(FrozenFill {
+            source: node.faces[0].source,
+            loop_key: [0; 3],
+            loop_vertices: 3,
+            fan_faces: 1,
+            bound: 0.,
+            reopen_children: 0,
+        });
+        node.faces[0].fill = Some(0);
+        assert!(node.validate().is_err());
+        node.faces[0].origin.triangle = u64::MAX;
+        node.validate().unwrap();
+    }
+
+    /// `lease_bytes` is exactly the lease `read` charges: that lease reads the packet and
+    /// one byte less is refused before the decode completes.
+    #[test]
+    fn lease_bytes_is_the_exact_read_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let sink = HandoffSink::new(
+            dir.path().join("handoff"),
+            std::sync::Arc::new(ScratchBudget::new(1 << 30)),
+        )
+        .unwrap();
+        let check = || Ok(());
+        for sets in [1, 256] {
+            let node = packet(sets);
+            sink.write(&node, &check).unwrap();
+            let (first, depth) = (node.identity.first, node.identity.depth);
+            let lease = sink.lease_bytes(first, depth, &check).unwrap();
+            assert_eq!(sink.read(first, depth, lease, &check).unwrap(), node);
+            assert_eq!(
+                sink.read(first, depth, lease - 1, &check)
+                    .unwrap_err()
+                    .kind(),
+                JobErrorKind::ResourceLimit
+            );
+            sink.release(first, depth).unwrap();
         }
     }
 

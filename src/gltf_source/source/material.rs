@@ -262,6 +262,12 @@ fn binding(
     }))
 }
 
+/// Test-only: the admitted materials of a document fragment (`materials`, `textures`).
+#[cfg(test)]
+pub(crate) fn parse_for_tests(doc: &Value) -> Vec<Material> {
+    parse(doc, usize::MAX).unwrap()
+}
+
 pub(super) fn parse(doc: &Value, max: usize) -> Result<Vec<Material>> {
     let input = list(doc, "materials")?;
     if input.len() > max {

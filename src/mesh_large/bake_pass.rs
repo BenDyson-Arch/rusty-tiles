@@ -418,7 +418,9 @@ impl PreencodeStore {
             "read leaf witness",
         )?;
         check()?;
-        let witness = LeafWitness::decode(&bytes, lease.limit() - lease.used())?;
+        // The decoder charges its owned structures against what remains of this lease,
+        // and the decoded witness stays charged while the packet is held.
+        let witness = LeafWitness::decode(&bytes, lease.limit().saturating_sub(lease.used()))?;
         lease.charge(witness.owned_bytes())?;
         Ok(LeafPreencode {
             pages,
@@ -428,9 +430,18 @@ impl PreencodeStore {
             witness,
         })
     }
-    pub(in crate::mesh_large) fn release_leaf(&self, index: u64) -> Result<(), JobError> {
+    /// Remove a leaf's retained files. The head naming its pages is read within
+    /// `memory_limit` bytes, in cancellable chunks.
+    pub(in crate::mesh_large) fn release_leaf(
+        &self,
+        index: u64,
+        memory_limit: u64,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<(), JobError> {
         let path = self.leaf_path(index);
-        let b = fs::read(&path).map_err(|e| JobError::io("read pre-encode store", &path, e))?;
+        let mut lease = Lease::new(memory_limit, "releasing a retained leaf");
+        let b = read_bounded(&path, None, &mut lease, check, "read pre-encode store")?;
+        lease.charge_items(b.len() as u64, 16)?;
         let n = b
             .get(8..16)
             .map(|x| u64::from_le_bytes(x.try_into().unwrap()) as usize)
@@ -438,6 +449,7 @@ impl PreencodeStore {
         let head: LeafHead = serde_json::from_slice(b.get(16..16 + n).unwrap_or_default())
             .map_err(|_| state("retained pre-encode packet is corrupt"))?;
         for page in &head.pages {
+            check()?;
             self.remove(&self.page_path(index, head.drop, page.page))?;
         }
         self.remove(&self.witness_path(index))?;
@@ -656,6 +668,16 @@ impl<'a> BakePass<'a> {
         self.handoff.read(first, depth, memory_limit, self.check)
     }
 
+    /// The exact memory lease [`BakePass::frozen`] charges for a tile's packet (file bytes
+    /// plus every decoded owner), from a cancellable streaming scan before any read.
+    pub(in crate::mesh_large) fn frozen_lease_bytes(
+        &self,
+        first: u64,
+        depth: u32,
+    ) -> Result<u64, JobError> {
+        self.handoff.lease_bytes(first, depth, self.check)
+    }
+
     /// Bytes of a tile's packet on disk.
     pub(in crate::mesh_large) fn frozen_size(
         &self,
@@ -714,6 +736,7 @@ impl<'a> BakePass<'a> {
             &self.captured.materials,
             self.tile_bytes,
             memory_limit,
+            self.check,
         )
     }
 
@@ -728,6 +751,7 @@ impl<'a> BakePass<'a> {
         &self,
         frozen: &FrozenNode,
         assembly: Assembly,
+        memory_limit: u64,
     ) -> Result<(), JobError> {
         (self.check)()?;
         let Assembly::Fit { glb, verified, .. } = assembly else {
@@ -752,7 +776,7 @@ impl<'a> BakePass<'a> {
         if glb.len() as u64 > self.tile_bytes {
             return Err(state("a committed member exceeds the tile budget"));
         }
-        check_faces(frozen, glb)?;
+        check_faces(frozen, glb, memory_limit, self.check)?;
         let path = self
             .stage
             .join(format!("proxies/f{}-d{}.glb", id.first, id.depth));
@@ -781,6 +805,7 @@ impl<'a> BakePass<'a> {
                 .map_err(|e| JobError::io("write proxy rows", &next_path, e))?,
         );
         let mut total = 0u64;
+        let mut chunk = vec![0u8; 1 << 20];
         for line in BufReader::new(input).lines() {
             let line = line.map_err(|e| JobError::io("read proxy rows", &rows_path, e))?;
             let mut row: Value = serde_json::from_str(&line).map_err(|e| state(e.to_string()))?;
@@ -789,10 +814,25 @@ impl<'a> BakePass<'a> {
                 .ok_or_else(|| state("proxy row without uri"))?
                 .to_owned();
             let member = self.stage.join(&uri);
-            let bytes = fs::read(&member).map_err(|e| JobError::io("read proxy", &member, e))?;
-            total += bytes.len() as u64;
-            row["bytes"] = json!(bytes.len());
-            row["sha256"] = json!(Sha256::digest(&bytes)
+            // Hash the member in fixed 1 MiB chunks (no whole-member read), cancellable.
+            let mut file =
+                fs::File::open(&member).map_err(|e| JobError::io("read proxy", &member, e))?;
+            let mut hash = Sha256::new();
+            let mut length = 0u64;
+            loop {
+                (self.check)()?;
+                let n = std::io::Read::read(&mut file, &mut chunk)
+                    .map_err(|e| JobError::io("read proxy", &member, e))?;
+                if n == 0 {
+                    break;
+                }
+                hash.update(&chunk[..n]);
+                length += n as u64;
+            }
+            total += length;
+            row["bytes"] = json!(length);
+            row["sha256"] = json!(hash
+                .finalize()
                 .iter()
                 .map(|b| format!("{b:02x}"))
                 .collect::<String>());
@@ -970,7 +1010,9 @@ pub(in crate::mesh_large) fn assemble(
     source_materials: &[Material],
     tile_bytes: u64,
     memory_limit: u64,
+    check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<Assembly, JobError> {
+    check()?;
     let needed = assembly_bytes(frozen, prepared);
     if needed > memory_limit {
         return Err(JobError::new(
@@ -1020,6 +1062,7 @@ pub(in crate::mesh_large) fn assemble(
     let mut meshes = Vec::new();
     let mut quantized = false;
     for (i, p) in prepared.primitives.iter().enumerate() {
+        check()?;
         let g = &frozen.gltf[p.gltf as usize];
         let count = 3 * p.faces.len();
         let corners: Vec<_> = p
@@ -1121,6 +1164,7 @@ pub(in crate::mesh_large) fn assemble(
     let mut classes = Map::new();
     let mut tables = Vec::new();
     for t in &frozen.tables {
+        check()?;
         let mut schema = Map::new();
         let mut properties = Map::new();
         for (name, component, values) in &t.columns {
@@ -1142,6 +1186,7 @@ pub(in crate::mesh_large) fn assemble(
     let mut images = Vec::new();
     let mut basis = false;
     for image in &prepared.images {
+        check()?;
         basis |= image.mime == "image/ktx2";
         let v = w.view(&image.bytes, None);
         images.push(json!({"bufferView":v,"mimeType":image.mime}));
@@ -1178,6 +1223,7 @@ pub(in crate::mesh_large) fn assemble(
         glb::add_extension(&mut document, "KHR_texture_basisu", true)
             .map_err(|e| state(e.to_string()))?;
     }
+    check()?;
     let compressed = glb::meshopt_compress(
         &mut document,
         &binary,
@@ -1194,7 +1240,9 @@ pub(in crate::mesh_large) fn assemble(
             actual_bytes: out.len() as u64,
         });
     }
+    check()?;
     let decoded = verify(frozen, prepared, &out)?;
+    check()?;
     let verified = Verified {
         first: frozen.identity.first,
         depth: frozen.identity.depth,
@@ -1212,8 +1260,55 @@ pub(in crate::mesh_large) fn assemble(
 
 /// The member's decoded faces are exactly the frozen faces (raw words, decoded bits and
 /// feature IDs per oriented face), as a multiset: output primitives may reorder faces.
-fn check_faces(frozen: &FrozenNode, glb: &[u8]) -> Result<(), JobError> {
-    let decoded = codec::decode(glb)?;
+/// Bytes [`check_faces`] may hold for a `glb_len`-byte member of `frozen`: the parsed
+/// JSON (at most eight bytes per text byte), each decoded view and its per-element
+/// accessor copies (POSITION and every feature set per corner), the decoded faces and
+/// both sorted identity lists, and every table column.
+pub(in crate::mesh_large) fn commit_bytes(frozen: &FrozenNode, glb_len: u64) -> u64 {
+    let s = |v: u64, w: u64| v.saturating_mul(w);
+    let faces = frozen.faces.len() as u64;
+    let sets = frozen
+        .gltf
+        .iter()
+        .map(|g| g.feature_ids.as_array().map_or(0, Vec::len) as u64)
+        .max()
+        .unwrap_or(0);
+    let identity = std::mem::size_of::<([[u32; 3]; 3], [[u32; 3]; 3], Vec<(u32, Option<u32>)>)>()
+        as u64
+        + 8 * sets;
+    let values: u64 = frozen
+        .tables
+        .iter()
+        .flat_map(|t| t.columns.iter().map(|c| c.2.len() as u64))
+        .sum();
+    s(glb_len, 9)
+        .saturating_add(s(s(faces, 3), s(1 + sets, 16 + 64)))
+        .saturating_add(s(
+            faces,
+            std::mem::size_of::<codec::DecodedFace>() as u64 + 16 * sets,
+        ))
+        .saturating_add(s(faces, 2 * identity))
+        .saturating_add(s(values, 16))
+}
+
+fn check_faces(
+    frozen: &FrozenNode,
+    glb: &[u8],
+    memory_limit: u64,
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<(), JobError> {
+    let needed = commit_bytes(frozen, glb.len() as u64);
+    if needed > memory_limit {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!(
+                "checking this member may hold {needed} bytes, above its {memory_limit} byte \
+                 memory lease"
+            ),
+        ));
+    }
+    let decoded = codec::decode_checked(glb, check)?;
+    check()?;
     type FaceKey = ([[u32; 3]; 3], [[u32; 3]; 3], Vec<(u32, Option<u32>)>);
     let mut got: Vec<FaceKey> = decoded
         .faces
@@ -1273,7 +1368,20 @@ fn check_transforms(frozen: &FrozenNode) -> Result<(), JobError> {
 
 /// The literal (non-texture) factors a baked material must keep from its source material,
 /// with glTF defaults filled in.
+/// Numbers as f64 (so `1` and `1.0` agree), recursively through arrays.
+fn normalized(value: Value) -> Value {
+    match value {
+        Value::Number(n) => n.as_f64().map_or(Value::Null, |f| json!(f)),
+        Value::Array(a) => Value::Array(a.into_iter().map(normalized).collect()),
+        other => other,
+    }
+}
+
 fn literal_factors(material: &Value) -> [Value; 7] {
+    literal_factors_raw(material).map(normalized)
+}
+
+fn literal_factors_raw(material: &Value) -> [Value; 7] {
     let pbr = |k: &str, default: Value| {
         material
             .get("pbrMetallicRoughness")
@@ -1416,11 +1524,15 @@ fn audit_materials(
 }
 
 /// A feature-ID attribute stream holding `ids` (one per face, three corners each)
-/// EXACTLY, in the narrowest type glTF admits for a feature-ID vertex attribute:
+/// EXACTLY, in the narrowest type rusty-tiles writes for a feature-ID vertex attribute:
 /// UNSIGNED_BYTE up to 255, UNSIGNED_SHORT up to 65535, FLOAT up to 2^24 (every integer
-/// there is exact). glTF forbids UNSIGNED_INT for application attributes, so an ID above
-/// 2^24 has no exact attribute encoding and is refused rather than rounded. Elements are
-/// padded to a four-byte stride (vertex-attribute alignment, meshopt streams).
+/// there is exact). glTF 2.0 says UNSIGNED_INT accessors SHOULD NOT be used for vertex
+/// attributes, application-specific ones included (KhronosGroup/glTF 521a91d). That
+/// guidance is advisory, not a prohibition; rusty-tiles chooses not to write UNSIGNED_INT
+/// vertex attributes (and C1 validation refuses them). As a rusty-tiles policy, an ID
+/// above 2^24 therefore has no exact attribute encoding and is refused rather than
+/// rounded. Elements are padded to a four-byte stride (vertex-attribute alignment,
+/// meshopt streams).
 fn feature_id_stream(ids: &[u32]) -> Result<(u32, Vec<u8>), JobError> {
     let max = ids.iter().copied().max().unwrap_or(0);
     let component = match max {
@@ -1431,8 +1543,9 @@ fn feature_id_stream(ids: &[u32]) -> Result<(u32, Vec<u8>), JobError> {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(
-                    "feature ID {max} exceeds 2^24: glTF feature-ID attributes cannot hold it \
-                     exactly (UNSIGNED_INT is not allowed for application attributes)"
+                    "feature ID {max} exceeds 2^24: rusty-tiles does not write UNSIGNED_INT \
+                     vertex attributes (glTF says they SHOULD NOT be used), so no feature-ID \
+                     attribute holds it exactly"
                 ),
             ))
         }
@@ -1999,7 +2112,14 @@ mod tests {
                 *self.fills.lock().unwrap() += frozen.fills.len();
                 let prepared = flat(&frozen, &pass.captured.materials);
                 // The physical budget path: a tiny budget reports the actual size.
-                match assemble(&frozen, &prepared, &pass.captured.materials, 64, u64::MAX)? {
+                match assemble(
+                    &frozen,
+                    &prepared,
+                    &pass.captured.materials,
+                    64,
+                    u64::MAX,
+                    pass.check,
+                )? {
                     Assembly::PhysicalBudget { actual_bytes } => assert!(actual_bytes > 64),
                     Assembly::Fit { .. } => panic!("a 64-byte member cannot fit"),
                 }
@@ -2017,10 +2137,15 @@ mod tests {
                 // unchanged since verification; every refusal leaves the member alone.
                 let fresh = || pass.assemble(&frozen, &prepared, 1 << 30);
                 let budget = Assembly::PhysicalBudget { actual_bytes: 1 };
-                assert!(pass.commit(&frozen, budget).is_err());
+                assert!(pass.commit(&frozen, budget, 1 << 30).is_err());
+                // The commit decode is leased: below its bound it is refused first.
+                assert_eq!(
+                    pass.commit(&frozen, fresh()?, 1).unwrap_err().kind(),
+                    JobErrorKind::ResourceLimit
+                );
                 let mut other = frozen.clone();
                 other.identity.first += 1;
-                assert!(pass.commit(&other, fresh()?).is_err());
+                assert!(pass.commit(&other, fresh()?, 1 << 30).is_err());
                 let mutate = |edit: &dyn Fn(&mut Vec<u8>)| -> Result<Assembly, JobError> {
                     let Assembly::Fit {
                         mut glb,
@@ -2040,14 +2165,20 @@ mod tests {
                 let previous = self.last.lock().unwrap().clone();
                 if let Some(previous) = previous {
                     let foreign = mutate(&|glb| *glb = previous.clone())?;
-                    assert!(pass.commit(&frozen, foreign).is_err(), "foreign bytes");
+                    assert!(
+                        pass.commit(&frozen, foreign, 1 << 30).is_err(),
+                        "foreign bytes"
+                    );
                 }
                 // Same-size mutations of the image, a UV and a material factor.
                 let image = mutate(&|glb| {
                     let at = glb.windows(4).position(|w| w == b"\x89PNG").unwrap();
                     glb[at + 40] ^= 1;
                 })?;
-                assert!(pass.commit(&frozen, image).is_err(), "image mutation");
+                assert!(
+                    pass.commit(&frozen, image, 1 << 30).is_err(),
+                    "image mutation"
+                );
                 let uv = mutate(&|glb| {
                     let jl = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
                     let doc: Value = serde_json::from_slice(&glb[20..20 + jl]).unwrap();
@@ -2061,19 +2192,22 @@ mod tests {
                         .unwrap_or(0) as usize;
                     glb[28 + jl + offset + 1] ^= 1;
                 })?;
-                assert!(pass.commit(&frozen, uv).is_err(), "UV mutation");
+                assert!(pass.commit(&frozen, uv, 1 << 30).is_err(), "UV mutation");
                 let material = mutate(&|glb| {
                     let needle = b"\"metallicFactor\":0";
                     let at = glb.windows(needle.len()).position(|w| w == needle).unwrap();
                     glb[at + needle.len() - 1] = b'1';
                 })?;
-                assert!(pass.commit(&frozen, material).is_err(), "material mutation");
+                assert!(
+                    pass.commit(&frozen, material, 1 << 30).is_err(),
+                    "material mutation"
+                );
                 pass.read_certified_proxy(first, depth, 1 << 30)?;
                 let fit = fresh()?;
                 if let Assembly::Fit { glb, .. } = &fit {
                     *self.last.lock().unwrap() = Some(glb.clone());
                 }
-                pass.commit(&frozen, fit)?;
+                pass.commit(&frozen, fit, 1 << 30)?;
                 // The member is now the baked one: the certified reader refuses it.
                 assert!(pass.read_certified_proxy(first, depth, 1 << 30).is_err());
                 pass.preencode.write_proxy(first, depth, b"pages")?;
@@ -2098,6 +2232,268 @@ mod tests {
             .iter()
             .map(|f| (f.raw, f.p.map(|p| p.map(f32::to_bits))))
             .collect()
+    }
+
+    /// The public path on a host that reports no available memory (the fixed 1 GiB bake
+    /// allowance of macOS and Windows) publishes the same textured archive as a large host.
+    #[test]
+    fn public_textured_path_is_the_same_under_the_unknown_memory_allowance() {
+        use crate::mesh_large::{bake::integration::UNKNOWN_MEMORY_HOST, TilerJobs, TilerRequest};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("textured"), 48);
+        let run = |unknown: bool| {
+            let output = work.path().join(format!("textured-{unknown}.3tz"));
+            UNKNOWN_MEMORY_HOST.with(|c| c.set(unknown));
+            let result = crate::mesh_large::mesh_to_tileset(
+                TilerRequest::new(&input, &output)
+                    .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap())),
+                &RunControl::default(),
+            );
+            UNKNOWN_MEMORY_HOST.with(|c| c.set(false));
+            result.unwrap();
+            fs::read(&output).unwrap()
+        };
+        assert!(
+            run(false) == run(true),
+            "archives differ under the 1 GiB allowance"
+        );
+    }
+
+    /// A source without NORMAL or COLOR_0 (photogrammetry): leaves carry POSITION and
+    /// TEXCOORD_0 only and render unlit, so baked proxies must carry the same shading
+    /// inputs (no NORMAL, TANGENT or COLOR_0), keep the source material factors, publish
+    /// base colour with the leaves' sRGB transfer, and reproduce a flat source colour.
+    #[test]
+    fn real_baker_proxies_keep_the_leaves_shading_inputs_and_source_colour() {
+        use crate::mesh_large::bake::{integration::ProxyTextureBaker, BakeLimits};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("src"), 48);
+        let out = work.path().join("out");
+        let scratch = work.path().join("scratch");
+        fs::create_dir_all(&scratch).unwrap();
+        let baker = ProxyTextureBaker::new(BakeLimits {
+            profile: crate::mesh_large::config::Profile::Balanced,
+            memory_bytes: 2 << 30,
+            member_bytes: crate::mesh_large::config::TILE_BYTES,
+            source_cache_bytes: 256 << 20,
+            query_work: 1 << 40,
+            max_page_edge: 4096,
+            max_density_drops: 8,
+        })
+        .unwrap();
+        let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+            .with_jobs(NonZeroUsize::new(2).unwrap())
+            .with_scratch_dir(&scratch)
+            .with_lod_target(256)
+            .with_leaf_triangles(1024)
+            .with_baker(Arc::new(baker));
+        mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+        // (attribute names without feature IDs, materials, base-colour images) of a GLB.
+        type Member = (
+            Vec<std::collections::BTreeSet<String>>,
+            Vec<Value>,
+            Vec<Vec<u8>>,
+        );
+        let member = |path: &Path| -> Member {
+            let glb = fs::read(path).unwrap();
+            let n = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+            let doc: Value = serde_json::from_slice(&glb[20..20 + n]).unwrap();
+            let bin = &glb[(28 + n).min(glb.len())..];
+            let attributes = doc["meshes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|m| m["primitives"].as_array().unwrap().clone())
+                .map(|p| {
+                    p["attributes"]
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .filter(|k| !k.starts_with("_FEATURE_ID"))
+                        .cloned()
+                        .collect()
+                })
+                .collect();
+            let materials = doc["materials"].as_array().cloned().unwrap_or_default();
+            let mut images = Vec::new();
+            for m in &materials {
+                let Some(t) = m.pointer("/pbrMetallicRoughness/baseColorTexture/index") else {
+                    continue;
+                };
+                let texture = &doc["textures"][t.as_u64().unwrap() as usize];
+                let source = texture
+                    .pointer("/extensions/KHR_texture_basisu/source")
+                    .or_else(|| texture.get("source"))
+                    .unwrap();
+                let view = &doc["bufferViews"][doc["images"][source.as_u64().unwrap() as usize]
+                    ["bufferView"]
+                    .as_u64()
+                    .unwrap() as usize];
+                let at = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+                images.push(bin[at..at + view["byteLength"].as_u64().unwrap() as usize].to_vec());
+            }
+            (attributes, materials, images)
+        };
+        let glbs = |dir: &str| -> Vec<PathBuf> {
+            let mut v: Vec<PathBuf> = fs::read_dir(out.join(dir))
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .filter(|p| p.extension().is_some_and(|e| e == "glb"))
+                .collect();
+            v.sort();
+            v
+        };
+        let leaves: Vec<Member> = glbs("leaves").iter().map(|p| member(p)).collect();
+        let proxies: Vec<Member> = glbs("proxies").iter().map(|p| member(p)).collect();
+        assert!(!leaves.is_empty() && proxies.len() >= 3);
+        let leaf_sets: std::collections::BTreeSet<_> =
+            leaves.iter().flat_map(|l| l.0.clone()).collect();
+        assert!(leaf_sets
+            .iter()
+            .all(|s| !s.contains("NORMAL") && !s.contains("TANGENT") && !s.contains("COLOR_0")));
+        // KTX2 base colour: transfer function byte of the basic data format descriptor.
+        let transfer = |ktx2: &[u8]| -> u8 {
+            assert_eq!(&ktx2[..4], b"\xabKTX");
+            let dfd = u32::from_le_bytes(ktx2[48..52].try_into().unwrap()) as usize;
+            ktx2[dfd + 4 + 8 + 2]
+        };
+        let leaf_transfer: Vec<u8> = leaves
+            .iter()
+            .flat_map(|l| l.2.iter().map(|i| transfer(i)))
+            .collect();
+        assert!(!leaf_transfer.is_empty());
+        let mut decoded_texels = 0;
+        for (attributes, materials, images) in &proxies {
+            for set in attributes {
+                assert!(
+                    !set.contains("NORMAL") && !set.contains("TANGENT") && !set.contains("COLOR_0"),
+                    "proxy shading inputs differ from the leaves: {set:?}"
+                );
+                assert!(
+                    set.iter().all(|a| a == "POSITION" || a == "TEXCOORD_0"),
+                    "{set:?}"
+                );
+            }
+            for m in materials {
+                assert_eq!(
+                    m.pointer("/pbrMetallicRoughness/metallicFactor"),
+                    Some(&json!(0))
+                );
+                assert!(m.get("normalTexture").is_none());
+            }
+            assert!(!images.is_empty(), "proxy is textured");
+            for ktx2 in images {
+                assert_eq!(
+                    transfer(ktx2),
+                    leaf_transfer[0],
+                    "proxy base colour transfer"
+                );
+                let w = u32::from_le_bytes(ktx2[20..24].try_into().unwrap());
+                let h = u32::from_le_bytes(ktx2[24..28].try_into().unwrap());
+                let rgba = crate::basisu_ktx2::decode_level_rgba(ktx2, 0, w, h).unwrap();
+                // Covered texels sit near the flat source colour; count those that do.
+                let near = rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|p| {
+                        p[..3]
+                            .iter()
+                            .zip([120u8, 160, 90])
+                            .all(|(a, b)| a.abs_diff(b) <= 8)
+                    })
+                    .count();
+                assert!(
+                    near * 2 > rgba.len() / 4,
+                    "flat source colour: {near} of {}",
+                    rgba.len() / 4
+                );
+                decoded_texels += near;
+            }
+        }
+        assert!(decoded_texels > 0);
+        assert!(
+            leaf_transfer.iter().all(|t| *t == 2),
+            "leaf base colour is sRGB"
+        );
+    }
+
+    /// The real proxy texture baker through the production bake pass: a textured terrain
+    /// with fill holes, several proxies per depth, baked with one and with three workers,
+    /// publishes byte-identical leaves, proxies and manifest.
+    #[test]
+    fn real_baker_output_does_not_depend_on_the_worker_count() {
+        use crate::mesh_large::bake::{integration::ProxyTextureBaker, BakeLimits};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("src"), 64);
+        let run = |jobs: usize| {
+            let out = work.path().join(format!("jobs-{jobs}"));
+            let scratch = work.path().join(format!("jobs-{jobs}-scratch"));
+            fs::create_dir_all(&scratch).unwrap();
+            let baker = ProxyTextureBaker::new(BakeLimits {
+                profile: crate::mesh_large::config::Profile::Balanced,
+                memory_bytes: 2 << 30,
+                member_bytes: crate::mesh_large::config::TILE_BYTES,
+                source_cache_bytes: 256 << 20,
+                query_work: 1 << 40,
+                max_page_edge: 4096,
+                max_density_drops: 8,
+            })
+            .unwrap();
+            let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(jobs).unwrap())
+                .with_scratch_dir(&scratch)
+                .with_lod_target(256)
+                .with_leaf_triangles(1024)
+                .with_baker(Arc::new(baker));
+            mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+            let mut files = BTreeMap::new();
+            let mut stack = vec![out.clone()];
+            while let Some(dir) = stack.pop() {
+                for entry in fs::read_dir(&dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else {
+                        let name = path.strip_prefix(&out).unwrap().to_owned();
+                        // Runtime resource diagnostics (worker counts, leases) describe the
+                        // run, not the published payload, and differ by design.
+                        if name != Path::new("resources.json") {
+                            files.insert(name, fs::read(&path).unwrap());
+                        }
+                    }
+                }
+            }
+            files
+        };
+        let one = run(1);
+        let three = run(3);
+        let rows: Vec<Value> = String::from_utf8_lossy(&one[Path::new("proxies.jsonl")])
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert!(rows.len() >= 3, "several proxies: {}", rows.len());
+        // Every proxy member is baked: it carries images.
+        for (name, bytes) in &one {
+            if name.starts_with("proxies") && name.extension().is_some_and(|e| e == "glb") {
+                let n = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+                let doc: Value = serde_json::from_slice(&bytes[20..20 + n]).unwrap();
+                assert!(
+                    doc["images"].as_array().is_some_and(|a| !a.is_empty()),
+                    "{name:?}"
+                );
+            }
+        }
+        assert_eq!(
+            one.keys().collect::<Vec<_>>(),
+            three.keys().collect::<Vec<_>>()
+        );
+        for (name, bytes) in &one {
+            assert!(
+                three[name] == *bytes,
+                "{name:?} differs between 1 and 3 workers"
+            );
+        }
     }
 
     /// The handoff end to end on real H8 + H17 output: packets are complete and consistent,
@@ -2302,7 +2698,8 @@ mod tests {
                         &missing,
                         &pass.captured.materials,
                         u64::MAX,
-                        u64::MAX
+                        u64::MAX,
+                        pass.check
                     )
                     .unwrap_err()
                     .kind(),
@@ -2311,7 +2708,7 @@ mod tests {
                 // Owner checks: transform domain, materials, remaps and no-raster rules.
                 let materials = &pass.captured.materials;
                 let refused = |f: &FrozenNode, p: &PreparedNode| {
-                    assemble(f, p, materials, u64::MAX, u64::MAX).is_err()
+                    assemble(f, p, materials, u64::MAX, u64::MAX, pass.check).is_err()
                 };
                 let mut f = frozen.clone();
                 f.gltf[0].scale[1] = 2f32.to_bits();
@@ -2372,15 +2769,36 @@ mod tests {
                 let needed = assembly_bytes(&frozen, &good);
                 for tile in [u64::MAX, 64] {
                     assert_eq!(
-                        assemble(&frozen, &good, &pass.captured.materials, tile, needed - 1)
-                            .unwrap_err()
-                            .kind(),
+                        assemble(
+                            &frozen,
+                            &good,
+                            &pass.captured.materials,
+                            tile,
+                            needed - 1,
+                            pass.check
+                        )
+                        .unwrap_err()
+                        .kind(),
                         JobErrorKind::ResourceLimit
                     );
                 }
-                assert!(assemble(&frozen, &good, &pass.captured.materials, 64, needed).is_ok());
-                let Assembly::Fit { glb, .. } =
-                    assemble(&frozen, &good, &pass.captured.materials, u64::MAX, u64::MAX)?
+                assert!(assemble(
+                    &frozen,
+                    &good,
+                    &pass.captured.materials,
+                    64,
+                    needed,
+                    pass.check
+                )
+                .is_ok());
+                let Assembly::Fit { glb, .. } = assemble(
+                    &frozen,
+                    &good,
+                    &pass.captured.materials,
+                    u64::MAX,
+                    u64::MAX,
+                    pass.check,
+                )?
                 else {
                     panic!()
                 };
@@ -2428,8 +2846,14 @@ mod tests {
                 };
                 for id in [255u32, 256, 65_535, 65_536, 16_777_215, 16_777_216] {
                     let high = with_id(id);
-                    let Assembly::Fit { decoded, .. } =
-                        assemble(&high, &good, &pass.captured.materials, u64::MAX, u64::MAX)?
+                    let Assembly::Fit { decoded, .. } = assemble(
+                        &high,
+                        &good,
+                        &pass.captured.materials,
+                        u64::MAX,
+                        u64::MAX,
+                        pass.check,
+                    )?
                     else {
                         panic!("fits")
                     };
@@ -2438,11 +2862,65 @@ mod tests {
                 }
                 let high = with_id(16_777_217);
                 assert_eq!(
-                    assemble(&high, &good, &pass.captured.materials, u64::MAX, u64::MAX)
-                        .unwrap_err()
-                        .kind(),
+                    assemble(
+                        &high,
+                        &good,
+                        &pass.captured.materials,
+                        u64::MAX,
+                        u64::MAX,
+                        pass.check
+                    )
+                    .unwrap_err()
+                    .kind(),
                     JobErrorKind::Unsupported
                 );
+                // 300 extra attribute sets (attributes 7..307), each with a distinct value
+                // per face: assembled, verified and independently decoded back, all sets.
+                let mut wide = frozen.clone();
+                for g in &mut wide.gltf {
+                    let ids = g.feature_ids.as_array_mut().unwrap();
+                    for k in 0..300u32 {
+                        ids.push(json!({"featureCount": 1u64 << 20, "attribute": 7 + k}));
+                    }
+                }
+                for (f, face) in wide.faces.iter_mut().enumerate() {
+                    for k in 0..300u32 {
+                        face.features.push((k * 1000 + f as u32, None));
+                    }
+                }
+                let Assembly::Fit { glb, decoded, .. } = assemble(
+                    &wide,
+                    &good,
+                    &pass.captured.materials,
+                    u64::MAX,
+                    u64::MAX,
+                    pass.check,
+                )?
+                else {
+                    panic!("wide member fits")
+                };
+                let back = codec::decode(&glb)?;
+                assert_eq!(back.faces.len(), wide.faces.len());
+                for d in &decoded {
+                    let want = &wide.faces[d.face as usize].features;
+                    assert_eq!(d.features.len(), want.len());
+                    assert_eq!(&d.features, want);
+                }
+                let mut sets: Vec<Vec<(u32, Option<usize>)>> =
+                    back.faces.iter().map(|f| f.features.clone()).collect();
+                let mut want: Vec<Vec<(u32, Option<usize>)>> = wide
+                    .faces
+                    .iter()
+                    .map(|f| {
+                        f.features
+                            .iter()
+                            .map(|&(v, t)| (v, t.map(|t| t as usize)))
+                            .collect()
+                    })
+                    .collect();
+                sets.sort();
+                want.sort();
+                assert_eq!(sets, want, "every one of 300+ sets reads back");
                 // One mutant per remaining verify branch.
                 let mut frozen_mutants: Vec<(&str, FrozenNode)> = Vec::new();
                 let mut m = frozen.clone();
@@ -2560,5 +3038,17 @@ mod tests {
             m
         };
         assert_eq!(manifest("out"), manifest("plain"));
+    }
+
+    /// Literal factors compare numerically: an integer `1` equals a float `1.0`.
+    #[test]
+    fn literal_factors_compare_numbers_by_value() {
+        let a = json!({"pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1],"metallicFactor":0},
+            "emissiveFactor":[0,0,0],"alphaMode":"MASK","alphaCutoff":1});
+        let b = json!({"pbrMetallicRoughness":{"baseColorFactor":[1.0,1.0,1.0,1.0],"metallicFactor":0.0},
+            "alphaMode":"MASK","alphaCutoff":1.0});
+        assert_eq!(literal_factors(&a), literal_factors(&b));
+        let c = json!({"pbrMetallicRoughness":{"metallicFactor":0.5}});
+        assert_ne!(literal_factors(&a), literal_factors(&c));
     }
 }

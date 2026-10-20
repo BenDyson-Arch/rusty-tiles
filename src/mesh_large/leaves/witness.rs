@@ -990,10 +990,10 @@ mod tests {
         assert!(
             full - empty >= witness.encoded_len() + witness.owned_bytes() - small.encoded_len()
         );
-        store.release_leaf(4).unwrap();
+        store.release_leaf(4, u64::MAX, &|| Ok(())).unwrap();
         // Released with its leaf, and the store returns to empty.
         fs::write(&path, &bytes).unwrap();
-        store.release_leaf(3).unwrap();
+        store.release_leaf(3, u64::MAX, &|| Ok(())).unwrap();
         assert!(!path.exists());
         assert!(fs::read_dir(dir.path().join("pre"))
             .unwrap()

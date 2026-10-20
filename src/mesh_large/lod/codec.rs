@@ -180,6 +180,15 @@ fn f32_exact(value: &Value) -> Result<f32, JobError> {
 /// Decode an H8 leaf or H17 proxy GLB: every triangle's positions in client order and its
 /// feature IDs, plus every property table.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
+    decode_checked(bytes, &|| Ok(()))
+}
+
+/// [`decode`], polling `check` before every scene node, glTF primitive and property table.
+pub(crate) fn decode_checked(
+    bytes: &[u8],
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<Decoded, JobError> {
+    check()?;
     let u32_at = |i: usize| -> Result<u32, JobError> {
         Ok(u32::from_le_bytes(
             bytes
@@ -196,12 +205,18 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
     if bytes.get(16..20) != Some(b"JSON") {
         return Err(invalid("GLB JSON chunk"));
     }
-    let doc: Value = serde_json::from_slice(&bytes[20..20 + json_length])
-        .map_err(|e| invalid(format!("GLB JSON: {e}")))?;
+    let doc: Value = serde_json::from_slice(
+        bytes
+            .get(20..20 + json_length)
+            .ok_or_else(|| invalid("GLB JSON chunk length"))?,
+    )
+    .map_err(|e| invalid(format!("GLB JSON: {e}")))?;
     let bin_start = 20 + json_length;
     let bin = if bin_start + 8 <= bytes.len() && &bytes[bin_start + 4..bin_start + 8] == b"BIN\0" {
         let length = u32_at(bin_start)? as usize;
-        &bytes[bin_start + 8..bin_start + 8 + length]
+        bytes
+            .get(bin_start + 8..(bin_start + 8).saturating_add(length))
+            .ok_or_else(|| invalid("GLB BIN chunk length"))?
     } else {
         &[][..]
     };
@@ -214,6 +229,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
         .as_array()
         .ok_or_else(|| invalid("GLB without scene nodes"))?
     {
+        check()?;
         let node = &doc["nodes"][root.as_u64().ok_or_else(|| invalid("node index"))? as usize];
         let translation = match node.get("translation") {
             Some(t) => [f32_exact(&t[0])?, f32_exact(&t[1])?, f32_exact(&t[2])?],
@@ -233,6 +249,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
             .iter()
             .enumerate()
         {
+            check()?;
             if primitive.get("mode").and_then(Value::as_u64).unwrap_or(4) != 4 {
                 return Err(invalid("non-triangle primitive"));
             }
@@ -372,6 +389,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Decoded, JobError> {
     {
         let classes = &metadata["schema"]["classes"];
         for table in metadata["propertyTables"].as_array().into_iter().flatten() {
+            check()?;
             let class = table["class"].as_str().unwrap_or_default().to_owned();
             let count = table["count"].as_u64().unwrap_or(0) as usize;
             let mut columns = BTreeMap::new();

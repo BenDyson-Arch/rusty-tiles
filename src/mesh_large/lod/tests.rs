@@ -1117,17 +1117,34 @@ const NO_BAKER_GOLDEN: &str = "8535a539236f33e85be879ae974845eae6567df1c1353be9e
 /// archive holds one member per proxy row beside the leaves and validates.
 #[test]
 fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
+    public_coarse_tiles(false);
+}
+
+/// The same public conversion on a host that reports no available memory (the fixed
+/// 1 GiB bake allowance of macOS and Windows) succeeds and publishes the same archive as
+/// on this host. This terrain has feature IDs but no textures; when feature IDs alone made
+/// faces rasterise, its root proxy needed seven 4096x4096 ID pages and that allowance
+/// refused it ("categorical tuple tally lease") while large hosts baked it for minutes.
+#[test]
+fn public_mesh_to_tileset_is_the_same_under_the_unknown_memory_allowance() {
+    assert!(public_coarse_tiles(true) == public_coarse_tiles(false));
+}
+
+fn public_coarse_tiles(unknown_memory: bool) -> Vec<u8> {
+    use crate::mesh_large::bake::integration::UNKNOWN_MEMORY_HOST;
     let work = tempfile::tempdir().unwrap();
     let source = terrain(90);
     let input = write_gltf(&work.path().join("src"), &source);
     let output = work.path().join("public.3tz");
-    crate::mesh_large::mesh_to_tileset(
+    UNKNOWN_MEMORY_HOST.with(|c| c.set(unknown_memory));
+    let result = crate::mesh_large::mesh_to_tileset(
         crate::mesh_large::TilerRequest::new(&input, &output).with_jobs(
             crate::mesh_large::TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()),
         ),
         &RunControl::default(),
-    )
-    .unwrap();
+    );
+    UNKNOWN_MEMORY_HOST.with(|c| c.set(false));
+    result.unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
     let mut members = Vec::new();
     for i in 0..zip.len() {
@@ -1150,6 +1167,7 @@ fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
         "{:?}",
         checked.not_inspected
     );
+    fs::read(&output).unwrap()
 }
 
 /// A directed seam record for the audit tests: `owner` traverses `from -> to`.

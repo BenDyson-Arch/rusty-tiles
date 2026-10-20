@@ -1,0 +1,65 @@
+{
+  "scope": "Six bounded integration adapter mutations; no authentic H17 core/production/lease acceptance.",
+  "cases": [
+    {
+      "name": "feature-attribute-number",
+      "path": "src/mesh_large/bake/integration.rs",
+      "old": "set: u32::try_from(attribute)\n                .map_err(|_| invalid(\"frozen feature attribute number\"))?,",
+      "new": "set: 0,",
+      "test": "mesh_large::bake::integration::tests::handoff_maps_each_source_with_shared_material_gltf_and_original_attribute_numbers",
+      "restored_source_sha256": "594c8669d93b07413f04d2fb771eac435300ef8ec0dfce69239296eceb2d8eba",
+      "mutated_source_sha256": "ec21a05ef7990895adcb7cd9b6f08a4ad99bdb7d229a9b7676a6f019747ff565",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    },
+    {
+      "name": "no-raster-detach",
+      "path": "src/mesh_large/bake/assembler.rs",
+      "old": "None => detach(&mut material, slot),",
+      "new": "None => {},",
+      "test": "mesh_large::bake::assembler::tests::mixed_no_raster_material_detaches_only_its_binding_and_preserves_corner_attributes",
+      "restored_source_sha256": "791d07a1079596402a2fa5310de28fafa4276cbad74693d18e2c92d09ef1265b",
+      "mutated_source_sha256": "b7e1b00c2cfc9ab325c5c4009130a2a7d0510db724c9bef8ef833f145d59ce2e",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    },
+    {
+      "name": "normal-scale-once",
+      "path": "src/mesh_large/bake/assembler.rs",
+      "old": "&& binding.get(\"scale\").and_then(Value::as_f64) != Some(1.)",
+      "new": "&& false",
+      "test": "mesh_large::bake::assembler::tests::translation_refuses_unabsorbed_scale_mislabeled_page_and_unsupported_budget",
+      "restored_source_sha256": "791d07a1079596402a2fa5310de28fafa4276cbad74693d18e2c92d09ef1265b",
+      "mutated_source_sha256": "8a26ff10b41f0b327068570b1c98a48268d0514e25efcbc4c77da4a285eb7d91",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    },
+    {
+      "name": "bounded-packet-decode",
+      "path": "src/mesh_large/bake/packet.rs",
+      "old": "if self.used > self.limit {",
+      "new": "if false {",
+      "test": "mesh_large::bake::packet::tests::child_packet_exact_bits_determinism_and_bounded_counts",
+      "restored_source_sha256": "dd97b4381512f7f68059d42037866e93631978c3ab8d5ce38c983c46a3a3053f",
+      "mutated_source_sha256": "f62138894e04fa8965dc6c89e5ce41a6daf1b30743df0b94e01d255c0e51dec3",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    },
+    {
+      "name": "leaf-slot-uv",
+      "path": "src/mesh_large/bake/child_bridge.rs",
+      "old": "let set = b[\"texCoord\"].as_u64().unwrap_or(0);",
+      "new": "let set = 0u64;",
+      "test": "mesh_large::bake::child_bridge::tests::leaf_bridge_maps_literal_slot_uv_sampler_scale_and_actual_spacing",
+      "restored_source_sha256": "04c60c16472204ca56479903ac36a0cedfd65517450a1a610ca5fb781dd7a6b8",
+      "mutated_source_sha256": "89fc6459ca386f56f69ddf8b5aec3973ead598318bf12aa617451b7fbfa0aaea",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    },
+    {
+      "name": "leaf-decoded-density",
+      "path": "src/mesh_large/bake/child_bridge.rs",
+      "old": "if !witness.texel_size.is_finite() || witness.texel_size < maximum_spacing {",
+      "new": "if !witness.texel_size.is_finite() {",
+      "test": "mesh_large::bake::child_bridge::tests::leaf_bridge_refuses_missing_or_mismatched_witness_and_low_lease",
+      "restored_source_sha256": "04c60c16472204ca56479903ac36a0cedfd65517450a1a610ca5fb781dd7a6b8",
+      "mutated_source_sha256": "250f4c6b54711b085b91499fc2d1b6ca76821566927b76f413be066b3417702a",
+      "expected": "Compile succeeds; exactly the intended semantic test fails at runtime."
+    }
+  ]
+}

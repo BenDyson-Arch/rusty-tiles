@@ -389,6 +389,10 @@ pub fn mesh_to_tileset(
             total: Some(1),
         })?;
         let plan = producer::stage_plan(config.profile, &captured, config.jobs)?;
+        // H27: the coarse tiles are textured by the bake core, with its stage policy
+        // resolved once from this run (memory, source cache, query work, page edge).
+        let baker =
+            super::bake::integration::ProxyTextureBaker::for_stage(config.profile, &captured)?;
         let leaf = producer::produce(
             work.path(),
             &captured,
@@ -397,8 +401,7 @@ pub fn mesh_to_tileset(
             request.profile,
             super::lod::Mutation::None,
             super::lod::TARGET_FACES,
-            // No production proxy baker yet (H27 plugs in here); proxies stay untextured.
-            None,
+            Some(&baker),
             &|| attempt.check(),
         )?;
         attempt.emit(&RunEvent::Progress {
