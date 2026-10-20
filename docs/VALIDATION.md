@@ -304,7 +304,7 @@ own exception, including `KeyboardInterrupt`, propagates unchanged) and `TilesEr
 Cancellation (`inspect_with`'s control, a Python callback or Ctrl-C) is checked before each
 hashed member, traversal task, memo-replayed event, implicit tile and phase-2 stream entry;
 progress events have the phases `validate.hash`, `validate.traverse`, `validate.stream` (only
-when decoded content bounds are streamed) and `validate.rows` (CLI `--progress json`). `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+when decoded content bounds are streamed) and `validate.rows` (CLI `--progress json`). The phase list is open and conditional, and `done` never decreases within a phase, but an event may repeat: a memo replay re-sends the current `validate.traverse` event every 1,024 replayed events as a heartbeat. `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
 capacity fault); it is never a verdict about the archive.
 No job/publication failure wrapper is used for this read-only operation.
 

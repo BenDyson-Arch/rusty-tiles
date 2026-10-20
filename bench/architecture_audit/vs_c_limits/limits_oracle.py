@@ -270,10 +270,11 @@ def check_one(binary, archive, overrides, timeout):
             if isinstance(lim, dict) and lim.get("limit") in OVERRIDABLE:
                 key = lim["limit"]
                 compared = True
-                if S is None:
+                # An overridden key's value and derivation do not depend on the archive size.
+                if S is None and key not in ov:
                     problems.append("oracle could not parse the archive")
                 else:
-                    limits, deriv = expected(S, ov)
+                    limits, deriv = expected(S or 0, ov)
                     want_v = limits[key]
                     want_d = derivation_label(key, deriv, ov)
                     if want_v is None:

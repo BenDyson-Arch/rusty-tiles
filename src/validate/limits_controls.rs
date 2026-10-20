@@ -745,6 +745,36 @@ fn cancellation_stops_a_memo_replay_at_its_next_event() {
         .collect();
     let placing = *traverse.last().unwrap();
     assert_eq!(traverse.iter().filter(|&&done| done == placing).count(), 2);
+    // Each heartbeat lands on a multiple of 1,024 replayed checks.
+    struct Heartbeats(Mutex<Vec<(u64, u64)>>);
+    impl Observer for Heartbeats {
+        fn observe(&self, event: &RunEvent<'_>) -> Result<(), crate::JobError> {
+            if let RunEvent::Progress {
+                phase: "validate.traverse",
+                done,
+                ..
+            } = *event
+            {
+                let checks = CHECKS.with(std::cell::Cell::get);
+                self.0.lock().unwrap().push((done, checks));
+            }
+            Ok(())
+        }
+    }
+    let observer = Arc::new(Heartbeats(Mutex::new(Vec::new())));
+    CHECKS.with(|checks| checks.set(0));
+    inspect_with(
+        ValidationRequest::new(&path),
+        &RunControl::new(Some(observer.clone())),
+    )
+    .unwrap();
+    let beats: Vec<_> = observer.0.lock().unwrap().clone();
+    let beats: Vec<_> = beats
+        .iter()
+        .filter(|(done, _)| *done == placing)
+        .map(|(_, checks)| *checks)
+        .collect();
+    assert_eq!(beats, [1024, 2048]);
     for at in [1, 1024, 1500, 2101] {
         let control = RunControl::default();
         CANCEL_AT_CHECK
