@@ -34,6 +34,7 @@ fn selected_limits() -> ValidationLimits {
         containment_bytes_read: 2147483648,
         containment_decoded_bytes: 2147483648,
         containment_node_depth: 64,
+        live_document_bytes: 268435456,
     }
 }
 

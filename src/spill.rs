@@ -17,10 +17,8 @@ mod volume;
 pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
 #[allow(unused_imports)]
 pub(crate) use sequence::{
-    ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter,
+    ByteFile, ByteWriter, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
-#[cfg(test)]
-pub(crate) use sort::CHUNK_OVERRIDE;
 #[allow(unused_imports)]
 pub(crate) use sort::{
     chunk_records, ExternalSorter, SortConfig, SortStats, SortedStream, CHUNK_BYTES,

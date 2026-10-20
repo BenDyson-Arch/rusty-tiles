@@ -23,6 +23,13 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
+    /// Decoded published POSITION per primitive, in corner order (the lattice decode the
+    /// writer proves client-order exact).
+    pub positions: Vec<Vec<[f32; 3]>>,
+    /// The NORMAL a renderer reads per primitive, in corner order (empty without
+    /// NORMAL): the octahedral codes decoded by the reference meshopt filter and read
+    /// as normalized SHORT, or the published f32 values.
+    pub normals: Vec<Vec<[f32; 3]>>,
 }
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]
@@ -147,7 +154,13 @@ impl Wire {
     }
     /// Unit normals as `bits`-bit octahedral codes behind the meshopt OCTAHEDRAL filter;
     /// clients decode them to normalized SHORT VEC3 (KHR_mesh_quantization).
-    fn octahedral(&mut self, normals: &[[f32; 3]], bits: u8) -> Result<usize, JobError> {
+    /// Also returns what a renderer reads: the codes through the reference meshopt
+    /// OCTAHEDRAL filter decode, as normalized SHORT (`max(c / 32767, -1)`).
+    fn octahedral(
+        &mut self,
+        normals: &[[f32; 3]],
+        bits: u8,
+    ) -> Result<(usize, Vec<[f32; 3]>), JobError> {
         // Capture refuses non-finite normals, so one here is a broken prepared leaf: a
         // typed state failure, as for non-finite float attributes, never a budget retry.
         if normals.iter().flatten().any(|v| !v.is_finite()) {
@@ -155,10 +168,22 @@ impl Wire {
         }
         let bytes = glb::encode_octahedral(normals, bits).map_err(|e| invalid(&e.to_string()))?;
         let count = normals.len();
+        let filtered = crate::content_integrity::meshopt::unfilter_octahedral(&bytes, count, 8)
+            .map_err(|e| invalid(&format!("octahedral NORMAL decode: {e}")))?;
+        let decoded = filtered
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|e| {
+                std::array::from_fn(|a| {
+                    (f32::from(i16::from_le_bytes([e[2 * a], e[2 * a + 1]])) / 32767.).max(-1.)
+                })
+            })
+            .collect();
         let view = self.view(&bytes, Some(MeshoptStream::Octahedral { count, stride: 8 }))?;
         let index = self.accessors.len();
         self.accessors.push(json!({"bufferView":view,"componentType":5122,"count":count,"type":"VEC3","normalized":true}));
-        Ok(index)
+        Ok((index, decoded))
     }
     fn floats(&mut self, rows: &[Vec<f32>], shape: &str) -> Result<usize, JobError> {
         let width = rows
@@ -400,6 +425,8 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
+    let mut decoded_positions = Vec::with_capacity(atlas.primitives.len());
+    let mut renderer_normals = Vec::with_capacity(atlas.primitives.len());
     let octahedral = lattice.profile().leaf_normal_octahedral_bits();
     for primitive in &atlas.primitives {
         let flags = primitive.triangles[0].flags;
@@ -412,7 +439,7 @@ pub(super) fn encode(
             .flat_map(|t| t.triangle.positions)
             .collect();
         let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
-        let position = lattice.encode(&points, &depths, u32::from(depth))?;
+        let mut position = lattice.encode(&points, &depths, u32::from(depth))?;
         bounds.union(&position.bounds);
         geometry_error = geometry_error.max(position.correspondence_error);
         let count = points.len();
@@ -453,6 +480,10 @@ pub(super) fn encode(
                 id
             }
         };
+        decoded_positions.push(std::mem::take(&mut position.decoded));
+        if flags & NORMAL == 0 {
+            renderer_normals.push(Vec::new());
+        }
         let mut attributes = json!({"POSITION":pos});
         for (flag, name, shape) in [
             (NORMAL, "NORMAL", "VEC3"),
@@ -468,9 +499,20 @@ pub(super) fn encode(
                     .iter()
                     .flat_map(|t| t.corners.iter().map(|c| c.normal))
                     .collect();
-                attributes[name] = json!(wire.octahedral(&normals, bits)?);
+                let (id, decoded) = wire.octahedral(&normals, bits)?;
+                attributes[name] = json!(id);
+                renderer_normals.push(decoded);
                 quantized = true;
             } else {
+                if flag == NORMAL {
+                    renderer_normals.push(
+                        primitive
+                            .triangles
+                            .iter()
+                            .flat_map(|t| t.corners.iter().map(|c| c.normal))
+                            .collect(),
+                    );
+                }
                 let rows: Vec<Vec<f32>> = primitive
                     .triangles
                     .iter()
@@ -628,6 +670,8 @@ pub(super) fn encode(
         glb: output,
         bounds,
         geometry_error,
+        positions: decoded_positions,
+        normals: renderer_normals,
     })
 }
 

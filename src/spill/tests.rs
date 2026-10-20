@@ -261,6 +261,8 @@ struct Faults {
     truncate_reads: Option<u64>,
     extra_read_byte: bool,
     read_error_at: Option<u64>,
+    /// Slot files open read-only, so every slot write fails.
+    slots_read_only: bool,
 }
 
 #[derive(Default)]
@@ -285,6 +287,18 @@ impl FaultIo {
 }
 
 impl SpillIo for FaultIo {
+    fn create_slots(&self, path: &Path) -> io::Result<File> {
+        let nth = self.counters.creates.fetch_add(1, Ordering::Relaxed);
+        if self.faults.create_error_at == Some(nth) {
+            return Err(io::Error::other("injected create failure"));
+        }
+        let file = FileIo.create_slots(path)?;
+        if self.faults.slots_read_only {
+            drop(file);
+            return File::open(path);
+        }
+        Ok(file)
+    }
     fn create(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
         let nth = self.counters.creates.fetch_add(1, Ordering::Relaxed);
         let file = FileIo.create(path)?;
@@ -1219,6 +1233,86 @@ fn relative_windows_path_uses_the_actual_working_directory_volume() {
     );
 }
 
+#[test]
+fn slot_files_read_back_any_order_and_account_their_extent() {
+    let (_parent, scratch) = new_scratch(FaultIo::new(Faults::default()));
+    let mut slots = SlotFile::new(&scratch, "slots", 7).unwrap();
+    for index in [9u64, 2, 3, 30] {
+        slots.write(index, &[index as u8; 7]).unwrap();
+    }
+    let mut out = [0u8; 7];
+    for index in [2u64, 3, 9, 30] {
+        slots.read(index, &mut out).unwrap();
+        assert_eq!(out, [index as u8; 7]);
+    }
+    // A slot below the extent that was never written reads as zeros (a hole).
+    slots.read(4, &mut out).unwrap();
+    assert_eq!(out, [0; 7]);
+    assert!(matches!(
+        slots.read(31, &mut out),
+        Err(SpillError::CorruptRun { .. })
+    ));
+    assert!(matches!(
+        slots.write(1, &[0; 6]),
+        Err(SpillError::InvalidConfig(_))
+    ));
+    assert!(matches!(
+        slots.read(1, &mut [0; 8]),
+        Err(SpillError::InvalidConfig(_))
+    ));
+    assert!(matches!(
+        SlotFile::new(&scratch, "zero", 0),
+        Err(SpillError::InvalidConfig(_))
+    ));
+    assert_eq!(scratch.live_bytes(), 31 * 7);
+    assert_eq!(scratch.peak_bytes(), 31 * 7);
+    drop(slots);
+    assert_eq!(scratch.live_bytes(), 0);
+}
+
+#[test]
+fn slot_file_faults_are_typed() {
+    let faults = Faults {
+        create_error_at: Some(0),
+        ..Faults::default()
+    };
+    let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+    assert!(matches!(
+        SlotFile::new(&scratch, "slots", 4),
+        Err(SpillError::Io { .. })
+    ));
+    let faults = Faults {
+        slots_read_only: true,
+        ..Faults::default()
+    };
+    let (_parent, scratch) = new_scratch(FaultIo::new(faults));
+    let mut slots = SlotFile::new(&scratch, "slots", 4).unwrap();
+    assert!(matches!(
+        slots.write(0, &[1; 4]),
+        Err(SpillError::Io { .. })
+    ));
+    // A file cut short under a written extent is corrupt, not a short record.
+    let (_parent, scratch) = new_scratch(FaultIo::new(Faults::default()));
+    let mut slots = SlotFile::new(&scratch, "slots", 4).unwrap();
+    slots.write(9, &[1; 4]).unwrap();
+    let path = std::fs::read_dir(scratch.path())
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_len(38)
+        .unwrap();
+    assert!(matches!(
+        slots.read(9, &mut [0; 4]),
+        Err(SpillError::CorruptRun { .. })
+    ));
+}
+
 /// Runs split into chunk files are read back in the same order, free their chunks as the
 /// stream advances, and keep every intermediate merge within `S + F × chunk`.
 #[test]
@@ -1238,8 +1332,8 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
     };
     let total = (input.len() * Wide::SIZE) as u64;
     // 5 records per chunk: each 100-record run is 20 chunk files.
-    super::sort::CHUNK_OVERRIDE.with(|c| c.set(Some(5 * Wide::SIZE)));
     let (_parent, scratch) = new_scratch(Arc::new(FileIo));
+    scratch.set_chunk_bytes(5 * Wide::SIZE);
     let mut sorter = ExternalSorter::new(&scratch, config).unwrap();
     sorter.extend(input.iter().copied()).unwrap();
     // The last 100 records stay buffered until finish.
@@ -1268,7 +1362,6 @@ fn chunked_runs_free_as_consumed_and_bound_merge_slack() {
             freed_midway = scratch.live_bytes() <= remaining + fan_in * chunk;
         }
     }
-    super::sort::CHUNK_OVERRIDE.with(|c| c.set(None));
     assert!(freed_midway, "consumed chunks are removed while streaming");
     assert_eq!(got, expected, "chunking changes no order or content");
     assert_eq!(scratch.live_bytes(), 0);

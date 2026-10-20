@@ -526,15 +526,25 @@ pub(crate) fn admit(bytes: &[u8], limits: JsonLimits) -> Result<CheckedDocument<
 }
 
 pub(crate) fn parse(bytes: &[u8], limits: JsonLimits) -> Result<Value, FormatError> {
+    parse_counted(bytes, limits).map(|(value, _)| value)
+}
+
+/// [`parse`], with the admitted value-node count.
+pub(crate) fn parse_counted(
+    bytes: &[u8],
+    limits: JsonLimits,
+) -> Result<(Value, usize), FormatError> {
     let checked = admit(bytes, limits)?;
+    let nodes = checked.value_nodes();
     // All source syntax/Unicode/duplicates/limits are already decided. A
     // subsequent failure is this finite owned representation's refusal, never
     // a reinterpretation of valid source as malformed (e.g. 1e400).
     let mut decoder = serde_json::Deserializer::from_str(checked.raw().get());
     decoder.disable_recursion_limit();
-    Value::deserialize(&mut decoder).map_err(|_| {
+    let value = Value::deserialize(&mut decoder).map_err(|_| {
         FormatError::Unsupported("JSON exceeds finite owned-document representation".into())
-    })
+    })?;
+    Ok((value, nodes))
 }
 
 /// The pre-C2-WB implementation (develop d1874ef, `json.rs:37-302`), retained

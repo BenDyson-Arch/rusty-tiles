@@ -2807,10 +2807,10 @@
    "file": "large/R2.3tz",
    "id": "R2",
    "limits": {
-    "document_decoded_bytes": 395040
+    "document_decoded_bytes": 395064
    },
    "members": 64,
-   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "note": "S = 65840 B per subtree plus a 4 B rank table; maximum live sum 6(S + 4) = 395064; cumulative members 63S = 4147920",
    "ref": "R2 (cap = maximum live sum)",
    "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
   },
@@ -2820,11 +2820,11 @@
    "file": "large/R2.3tz",
    "id": "R2-1",
    "limits": {
-    "document_decoded_bytes": 395039
+    "document_decoded_bytes": 395063
    },
    "members": 64,
-   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
-   "ref": "R2 (one less: refused before the sixth read)",
+   "note": "S = 65840 B per subtree plus a 4 B rank table; maximum live sum 6(S + 4) = 395064; cumulative members 63S = 4147920",
+   "ref": "R2 (one less: the sixth subtree's table charge is refused)",
    "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
   },
   {
@@ -2833,10 +2833,10 @@
    "file": "large/R2.3tz",
    "id": "R2b.mid",
    "limits": {
-    "document_decoded_bytes": 2271480
+    "document_decoded_bytes": 2271492
    },
    "members": 64,
-   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "note": "S = 65840 B per subtree plus a 4 B rank table; maximum live sum 6(S + 4) = 395064; cumulative members 63S = 4147920",
    "ref": "R2b (between live and cumulative)",
    "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
   },
@@ -2849,7 +2849,7 @@
     "document_decoded_bytes": 4147919
    },
    "members": 64,
-   "note": "S = 65840 B per subtree; maximum live sum 6S = 395040; cumulative 63S = 4147920",
+   "note": "S = 65840 B per subtree plus a 4 B rank table; maximum live sum 6(S + 4) = 395064; cumulative members 63S = 4147920",
    "ref": "R2b (cumulative - 1; flips the cumulative mutant)",
    "sha256": "697cdf011821f9fc8ed95986ad29a39e53e2b668a8eb82a27cfaf1260538e733"
   },
@@ -2955,6 +2955,84 @@
    "question": "Q4",
    "ref": "R8a timing companion without padding",
    "sha256": "055654f9461d190328f771dda8b6105eec52c867d348dcd62be4a2bf1a39f30b"
+  },
+  {
+   "bytes": 5146,
+   "expected": "Accepted",
+   "file": "fixtures/VSB8.rank.3tz",
+   "id": "VSB8.rank",
+   "limits": {
+    "document_decoded_bytes": 4440
+   },
+   "members": 2,
+   "note": "QUADTREE L=4 A=4, T=85, E=0, bitstream tiles; member 4432 B + tables 8 B = cap 4440",
+   "ref": "VS-B-8 rank table only (cap = member + tables)",
+   "sha256": "731d13614dae793ebf2398f689b78a8f4fafe5b9b052193fbd61c2c995c9ba64"
+  },
+  {
+   "bytes": 5146,
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "file": "fixtures/VSB8.rank.3tz",
+   "id": "VSB8.rank-1",
+   "limits": {
+    "document_decoded_bytes": 4439
+   },
+   "members": 2,
+   "note": "QUADTREE L=4 A=4, T=85, E=0, bitstream tiles; member 4432 B + tables 8 B = cap 4440",
+   "ref": "VS-B-8 rank table only (one less: the table charge is refused)",
+   "sha256": "731d13614dae793ebf2398f689b78a8f4fafe5b9b052193fbd61c2c995c9ba64"
+  },
+  {
+   "bytes": 9505,
+   "expected": "Accepted",
+   "file": "fixtures/VSB8.alias.3tz",
+   "id": "VSB8.alias",
+   "limits": {
+    "document_decoded_bytes": 4644
+   },
+   "members": 10,
+   "note": "QUADTREE L=3 A=3, T=21, P_t=6, E=8, slots 1-2 alias X(3), slot 3 Y(2); member 4576 B + tables 68 B = cap 4644",
+   "ref": "VS-B-8 offsets, slots and deduplicated positions (cap = member + tables)",
+   "sha256": "38bc69897ee8f245dbfc4096d077a0e96f5f8a2715e57cd70bcf338331013897"
+  },
+  {
+   "bytes": 9505,
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "file": "fixtures/VSB8.alias.3tz",
+   "id": "VSB8.alias-1",
+   "limits": {
+    "document_decoded_bytes": 4643
+   },
+   "members": 10,
+   "note": "QUADTREE L=3 A=3, T=21, P_t=6, E=8, slots 1-2 alias X(3), slot 3 Y(2); member 4576 B + tables 68 B = cap 4644",
+   "ref": "VS-B-8 offsets, slots and deduplicated positions (one less: the table charge is refused)",
+   "sha256": "38bc69897ee8f245dbfc4096d077a0e96f5f8a2715e57cd70bcf338331013897"
+  },
+  {
+   "bytes": 6666,
+   "expected": "Accepted",
+   "file": "fixtures/VSB8.const.3tz",
+   "id": "VSB8.const",
+   "limits": {
+    "document_decoded_bytes": 4426
+   },
+   "members": 5,
+   "note": "QUADTREE L=2 A=2, tiles constant 1, P_t=5, E=3; member 4384 B + tables 42 B = cap 4426",
+   "ref": "VS-B-8 constant tiles, content bitstream (no rank table) (cap = member + tables)",
+   "sha256": "dab2363b108d9b5a7554f21ddeff21489b78d7424be517883e706ff3d9ccd08c"
+  },
+  {
+   "bytes": 6666,
+   "expected": "ResourceLimit:document_decoded_bytes",
+   "file": "fixtures/VSB8.const.3tz",
+   "id": "VSB8.const-1",
+   "limits": {
+    "document_decoded_bytes": 4425
+   },
+   "members": 5,
+   "note": "QUADTREE L=2 A=2, tiles constant 1, P_t=5, E=3; member 4384 B + tables 42 B = cap 4426",
+   "ref": "VS-B-8 constant tiles, content bitstream (no rank table) (one less: the table charge is refused)",
+   "sha256": "dab2363b108d9b5a7554f21ddeff21489b78d7424be517883e706ff3d9ccd08c"
   },
   {
    "bytes": 18144,

@@ -30,6 +30,11 @@ def run(args):
     generator = importlib.util.module_from_spec(spec); spec.loader.exec_module(generator)
     fixtures = args.run_dir / 'fixtures'
     generated = generator.generate(fixtures)
+    # VS-B budget amendment (2026-10-14): admitted limits are max(floor, kappa*S).
+    spec = importlib.util.spec_from_file_location(
+        'vs_b_amend', HERE.parents[1] / 'vs_b_budget_amendment/2026-10-14/amend.py')
+    amend = importlib.util.module_from_spec(spec); spec.loader.exec_module(amend)
+    generated, _ = amend.amend_cases(generated, fixtures)
     assert generated == manifest['cases'], 'regenerated fixtures differ from the frozen manifest'
     env = dict(os.environ, RAYON_NUM_THREADS='2', RUST_TEST_THREADS='2', CARGO_BUILD_JOBS='2')
     records = []

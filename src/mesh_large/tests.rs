@@ -201,6 +201,55 @@ fn external_driver() {
     output.close().unwrap();
 }
 
+/// Chunked sort runs change when scratch is freed, never what is published: the same source
+/// tiled with spilling sorts gives byte-identical archives whether runs are one chunk each or
+/// split into many small chunk files, and the same as with default (non-spilling) sorts.
+#[test]
+fn chunked_sort_runs_publish_identical_archives() {
+    use crate::{mesh_large::TilerJobs, spill::SortConfig, RunControl};
+    let work = tempfile::tempdir().unwrap();
+    let input = super::full::tests::fixture(&work.path().join("src"), 2000);
+    let sort = SortConfig {
+        run_bytes: 64 << 10,
+        fan_in: 4,
+        buffer_bytes: 4096,
+        jobs: 1,
+    };
+    let mut archives = Vec::new();
+    for (tag, spill) in [
+        ("default", None),
+        ("unchunked", Some((sort, crate::spill::CHUNK_BYTES))),
+        ("chunked", Some((sort, 4096))),
+    ] {
+        let scratch = work.path().join(format!("scratch-{tag}"));
+        fs::create_dir(&scratch).unwrap();
+        let output = work.path().join(format!("{tag}.3tz"));
+        let mut request = super::TilerRequest::new(&input, &output)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_scratch_dir(&scratch);
+        if let Some((sort, chunk)) = spill {
+            request = request.with_test_spill(sort, chunk);
+        }
+        let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
+        assert_eq!(result.report.triangles, 2000);
+        if tag == "chunked" {
+            assert!(
+                result.diagnostics.capture.run_scratch_peak_bytes > 0,
+                "the sorts spilled"
+            );
+        }
+        archives.push(fs::read(&output).unwrap());
+    }
+    assert_eq!(
+        archives[0], archives[1],
+        "spilling sorts publish the same archive"
+    );
+    assert_eq!(
+        archives[1], archives[2],
+        "chunk size publishes the same archive"
+    );
+}
+
 /// A non-indexed source with varied unit NORMALs (both hemispheres) through the public
 /// facade: every profile publishes an archive the validator accepts; `lossless` leaves keep
 /// the f32 source bits and `balanced` leaves decode (meshopt OCTAHEDRAL filter) to within the

@@ -5,6 +5,7 @@ use super::{
     full,
     input::StreamSource,
     leaves::producer,
+    source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
 use crate::{
     mesh_archive::ResolvedPlacement, runtime::Staging, CleanupDiagnostic, JobError, JobErrorKind,
@@ -72,7 +73,11 @@ pub struct TilerRequest {
     jobs: TilerJobs,
     scratch_dir: Option<PathBuf>,
     placement: MeshPlacement,
+    source_crs: Option<MeshSourceCrs>,
     policy: OutputPolicy,
+    /// Test seam: sort configuration and largest spill chunk, so small inputs spill.
+    #[cfg(test)]
+    test_spill: Option<(crate::spill::SortConfig, usize)>,
 }
 impl TilerRequest {
     pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
@@ -83,8 +88,16 @@ impl TilerRequest {
             jobs: TilerJobs::Auto,
             scratch_dir: None,
             placement: MeshPlacement::Local,
+            source_crs: None,
             policy: OutputPolicy::CreateNew,
+            #[cfg(test)]
+            test_spill: None,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
+        self.test_spill = Some((sort, chunk));
+        self
     }
     pub fn with_profile(mut self, profile: TilerProfile) -> Self {
         self.profile = profile;
@@ -100,6 +113,12 @@ impl TilerRequest {
     }
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
         self.placement = placement;
+        self
+    }
+    /// Map source positions through a declared CRS at capture. Mutually exclusive with a
+    /// rigid placement: the root transform is derived from the source.
+    pub fn with_source_crs(mut self, source_crs: MeshSourceCrs) -> Self {
+        self.source_crs = Some(source_crs);
         self
     }
     pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
@@ -151,6 +170,9 @@ pub struct TilerReport {
     pub source_coordinates: &'static str,
     pub coordinates: &'static str,
     pub root_transform: Option<[f64; 16]>,
+    /// The resolved source CRS; omitted for local sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_crs: Option<MeshSourceCrsReport>,
 }
 impl TilerReport {
     fn new(
@@ -191,13 +213,18 @@ impl TilerReport {
             root_geometric_error: facts.root_geometric_error,
             tileset_geometric_error: facts.tileset_geometric_error,
             placement: facts.placement.clone(),
-            source_coordinates: "local-gltf",
+            source_coordinates: if capture.source_crs.is_some() {
+                "source-crs"
+            } else {
+                "local-gltf"
+            },
             coordinates: if facts.root_transform.is_some() {
                 "wgs84-ecef"
             } else {
                 "local-gltf"
             },
             root_transform: facts.root_transform,
+            source_crs: capture.source_crs.clone(),
         }
     }
 }
@@ -217,6 +244,8 @@ pub struct CaptureDiagnostics {
     pub scratch_stage_peak_bytes: super::full::ScratchStages,
     /// Output-side admission reservation on the work directory and output filesystems.
     pub output_reserve_bytes: u64,
+    /// Whole-run spill peak, including H17 and the bake; at most `scratch_logical_need_bytes`.
+    pub run_scratch_peak_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TilerDiagnostics {
@@ -246,6 +275,14 @@ fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), Job
         return Err(invalid("mesh output must have the .3tz extension"));
     }
     let placement = ResolvedPlacement::resolve(&request.placement)?;
+    if let Some(source_crs) = &request.source_crs {
+        if request.placement != MeshPlacement::Local {
+            return Err(invalid(
+                "a source CRS cannot be combined with --anchor, --orientation-xyzw or --scene-offset",
+            ));
+        }
+        source_crs.check()?;
+    }
     match std::fs::symlink_metadata(&request.output) {
         Ok(m) if !m.is_file() => return Err(invalid("mesh output must be a regular file path")),
         Ok(_) => {}
@@ -290,6 +327,12 @@ pub fn mesh_to_tileset(
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
+    config.source_crs = request.source_crs.clone();
+    #[cfg(test)]
+    if let Some((sort, chunk)) = request.test_spill {
+        config.sort = sort;
+        config.test_chunk_bytes = Some(chunk);
+    }
     config.scratch_dir = request
         .scratch_dir
         .as_deref()
@@ -366,6 +409,8 @@ pub fn mesh_to_tileset(
         // H17 certified the coarse tiles inside the producer, while the capture was live;
         // delivery publishes them with the leaves.
         let delivery_request = MeshTilesetRequest::new(work.path(), &output);
+        // A source CRS derives the root placement from the captured origin.
+        let placement = captured.placement.clone().unwrap_or(placement);
         let prepared = delivery::prepare_tiler(
             &delivery_request,
             placement,
@@ -383,6 +428,19 @@ pub fn mesh_to_tileset(
             work.path(),
         )?;
         let c = &captured.report;
+        // Every spill stage after capture (H17 pre-pass, coarse levels, bake) shares the
+        // admitted scratch: the whole-run peak must stay within the declared need. LOD proxy
+        // sidecars and bake handoff files are budgeted by their owners and not counted here.
+        let run_scratch_peak_bytes = captured.scratch.peak_bytes();
+        if run_scratch_peak_bytes > c.scratch.logical_need_bytes {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "mesh run spill peak {run_scratch_peak_bytes} bytes exceeded the declared scratch need {}",
+                    c.scratch.logical_need_bytes
+                ),
+            ));
+        }
         let diagnostics = TilerDiagnostics {
             requested_jobs: c.jobs.requested.clone(),
             capture: CaptureDiagnostics {
@@ -397,6 +455,7 @@ pub fn mesh_to_tileset(
                 scratch_stage_bytes: c.scratch.stages,
                 scratch_stage_peak_bytes: c.scratch_stage_peaks,
                 output_reserve_bytes: c.scratch.output_reserve_bytes,
+                run_scratch_peak_bytes,
             },
             leaf_delivery: leaf.diagnostics,
             archive_bytes,
