@@ -27,6 +27,8 @@ pub(super) struct ChildQuery<'a> {
     children: &'a [PreencodeChild],
     entries: Vec<Entry>,
     tree: Vec<Branch>,
+    /// Reused depth-first stack of [`ChildQuery::nearest`]: branch and lower bound.
+    stack: Vec<(usize, f64)>,
     work: u64,
     limit: u64,
 }
@@ -108,6 +110,7 @@ impl<'a> ChildQuery<'a> {
             children,
             entries,
             tree: Vec::new(),
+            stack: Vec::new(),
             work: 0,
             limit,
         };
@@ -165,9 +168,19 @@ impl<'a> ChildQuery<'a> {
         if self.tree.is_empty() {
             return Ok(None);
         }
-        let mut stack = vec![0usize];
+        // Nearest-first: the nearer branch is searched first so the bound tightens
+        // early. A branch is pruned only when its lower bound exceeds the best distance
+        // by more than the arithmetic slack of a computed distance, and candidates are
+        // compared by a strict total order, so the answer is the exhaustive one.
+        let slack = 1e-12 * (1. + math::dot(q, q));
+        let mut stack = std::mem::take(&mut self.stack);
+        stack.clear();
         let mut best: Option<(f64, Entry, V3)> = None;
-        while let Some(i) = stack.pop() {
+        stack.push((
+            0,
+            math::box_distance_lower(q, self.tree[0].lo, self.tree[0].hi),
+        ));
+        while let Some((i, lower)) = stack.pop() {
             check()?;
             self.work = self
                 .work
@@ -176,13 +189,20 @@ impl<'a> ChildQuery<'a> {
             if self.work > self.limit {
                 return Err(resource("child query work budget"));
             }
-            let b = &self.tree[i];
-            if best.is_some_and(|(d, _, _)| math::box_distance_lower(q, b.lo, b.hi) > d) {
+            if best.is_some_and(|(d, _, _)| lower > d + slack) {
                 continue;
             }
+            let b = &self.tree[i];
             if let Some([a, b]) = b.children {
-                stack.push(b);
-                stack.push(a);
+                let la = math::box_distance_lower(q, self.tree[a].lo, self.tree[a].hi);
+                let lb = math::box_distance_lower(q, self.tree[b].lo, self.tree[b].hi);
+                if la <= lb {
+                    stack.push((b, lb));
+                    stack.push((a, la));
+                } else {
+                    stack.push((a, la));
+                    stack.push((b, lb));
+                }
                 continue;
             }
             for &e in &self.entries[b.range.clone()] {
@@ -219,6 +239,7 @@ impl<'a> ChildQuery<'a> {
                 }
             }
         }
+        self.stack = stack;
         Ok(best.map(|(_, e, b)| (e, b)))
     }
     pub(super) fn signal(
