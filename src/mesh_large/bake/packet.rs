@@ -625,6 +625,15 @@ pub(super) fn decode(
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<PreencodeChild, JobError> {
+    decode_owned(bytes, memory, check).map(|(child, _)| child)
+}
+/// [`decode`], also returning the bytes charged for the decoded child alone (the lease
+/// minus the encoded input), which stay owned after `bytes` is dropped.
+pub(super) fn decode_owned(
+    bytes: &[u8],
+    memory: u64,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<(PreencodeChild, u64), JobError> {
     check()?;
     let mut r = Reader {
         check,
@@ -643,8 +652,9 @@ pub(super) fn decode(
     if r.offset != bytes.len() {
         return Err(invalid("child packet trailing bytes"));
     }
+    let owned = r.used - bytes.len() as u64;
     validate(&child, check)?;
-    Ok(child)
+    Ok((child, owned))
 }
 
 #[cfg(test)]
@@ -690,6 +700,25 @@ mod tests {
         let mut trailing = bytes;
         trailing.push(0);
         assert!(decode(&trailing, 4096, &mut || Ok(())).is_err());
+    }
+
+    #[test]
+    fn decoded_owner_is_exactly_the_lease_beyond_the_encoded_bytes() {
+        let bytes = encode(&child(), 4096, &mut || Ok(())).unwrap();
+        let (_, owned) = decode_owned(&bytes, 1 << 20, &mut || Ok(())).unwrap();
+        assert!(owned >= std::mem::size_of::<PreencodeChild>() as u64);
+        let exact = bytes.len() as u64 + owned;
+        assert_eq!(
+            decode_owned(&bytes, exact, &mut || Ok(())).unwrap().1,
+            owned
+        );
+        assert_eq!(
+            decode(&bytes, exact - 1, &mut || Ok(()))
+                .err()
+                .unwrap()
+                .kind(),
+            crate::JobErrorKind::ResourceLimit
+        );
     }
 
     #[test]

@@ -516,6 +516,10 @@ pub(super) fn from_witness(
 
 /// Every retained child of `frozen`, within `memory` bytes: proxy children are the
 /// bake's own exact packets; leaf children come from their accepted witness.
+///
+/// The children share one running lease rather than equal fixed shares, so one large
+/// child may use what its smaller siblings leave. Each child's transient read and
+/// decode work is bounded by what remains; only its decoded owner stays charged.
 pub(super) fn load_children(
     pass: &BakePass<'_>,
     frozen: &handoff::FrozenNode,
@@ -529,40 +533,46 @@ pub(super) fn load_children(
     let owner = (frozen.children.len() as u64)
         .checked_mul(std::mem::size_of::<PreencodeChild>() as u64)
         .ok_or_else(|| resource("retained children outer owner overflow"))?;
-    let residual = memory
+    let mut remaining = memory
         .checked_sub(owner)
         .ok_or_else(|| resource("retained children outer owner lease"))?;
     let mut out = Vec::new();
     out.try_reserve_exact(frozen.children.len())
         .map_err(|_| resource("retained children reserve"))?;
-    // Each child gets one share for its read and one for its decoded owner.
-    let share = residual
-        .checked_div(2 * frozen.children.len().max(1) as u64)
-        .unwrap();
     for child in &frozen.children {
         check()?;
-        if let Some(leaf) = &child.leaf {
-            let packet = pass.preencode.read_leaf(leaf.index, share, pass.check)?;
-            out.push(from_witness(parent, child, &packet, share, check)?);
-            continue;
-        }
-        let bytes = pass
-            .preencode
-            .read_proxy(child.first, child.depth, share, pass.check)?;
-        let decoded = packet::decode(&bytes, share, check)?;
-        if decoded.node.first != child.first
-            || decoded.node.end != child.end
-            || decoded.node.depth() != child.depth
-        {
-            return Err(invalid("retained proxy child identity/rank"));
-        }
-        if decoded
-            .pages
-            .iter()
-            .any(|p| p.slot == TextureSlot::Normal && p.normal_scale.to_bits() != 1.0f64.to_bits())
-        {
-            return Err(invalid("retained proxy normal scale was not absorbed"));
-        }
+        let (decoded, owned) = if let Some(leaf) = &child.leaf {
+            // The retained packet and the bridge's working set are live together.
+            let packet = pass
+                .preencode
+                .read_leaf(leaf.index, remaining / 2, pass.check)?;
+            let decoded = from_witness(parent, child, &packet, remaining / 2, check)?;
+            let owned = (decoded.faces.len() as u64)
+                .checked_mul(std::mem::size_of::<ChildFace>() as u64)
+                .ok_or_else(|| resource("retained leaf child owner overflow"))?;
+            (decoded, owned)
+        } else {
+            // The decode lease counts the encoded bytes it reads from.
+            let bytes =
+                pass.preencode
+                    .read_proxy(child.first, child.depth, remaining, pass.check)?;
+            let (decoded, owned) = packet::decode_owned(&bytes, remaining, check)?;
+            if decoded.node.first != child.first
+                || decoded.node.end != child.end
+                || decoded.node.depth() != child.depth
+            {
+                return Err(invalid("retained proxy child identity/rank"));
+            }
+            if decoded.pages.iter().any(|p| {
+                p.slot == TextureSlot::Normal && p.normal_scale.to_bits() != 1.0f64.to_bits()
+            }) {
+                return Err(invalid("retained proxy normal scale was not absorbed"));
+            }
+            (decoded, owned)
+        };
+        remaining = remaining
+            .checked_sub(owned)
+            .ok_or_else(|| resource("retained children decoded ownership lease"))?;
         out.push(decoded);
     }
     Ok(out)

@@ -133,10 +133,6 @@ impl root::ProxyBaker for ProxyTextureBaker {
             return Ok(());
         };
         let workers = pass.jobs.min(widest).max(1);
-        let share = BakeLimits {
-            memory_bytes: limits.memory_bytes / workers as u64,
-            ..limits
-        };
         let failed = std::sync::atomic::AtomicBool::new(false);
         let cancelled = || -> Result<(), JobError> {
             if failed.load(std::sync::atomic::Ordering::Relaxed) {
@@ -148,9 +144,18 @@ impl root::ProxyBaker for ProxyTextureBaker {
             (pass.check)()
         };
         for (depth, firsts) in levels.iter().rev() {
+            // A depth narrower than the worker pool splits the lease among the workers
+            // it actually runs, so shallow tiles (with the largest retained children)
+            // get the larger share.
+            let running = workers.min(firsts.len()).max(1);
+            let share = BakeLimits {
+                memory_bytes: limits.memory_bytes / running as u64,
+                ..limits
+            };
+            let share = &share;
             let next = std::sync::atomic::AtomicUsize::new(0);
             let results: Vec<Result<(), JobError>> = std::thread::scope(|scope| {
-                let handles: Vec<_> = (0..workers.min(firsts.len()))
+                let handles: Vec<_> = (0..running)
                     .map(|_| {
                         scope.spawn(|| -> Result<(), JobError> {
                             let mut check = || cancelled();
@@ -169,7 +174,7 @@ impl root::ProxyBaker for ProxyTextureBaker {
                                     )?),
                                 };
                                 let outcome =
-                                    bake_tile(pass, share, source, first, *depth, &mut check);
+                                    bake_tile(pass, *share, source, first, *depth, &mut check);
                                 if outcome.is_err() {
                                     failed.store(true, std::sync::atomic::Ordering::Relaxed);
                                     return outcome;
