@@ -20,6 +20,7 @@ mod rows;
 #[cfg(test)]
 mod scale_driver;
 mod schema;
+mod stream_log;
 #[cfg(test)]
 mod traversal_controls;
 mod types;
@@ -716,7 +717,7 @@ struct UriFacts {
     exclusions: u16,
 }
 /// One tile of the traversal path (VS-B-3): f64 facts only.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct TileFact {
     /// The tile's own transform into its parent frame, when present.
     transform: Option<[f64; 16]>,
@@ -761,21 +762,14 @@ struct Containment {
     levels: Vec<LevelFacts>,
     /// The phase-1 arena (rotation admission).
     arena: Option<Arena>,
-    stream: Stream,
 }
-/// Inline phase 2 (VS-B-4): the state the old post-traversal stream carried across
-/// references, in traversal order.
+/// Phase 2 (VS-B-4): the state the stream carries across references, in traversal order.
 #[derive(Default)]
 struct Stream {
     arena: Option<Arena>,
     bitmap: Vec<u64>,
     credit: Credit,
     reread: u64,
-    /// Whether any reference was streamed.
-    started: bool,
-    /// The first stream failure: published only after C1 success with the archive in
-    /// domain, under the unchanged precedence (R8).
-    failure: Option<Error>,
 }
 impl Containment {
     fn new(limits: &ValidationLimits) -> Self {
@@ -795,7 +789,6 @@ impl Containment {
             path: Vec::new(),
             levels: Vec::new(),
             arena: None,
-            stream: Stream::default(),
         }
     }
     fn exclude(&mut self, reason: Reason) {
@@ -878,8 +871,8 @@ impl Containment {
     /// Collect chain exclusions in O(1) and run the precheck step for one
     /// reference, in traversal order. The precheck stops at its first violation;
     /// the level chain is built only when the precheck step runs (C2-WB §3.3).
-    /// Returns whether the reference is to be streamed now (VS-B-4): its step passed and no
-    /// stream failure is recorded. `self.levels` then holds its chain.
+    /// Returns whether the precheck step passed: the reference joins the phase-2 stream
+    /// (VS-B-4). `self.levels` then holds its chain.
     fn reference(
         &mut self,
         tile: usize,
@@ -896,7 +889,7 @@ impl Containment {
         }
         self.build_levels(tile, content)?;
         self.precheck = self.precheck_step(facts);
-        Ok(self.precheck.is_none() && self.stream.failure.is_none())
+        Ok(self.precheck.is_none())
     }
     /// One reference's charge: `T·V + Nodes + Idx + E` plus the per-reference
     /// terms (C2-WB §3.1), against the work cap; `B` and `Dec` also against
@@ -1236,6 +1229,8 @@ struct Check<'a> {
     extension_labels: Labels,
     /// Σ live-document charges of the documents being traversed (VS-B-7).
     live_documents: u64,
+    /// The phase-2 stream log while the archive is in domain (VS-B-4).
+    stream_log: Option<stream_log::StreamLog>,
     /// One per validation: the I1 allowances.
     implicit: ImplicitLimits,
     /// Implicit roots read in this validation (report labels, OD-4).
@@ -1303,6 +1298,10 @@ struct Summary {
     root_transform: [f64; 16],
     root_error: f64,
     document_error: f64,
+    /// The largest live-document charge of the expansion above the placement's own
+    /// (VS-B-7): a placement may use the summary only if it fits, so the limit's verdict
+    /// does not depend on the memo.
+    live_peak: u64,
     /// The document's own C2 registrations, in traversal order (EM-5.4).
     events: Vec<Event>,
 }
@@ -1356,6 +1355,10 @@ struct Recorder {
     node_depth: usize,
     document_error: f64,
     root: Option<(Volume, [f64; 16], f64)>,
+    /// `live_documents` before this placement, and its largest value during the expansion,
+    /// replayed nested placements included (VS-B-7).
+    live_base: u64,
+    live_peak: u64,
     /// The document's own tiles registered so far: local indices `0..locals`.
     locals: usize,
     events: Vec<Event>,
@@ -1581,8 +1584,8 @@ impl Check<'_> {
         self.rows.push(&report.uri, member.name_ref, &report)?;
         Ok(stored)
     }
-    /// One C2 reference: registration and precheck step and, while in domain, its inline
-    /// stream (VS-B-4).
+    /// One C2 reference: registration and precheck step; a reference whose step passed is
+    /// logged for the phase-2 stream (VS-B-4).
     fn c2_ref(
         &mut self,
         tile: usize,
@@ -1591,33 +1594,81 @@ impl Check<'_> {
         stored: &Stored,
     ) -> Result<(), Error> {
         if !self.c2.reference(tile, content, &stored.facts)? {
-            return Ok(());
+            return self.log(None);
         }
-        let depth = self.c2.on_path(tile)?.depth;
         #[cfg(test)]
         if let Some(deferred) = &mut self.deferred {
-            // The reference traversal: the old phase 2 streams after traversal.
+            // The reference traversal: the old phase 2 over in-memory chains, with a full
+            // C1 re-inspection per reference.
             let levels = self.c2.levels.clone();
+            let depth = self.c2.on_path(tile)?.depth;
             return try_push(deferred, (levels, rank, stored.facts.t, depth));
         }
-        self.c2.stream.started = true;
-        // Phase 2 of this reference, right after its passing precheck step (VS-B-4), as a
-        // replay of the payload's own successful first admission (H23). A failure is
-        // recorded; it is published only after whole-archive C1, exclusion and precheck
-        // admission, under the outcome precedence.
-        if let Err(failure) = stream_member(
-            &mut self.resources,
-            &mut self.c2.stream,
-            self.c2.caps,
-            &self.c2.levels,
-            depth,
+        self.log(Some(stream_log::Entry::Reference {
+            tile,
+            content,
             rank,
-            stored.facts.t,
-            Some(&stored.replay),
-        ) {
-            self.c2.stream.failure = Some(failure);
+        }))
+    }
+    /// A tile on the path stack, logged for the phase-2 stream while in domain (VS-B-4).
+    fn path_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        let index = self.c2.tile(fact)?;
+        self.log(Some(stream_log::Entry::Tile(fact)))?;
+        Ok(index)
+    }
+    /// Appends to the phase-2 stream log while the archive is in domain; the log is dropped
+    /// as soon as it is not, since no stream will then run.
+    fn log(&mut self, entry: Option<stream_log::Entry>) -> Result<(), Error> {
+        if self.c2.exclusions != 0 || self.c2.precheck.is_some() {
+            self.stream_log = None;
+            return Ok(());
         }
-        Ok(())
+        match (entry, &mut self.stream_log) {
+            (Some(entry), Some(log)) => log.push(&entry, &self.scratch),
+            _ => Ok(()),
+        }
+    }
+    /// Phase 2 (VS-B-4), after whole-archive C1, exclusion and precheck admission: the
+    /// logged tiles rebuild the path stack in traversal order, and each logged reference is
+    /// streamed along its level chain as a replay of its payload's own first admission
+    /// (H23, VS-B-11). The first failure is the result.
+    fn stream(&mut self) -> Result<(), Error> {
+        let Some(log) = self.stream_log.take() else {
+            return Err(Error::InvalidState(
+                "phase-2 stream log missing for an archive in domain".into(),
+            ));
+        };
+        let log = log.finish(&self.scratch)?;
+        let mut stream = Stream {
+            arena: match self.c2.arena.take() {
+                Some(arena) => Some(arena),
+                None => Some(Arena::reserve(self.c2.caps).map_err(|_| refused())?),
+            },
+            ..Stream::default()
+        };
+        self.c2.path = Vec::new();
+        log.for_each(|entry| match entry {
+            stream_log::Entry::Tile(fact) => self.c2.tile(fact).map(|_| ()),
+            stream_log::Entry::Reference {
+                tile,
+                content,
+                rank,
+            } => {
+                self.c2.build_levels(tile, content)?;
+                let stored = self.facts.get(rank)?;
+                let depth = self.c2.on_path(tile)?.depth;
+                stream_member(
+                    &mut self.resources,
+                    &mut stream,
+                    self.c2.caps,
+                    &self.c2.levels,
+                    depth,
+                    rank,
+                    stored.facts.t,
+                    Some(&stored.replay),
+                )
+            }
+        })
     }
     /// The `schemaUri` document of a tileset, read once per preparation, with its
     /// live-document charge.
@@ -1643,6 +1694,9 @@ impl Check<'_> {
             .checked_add(charge)
             .filter(|&n| n <= limit)
             .ok_or_else(|| Error::limit(format!("live tileset documents exceed {limit} bytes")))?;
+        if let Some(recorder) = self.recording.last_mut() {
+            recorder.live_peak = recorder.live_peak.max(self.live_documents);
+        }
         Ok(())
     }
     fn tileset(
@@ -1775,6 +1829,11 @@ impl Check<'_> {
                 summary.bytes,
                 limits.total_bytes_read,
             )
+            && within(
+                self.live_documents,
+                summary.live_peak,
+                limits.live_document_bytes,
+            )
             && deep(summary.tileset_depth, 128)
             && deep(summary.node_depth, limits.hierarchy_depth))
         .then(|| summary.clone())
@@ -1810,7 +1869,9 @@ impl Check<'_> {
         self.tiles += summary.tiles;
         self.contents += summary.contents;
         self.links += summary.links;
+        let live = self.live_documents + summary.live_peak;
         let recording = self.recording.last_mut().map(|recorder| {
+            recorder.live_peak = recorder.live_peak.max(live);
             recorder.tileset_depth = recorder.tileset_depth.max(depth + summary.tileset_depth);
             recorder.node_depth = recorder.node_depth.max(depth + summary.node_depth);
             (recorder.opaque, depth - recorder.depth)
@@ -1864,7 +1925,7 @@ impl Check<'_> {
                         None => (frame.link.parent, frame.link.external),
                         Some(local) => (Some(frame.locals[*local]), None),
                     };
-                    let index = self.c2.tile(TileFact {
+                    let index = self.path_tile(TileFact {
                         transform: *transform,
                         volume: *volume,
                         external,
@@ -1964,6 +2025,8 @@ impl Check<'_> {
             node_depth: depth,
             document_error: 0.,
             root: None,
+            live_base: self.live_documents,
+            live_peak: self.live_documents,
             locals: 0,
             events: Vec::new(),
             held: 0,
@@ -2009,6 +2072,7 @@ impl Check<'_> {
                     root_transform,
                     root_error,
                     document_error: recorder.document_error,
+                    live_peak: recorder.live_peak - recorder.live_base,
                     events: recorder.events,
                 }))
             }
@@ -2022,6 +2086,7 @@ impl Check<'_> {
             self.memo.insert(name, summary.clone());
         }
         let outer = self.recording.last_mut().map(|outer| {
+            outer.live_peak = outer.live_peak.max(recorder.live_peak);
             outer.tileset_depth = outer.tileset_depth.max(recorder.tileset_depth);
             outer.node_depth = outer.node_depth.max(recorder.node_depth);
             (outer.opaque, recorder.depth - outer.depth)
@@ -2060,7 +2125,7 @@ impl Check<'_> {
         if let (Some(Some(_)), Some(recorder)) = (mapped, self.recording.last()) {
             fact.owner = Some((recorder.serial, recorder.locals));
         }
-        let index = self.c2.tile(fact)?;
+        let index = self.path_tile(fact)?;
         match mapped {
             None => {}
             Some(Some(parent)) => {
@@ -2557,7 +2622,7 @@ impl Check<'_> {
             }
             // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for
             // a rowless I_0, and no volume for a derived cell (I5).
-            let index = self.c2.tile(TileFact {
+            let index = self.path_tile(TileFact {
                 transform: None,
                 volume: match &tile.volume {
                     EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),
@@ -3086,6 +3151,7 @@ fn inspect_run(
         scratch: scratch.clone(),
         extension_labels: Labels::default(),
         live_documents: 0,
+        stream_log: Some(stream_log::StreamLog::new(&config)),
         resources: ArchiveResources {
             archive: &mut archive,
             used,
@@ -3160,8 +3226,7 @@ fn inspect_run(
     }
     unreferenced(check.resources.archive, &check.resources.used)?;
     // C2 outcome precedence after C1 success: exclusions, then the precheck,
-    // then the recorded stream failure (Outside, allocation refusal, fault), otherwise
-    // Contained (VS-B-4).
+    // then streaming (Outside or allocation refusal), otherwise Contained.
     let reasons = if check.c2.exclusions != 0 {
         check.c2.exclusions
     } else {
@@ -3178,13 +3243,7 @@ fn inspect_run(
     let labels = std::mem::take(&mut check.extension_labels);
     check.not_inspected.extend(labels.kept);
     if contained {
-        if let Some(failure) = check.c2.stream.failure.take() {
-            return Err(failure);
-        }
-        // The old phase 2 reserved its arena even with nothing to stream.
-        if !check.c2.stream.started && check.c2.arena.is_none() {
-            Arena::reserve(check.c2.caps).map_err(|_| refused())?;
-        }
+        check.stream()?;
         #[cfg(test)]
         if let Some(deferred) = check.deferred.take() {
             let mut stream = Stream {
@@ -3220,7 +3279,7 @@ fn inspect_run(
     check.c2.path = Vec::new();
     check.c2.levels = Vec::new();
     check.c2.arena = None;
-    check.c2.stream = Stream::default();
+    check.stream_log = None;
     check.facts = FactStore::new(0, &config)?;
     check.progress.phase("validate.rows", None)?;
     let payloads = check.rows.finish(names, scratch.clone())?;

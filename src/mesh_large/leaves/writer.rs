@@ -23,6 +23,13 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
+    /// Decoded published POSITION per primitive, in corner order (the lattice decode the
+    /// writer proves client-order exact).
+    pub positions: Vec<Vec<[f32; 3]>>,
+    /// The NORMAL a renderer reads per primitive, in corner order (empty without
+    /// NORMAL): the octahedral codes decoded by the reference meshopt filter and read
+    /// as normalized SHORT, or the published f32 values.
+    pub normals: Vec<Vec<[f32; 3]>>,
 }
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]
@@ -103,7 +110,10 @@ impl Wire {
         self.binary.resize(offset, 0);
         self.binary.extend_from_slice(bytes);
         let mut view = json!({"buffer":0,"byteOffset":offset,"byteLength":bytes.len()});
-        if let Some(MeshoptStream::Attributes { stride, .. }) = stream {
+        if let Some(
+            MeshoptStream::Attributes { stride, .. } | MeshoptStream::Octahedral { stride, .. },
+        ) = stream
+        {
             view["target"] = json!(34962);
             view["byteStride"] = json!(stride);
         }
@@ -127,6 +137,53 @@ impl Wire {
         let index = self.accessors.len();
         self.accessors.push(json!({"bufferView":view,"componentType":component,"count":count,"type":shape,"normalized":false}));
         Ok(index)
+    }
+    /// One tightly packed property-table column (no `byteStride` or `target`). Columns of
+    /// 4- or 8-byte values are meshopt ATTRIBUTES streams with the value width as stride,
+    /// so decoded bytes are unchanged; UINT8 columns stay raw because the extension needs
+    /// a stride divisible by 4.
+    fn column(&mut self, bytes: &[u8], width: usize) -> Result<usize, JobError> {
+        let index = self.view(bytes, None)?;
+        if width.is_multiple_of(4) {
+            self.streams[index] = Some(MeshoptStream::Attributes {
+                count: bytes.len() / width,
+                stride: width,
+            });
+        }
+        Ok(index)
+    }
+    /// Unit normals as `bits`-bit octahedral codes behind the meshopt OCTAHEDRAL filter;
+    /// clients decode them to normalized SHORT VEC3 (KHR_mesh_quantization).
+    /// Also returns what a renderer reads: the codes through the reference meshopt
+    /// OCTAHEDRAL filter decode, as normalized SHORT (`max(c / 32767, -1)`).
+    fn octahedral(
+        &mut self,
+        normals: &[[f32; 3]],
+        bits: u8,
+    ) -> Result<(usize, Vec<[f32; 3]>), JobError> {
+        // Capture refuses non-finite normals, so one here is a broken prepared leaf: a
+        // typed state failure, as for non-finite float attributes, never a budget retry.
+        if normals.iter().flatten().any(|v| !v.is_finite()) {
+            return Err(invalid("non-finite prepared leaf NORMAL"));
+        }
+        let bytes = glb::encode_octahedral(normals, bits).map_err(|e| invalid(&e.to_string()))?;
+        let count = normals.len();
+        let filtered = crate::content_integrity::meshopt::unfilter_octahedral(&bytes, count, 8)
+            .map_err(|e| invalid(&format!("octahedral NORMAL decode: {e}")))?;
+        let decoded = filtered
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|e| {
+                std::array::from_fn(|a| {
+                    (f32::from(i16::from_le_bytes([e[2 * a], e[2 * a + 1]])) / 32767.).max(-1.)
+                })
+            })
+            .collect();
+        let view = self.view(&bytes, Some(MeshoptStream::Octahedral { count, stride: 8 }))?;
+        let index = self.accessors.len();
+        self.accessors.push(json!({"bufferView":view,"componentType":5122,"count":count,"type":"VEC3","normalized":true}));
+        Ok((index, decoded))
     }
     fn floats(&mut self, rows: &[Vec<f32>], shape: &str) -> Result<usize, JobError> {
         let width = rows
@@ -260,6 +317,35 @@ fn validate_closure(atlas: &PreparedAtlas) -> Result<bool, JobError> {
                 )?;
             }
         }
+        for entry in &primitive.feature_id_textures {
+            let texture = &entry["texture"];
+            let n = index(
+                &texture["index"],
+                atlas.textures.len(),
+                "prepared ID texture missing",
+            )?;
+            let uv = texture.get("texCoord").cloned().unwrap_or(json!(0));
+            index(&uv, primitive.uvs.len(), "prepared ID TEXCOORD missing")?;
+            let channels = texture["channels"].as_array();
+            if entry["featureCount"].as_u64().is_none_or(|n| n == 0)
+                || channels.is_none_or(|c| {
+                    c.is_empty()
+                        || c.len() > 4
+                        || c.iter().any(|v| v.as_u64().is_none_or(|v| v > 3))
+                })
+                || atlas.textures[n].get("extensions").is_some()
+            {
+                return Err(invalid(
+                    "prepared ID texture entry is not a PNG feature ID texture",
+                ));
+            }
+            let s = index(
+                &atlas.textures[n]["sampler"],
+                atlas.samplers.len(),
+                "prepared ID texture sampler missing",
+            )?;
+            super::id_texture::check_sampler(&atlas.samplers[s])?;
+        }
     }
     Ok(basis)
 }
@@ -294,13 +380,13 @@ pub(super) fn encode(
     if total as u64 > CONSUMER_TABLE_ROWS {
         return Err(invalid("leaf property table exceeds the consumer row limit").into());
     }
-    // Every triangle's mandatory numeric columns are uncompressed: this lower
+    // Every triangle's two UINT8 provenance columns stay uncompressed: this lower
     // bound rejects impossible tiles BEFORE allocating geometry or compression.
     let page_bytes = atlas.pages.iter().try_fold(0u64, |sum, p| {
         sum.checked_add(p.bytes.len() as u64).ok_or_else(overflow)
     })?;
     if (total as u64)
-        .checked_mul(58)
+        .checked_mul(2)
         .and_then(|n| n.checked_add(page_bytes))
         .ok_or_else(overflow)?
         > limit
@@ -339,6 +425,9 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
+    let mut decoded_positions = Vec::with_capacity(atlas.primitives.len());
+    let mut renderer_normals = Vec::with_capacity(atlas.primitives.len());
+    let octahedral = lattice.profile().leaf_normal_octahedral_bits();
     for primitive in &atlas.primitives {
         let flags = primitive.triangles[0].flags;
         if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
@@ -350,7 +439,7 @@ pub(super) fn encode(
             .flat_map(|t| t.triangle.positions)
             .collect();
         let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
-        let position = lattice.encode(&points, &depths, u32::from(depth))?;
+        let mut position = lattice.encode(&points, &depths, u32::from(depth))?;
         bounds.union(&position.bounds);
         geometry_error = geometry_error.max(position.correspondence_error);
         let count = points.len();
@@ -391,13 +480,39 @@ pub(super) fn encode(
                 id
             }
         };
+        decoded_positions.push(std::mem::take(&mut position.decoded));
+        if flags & NORMAL == 0 {
+            renderer_normals.push(Vec::new());
+        }
         let mut attributes = json!({"POSITION":pos});
         for (flag, name, shape) in [
             (NORMAL, "NORMAL", "VEC3"),
             (TANGENT, "TANGENT", "VEC4"),
             (COLOR, "COLOR_0", "VEC4"),
         ] {
-            if flags & flag != 0 {
+            if flags & flag == 0 {
+                continue;
+            }
+            if let (NORMAL, Some(bits)) = (flag, octahedral) {
+                let normals: Vec<[f32; 3]> = primitive
+                    .triangles
+                    .iter()
+                    .flat_map(|t| t.corners.iter().map(|c| c.normal))
+                    .collect();
+                let (id, decoded) = wire.octahedral(&normals, bits)?;
+                attributes[name] = json!(id);
+                renderer_normals.push(decoded);
+                quantized = true;
+            } else {
+                if flag == NORMAL {
+                    renderer_normals.push(
+                        primitive
+                            .triangles
+                            .iter()
+                            .flat_map(|t| t.corners.iter().map(|c| c.normal))
+                            .collect(),
+                    );
+                }
                 let rows: Vec<Vec<f32>> = primitive
                     .triangles
                     .iter()
@@ -430,9 +545,12 @@ pub(super) fn encode(
             attributes[format!("_FEATURE_ID_{set}")] =
                 json!(wire.attribute(&bytes, count, 4, 5126, "SCALAR")?);
         }
-        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":[
-            {"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"},
-            {"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}]}}});
+        let mut feature_ids = vec![
+            json!({"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"}),
+            json!({"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}),
+        ];
+        feature_ids.extend(primitive.feature_id_textures.iter().cloned());
+        let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":feature_ids}}});
         if let Some(material) = &primitive.material {
             output["material"] = json!(materials.len());
             materials.push(material.clone());
@@ -488,7 +606,7 @@ pub(super) fn encode(
                 };
                 bytes.extend_from_slice(&value.to_le_bytes()[..width]);
             }
-            properties.insert(name.into(), json!({"values":wire.view(&bytes,None)?}));
+            properties.insert(name.into(), json!({"values":wire.column(&bytes,width)?}));
             schema.insert(
                 name.into(),
                 json!({"type":"SCALAR","componentType":component,"required":true}),
@@ -552,6 +670,8 @@ pub(super) fn encode(
         glb: output,
         bounds,
         geometry_error,
+        positions: decoded_positions,
+        normals: renderer_normals,
     })
 }
 
@@ -622,6 +742,7 @@ mod tests {
                     .map(|set| vec![[set as f32 / 8.0, 0.25]; 6])
                     .collect(),
                 material: Some(material),
+                feature_id_textures: Vec::new(),
             }],
             pages: vec![PreparedPage {
                 bytes: png.into_inner(),
@@ -629,6 +750,7 @@ mod tests {
             }],
             textures: vec![json!({"source":0,"sampler":0})],
             samplers: vec![json!({"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071})],
+            preencode: Vec::new(),
         }
     }
     fn plan(profile: Profile) -> LatticePlan {
@@ -664,20 +786,18 @@ mod tests {
             .get("extensions")
             .and_then(|x| x.get("EXT_meshopt_compression"))
         {
+            use crate::content_integrity::meshopt::{self, Filter, Mode};
             assert_eq!(e["mode"], "ATTRIBUTES");
-            assert_eq!(e["filter"], "NONE");
+            let filter = Filter::parse(e["filter"].as_str().unwrap()).unwrap();
             let start = e["byteOffset"].as_u64().unwrap() as usize;
             let length = e["byteLength"].as_u64().unwrap() as usize;
-            crate::content_integrity::meshopt::check_header(
-                &bin[start..start + length],
-                crate::content_integrity::meshopt::Mode::Attributes,
-            )
-            .unwrap();
-            crate::content_integrity::meshopt::decode(
+            meshopt::check_header(&bin[start..start + length], Mode::Attributes).unwrap();
+            meshopt::decode_filtered(
                 &bin[start..start + length],
                 e["count"].as_u64().unwrap() as usize,
                 e["byteStride"].as_u64().unwrap() as usize,
-                crate::content_integrity::meshopt::Mode::Attributes,
+                Mode::Attributes,
+                filter,
             )
             .unwrap()
         } else {
@@ -740,8 +860,31 @@ mod tests {
             }
         }
         assert_eq!(leaf.geometry_error, expected.correspondence_error);
+        // Balanced NORMAL: 12-bit octahedral codes, decoded as normalized SHORT VEC3.
+        let normal = &doc["accessors"][attributes["NORMAL"].as_u64().unwrap() as usize];
+        assert_eq!(
+            (
+                &normal["componentType"],
+                &normal["normalized"],
+                &normal["type"]
+            ),
+            (&json!(5122), &json!(true), &json!("VEC3"))
+        );
+        let normal_view = &doc["bufferViews"][normal["bufferView"].as_u64().unwrap() as usize];
+        assert_eq!(normal_view["byteStride"], 8);
+        assert_eq!(
+            normal_view["extensions"]["EXT_meshopt_compression"]["filter"],
+            "OCTAHEDRAL"
+        );
+        let decoded = view(&doc, bin, normal["bufferView"].as_u64().unwrap() as usize);
+        let shorts: Vec<_> = decoded
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| i16::from_le_bytes(*b))
+            .collect();
+        assert_eq!(shorts, [0, 0, 32767, 0].repeat(6));
         for (name, truth) in [
-            ("NORMAL", vec![0., 0., 1.]),
             ("TANGENT", vec![1., 0., 0., -1.]),
             ("COLOR_0", vec![0.3, 0.5, 0.7, 0.9]),
         ] {
@@ -797,6 +940,259 @@ mod tests {
         );
         assert_eq!(page, input.pages[0].bytes);
     }
+    /// Every provenance column decodes to the exact source values in every profile: 4- and
+    /// 8-byte columns are tightly packed meshopt ATTRIBUTES streams (value width as stride,
+    /// no parent `byteStride`/`target`), UINT8 columns stay raw, and the schema is unchanged.
+    #[test]
+    fn provenance_columns_are_lossless_meshopt_streams_with_the_unchanged_schema() {
+        let mut input = atlas();
+        let triangles = &mut input.primitives[0].triangles;
+        for (i, t) in triangles.iter_mut().enumerate() {
+            t.triangle.vertices = [u64::MAX - i as u64, (1 << 33) + i as u64, 7 * i as u64];
+        }
+        for profile in [Profile::Balanced, Profile::Lossless] {
+            let leaf = encode(&input, &plan(profile), 1, TILE_LIMIT).unwrap();
+            let (doc, bin) = parse(&leaf.glb);
+            let metadata = &doc["extensions"]["EXT_structural_metadata"];
+            assert_eq!(metadata["schema"]["id"], "rusty_tiles_large_source_v1");
+            let rows = &input.primitives[0].triangles;
+            let class = &metadata["schema"]["classes"]["source_triangle"]["properties"];
+            for (name, width, expected) in [
+                (
+                    "node_index",
+                    4,
+                    rows.iter()
+                        .map(|r| u64::from(r.triangle.source.node))
+                        .collect::<Vec<_>>(),
+                ),
+                (
+                    "mesh_index",
+                    4,
+                    rows.iter()
+                        .map(|r| u64::from(r.triangle.source.mesh))
+                        .collect(),
+                ),
+                (
+                    "primitive_index",
+                    4,
+                    rows.iter()
+                        .map(|r| u64::from(r.triangle.source.primitive))
+                        .collect(),
+                ),
+                (
+                    "expanded_ordinal",
+                    8,
+                    rows.iter().map(|r| r.expanded_ordinal).collect(),
+                ),
+                (
+                    "material_index",
+                    4,
+                    rows.iter().map(|r| u64::from(r.material)).collect(),
+                ),
+                (
+                    "triangle_index",
+                    8,
+                    rows.iter().map(|r| r.triangle.source.triangle).collect(),
+                ),
+                (
+                    "vertex_0",
+                    8,
+                    rows.iter().map(|r| r.triangle.vertices[0]).collect(),
+                ),
+                (
+                    "vertex_1",
+                    8,
+                    rows.iter().map(|r| r.triangle.vertices[1]).collect(),
+                ),
+                (
+                    "vertex_2",
+                    8,
+                    rows.iter().map(|r| r.triangle.vertices[2]).collect(),
+                ),
+                (
+                    "attribute_flags",
+                    1,
+                    rows.iter().map(|r| u64::from(r.flags)).collect(),
+                ),
+                (
+                    "degenerate",
+                    1,
+                    rows.iter()
+                        .map(|r| u64::from(r.triangle.degenerate))
+                        .collect(),
+                ),
+            ] {
+                let component = match width {
+                    1 => "UINT8",
+                    4 => "UINT32",
+                    _ => "UINT64",
+                };
+                assert_eq!(
+                    class[name],
+                    json!({"type":"SCALAR","componentType":component,"required":true})
+                );
+                let index = metadata["propertyTables"][1]["properties"][name]["values"]
+                    .as_u64()
+                    .unwrap() as usize;
+                let parent = &doc["bufferViews"][index];
+                assert!(parent.get("byteStride").is_none() && parent.get("target").is_none());
+                assert_eq!(parent["byteLength"], rows.len() * width);
+                let meshopt = parent
+                    .get("extensions")
+                    .map(|e| &e["EXT_meshopt_compression"]);
+                if width == 1 {
+                    assert!(meshopt.is_none(), "{name}");
+                } else {
+                    let e = meshopt.unwrap();
+                    assert_eq!(
+                        (&e["mode"], &e["filter"], &e["byteStride"], &e["count"]),
+                        (
+                            &json!("ATTRIBUTES"),
+                            &json!("NONE"),
+                            &json!(width),
+                            &json!(rows.len())
+                        ),
+                        "{name}"
+                    );
+                }
+                let decoded: Vec<u64> = column(&doc, bin, 1, name)
+                    .chunks_exact(width)
+                    .map(|c| {
+                        let mut b = [0; 8];
+                        b[..width].copy_from_slice(c);
+                        u64::from_le_bytes(b)
+                    })
+                    .collect();
+                assert_eq!(decoded, expected, "{name}");
+            }
+            let normal = &doc["accessors"][doc["meshes"][0]["primitives"][0]["attributes"]["NORMAL"]
+                .as_u64()
+                .unwrap() as usize];
+            let lossless = profile == Profile::Lossless;
+            assert_eq!(normal["componentType"], if lossless { 5126 } else { 5122 });
+            assert_eq!(normal["normalized"], !lossless);
+            // Filter output is specified to one unit, so octahedral NORMAL declares no
+            // bounds a decoder on another host could miss by that unit.
+            assert!(normal.get("min").is_none() && normal.get("max").is_none());
+        }
+    }
+    /// A non-finite prepared NORMAL is a typed state failure in every profile (the octahedral
+    /// encoder refuses it as data), never a budget retry or a silently encoded vector.
+    #[test]
+    fn non_finite_normals_are_typed_failures() {
+        assert!(matches!(
+            glb::encode_octahedral(&[[0., f32::NAN, 1.]], 12),
+            Err(crate::error::Error::Data(_))
+        ));
+        for profile in [Profile::Balanced, Profile::Lossless] {
+            let mut input = atlas();
+            input.primitives[0].triangles[1].corners[2].normal = [f32::INFINITY, 0., 0.];
+            match encode(&input, &plan(profile), 1, TILE_LIMIT) {
+                Err(WriteError::Failure(error)) => {
+                    assert_eq!(error.kind(), JobErrorKind::InvalidState, "{profile:?}");
+                    assert!(error.message().contains("finite"), "{error}");
+                }
+                other => panic!("{profile:?}: {other:?}"),
+            }
+        }
+    }
+    /// The 12-bit octahedral NORMAL bound over a dense sphere: decoded through the same
+    /// filter clients use, against the f32 source direction.
+    #[test]
+    fn octahedral_normals_stay_within_the_profile_angle() {
+        use crate::content_integrity::meshopt::{decode_filtered, Filter, Mode};
+        let n = 200_000;
+        let golden = std::f64::consts::PI * (3. - 5f64.sqrt());
+        let normals: Vec<[f32; 3]> = (0..n)
+            .map(|i| {
+                let z = 1. - 2. * (i as f64 + 0.5) / n as f64;
+                let r = (1. - z * z).sqrt();
+                let a = golden * i as f64;
+                [(r * a.cos()) as f32, (r * a.sin()) as f32, z as f32]
+            })
+            .chain([[0., 0., 1.], [0., 0., -1.], [1., 0., 0.], [0., -1., 0.]])
+            .collect();
+        let raw = glb::encode_octahedral(&normals, 12).unwrap();
+        let mut binary = Vec::new();
+        let mut doc = json!({"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":raw.len(),"byteStride":8}]});
+        let count = normals.len();
+        let out = glb::meshopt_compress(
+            &mut doc,
+            &raw,
+            MeshoptLayout {
+                align: 8,
+                explicit_filter: true,
+            },
+            |_, _| Ok(Some(MeshoptStream::Octahedral { count, stride: 8 })),
+        )
+        .unwrap();
+        binary.extend_from_slice(&out);
+        let decoded =
+            decode_filtered(&binary, count, 8, Mode::Attributes, Filter::Octahedral).unwrap();
+        let (mut max, mut sum) = (0f64, 0f64);
+        for (source, element) in normals.iter().zip(decoded.as_chunks::<8>().0) {
+            let q: [f64; 3] = std::array::from_fn(|a| {
+                f64::from(i16::from_le_bytes([element[2 * a], element[2 * a + 1]])) / 32767.
+            });
+            let s = source.map(f64::from);
+            let dot = (0..3).map(|a| q[a] * s[a]).sum::<f64>()
+                / ((q.iter().map(|v| v * v).sum::<f64>()).sqrt()
+                    * (s.iter().map(|v| v * v).sum::<f64>()).sqrt());
+            let angle = dot.clamp(-1., 1.).acos().to_degrees();
+            max = max.max(angle);
+            sum += angle;
+        }
+        let mean = sum / count as f64;
+        assert!(max < 0.07 && mean < 0.03, "oct12 max {max} mean {mean}");
+    }
+    #[test]
+    fn id_texture_sets_follow_the_source_sets_and_need_nearest() {
+        use super::super::id_texture::{bake, IdSet, Request};
+        // Five sets: the leaf carries 2 + 5 featureIds; nothing caps the count.
+        let sets = [IdSet { bytes: 1 }; 5];
+        let ids: Vec<u32> = (0..16 * 5).map(|i| (i % 7) as u32).collect();
+        let support = vec![1; 16];
+        let id = bake(&Request {
+            width: 4,
+            height: 4,
+            sets: &sets,
+            ids: &ids,
+            support: &support,
+            memory_limit: 1 << 30,
+        })
+        .unwrap();
+        let mut input = atlas();
+        let refs = id.append_level(&mut input, 0).unwrap();
+        input.primitives[0].feature_id_textures = refs
+            .iter()
+            .enumerate()
+            .map(|(k, r)| r.feature_id(0, &format!("annotation_{k}")).unwrap())
+            .collect();
+        let leaf = encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).unwrap();
+        let (doc, _) = parse(&leaf.glb);
+        let ids =
+            &doc["meshes"][0]["primitives"][0]["extensions"]["EXT_mesh_features"]["featureIds"];
+        assert_eq!(ids.as_array().unwrap().len(), 7);
+        for (k, r) in refs.iter().enumerate() {
+            let entry = &ids[2 + k];
+            assert_eq!(entry["nullFeatureId"], 255);
+            let texture = &doc["textures"][entry["texture"]["index"].as_u64().unwrap() as usize];
+            let sampler = &doc["samplers"][texture["sampler"].as_u64().unwrap() as usize];
+            assert_eq!(
+                (sampler["magFilter"].as_u64(), sampler["minFilter"].as_u64()),
+                (Some(9728), Some(9728))
+            );
+            assert_eq!(
+                doc["images"][texture["source"].as_u64().unwrap() as usize]["mimeType"],
+                "image/png"
+            );
+            assert_eq!(entry["texture"]["channels"], json!(r.channels));
+        }
+        // Mutant: a LINEAR sampler on an ID texture is refused by the writer.
+        let s = input.textures[refs[0].texture]["sampler"].as_u64().unwrap() as usize;
+        input.samplers[s]["magFilter"] = json!(9729);
+        assert!(encode(&input, &plan(Profile::Lossless), 1, TILE_LIMIT).is_err());
+    }
     #[test]
     fn float_profiles_keep_position_bits_and_each_node_owns_its_trs() {
         for profile in [Profile::Quality, Profile::Lossless] {
@@ -806,6 +1202,7 @@ mod tests {
                 corner_depths: vec![[1; 3]],
                 uvs: vec![],
                 material: None,
+                feature_id_textures: Vec::new(),
             });
             let leaf = encode(&input, &plan(profile), 1, TILE_LIMIT).unwrap();
             let (doc, bin) = parse(&leaf.glb);

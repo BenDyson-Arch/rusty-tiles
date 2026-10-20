@@ -25,6 +25,8 @@ impl SpaceRole {
 pub(crate) enum PreflightStage {
     Geometry,
     Texture,
+    /// H17 coarse levels: the vertex incidence join, slim source and proxy sidecars.
+    Lod,
 }
 
 impl PreflightStage {
@@ -32,6 +34,7 @@ impl PreflightStage {
         match self {
             Self::Geometry => "geometry",
             Self::Texture => "texture",
+            Self::Lod => "lod",
         }
     }
 }
@@ -61,6 +64,21 @@ fn validate_volume(volume: Volume) -> io::Result<Volume> {
         ));
     }
     Ok(volume)
+}
+
+/// Whether two existing paths are on one filesystem, so their space demands add up.
+/// Unix compares device ids; elsewhere every pair is conservatively one filesystem.
+pub(crate) fn same_filesystem(a: &Path, b: &Path) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(std::fs::metadata(a)?.dev() == std::fs::metadata(b)?.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        Ok(true)
+    }
 }
 
 /// Refuses before any workspace exists when `available < needed`.

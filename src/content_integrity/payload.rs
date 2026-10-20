@@ -334,7 +334,7 @@ fn decode_meshopt(
     source: usize,
     buffers: &[Cow<'_, [u8]>],
     ceiling: usize,
-) -> FormatResult<(Vec<u8>, usize)> {
+) -> FormatResult<(Vec<u8>, usize, super::meshopt::Filter)> {
     let compressed = range(&buffers[source], off(e.offset)?, uint(e.length)?)?;
     let count = usize::try_from(work(e.count, ceiling as u64)?)
         .map_err(|_| limit("meshopt count outside host range"))?;
@@ -351,11 +351,17 @@ fn decode_meshopt(
     let filter = e
         .filter
         .map_or_else(|| Ok("NONE".to_owned()), |v| string(Some(v)))?;
-    if filter != "NONE" {
-        return Err(unsupported("meshopt filters other than NONE"));
-    }
+    let filter = super::meshopt::Filter::parse(&filter)
+        .ok_or_else(|| unsupported("meshopt filters other than NONE and OCTAHEDRAL"))?;
     let mode = string(e.mode)?;
+    let octahedral = filter == super::meshopt::Filter::Octahedral;
     match mode.as_str() {
+        "ATTRIBUTES" if octahedral && stride != 4 && stride != 8 => {
+            return Err(invalid("meshopt OCTAHEDRAL filter needs byteStride 4 or 8"))
+        }
+        "TRIANGLES" | "INDICES" if octahedral => {
+            return Err(invalid("meshopt index modes admit only the NONE filter"))
+        }
         "ATTRIBUTES" if stride > 0 && stride <= 256 && stride % 4 == 0 => {}
         "TRIANGLES" if [2, 4].contains(&stride) && count % 3 == 0 => {}
         "INDICES" if [2, 4].contains(&stride) => {}
@@ -370,8 +376,8 @@ fn decode_meshopt(
         _ => super::meshopt::Mode::Indices,
     };
     super::meshopt::check_header(compressed, mode)?;
-    let out = super::meshopt::decode(compressed, count, stride, mode)?;
-    Ok((out, stride))
+    let out = super::meshopt::decode_filtered(compressed, count, stride, mode, filter)?;
+    Ok((out, stride, filter))
 }
 // Extension declarations are semantic checks. Opaque extras and extension bodies
 // remain outside this traversal; JSON admission already checked their structure.
@@ -735,6 +741,9 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
     drop(placeholder_covered);
     drop(lengths);
     let mut views = Vec::new();
+    // Views whose bytes come from a meshopt filter; the extension specifies filter output
+    // only to one unit in the last place (Appendix B), so their declared bounds get that.
+    let mut filtered = Vec::new();
     let mut view_budget = 0usize;
     for plan in &mut plans {
         let remaining = limits
@@ -748,8 +757,9 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
             if !used.contains("EXT_meshopt_compression") {
                 return Err(invalid("meshopt extension not declared").into());
             }
-            let (decoded, stride) =
+            let (decoded, stride, filter) =
                 decode_meshopt(&e, plan.meshopt_source.unwrap(), &buffers, remaining)?;
+            push(&mut filtered, filter != super::meshopt::Filter::None, slots)?;
             if decoded.len() != plan.length {
                 return Err(invalid("meshopt decoded size differs from bufferView").into());
             }
@@ -759,6 +769,7 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
             }
             push(&mut views, Cow::Owned(decoded), slots)?;
         } else {
+            push(&mut filtered, false, slots)?;
             push(
                 &mut views,
                 Cow::Borrowed(range(&buffers[plan.buffer], plan.offset, plan.length)?),
@@ -912,7 +923,14 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
                             );
                         }
                         // Published arbitrary-bound exemption applies only to viewless nonsparse storage.
-                        if view.is_some() && n != *actual {
+                        // Filtered (OCTAHEDRAL) integer output is specified to one unit, which
+                        // conforming decoders use differently (SIMD rsqrt), so a declared bound
+                        // within one unit of this decoder's value is admitted there only.
+                        let tolerance = match view {
+                            Some(v) if filtered[v] && [5120, 5122].contains(&component) => 1.,
+                            _ => 0.,
+                        };
+                        if view.is_some() && (n - *actual).abs() > tolerance {
                             return Err(invalid(
                                 "declared accessor bounds differ from decoded values",
                             )

@@ -15,8 +15,10 @@ use crate::archive3tz::CatalogConfig;
 use crate::content_integrity::payload::ReplayAdmission;
 use crate::spill::{Scratch, SlotFile};
 
-/// Encoded record width: 131 bytes of facts and the 64-byte replay receipt.
-pub(super) const WIDTH: usize = 195;
+/// Encoded record width: 131 bytes of facts, the 64-byte replay receipt and a CRC-32 of both.
+pub(super) const WIDTH: usize = 199;
+/// Bytes covered by the record's CRC-32.
+const BODY: usize = WIDTH - 4;
 /// Records per resident page.
 const PAGE: u64 = 64;
 
@@ -78,8 +80,21 @@ fn encode(stored: &Stored, out: &mut [u8; WIDTH]) {
     put(out, &f.exclusions.to_le_bytes());
     put(out, &stored.vertices.to_le_bytes());
     put(out, &stored.replay.to_stored_bytes());
-    debug_assert_eq!(at, WIDTH);
+    debug_assert_eq!(at, BODY);
     out[0] = flags;
+    let crc = crc32fast::hash(&out[..BODY]);
+    out[BODY..].copy_from_slice(&crc.to_le_bytes());
+}
+
+/// A record whose CRC-32 does not match is corrupt scratch, never a verdict.
+fn checked(bytes: &[u8; WIDTH], rank: u64) -> Result<Stored, Error> {
+    let crc = u32::from_le_bytes(bytes[BODY..].try_into().unwrap());
+    if crc32fast::hash(&bytes[..BODY]) != crc {
+        return Err(Error::InvalidState(format!(
+            "validation scratch: payload facts record {rank} is corrupt"
+        )));
+    }
+    Ok(decode(bytes))
 }
 
 fn decode(bytes: &[u8; WIDTH]) -> Stored {
@@ -118,7 +133,7 @@ fn decode(bytes: &[u8; WIDTH]) -> Stored {
         },
         vertices: u64_at(123),
         // Trusted: this validation's own record, guarded by the inspected bit.
-        replay: ReplayAdmission::from_stored_bytes(bytes[131..].try_into().unwrap()),
+        replay: ReplayAdmission::from_stored_bytes(bytes[131..BODY].try_into().unwrap()),
     }
 }
 
@@ -227,7 +242,15 @@ impl FactStore {
                 return Err(Error::InvalidState("payload facts store is empty".into()));
             }
         }
-        Ok(decode(&record))
+        checked(&record, rank)
+    }
+    /// Test seam: the scratch file of a spilled store, for corruption controls.
+    #[cfg(test)]
+    fn slot_file(&mut self) -> Option<&mut SlotFile> {
+        match &mut self.slots {
+            Some(Slots::Spilled(file)) => Some(file),
+            _ => None,
+        }
     }
 }
 
@@ -296,10 +319,16 @@ mod tests {
             FactStore::new(entries, &CatalogConfig::FORCED_SPILL).unwrap(),
         ];
         assert!(stores[0].resident && !stores[1].resident);
-        let ranks: Vec<u64> = (0..entries)
+        // Strided ranks plus a run of adjacent ones.
+        let mut ranks: Vec<u64> = (0..entries)
             .map(|i| (i * 617) % entries)
             .step_by(3)
             .collect();
+        ranks.extend(
+            (500..520)
+                .filter(|r| !ranks.contains(r))
+                .collect::<Vec<_>>(),
+        );
         for store in &mut stores {
             for &rank in &ranks {
                 store.insert(rank, &sample(rank), &scratch).unwrap();
@@ -315,6 +344,43 @@ mod tests {
             }
         }
         assert!(scratch.is_created(), "the forced profile spills");
+        // Scratch accounting: the spilled file's logical extent is one record past the
+        // highest rank written.
+        let top = ranks.iter().max().unwrap() + 1;
+        assert_eq!(scratch.peak_bytes(), top * WIDTH as u64);
+        assert_eq!(scratch.live_bytes(), top * WIDTH as u64);
+    }
+
+    #[test]
+    fn a_corrupt_record_is_a_typed_scratch_failure() {
+        let mut bytes = [0u8; WIDTH];
+        encode(&sample(7), &mut bytes);
+        assert_eq!(checked(&bytes, 7).unwrap(), sample(7));
+        for at in [0, 60, 130, 131, 194, WIDTH - 1] {
+            let mut flipped = bytes;
+            flipped[at] ^= 0x10;
+            assert!(
+                matches!(checked(&flipped, 7), Err(Error::InvalidState(m)) if m.contains("record 7 is corrupt")),
+                "byte {at}"
+            );
+        }
+        // A flipped byte in the spilled file itself.
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::deferred(crate::spill::Placement::In(dir.path().into()), 0);
+        let mut store = FactStore::new(16, &CatalogConfig::FORCED_SPILL).unwrap();
+        store.insert(5, &sample(5), &scratch).unwrap();
+        let file = store.slot_file().unwrap();
+        let mut record = [0u8; WIDTH];
+        file.read(5, &mut record).unwrap();
+        record[100] ^= 1;
+        file.write(5, &record).unwrap();
+        assert!(matches!(store.get(5), Err(Error::InvalidState(_))));
+    }
+
+    #[test]
+    fn the_scratch_estimate_counts_the_facts_file() {
+        assert_eq!(crate::archive3tz::FACTS_RECORD_BYTES, WIDTH as u64);
+        crate::archive3tz::CatalogConfig::assert_estimate_slope();
     }
 
     #[test]

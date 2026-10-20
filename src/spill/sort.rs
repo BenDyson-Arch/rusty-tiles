@@ -2,10 +2,15 @@
 //!
 //! Every merge breaks ties by source position (earlier input first) and runs are grouped
 //! consecutively, so the output is the stable sort of the input for any `R`, `F` and `jobs`.
+//!
+//! A run is stored as consecutive chunk files of at most [`CHUNK_BYTES`]. Readers remove each
+//! chunk as soon as it is consumed, so a streamed merge and its consumer's output share disk
+//! space instead of adding up, and an intermediate merge frees its inputs while it writes.
+//! Chunking changes no record order or content.
 use super::{scratch::SpillFile, Record, Scratch, SpillError};
 use std::{
     cmp::Ordering,
-    collections::BinaryHeap,
+    collections::{BinaryHeap, VecDeque},
     io::{self, BufReader, BufWriter, Read, Write},
     marker::PhantomData,
     path::Path,
@@ -112,8 +117,27 @@ pub(crate) struct SortStats {
     pub spilled_bytes: u64,
 }
 
-struct Run {
+/// Largest run chunk file. Smaller chunks free disk sooner and raise the file count; with the
+/// default `F = 64` an intermediate merge holds at most `F` partly read chunks (512 MiB).
+pub(crate) const CHUNK_BYTES: usize = 8 << 20;
+
+/// Records per chunk file for `T` at the production [`CHUNK_BYTES`] (the scratch model).
+pub(crate) fn chunk_records<T: Record>() -> u64 {
+    chunk_records_of::<T>(CHUNK_BYTES)
+}
+
+fn chunk_records_of<T: Record>(chunk_bytes: usize) -> u64 {
+    (chunk_bytes / T::SIZE).max(1) as u64
+}
+
+struct Chunk {
     file: SpillFile,
+    records: u64,
+}
+
+struct Run {
+    /// Consecutive chunks in record order; a reader removes each once consumed.
+    chunks: VecDeque<Chunk>,
     records: u64,
     /// Online compaction generation; runs stay in original input order.
     generation: u8,
@@ -148,70 +172,109 @@ impl<T: Copy> Cursor<T> for MemCursor<T> {
 }
 
 struct RunReader<T> {
-    // Declared before `run` so the handle closes before the file is removed.
-    reader: BufReader<Box<dyn Read + Send>>,
-    run: Run,
+    // Declared before `chunks` so the handle closes before its file is removed.
+    reader: Option<BufReader<Box<dyn Read + Send>>>,
+    /// The front chunk is the one being read.
+    chunks: VecDeque<Chunk>,
+    scratch_io: Arc<dyn super::SpillIo>,
+    buffer_bytes: usize,
+    /// Records left in the front chunk.
+    in_chunk: u64,
     remaining: u64,
-    end_checked: bool,
+    records: u64,
     encoded: Vec<u8>,
     _record: PhantomData<T>,
 }
 
 impl<T: Record> RunReader<T> {
     fn open(scratch: &Scratch, run: Run, buffer_bytes: usize) -> Result<Self, SpillError> {
-        let inner = scratch
-            .io()
-            .open(run.file.path())
-            .map_err(|e| SpillError::io("open spill run", run.file.path(), e))?;
-        Ok(Self {
-            reader: BufReader::with_capacity(buffer_bytes, inner),
+        let mut reader = Self {
+            reader: None,
+            chunks: run.chunks,
+            scratch_io: scratch.io_handle(),
+            buffer_bytes,
+            in_chunk: 0,
             remaining: run.records,
-            run,
-            end_checked: false,
+            records: run.records,
             encoded: vec![0; T::SIZE],
             _record: PhantomData,
-        })
+        };
+        reader.open_front()?;
+        Ok(reader)
+    }
+
+    fn open_front(&mut self) -> Result<(), SpillError> {
+        let Some(chunk) = self.chunks.front() else {
+            return Ok(());
+        };
+        let inner = self
+            .scratch_io
+            .open(chunk.file.path())
+            .map_err(|e| SpillError::io("open spill run", chunk.file.path(), e))?;
+        self.reader = Some(BufReader::with_capacity(self.buffer_bytes, inner));
+        self.in_chunk = chunk.records;
+        Ok(())
+    }
+
+    fn path(&self) -> &Path {
+        self.chunks
+            .front()
+            .map_or(Path::new(""), |chunk| chunk.file.path())
     }
 
     fn corrupt(&self, detail: String) -> SpillError {
         SpillError::CorruptRun {
-            path: self.run.file.path().to_owned(),
+            path: self.path().to_owned(),
             detail,
         }
+    }
+
+    /// Verifies the front chunk ends exactly after its records, then closes and removes it.
+    fn finish_front(&mut self) -> Result<(), SpillError> {
+        if let Some(reader) = self.reader.as_mut() {
+            let mut probe = [0u8; 1];
+            loop {
+                match reader.read(&mut probe) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        let (chunk, records) = (
+                            self.chunks.front().map_or(0, |chunk| chunk.records),
+                            self.records,
+                        );
+                        return Err(self.corrupt(format!(
+                            "bytes follow the expected {chunk} records of a chunk (run of {records} records)"
+                        )));
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                    Err(e) => return Err(SpillError::io("read spill run", self.path(), e)),
+                }
+            }
+        }
+        self.reader = None;
+        self.chunks.pop_front();
+        Ok(())
     }
 }
 
 impl<T: Record> Cursor<T> for RunReader<T> {
     fn next_record(&mut self) -> Result<Option<T>, SpillError> {
-        if self.remaining == 0 {
-            if !self.end_checked {
-                self.end_checked = true;
-                let mut probe = [0u8; 1];
-                loop {
-                    match self.reader.read(&mut probe) {
-                        Ok(0) => break,
-                        Ok(_) => {
-                            let records = self.run.records;
-                            return Err(self
-                                .corrupt(format!("bytes follow the expected {records} records")));
-                        }
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                        Err(e) => {
-                            return Err(SpillError::io("read spill run", self.run.file.path(), e))
-                        }
-                    }
-                }
+        while self.in_chunk == 0 {
+            if self.chunks.is_empty() {
+                return Ok(None);
             }
-            return Ok(None);
+            self.finish_front()?;
+            self.open_front()?;
         }
-        if let Err(e) = self.reader.read_exact(&mut self.encoded) {
+        let reader = self.reader.as_mut().expect("open chunk has a reader");
+        if let Err(e) = reader.read_exact(&mut self.encoded) {
             if e.kind() == io::ErrorKind::UnexpectedEof {
-                let read = self.run.records - self.remaining;
-                let records = self.run.records;
+                let read = self.records - self.remaining;
+                let records = self.records;
                 return Err(self.corrupt(format!("ended after {read} of {records} records")));
             }
-            return Err(SpillError::io("read spill run", self.run.file.path(), e));
+            return Err(SpillError::io("read spill run", self.path(), e));
         }
+        self.in_chunk -= 1;
         self.remaining -= 1;
         Ok(Some(T::decode(&self.encoded)))
     }
@@ -279,47 +342,83 @@ impl<T: Ord, C: Cursor<T>> Cursor<T> for Merger<T, C> {
     }
 }
 
+/// One chunk file being written.
+struct OpenChunk {
+    // Declared before `file` so the handle closes before an error removes the file.
+    writer: BufWriter<Box<dyn Write + Send>>,
+    file: SpillFile,
+    records: u64,
+}
+
+impl OpenChunk {
+    fn close<T: Record>(mut self) -> Result<Chunk, SpillError> {
+        self.writer
+            .flush()
+            .map_err(|e| SpillError::io("write spill run", self.file.path(), e))?;
+        let Self {
+            writer,
+            mut file,
+            records,
+        } = self;
+        drop(writer);
+        let bytes = records
+            .checked_mul(T::SIZE as u64)
+            .ok_or(SpillError::Overflow)?;
+        file.completed(bytes);
+        Ok(Chunk { file, records })
+    }
+}
+
 fn write_run<T: Record>(
     scratch: &Scratch,
     buffer_bytes: usize,
     records: &mut impl Cursor<T>,
 ) -> Result<Run, SpillError> {
-    let mut file = scratch.new_file("run")?;
-    // Declared after `file` so the handle closes before an error removes the file.
-    let mut writer = BufWriter::with_capacity(
-        buffer_bytes,
-        scratch
-            .io()
-            .create(file.path())
-            .map_err(|e| SpillError::io("create spill run", file.path(), e))?,
-    );
+    let per_chunk = chunk_records_of::<T>(scratch.chunk_bytes());
+    let mut chunks = VecDeque::new();
+    let mut open: Option<OpenChunk> = None;
     let mut encoded = vec![0; T::SIZE];
     let mut count = 0u64;
     while let Some(record) = records.next_record()? {
+        if open.as_ref().is_none_or(|chunk| chunk.records == per_chunk) {
+            if let Some(full) = open.take() {
+                chunks.push_back(full.close::<T>()?);
+            }
+            let file = scratch.new_file("run")?;
+            let writer = BufWriter::with_capacity(
+                buffer_bytes,
+                scratch
+                    .io()
+                    .create(file.path())
+                    .map_err(|e| SpillError::io("create spill run", file.path(), e))?,
+            );
+            open = Some(OpenChunk {
+                writer,
+                file,
+                records: 0,
+            });
+        }
+        let chunk = open.as_mut().expect("a chunk is open");
         record.encode(&mut encoded);
-        let next_count = count.checked_add(1).ok_or(SpillError::Overflow)?;
+        let next = chunk.records.checked_add(1).ok_or(SpillError::Overflow)?;
         // A failing write_all may write a prefix before returning its error. Pre-account
         // the entire attempted record so failure peaks cannot omit that prefix.
-        file.completed(
-            next_count
-                .checked_mul(T::SIZE as u64)
+        chunk.file.completed(
+            next.checked_mul(T::SIZE as u64)
                 .ok_or(SpillError::Overflow)?,
         );
-        writer
+        chunk
+            .writer
             .write_all(&encoded)
-            .map_err(|e| SpillError::io("write spill run", file.path(), e))?;
-        count = next_count;
+            .map_err(|e| SpillError::io("write spill run", chunk.file.path(), e))?;
+        chunk.records = next;
+        count = count.checked_add(1).ok_or(SpillError::Overflow)?;
     }
-    writer
-        .flush()
-        .map_err(|e| SpillError::io("write spill run", file.path(), e))?;
-    drop(writer);
-    let bytes = count
-        .checked_mul(T::SIZE as u64)
-        .ok_or(SpillError::Overflow)?;
-    file.completed(bytes);
+    if let Some(last) = open.take() {
+        chunks.push_back(last.close::<T>()?);
+    }
     Ok(Run {
-        file,
+        chunks,
         records: count,
         generation: 0,
     })
@@ -494,15 +593,24 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
     }
 
     /// Upper bound for descriptor inventory and its Vec reallocations, including owned
-    /// paths. The owning producer adds this to its resident-memory declaration.
-    pub(crate) fn inventory_memory_bound(config: SortConfig, scratch_path_bytes: usize) -> u64 {
-        (config.fan_in as u64)
-            .saturating_mul(128)
+    /// paths: fewer than `128F` run descriptors (two generations while merging), and one
+    /// chunk descriptor per live chunk file of `spill_bytes` (the sort's live spill, a merge's
+    /// output included), at the production [`CHUNK_BYTES`]. The owning producer adds this to
+    /// its resident-memory declaration.
+    pub(crate) fn inventory_memory_bound(
+        config: SortConfig,
+        scratch_path_bytes: usize,
+        spill_bytes: u64,
+    ) -> u64 {
+        let paths = (scratch_path_bytes as u64)
             .saturating_mul(2)
-            .saturating_mul(
-                (size_of::<Run>() as u64)
-                    .saturating_add((scratch_path_bytes as u64).saturating_mul(2))
-                    .saturating_add(64),
+            .saturating_add(64);
+        let runs = (config.fan_in as u64).saturating_mul(128).saturating_mul(2);
+        let chunk_bytes = chunk_records::<T>().saturating_mul(T::SIZE as u64).max(1);
+        let chunks = spill_bytes.div_ceil(chunk_bytes).saturating_add(runs);
+        runs.saturating_mul((size_of::<Run>() as u64).saturating_add(paths))
+            .saturating_add(
+                chunks.saturating_mul((size_of::<Chunk>() as u64).saturating_add(paths)),
             )
     }
 
@@ -543,7 +651,8 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                     let mut merger = Merger::new(readers)?;
                     let run = write_run(self.scratch, self.config.buffer_bytes, &mut merger)?;
                     self.stats.spilled_bytes += run.file_bytes();
-                    // Inputs are removed only now, after the output is complete.
+                    // Inputs were removed chunk by chunk as the merge read them; dropping
+                    // the merger removes any remainder (e.g. after an error).
                     drop(merger);
                     merged.push(run);
                 }
@@ -604,7 +713,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
 
 impl Run {
     fn file_bytes(&self) -> u64 {
-        self.file.bytes()
+        self.chunks.iter().map(|chunk| chunk.file.bytes()).sum()
     }
 }
 

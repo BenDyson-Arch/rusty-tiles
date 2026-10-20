@@ -42,7 +42,14 @@ numeric buffers, accessor layouts and primitive indices. Finite stored values an
 prove unit-length normals, rendered material meaning or source/LOD fidelity.
 KHR_mesh_quantization permits
 its specified extra attribute representations. EXT_meshopt_compression supports
-bounded decoding with the NONE filter; unavailable filters are unsupported. Each
+bounded decoding with the NONE and OCTAHEDRAL filters; QUATERNION and EXPONENTIAL
+are unsupported. OCTAHEDRAL needs ATTRIBUTES mode and a 4- or 8-byte stride, and
+every element must be a valid K-bit code (the third component encodes 1.0 as
+`(1 << (K - 1)) - 1`, and |x|, |y| do not exceed it); anything else is invalid.
+Because the extension specifies filter output only to one unit, declared bounds on a
+filtered BYTE/SHORT accessor may differ from the decoded values by one unit; all other
+bounds are exact. A compressed view may serve any role, including property-table values. See the
+[meshopt OCTAHEDRAL amendment](architecture/c1-meshopt-octahedral-amendment.md). Each
 compressed stream must start with the header byte the extension requires for its
 mode (`0xa0` ATTRIBUTES, `0xe1` TRIANGLES, `0xd1` INDICES); other codec versions,
 such as vertex v1 (`0xa1`) or index and sequence v0 (`0xe0`, `0xd0`), are invalid
@@ -156,10 +163,10 @@ stored geometric error establishes a source-surface or LOD error bound. The
 `notInspected` field records these boundaries explicitly. Unsupported glTF extension
 names declared by payloads are listed as they are named, at most the 64 byte-smallest
 of at most 256 bytes each; when any is left out the report adds
-`notInspectedTruncated: true`. Decoded containment streams each reference as soon as
-its precheck step passes and publishes the first escape only after the whole archive
-passed C1 with no exclusion and no precheck stop, replaying each payload against
-digests of its own first, full inspection. A required unsupported
+`notInspectedTruncated: true`. Decoded containment streams only after the whole archive
+passed C1 with no exclusion and no precheck stop, from a log of the tiles and references
+seen while in domain, and replays each payload against digests of its own first, full
+inspection instead of inspecting it again. A required unsupported
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 

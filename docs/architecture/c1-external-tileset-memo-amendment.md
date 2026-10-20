@@ -12,6 +12,8 @@ C2 traversal facts of the
 governs how an external-tileset placement is evaluated. Everything else is
 unchanged.
 
+> **VS-B (2026-10-14).** [validator-traversal-scale-amendment.md](validator-traversal-scale-amendment.md) amends this text and governs where they disagree: summaries carry their facts by value, are capped at 64 MiB and record their live-document peak (VS-B-6, VS-B-7).
+
 ## Defect
 
 Each placement of a shared external tileset re-read, re-parsed, re-schema-checked

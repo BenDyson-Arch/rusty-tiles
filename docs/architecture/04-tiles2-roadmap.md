@@ -1,4 +1,4 @@
-# 0.4.0 foundation and streaming; 0.5.0 format transition
+# 0.4.0 foundation and streaming; 0.6.0 format transition
 
 Status: **development direction and ordered roadmap, 2026-10-12**. This document
 consolidates the proposed ML0–ML10 sequence and records the accepted release
@@ -6,7 +6,7 @@ split. It authorizes planning and bounded implementation slices; it records no
 new implementation acceptance or release authorization.
 
 **0.4.0 ships real 3D Tiles 1.1/glTF 2.0 and implicit tiling, with the shared
-foundation and the streaming, certified, textured large-mesh tiler. 0.5.0 makes
+foundation and the streaming, certified, textured large-mesh tiler. 0.6.0 makes
 the official 3D Tiles 2.0/glTF 2.1 transition against finalized specifications
 and supported viewers.** Version strings must describe the encoding actually
 implemented. Draft experiments are optional design checks, never 0.4.0 blockers.
@@ -31,7 +31,7 @@ retain code only for the domain independently established by its evidence.
   including the index and early typed refusal at the 178,956,970-member ceiling.
   Prove directory/server delivery, direct archive loading or a documented archive
   bridge from actual consumer loads; do not assume a viewer loads `.3tz` directly.
-  Reassess packaging and derive new encoding limits at the 0.5.0 transition.
+  Reassess packaging and derive new encoding limits at the 0.6.0 transition.
 - Migrate producers through the shared output contract. Local mesh input stays
   local static metres with rigid geographic placement; the mesh tiler does not
   gain source-CRS conversion. Other producers keep their independently established
@@ -43,7 +43,7 @@ The new-format migrations in [#84](https://github.com/BenDyson-Arch/rusty-tiles/
 (tileset writing), [#85](https://github.com/BenDyson-Arch/rusty-tiles/issues/85)
 (implicit tiling), [#86](https://github.com/BenDyson-Arch/rusty-tiles/issues/86)
 (coordinates), and [#87](https://github.com/BenDyson-Arch/rusty-tiles/issues/87)
-(vectors/layers) belong to 0.5.0. Foundation work and current-content conformance
+(vectors/layers) belong to 0.6.0. Foundation work and current-content conformance
 needed to ship 0.4.0 remain in 0.4.0. [#75](https://github.com/BenDyson-Arch/rusty-tiles/issues/75)
 glTF-only vector fills passed their viewer gate and merged in #185; the
 remaining legacy-content removal stays in 0.4.0 through H6 (explicit output)
@@ -107,7 +107,7 @@ equivalent fixtures can establish representation equivalence; full production
 emitters are required only where an advertised supported path needs them.
 Keep each superseded path until its migrated final consumer is independently
 accepted. Review public operation names and retained APIs against the 0.4.0
-contract; no new delivery naming or speculative 0.5.0 abstraction is required.
+contract; no new delivery naming or speculative 0.6.0 abstraction is required.
 
 ### 3. Deliver the production streaming textured large-mesh tiler
 
@@ -172,9 +172,35 @@ Preserve the following agreed large-mesh requirements:
   one unified design during milestone-4 acceptance, using real-mesh
   measurements. Data point: the full-resolution 10M-triangle photogrammetry mesh
   took 35.5 min with `balanced`, peaked at 12.4 GiB and produced an 8.1 GB
-  archive. Basis encoding dominates and scales with texel count. Planned leaf-size
-  comparison, measured with HLOD: 8192-triangle leaves against 32k-triangle
-  leaves split into per-primitive property tables of 8192 rows or fewer.
+  archive. Basis encoding dominates and scales with texel count. The leaf-size
+  comparison is settled; see the leaf size decision below.
+
+Recorded decisions for the tiler:
+
+- Public surface. The CLI is `rusty-tiles mesh` and the Python API is
+  `rusty_tiles.mesh_to_tileset`. This is the one public entry point; the H8
+  leaf-directory and H16 delivery APIs become internal. `--jobs N` is a
+  memory-capped maximum and reports the jobs it actually used; the default is
+  auto and memory-aware. Output is `.3tz` only in 0.4. Profiles stay
+  provisional. Placement is rigid local metres. mesh-to-3tz retires after full
+  tiler acceptance, with a migration note.
+- Leaf size. The 8192-triangle cap per leaf stays. Measured: CesiumJS 1.146
+  resolves mesh picks through one property table per model. 32k-triangle leaves
+  split into 4 tables picked correctly only 8 of 56 times and could not refine
+  at the default 1 GiB cache.
+- Cesium 1.146 sRGB limitation. KTX2 sRGB colour textures are uploaded as
+  linear (UNORM) formats on the ASTC, BC7, ETC2 and uncompressed paths. The
+  measured worst case is 72/255 on high-contrast test textures; linear data
+  textures are unaffected. The user decided this is documented, not a 0.4
+  blocker, and not filed upstream. The tiler adds no viewer-specific
+  compensation.
+- Validator. `validate` accepts KHR_texture_basisu / KTX2
+  ([#202](https://github.com/BenDyson-Arch/rusty-tiles/pull/202)), so the
+  tiler's own default output validates. VS-A
+  ([#206](https://github.com/BenDyson-Arch/rusty-tiles/pull/206)) handles the
+  catalog at scale; VS-B and VS-C follow. Large real archives (8.1 GB) still
+  exceed the default 1 GiB / 2^18-visit validator limits until VS-B and VS-C
+  land.
 
 Annotation readiness. Leaves keep exact per-triangle source provenance so that a
 future, post-0.4 lightweight "annotate" pass can add attributes to parts of 3D
@@ -197,7 +223,7 @@ Property-texture picking via `scene.pickMetadata` is experimental since 1.122.
 The earlier v6.1 design supplies the detailed algorithms, constants and tests as
 planning inputs. Preserve its requirements unless a recorded decision explicitly
 changes them; use the real Tiles 1.1/glTF 2.0 semantics for 0.4.0. Rederive
-extension names, JSON shapes and new wire encodings at the official 0.5.0
+extension names, JSON shapes and new wire encodings at the official 0.6.0
 transition. A successful codec prototype does not accept the tiler, and
 untextured temporary proxies do not accept textured output.
 
@@ -214,12 +240,13 @@ production octree case, the 10^4-primitives and 10^4-holes/islands-per-root
 feature-density case, the procedural-texture bake case, and the large hierarchy
 and delivery cases (at least 2^22 tiles and over 4 GiB of output). Carry forward
 the 3TZ format-specific probes and independently check the proven viewer delivery
-route. A replacement container at 0.5.0 needs its own delivery checks. Measure
+route. A replacement container at 0.6.0 needs its own delivery checks. Measure
 peak resident memory, scratch, wall time and consumer load/refinement against their declared
 budgets. Smaller tests establish bounded correctness evidence; they do not
 substitute for these scale gates.
 
-Validator memory and work must scale with the supported delivered-resource domain. Keep
+Validator memory and work must scale with the supported delivered-resource domain;
+VS-B and VS-C close the gap for large real archives noted in milestone 3. Keep
 absolute volume caps opt-in, explicit per-item limits and non-circular
 amplification budgets; test malformed and multiply traversed resources with
 sensitive controls. Complete applicable platform CI, installed-wheel and
@@ -305,10 +332,39 @@ evidence. It does not implement the whole tiler or retire advertised output
 modes. The next dependency-ready slice integrates the next retained producer and
 its metadata ownership through this demonstrated boundary.
 
-## 0.5.0 reference context
+## Release sequence after 0.4.0
+
+Decided 2026-10-14. The official format transition moves from 0.5 to 0.6 so that
+each version line has one meaning:
+
+- **0.4.x: completion and fixes, no new public capability.**
+  - H27 proxy-bake leftovers.
+  - Retiring the legacy `mesh-to-3tz` / `mesh-local-to-3tz` paths once the new
+    tiler is accepted.
+  - Finalizing the provisional profile presets from flythrough evidence.
+  - Documentation of known consumer limitations, and follow-ups from the
+    large-mesh scale runs.
+  - Indexed mesh capture (compact sort records with in-place or deduplicated
+    vertex attributes). It belongs here only if archives stay byte-identical to
+    0.4.0; otherwise it moves to 0.5.
+- **0.5: new capabilities on Tiles 1.1/glTF 2.0.**
+  - A pure-Rust GeoTIFF/COG DEM reader that makes `terrain` available in the
+    standard build. It admits COG base images and ZSTD, refuses LERC, and keeps
+    GDAL as the native fallback.
+  - Projected-CRS terrain.
+  - A JSON C ABI with a Go wrapper first, and other languages on demand.
+  - A WASM feasibility spike for a GDAL-free subset.
+  - Imagery (`raster`) stays on GDAL.
+- **0.6: the official 3D Tiles 2.0/glTF 2.1 transition**, with the scope
+  previously recorded for 0.5.
+
+Scope documents for these items are working evidence, not acceptance. Each
+item still needs its own slice contract, review tier and gates.
+
+## 0.6.0 reference context
 
 The following draft source revisions were inspected on 2026-10-12. Preserve
-these pins as design context for 0.5.0, not as the 0.4.0 wire contract or a claim
+these pins as design context for 0.6.0, not as the 0.4.0 wire contract or a claim
 of accepted support. The official transition must use the finalized specification
 and supported viewers, pin its normative sources and consumer builds, and
 reconcile any differences from these drafts. Optional draft experiments can
@@ -327,7 +383,7 @@ frames are Y-up; geometric error is no longer scaled by node transforms; and
 actual bounds/errors move to accessor-backed subtree attributes. In particular,
 the box override becomes a DOUBLE MAT4 rather than twelve metadata values.
 Preserve application properties through structural metadata at the new attachment
-points. Revalidate each mapping independently against the finalized 0.5.0
+points. Revalidate each mapping independently against the finalized 0.6.0
 specification. New subtree, coordinate, metadata and delivery encoding must be
 rederived at that transition. Native glTF packaging is a separate delivery contract; do not
 assume the existing 3TZ index or ceiling applies to it.
@@ -341,7 +397,7 @@ and tileset versions beyond 1.1 in
 The same restrictions were inspected at the pinned `main` revision
 ([glTF loader](https://github.com/CesiumGS/cesium/blob/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/GltfJsonLoader.js#L267),
 [tileset loader](https://github.com/CesiumGS/cesium/blob/df52c781de3491a4b76839d420f7ca90a032efb6/packages/engine/Source/Scene/Cesium3DTileset.js#L2386)). An upgrade
-is not a demonstrated fix. These source observations constrain the future 0.5.0
+is not a demonstrated fix. These source observations constrain the future 0.6.0
 transition; they do not block a 0.4.0 consumer using real Tiles 1.1/glTF 2.0.
 Do not claim draft consumer support without an executed compatible path. Any
 optional adapter or prototype needs bounded scope and evidence; this roadmap
@@ -362,7 +418,7 @@ Prior P0 and p0b results are prototype evidence. They do not establish productio
 streaming, interval certificates, texture baking at scale, packed implicit
 output, or the full vanished/filled policy. Record those limits alongside their
 positive results. Earlier accepted foundation slices retain only their stated
-domains; they do not accept the full 0.4.0 tiler or the 0.5.0 format transition
+domains; they do not accept the full 0.4.0 tiler or the 0.6.0 format transition
 by inheritance.
 
 Planning inputs read for this consolidation (not newly accepted contracts):

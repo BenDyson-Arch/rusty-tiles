@@ -19,6 +19,8 @@ mod read;
 pub(crate) use catalog::FORCED;
 pub(crate) use catalog::{CatalogConfig, Names};
 #[cfg(test)]
+pub(crate) use catalog::{FACTS_RECORD_BYTES, STREAM_LOG_BYTES_PER_MEMBER};
+#[cfg(test)]
 pub(crate) use read::tests as read_tests;
 pub(crate) use read::{ReadError, ReadLimits, StoredArchive};
 

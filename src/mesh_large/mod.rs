@@ -1,10 +1,11 @@
 //! Private streamed mesh foundation. Tile producers will consume these owned spill records.
 //! Full capture owns attributes, images and the frozen lattice; H8 publishes full-detail
-//! leaves and H16 (`delivery`) their hierarchy as a `.3tz`. Coarse levels and approximation
-//! certificates remain downstream work.
+//! leaves, H17 (`lod`) certifies the coarse tiles inside the H8 producer while the capture is
+//! live, and H16 (`delivery`) publishes their hierarchy as a `.3tz`.
 #![allow(dead_code)] // First concrete consumer is the diagnostic acceptance driver; tiler follows.
 
 mod attributes;
+pub(in crate::mesh_large) mod bake_pass;
 mod capture;
 mod config;
 mod delivery;
@@ -12,12 +13,16 @@ mod full;
 mod images;
 mod input;
 mod leaves;
+mod lod;
+mod pipeline;
 mod records;
+mod source_crs;
 mod tree;
-pub use delivery::{mesh_leaves_to_3tz, MeshTilesetReport, MeshTilesetRequest, MeshTilesetResult};
-pub use leaves::producer::{
-    mesh_to_leaf_payloads, LeafOutputReport, LeafOutputRequest, LeafOutputResult, LeafProfile,
+pub use pipeline::{
+    mesh_to_tileset, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport, TilerRequest,
+    TilerResult,
 };
+pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -89,6 +94,12 @@ pub(crate) fn build(
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<CapturedTree, JobFailure> {
     config.validate().map_err(failure)?;
+    if config.source_crs.is_some() {
+        return Err(failure(JobError::new(
+            JobErrorKind::InvalidRequest,
+            "the H1 diagnostic build captures local sources only",
+        )));
+    }
     check().map_err(failure)?;
     let source = StreamSource::open(input, check).map_err(failure)?;
     member_gate(
@@ -150,7 +161,7 @@ pub(crate) fn build(
             check,
         )?;
         config::preflight_remaining(&scratch, need.need_bytes)?;
-        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, 0, check)?;
+        let tree = tree::build(&scratch, triangles, config, jobs.jobs as usize, None, check)?;
         member_gate(tree.stats.nodes, config.member_ceiling)?;
         check()?;
         if scratch.peak_bytes() > need.logical_need_bytes {

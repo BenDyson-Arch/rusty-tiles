@@ -32,7 +32,7 @@ use std::{
     },
 };
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LeafProfile {
     Fast,
@@ -57,6 +57,11 @@ pub struct LeafOutputRequest {
     profile: LeafProfile,
     jobs: Jobs,
     scratch_dir: Option<PathBuf>,
+    lod_mutation: super::super::lod::Mutation,
+    lod_target: usize,
+    baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
+    #[cfg(test)]
+    leaf_triangles: Option<u64>,
 }
 impl LeafOutputRequest {
     pub fn new(
@@ -70,6 +75,11 @@ impl LeafOutputRequest {
             profile,
             jobs: Jobs::Auto,
             scratch_dir: None,
+            lod_mutation: super::super::lod::Mutation::None,
+            lod_target: super::super::lod::TARGET_FACES,
+            baker: None,
+            #[cfg(test)]
+            leaf_triangles: None,
         }
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
@@ -78,6 +88,33 @@ impl LeafOutputRequest {
     }
     pub fn with_scratch_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.scratch_dir = Some(path.into());
+        self
+    }
+    /// Test controls: run the coarse levels with a certificate mutation.
+    #[cfg(test)]
+    pub(crate) fn with_lod_mutation(mut self, mutation: super::super::lod::Mutation) -> Self {
+        self.lod_mutation = mutation;
+        self
+    }
+    /// Bake the coarse tiles' appearance (H13) after they are certified. Without a baker
+    /// the proxies stay untextured.
+    pub(in crate::mesh_large) fn with_baker(
+        mut self,
+        baker: std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>,
+    ) -> Self {
+        self.baker = Some(baker);
+        self
+    }
+    /// Test fixtures: a smaller coarse-tile face target, so small inputs get deep LOD.
+    #[cfg(test)]
+    pub(crate) fn with_lod_target(mut self, target: usize) -> Self {
+        self.lod_target = target;
+        self
+    }
+    /// Test fixtures: smaller leaves, so small inputs get several leaves and coarse levels.
+    #[cfg(test)]
+    pub(crate) fn with_leaf_triangles(mut self, leaf_triangles: u64) -> Self {
+        self.leaf_triangles = Some(leaf_triangles);
         self
     }
 }
@@ -91,6 +128,63 @@ pub struct LeafOutputReport {
     pub maximum_glb_bytes: u64,
     pub maximum_geometry_error: f64,
     pub density_reduced_leaves: u64,
+    /// H17 coarse tiles (untextured certified proxies) written beside the leaves.
+    pub proxies: u64,
+    pub proxy_bytes: u64,
+    /// Lossy pages delivered by a stronger UASTC step after their profile's
+    /// own setting missed a decoded-image gate, by the step that passed.
+    pub escalated_pages: EscalatedPages,
+    /// Pages delivered as exact level-0 PNG after every lossy step missed.
+    pub lossless_fallback_pages: u64,
+    /// Escalated pages (both counts above) by what the profile step missed.
+    pub escalation_reasons: EscalationReasons,
+    /// The first [`ESCALATION_DIAGNOSTICS`] escalated pages in leaf order.
+    pub escalation_diagnostics: Vec<EscalationDiagnostic>,
+    /// Escalated pages beyond the bounded diagnostics list.
+    pub escalation_diagnostics_omitted: u64,
+}
+/// Escalated pages by the profile step's miss: a decoded-image gate, or the
+/// codec's own verification floor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalationReasons {
+    pub gate: u64,
+    pub codec_verify: u64,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalatedPages {
+    pub uastc_level2: u64,
+    pub uastc_level3: u64,
+}
+/// Bound of [`LeafOutputReport::escalation_diagnostics`].
+pub const ESCALATION_DIAGNOSTICS: usize = 32;
+/// One escalated page: its leaf, slot, sources, delivering step and every
+/// gate it missed on the way.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationDiagnostic {
+    /// Leaf member, `leaves/<index>.glb` in the leaf stage.
+    pub leaf: String,
+    /// The leaf's first source triangle rank and depth: archive tile
+    /// `content/f<first>-d<depth>.glb` when explicit.
+    pub first: u64,
+    pub depth: u32,
+    pub page: u64,
+    pub slot: &'static str,
+    pub sources: Vec<EscalationSource>,
+    pub step: &'static str,
+    pub misses: Vec<EscalationMiss>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationSource {
+    pub image: u64,
+    pub material: u32,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EscalationMiss {
+    pub step: &'static str,
+    /// `gate` or `codec_verify`.
+    pub reason: &'static str,
+    pub mip: Option<u64>,
+    pub gate: String,
 }
 #[derive(Debug)]
 pub struct LeafOutputResult {
@@ -123,7 +217,7 @@ fn hex(bytes: impl AsRef<[u8]>) -> String {
 /// sources live in a separately budgeted cache; in-flight leaves own their
 /// geometry closure and encoded members up to the tile budget each.
 #[derive(Clone, Copy, Debug, Serialize)]
-struct StagePlan {
+pub(crate) struct StagePlan {
     /// Per-page limit for internal allocation checks (largest page lease).
     page_bytes: u64,
     gate_bytes: u64,
@@ -134,10 +228,11 @@ struct StagePlan {
     jobs: u64,
     jobs_limited_by: &'static str,
     available_bytes: Option<u64>,
+    bound_bytes: u64,
 }
 /// Bytes reserved for the runtime, allocator slack and the output writer.
 const STAGE_RESERVE: u64 = 256 << 20;
-fn stage_plan(
+pub(crate) fn stage_plan(
     profile: Profile,
     captured: &full::FullCaptured,
     requested: Jobs,
@@ -227,19 +322,13 @@ fn stage_plan(
                 .ok_or_else(|| resource("window"))?,
         )
         .ok_or_else(|| resource("per-job overflow"))?;
-    let (jobs, limited_by) = match requested {
-        Jobs::Fixed(n) => (n.get() as u64, "request"),
-        Jobs::Auto => match usable.map(|u| {
-            u.saturating_sub(cache_bytes)
-                .saturating_sub(page_bytes)
-                .saturating_sub(2 * leaf_owned)
-                / per_job.max(1)
-        }) {
-            Some(0) => (1, "floor"),
-            Some(n) if n < cores => (n, "memory"),
-            _ => (cores, "cores"),
-        },
-    };
+    let fixed = cache_bytes
+        .checked_add(page_bytes)
+        .and_then(|n| n.checked_add(2 * leaf_owned))
+        .ok_or_else(|| resource("leaf fixed memory overflow"))?;
+    let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
+    let jobs = plan.jobs;
+    let limited_by = plan.limited_by;
     let window = jobs
         .checked_mul(4)
         .and_then(|n| n.checked_add(2))
@@ -257,7 +346,14 @@ fn stage_plan(
             "one leaf job cannot fit available memory including owned scratch",
         ));
     }
+    let bound_bytes = global_bytes
+        .checked_add(STAGE_RESERVE)
+        .and_then(|n| n.checked_add(cache_bytes))
+        .and_then(|n| n.checked_add(gate_bytes))
+        .and_then(|n| n.checked_add(leaves))
+        .ok_or_else(|| resource("leaf declared memory overflow"))?;
     Ok(StagePlan {
+        bound_bytes,
         page_bytes,
         gate_bytes,
         cache_bytes,
@@ -298,6 +394,22 @@ fn encode_with_density_budget<T>(
         }
     }
 }
+/// Write one prepared atlas. This is the single place the writer's
+/// retryable-budget / hard-failure split enters the density retry loop: only
+/// `Budget` may lower texture density, a writer `Failure` must surface as is.
+fn write_prepared<A, R, L>(
+    prepared: Result<(A, R), atlas::PrepareError>,
+    write: impl FnOnce(&A) -> Result<L, writer::WriteError>,
+) -> Result<(L, R), atlas::PrepareError> {
+    prepared.and_then(|(atlas, receipt)| {
+        write(&atlas)
+            .map_err(|error| match error {
+                writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
+                writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
+            })
+            .map(|leaf| (leaf, receipt))
+    })
+}
 /// One leaf's frozen inputs, read serially from the captured streams.
 struct LeafInput {
     node: NodeRecord,
@@ -314,6 +426,7 @@ struct LeafEncoded {
     bounds: super::super::records::Bounds,
     geometry_error: f64,
     appearance: Vec<serde_json::Value>,
+    escalations: Vec<atlas::PageEscalation>,
     density_drop: u32,
     density_reasons: Vec<serde_json::Value>,
 }
@@ -365,42 +478,89 @@ fn read_leaf(
         corner_depths,
     })
 }
+/// Any leaf failure but cancellation names the leaf member and its rank.
 fn encode_leaf(
     input: &LeafInput,
     services: &atlas::Services<'_>,
     config: &TreeConfig,
     leaves: &Path,
     index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
+) -> Result<LeafEncoded, JobError> {
+    let node = &input.node;
+    leaf_encode(input, services, config, leaves, index, preencode).map_err(|error| {
+        if error.kind() == JobErrorKind::Cancelled {
+            return error;
+        }
+        JobError::with_cause(
+            error.kind(),
+            format!(
+                "leaf {index:012} (first {}, depth {}): {error}",
+                node.first,
+                node.depth()
+            ),
+            error,
+        )
+    })
+}
+fn leaf_encode(
+    input: &LeafInput,
+    services: &atlas::Services<'_>,
+    config: &TreeConfig,
+    leaves: &Path,
+    index: u64,
+    preencode: Option<&super::super::bake_pass::PreencodeStore>,
 ) -> Result<LeafEncoded, JobError> {
     let node = &input.node;
     let captured = services.captured;
+    // The bake witness names each face by its global sorted rank: the leaf's records are
+    // read in rank order from `node.first`.
+    let ranks: std::collections::HashMap<_, _> = if preencode.is_some() {
+        input
+            .records
+            .iter()
+            .zip(node.first..)
+            .map(|(row, rank)| {
+                let s = row.triangle.source;
+                ((s.node, s.mesh, s.primitive, s.triangle), rank)
+            })
+            .collect()
+    } else {
+        Default::default()
+    };
     let ((glb, appearance), density_drop, density_reasons) = encode_with_density_budget(
         config.profile,
         u32::from(input.plan.density_drop),
         |density_drop| {
             (services.check)().map_err(atlas::PrepareError::from)?;
-            atlas::prepare(
-                (input.records.clone(), input.corner_depths.clone()),
-                services,
-                config.profile,
-                node.depth() as u8,
-                density_drop,
+            write_prepared(
+                atlas::prepare(
+                    (input.records.clone(), input.corner_depths.clone()),
+                    services,
+                    config.profile,
+                    node.depth() as u8,
+                    density_drop,
+                    index,
+                ),
+                |atlas| {
+                    let mut leaf = timing::time(Stage::GlbWrite, || {
+                        writer::encode(
+                            atlas,
+                            &captured.lattice,
+                            node.depth() as u8,
+                            config.tile_bytes(),
+                        )
+                    })?;
+                    // Only the accepted density attempt reaches here.
+                    let positions = std::mem::take(&mut leaf.positions);
+                    let normals = std::mem::take(&mut leaf.normals);
+                    if let Some(store) = preencode {
+                        let witness = super::witness::build(atlas, &positions, &normals, &ranks)?;
+                        store.write_leaf(index, density_drop, atlas, &witness)?;
+                    }
+                    Ok(leaf)
+                },
             )
-            .and_then(|(atlas, receipt)| {
-                timing::time(Stage::GlbWrite, || {
-                    writer::encode(
-                        &atlas,
-                        &captured.lattice,
-                        node.depth() as u8,
-                        config.tile_bytes(),
-                    )
-                })
-                .map_err(|error| match error {
-                    writer::WriteError::Budget(e) => atlas::PrepareError::Budget(e),
-                    writer::WriteError::Failure(e) => atlas::PrepareError::Failure(e),
-                })
-                .map(|leaf| (leaf, receipt))
-            })
         },
     )?;
     // Members are named by frozen leaf order, so workers write them in
@@ -414,7 +574,8 @@ fn encode_leaf(
         bytes: glb.glb.len() as u64,
         bounds: glb.bounds,
         geometry_error: glb.geometry_error,
-        appearance,
+        appearance: appearance.receipts,
+        escalations: appearance.escalations,
         density_drop,
         density_reasons,
     })
@@ -424,14 +585,41 @@ fn encode_leaf(
 /// of one leaf also run in parallel), and written strictly in leaf order, so
 /// every member, manifest row and the first reported failure are independent
 /// of the worker count.
-fn produce(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn produce(
     path: &Path,
     captured: &full::FullCaptured,
     config: &TreeConfig,
     stage: &StagePlan,
     profile: LeafProfile,
+    mutation: super::super::lod::Mutation,
+    target: usize,
+    baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<LeafOutputReport, JobError> {
+) -> Result<LeafStageOutput, JobError> {
+    use super::super::{bake_pass, lod::handoff::HandoffSink};
+    // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
+    // tile packets.
+    let bake_dir = captured.scratch.path().join("bake");
+    // One allowance for both stores: half the scratch volume's free space, measured before
+    // the leaves are written (a failed probe is an error, never an allowance of zero). Both
+    // stores fill during H8 and H17 and drain only as the baker consumes them.
+    let (preencode, handoff) = match baker {
+        Some(_) => {
+            let volume = crate::spill::inspect_volume(captured.scratch.path())?;
+            let budget = std::sync::Arc::new(super::super::lod::handoff::ScratchBudget::new(
+                volume.available_bytes / 2,
+            ));
+            (
+                Some(bake_pass::PreencodeStore::new(
+                    bake_dir.join("preencode"),
+                    budget.clone(),
+                )?),
+                Some(HandoffSink::new(bake_dir.join("handoff"), budget)?),
+            )
+        }
+        None => (None, None),
+    };
     let leaves = path.join("leaves");
     fs::create_dir(&leaves).map_err(|e| JobError::io("create leaf directory", &leaves, e))?;
     let manifest_path = path.join("leaves.jsonl");
@@ -450,6 +638,13 @@ fn produce(
         maximum_glb_bytes: 0,
         maximum_geometry_error: 0.,
         density_reduced_leaves: 0,
+        proxies: 0,
+        proxy_bytes: 0,
+        escalated_pages: EscalatedPages::default(),
+        lossless_fallback_pages: 0,
+        escalation_reasons: EscalationReasons::default(),
+        escalation_diagnostics: Vec::new(),
+        escalation_diagnostics_omitted: 0,
     };
     let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
     let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
@@ -477,7 +672,9 @@ fn produce(
         gate: &gate,
         memory: stage.page_bytes,
         check: &leaf_check,
+        preencode: preencode.as_ref(),
     };
+    let preencode_ref = preencode.as_ref();
     let mut nodes = captured.tree.nodes.reader()?;
     let result = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Done = Result<(LeafEncoded, LeafInput), JobError>;
@@ -523,7 +720,14 @@ fn produce(
                         // writer never waits for a result that cannot come.
                         let encoded =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                encode_leaf(&input, services, config, leaves_dir, index)
+                                encode_leaf(
+                                    &input,
+                                    services,
+                                    config,
+                                    leaves_dir,
+                                    index,
+                                    preencode_ref,
+                                )
                             }))
                             .unwrap_or_else(|_| Err(invariant("leaf worker panicked")));
                         // The receiver outlives every task of this scope.
@@ -565,12 +769,55 @@ fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
-    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
+    let mut lod = timing::time(Stage::Lod, || {
+        super::super::lod::produce(
+            super::super::lod::LodInput {
+                stage: path,
+                captured,
+                scratch: &captured.scratch,
+                sort: config.sorter(stage.jobs as usize),
+                jobs: stage.jobs as usize,
+                mutation,
+                target,
+                handoff: handoff.as_ref(),
+            },
+            check,
+        )
+    })?;
+    report.proxies = lod.proxies;
+    report.proxy_bytes = lod.proxy_bytes;
+    // The bake hook: capture and staging are still live here.
+    if let (Some(baker), Some(handoff), Some(preencode)) = (baker, &handoff, &preencode) {
+        let pass = bake_pass::BakePass::new(
+            captured,
+            config.profile,
+            config.tile_bytes(),
+            stage.jobs as usize,
+            path,
+            handoff,
+            preencode,
+            check,
+        );
+        baker.bake(&pass)?;
+        // The manifest reports the published (baked) proxy bytes, and keeps the certified
+        // untextured figure beside them.
+        let baked = pass.finish()?;
+        lod.untextured_proxy_bytes = Some(lod.proxy_bytes);
+        lod.proxy_bytes = baked;
+        report.proxy_bytes = baked;
+    }
+    drop(handoff);
+    drop(preencode);
+    if bake_dir.exists() {
+        fs::remove_dir_all(&bake_dir)
+            .map_err(|e| JobError::io("remove bake scratch", &bake_dir, e))?;
+    }
+    let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","lod":lod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
     write_file(
         &path.join("manifest.json"),
         &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
     )?;
-    let resources = json!({"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
+    let resources = json!({"lod":{"jobs":lod.jobs,"tileRuns":lod.tile_runs,"seconds":lod.seconds,"prepassSeconds":lod.prepass_seconds,"auditSeconds":lod.audit_seconds,"phaseSeconds":{"loadChildren":lod.phase_seconds[0],"islandsSeams":lod.phase_seconds[1],"simplify":lod.phase_seconds[2],"encodeComposed":lod.phase_seconds[3],"direct":lod.phase_seconds[4],"primitivesFills":lod.phase_seconds[5],"finalEncode":lod.phase_seconds[6],"encodeUnfilled":lod.phase_seconds[7],"proxyToChildren":lod.phase_seconds[8],"childrenToProxy":lod.phase_seconds[9]}},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats(),"nativeWorkspace":"conservative provisional charge; measured scale acceptance recorded separately"});
     write_file(
         &path.join("resources.json"),
         &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
@@ -583,7 +830,48 @@ fn produce(
     timing::finish(
         json!({"profile":profile,"leaves":report.leaves,"triangles":report.triangles,"glbBytes":report.glb_bytes,"sourceImages":captured.image_info.len(),"sourceTexels":source_texels,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()}),
     );
-    Ok(report)
+    let stats = cache.stats();
+    Ok(LeafStageOutput {
+        report,
+        diagnostics: LeafStageDiagnostics {
+            memory_bound_bytes: stage.bound_bytes,
+            jobs: stage.jobs,
+            jobs_limited_by: stage.jobs_limited_by,
+            available_bytes: stage.available_bytes,
+            page_bytes: stage.page_bytes,
+            gate_bytes: stage.gate_bytes,
+            cache_bytes: stage.cache_bytes,
+            global_bytes: stage.global_bytes,
+            leaf_bytes: stage.leaf_bytes,
+            window: stage.window,
+            page_gate_peak_bytes: gate.peak(),
+            cache_peak_resident_bytes: stats.peak_resident_bytes,
+            cache_hits: stats.hits,
+            cache_misses: stats.misses,
+        },
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LeafStageDiagnostics {
+    pub memory_bound_bytes: u64,
+    pub jobs: u64,
+    pub jobs_limited_by: &'static str,
+    pub available_bytes: Option<u64>,
+    pub page_bytes: u64,
+    pub gate_bytes: u64,
+    pub cache_bytes: u64,
+    pub global_bytes: u64,
+    pub leaf_bytes: u64,
+    pub window: u64,
+    pub page_gate_peak_bytes: u64,
+    pub cache_peak_resident_bytes: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+}
+pub(crate) struct LeafStageOutput {
+    pub report: LeafOutputReport,
+    pub diagnostics: LeafStageDiagnostics,
 }
 
 fn write_leaf(
@@ -602,6 +890,7 @@ fn write_leaf(
         bounds,
         geometry_error,
         appearance,
+        escalations,
         density_drop,
         density_reasons,
     } = encoded;
@@ -627,6 +916,51 @@ fn write_leaf(
     report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
     report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
+    for page in escalations {
+        use super::delivery::{MissReason, Step};
+        match page.escalation.step {
+            Step::UastcLevel2 => report.escalated_pages.uastc_level2 += 1,
+            Step::UastcLevel3 => report.escalated_pages.uastc_level3 += 1,
+            Step::LosslessPng => report.lossless_fallback_pages += 1,
+            Step::Profile => return Err(invariant("unescalated page reported as escalated")),
+        }
+        match page.escalation.misses.first().map(|m| m.reason) {
+            Some(MissReason::Gate) => report.escalation_reasons.gate += 1,
+            Some(MissReason::CodecVerify) => report.escalation_reasons.codec_verify += 1,
+            None => return Err(invariant("escalated page without a miss")),
+        }
+        if report.escalation_diagnostics.len() >= ESCALATION_DIAGNOSTICS {
+            report.escalation_diagnostics_omitted += 1;
+            continue;
+        }
+        report.escalation_diagnostics.push(EscalationDiagnostic {
+            leaf: format!("leaves/{name}"),
+            first: node.first,
+            depth: node.depth(),
+            page: page.page as u64,
+            slot: atlas::slot_property(page.slot),
+            sources: page
+                .sources
+                .iter()
+                .map(|&(image, material)| EscalationSource {
+                    image: image as u64,
+                    material,
+                })
+                .collect(),
+            step: page.escalation.step.name(),
+            misses: page
+                .escalation
+                .misses
+                .iter()
+                .map(|m| EscalationMiss {
+                    step: m.step.name(),
+                    reason: m.reason.name(),
+                    mip: m.mip.map(|mip| mip as u64),
+                    gate: m.gate.clone(),
+                })
+                .collect(),
+        });
+    }
     Ok(())
 }
 
@@ -640,6 +974,10 @@ pub fn mesh_to_leaf_payloads(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs;
     config.scratch_dir = request.scratch_dir;
+    #[cfg(test)]
+    if let Some(leaf_triangles) = request.leaf_triangles {
+        config = config.with_leaf_triangles(leaf_triangles);
+    }
     let captured = match timing::time(Stage::Capture, || {
         full::capture(&request.input, &config, &mut || attempt.check())
     }) {
@@ -674,12 +1012,15 @@ pub fn mesh_to_leaf_payloads(
         &config,
         &stage_plan,
         request.profile,
+        request.lod_mutation,
+        request.lod_target,
+        request.baker.as_deref(),
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();
     let cleanup = captured.close();
     let report = match result {
-        Ok(report) => report,
+        Ok(output) => output.report,
         Err(error) => {
             let mut failed = stage.fail(error);
             if let Err(error) = cleanup {
@@ -767,6 +1108,49 @@ mod tests {
             assert_eq!(attempts, [initial]);
         }
     }
+    /// A writer `Failure` (invalid state, consumer row limit, frame escape) must
+    /// reach the caller after one attempt; reclassified as `Budget` it would
+    /// silently coarsen textures and retry up to twelve times.
+    #[test]
+    fn writer_failure_is_never_a_density_retry_but_writer_budget_is() {
+        for (writer_error, retried) in [
+            (
+                writer::WriteError::Failure(JobError::new(
+                    JobErrorKind::InvalidState,
+                    "writer failure",
+                )),
+                false,
+            ),
+            (
+                writer::WriteError::Budget(JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    "member budget",
+                )),
+                true,
+            ),
+        ] {
+            let kind = writer_error.kind();
+            let mut attempts = Vec::new();
+            let mut writer_error = Some(writer_error);
+            let result = encode_with_density_budget(Profile::Balanced, 2, |drop| {
+                attempts.push(drop);
+                match writer_error.take() {
+                    Some(error) => write_prepared(Ok(((), ())), |_| Err::<(), _>(error)),
+                    None => Ok(((), ())),
+                }
+            });
+            if retried {
+                let (_, drop, reasons) = result.unwrap();
+                assert_eq!(
+                    (attempts.as_slice(), drop, reasons.len()),
+                    (&[2, 3][..], 3, 1)
+                );
+            } else {
+                assert_eq!(result.unwrap_err().kind(), kind);
+                assert_eq!(attempts, [2]);
+            }
+        }
+    }
     #[test]
     fn real_leaf_output_all_profiles_and_exact_member_limit() {
         let work = tempfile::tempdir().unwrap();
@@ -849,6 +1233,24 @@ mod tests {
     /// texture, like a photogrammetry atlas: a leaf's hull covers most of the
     /// texture while its charts are a small part of it.
     fn scattered_fixture(parent: &Path, count: usize, min_filter: u32) -> PathBuf {
+        textured_fixture(parent, count, min_filter, Texture::Smooth, 1024)
+    }
+    #[derive(Clone, Copy)]
+    enum Texture {
+        Smooth,
+        /// Every n-th 4x4 block holds four scattered random colours.
+        Hard(u64),
+    }
+    /// [`scattered_fixture`]; `Texture::Hard(n)` replaces every n-th 4x4 texture
+    /// block with four scattered random colours (1: every block), so pages
+    /// miss the colour gate at the profile's encoder setting.
+    fn textured_fixture(
+        parent: &Path,
+        count: usize,
+        min_filter: u32,
+        pattern: Texture,
+        edge: u32,
+    ) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
         let mut next = || {
@@ -884,8 +1286,22 @@ mod tests {
         }
         fs::write(parent.join("attributes.bin"), &bytes).unwrap();
         // Smooth gradients with mild texel detail, like photographed surfaces.
-        let texture = image::RgbaImage::from_fn(1024, 1024, |x, y| {
-            // Every channel stays below 256 for x, y < 1024.
+        let hash = |x: u32, y: u32, s: u32| {
+            let mut h = u64::from(x).wrapping_mul(0x9E37_79B9)
+                ^ u64::from(y).wrapping_mul(0x85EB_CA6B)
+                ^ u64::from(s).wrapping_mul(0x27D4_EB2F);
+            h ^= h >> 13;
+            h = h.wrapping_mul(0xC2B2_AE35);
+            h ^ (h >> 16)
+        };
+        let texture = image::RgbaImage::from_fn(edge, edge, |x, y| {
+            if let Texture::Hard(every) = pattern {
+                if hash(x / 4, y / 4, 77).is_multiple_of(every) {
+                    let c = hash(x / 4, y / 4, (hash(x, y, 9) % 4) as u32);
+                    return image::Rgba([c as u8, (c >> 8) as u8, (c >> 16) as u8, 255]);
+                }
+            }
+            // Every channel stays below 256 for x, y < 1024 (`edge` <= 1024).
             let detail = (x * 37 + y * 91) % 13;
             image::Rgba([
                 (x / 8 + detail) as u8,
@@ -916,6 +1332,13 @@ mod tests {
             rows.as_bytes().to_vec(),
         ];
         for row in rows.lines() {
+            let row: serde_json::Value = serde_json::from_str(row).unwrap();
+            files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
+        }
+        // H17 coarse tiles are part of the deterministic output too.
+        let proxies = fs::read_to_string(output.join("proxies.jsonl")).unwrap();
+        files.push(proxies.as_bytes().to_vec());
+        for row in proxies.lines() {
             let row: serde_json::Value = serde_json::from_str(row).unwrap();
             files.push(fs::read(output.join(row["uri"].as_str().unwrap())).unwrap());
         }
@@ -1025,5 +1448,197 @@ mod tests {
             .file_name()
             .to_string_lossy()
             .starts_with(".tiles-dir-")));
+    }
+
+    /// Pages that miss the colour gate at the profile setting escalate; the
+    /// report counts them by step, agrees with the leaf manifest and lists
+    /// them with leaf, slot, sources and the missed level, and the published
+    /// bytes and report are the same for any worker count.
+    #[test]
+    fn escalated_pages_are_reported_and_identical_across_jobs() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(
+            &work.path().join("source"),
+            9_000,
+            9729,
+            Texture::Hard(4),
+            256,
+        );
+        let mut previous = None;
+        for jobs in [1, 3] {
+            let output = work.path().join(format!("balanced{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let report = &result.report;
+            let total = report.escalated_pages.uastc_level2
+                + report.escalated_pages.uastc_level3
+                + report.lossless_fallback_pages;
+            assert!(total > 0, "{report:?}");
+            let mut manifest = BTreeMap::<String, u64>::new();
+            let mut pages = 0;
+            for row in fs::read_to_string(output.join("leaves.jsonl"))
+                .unwrap()
+                .lines()
+            {
+                let row: serde_json::Value = serde_json::from_str(row).unwrap();
+                for page in row["appearance"].as_array().unwrap() {
+                    if page.get("levels").is_none() {
+                        continue;
+                    }
+                    pages += 1;
+                    if let Some(step) = page["escalation"]["step"].as_str() {
+                        *manifest.entry(step.to_owned()).or_default() += 1;
+                        assert_eq!(page["escalation"]["misses"][0]["step"], "profile");
+                        assert_eq!(
+                            page["mime"],
+                            if step == "lossless_png" {
+                                "image/png"
+                            } else {
+                                "image/ktx2"
+                            }
+                        );
+                    }
+                }
+            }
+            println!(
+                "escalation jobs{jobs} pages{pages} level2 {} level3 {} png {}",
+                report.escalated_pages.uastc_level2,
+                report.escalated_pages.uastc_level3,
+                report.lossless_fallback_pages
+            );
+            let count = |step: &str| manifest.get(step).copied().unwrap_or(0);
+            assert_eq!(count("uastc_level2"), report.escalated_pages.uastc_level2);
+            assert_eq!(count("uastc_level3"), report.escalated_pages.uastc_level3);
+            assert_eq!(count("lossless_png"), report.lossless_fallback_pages);
+            assert_eq!(
+                report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
+                total
+            );
+            assert!(report.escalation_diagnostics.len() <= ESCALATION_DIAGNOSTICS);
+            for diagnostic in &report.escalation_diagnostics {
+                assert!(diagnostic.leaf.starts_with("leaves/"));
+                assert_eq!(diagnostic.slot, "baseColorTexture");
+                assert_eq!(
+                    diagnostic.sources,
+                    [EscalationSource {
+                        image: 0,
+                        material: 0
+                    }]
+                );
+                assert_eq!(diagnostic.misses[0].step, "profile");
+                assert!(diagnostic.misses.iter().all(|m| m.mip.is_some()));
+            }
+            let files = output_files(&output);
+            let report = serde_json::to_value(report).unwrap();
+            if let Some((prior_files, prior_report)) = &previous {
+                assert_eq!(prior_files, &files, "jobs {jobs} changed published bytes");
+                assert_eq!(prior_report, &report, "jobs {jobs} changed the report");
+            } else {
+                previous = Some((files, report));
+            }
+        }
+    }
+    /// A mip-sampled page has no lossless step; when every lossy step misses,
+    /// the refusal names the leaf, page, slot, source image and material, and
+    /// each step's missed level.
+    #[test]
+    fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
+        let work = tempfile::tempdir().unwrap();
+        let input = textured_fixture(
+            &work.path().join("source"),
+            640,
+            9987,
+            Texture::Hard(1),
+            256,
+        );
+        let failure = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        let message = failure.error.to_string();
+        assert_eq!(failure.error.kind(), JobErrorKind::Unsupported, "{message}");
+        for text in [
+            "leaf 000000000000 (first 0, depth ",
+            "page 0 baseColorTexture (source image 0 material 0)",
+            "profile mip",
+            "uastc_level3 mip",
+            "no lossless PNG step",
+        ] {
+            assert!(message.contains(text), "{text}: {message}");
+        }
+    }
+
+    /// Pages the codec's own verification refuses at the profile setting
+    /// escalate and are counted apart from gate misses.
+    #[test]
+    fn codec_verification_misses_are_reported_by_reason() {
+        let work = tempfile::tempdir().unwrap();
+        // One quad covering the whole 64x64 sharp texture, mip-sampled: a dedicated
+        // page whose authored levels are the texture's own class chain.
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(64, 64, |x, y| {
+            let v = |k: u32| ((x * 7 + y * 13 + k * 31) % 97 + 80) as u8;
+            image::Rgba([v(0), v(1), v(2), 255])
+        })
+        .save(source.join("sharp.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"sharp.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        let result = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let report = &result.report;
+        let total = report.escalated_pages.uastc_level2
+            + report.escalated_pages.uastc_level3
+            + report.lossless_fallback_pages;
+        println!(
+            "codec-verify escalation {:?} {:?} png {}",
+            report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
+        );
+        assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+        assert_eq!(
+            report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
+            total
+        );
+        let codec = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "codec_verify")
+            .count() as u64;
+        assert_eq!(codec, report.escalation_reasons.codec_verify);
+        assert!(report
+            .escalation_diagnostics
+            .iter()
+            .all(|d| d.misses[0].step == "profile"));
     }
 }

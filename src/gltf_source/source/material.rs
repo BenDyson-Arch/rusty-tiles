@@ -114,6 +114,33 @@ impl Material {
         }
         Ok(value)
     }
+    /// The flat (untextured) material of an H17 geometry proxy: every texture binding is
+    /// removed and every literal factor kept; alpha masking (texture driven) becomes opaque.
+    pub(crate) fn flat_proxy(&self) -> Value {
+        let mut value = self.value.clone();
+        for spec in SLOTS.iter() {
+            let (last, parents) = spec.path.split_last().expect("slot paths are non-empty");
+            let pointer: String = parents.iter().map(|k| format!("/{k}")).collect();
+            if let Some(object) = value.pointer_mut(&pointer).and_then(Value::as_object_mut) {
+                object.remove(*last);
+            }
+        }
+        if let Some(object) = value.as_object_mut() {
+            if object.get("alphaMode").and_then(Value::as_str) == Some("MASK") {
+                object.remove("alphaMode");
+                object.remove("alphaCutoff");
+            }
+            if object
+                .get("pbrMetallicRoughness")
+                .and_then(Value::as_object)
+                .is_some_and(|p| p.is_empty())
+            {
+                object.remove("pbrMetallicRoughness");
+            }
+        }
+        value
+    }
+
     /// The root proxy profile preserves untextured opaque core factors.
     pub(crate) fn proxy_eligible(&self) -> bool {
         self.bindings().next().is_none()
@@ -125,6 +152,28 @@ impl Material {
 
     pub(crate) fn bindings(&self) -> impl Iterator<Item = &TextureBinding> {
         self.bindings.iter().flatten()
+    }
+
+    /// The material exactly as authored (literal factors and bindings).
+    pub(crate) fn literal(&self) -> &Value {
+        &self.value
+    }
+
+    /// JSON pointers of the texture slots this material binds.
+    pub(crate) fn bound_slot_pointers(&self) -> Vec<String> {
+        SLOTS
+            .iter()
+            .zip(&self.bindings)
+            .filter(|(_, b)| b.is_some())
+            .map(|(spec, _)| spec.path.iter().map(|k| format!("/{k}")).collect())
+            .collect()
+    }
+
+    /// JSON pointers of every texture slot a material may bind.
+    pub(crate) fn slot_pointers() -> impl Iterator<Item = String> {
+        SLOTS
+            .iter()
+            .map(|spec| spec.path.iter().map(|k| format!("/{k}")).collect())
     }
 
     pub(crate) fn has_normal_texture(&self) -> bool {

@@ -289,12 +289,18 @@ def decoded(path, cache=None):
 
 def accessor(doc, views, identifier):
     a = doc['accessors'][identifier]
+    view = doc['bufferViews'][a['bufferView']]
+    octahedral = view.get('extensions',{}).get('EXT_meshopt_compression',{}).get('filter') == 'OCTAHEDRAL'
+    if octahedral:
+        # Lossy profiles: OCTAHEDRAL-filtered NORMAL decodes to normalized SHORT VEC3.
+        require(a['componentType'] == 5122 and a.get('normalized') is True and a['type'] == 'VEC3' and view['byteStride'] == 8,'octahedral NORMAL accessor')
+        data = views[a['bufferView']]
+        return [[max(v/32767,-1.) for v in struct.unpack_from('<3h',data,i*8)] for i in range(a['count'])]
     require(not a.get('normalized',False),'unexpected normalized accessor')
     component = a['componentType']
     require(component in (5123,5126),'writer component domain')
     fmt,size = ('H',2) if component == 5123 else ('f',4)
     width = {'SCALAR':1,'VEC2':2,'VEC3':3,'VEC4':4}[a['type']]
-    view = doc['bufferViews'][a['bufferView']]
     stride = view.get('byteStride',size*width)
     data = views[a['bufferView']]
     start = a.get('byteOffset',0)
@@ -389,6 +395,21 @@ def check_material(output, source):
         require('index' in a and a.get('texCoord',0) == slot,'dense slot UV assignment')
         b['index'],b['texCoord'] = a['index'],a.get('texCoord',0)
     require(output == expected,'literal material factors/normalScale preserved')
+
+
+OCTAHEDRAL_NORMAL_DEGREES = 0.07  # 12-bit octahedral codes (provisional profile constant)
+
+
+def check_normals(actual, truth, profile):
+    """lossless keeps the f32 source NORMAL exactly; other profiles store 12-bit
+    octahedral codes, so each decoded corner is within the octahedral angle."""
+    if profile == 'lossless':
+        require(actual == truth,'source NORMAL preservation')
+        return
+    for a,t in zip(actual,truth,strict=True):
+        la,lt = math.sqrt(sum(v*v for v in a)),math.sqrt(sum(v*v for v in t))
+        cosine = max(-1.,min(1.,sum(x*y for x,y in zip(a,t))/(la*lt)))
+        require(math.degrees(math.acos(cosine)) <= OCTAHEDRAL_NORMAL_DEGREES,'octahedral NORMAL angle')
 
 
 def check_features(features, tables):
@@ -758,7 +779,8 @@ def verify(truth_path, output, decode_cache=None, controls=False, ktx_decoded=No
                 require([tcolumns[f'vertex_{i}'][tid] for i in range(3)] == source['vertices'],'authored corner identity/reflected winding')
                 require(tcolumns['attribute_flags'][tid] == (31 if small else 23),'captured attribute presence')
                 require(tcolumns['degenerate'][tid] == 0,'fixture source degeneracy flag')
-                for name,truth_name in [('NORMAL','normal'),('TANGENT','tangent'),('COLOR_0','color')]:
+                check_normals(values['NORMAL'][ti*3:ti*3+3],source['normal'],profile)
+                for name,truth_name in [('TANGENT','tangent'),('COLOR_0','color')]:
                     require(values[name][ti*3:ti*3+3] == source[truth_name],'source '+name+' preservation/TBN')
                 translation,scale = node.get('translation',[0.,0.,0.]),node.get('scale',[1.,1.,1.])
                 decoded_position = []
@@ -884,7 +906,11 @@ def sensitivity_controls(snapshot, truth):
     mutant_uv = copy.deepcopy(values['TEXCOORD_0'])
     mutant_uv[0][0] = f32(mutant_uv[0][0]+0.5/page_size[0])
     reject('half-source-texel-UV-origin',lambda:check_page_mapping(mutant_uv,original_uv,truth['images'][binding['sourceImage']],binding,page_size))
-    require(len(failures) == 9,'nine sensitive decoded controls')
+    turned = copy.deepcopy(values['NORMAL'][:3])
+    turned[0] = [turned[0][0]+0.01,turned[0][1],turned[0][2]-0.01]
+    reject('normal-profile-angle',lambda:check_normals(turned,source['normal'],'balanced'))
+    reject('normal-lossless-bits',lambda:check_normals(turned,source['normal'],'lossless'))
+    require(len(failures) == 11,'eleven sensitive decoded controls')
     return failures
 
 

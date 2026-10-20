@@ -14,6 +14,18 @@ use std::{
 pub(crate) trait SpillIo: Send + Sync {
     fn create(&self, path: &Path) -> io::Result<Box<dyn Write + Send>>;
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>>;
+    /// Open `path` positioned `offset` bytes in. The default reads and discards the prefix.
+    fn open_at(&self, path: &Path, offset: u64) -> io::Result<Box<dyn Read + Send>> {
+        let mut reader = self.open(path)?;
+        let skipped = io::copy(&mut (&mut reader).take(offset), &mut io::sink())?;
+        if skipped != offset {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "spill file is shorter than the requested offset",
+            ));
+        }
+        Ok(reader)
+    }
     /// A handle for positioned reads of a completed file (random access to sequences).
     fn open_random(&self, path: &Path) -> io::Result<File> {
         File::open(path)
@@ -78,18 +90,27 @@ impl SpillIo for FileIo {
     fn open(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         Ok(Box::new(File::open(path)?))
     }
+    fn open_at(&self, path: &Path, offset: u64) -> io::Result<Box<dyn Read + Send>> {
+        use std::io::Seek;
+        let mut file = File::open(path)?;
+        file.seek(io::SeekFrom::Start(offset))?;
+        Ok(Box::new(file))
+    }
 }
 
 #[derive(Default)]
 pub(super) struct Accounting {
     live: AtomicU64,
     peak: AtomicU64,
+    /// Largest live bytes since the last [`Scratch::begin_stage`].
+    stage_peak: AtomicU64,
 }
 
 impl Accounting {
     fn add(&self, bytes: u64) {
         let live = self.live.fetch_add(bytes, Ordering::Relaxed) + bytes;
         self.peak.fetch_max(live, Ordering::Relaxed);
+        self.stage_peak.fetch_max(live, Ordering::Relaxed);
     }
     fn remove(&self, bytes: u64) {
         self.live.fetch_sub(bytes, Ordering::Relaxed);
@@ -110,6 +131,8 @@ pub(crate) struct Scratch {
     io: Arc<dyn SpillIo>,
     accounting: Arc<Accounting>,
     next_file: AtomicU64,
+    /// Largest sort run chunk file ([`super::CHUNK_BYTES`]; tests may shrink it).
+    chunk_bytes: std::sync::atomic::AtomicUsize,
 }
 
 struct Created {
@@ -238,6 +261,7 @@ impl Scratch {
             io,
             accounting: Arc::default(),
             next_file: AtomicU64::new(0),
+            chunk_bytes: std::sync::atomic::AtomicUsize::new(super::CHUNK_BYTES),
         }
     }
 
@@ -384,6 +408,30 @@ impl Scratch {
     /// Largest number of bytes held by live spill files at once.
     pub(crate) fn peak_bytes(&self) -> u64 {
         self.accounting.peak.load(Ordering::Relaxed)
+    }
+
+    /// Largest sort run chunk file written in this scratch.
+    pub(crate) fn chunk_bytes(&self) -> usize {
+        self.chunk_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Test seam: smaller chunks exercise multi-chunk runs on small inputs. Chunking changes
+    /// no sorted order or content, only when scratch is freed.
+    #[cfg(test)]
+    pub(crate) fn set_chunk_bytes(&self, bytes: usize) {
+        self.chunk_bytes.store(bytes.max(1), Ordering::Relaxed);
+    }
+
+    /// Starts a stage: its peak restarts from the bytes currently live (retained files).
+    pub(crate) fn begin_stage(&self) {
+        self.accounting
+            .stage_peak
+            .store(self.live_bytes(), Ordering::Relaxed);
+    }
+
+    /// Largest number of live bytes since the last [`Scratch::begin_stage`] (or creation).
+    pub(crate) fn stage_peak_bytes(&self) -> u64 {
+        self.accounting.stage_peak.load(Ordering::Relaxed)
     }
 
     /// Removes the directory, reporting failure rather than ignoring it as drop does.

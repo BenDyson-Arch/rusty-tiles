@@ -6,7 +6,7 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh placement can need native CRS support too. See [installation](INSTALL.md#choose-a-build).
+The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh source-CRS conversion (legacy and `mesh --source-crs`) can need native support for CRS outside the verified grid-free tier; the new `mesh` command, its grid-free source CRS and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
 
 Both builds expose the command help, including commands whose native capability is unavailable. Check `rusty-tiles doctor --command COMMAND` before using a converter. Adding GDAL to a standard installation does not enable the feature. The Python wheel exposes only the [standard Python API](../bindings/python/README.md), not this CLI.
 
@@ -41,13 +41,49 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling. `point-cloud` and `vector` write only this layout: their `--explicit` flag was removed in 0.4.0 and is now an unknown argument. The legacy `mesh-to-3tz` keeps `--explicit`, which selects the earlier explicit hierarchy, partitioning and payloads. To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+`mesh`, `mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling. `point-cloud` and `vector` write only this layout: their `--explicit` flag was removed in 0.4.0 and is now an unknown argument. The legacy `mesh-to-3tz` keeps `--explicit`, which selects the earlier explicit hierarchy, partitioning and payloads. To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
 
-The default layout is a bounded implicit forest. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
+The shared layout is a bounded implicit forest. Producer naming/partition details vary; the following member naming describes vector and point-cloud output. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
 
 ## Converters
 
+### mesh
+
+Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
+through capture, leaf encoding and Tiles 1.1 implicit `.3tz` delivery. Current parents have no coarse content;
+certified LOD and proxy baking are downstream work. See the [mesh guide](MESH.md)
+for admitted sources, placement, resources, migration and the known Cesium
+KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
+Rust exports are now internal.
+
+| Option | Alias | Default | Meaning |
+| --- | --- | --- | --- |
+| `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`; policies/constants are provisional |
+| `--jobs` | | `auto` | Positive maximum workers or memory-aware auto; actual workers are capped per stage by cores and memory; unknown memory uses one worker |
+| `--scratchDir` | `--scratch-dir` | platform scratch parent | Owned working-data parent; final archive staging stays beside output |
+| `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
+| `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |
+| `--sceneOffset X Y Z` | `--scene-offset` | zero with anchor | Post-node source Y-up metre translation before orientation; requires anchor |
+| `--sourceCrs` | `--source-crs` | `local` | `local` or a 2D horizontal EPSG/WKT/PROJ definition, mapped at capture; excludes the anchor options |
+| `--sourceAxes` | `--source-axes` | `y-up` with a source CRS | `y-up` (E, height, −N) or `xyz` (E, N, height) after node transforms |
+| `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Added in double precision: E/N in horizontal CRS units, A metres |
+| `--sourceOffsetFile` | `--source-offset-file` | none | Metashape offset file of exactly `E: <n>`, `N: <n>`, `A: <n>` lines; excludes `--sourceOffset` |
+| `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height |
+
+Shared `-i`/`-o`/`--force`, `--json` and `--progress json` apply. Output is `.3tz`
+only. `--json` returns `tilerReport` (snake_case, identical to `conversion.json`),
+`diagnostics` (requested/actual workers and resources, outside the archive),
+`cleanupDiagnostics`, and the resolved output. Input is local with optional
+rigid placement, or in a declared [source CRS](MESH.md#source-crs) whose
+per-vertex map (positions, normals and tangents) is applied at capture and whose
+ENU frame becomes the root transform. There is no CRS inference, geoid
+conversion, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
+`lossless` is not a source-GLB byte-preservation promise.
+
 ### mesh-to-3tz
+
+Deprecated; retained until the full new tiler is accepted. Use `mesh` for the
+new local-metre pipeline. Its old options do not apply to `mesh`.
 
 Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. Small inputs are wrapped without splitting.
 
@@ -340,9 +376,12 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
+Mesh, vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
 
 ## mesh-local-to-3tz
+
+Deprecated; retained until the full new tiler is accepted. Use [mesh](#mesh) for
+the new public operation; the legacy leaf/proxy options below do not apply to it.
 
 F1c1 explicit placement is a development implementation candidate pending
 independent review and final consumer/platform acceptance. The bounded source
@@ -465,7 +504,7 @@ A failure has this shape and the matching exit code:
 {"ok": false, "error": {"code": "data", "message": "input not found: nope.geojson"}, "exitCode": 3}
 ```
 
-`validate --json` returns `ok`, `archive`, `tiles`, `contentReferences`, `entries` and the list of `checks` run. `doctor --json` returns the dependency inventory with `ok`. If a selected command is not ready, it also carries `error` and exits with code 4. `preview --json` prints one startup object with `ok`, the bound `url` and the selected `layers`.
+`validate --json` returns `ok`, `archive`, `tiles`, `contentReferences`, `entries` and the list of `checks` run. `doctor --json` returns the dependency inventory with `ok`. If a selected command is not ready, it also carries `error` and exits with that capability's refusal status (see [doctor](#doctor)). `preview --json` prints one startup object with `ok`, the bound `url` and the selected `layers`.
 
 ### Progress events
 
@@ -487,6 +526,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `raster` | `source_cog` and `aligned_warp` use native normalized progress out of 1,000,000; `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports actual tile count before sealing and installation. |
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
+| `mesh` | Named capture/leaf/hierarchy/archive work; required events finish before installation; see the mesh guide |
 | `mesh-local-to-3tz` | `mesh_approximation` when requested, `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |
 
 Events report work units, not time remaining.
@@ -496,7 +536,7 @@ Events report work units, not time remaining.
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` still works when this is unset. |
-| `RAYON_NUM_THREADS` | mesh | Limit worker threads. Terrain encoding is sequential. |
+| `RAYON_NUM_THREADS` | legacy mesh | Limit legacy Rayon workers. The new `mesh` owns its workers through `--jobs`; terrain encoding is sequential. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
 | `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 

@@ -30,9 +30,90 @@ STALE = {
     "c2:slice3/merge-I0-into-R", "c2:slice3/slice1-reuse-URI-cache-for-verdicts",
     "c2:slice3/slice1-skip-external-root-transform", "c2:slice3/units-per-URI",
     "i1:drop-repeated-subtree-check", "em:replay-without-references",
-    "em:nested-placement-unrecorded",
+    "em:nested-placement-unrecorded", "c2:h11/trust-declared-bounds",
+    # These two apply textually but name the removed tile arena (they do not compile).
+    "c2:reverse-tile-order", "c2:slice3/R-transform-before-V_R",
+    "c2:slice3/external-content-at-R-level", "c2:slice3/slice1-reverse-tile-order",
+    # The replayed root keeping the first placement's arena link: there is no arena link to
+    # keep; the VS-B mutants `replay-no-external` and `replay-flat-parent` are its defects now.
+    "em:cached-placement-link",
+    # Their context lines name the former direct tile registration.
+    "c2:slice3/archive-scoped-derived", "c2:slice3/float32-rows-via-shortest-decimal",
+    # Develop's H7 moved this check into a shared suffix helper.
+    "i1:case-sensitive-suffix",
 }
 PORTS = [
+    # H11: the corner test trusts the declared accessor bounds of viewless accessors.
+    ("port:c2:h11/trust-declared-bounds", [
+        ("src/content_integrity/payload.rs",
+         "            parsed.min = min;\n            parsed.max = max;\n        }\n",
+         "            parsed.min = min;\n            parsed.max = max;\n        }\n"
+         "        if view.is_none() {\n"
+         "            for (bound, out) in [(a.min, &mut parsed.min), (a.max, &mut parsed.max)] {\n"
+         "                if let Some(bound) = bound {\n"
+         "                    let declared = array::<&RawValue>(Some(bound), slots)?;\n"
+         "                    for (raw, o) in declared.iter().zip(out.iter_mut()) {\n"
+         "                        *o = serde_json::from_str::<f64>(raw.get()).unwrap_or(*o);\n"
+         "                    }\n                }\n            }\n        }\n"),
+        ("src/content_integrity/payload/scene.rs",
+         "    pub(crate) fn positions(&self) -> &[usize] {\n        self.positions\n    }\n",
+         "    pub(crate) fn positions(&self) -> &[usize] {\n        self.positions\n    }\n"
+         "    pub(crate) fn extent(&self, accessor: usize) -> ([f64; 3], [f64; 3]) {\n"
+         "        let a = &self.draws.accessors[accessor];\n"
+         "        (std::array::from_fn(|c| a.min.get(c).copied().unwrap_or(f64::NAN)),\n"
+         "         std::array::from_fn(|c| a.max.get(c).copied().unwrap_or(f64::NAN)))\n    }\n"),
+        (V, "containment::walk_marked(self.arena, n, self.levels, bitmap, self.credit, |v| {\n"
+            "                    raw_vertex(instance.vertex(accessor, v))\n                });",
+         "containment::walk_marked_declared(self.arena, n, self.levels, bitmap, self.credit, |v| {\n"
+         "                    raw_vertex(instance.vertex(accessor, v))\n                }, {\n"
+         "                    let (lo, hi) = instance.extent(accessor);\n"
+         "                    let word = |p: [f64; 3]| match instance.format(accessor) {\n"
+         "                        PositionFormat::F32 => RawVertex::F32(p.map(|x| x as f32)),\n"
+         "                        _ => RawVertex::Int(p.map(|x| x as i32)),\n                    };\n"
+         "                    Some((word(lo), word(hi)))\n                });"),
+        ("src/validate/containment.rs",
+         "    vertex: impl Fn(usize) -> RawVertex,\n) -> Option<(usize, Verdict)> {\n    let diagonal = diagonal_suffices(arena, levels);",
+         "    vertex: impl Fn(usize) -> RawVertex,\n) -> Option<(usize, Verdict)> {\n"
+         "    walk_marked_declared(arena, n, levels, bitmap, credit, vertex, None)\n}\n"
+         "#[allow(clippy::too_many_arguments)]\n"
+         "pub(crate) fn walk_marked_declared(\n    arena: &mut Arena,\n    n: Normalization,\n"
+         "    levels: &[LevelFacts],\n    bitmap: &[u64],\n    credit: &mut Credit,\n"
+         "    vertex: impl Fn(usize) -> RawVertex,\n    declared: Option<(RawVertex, RawVertex)>,\n"
+         ") -> Option<(usize, Verdict)> {\n    let diagonal = diagonal_suffices(arena, levels);"),
+        ("src/validate/containment.rs", "            .then(|| raw_box(words, first, &vertex))",
+         "            .then(|| declared.or_else(|| raw_box(words, first, &vertex)))"),
+    ]),
+    ("port:c2:reverse-tile-order", [(V, "            try_push(&mut self.levels, fact)?;\n            current = parent;\n        }\n        Ok(())",
+        "            try_push(&mut self.levels, fact)?;\n            current = parent;\n        }\n"
+        "        let mut path = Vec::new();\n        let mut at = Some(tile);\n"
+        "        while let Some(t) = at {\n            path.push(self.path[t].transform);\n"
+        "            at = self.path[t].parent;\n        }\n        path.reverse();\n"
+        "        for (l, level) in self.levels.iter_mut().enumerate().skip(1) {\n"
+        "            level.to_parent = path[l - 1];\n        }\n        Ok(())")]),
+    ("port:c2:slice3/R-transform-before-V_R", [(V, "            let index = self.path_tile(TileFact {\n                transform: None,",
+        "            let moved = if level == 0 { self.c2.path[r.tile].transform.take() } else { None };\n"
+        "            let index = self.path_tile(TileFact {\n                transform: moved,")]),
+    ("port:c2:slice3/external-content-at-R-level", [(V,
+        "            let index = self.path_tile(TileFact {\n                transform: None,",
+        "            let moved = if level == 0 { self.c2.path[r.tile].external.take() } else { None };\n"
+        "            let index = self.path_tile(TileFact {\n                transform: None,"),
+        (V, "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: None,",
+         "                    EffectiveVolume::Derived(_) => None,\n                },\n                external: moved,")]),
+    ("port:i1:case-sensitive-suffix", [("src/content_integrity/implicit.rs",
+        "        ends_with_suffix(self.static_tail(), \"json\")",
+        "        { let tail = self.static_tail(); tail.len() >= 5 && &tail[tail.len() - 5..] == b\".json\" }")]),
+    ("port:c2:slice3/archive-scoped-derived", [(V,
+        "            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for",
+        "            if matches!(tile.volume, EffectiveVolume::Derived(_)) {\n"
+        "                self.c2.exclude(Reason::DerivedImplicitVolume);\n            }\n"
+        "            // C2 facts: rows exactly (FLOAT32 already widened by I1), V_R for")]),
+    ("port:c2:slice3/float32-rows-via-shortest-decimal", [(V,
+        "                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(*b)),",
+        "                    EffectiveVolume::Row(b) => Some(VolumeFacts::Box(b.map(|v| {\n"
+        "                        if (v as f32) as f64 == v && v.is_finite() {\n"
+        "                            format!(\"{}\", v as f32).parse().unwrap()\n"
+        "                        } else {\n                            v\n                        }\n"
+        "                    }))),")]),
     ("port:c2:skip-ancestors", [(V, "                    Some((Role::Ancestor(level), volume)),",
                                  "                    None,")]),
     ("port:c2:skip-content-volume", [(V, "                volumes: [Some((Role::Own, own)), content, None],",
@@ -40,9 +121,9 @@ PORTS = [
     ("port:c2:skip-external-root-transform", [(V, "                to_parent: child.transform,",
                                                "                to_parent: child.transform.filter(|_| child.external.is_none()),")]),
     # One stream per URI: later references to an already streamed URI are not streamed.
-    ("port:c2:reuse-URI-cache-for-verdicts", [(V, "        self.c2.stream.started = true;\n",
-                                               "        self.c2.stream.started = true;\n"
-                                               "        if self.repeat_seen(rank) {\n            return Ok(());\n        }\n")]),
+    ("port:c2:reuse-URI-cache-for-verdicts", [(V, "                self.c2.build_levels(tile, content)?;\n                let stored = self.facts.get(rank)?;",
+                                               "                if self.repeat_seen(rank) {\n                    return Ok(());\n                }\n"
+                                               "                self.c2.build_levels(tile, content)?;\n                let stored = self.facts.get(rank)?;")]),
     ("port:c2:test-undrawn-vertices", [(V, "            instance.mark(accessor, |v| bitmap[v / 64] |= 1 << (v % 64));",
                                         "            (0..instance.count(accessor)).for_each(|v| bitmap[v / 64] |= 1 << (v % 64));")]),
     ("port:c2:slice3/depth-is-chain-length-minus-1", [(V, "                parent: Some(parent_tile),\n                depth,\n",
@@ -67,15 +148,15 @@ PORTS = [
                                               "            if false && self.subtrees.get(member.rank) {")]),
     ("port:em:replay-without-references", [(V, "                    self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;",
                                             "                    let _ = (tile, content, rank, stored);")]),
-    ("port:em:nested-placement-unrecorded", [(V, "                (Some(summary), Some(parent)) => self.record(Event::Place(Box::new(Placement {",
-                                              "                (Some(summary), Some(parent)) if false => self.record(Event::Place(Box::new(Placement {")]),
+    ("port:em:nested-placement-unrecorded", [(V, "                (Some(summary), Some(parent)) => {",
+                                              "                (Some(summary), Some(parent)) if false => {")]),
 ]
 # `units-per-URI` needs a helper on Check: whether this rank was referenced before.
-HELPER = (V, "    /// One C2 reference: registration and precheck step and, while in domain, its inline",
+HELPER = (V, "    /// One C2 reference: registration and precheck step; a reference whose step passed is",
           "    fn repeat_seen(&mut self, rank: u64) -> bool {\n"
           "        thread_local!(static SEEN: std::cell::RefCell<std::collections::HashSet<u64>> = Default::default());\n"
           "        SEEN.with(|s| !s.borrow_mut().insert(rank))\n    }\n"
-          "    /// One C2 reference: registration and precheck step and, while in domain, its inline")
+          "    /// One C2 reference: registration and precheck step; a reference whose step passed is")
 H23 = [
     ("h23:omit-member-check", [(PAYLOAD, "    if replay.is_some_and(|admission| member_digest(kind, bytes) != admission.member) {\n"
                                 "        return Err(invalid(\"source archive changed during inspection\").into());\n    }\n", "")]),
@@ -99,7 +180,7 @@ H23 = [
                                     "        if false {\n            let mut min = allocation(parsed.components, f64::INFINITY)?;")]),
 ]
 TESTS = ["validate::", "content_integrity::", "c2_oracle_parity", "i1_oracle_parity", "archive3tz",
-         "payload_context_acceptance"]
+         "payload_context_acceptance", "spill::"]
 
 
 def sh(cmd, **kw):
@@ -160,6 +241,15 @@ def main(argv):
         applied = True
         if kind == "patch":
             applied = sh(["git", "apply", spec]).returncode == 0
+            if not applied:
+                # A patch whose context names the removed tile arena or the former direct
+                # registration is applied with those names mapped to the path stack.
+                text = open(spec).read().replace("self.c2.tile(TileFact {", "self.path_tile(TileFact {")
+                text = text.replace("self.c2.tiles[", "self.c2.path[").replace("self.tiles[", "self.path[")
+                applied = subprocess.run(["git", "apply", "-"], input=text, text=True,
+                                         capture_output=True).returncode == 0
+                if applied:
+                    name = name + " (mapped)"
         else:
             helper = name in ("port:c2:slice3/units-per-URI", "port:c2:reuse-URI-cache-for-verdicts")
             edits = list(spec) + ([HELPER] if helper else [])

@@ -66,7 +66,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -99,6 +99,7 @@ jobs:
           node --version
           python3 -I bench/perf_lane/test_report.py
           python3 -I bench/perf_lane/test_cesium.py
+          python3 -I bench/perf_lane/test_flythrough.py
       - name: Check the crate package size and third-party notices
         run: |
           cargo package --locked --no-verify
@@ -256,7 +257,7 @@ jobs:
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
     if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

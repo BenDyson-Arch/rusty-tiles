@@ -31,3 +31,18 @@ Kept as live tooling: `oracle/` with its self-test, `witnesses/`, `acceptance/sc
 the production-mutant set (patches, `mutants.json`, scripts) and `corpus/run.py`.
 Removed from the tree: `preparation/` (contract drafts v1-v3, precode reviews, primary
 fetches), `acceptance/` receipts and mutant reports, and generated `corpus/facts/`.
+
+## W corpus archives live under `~/.cache/rusty-tiles-w-corpus`
+
+`corpus/manifest.json` pins the 41 W archives by sha256; `oracle_parity.rs` skips any that is
+missing. Seven of them (14 manifest entries: `pc-perf-2000`, `pc-deep`, `vec-perf`, and the four
+`a2fix/*` archives) were built into `/tmp`, a RAM tmpfs, and a reboot lost them (H7 then ran 27/27).
+They now live in `~/.cache/rusty-tiles-w-corpus/samples/`, and `corpus/regenerate.py` rebuilds any
+that is missing or re-hashed (`python3 -I corpus/regenerate.py`; it refuses `/tmp`). It needs the
+pre-forest producer binary `f2238cd` (`~/.cache/c2-corpus/rusty-tiles-f2238cd`, sha256 `369c3c81...`),
+the pinned perf-lane inputs (`bench/perf_lane/corpus.py`) and the retained `cloud.las`.
+Six archives regenerate byte-identically. `vec-perf` embeds the PROJ version, and the PROJ 9.8.1 ->
+9.9.0 upgrade of 2026-10-13 changed its bytes, so W5u is marked `verdictOnly` in the manifest (only its
+verdict, Unsupported, is compared). Any other present archive whose hash differs now fails the parity
+test instead of being skipped. `cloud.las` has no generator and is copied from `~/.cache/c2-corpus/run2/inputs/`. Check: `cargo test --lib production_matches_the_oracle_on_the_w_corpus` on develop `df3f7a5`
+runs 41 of 41, with none skipped.

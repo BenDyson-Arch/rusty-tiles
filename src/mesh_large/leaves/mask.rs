@@ -10,7 +10,7 @@ use crate::{JobError, JobErrorKind};
 const Q: u64 = 1 << 32;
 const MAX: u64 = 256 * Q;
 #[derive(Clone, Copy, Debug)]
-pub(super) struct SurfaceSample {
+pub(in crate::mesh_large) struct SurfaceSample {
     pub uv: [f64; 2],
     /// Original interpolated vertex COLOR alpha; material factor is separate.
     pub alpha: f64,
@@ -18,7 +18,7 @@ pub(super) struct SurfaceSample {
     pub source_pass: bool,
 }
 #[derive(Debug)]
-pub(super) struct MaskReceipt {
+pub(in crate::mesh_large) struct MaskReceipt {
     pub target: f64,
     pub optimum_gap: f64,
     pub scale: f64,
@@ -147,7 +147,7 @@ impl Evaluator<'_> {
     }
 }
 
-pub(super) fn coverage(
+pub(in crate::mesh_large) fn coverage(
     bytes: &[u8],
     w: u32,
     h: u32,
@@ -203,7 +203,7 @@ pub(super) fn preserves_classifications(
     Ok(true)
 }
 
-pub(super) fn adjust(
+pub(in crate::mesh_large) fn adjust(
     bytes: &mut [u8],
     w: u32,
     h: u32,

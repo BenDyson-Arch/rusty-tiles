@@ -1,15 +1,18 @@
 //! Leaf encoding foundations. The producer owns their frozen plans and budgets.
 pub(super) mod atlas;
-mod crops;
-mod delivery;
-pub(super) mod geometry;
-mod mask;
-mod mips;
+pub(in crate::mesh_large) mod crops;
+pub(in crate::mesh_large) mod delivery;
+pub(in crate::mesh_large) mod geometry;
+#[allow(dead_code)] // Requested by H13 baking and the future annotate pass.
+pub(crate) mod id_texture;
+pub(in crate::mesh_large) mod mask;
+pub(in crate::mesh_large) mod mips;
 pub(super) mod planning;
-mod prepared;
+pub(in crate::mesh_large) mod prepared;
 pub(crate) mod producer;
 mod schedule;
-mod sparse_mips;
+pub(in crate::mesh_large) mod sparse_mips;
+pub(in crate::mesh_large) mod witness;
 mod writer;
 
 #[cfg(test)]

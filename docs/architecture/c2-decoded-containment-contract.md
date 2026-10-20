@@ -777,6 +777,8 @@ The following are not provided:
 
 Parents #113, #120, #125 and #126 stay open. There is no main merge, tag or publication.
 
+> **VS-B (2026-10-14).** [validator-traversal-scale-amendment.md](validator-traversal-scale-amendment.md) amends this text and governs where they disagree: the tile arena, reference list and per-URI table are replaced (VS-B-3 to VS-B-5), phase 2 streams from a log after admission (VS-B-4), stream step 1 is a replay of the payload's first admission and the allocation ledger is restated (VS-B-11).
+
 ## Amendments adopted after the interface freeze
 
 The full record is in `preparation/contract-20261011/change-log.md`, sections v3.2 and v3.3.

@@ -45,6 +45,17 @@ impl Profile {
             Self::Fast | Self::Balanced | Self::Quality | Self::Lossless => CONSUMER_TABLE_ROWS,
         }
     }
+
+    /// Leaf `NORMAL` storage (provisional): `Some(K)` stores K-bit octahedral codes through
+    /// the `EXT_meshopt_compression` OCTAHEDRAL filter, decoded by clients to normalized
+    /// SHORT VEC3 (KHR_mesh_quantization); `None` keeps the source f32 values. 12 bits keep
+    /// the angular error near 0.06 degrees; `lossless` keeps f32.
+    pub(crate) fn leaf_normal_octahedral_bits(self) -> Option<u8> {
+        match self {
+            Self::Fast | Self::Balanced | Self::Quality => Some(12),
+            Self::Lossless => None,
+        }
+    }
 }
 
 /// `--jobs`: `auto` (the default) or an explicit worker count.
@@ -70,6 +81,14 @@ pub(crate) struct TreeConfig {
     pub(crate) tile_bytes: u64,
     pub(crate) height_cap: u32,
     pub(crate) member_ceiling: u64,
+    /// Parents of the private leaf/forest work directory and of the output, whose
+    /// filesystems receive the admission output reservation; `None` reserves nothing.
+    pub output_parents: Option<(PathBuf, PathBuf)>,
+    /// Declared source CRS applied at capture; `None` is local metres/Y-up.
+    pub source_crs: Option<super::MeshSourceCrs>,
+    /// Test seam: largest spill chunk of the capture scratch.
+    #[cfg(test)]
+    pub test_chunk_bytes: Option<usize>,
 }
 
 impl TreeConfig {
@@ -105,6 +124,10 @@ impl TreeConfig {
             tile_bytes: TILE_BYTES,
             height_cap: HEIGHT_CAP,
             member_ceiling: MEMBER_CEILING_3TZ,
+            output_parents: None,
+            source_crs: None,
+            #[cfg(test)]
+            test_chunk_bytes: None,
         }
     }
 
@@ -246,7 +269,7 @@ pub(crate) struct JobsPlan {
 }
 
 /// `auto` is `min(cores, (available − base − tmpfs scratch) ÷ per-job need)`, at least 1. An
-/// explicit count is used as given.
+/// explicit count is a maximum. Unknown memory admits one worker; stages still check fit.
 pub(crate) fn plan_jobs(
     requested: Jobs,
     cores: usize,
@@ -257,16 +280,21 @@ pub(crate) fn plan_jobs(
 ) -> JobsPlan {
     let cores = cores.max(1) as u64;
     let usable = available_memory.map(|m| m.saturating_sub(memory_backed_scratch));
-    let (jobs, limited_by, label) = match requested {
-        Jobs::Fixed(n) => (n.get() as u64, "request", n.to_string()),
-        Jobs::Auto => {
-            let by_memory = usable.map(|m| m.saturating_sub(base) / per_job.max(1));
-            match by_memory {
-                Some(0) => (1, "floor", "auto".into()),
-                Some(n) if n < cores => (n, "memory", "auto".into()),
-                _ => (cores, "cores", "auto".into()),
-            }
-        }
+    let maximum = match requested {
+        Jobs::Fixed(n) => n.get() as u64,
+        Jobs::Auto => cores,
+    };
+    let label = match requested {
+        Jobs::Fixed(n) => n.to_string(),
+        Jobs::Auto => "auto".into(),
+    };
+    let cap = cores.min(maximum);
+    let (jobs, limited_by) = match usable.map(|m| m.saturating_sub(base) / per_job.max(1)) {
+        None => (1, "unknown_memory"),
+        Some(0) => (1, "floor"), // The stage must reject a bound that cannot fit one job.
+        Some(n) if n < cap => (n, "memory"),
+        _ if maximum < cores => (cap, "request"),
+        _ => (cap, "cores"),
     };
     JobsPlan {
         requested: label,
@@ -472,14 +500,11 @@ pub(crate) fn scratch_need_parts(
         .checked_add(32)?;
     let max_live_files = inventory_files.min(counted_files);
     // Record bytes are not physical allocation. Reserve one rounding unit plus 64KiB per
-    // live file, 1MiB directory metadata and another logical generation for extent overhead.
-    // These conservative reserves need measured filesystem acceptance; they are not a
-    // theorem about arbitrary filesystems, quotas or concurrent writers.
-    let reserve = allocation_unit_bytes
-        .checked_add(64 << 10)?
-        .checked_mul(max_live_files)?
-        .checked_add(1 << 20)?
-        .checked_add(logical)?;
+    // live file and 1MiB directory metadata. The logical sum already counts a second
+    // generation for every sort, so no further extent-overhead generation is added.
+    // These reserves need measured filesystem acceptance; they are not a theorem about
+    // arbitrary filesystems, quotas or concurrent writers.
+    let reserve = file_rounding(allocation_unit_bytes, max_live_files)?;
     let need = logical.checked_add(reserve)?;
     Some(ScratchNeed {
         corner_sort_bytes: a.checked_mul(2)?,
@@ -495,9 +520,140 @@ pub(crate) fn scratch_need_parts(
     })
 }
 
+/// Per-file allocation rounding: one allocation unit plus 64 KiB per live file, and 1 MiB of
+/// directory metadata.
+pub(crate) fn file_rounding(allocation_unit_bytes: u64, live_files: u64) -> Option<u64> {
+    allocation_unit_bytes
+        .checked_add(64 << 10)?
+        .checked_mul(live_files)?
+        .checked_add(1 << 20)
+}
+
+/// Scratch held by one external sort of `records`, from the sorter's file lifetimes
+/// (spill/sort.rs). Runs of `run_bytes / size_of::<T>()` records are written as chunk files of
+/// [`crate::spill::chunk_records`] records, and every reader removes a chunk once consumed. An
+/// intermediate merge (more than `F` runs at `finish`, or inventory compaction from `64F` runs
+/// while pushing) therefore holds its unconsumed inputs plus its output, which never exceeds
+/// `S` plus one partly read chunk per input: `F × chunk`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SortSpill {
+    /// `S`: every record once.
+    pub bytes: u64,
+    /// While pushing: `S`, plus merge slack once inventory compaction can run.
+    pub push_peak: u64,
+    /// Through `finish`: `S`, plus merge slack when an intermediate merge runs.
+    pub finish_peak: u64,
+    /// While the sorted stream is consumed: partly read chunks still on disk, at most one
+    /// per merged run (`min(S, F × chunk)`).
+    pub stream_slack: u64,
+}
+
+impl SortSpill {
+    /// Consuming this sort's stream while writing `outputs` bytes in proportion to progress:
+    /// the unread input and the written output trade off linearly, so the larger of the two
+    /// plus the partly read chunks bounds the stage.
+    ///
+    /// Assumption: output grows proportionally to the records consumed (each input record
+    /// emits a fixed amount, as every capture join and projection here does). A consumer that
+    /// emits its output in bursts late in the stream (e.g. buffering, or output per group of
+    /// variable size) can exceed this; such stages must be charged as `bytes + outputs`.
+    pub(crate) fn flow(&self, outputs: u64) -> Option<u64> {
+        self.bytes.max(outputs).checked_add(self.stream_slack)
+    }
+}
+
+pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
+    sort_spill_with::<T>(records, sorter, crate::spill::CHUNK_BYTES)
+}
+
+/// [`sort_spill`] for a given largest chunk file (a scratch with smaller chunks is bounded by
+/// the production figure too, because slack only shrinks with the chunk).
+pub(crate) fn sort_spill_with<T: Record>(
+    records: u64,
+    sorter: SortConfig,
+    chunk_bytes: usize,
+) -> Option<SortSpill> {
+    let bytes = records.checked_mul(T::SIZE as u64)?;
+    let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
+    let runs = records.div_ceil(run_records);
+    let fan_in = sorter.fan_in as u64;
+    let chunk_bytes = ((chunk_bytes / T::SIZE).max(1) as u64).checked_mul(T::SIZE as u64)?;
+    let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
+    let push_peak = if runs >= fan_in.checked_mul(64)? {
+        bytes.checked_add(slack)?
+    } else {
+        bytes
+    };
+    let finish_peak = if runs > fan_in {
+        push_peak.max(bytes.checked_add(slack)?)
+    } else {
+        push_peak
+    };
+    Some(SortSpill {
+        bytes,
+        push_peak,
+        finish_peak,
+        stream_slack: slack,
+    })
+}
+
+/// Published bytes per source triangle used to reserve output-side space at admission:
+/// the pohnpei 24.36M-triangle archive measured 118.96 B/tri (2026-10-14 scale findings).
+/// An estimate, not a bound: texture payloads are charged separately from image bytes.
+pub(crate) const OUTPUT_BYTES_PER_TRIANGLE: u64 = 119;
+
+/// Estimated published texture bytes for `texels` admitted source texels: lossless leaf pages
+/// are PNG (up to 4 bytes per RGBA8 texel), lossy profiles KTX2/Basis (about 1 byte per texel
+/// for UASTC, less for ETC1S), each with a 4/3 mip chain. Atlas repacking keeps texels at
+/// source resolution; gutters and texels shared by several leaves are covered by the mip
+/// allowance, not proven. mgal 2048 (10M triangles, 373M texels) published 2.25 GB lossless
+/// against a 3.18 GB per-copy estimate.
+pub(crate) fn output_texture_bytes(profile: Profile, texels: u64) -> Option<u64> {
+    let per_texel = match profile {
+        Profile::Lossless => 4,
+        Profile::Fast | Profile::Balanced | Profile::Quality => 1,
+    };
+    Some(texels.checked_mul(per_texel)?.checked_mul(4)?.div_ceil(3))
+}
+
 /// Stage-1 sound lower bound on tiles: `⌈N/L⌉` leaves, plus the root when it must be internal.
 pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {
     triangles
         .div_ceil(leaf_triangles)
         .saturating_add(u64::from(triangles > leaf_triangles))
+}
+
+#[cfg(test)]
+mod worker_controls {
+    use super::*;
+    #[test]
+    fn maximum_is_capped_by_memory_and_cores_and_unknown_memory_is_one() {
+        let maximum = Jobs::Fixed(NonZeroUsize::new(64).unwrap());
+        let memory = plan_jobs(maximum, 16, Some(1300), 100, 600, 200);
+        assert_eq!((memory.jobs, memory.limited_by), (3, "memory"));
+        let cores = plan_jobs(maximum, 4, Some(10_000), 0, 0, 1);
+        assert_eq!((cores.jobs, cores.limited_by), (4, "cores"));
+        let request = plan_jobs(
+            Jobs::Fixed(NonZeroUsize::new(2).unwrap()),
+            16,
+            Some(10_000),
+            0,
+            0,
+            1,
+        );
+        assert_eq!((request.jobs, request.limited_by), (2, "request"));
+        for mode in [Jobs::Auto, maximum] {
+            let unknown = plan_jobs(mode, 64, None, 100, 600, 200);
+            assert_eq!((unknown.jobs, unknown.limited_by), (1, "unknown_memory"));
+            // A floor is a scheduling candidate, never evidence that its bound fits.
+            let floor = plan_jobs(mode, 64, Some(799), 100, 600, 200);
+            assert_eq!((floor.jobs, floor.limited_by), (1, "floor"));
+            assert!(
+                floor.base_memory_bytes
+                    + floor.per_job_memory_bytes
+                    + floor.memory_backed_scratch_bytes
+                    > floor.available_memory_bytes.unwrap()
+            );
+        }
+    }
 }

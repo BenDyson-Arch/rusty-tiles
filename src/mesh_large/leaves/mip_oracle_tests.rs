@@ -139,6 +139,7 @@ fn reference(w: usize, h: usize, pixels: Vec<u8>, class: Class, mask: Option<Mas
                             Class::Colour => [from_srgb(p[0]), from_srgb(p[1]), from_srgb(p[2])],
                             Class::Data => [p[0], p[1], p[2]].map(|a| f64::from(a) / 255.0),
                             Class::Normal => direction(vector(p)),
+                            Class::Id => unreachable!("ID class has its own oracle in id_texture"),
                         };
                         if class == Class::Normal && weight > dominant.1 {
                             dominant = (rgb, weight);
@@ -165,6 +166,7 @@ fn reference(w: usize, h: usize, pixels: Vec<u8>, class: Class, mask: Option<Mas
                         Class::Colour => to_srgb(rgb[c]),
                         Class::Data => quantize(rgb[c]),
                         Class::Normal => quantize((rgb[c] + 1.0) / 2.0),
+                        Class::Id => unreachable!("ID class has its own oracle in id_texture"),
                     };
                 }
                 p[3] = quantize(sums[3] / area);
@@ -405,6 +407,7 @@ fn historical_abandoned_policy_reports_retained_floor_violations() {
                             [37, 128, 218, 255]
                         }
                     }
+                    Class::Id => unreachable!("ID class has its own oracle in id_texture"),
                 })
                 .collect();
             let mut source = if role == "mask" {
@@ -1137,6 +1140,7 @@ fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
                             [37, 128, 218, 255]
                         }
                     }
+                    Class::Id => unreachable!("ID class has its own oracle in id_texture"),
                 }
             })
             .collect();
@@ -1150,6 +1154,7 @@ fn current_production_policy_nonconstant_128_every_class_profile_and_level() {
                 profile,
                 128 * 1024 * 1024,
                 None,
+                super::delivery::LADDER,
             )
             .unwrap();
             let decoder = basisu::Transcoder::new(&output.bytes).unwrap();

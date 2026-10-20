@@ -419,15 +419,26 @@ pub(crate) fn check_index(index: usize, vertices: usize, component: usize) -> Re
 /// Bakes a source position through its accumulated node transform: evaluated in f64, rounded
 /// once to f32, and kept inside the local-metre domain.
 pub(crate) fn bake_position(world: &[[f64; 4]; 4], position: [f64; 3]) -> Result<[f32; 3]> {
+    Ok(world_position(world, position)?.map(|x| x as f32))
+}
+
+/// The f64 position after the accumulated node transform, before any rounding, kept
+/// inside the local-metre domain. A source CRS maps this value before its single rounding.
+pub(crate) fn world_position(world: &[[f64; 4]; 4], position: [f64; 3]) -> Result<[f64; 3]> {
     let mut baked = [0.; 3];
     for (r, out) in baked.iter_mut().enumerate() {
         let x = world[r][3] + (0..3).map(|c| world[r][c] * position[c]).sum::<f64>();
         if !x.is_finite() || x.abs() > MAX_LOCAL_COORDINATE {
             return Err(unsupported("transformed position outside local F1a domain"));
         }
-        *out = x as f32;
+        *out = x;
     }
     Ok(baked)
+}
+
+/// The admitted local coordinate magnitude, also the bound for CRS-mapped output.
+pub(crate) fn within_local_domain(value: f64) -> bool {
+    value.is_finite() && value.abs() <= MAX_LOCAL_COORDINATE
 }
 
 impl Accessor<'_> {

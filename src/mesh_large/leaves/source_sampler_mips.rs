@@ -187,6 +187,13 @@ pub(super) fn build(
     memory_limit: u64,
 ) -> Result<Chain, JobError> {
     let (source, source_size) = source;
+    if class == Class::Id {
+        // Source material pages resample with filters; IDs never do.
+        return Err(JobError::new(
+            JobErrorKind::InvalidRequest,
+            "ID pages are not source-sampler pages",
+        ));
+    }
     validate_sampler(sampler)?;
     if drop > 12
         || crop.gutter != 0
@@ -381,6 +388,7 @@ pub(super) fn build(
     Ok(Chain {
         original,
         page: sparse_mips::Chain {
+            class,
             levels,
             charged_bytes: page_charge,
         },

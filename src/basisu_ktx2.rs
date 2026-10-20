@@ -159,6 +159,47 @@ pub(crate) fn encode_ktx2_mips_decoded(
     mode: Mode,
     params: Params,
 ) -> Result<(Vec<u8>, Vec<Vec<u8>>), JobError> {
+    encode_ktx2_mips_floor_checked(mips, mode, params)?.map_err(|miss| miss.error)
+}
+
+/// A decoded level that missed the verification's error floor ([`ErrorFloor`])
+/// or detail floor ([`DetailFloor`]): the container is well formed and decodes,
+/// but this encode does not reproduce the input closely enough. A caller may
+/// try a stronger encoder setting; the check itself is never relaxed.
+#[derive(Debug)]
+pub(crate) struct FloorMiss {
+    pub level: u32,
+    /// The same `InvalidState` error [`encode_ktx2_mips_decoded`] returns.
+    pub error: JobError,
+}
+/// A verified KTX2 file and every level as decoded by its verification.
+pub(crate) type EncodedLevels = (Vec<u8>, Vec<Vec<u8>>);
+enum VerifyFailure {
+    Floor(FloorMiss),
+    Hard(JobError),
+}
+impl From<JobError> for VerifyFailure {
+    fn from(error: JobError) -> Self {
+        Self::Hard(error)
+    }
+}
+impl VerifyFailure {
+    fn into_error(self) -> JobError {
+        match self {
+            Self::Floor(miss) => miss.error,
+            Self::Hard(error) => error,
+        }
+    }
+}
+
+/// [`encode_ktx2_mips_decoded`] with its verification floor misses typed apart:
+/// `Ok(Err(miss))` when only a decoded-level floor failed. Every other
+/// verification failure (container fields, level sizes, decode) stays an error.
+pub(crate) fn encode_ktx2_mips_floor_checked(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<Result<EncodedLevels, FloorMiss>, JobError> {
     check_mips(mips, mode, params)?;
     let base = u64::from(mips[0].width) * u64::from(mips[0].height);
     let chain = mips
@@ -167,10 +208,13 @@ pub(crate) fn encode_ktx2_mips_decoded(
         .sum();
     let encoded =
         crate::stage_timing::encode(base, chain, || encode_mips_unverified(mips, mode, params))?;
-    let (_, decoded) = crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
+    match crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
         verify_levels(&encoded, mips, mode, params, true)
-    })?;
-    Ok((encoded, decoded))
+    }) {
+        Ok((_, decoded)) => Ok(Ok((encoded, decoded))),
+        Err(VerifyFailure::Floor(miss)) => Ok(Err(miss)),
+        Err(VerifyFailure::Hard(error)) => Err(error),
+    }
 }
 
 fn check_mips(mips: &[MipLevel<'_>], mode: Mode, params: Params) -> Result<(), JobError> {
@@ -392,6 +436,13 @@ fn encode_mips_unverified(
     Ok(encoded)
 }
 
+fn floor_miss(level: u32, message: String) -> VerifyFailure {
+    VerifyFailure::Floor(FloorMiss {
+        level,
+        error: invalid_state(message),
+    })
+}
+
 fn invalid_state(message: String) -> JobError {
     JobError::new(
         JobErrorKind::InvalidState,
@@ -588,7 +639,9 @@ pub(crate) fn verify_ktx2_mips(
     mode: Mode,
     params: Params,
 ) -> Result<Verified, JobError> {
-    verify_levels(ktx2, mips, mode, params, false).map(|(verified, _)| verified)
+    verify_levels(ktx2, mips, mode, params, false)
+        .map(|(verified, _)| verified)
+        .map_err(VerifyFailure::into_error)
 }
 
 fn verify_levels(
@@ -597,7 +650,7 @@ fn verify_levels(
     mode: Mode,
     params: Params,
     keep: bool,
-) -> Result<(Verified, Vec<Vec<u8>>), JobError> {
+) -> Result<(Verified, Vec<Vec<u8>>), VerifyFailure> {
     check_mips(mips, mode, params)?;
     let mut kept = Vec::new();
     let MipLevel {
@@ -660,17 +713,17 @@ fn verify_levels(
     ];
     for (name, found, expected) in fields {
         if found != expected {
-            return Err(invalid_state(format!(
+            return Err(VerifyFailure::Hard(invalid_state(format!(
                 "{name} is {found}, expected {expected}"
-            )));
+            ))));
         }
     }
     let has_global_data = parsed.global_data_length != 0;
     if has_global_data != (supercompression == container::SUPERCOMPRESSION_BASIS_LZ) {
-        return Err(invalid_state(format!(
+        return Err(VerifyFailure::Hard(invalid_state(format!(
             "supercompression global data length {} does not match scheme {supercompression}",
             parsed.global_data_length
-        )));
+        ))));
     }
     let block_mean = block_mean_sse(rgba, width, height);
     let mut base_sse = 0;
@@ -682,10 +735,10 @@ fn verify_levels(
             let stored_ok =
                 supercompression != container::SUPERCOMPRESSION_NONE || entry.length == blocks;
             if entry.uncompressed_length != blocks || !stored_ok {
-                return Err(invalid_state(format!(
+                return Err(VerifyFailure::Hard(invalid_state(format!(
                     "UASTC level {level} holds {} bytes ({} uncompressed), expected {blocks}",
                     entry.length, entry.uncompressed_length
-                )));
+                ))));
             }
         }
         let decoded = decode_level_rgba(ktx2, level, w, h)?;
@@ -711,11 +764,14 @@ fn verify_levels(
             let allowed =
                 floor.ratio * level_block_mean + floor.slack_per_byte * input.len() as u64;
             if level_sse > allowed {
-                return Err(invalid_state(format!(
-                    "decoded mip {level} error {level_sse} exceeds the floor {allowed} \
+                return Err(floor_miss(
+                    level,
+                    format!(
+                        "decoded mip {level} error {level_sse} exceeds the floor {allowed} \
                      ({} x block-mean error {level_block_mean} + {} per byte)",
-                    floor.ratio, floor.slack_per_byte
-                )));
+                        floor.ratio, floor.slack_per_byte
+                    ),
+                ));
             }
             let texels = u64::from(w) * u64::from(h);
             let stats = detail(input, &decoded, w, h);
@@ -723,15 +779,18 @@ fn verify_levels(
                 && stats.input_variance_at_least(detail_floor.min_variance)
                 && !stats.correlation_at_least(detail_floor.numerator, detail_floor.denominator)
             {
-                return Err(invalid_state(format!(
-                    "decoded mip {level} detail does not follow the input: covariance {}, \
+                return Err(floor_miss(
+                    level,
+                    format!(
+                        "decoded mip {level} detail does not follow the input: covariance {}, \
                      input {}, decoded {} (correlation floor {}/{})",
-                    stats.covariance,
-                    stats.input,
-                    stats.decoded,
-                    detail_floor.numerator,
-                    detail_floor.denominator
-                )));
+                        stats.covariance,
+                        stats.input,
+                        stats.decoded,
+                        detail_floor.numerator,
+                        detail_floor.denominator
+                    ),
+                ));
             }
         }
         if keep {

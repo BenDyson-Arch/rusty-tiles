@@ -3,19 +3,27 @@
 //! values are raw unit tangent vectors; material normalScale remains literal.
 //! PNG source-pixel lossless bypasses this module. MASK/guards are later delivery
 //! operations and must never feed this semantic pyramid.
+//! `Class::Id` pages are never averaged: each level takes the support-weighted
+//! mode of its 2x2 children (whole RGBA tuple, ties to the first row-major
+//! contributor), and every zero-support texel is the no-feature value
+//! [`ID_NO_FEATURE`] rather than a dilated neighbour.
 use super::mips::Class;
 use crate::{JobError, JobErrorKind};
 use std::mem::size_of;
 
 #[derive(Debug)]
-pub(super) struct Level {
+pub(in crate::mesh_large) struct Level {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
     pub support: Vec<u32>,
 }
+/// Gutter/padding texel of an ID page: every channel all-ones, so each packed
+/// feature-ID set reads its own `nullFeatureId` (2^(8*bytes) - 1).
+pub(super) const ID_NO_FEATURE: [u8; 4] = [255; 4];
 #[derive(Debug)]
-pub(super) struct Chain {
+pub(in crate::mesh_large) struct Chain {
+    pub class: Class,
     pub levels: Vec<Level>,
     /// Owned chain plus reusable gutter scratch bound; borrowed inputs and
     /// native encoder workspace/output must be charged by the caller.
@@ -72,10 +80,10 @@ fn unit(v: [f64; 3]) -> Result<[f64; 3], JobError> {
     Ok(v.map(|x| x / length.sqrt()))
 }
 fn empty_pixel(class: Class) -> [u8; 4] {
-    if class == Class::Normal {
-        [128, 128, 255, 0]
-    } else {
-        [0; 4]
+    match class {
+        Class::Normal => [128, 128, 255, 0],
+        Class::Id => ID_NO_FEATURE,
+        _ => [0; 4],
     }
 }
 fn reserve<T>(n: usize) -> Result<Vec<T>, JobError> {
@@ -99,6 +107,20 @@ fn relax(nearest: &mut [Nearest], to: usize, from: usize) {
 /// Exact Manhattan nearest signal texel; ties original row-major identity.
 /// Two-pass taxicab distance transform, not a quadratic search or Euclidean claim.
 fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
+    if class == Class::Id {
+        for (p, &s) in level
+            .rgba
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(&level.support)
+        {
+            if s == 0 {
+                *p = ID_NO_FEATURE;
+            }
+        }
+        return;
+    }
     let n = level.support.len();
     let w = level.width as usize;
     nearest.clear();
@@ -138,7 +160,7 @@ fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
     }
 }
 
-pub(super) fn build(
+pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,
     rgba: &[u8],
@@ -204,6 +226,7 @@ pub(super) fn build(
         return Err(resource());
     }
     let mut chain = Chain {
+        class,
         levels: reserve(count)?,
         charged_bytes: charged,
     };
@@ -244,6 +267,40 @@ pub(super) fn build(
         dst.support.resize(n, 0);
         for y in 0..dh as usize {
             for x in 0..dw as usize {
+                if class == Class::Id {
+                    let i = y * dw as usize + x;
+                    let mut tally = [([0u8; 4], 0u64); 4];
+                    let mut len = 0;
+                    let mut weight = 0u32;
+                    for sy in y * 2..(y * 2 + 2).min(src.height as usize) {
+                        for sx in x * 2..(x * 2 + 2).min(sw) {
+                            let j = sy * sw + sx;
+                            let s = src.support[j];
+                            if s == 0 {
+                                continue;
+                            }
+                            let p: [u8; 4] = src.rgba[j * 4..j * 4 + 4].try_into().expect("RGBA8");
+                            match tally[..len].iter_mut().find(|(v, _)| *v == p) {
+                                Some((_, w)) => *w += u64::from(s),
+                                None => {
+                                    tally[len] = (p, u64::from(s));
+                                    len += 1;
+                                }
+                            }
+                            weight = weight.checked_add(s).ok_or_else(resource)?;
+                        }
+                    }
+                    dst.support[i] = weight;
+                    // Strictly greater keeps the first row-major value on ties.
+                    let mut best = (empty_pixel(class), 0u64);
+                    for &(v, w) in &tally[..len] {
+                        if w > best.1 {
+                            best = (v, w);
+                        }
+                    }
+                    dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&best.0);
+                    continue;
+                }
                 let mut sum = [0.0; 4];
                 let mut weight = 0u32;
                 let mut dominant = [0.0, 0.0, 1.0];
@@ -260,6 +317,7 @@ pub(super) fn build(
                             Class::Colour => std::array::from_fn(|a| decode_colour(p[a])),
                             Class::Data => std::array::from_fn(|a| f64::from(p[a]) / 255.0),
                             Class::Normal => unit(normal(p))?,
+                            Class::Id => unreachable!("ID footprints take the mode above"),
                         };
                         if s > dominant_weight {
                             dominant = rgb;
@@ -292,6 +350,7 @@ pub(super) fn build(
                         Class::Colour => encode_colour(v),
                         Class::Data => quant(v),
                         Class::Normal => quant((v + 1.0) * 0.5),
+                        Class::Id => unreachable!("ID footprints take the mode above"),
                     };
                 }
                 dst.rgba[i * 4 + 3] = quant(sum[3] / f64::from(weight));
@@ -453,7 +512,7 @@ mod tests {
     }
     #[test]
     fn empty_pages_and_rectangular_complete_chain() {
-        for class in [Class::Colour, Class::Data, Class::Normal] {
+        for class in [Class::Colour, Class::Data, Class::Normal, Class::Id] {
             let chain = build(8, 4, &[255; 128], &[0; 32], class, 1 << 20).unwrap();
             assert_eq!(
                 chain

@@ -238,7 +238,7 @@ RUSTY_TILES_DEMODATA="$PWD/../demodata" \
   demodata_smoke -- --ignored --nocapture
 ```
 
-The glTF extension, voxel, SPZ, CityJSON and unused 3D Tiles fixtures remain a hash-pinned reference inventory for future work. Listing or verifying them is not a passing conversion/conformance claim. [Recorded demo-data results](bench/demodata_benchmark_results.json) contain the full acceptance and benchmark evidence; timings describe that machine and recipe only.
+The glTF extension, voxel, SPZ, CityJSON and unused 3D Tiles fixtures remain a hash-pinned reference inventory for future work. Listing or verifying them is not a passing conversion/conformance claim. [Recorded demo-data results](bench/MOVED_EVIDENCE.md) contain the full acceptance and benchmark evidence; timings describe that machine and recipe only.
 
 Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. That 27-case run predates the additional FlightHelmet wrapping case in the current 28-case manifest. All recorded cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
 
@@ -250,9 +250,9 @@ Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 
 | Sentinel-2 imagery | 954 decoded tiles | 11.839 | 227.3 |
 | Copernicus terrain mosaic | 822 decoded tiles | 6.679 | 136.2 |
 
-[The paired smoke run](bench/demodata_baseline_results.json) also passed all eight cases for current and baseline `99b9605`, with identical payloads within each method's three repetitions. The baseline defaults to explicit tiling and current defaults to implicit tiling. For the 512-pixel atlas milk-truck recipe, current emits 270 leaves versus 132 in the baseline: medians are 0.376 versus 0.207 seconds, with archives of 5,494,680 versus 4,200,493 bytes. This exposes the cost of the changed partition/layout on that recipe; it is not a general speedup claim. Both methods retain all 3,624 source triangles exactly once.
+[The paired smoke run](bench/MOVED_EVIDENCE.md) also passed all eight cases for current and baseline `99b9605`, with identical payloads within each method's three repetitions. The baseline defaults to explicit tiling and current defaults to implicit tiling. For the 512-pixel atlas milk-truck recipe, current emits 270 leaves versus 132 in the baseline: medians are 0.376 versus 0.207 seconds, with archives of 5,494,680 versus 4,200,493 bytes. This exposes the cost of the changed partition/layout on that recipe; it is not a general speedup claim. Both methods retain all 3,624 source triangles exactly once.
 
-[The additional FlightHelmet wrapping run](bench/demodata_gltf_wrap_results.json) passed an audited warmup and three repetitions on the same machine. Its 48,397,031-byte archive validates and preserves the glTF, one buffer and fifteen PNGs byte-for-byte, with identical repeated payload fingerprints. Median conversion time was 0.067 seconds and peak RSS 30.1 MiB; these are local warm-cache measurements.
+[The additional FlightHelmet wrapping run](bench/MOVED_EVIDENCE.md) passed an audited warmup and three repetitions on the same machine. Its 48,397,031-byte archive validates and preserves the glTF, one buffer and fifteen PNGs byte-for-byte, with identical repeated payload fingerprints. Median conversion time was 0.067 seconds and peak RSS 30.1 MiB; these are local warm-cache measurements.
 
 
 ## Fixtures and oracles
@@ -319,7 +319,7 @@ rusty-tiles preview --annotations target/fill-fixtures --cesium target/metadata-
 NODE_PATH="$PWD/target/metadata-browser/node_modules" node tests/fixtures/vector_fills.cjs http://127.0.0.1:9377
 ```
 
-Generate a second directory with `--compressed` to exercise `--quantize --meshopt`. Repeat with the portable and native binaries. `--cdp http://localhost:9222` runs the probe in an already running Chromium. It opens one new context and closes only that context. The issue #75 failure that kept the `b3dm` wrapper is recorded in [vector_fill_glb_results.json](bench/vector_fill_glb_results.json).
+Generate a second directory with `--compressed` to exercise `--quantize --meshopt`. Repeat with the portable and native binaries. `--cdp http://localhost:9222` runs the probe in an already running Chromium. It opens one new context and closes only that context. The issue #75 failure that kept the `b3dm` wrapper is recorded in [vector_fill_glb_results.json](bench/MOVED_EVIDENCE.md).
 
 ## Check byte-identity
 
@@ -388,14 +388,16 @@ A new version changes converter and cache identity. Consumers must invalidate de
 
 These files record measured runs. Read them for numbers. They describe one machine and run, not guarantees.
 
+Runs whose result files left the tree to save space link to [`bench/MOVED_EVIDENCE.md`](bench/MOVED_EVIDENCE.md), which gives each file's SHA-256 and the commit that last held it.
+
 | Evidence | What it covers | Reproduce with |
 | --- | --- | --- |
-| [`release_04_blockers_results.json`](bench/release_04_blockers_results.json) | 0.4 candidate Rust/Python/browser checks, five-platform wheels and official Blender bundle provenance; publication remains separate | Release acceptance and wheel acceptance workflows |
+| [`release_04_blockers_results.json`](bench/MOVED_EVIDENCE.md) | 0.4 candidate Rust/Python/browser checks, five-platform wheels and official Blender bundle provenance; publication remains separate | Release acceptance and wheel acceptance workflows |
 | [`public_runtime_audit.json`](bench/public_runtime_audit.json) | Full audits of Autzen points and Natural Earth roads, with source hashes and attribution | `bench/public_data.py`, `bench/audit_point_cloud.py`, `bench/audit_vector.py` |
-| [`vector_benchmark_results.json`](bench/vector_benchmark_results.json) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
-| [`raster_benchmark_results.json`](bench/raster_benchmark_results.json) | Historical: native raster against the Python baseline at `9a95862`, with every PNG byte compared. R2 retired that converter and its `conversion.json`, so this is not reproducible on current builds | `bench/benchmark_raster.py` at `9a95862` |
-| [`terrain_benchmark_results.json`](bench/terrain_benchmark_results.json) | First native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` |
-| [`terrain_performance_results.json`](bench/terrain_performance_results.json) | Parallel terrain encoding, with byte-identical payloads | `bench/benchmark_terrain.py --mode performance` |
+| [`vector_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | Native vector against the Python baseline at `fada1d1`, including `--aggregate-points` | `bench/benchmark_vector.py` |
+| [`raster_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | Historical: native raster against the Python baseline at `9a95862`, with every PNG byte compared. R2 retired that converter and its `conversion.json`, so this is not reproducible on current builds | `bench/benchmark_raster.py` at `9a95862` |
+| [`terrain_benchmark_results.json`](bench/MOVED_EVIDENCE.md) | First native terrain at `62091ea` against Python | `bench/benchmark_terrain.py` |
+| [`terrain_performance_results.json`](bench/MOVED_EVIDENCE.md) | Parallel terrain encoding, with byte-identical payloads | `bench/benchmark_terrain.py --mode performance` |
 | [`runtime_benchmark_results.json`](bench/runtime_benchmark_results.json) | Native doctor and preview against the Python helpers at `bf3346c` | `bench/benchmark_runtime.py BINARY RESULTS.json` |
 
 Benchmarks build the old and new binaries in separate worktrees and target directories against the same GDAL stack. They use warm caches, one warmup and rotated method order. Peak RSS is the largest process from Linux `wait4`, not a process-tree sum. Run each script with `--help` for its arguments.

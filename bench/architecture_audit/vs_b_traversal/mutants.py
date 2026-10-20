@@ -31,17 +31,29 @@ MUTANTS = [
     ("stack-no-truncate", [(V, "        self.path.truncate(position);\n", "")]),
     # VS-B-3: chain bits are not inherited from the parent.
     ("chain-not-inherited", [(V, "            | inherited;", "            | 0;")]),
-    # VS-B-4: a later stream failure replaces the first.
-    ("stream-after-failure", [(V, "Ok(self.precheck.is_none() && self.stream.failure.is_none())",
-                               "Ok(self.precheck.is_none())")]),
-    # VS-B-4: a recorded stream failure outranks exclusions and the precheck.
-    ("stream-before-exclusions", [(V, "    // C2 outcome precedence after C1 success: exclusions, then the precheck,",
-                                   "    if let Some(failure) = check.c2.stream.failure.take() {\n"
-                                   "        return Err(failure);\n    }\n"
-                                   "    // C2 outcome precedence after C1 success: exclusions, then the precheck,")]),
+    # VS-B-4: passing references are not logged, so nothing is streamed.
+    ("log-drops-references", [(V, "        self.log(Some(stream_log::Entry::Reference {\n            tile,\n            content,\n            rank,\n        }))",
+                               "        let _ = (tile, content, rank);\n        self.log(None)")]),
+    # VS-B-4: the logged stream also runs when the archive left the domain. The stream is
+    # guarded twice: the log is dropped at the first event out of domain, and the stream runs
+    # only when contained. Removing one guard alone is equivalent (every exclusion or precheck
+    # stop precedes a log call; the first final run recorded the gate-only edit as not
+    # caught), so this mutant removes both.
+    ("stream-ignores-domain", [(V, "    if contained {\n        check.stream()?;",
+                                "    if check.stream_log.is_some() {\n        check.stream()?;\n    }\n    if contained {"),
+                               (V, "            self.stream_log = None;\n            return Ok(());",
+                                "            return Ok(());")]),
     # VS-B-4: the Outside message names the root's depth.
-    ("stream-depth-root", [(V, "let depth = self.c2.on_path(tile)?.depth;",
-                            "let depth = self.c2.on_path(tile).map(|_| 0)?;")]),
+    ("stream-depth-root", [(V, "                let depth = self.c2.on_path(tile)?.depth;",
+                            "                let depth = self.c2.on_path(0)?.depth;")]),
+    # VS-B-7: a summary is used whatever its live-document peak.
+    ("live-peak-ignored", [(V, "                self.live_documents,\n                summary.live_peak,",
+                            "                self.live_documents,\n                0,")]),
+    # VS-B-5: the record CRC is never checked.
+    ("facts-crc-unchecked", [(FACTS, "    if crc32fast::hash(&bytes[..BODY]) != crc {", "    if false && crc32fast::hash(&bytes[..BODY]) != crc {")]),
+    # Scratch accounting: the slot extent is one record short.
+    ("slot-extent-short", [("src/spill/sequence.rs", "            self.file.completed(self.offset(end)?);",
+                            "            self.file.completed(self.offset(index)?);")]),
     # VS-B-5: the overflow flag of Nodes is lost in the record.
     ("facts-nodes-flag", [(FACTS, "        flags |= 2;", "        flags |= 0;")]),
     # VS-B-5 / VS-B-11: the stored receipt is not the admission's.
@@ -85,7 +97,7 @@ MUTANTS = [
                           "            Self::Absolute(limits) => limits.scaled(stored_bytes),")]),
 ]
 TESTS = ["validate::", "content_integrity::implicit", "c2_oracle_parity", "i1_oracle_parity",
-         "payload_context_acceptance"]
+         "payload_context_acceptance", "spill::"]
 
 
 def sh(cmd, **kw):

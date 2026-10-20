@@ -724,3 +724,66 @@ fn a_replayed_document_composes_its_own_tiles_under_each_placement() {
     let outcome = agreed(&files, &ValidationLimits::default());
     assert_eq!(reasons(&outcome), ["rotatedBox"], "{outcome:?}");
 }
+
+/// Audit probe (SHOULD-2): one document placed shallow and then deep, with the cap one below
+/// the deep path's charge. The verdict must not depend on the memo (VS-B-6, VS-B-7).
+#[test]
+fn the_live_document_verdict_does_not_depend_on_the_memo() {
+    let charge = |bytes: &[u8]| {
+        let nodes = json::admit(
+            bytes,
+            content_limits(&ValidationLimits::default()).unwrap().json,
+        )
+        .unwrap()
+        .value_nodes();
+        bytes.len() as u64 + 128 * nodes as u64
+    };
+    let mut top = tile(100., 10.);
+    top["children"] = json!([
+        with_content(tile(90., 9.), "e.json"),
+        with_content(tile(90., 9.), "f.json")
+    ]);
+    let e = doc(with_content(tile(80., 8.), "p.glb"));
+    let f = doc(with_content(tile(85., 8.5), "g.json"));
+    let g = doc(with_content(tile(82., 8.2), "e.json"));
+    let top = doc(top);
+    let deep = charge(&top) + charge(&f) + charge(&g) + charge(&e);
+    let files = files(vec![
+        ("tileset.json", top),
+        ("e.json", e),
+        ("f.json", f),
+        ("g.json", g),
+        ("p.glb", point(0.)),
+    ]);
+    let (_work, path) = package(&files);
+    for (cap, refused) in [(deep - 1, true), (deep, false)] {
+        let limits = ValidationLimits {
+            live_document_bytes: cap,
+            ..ValidationLimits::default()
+        };
+        let with_memo = run(&path, &limits, INLINE);
+        let without = run(
+            &path,
+            &limits,
+            Mode {
+                memoize: false,
+                ..INLINE
+            },
+        );
+        assert_eq!(with_memo, without, "cap {cap}");
+        assert_eq!(
+            with_memo
+                .result
+                .starts_with("resource_limit: live tileset documents exceed"),
+            refused,
+            "cap {cap}: {with_memo:?}"
+        );
+    }
+    // The memo is engaged at the passing cap: e.json is prepared once.
+    let limits = Budgets::Absolute(ValidationLimits {
+        live_document_bytes: deep,
+        ..ValidationLimits::default()
+    });
+    let (_, prepared, _) = inspect_in(&path, limits, INLINE);
+    assert_eq!(prepared, 4);
+}

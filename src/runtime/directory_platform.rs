@@ -40,6 +40,46 @@ pub(crate) fn test_directory() -> tempfile::TempDir {
     }
 }
 
+/// FILE_RENAME_INFO (BOOLEAN, pointer-aligned HANDLE, DWORD, UTF-16 flexible array).
+#[cfg(any(windows, test))]
+#[repr(C)]
+struct RenameInfo {
+    replace: u8,
+    root: *mut std::ffi::c_void,
+    length: u32,
+    name: [u16; 1],
+}
+
+/// A FILE_RENAME_INFO for `name` (UTF-16, without terminator) with replace FALSE and no
+/// root, in pointer-aligned zeroed storage, and the byte size to pass. The name is
+/// NUL-TERMINATED inside the passed size: Windows resolves a full Win32 path as a C
+/// string, so without the terminator it reads past the name whenever the unpadded size
+/// happens to be a multiple of the word size (a failed or misdirected install).
+#[cfg(any(windows, test))]
+fn rename_information(name: &[u16]) -> io::Result<(Vec<usize>, u32)> {
+    let offset = std::mem::offset_of!(RenameInfo, name);
+    let too_long = || io::Error::new(io::ErrorKind::InvalidInput, "rename path too long");
+    let length = name.len().checked_mul(2).ok_or_else(too_long)?;
+    let size = offset
+        .checked_add(length)
+        .and_then(|s| s.checked_add(2))
+        .ok_or_else(too_long)?;
+    let allocation = size.max(std::mem::size_of::<RenameInfo>());
+    let mut storage = vec![0usize; allocation.div_ceil(std::mem::size_of::<usize>())];
+    let info = storage.as_mut_ptr().cast::<RenameInfo>();
+    // SAFETY: usize storage is pointer-aligned, zeroed and covers the struct and the
+    // complete name plus its terminator; the copy is in bounds and does not overlap.
+    unsafe {
+        (*info).replace = 0;
+        (*info).root = std::ptr::null_mut();
+        (*info).length = u32::try_from(length).map_err(|_| too_long())?;
+        let start = storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>();
+        std::ptr::copy_nonoverlapping(name.as_ptr(), start, name.len());
+        start.add(name.len()).write(0);
+    }
+    Ok((storage, u32::try_from(size).map_err(|_| too_long())?))
+}
+
 #[cfg(unix)]
 fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
     use std::os::unix::ffi::OsStrExt;
@@ -297,13 +337,6 @@ mod implementation {
         }
         Ok(())
     }
-    #[repr(C)]
-    struct RenameInfo {
-        replace: u8,
-        root: *mut c_void,
-        length: u32,
-        name: [u16; 1],
-    }
     pub(super) fn install(source: &Path, destination: &Path) -> io::Result<()> {
         let file = std::fs::OpenOptions::new()
             .access_mode(0x00010000)
@@ -311,39 +344,18 @@ mod implementation {
             .custom_flags(0x02000000 | 0x00200000)
             .open(source)?;
         let name = wide(destination)?;
-        let offset = std::mem::offset_of!(RenameInfo, name);
-        let size = offset
-            .checked_add((name.len() - 1) * 2)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rename path too long"))?;
-        let allocation = size.max(std::mem::size_of::<RenameInfo>());
-        let mut storage = vec![0usize; allocation.div_ceil(std::mem::size_of::<usize>())];
-        let info = storage.as_mut_ptr().cast::<RenameInfo>();
-        // SAFETY: repr(C) reproduces FILE_RENAME_INFO (BOOLEAN, pointer-aligned
-        // HANDLE, DWORD, UTF-16 flexible array). usize storage guarantees pointer
-        // alignment and covers both the struct and complete filename. All padding
-        // starts zeroed. Filename copy is in bounds and does not overlap. The file
-        // owns a valid directory handle for the synchronous call; storage and name
-        // remain live. Class 3 is FileRenameInfo, so replace FALSE means no clobber.
-        unsafe {
-            (*info).replace = 0;
-            (*info).root = std::ptr::null_mut();
-            (*info).length = ((name.len() - 1) * 2) as u32;
-            std::ptr::copy_nonoverlapping(
-                name.as_ptr(),
-                storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(),
-                name.len() - 1,
-            );
-            if SetFileInformationByHandle(
-                file.as_raw_handle(),
-                3,
-                storage.as_ptr().cast(),
-                size as u32,
-            ) != 0
-            {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
+        let (storage, size) = super::rename_information(&name[..name.len() - 1])?;
+        // SAFETY: `storage` is a complete, pointer-aligned FILE_RENAME_INFO with a
+        // NUL-terminated name (see `rename_information`); the file owns a valid directory
+        // handle for the synchronous call and the storage remains live. Class 3 is
+        // FileRenameInfo; replace FALSE means no clobber.
+        if unsafe {
+            SetFileInformationByHandle(file.as_raw_handle(), 3, storage.as_ptr().cast(), size)
+        } != 0
+        {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
         }
     }
 }
@@ -364,9 +376,61 @@ mod implementation {
     }
 }
 
+#[cfg(test)]
+mod rename_information_tests {
+    use super::*;
+    /// Every name length (so every residue of the unpadded size modulo the word size) has
+    /// its declared length, exact characters and a NUL terminator inside the passed size.
+    #[test]
+    fn rename_information_is_terminated_for_every_name_length() {
+        let offset = std::mem::offset_of!(RenameInfo, name);
+        for n in 1..=64usize {
+            let name: Vec<u16> = (0..n).map(|i| u16::from(b'a') + (i % 26) as u16).collect();
+            let (storage, size) = rename_information(&name).unwrap();
+            let bytes: Vec<u8> = storage.iter().flat_map(|w| w.to_ne_bytes()).collect();
+            assert_eq!(size as usize, offset + 2 * n + 2, "length {n}");
+            assert!(bytes.len() >= size as usize);
+            let at = std::mem::offset_of!(RenameInfo, length);
+            let length = u32::from_ne_bytes(bytes[at..at + 4].try_into().unwrap());
+            assert_eq!(length as usize, 2 * n);
+            let units: Vec<u16> = bytes[offset..size as usize]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_ne_bytes(*c))
+                .collect();
+            assert_eq!(&units[..n], &name[..]);
+            assert_eq!(units[n], 0, "terminator for length {n}");
+            assert_eq!(bytes[0], 0, "replace is FALSE");
+        }
+    }
+}
+
 #[cfg(all(test, any(target_os = "linux", target_os = "macos", windows)))]
 mod tests {
     use super::*;
+    /// Destinations of every name length up to two words install exactly where named
+    /// (Windows read past an unterminated name for some lengths).
+    #[test]
+    fn exclusive_install_lands_at_every_destination_name_length() {
+        let parent = test_directory();
+        for n in 1..=17usize {
+            let source = parent.path().join("candidate");
+            std::fs::create_dir(&source).unwrap();
+            std::fs::write(source.join("complete"), b"payload").unwrap();
+            let name: String = (0..n).map(|i| char::from(b'a' + (i % 26) as u8)).collect();
+            let target = parent.path().join(&name);
+            install(&source, &target).unwrap();
+            assert!(!source.exists());
+            assert_eq!(std::fs::read(target.join("complete")).unwrap(), b"payload");
+            let names: Vec<_> = std::fs::read_dir(parent.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert_eq!(names, vec![std::ffi::OsString::from(&name)], "length {n}");
+            std::fs::remove_dir_all(target).unwrap();
+        }
+    }
     #[cfg(target_os = "linux")]
     #[test]
     fn unsupported_procfs_is_rejected() {

@@ -289,7 +289,13 @@ fn pack(
 /// pages filtered with viewer-generated mips carry eight texels of real source
 /// context around every island, aligned to eight texels, so the first three
 /// box-filtered levels of an island never read a neighbouring island.
-fn crop_padding(profile: Profile, sampler: SourceSampler) -> (u32, u32) {
+/// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel
+/// no-feature gutter and align islands to eight texels, so the first three
+/// authored mode levels used by coarse proxies never merge two islands.
+fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32, u32) {
+    if class == Class::Id {
+        return (2, 8);
+    }
     match profile {
         Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
         Profile::Lossless => (2, 1),
@@ -320,6 +326,7 @@ fn triangles_by_primitive(
             corner_depths,
             uvs: Vec::new(),
             material: None,
+            feature_id_textures: Vec::new(),
         })
         .collect())
 }
@@ -363,6 +370,7 @@ fn density_image(
         Class::Colour => 0,
         Class::Normal => 1,
         Class::Data => 2,
+        Class::Id => 3,
     };
     services.cache.get((index, drop * 4 + class_key), || {
         let memory = usize::try_from(services.memory).map_err(|_| resource())?;
@@ -815,7 +823,7 @@ fn layout(
                     p.triangles.len(),
                 )
             } else {
-                let (gutter, align) = crop_padding(profile, sampler);
+                let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
                 crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?
             };
             p.uvs.push(uvs);
@@ -891,6 +899,8 @@ pub(super) struct Services<'a> {
     /// Declared per-page workspace limit for internal allocation checks.
     pub memory: u64,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    /// Spill every page's pre-encode values for the bake pass (accepted attempts kept).
+    pub preencode: Option<&'a crate::mesh_large::bake_pass::PreencodeStore>,
 }
 
 /// Bytes leased from the memory gate for one page: page assembly, the
@@ -962,8 +972,94 @@ fn island_receipts(b: &Binding) -> Value {
 struct EncodedPage {
     delivered: delivery::Delivery,
     binding_receipts: Vec<Value>,
+    preencode: Option<super::prepared::PreencodePage>,
 }
 
+/// glTF material property of a texture slot, for diagnostics.
+pub(super) fn slot_property(slot: TextureSlot) -> &'static str {
+    match slot {
+        TextureSlot::BaseColor => "baseColorTexture",
+        TextureSlot::MetallicRoughness => "metallicRoughnessTexture",
+        TextureSlot::Normal => "normalTexture",
+        TextureSlot::Occlusion => "occlusionTexture",
+        TextureSlot::Emissive => "emissiveTexture",
+    }
+}
+/// A page that left its profile's encoder setting, with what it was cut from.
+#[derive(Clone, Debug)]
+pub(super) struct PageEscalation {
+    pub page: usize,
+    pub slot: TextureSlot,
+    /// Distinct (source image, source material) pairs on the page, in binding order.
+    pub sources: Vec<(usize, u32)>,
+    pub escalation: delivery::Escalation,
+}
+/// A leaf's appearance receipts and its escalated pages, in page order.
+#[derive(Debug, Default)]
+pub(super) struct Appearance {
+    pub receipts: Vec<Value>,
+    pub escalations: Vec<PageEscalation>,
+}
+fn page_sources(layout: &Layout, page: &PagePlan) -> Vec<(usize, u32)> {
+    let mut sources = Vec::new();
+    for &bi in &page.bindings {
+        let b = &layout.bindings[bi];
+        let material = layout.primitives[b.primitive].triangles[0].material;
+        if !sources.contains(&(b.image, material)) {
+            sources.push((b.image, material));
+        }
+    }
+    sources
+}
+/// Names the page, slot and sources in any page failure except cancellation.
+fn page_error(
+    error: JobError,
+    page_id: usize,
+    slot: TextureSlot,
+    sources: &[(usize, u32)],
+) -> JobError {
+    if error.kind() == JobErrorKind::Cancelled {
+        return error;
+    }
+    let sources: Vec<String> = sources
+        .iter()
+        .map(|(image, material)| format!("image {image} material {material}"))
+        .collect();
+    JobError::with_cause(
+        error.kind(),
+        format!(
+            "page {page_id} {} (source {}): {error}",
+            slot_property(slot),
+            sources.join(", ")
+        ),
+        error,
+    )
+}
+
+/// Ends the `MaskDelivery` borrow of the page's surface samples before the page buffers
+/// move into the retained pre-encode record.
+fn drop_mask_borrow(_mask: Option<MaskDelivery<'_>>) {}
+
+fn slot_name(slot: TextureSlot) -> &'static str {
+    match slot {
+        TextureSlot::BaseColor => "baseColor",
+        TextureSlot::MetallicRoughness => "metallicRoughness",
+        TextureSlot::Normal => "normal",
+        TextureSlot::Occlusion => "occlusion",
+        TextureSlot::Emissive => "emissive",
+    }
+}
+
+fn class_name(class: Class) -> &'static str {
+    match class {
+        Class::Colour => "colour",
+        Class::Normal => "normal",
+        Class::Data => "data",
+        Class::Id => "id",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn encode_page(
     services: &Services<'_>,
     layout: &Layout,
@@ -972,11 +1068,17 @@ fn encode_page(
     profile: Profile,
     depth: u8,
     drop: u32,
+    leaf: u64,
 ) -> Result<EncodedPage, JobError> {
     let captured = services.captured;
     let memory = services.memory;
     let check = &mut || (services.check)();
     check()?;
+    // Mipmap minification is the only way a sampler reads a coarser level.
+    let ladder = delivery::Ladder {
+        level0_sampled: !matches!(page.sampler.min_filter, 9984..=9987),
+        check: services.check,
+    };
     let _permit = services.gate.acquire(page_charge(
         page,
         &layout.bindings,
@@ -988,6 +1090,7 @@ fn encode_page(
     let primitives = &layout.primitives;
     let masked = &layout.masked;
     let mut receipts = Vec::new();
+    let mut preencode = None;
     let delivered = if page.source_mips {
         if page.bindings.len() != 1 {
             return Err(invariant());
@@ -1061,12 +1164,51 @@ fn encode_page(
             source_sampler_mips::check_authored(&chain, &context)
         })?;
         receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"cropOrigin":b.block.islands[0].crop.origin,"cropSize":[b.block.width,b.block.height],"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter},"mipConstruction":"dedicated original-source class levels","samplerCheckBeforeEncode":planned,"samplerCheckScope":"22 locations per nondegenerate decoded triangle; finite isotropic surface-footprint integer/quarter LODs plus magnification; MASK alpha separate"}));
-        delivery::encode_authored(&chain.page, b.slot, profile, memory, mask, |decoded| {
-            let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
-            Ok(
-                json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
-            )
-        })?
+        let delivered = delivery::encode_authored(
+            &chain.page,
+            b.slot,
+            profile,
+            memory,
+            mask,
+            ladder,
+            |decoded| {
+                let result = source_sampler_mips::check_samples(&chain, decoded, &context)?;
+                Ok(
+                    json!({"sourceSamplerCheckAfterEncode":result,"sourceChainChargedBytes":chain.charged_bytes,"sourceLODClampedSeparately":true}),
+                )
+            },
+        )?;
+        if let Some(store) = services.preencode {
+            preencode = Some(
+                store.write_page(
+                    leaf,
+                    drop,
+                    &super::prepared::PreencodePage {
+                        page: page_id as u32,
+                        slot: slot_name(b.slot).to_owned(),
+                        class: class_name(class).to_owned(),
+                        width: page.width,
+                        height: page.height,
+                        levels: chain
+                            .page
+                            .levels
+                            .into_iter()
+                            .map(|l| super::prepared::PreencodeLevel {
+                                width: l.width,
+                                height: l.height,
+                                rgba: l.rgba,
+                            })
+                            .collect(),
+                        support: None,
+                        min_filter: b.sampler.min_filter,
+                        mag_filter: b.sampler.mag_filter,
+                        density_drop: drop,
+                        source_mips: true,
+                    },
+                )?,
+            );
+        }
+        delivered
     } else {
         let pixels = (page.width as usize)
             .checked_mul(page.height as usize)
@@ -1144,7 +1286,7 @@ fn encode_page(
             linear,
             min_linear,
         });
-        delivery::encode(
+        let delivered = delivery::encode(
             [page.width, page.height],
             &rgba,
             &support,
@@ -1152,7 +1294,33 @@ fn encode_page(
             profile,
             memory,
             mask,
-        )?
+            ladder,
+        )?;
+        drop_mask_borrow(mask);
+        if let Some(store) = services.preencode {
+            preencode = Some(store.write_page(
+                leaf,
+                drop,
+                &super::prepared::PreencodePage {
+                    page: page_id as u32,
+                    slot: slot_name(page.slot).to_owned(),
+                    class: class_name(class(page.slot)).to_owned(),
+                    width: page.width,
+                    height: page.height,
+                    levels: vec![super::prepared::PreencodeLevel {
+                        width: page.width,
+                        height: page.height,
+                        rgba,
+                    }],
+                    support: Some(support),
+                    min_filter: page.sampler.min_filter,
+                    mag_filter: page.sampler.mag_filter,
+                    density_drop: drop,
+                    source_mips: false,
+                },
+            )?);
+        }
+        delivered
     };
     timing::count(Counter::Pages, 1);
     timing::count(
@@ -1163,6 +1331,7 @@ fn encode_page(
     Ok(EncodedPage {
         delivered,
         binding_receipts: receipts,
+        preencode,
     })
 }
 
@@ -1176,7 +1345,8 @@ pub(super) fn prepare(
     profile: Profile,
     depth: u8,
     drop: u32,
-) -> Result<(PreparedAtlas, Vec<Value>), PrepareError> {
+    leaf: u64,
+) -> Result<(PreparedAtlas, Appearance), PrepareError> {
     let captured = services.captured;
     let resources = AtlasResources {
         materials: &captured.materials,
@@ -1189,11 +1359,19 @@ pub(super) fn prepare(
             (services.check)()
         })
     })?;
+    let sources: Vec<_> = layout
+        .pages
+        .iter()
+        .map(|page| page_sources(&layout, page))
+        .collect();
     let encoded: Vec<Result<EncodedPage, JobError>> = layout
         .pages
         .par_iter()
         .enumerate()
-        .map(|(page_id, page)| encode_page(services, &layout, page, page_id, profile, depth, drop))
+        .map(|(page_id, page)| {
+            encode_page(services, &layout, page, page_id, profile, depth, drop, leaf)
+                .map_err(|e| page_error(e, page_id, page.slot, &sources[page_id]))
+        })
         .collect();
     let Layout {
         primitives,
@@ -1206,15 +1384,30 @@ pub(super) fn prepare(
         pages: Vec::new(),
         textures: Vec::new(),
         samplers: Vec::new(),
+        preencode: Vec::new(),
     };
     let mut receipts = Vec::new();
+    let mut escalations = Vec::new();
     let mut encoded_bytes = 0u64;
-    for (page_id, (page, result)) in plans.iter().zip(encoded).enumerate() {
+    for (page_id, ((page, result), sources)) in plans.iter().zip(encoded).zip(sources).enumerate() {
         let EncodedPage {
             delivered,
             binding_receipts,
+            preencode,
         } = result?;
+        atlas.preencode.extend(preencode);
         receipts.extend(binding_receipts);
+        let escalation = delivered.escalation.as_ref().map(|e| {
+            json!({"step":e.step.name(),"misses":e.misses.iter().map(delivery::GateMiss::to_json).collect::<Vec<_>>()})
+        });
+        if let Some(escalation) = delivered.escalation.clone() {
+            escalations.push(PageEscalation {
+                page: page_id,
+                slot: page.slot,
+                sources,
+                escalation,
+            });
+        }
         encoded_bytes = encoded_bytes
             .checked_add(delivered.bytes.len() as u64)
             .ok_or_else(resource)?;
@@ -1224,7 +1417,7 @@ pub(super) fn prepare(
                 "encoded leaf pages exceed 96 MiB member budget",
             )));
         }
-        receipts.push(json!({"page":page_id,"width":page.width,"height":page.height,"mime":delivered.mime,"levels":delivered.mip_count,"bytes":delivered.bytes.len(),"quality":delivered.receipts}));
+        receipts.push(json!({"page":page_id,"width":page.width,"height":page.height,"mime":delivered.mime,"levels":delivered.mip_count,"bytes":delivered.bytes.len(),"quality":delivered.receipts,"escalation":escalation}));
         atlas.pages.push(PreparedPage {
             bytes: delivered.bytes,
             mime: delivered.mime,
@@ -1248,7 +1441,13 @@ pub(super) fn prepare(
             .collect();
         p.material = Some(captured.materials[id as usize].remap_slots(&patches)?);
     }
-    Ok((atlas, receipts))
+    Ok((
+        atlas,
+        Appearance {
+            receipts,
+            escalations,
+        },
+    ))
 }
 
 #[cfg(test)]
