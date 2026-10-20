@@ -363,6 +363,9 @@ pub(crate) struct Simplifier {
     cut: Vec<bool>,
     rejected: std::cell::Cell<[u64; 8]>,
     pub report: SimplifyReport,
+    /// Refuse collapses that span the seam (see [`Simplifier::spans_seam`]); set for tiles
+    /// whose seam overlapped a neighbour's at this depth.
+    pub strict_seams: bool,
 }
 
 const FEATURE_WEIGHT: f64 = 4.;
@@ -403,6 +406,7 @@ impl Simplifier {
                 input_faces: faces.len() as u64,
                 ..Default::default()
             },
+            strict_seams: false,
         };
         for i in 0..s.faces.len() {
             let f = s.faces[i];
@@ -536,6 +540,26 @@ impl Simplifier {
         reason.is_none()
     }
 
+    /// Seam coverage guard (both passes; on for tiles the depth audit found overlapping a
+    /// neighbour). Collapsing a non-seam vertex `u` onto a seam vertex `v` must not create
+    /// a face `(v, a, b)` of seam vertices only. Such a face lies along the seam, and the
+    /// tile across it can build the same face from its side (the composite's depth-6 case:
+    /// a sliver L-H-P in both tiles, opposite windings, every seam edge still partnered);
+    /// the two then cover it twice, and at the next depth the parents' seams disagree.
+    /// Collapses of a seam vertex (the forced removals, which both sides of a seam make
+    /// identically) are exempt: a flagged tile may still form such a face that way, which
+    /// consensus answers by keeping the removed seam vertices instead.
+    fn spans_seam(&self, u: u32, v: u32) -> bool {
+        let cut = |x: u32| self.cut.get(x as usize).copied().unwrap_or(false);
+        if !self.strict_seams || cut(u) || !cut(v) {
+            return false;
+        }
+        self.live(u).any(|f| {
+            let face = self.faces[f as usize];
+            !face.v.contains(&v) && face.v.iter().all(|&x| x == u || cut(x))
+        })
+    }
+
     fn why_not(&self, u: u32, v: u32, ring_u: &Ring) -> Option<usize> {
         let Some(shared) = ring_u.get(&v) else {
             return Some(0);
@@ -587,6 +611,9 @@ impl Simplifier {
             if survivors == 0 {
                 return Some(3);
             }
+        }
+        if self.spans_seam(u, v) {
+            return Some(7);
         }
         for f in self.live(u) {
             let face = self.faces[f as usize];
@@ -1092,6 +1119,49 @@ mod tests {
         expanded_ordinal: 0,
         material: u32::MAX,
     };
+
+    /// The seam guard: an interior vertex fanned against three consecutive seam vertices
+    /// may not collapse onto one of them under the guard (it would leave a face of seam
+    /// vertices only, which the neighbouring tile can build too), while the same collapse
+    /// is unaffected without the guard or onto a non-seam vertex.
+    #[test]
+    fn seam_span_guard_refuses_slivers_along_the_seam() {
+        let k = |x: f32, z: f32| key(x, 0., z);
+        let (a, b, c) = (k(0., 0.), k(1., 0.5), k(2., 0.));
+        let (x, y) = (k(1., -0.5), k(1., -2.));
+        let face = |keys: [Key; 3]| KeyFace {
+            keys,
+            info: [VertexInfo::default(); 3],
+            label: L,
+            origin: Origin::default(),
+        };
+        let faces = vec![
+            face([a, x, b]),
+            face([b, x, c]),
+            face([c, x, y]),
+            face([y, x, a]),
+        ];
+        let mesh = KeyMesh::build(&faces).unwrap();
+        let index = |key: Key| mesh.vertices.iter().position(|v| v.key == key).unwrap() as u32;
+        let mut s = Simplifier::new(&mesh, &mesh.faces, vec![false; mesh.vertices.len()]);
+        let cut: Vec<bool> = mesh
+            .vertices
+            .iter()
+            .map(|v| [a, b, c].contains(&v.key))
+            .collect();
+        s.set_seam(cut.clone(), cut);
+        let (ia, ix, iy) = (index(a), index(x), index(y));
+        assert!(!s.spans_seam(ix, ia), "inactive without the guard");
+        s.strict_seams = true;
+        assert!(
+            s.spans_seam(ix, ia),
+            "x onto a leaves the sliver b-c-a along the seam"
+        );
+        assert!(
+            !s.spans_seam(ix, iy),
+            "onto a non-seam vertex is unaffected"
+        );
+    }
 
     #[test]
     fn simplification_keeps_locked_vertices_labels_and_reaches_its_target() {
