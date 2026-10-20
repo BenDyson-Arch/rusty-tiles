@@ -175,6 +175,12 @@ escalation ladder as leaves; `lossless` delivers a PNG base level. The complete
 proxy GLB is read back before it replaces the untextured one, and a tile that
 would exceed the per-tile byte budget is rebaked at a lower texel density.
 
+A proxy starts at its children's texel density: the coarsest child's
+world-area-weighted median texel spacing (a few near-degenerate source UV
+triangles do not coarsen it), or a profile fraction of its geometric error if
+that is coarser (`balanced`: one sixteenth; `fast` twice that; `quality` and
+`lossless` half).
+
 Appearance rules:
 
 - **Sub-texel slivers have no texture.** A face whose exact page footprint is
@@ -191,10 +197,16 @@ Appearance rules:
   UNSIGNED_SHORT or FLOAT, and FLOAT holds every integer only up to 2^24. A
   larger ID is `unsupported` rather than rounded.
 
-Known limitation (0.4): a proxy directly above leaf tiles samples the original
-source images, not the leaves' delivered pages, because leaf pages keep no
-per-texel terminal ledger. This is correct but slower than resampling the
-children; keeping that ledger is a planned 0.4.x follow-up.
+Known limitations (0.4):
+
+- A proxy directly above leaf tiles samples the original source images, not
+  the leaves' delivered pages, because leaf pages keep no per-texel terminal
+  ledger. This is correct but slower than resampling the children; keeping
+  that ledger is a planned 0.4.x follow-up.
+- Baking dominates conversion time. Proxies of one depth bake in parallel
+  (up to `--jobs`), but one proxy bakes on one thread, so the narrow top of the
+  tree runs serially. A 0.79M-triangle textured crop that converts in under a
+  minute untextured takes about two hours on four cores.
 
 Leaf normals are a profile property. `lossless` keeps the f32 source normal
 (after the node transform, renormalized at capture). `fast`, `balanced` and
