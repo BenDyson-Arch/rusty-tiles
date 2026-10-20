@@ -143,6 +143,11 @@ pub(crate) struct CapturedSource<'a> {
     /// their residency (see [`CapturedSource::make_resident`]); else they are streamed.
     resident: Vec<FullTriangle>,
     resident_first: u64,
+    /// True when the resident triangles carry no COLOR_0: every corner colour is then
+    /// the default white, so colour queries need no search.
+    colorless: bool,
+    /// Reused depth-first stack of the nearest-witness query.
+    nearest_stack: Vec<(QueryNode, f64)>,
     root: u64,
     first: u64,
     end: u64,
@@ -233,6 +238,8 @@ impl<'a> CapturedSource<'a> {
             nodes,
             resident: Vec::new(),
             resident_first: 0,
+            colorless: false,
+            nearest_stack: Vec::new(),
             root: root.ok_or_else(|| invalid("empty captured hierarchy"))?,
             first: 0,
             end: captured.triangles.len(),
@@ -251,6 +258,7 @@ impl<'a> CapturedSource<'a> {
         self.work.set(0);
         self.limit = limit;
         self.resident = Vec::new();
+        self.colorless = false;
         Ok(())
     }
     /// Hold the current node's source triangles in memory when they fit `budget` bytes,
@@ -282,6 +290,7 @@ impl<'a> CapturedSource<'a> {
             }
             resident.push(t?);
         }
+        self.colorless = !resident.iter().any(|t| t.flags & COLOR != 0);
         self.resident = resident;
         self.resident_first = self.first;
         Ok(bytes)
@@ -339,37 +348,56 @@ impl<'a> CapturedSource<'a> {
         let ranges = &face.donor_ranges;
         let mut best: Option<Witness> = None;
         let mut unfiltered: Option<Witness> = None;
-        let mut stack = Vec::new();
-        stack
-            .try_reserve_exact(8 * 65)
-            .map_err(|_| resource("source query stack"))?;
-        stack.push(self.root);
-        while let Some(i) = stack.pop() {
+        // Nearest-first depth-first search: children are pushed farthest first, so the
+        // closest box is searched first and the distance bound tightens early. The
+        // result does not depend on visit order: candidates are compared by a strict
+        // total order (distance, then lineage, triangle and rank), and a box is pruned
+        // only when its lower distance bound strictly exceeds the best distance.
+        let mut stack = std::mem::take(&mut self.nearest_stack);
+        stack.clear();
+        if stack.capacity() < 8 * 65 {
+            stack
+                .try_reserve_exact(8 * 65)
+                .map_err(|_| resource("source query stack"))?;
+        }
+        let bound = |n: &QueryNode| {
+            math::box_distance_lower(
+                q,
+                n.lo.map(|v| f64::from(f32::from_bits(v))),
+                n.hi.map(|v| f64::from(f32::from_bits(v))),
+            )
+        };
+        let root = self.node(self.root)?;
+        stack.push((root, bound(&root)));
+        while let Some((n, lower)) = stack.pop() {
             check()?;
             self.charge()?;
-            let n = self.node(i)?;
             if n.end <= self.first
                 || n.first >= self.end
                 || !ranges.iter().any(|r| n.first < r.end && n.end > r.start)
             {
                 continue;
             }
-            let lower = math::box_distance_lower(
-                q,
-                n.lo.map(|v| f64::from(f32::from_bits(v))),
-                n.hi.map(|v| f64::from(f32::from_bits(v))),
-            );
             if best.is_some_and(|b| lower > b.distance2)
                 && (fill.is_none() || unfiltered.is_some_and(|b| lower > b.distance2))
             {
                 continue;
             }
             if n.count > 0 {
-                for &child in n.children[..n.count as usize].iter().rev() {
+                let mut kids = [(root, 0f64); 8];
+                for (slot, &child) in kids.iter_mut().zip(&n.children[..n.count as usize]) {
+                    let c = self.node(child)?;
+                    *slot = (c, bound(&c));
+                }
+                let kids = &mut kids[..n.count as usize];
+                // Farthest first; equal bounds keep the original (last-first) push order.
+                kids.reverse();
+                kids.sort_by(|a, b| b.1.total_cmp(&a.1));
+                for &kid in kids.iter() {
                     if stack.len() >= 8 * 65 {
                         return Err(resource("source query stack bound"));
                     }
-                    stack.push(child);
+                    stack.push(kid);
                 }
                 continue;
             }
@@ -419,6 +447,8 @@ impl<'a> CapturedSource<'a> {
                 check()?;
             }
         }
+        // An early error return drops the buffer; the next query reallocates it.
+        self.nearest_stack = stack;
         if let Some(bound) = fill {
             if best.is_none_or(|b| {
                 (if b.distance2 == 0. {
@@ -451,6 +481,11 @@ impl<'a> CapturedSource<'a> {
         weld: [u32; 3],
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<[f32; 4], JobError> {
+        // Both the weld match and the nearest-corner fallback return white for a
+        // triangle without COLOR_0; when no resident triangle has it, skip the search.
+        if self.colorless && !self.resident.is_empty() {
+            return Ok([1.; 4]);
+        }
         let q = weld.map(|v| f64::from(f32::from_bits(v)));
         let mut stack = vec![self.root];
         let mut best: Option<((bool, u64, u8), [f32; 4])> = None;
