@@ -175,6 +175,33 @@ fn terrain(g: usize) -> Vec<Mesh> {
     meshes
 }
 
+/// A conforming wavy grid, dense in x over one part and sparse elsewhere (every column has
+/// the same rows, so there are no T-junctions): the tree is deeper over the dense part, so
+/// shallow leaves of the sparse part sit on the same frontier as proxies of the dense part.
+fn graded(rows: usize, columns: &[f32]) -> Vec<Mesh> {
+    let mut m = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.5, 0.6, 0.4, 1.],
+    };
+    let w = rows + 1;
+    for &x in columns {
+        for j in 0..=rows {
+            let z = j as f32 * 100. / rows as f32;
+            m.positions.push([x, height(x, z), z]);
+        }
+    }
+    for i in 0..columns.len() - 1 {
+        for j in 0..rows {
+            let v = |a: usize, c: usize| (a * w + c) as u32;
+            m.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+            m.indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+        }
+    }
+    vec![m]
+}
+
 /// A dense micro-cluster (synthetic run depths > 21) inside a large sparse frame.
 fn cluster() -> Vec<Mesh> {
     let mut dense = Mesh {
@@ -1125,75 +1152,150 @@ fn public_mesh_to_tileset_publishes_certified_coarse_tiles() {
     );
 }
 
-/// The seam audit from the composite crack's geometry (mgal x10, depth 6): tiles
-/// f88245879 and f89031639 both held the seam-vertex face L-H-P after their forced seam
-/// removals, so at depth 5 their parents disagreed about edge L-H. The audit now flags
-/// such a face held by two tiles, and an edge claimed by more than two tiles, for both
-/// owners; consensus then re-keeps their removed seam vertices (or fails typed).
-#[test]
-fn seam_audit_flags_duplicate_seam_faces_and_overclaimed_edges() {
-    use super::{audit, seam_face, Defect, SeamEdge};
-    let key = |p: [f32; 3]| super::incidence::weld(p);
-    let l = key([703.64294, 28.421944, 204.25375]);
-    let h = key([703.6449, 28.462814, 204.25786]);
-    let p = key([703.6427, 28.492601, 204.25209]);
-    let q = key([703.6497, 28.519394, 204.1919]);
-    let edge = |a: [u32; 3], b: [u32; 3], owner: u64| SeamEdge {
-        lo: a.min(b),
-        hi: a.max(b),
-        kind: 0,
-        third: [0; 3],
+/// A directed seam record for the audit tests: `owner` traverses `from -> to`.
+fn seam_record(from: [u32; 3], to: [u32; 3], owner: u64, special: bool) -> super::SeamEdge {
+    super::SeamEdge {
+        lo: from.min(to),
+        hi: from.max(to),
+        forward: from < to,
         owner,
         owner_depth: 6,
+        leaf: false,
         lo_dec: [1; 3],
         hi_dec: [2; 3],
-        special: false,
+        special,
         round: 0,
-    };
-    let (a, b, c) = (88_245_879, 89_031_639, 89_523_094);
-    let mut records = vec![
-        seam_face([l, h, p], false, a, 6).unwrap(),
-        seam_face([p, l, h], false, b, 6).unwrap(),
-        edge(l, h, a),
-        edge(l, h, b),
-        edge(l, h, c),
-        edge(h, p, a),
-        edge(h, p, b),
-        edge(p, q, c),
-    ];
-    records.sort();
-    let counts = audit(records.into_iter().map(Ok), 6, false).unwrap();
-    assert_eq!(
-        counts.overlapping, 2,
-        "one duplicate face, one overclaimed edge"
-    );
-    assert_eq!(counts.matched, 1, "H-P is an ordinary two-tile seam edge");
-    let defect = |owner: u64| counts.unmatched.get(&(owner, 6)).map(|v| v.2);
-    assert!(
-        matches!(defect(a), Some(Defect::DuplicateFace(_))),
-        "{:?}",
-        counts.unmatched
-    );
-    assert!(
-        matches!(defect(b), Some(Defect::DuplicateFace(_))),
-        "{:?}",
-        counts.unmatched
-    );
-    // c's overclaimed L-H (or its partnerless P-Q) is reported too.
-    assert!(defect(c).is_some());
-    // A face whose vertices are all special (a repeated source face) is not flagged.
-    let mut special = vec![
-        seam_face([l, h, p], true, a, 6).unwrap(),
-        seam_face([l, h, p], true, b, 6).unwrap(),
-    ];
-    special.sort();
-    let counts = audit(special.into_iter().map(Ok), 6, false).unwrap();
-    assert!(counts.unmatched.is_empty() && counts.overlapping == 0);
+    }
 }
 
-/// Overlapping seam coverage never passes silently: with the first tile of each depth
-/// claiming a seam edge a second time, consensus cannot resolve it and the run fails
-/// with a typed error naming the overclaimed edge.
+fn run_audit(mut records: Vec<super::SeamEdge>) -> super::AuditCounts {
+    records.sort();
+    super::audit(records.into_iter().map(Ok), 6, false).unwrap()
+}
+
+/// The seam audit on the composite crack's geometry (mgal x10, depth 6): tiles f88245879
+/// (a) and f89031639 (b) both kept the sliver L-H-P along their seam, so both traverse L-H
+/// the same way, and f89523094 (c), the true partner, the other way. Directed records see
+/// the overlap for all three owners; an ordinary two-tile edge matches. Two owners on one
+/// side of an edge are caught too (an undirected count of two looked like a partner), and
+/// a tile's crack listed first does not hide its later overlap.
+#[test]
+fn seam_audit_flags_same_side_coverage() {
+    use super::{incidence::weld, Defect};
+    let l = weld([703.64294, 28.421944, 204.25375]);
+    let h = weld([703.6449, 28.462814, 204.25786]);
+    let p = weld([703.6427, 28.492601, 204.25209]);
+    let q = weld([703.6497, 28.519394, 204.1919]);
+    let z = weld([700., 28., 204.]);
+    let (a, b, c, e) = (88_245_879, 89_031_639, 89_523_094, 90_000_000);
+    let counts = run_audit(vec![
+        // The sliver L-H-P in a and in b, same winding: L->H twice.
+        seam_record(l, h, a, false),
+        seam_record(l, h, b, false),
+        seam_record(h, l, c, false),
+        // H-P: a and b on opposite sides, an ordinary seam edge.
+        seam_record(h, p, a, false),
+        seam_record(p, h, b, false),
+        // P-Q: c and e both traverse it P->Q (two owners, one side).
+        seam_record(p, q, c, false),
+        seam_record(p, q, e, false),
+        // c's crack, before its overlaps in edge order.
+        seam_record(z, l, c, false),
+    ]);
+    assert_eq!(counts.overlapping, 2, "L-H and P-Q");
+    assert_eq!(counts.matched, 1, "H-P is an ordinary two-tile seam edge");
+    let tile = |owner: u64| {
+        counts
+            .unmatched
+            .get(&(owner, 6))
+            .copied()
+            .unwrap_or_default()
+    };
+    for owner in [a, b] {
+        let t = tile(owner);
+        assert!(t.overlap.is_some() && t.crack.is_none(), "{t:?}");
+        assert_eq!(t.overlap.unwrap().lo, l.min(h));
+    }
+    let (left, right) = if l < h { (2, 1) } else { (1, 2) };
+    assert_eq!(
+        tile(a).overlap.unwrap().defect,
+        Defect::Overlap {
+            forward: left,
+            backward: right
+        }
+    );
+    assert_eq!(
+        tile(e).overlap.unwrap().defect,
+        Defect::Overlap {
+            forward: usize::from(p < q) * 2,
+            backward: usize::from(p > q) * 2
+        }
+    );
+    // c: one crack and two overlaps, all recorded; the overlap is what is reported.
+    let t = tile(c);
+    assert_eq!(t.count, 3, "{t:?}");
+    assert!(t.crack.is_some() && t.overlap.is_some(), "{t:?}");
+    assert!(matches!(t.first().unwrap().defect, Defect::Overlap { .. }));
+}
+
+/// A depth-`d` leaf and a depth-`d` proxy share an owner depth; the audit tells them apart,
+/// so consensus re-runs only the proxy (the composite's depth-10 crack came from re-running
+/// leaf f88468492-d10, which hid its seam records from every later round).
+#[test]
+fn seam_audit_marks_leaf_owners() {
+    use super::incidence::weld;
+    let (l, h) = (weld([1., 0., 0.]), weld([2., 0., 0.]));
+    let (proxy, leaf) = (88_507_695, 88_468_492);
+    let leaf_record = super::SeamEdge {
+        leaf: true,
+        ..seam_record(l, h, leaf, false)
+    };
+    let counts = run_audit(vec![seam_record(l, h, proxy, false), leaf_record]);
+    assert_eq!(counts.overlapping, 1);
+    let tile = |owner: u64| counts.unmatched[&(owner, 6)];
+    assert!(tile(leaf).leaf && !tile(proxy).leaf);
+}
+
+/// Control: duplicate faces alone are not a seam defect. A double-sided face whose two
+/// sides lie in different tiles (the composite source holds such opposite-winding pairs)
+/// has every edge traversed once each way, so every edge matches; the audit before the
+/// directed records flagged such a pair as an unresolvable "fold over the seam". Two tiles
+/// traversing an edge the same way are not flagged either when the source itself leaves
+/// that edge unoriented (special endpoints: a winding flip or a non-manifold edge).
+#[test]
+fn seam_audit_passes_double_sided_faces_and_special_edges() {
+    use super::incidence::weld;
+    let l = weld([1., 0., 0.]);
+    let h = weld([2., 0., 0.]);
+    let p = weld([1.5, 1., 0.]);
+    let (a, b) = (10, 20);
+    // Front (L, H, P) in a, back (L, P, H) in b.
+    let counts = run_audit(vec![
+        seam_record(l, h, a, false),
+        seam_record(h, p, a, false),
+        seam_record(p, l, a, false),
+        seam_record(l, p, b, false),
+        seam_record(p, h, b, false),
+        seam_record(h, l, b, false),
+    ]);
+    assert_eq!((counts.matched, counts.overlapping), (3, 0));
+    assert!(counts.unmatched.is_empty(), "{:?}", counts.unmatched);
+    // Same direction over a source winding flip (special endpoints): not an overlap.
+    let counts = run_audit(vec![seam_record(l, h, a, true), seam_record(l, h, b, true)]);
+    assert_eq!((counts.matched, counts.overlapping), (1, 0));
+    assert!(counts.unmatched.is_empty());
+    // The same pair without the source exception is one.
+    let counts = run_audit(vec![
+        seam_record(l, h, a, false),
+        seam_record(l, h, b, false),
+    ]);
+    assert_eq!(counts.overlapping, 1);
+    assert_eq!(counts.unmatched.len(), 2);
+}
+
+/// Overlapping seam coverage never passes silently: with a fictitious second owner
+/// traversing one of the first tile's seam edges the same way at every depth, consensus
+/// cannot resolve it and the run fails with a typed error naming the overlap.
 #[test]
 fn control_overclaimed_seam_edge_is_refused() {
     let work = tempfile::tempdir().unwrap();
@@ -1209,8 +1311,111 @@ fn control_overclaimed_seam_edge_is_refused() {
     .unwrap_err();
     assert_eq!(refused.error.kind(), JobErrorKind::InvalidState);
     assert!(
-        refused.error.message().contains("claimed by"),
+        refused.error.message().contains("same side"),
         "{}",
         refused.error.message()
     );
+}
+
+/// End to end: detect, resolve, pass. Every proxy also claims the far side of each of its
+/// seam edges until it runs under the seam guard, so overlaps sit on seams shared with
+/// proxies and with leaves at the same depth (the composite's depth-10 case: a proxy and a
+/// depth-10 leaf held the same seam face). The audit must see the same-side coverage;
+/// consensus must re-run the overlapping proxies under the guard (with their removed seam
+/// vertices kept) and never the leaves, whose round-0 seam records must stay in the audit;
+/// the run must then pass: the published proxies audit crack-free on decoded bytes, are
+/// certified, validate, and are identical across worker counts. (With leaves re-run like
+/// proxies, as before this fix, the run fails exactly as the composite did: "depth 1 seam:
+/// edge ... of tile f600-d1 has no partner tile, and seam consensus cannot resolve it".)
+#[test]
+fn seam_overlap_is_detected_resolved_and_published_clean() {
+    let work = tempfile::tempdir().unwrap();
+    // Sparse columns over x in [0, 60), dense ones over [60, 100].
+    let columns: Vec<f32> = (0..12)
+        .map(|i| i as f32 * 5.)
+        .chain((0..=320).map(|i| 60. + i as f32 * 0.125))
+        .collect();
+    let source = graded(60, &columns);
+    let input = write_gltf(&work.path().join("src"), &source);
+    let mut archives = Vec::new();
+    for jobs in [1, 2] {
+        let dir = leaves(
+            &input,
+            &work.path().join(format!("leaves{jobs}")),
+            jobs,
+            Mutation::OverlapUntilStrict,
+            1024,
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let lod = &manifest["lod"];
+        // The fixture's point: leaves on the frontier of a depth that also has proxies.
+        let depths = |file: &str| -> BTreeSet<u64> {
+            rows(&dir.join(file))
+                .iter()
+                .map(|r| r["depth"].as_u64().unwrap())
+                .collect()
+        };
+        assert!(
+            depths("leaves.jsonl")
+                .intersection(&depths("proxies.jsonl"))
+                .next()
+                .is_some(),
+            "no leaf shares a depth with a proxy"
+        );
+        // Detected (tiles re-run under the guard) and resolved (the run finished).
+        assert!(lod["seamOverlapTiles"].as_u64().unwrap() >= 2, "{lod}");
+        assert!(lod["seamRounds"].as_u64().unwrap() > 0, "{lod}");
+        let out = work.path().join(format!("t{jobs}.3tz"));
+        archive(&dir, &out);
+        if jobs == 1 {
+            let audit = audit(&source, &dir);
+            eprintln!("overlap jobs {jobs}: {audit:?}\nlod {lod}");
+            assert_eq!(audit.cracks, 0, "{audit:?}");
+            assert_eq!(audit.seam_fill_vertices, 0, "{audit:?}");
+            assert!(audit.matched_edges > 0);
+            inspect(ValidationRequest::new(&out)).unwrap();
+        }
+        archives.push(fs::read(&out).unwrap());
+    }
+    assert!(archives[0] == archives[1], "archives differ across jobs");
+    // Without the injected overlap no tile runs under the guard.
+    let clean = leaves(&input, &work.path().join("clean"), 2, Mutation::None, 1024).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(clean.join("manifest.json")).unwrap()).unwrap();
+    assert!(manifest["lod"].get("seamOverlapTiles").is_none());
+}
+
+/// Control on real geometry: a source whose winding flips across tile seams. In the middle
+/// terrain band the triangles of every other grid column are wound the other way, so on
+/// the lines between flipped and unflipped triangles both triangles of an edge traverse it
+/// in the same direction, and tile seams run along such lines. The pre-pass marks those
+/// vertices special (the source leaves that edge's side unoriented), so the directed seam
+/// audit does not take the two tiles meeting there for overlapping coverage: the run passes
+/// and audits clean. (Without the pre-pass rule the run is refused: "covered on the same
+/// side by two tiles", 156 defects at depth 1.)
+#[test]
+fn winding_flip_across_seams_is_not_an_overlap() {
+    let work = tempfile::tempdir().unwrap();
+    let mut source = terrain(150);
+    // Middle band: flip the triangles whose least x (of corners 0 and 2) is an odd column.
+    let step = 100. / 150.;
+    let band = source[1].clone();
+    for t in source[1].indices.chunks_mut(3) {
+        let x = band.positions[t[0] as usize][0].min(band.positions[t[2] as usize][0]);
+        if ((x / step).round() as usize) % 2 == 1 {
+            t.swap(1, 2);
+        }
+    }
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = leaves(&input, &work.path().join("leaves"), 2, Mutation::None, 1024).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let lod = &manifest["lod"];
+    assert!(lod.get("seamOverlapTiles").is_none(), "{lod}");
+    let audit = audit(&source, &dir);
+    eprintln!("flipped band: {audit:?}\nlod {lod}");
+    assert_eq!(audit.cracks, 0, "{audit:?}");
+    archive(&dir, &work.path().join("flipped.3tz"));
 }

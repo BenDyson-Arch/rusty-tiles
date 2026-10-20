@@ -230,27 +230,32 @@ impl Record for Row {
     }
 }
 
-/// A seam record for the per-depth audit: a border edge with both endpoints cut at this
-/// depth (`kind` 0, `third` zero), or a face whose three vertices are all cut (`kind` 1,
-/// keys sorted `lo < hi < third`). Records group by `(lo, hi, kind, third)`.
+/// A seam edge for the per-depth audit: a border edge with both endpoints cut at this
+/// depth, with the direction its owner's face traverses it (`forward`: from `lo` to `hi`).
+/// Records group by `(lo, hi)`. A seam edge between two consistently wound tiles is
+/// traversed once in each direction; two owners traversing it the same way both cover the
+/// same side of it (overlapping coverage), which an undirected owner count cannot see.
+/// The owner is a depth-`d` proxy or a leaf at depth `<= d` (`leaf`): a leaf at depth `d`
+/// has the same `owner_depth` as a proxy, but it is source and never re-runs, so its
+/// records (logged once, in round 0) must never be superseded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct SeamEdge {
     lo: Key,
     hi: Key,
-    kind: u8,
-    third: Key,
+    forward: bool,
     owner: u64,
     owner_depth: u8,
+    leaf: bool,
     lo_dec: [u32; 3],
     hi_dec: [u32; 3],
     special: bool,
     round: u8,
 }
 impl Record for SeamEdge {
-    const SIZE: usize = 12 * 5 + 8 + 1 + 1 + 1 + 1;
+    const SIZE: usize = 12 * 4 + 8 + 1 + 1 + 1 + 1 + 1;
     fn encode(&self, out: &mut [u8]) {
         let mut w = 0;
-        for k in [self.lo, self.hi, self.lo_dec, self.hi_dec, self.third] {
+        for k in [self.lo, self.hi, self.lo_dec, self.hi_dec] {
             for v in k {
                 out[w..w + 4].copy_from_slice(&v.to_le_bytes());
                 w += 4;
@@ -260,7 +265,8 @@ impl Record for SeamEdge {
         out[w + 8] = self.owner_depth;
         out[w + 9] = u8::from(self.special);
         out[w + 10] = self.round;
-        out[w + 11] = self.kind;
+        out[w + 11] = u8::from(self.forward);
+        out[w + 12] = u8::from(self.leaf);
     }
     fn decode(b: &[u8]) -> Self {
         let k = |i: usize| -> [u32; 3] {
@@ -273,12 +279,12 @@ impl Record for SeamEdge {
             hi: k(12),
             lo_dec: k(24),
             hi_dec: k(36),
-            third: k(48),
-            owner: u64::from_le_bytes(b[60..68].try_into().unwrap()),
-            owner_depth: b[68],
-            special: b[69] != 0,
-            round: b[70],
-            kind: b[71],
+            owner: u64::from_le_bytes(b[48..56].try_into().unwrap()),
+            owner_depth: b[56],
+            special: b[57] != 0,
+            round: b[58],
+            forward: b[59] != 0,
+            leaf: b[60] != 0,
         }
     }
 }
@@ -418,6 +424,10 @@ pub(crate) struct LodReport {
     /// remove them validly.
     pub seam_rounds: u64,
     pub seam_kept_extra: u64,
+    /// Tiles the audit found overlapping a neighbour's seam coverage, re-run under the
+    /// seam guard (absent when none).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub seam_overlap_tiles: u64,
     pub lattice_sha256: String,
     pub sidecar_peak_bytes: u64,
     pub relaxed_tiles: u64,
@@ -1076,8 +1086,14 @@ fn process(
         .sidecars
         .join(format!("topo-d{d}"))
         .join(format!("f{}.bin", node.first));
-    // The cache is bound to the forced set, so a keep set that changed since the cached run
-    // cannot silently reuse stale faces.
+    // The cache key binds every input of the simplification that can change between rounds
+    // of one depth: the tile's children and target are fixed per depth, but the forced set
+    // shrinks as consensus keeps vertices, and the seam-span guard switches on once the
+    // audit finds the tile overlapping a neighbour. Folding the guard flag into the seed
+    // (`FORCED_BINDING ^ strict`) and every forced key into the hash means a topology
+    // cached under a different keep set or guard state never matches, so neither a later
+    // round nor the finishing pass reuses stale faces. (The finishing pass reads with the
+    // tile's final flag and forced set: exactly the run the audit accepted.)
     let binding = forced
         .iter()
         .fold(FORCED_BINDING ^ u64::from(strict_seams), |h, &i| {
@@ -1165,16 +1181,29 @@ fn process(
         // Topology pass: the seam edges are all the depth audit needs (fills never touch a
         // seam vertex, so the finishing pass publishes the same seam edges).
         out.seams = seam_edges(ctx, &mesh, &s_faces, node.first, d)?;
+        // Control: the first tile of each depth claims one of its seam edges a second time
+        // under a fictitious owner traversing it the same way, at every round (consensus
+        // cannot resolve it).
         if ctx.mutation == Mutation::OverclaimSeam && node.first == 0 && d >= 1 {
-            if let Some(mut e) = out
-                .seams
-                .iter()
-                .find(|e| e.kind == 0 && !e.special)
-                .copied()
-            {
+            if let Some(mut e) = out.seams.iter().find(|e| !e.special).copied() {
                 e.owner = u64::MAX;
                 out.seams.push(e);
             }
+        }
+        // Stress: until the seam guard is on for it, every proxy also claims the far side
+        // of each of its seam edges, so the audit sees overlapping coverage on every seam,
+        // including those it shares with leaves at this depth.
+        if ctx.mutation == Mutation::OverlapUntilStrict && !strict_seams {
+            let far: Vec<SeamEdge> = out
+                .seams
+                .iter()
+                .filter(|e| !e.special)
+                .map(|e| SeamEdge {
+                    forward: !e.forward,
+                    ..*e
+                })
+                .collect();
+            out.seams.extend(far);
         }
         lap(&mut phases[2]);
         out.phases = phases;
@@ -2062,7 +2091,8 @@ fn read_topology(
     Ok(Some((faces, report, relaxed)))
 }
 
-/// Border edges of a depth-`d` proxy with both endpoints seam vertices, for the audit.
+/// Border edges of a depth-`d` proxy with both endpoints seam vertices, for the audit,
+/// each with the direction the proxy's one face on it traverses it.
 fn seam_edges(
     ctx: &Ctx,
     mesh: &KeyMesh,
@@ -2070,17 +2100,19 @@ fn seam_edges(
     owner: u64,
     d: u32,
 ) -> Result<Vec<SeamEdge>, JobError> {
-    let mut count: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    // (lo, hi) -> (faces on the edge, the last one's traversal from `a` to `b`)
+    let mut count: BTreeMap<(u32, u32), (u32, (u32, u32))> = BTreeMap::new();
     for f in faces {
         for k in 0..3 {
             let (a, b) = (f.v[k], f.v[(k + 1) % 3]);
             if a != b {
-                *count.entry((a.min(b), a.max(b))).or_default() += 1;
+                let e = count.entry((a.min(b), a.max(b))).or_default();
+                *e = (e.0 + 1, (a, b));
             }
         }
     }
     let mut out = Vec::new();
-    for ((a, b), n) in count {
+    for ((a, b), (n, (from, _))) in count {
         let (va, vb) = (mesh.vertices[a as usize], mesh.vertices[b as usize]);
         if n != 1 || !va.info.cut(d) || !vb.info.cut(d) {
             continue;
@@ -2092,45 +2124,17 @@ fn seam_edges(
         out.push(SeamEdge {
             lo: lo.key,
             hi: hi.key,
+            forward: mesh.vertices[from as usize].key == lo.key,
             owner,
             owner_depth: d as u8,
+            leaf: false,
             lo_dec: dec(&lo)?,
             hi_dec: dec(&hi)?,
             special: lo.info.special && hi.info.special,
             round: 0,
-            kind: 0,
-            third: [0; 3],
         });
     }
-    // Faces of seam vertices only: no two frontier tiles may both hold one.
-    for f in faces {
-        let v = f.v.map(|i| mesh.vertices[i as usize]);
-        if v.iter().all(|x| x.info.cut(d)) {
-            let special = v.iter().all(|x| x.info.special);
-            if let Some(face) = seam_face(v.map(|x| x.key), special, owner, d as u8) {
-                out.push(face);
-            }
-        }
-    }
     Ok(out)
-}
-
-/// The audit record of a face whose three (distinct) vertices are seam vertices.
-fn seam_face(keys: [Key; 3], special: bool, owner: u64, owner_depth: u8) -> Option<SeamEdge> {
-    let mut k = keys;
-    k.sort_unstable();
-    (k[0] != k[1] && k[1] != k[2]).then_some(SeamEdge {
-        lo: k[0],
-        hi: k[1],
-        kind: 1,
-        third: k[2],
-        owner,
-        owner_depth,
-        lo_dec: [0; 3],
-        hi_dec: [0; 3],
-        special,
-        round: 0,
-    })
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2143,7 +2147,8 @@ fn leaf_seams(
     d: u32,
     out: &mut crate::spill::SequenceWriter<SeamEdge>,
 ) -> Result<u64, JobError> {
-    let mut count: BTreeMap<(Key, Key), u32> = BTreeMap::new();
+    // (lo, hi) -> (triangles on the edge, whether the last one runs from lo to hi)
+    let mut count: BTreeMap<(Key, Key), (u32, bool)> = BTreeMap::new();
     let mut info: BTreeMap<Key, VertexInfo> = BTreeMap::new();
     for s in source.range(leaf.first, leaf.end, 1 << 16)? {
         let s = s?;
@@ -2152,12 +2157,13 @@ fn leaf_seams(
             info.insert(keys[c], s.info[c]);
             let (a, b) = (keys[c], keys[(c + 1) % 3]);
             if a != b {
-                *count.entry((a.min(b), a.max(b))).or_default() += 1;
+                let e = count.entry((a.min(b), a.max(b))).or_default();
+                *e = (e.0 + 1, a < b);
             }
         }
     }
     let mut n = 0;
-    for ((a, b), c) in count {
+    for ((a, b), (c, forward)) in count {
         let (ia, ib) = (info[&a], info[&b]);
         if c != 1 || !ia.cut(d) || !ib.cut(d) {
             continue;
@@ -2168,32 +2174,16 @@ fn leaf_seams(
         out.push(&SeamEdge {
             lo: a,
             hi: b,
+            forward,
             owner: leaf.first,
             owner_depth: leaf.depth() as u8,
+            leaf: true,
             lo_dec: dec(a, ia)?,
             hi_dec: dec(b, ib)?,
             special: ia.special && ib.special,
             round: 0,
-            kind: 0,
-            third: [0; 3],
         })?;
         n += 1;
-    }
-    // The leaf's own faces of seam vertices only.
-    for s in source.range(leaf.first, leaf.end, 1 << 16)? {
-        let s = s?;
-        if s.info.iter().all(|i| i.cut(d)) {
-            let special = s.info.iter().all(|i| i.special);
-            if let Some(face) = seam_face(
-                s.positions.map(incidence::weld),
-                special,
-                leaf.first,
-                leaf.depth() as u8,
-            ) {
-                out.push(&face)?;
-                n += 1;
-            }
-        }
     }
     Ok(n)
 }
@@ -2204,22 +2194,60 @@ struct AuditCounts {
     matched: u64,
     boundary: u64,
     relabelled: u64,
-    /// Edges claimed by more than two tiles, and seam-vertex faces held by two or more.
+    /// Edges with overlapping coverage: two owners traverse them the same way, or more
+    /// than two owners claim them.
     overlapping: u64,
-    /// Proxy tiles with a seam defect, one such defect each: an edge no other frontier
-    /// tile has, an edge more than two tiles claim, or a seam-vertex face two tiles hold.
-    unmatched: BTreeMap<(u64, u8), (Key, Key, Defect)>,
+    /// Frontier tiles with a seam defect, and what is wrong with each.
+    unmatched: BTreeMap<(u64, u8), TileDefects>,
 }
 
-/// What is wrong with a seam record group.
+/// What is wrong with a seam edge group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Defect {
     /// A border edge only one frontier tile has (a crack).
     NoPartner,
-    /// A border edge more than two frontier tiles claim (overlapping coverage).
-    Overclaimed(usize),
-    /// A face of seam vertices only, held by two or more tiles (a fold over the seam).
-    DuplicateFace(Key),
+    /// Overlapping coverage: `forward` owners traverse the edge from `lo` to `hi`,
+    /// `backward` owners the other way; a manifold seam edge has one of each.
+    Overlap { forward: usize, backward: usize },
+}
+
+/// One seam defect of a tile: the edge and what is wrong with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SeamDefect {
+    lo: Key,
+    hi: Key,
+    defect: Defect,
+}
+
+/// Every seam defect of one frontier tile, summarised. Each defect is recorded, not just
+/// the tile's first: consensus treats a tile with any overlap differently from one with
+/// cracks only, so a crack listed first must not hide a later overlap.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct TileDefects {
+    /// The tile is a leaf (source: consensus cannot re-run it).
+    leaf: bool,
+    /// The tile's first crack (edge without a partner), in edge order.
+    crack: Option<SeamDefect>,
+    /// The tile's first overlap, in edge order.
+    overlap: Option<SeamDefect>,
+    /// All defects of the tile.
+    count: u64,
+}
+
+impl TileDefects {
+    fn add(&mut self, d: SeamDefect) {
+        let slot = match d.defect {
+            Defect::NoPartner => &mut self.crack,
+            Defect::Overlap { .. } => &mut self.overlap,
+        };
+        slot.get_or_insert(d);
+        self.count += 1;
+    }
+
+    /// The defect to report: an overlap before a crack (the crack is often its symptom).
+    fn first(&self) -> Option<SeamDefect> {
+        self.overlap.or(self.crack)
+    }
 }
 
 fn audit(
@@ -2233,25 +2261,6 @@ fn audit(
         let Some(first) = group.first().copied() else {
             return Ok(());
         };
-        let owners: BTreeSet<(u64, u8)> = group.iter().map(|e| (e.owner, e.owner_depth)).collect();
-        let flag = |defect: Defect, counts: &mut AuditCounts| {
-            for owner in &owners {
-                counts
-                    .unmatched
-                    .entry(*owner)
-                    .or_insert((first.lo, first.hi, defect));
-            }
-        };
-        if first.kind == 1 {
-            // A seam-vertex face two tiles both hold: their surfaces overlap over the seam
-            // (unless the source itself repeats it: its vertices are then special).
-            if owners.len() >= 2 && !first.special {
-                counts.overlapping += 1;
-                flag(Defect::DuplicateFace(first.third), counts);
-            }
-            group.clear();
-            return Ok(());
-        }
         counts.edges += 1;
         if group
             .iter()
@@ -2261,31 +2270,64 @@ fn audit(
                 "depth {d} seam: tiles decode a shared edge differently (crack)"
             )));
         }
-        if owners.len() > 2 && !first.special {
-            // Overlapping coverage: a manifold seam edge borders exactly two tiles.
-            counts.overlapping += 1;
-            flag(Defect::Overclaimed(owners.len()), counts);
-        } else if owners.len() >= 2 {
+        let owners: BTreeSet<(u64, u8)> = group.iter().map(|e| (e.owner, e.owner_depth)).collect();
+        let leaves: BTreeSet<(u64, u8)> = group
+            .iter()
+            .filter(|e| e.leaf)
+            .map(|e| (e.owner, e.owner_depth))
+            .collect();
+        let side = |forward: bool| -> BTreeSet<(u64, u8)> {
+            group
+                .iter()
+                .filter(|e| e.forward == forward)
+                .map(|e| (e.owner, e.owner_depth))
+                .collect()
+        };
+        let (forward, backward) = (side(true), side(false));
+        let flag = |defect: Defect, owners: &BTreeSet<(u64, u8)>, counts: &mut AuditCounts| {
+            for owner in owners {
+                let tile = counts.unmatched.entry(*owner).or_default();
+                tile.leaf = leaves.contains(owner);
+                tile.add(SeamDefect {
+                    lo: first.lo,
+                    hi: first.hi,
+                    defect,
+                });
+            }
+        };
+        if owners.len() >= 2 && forward.len() == 1 && backward.len() == 1 {
+            // One owner on each side: the manifold seam edge.
             counts.matched += 1;
+        } else if owners.len() >= 2 {
+            // Two owners on one side (or more than two owners): overlapping coverage, unless
+            // the edge's endpoints are special in the source (non-manifold, boundary or
+            // winding-flip edges, whose coverage the source itself does not orient).
+            if first.special {
+                counts.matched += 1;
+            } else {
+                counts.overlapping += 1;
+                flag(
+                    Defect::Overlap {
+                        forward: forward.len(),
+                        backward: backward.len(),
+                    },
+                    &owners,
+                    counts,
+                );
+            }
         } else if first.special {
             counts.boundary += 1;
         } else if relabel {
             counts.relabelled += 1;
         } else {
-            counts
-                .unmatched
-                .entry((first.owner, first.owner_depth))
-                .or_insert((first.lo, first.hi, Defect::NoPartner));
+            flag(Defect::NoPartner, &owners, counts);
         }
         group.clear();
         Ok(())
     };
     for e in sorted {
         let e = e?;
-        if group
-            .first()
-            .is_some_and(|g| (g.lo, g.hi, g.kind, g.third) != (e.lo, e.hi, e.kind, e.third))
-        {
+        if group.first().is_some_and(|g| (g.lo, g.hi) != (e.lo, e.hi)) {
             finish(&mut group, &mut counts)?;
         }
         group.push(e);
@@ -2673,20 +2715,22 @@ pub(crate) fn produce(
                     selected = None;
                     continue;
                 }
-                let owners: BTreeSet<u64> = counts
-                    .unmatched
-                    .keys()
-                    .filter(|(_, depth)| u32::from(*depth) == d)
-                    .map(|(first, _)| *first)
-                    .collect();
-                newly_strict = counts
-                    .unmatched
-                    .iter()
-                    .filter(|((first, depth), (_, _, defect))| {
-                        u32::from(*depth) == d
-                            && *defect != Defect::NoPartner
-                            && !strict.contains(first)
-                    })
+                // Consensus acts on this depth's proxies only. A leaf at depth `d` is a
+                // frontier owner with the same depth, but it is source: it has no forced
+                // keys and never re-runs, and marking it for a re-run would supersede its
+                // round-0 seam records (the only ones it ever logs), leaving every neighbour
+                // along its seam without a partner.
+                let proxies = || {
+                    counts
+                        .unmatched
+                        .iter()
+                        .filter(|((_, depth), t)| u32::from(*depth) == d && !t.leaf)
+                };
+                let owners: BTreeSet<u64> = proxies().map(|((first, _), _)| *first).collect();
+                // Every proxy with an overlap among its defects, not just the proxies whose
+                // first defect is one.
+                newly_strict = proxies()
+                    .filter(|((first, _), t)| t.overlap.is_some() && !strict.contains(first))
                     .map(|((first, _), _)| *first)
                     .collect();
                 let log = std::mem::replace(
@@ -2710,28 +2754,36 @@ pub(crate) fn produce(
             if (contested.is_empty() && newly_strict.is_empty()) || round >= 16 {
                 let counts = audited.unwrap_or_default();
                 let p = |k: Key| k.map(f32::from_bits);
-                let ((first, depth), (lo, hi, defect)) = counts
+                // Name an overlap if any tile has one (a crack is often its symptom).
+                let named = counts
                     .unmatched
                     .iter()
-                    .next()
-                    .map(|(k, v)| (*k, *v))
-                    .unwrap_or(((0, 0), ([0; 3], [0; 3], Defect::NoPartner)));
-                let what = match defect {
+                    .find(|(_, t)| t.overlap.is_some())
+                    .or_else(|| counts.unmatched.iter().next())
+                    .and_then(|(k, t)| Some((*k, t.first()?)));
+                let ((first, depth), defect) = named.unwrap_or((
+                    (0, 0),
+                    SeamDefect {
+                        lo: [0; 3],
+                        hi: [0; 3],
+                        defect: Defect::NoPartner,
+                    },
+                ));
+                let what = match defect.defect {
                     Defect::NoPartner => "has no partner tile".to_string(),
-                    Defect::Overclaimed(n) => {
-                        format!("is claimed by {n} tiles (overlapping coverage)")
-                    }
-                    Defect::DuplicateFace(third) => format!(
-                        "and {:?} form a face of seam vertices that two tiles both hold \
-                         (a fold over the seam)",
-                        p(third)
+                    Defect::Overlap { forward, backward } => format!(
+                        "is covered on the same side by two tiles ({forward} traverse it one way, \
+                         {backward} the other: overlapping coverage)"
                     ),
                 };
+                let total: u64 = counts.unmatched.values().map(|t| t.count).sum();
                 return Err(state(format!(
                     "depth {d} seam: edge {:?}-{:?} of tile f{first}-d{depth} {what}, and seam \
-                     consensus cannot resolve it (crack); a crack is never published as a hole",
-                    p(lo),
-                    p(hi)
+                     consensus cannot resolve it (crack; {total} seam defects in {} tiles); a \
+                     crack is never published as a hole",
+                    p(defect.lo),
+                    p(defect.hi),
+                    counts.unmatched.len()
                 )));
             }
             round += 1;
@@ -2754,6 +2806,7 @@ pub(crate) fn produce(
                 }
                 forced_log.push(&f)?;
             }
+            report.seam_overlap_tiles += newly_strict.len() as u64;
             rerun.extend(newly_strict.iter().copied());
             strict.append(&mut newly_strict);
             for first in &rerun {

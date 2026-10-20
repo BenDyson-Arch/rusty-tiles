@@ -8,8 +8,9 @@
 //!   triangles share one leaf;
 //! - `c3`: the least depth with three or more incident tiles (a seam endpoint);
 //! - `special`: incident to a degenerate triangle, a source boundary edge (one incident
-//!   triangle) or a non-manifold edge (three or more), or its incidence overflowed the
-//!   bounded group (then `c2 = c3 = 0`: kept at every depth).
+//!   triangle), a non-manifold edge (three or more), or an edge whose two triangles
+//!   traverse it in the same direction (a winding flip or a same-winding duplicate), or its
+//!   incidence overflowed the bounded group (then `c2 = c3 = 0`: kept at every depth).
 //!
 //! Tile identity at depth `d` is the length-`d` prefix of the leaf address (a shorter leaf
 //! is its own tile), so for lexicographically sorted distinct leaf addresses the number of
@@ -280,23 +281,29 @@ pub(crate) fn scratch_need(triangles: u64) -> Option<u64> {
 /// Facts of one welded vertex from its (bounded) group of incidences.
 fn reduce(key: [u32; 3], group: &[Incidence]) -> (u8, u8, bool) {
     let mut special = group.iter().any(|g| g.degenerate);
-    let mut others: Vec<[u32; 3]> = Vec::with_capacity(group.len() * 2);
+    // Each neighbour with the direction of the edge to it: `others` is (next, previous) in
+    // the triangle's winding, so the edge runs out to the next and in from the previous.
+    let mut others: Vec<([u32; 3], bool)> = Vec::with_capacity(group.len() * 2);
     for g in group {
-        for o in g.others {
+        for (o, out) in g.others.into_iter().zip([true, false]) {
             if o == key {
                 special = true;
             }
-            others.push(o);
+            others.push((o, out));
         }
     }
     others.sort_unstable();
     let mut i = 0;
     while i < others.len() {
         let mut j = i + 1;
-        while j < others.len() && others[j] == others[i] {
+        while j < others.len() && others[j].0 == others[i].0 {
             j += 1;
         }
-        if j - i != 2 {
+        // A manifold edge has two triangles traversing it in opposite directions; two that
+        // traverse it the same way (a winding flip, or a same-winding duplicate face) leave
+        // the edge's side unoriented, so the directed seam audit treats it like a
+        // non-manifold edge.
+        if j - i != 2 || others[i].1 == others[i + 1].1 {
             special = true;
         }
         i = j;
@@ -502,6 +509,36 @@ mod tests {
         // One leaf only: never cut.
         let solo = [inc(k, ring(a, b), &[4], 0), inc(k, ring(b, a), &[4], 1)];
         assert_eq!(reduce(k, &solo).0, NEVER);
+    }
+
+    /// A closed fan whose triangles disagree in winding across one edge: every edge still
+    /// has two triangles, but two traverse k-c the same way, so the vertex is special (the
+    /// directed seam audit cannot orient that edge's side). Opposite-winding coincident
+    /// pairs (a double-sided face) are consistent and stay ordinary.
+    #[test]
+    fn winding_flips_are_special() {
+        let k = [1, 2, 3];
+        let ring = |a: [u32; 3], b: [u32; 3]| [a, b];
+        let (a, b, c, d) = ([1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0]);
+        let consistent = [
+            inc(k, ring(a, b), &[1, 2], 0),
+            inc(k, ring(b, c), &[1, 2], 1),
+            inc(k, ring(c, d), &[1, 3], 2),
+            inc(k, ring(d, a), &[1, 3], 3),
+        ];
+        assert!(!reduce(k, &consistent).2);
+        // (k, c, d) flipped to (k, d, c): k-c is now traversed k->c twice, k-d d->k twice.
+        let mut flipped = consistent;
+        flipped[2] = inc(k, ring(d, c), &[1, 3], 2);
+        let (c2, _, special) = reduce(k, &flipped);
+        assert!(special);
+        assert_eq!(c2, 2, "cut depths are unchanged");
+        // A double-sided triangle split over two leaves is consistent.
+        let pair = [
+            inc(k, ring(a, b), &[1, 2], 0),
+            inc(k, ring(b, a), &[1, 3], 1),
+        ];
+        assert!(!reduce(k, &pair).2);
     }
 
     #[test]
