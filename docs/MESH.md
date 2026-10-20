@@ -205,8 +205,13 @@ Known limitations (0.4):
   that ledger is a planned 0.4.x follow-up.
 - Baking dominates conversion time. Proxies of one depth bake in parallel
   (up to `--jobs`), but one proxy bakes on one thread, so the narrow top of the
-  tree runs serially. A 0.79M-triangle textured crop that converts in under a
-  minute untextured takes about two hours on four cores.
+  tree runs serially. A 0.79M-triangle textured crop that converts in about
+  20 s untextured takes about two minutes with baking (eight hardware threads,
+  `--jobs 8`).
+- A proxy whose retained children do not fit its worker's share of the bake
+  memory is baked again after its depth, alone with the whole allowance, so
+  `--jobs` does not change which inputs convert (or their output) but can add
+  serial time.
 
 Leaf normals are a profile property. `lossless` keeps the f32 source normal
 (after the node transform, renormalized at capture). `fast`, `balanced` and

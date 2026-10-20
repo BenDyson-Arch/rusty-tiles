@@ -8,8 +8,10 @@
   per-tile byte budget. A proxy starts at its children's texel density (their
   world-area-weighted median spacing, so stray near-degenerate source UV triangles
   do not coarsen it). Geometric errors are unchanged. Depths are baked deepest
-  first, each on up to `--jobs` workers. Archives are larger and conversions much
-  slower than before: baking dominates the run time.
+  first, each on up to `--jobs` workers; a proxy that does not fit its worker's
+  memory share is retried alone with the whole allowance, so output and admission
+  do not depend on `--jobs`. Archives are larger and conversions slower than
+  before: baking dominates the run time.
 - Proxy faces whose exact texture footprint is strictly under one square texel and
   whose quantized UVs collapse are published as no-raster faces (geometry, corner
   attributes and feature IDs kept, no texture sampling). Larger collapses force a
