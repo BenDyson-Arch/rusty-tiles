@@ -21,6 +21,186 @@ use crate::{
 };
 use std::{cell::Cell, cmp::Ordering, collections::BTreeMap};
 
+/// A fine bounding-volume hierarchy over the resident triangles (indices into the
+/// resident slice), at most [`BVH_LEAF`] triangles per leaf. The captured-tree index
+/// stops at tile-sized leaves of thousands of triangles; this one is what makes a
+/// nearest-witness query logarithmic once the tile's triangles are resident.
+struct Bvh {
+    nodes: Vec<BvhNode>,
+    order: Vec<u32>,
+}
+#[derive(Clone, Copy)]
+struct BvhNode {
+    lo: V3,
+    hi: V3,
+    /// Leaf: `order[start..start + len]`. Inner (`len == 0`): children `start` and
+    /// `start + 1`.
+    start: u32,
+    len: u32,
+}
+const BVH_LEAF: usize = 8;
+/// Bytes a [`Bvh`] over `n` triangles may hold, including its build workspace.
+fn bvh_bytes(n: u64) -> u64 {
+    n.saturating_mul(4 + 24).saturating_add(
+        (2 * n.div_ceil(4) + 1).saturating_mul(std::mem::size_of::<BvhNode>() as u64),
+    )
+}
+fn build_bvh(
+    tris: &[FullTriangle],
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Bvh, JobError> {
+    let n = tris.len();
+    let points = |i: u32| {
+        tris[i as usize]
+            .triangle
+            .positions
+            .map(|p| p.map(f64::from))
+    };
+    let mut centres = Vec::new();
+    centres
+        .try_reserve_exact(n)
+        .map_err(|_| resource("source BVH centres"))?;
+    centres.extend((0..n as u32).map(|i| {
+        let p = points(i);
+        std::array::from_fn::<f64, 3, _>(|a| (p[0][a] + p[1][a] + p[2][a]) / 3.)
+    }));
+    let mut order: Vec<u32> = Vec::new();
+    order
+        .try_reserve_exact(n)
+        .map_err(|_| resource("source BVH order"))?;
+    order.extend(0..n as u32);
+    let mut nodes = Vec::new();
+    nodes
+        .try_reserve_exact(2 * n.div_ceil(4) + 1)
+        .map_err(|_| resource("source BVH nodes"))?;
+    let empty = BvhNode {
+        lo: [0.; 3],
+        hi: [0.; 3],
+        start: 0,
+        len: 0,
+    };
+    nodes.push(empty);
+    let mut pending = vec![(0usize, 0usize, n)];
+    while let Some((at, start, end)) = pending.pop() {
+        check()?;
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        let mut clo = [f64::INFINITY; 3];
+        let mut chi = [f64::NEG_INFINITY; 3];
+        for &i in &order[start..end] {
+            for p in points(i) {
+                for a in 0..3 {
+                    lo[a] = lo[a].min(p[a]);
+                    hi[a] = hi[a].max(p[a]);
+                }
+            }
+            for a in 0..3 {
+                clo[a] = clo[a].min(centres[i as usize][a]);
+                chi[a] = chi[a].max(centres[i as usize][a]);
+            }
+        }
+        let axis = (0..3)
+            .max_by(|&a, &b| (chi[a] - clo[a]).total_cmp(&(chi[b] - clo[b])))
+            .unwrap();
+        if end - start <= BVH_LEAF || !(chi[axis] > clo[axis]) {
+            nodes[at] = BvhNode {
+                lo,
+                hi,
+                start: start as u32,
+                len: (end - start) as u32,
+            };
+            continue;
+        }
+        let mid = start + (end - start) / 2;
+        order[start..end].select_nth_unstable_by(mid - start, |&a, &b| {
+            centres[a as usize][axis]
+                .total_cmp(&centres[b as usize][axis])
+                .then(a.cmp(&b))
+        });
+        let left = nodes.len();
+        if left + 2 > nodes.capacity() {
+            return Err(resource("source BVH node bound"));
+        }
+        nodes.push(empty);
+        nodes.push(empty);
+        nodes[at] = BvhNode {
+            lo,
+            hi,
+            start: left as u32,
+            len: 0,
+        };
+        pending.push((left, start, mid));
+        pending.push((left + 1, mid, end));
+    }
+    Ok(Bvh { nodes, order })
+}
+
+/// The fixed inputs of one nearest-witness query.
+struct Query<'q> {
+    q: V3,
+    normal: V3,
+    key: SourceKey,
+    lineage: u64,
+    ranges: &'q [std::ops::Range<u64>],
+    fill: bool,
+}
+/// One candidate of a nearest-witness query, shared by both search paths: a triangle
+/// of the face's own source primitive inside its donor ranges; `best` must also face
+/// the proxy normal, `unfiltered` (fills only) need not. Ties are broken by lineage,
+/// source triangle and rank, so the winner is a strict minimum.
+fn consider(
+    query: &Query<'_>,
+    rank: u64,
+    t: FullTriangle,
+    best: &mut Option<Witness>,
+    unfiltered: &mut Option<Witness>,
+) -> Result<(), JobError> {
+    let Query {
+        q,
+        normal,
+        key: k,
+        lineage,
+        ranges,
+        fill,
+    } = *query;
+    if !(ranges.iter().any(|r| r.contains(&rank)) && key(&t) == k) {
+        return Ok(());
+    }
+    let p = t.triangle.positions.map(|p| p.map(f64::from));
+    let bary = math::closest(q, p);
+    let d = math::distance2(q, math::bary(p, bary));
+    if !d.is_finite() {
+        return Err(invalid("nonfinite source witness distance"));
+    }
+    let witness = Witness {
+        rank,
+        triangle: t,
+        bary,
+        distance2: d,
+        fill_fallback: false,
+    };
+    let earlier = |b: Witness| {
+        d < b.distance2
+            || (d == b.distance2
+                && (
+                    t.triangle.source.triangle != lineage,
+                    t.triangle.source.triangle,
+                    rank,
+                ) < (
+                    b.triangle.triangle.source.triangle != lineage,
+                    b.triangle.triangle.source.triangle,
+                    b.rank,
+                ))
+    };
+    if fill && unfiltered.is_none_or(earlier) {
+        *unfiltered = Some(witness);
+    }
+    if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.) && best.is_none_or(earlier) {
+        *best = Some(witness);
+    }
+    Ok(())
+}
+
 /// Source triangles of a rank range: a resident slice or a spill stream.
 enum Tris<'a> {
     Resident(std::slice::Iter<'a, FullTriangle>),
@@ -148,6 +328,9 @@ pub(crate) struct CapturedSource<'a> {
     colorless: bool,
     /// Reused depth-first stack of the nearest-witness query.
     nearest_stack: Vec<(QueryNode, f64)>,
+    /// Fine hierarchy over `resident`, when its bytes fit beside them.
+    bvh: Option<Bvh>,
+    bvh_stack: Vec<(u32, f64)>,
     root: u64,
     first: u64,
     end: u64,
@@ -240,6 +423,8 @@ impl<'a> CapturedSource<'a> {
             resident_first: 0,
             colorless: false,
             nearest_stack: Vec::new(),
+            bvh: None,
+            bvh_stack: Vec::new(),
             root: root.ok_or_else(|| invalid("empty captured hierarchy"))?,
             first: 0,
             end: captured.triangles.len(),
@@ -258,18 +443,21 @@ impl<'a> CapturedSource<'a> {
         self.work.set(0);
         self.limit = limit;
         self.resident = Vec::new();
+        self.bvh = None;
         self.colorless = false;
         Ok(())
     }
     /// Hold the current node's source triangles in memory when they fit `budget` bytes,
-    /// so correspondence queries read memory instead of the spill. Returns the bytes
-    /// held (0 when they do not fit; queries then stream as before, same results).
+    /// so correspondence queries read memory instead of the spill, plus a fine search
+    /// hierarchy over them when that also fits. Returns the bytes held (0 when the
+    /// triangles do not fit; queries then stream as before, same results).
     pub(super) fn make_resident(
         &mut self,
         budget: u64,
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<u64, JobError> {
         self.resident = Vec::new();
+        self.bvh = None;
         let count = self.end - self.first;
         let bytes = count.saturating_mul(std::mem::size_of::<FullTriangle>() as u64);
         if bytes > budget {
@@ -291,9 +479,16 @@ impl<'a> CapturedSource<'a> {
             resident.push(t?);
         }
         self.colorless = !resident.iter().any(|t| t.flags & COLOR != 0);
+        let tree = bvh_bytes(count);
+        let held = if bytes.saturating_add(tree) <= budget && count <= u64::from(u32::MAX) {
+            self.bvh = Some(build_bvh(&resident, check)?);
+            bytes + tree
+        } else {
+            bytes
+        };
         self.resident = resident;
         self.resident_first = self.first;
-        Ok(bytes)
+        Ok(held)
     }
     fn node(&self, i: u64) -> Result<QueryNode, JobError> {
         if let Some(n) = self.nodes.get(i as usize) {
@@ -348,6 +543,18 @@ impl<'a> CapturedSource<'a> {
         let ranges = &face.donor_ranges;
         let mut best: Option<Witness> = None;
         let mut unfiltered: Option<Witness> = None;
+        let query = Query {
+            q,
+            normal,
+            key: k,
+            lineage,
+            ranges,
+            fill: fill.is_some(),
+        };
+        if self.bvh.is_some() {
+            self.nearest_bvh(&query, &mut best, &mut unfiltered, check)?;
+            return self.nearest_result(fill, best, unfiltered);
+        }
         // Nearest-first depth-first search: children are pushed farthest first, so the
         // closest box is searched first and the distance bound tightens early. The
         // result does not depend on visit order: candidates are compared by a strict
@@ -407,48 +614,77 @@ impl<'a> CapturedSource<'a> {
             let mut rank = first;
             while let Some(t) = r.next().transpose()? {
                 self.charge()?;
-                if ranges.iter().any(|r| r.contains(&rank)) && key(&t) == k {
-                    let p = t.triangle.positions.map(|p| p.map(f64::from));
-                    let bary = math::closest(q, p);
-                    let d = math::distance2(q, math::bary(p, bary));
-                    if !d.is_finite() {
-                        return Err(invalid("nonfinite source witness distance"));
-                    }
-                    let witness = Witness {
-                        rank,
-                        triangle: t,
-                        bary,
-                        distance2: d,
-                        fill_fallback: false,
-                    };
-                    let earlier = |b: Witness| {
-                        d < b.distance2
-                            || (d == b.distance2
-                                && (
-                                    t.triangle.source.triangle != lineage,
-                                    t.triangle.source.triangle,
-                                    rank,
-                                ) < (
-                                    b.triangle.triangle.source.triangle != lineage,
-                                    b.triangle.triangle.source.triangle,
-                                    b.rank,
-                                ))
-                    };
-                    if fill.is_some() && unfiltered.is_none_or(earlier) {
-                        unfiltered = Some(witness);
-                    }
-                    if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.)
-                        && best.is_none_or(earlier)
-                    {
-                        best = Some(witness);
-                    }
-                }
+                consider(&query, rank, t, &mut best, &mut unfiltered)?;
                 rank += 1;
                 check()?;
             }
         }
         // An early error return drops the buffer; the next query reallocates it.
         self.nearest_stack = stack;
+        self.nearest_result(fill, best, unfiltered)
+    }
+    /// [`Self::nearest`] over the fine hierarchy of the resident triangles. A box is
+    /// pruned only when its lower bound exceeds the best distance by more than the
+    /// arithmetic slack of a computed distance, so the answer is the exhaustive one
+    /// over the same candidates, whatever the tree.
+    fn nearest_bvh(
+        &mut self,
+        query: &Query<'_>,
+        best: &mut Option<Witness>,
+        unfiltered: &mut Option<Witness>,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<(), JobError> {
+        let q = query.q;
+        let slack = 1e-12 * (1. + math::dot(q, q));
+        let mut stack = std::mem::take(&mut self.bvh_stack);
+        stack.clear();
+        let bvh = self
+            .bvh
+            .as_ref()
+            .ok_or_else(|| invalid("source BVH missing"))?;
+        let bound = |n: &BvhNode| math::box_distance_lower(q, n.lo, n.hi);
+        stack.push((0, bound(&bvh.nodes[0])));
+        while let Some((i, lower)) = stack.pop() {
+            check()?;
+            self.charge()?;
+            if best.is_some_and(|b| lower > b.distance2 + slack)
+                && (!query.fill || unfiltered.is_some_and(|b| lower > b.distance2 + slack))
+            {
+                continue;
+            }
+            let n = bvh.nodes[i as usize];
+            if n.len == 0 {
+                let (a, b) = (n.start, n.start + 1);
+                let (la, lb) = (bound(&bvh.nodes[a as usize]), bound(&bvh.nodes[b as usize]));
+                // Nearer child last, so it is searched first.
+                if la <= lb {
+                    stack.push((b, lb));
+                    stack.push((a, la));
+                } else {
+                    stack.push((a, la));
+                    stack.push((b, lb));
+                }
+                continue;
+            }
+            for &local in &bvh.order[n.start as usize..(n.start + n.len) as usize] {
+                self.charge()?;
+                let rank = self.resident_first + u64::from(local);
+                if rank < self.first || rank >= self.end {
+                    continue;
+                }
+                consider(query, rank, self.resident[local as usize], best, unfiltered)?;
+            }
+        }
+        self.bvh_stack = stack;
+        Ok(())
+    }
+    /// The query's answer from its best facing and unfiltered candidates.
+    fn nearest_result(
+        &self,
+        fill: Option<f64>,
+        best: Option<Witness>,
+        unfiltered: Option<Witness>,
+    ) -> Result<Witness, JobError> {
         if let Some(bound) = fill {
             if best.is_none_or(|b| {
                 (if b.distance2 == 0. {
