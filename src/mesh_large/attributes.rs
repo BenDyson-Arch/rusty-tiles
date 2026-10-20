@@ -2,9 +2,10 @@
 //! caller releases source ownership. At most six accessor windows are live in the join;
 //! callers must additionally charge the typed sorter runs and merge buffers.
 use super::{
-    capture::{bake, triangle_bytes, vertices, SourceScan},
+    capture::{canonical, source_position, triangle_bytes, vertices, SourceScan},
     input::{ElementReader, StreamSource},
     records::{Bounds, CornerPosition, CornerRef, Cube, Provenance, TriangleRecord},
+    source_crs::{Jacobian, SourceFrame},
 };
 use crate::{
     gltf_source::source::ScenePrimitive,
@@ -178,6 +179,7 @@ fn normalize(mapped: [f64; 3], role: &str) -> Result<[f32; 3]> {
 fn read_attributes(
     p: &ScenePrimitive<'_>,
     vertex: u64,
+    jacobian: Option<&Jacobian>,
     normals: &mut Option<ElementReader<'_>>,
     tangents: &mut Option<ElementReader<'_>>,
     uvs: &mut [Option<ElementReader<'_>>; 2],
@@ -185,25 +187,35 @@ fn read_attributes(
 ) -> Result<CornerAttributes> {
     let vertex = usize::try_from(vertex).map_err(|_| overflow())?;
     let mut out = CornerAttributes::default();
+    // With a source CRS, the f64 unit normal that a mapped tangent is orthogonalized against.
+    let mut unit_normal = None;
     if let Some(reader) = normals {
         let n = reader.vec3(vertex)?;
-        out.normal = normalize(
-            std::array::from_fn(|r| (0..3).map(|c| p.normal_matrix[r][c] * n[c]).sum()),
-            "normal",
-        )?;
+        let mut mapped: [f64; 3] =
+            std::array::from_fn(|r| (0..3).map(|c| p.normal_matrix[r][c] * n[c]).sum());
+        if let Some(jacobian) = jacobian {
+            mapped = jacobian.normal(mapped)?;
+            let norm = mapped.iter().map(|v| v * v).sum::<f64>().sqrt();
+            unit_normal = Some(mapped.map(|v| v / norm));
+        }
+        out.normal = normalize(mapped, "normal")?;
     }
     if let Some(reader) = tangents {
         let t = reader.values(vertex)?;
-        let xyz = normalize(
-            std::array::from_fn(|r| (0..3).map(|c| p.world[r][c] * t[c]).sum()),
-            "tangent",
-        )?;
-        out.tangent = [
-            xyz[0],
-            xyz[1],
-            xyz[2],
-            (t[3] * p.determinant.signum()) as f32,
-        ];
+        let mut mapped = std::array::from_fn(|r| (0..3).map(|c| p.world[r][c] * t[c]).sum());
+        let mut handedness = p.determinant.signum();
+        if let Some(jacobian) = jacobian {
+            mapped = jacobian.tangent(mapped);
+            handedness *= jacobian.handedness();
+            // A CRS map is not conformal: restore orthogonality to the mapped normal
+            // (Gram-Schmidt) before normalizing; the handedness sign is kept.
+            if let Some(n) = unit_normal {
+                let along = (0..3).map(|i| mapped[i] * n[i]).sum::<f64>();
+                mapped = std::array::from_fn(|i| mapped[i] - along * n[i]);
+            }
+        }
+        let xyz = normalize(mapped, "tangent")?;
+        out.tangent = [xyz[0], xyz[1], xyz[2], (t[3] * handedness) as f32];
     }
     for (reader, uv) in uvs.iter_mut().zip(&mut out.texcoords) {
         if let Some(reader) = reader {
@@ -235,6 +247,27 @@ pub(crate) fn capture_full<'s>(
     scan: &SourceScan,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
+    let mut scan = *scan;
+    capture_full_in(
+        source,
+        &mut SourceFrame::Local,
+        scratch,
+        sort,
+        &mut scan,
+        check,
+    )
+}
+/// [`capture_full`] in a resolved frame. A source CRS frame checks the used post-node source
+/// bounds against the scan's and replaces `scan.bounds` with the mapped box before the cube
+/// keys are assigned; the scan never maps positions.
+pub(crate) fn capture_full_in<'s>(
+    source: &StreamSource,
+    frame: &mut SourceFrame,
+    scratch: &'s Scratch,
+    sort: SortConfig,
+    scan: &mut SourceScan,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<SortedStream<'s, FullTriangle>> {
     source.validate_payload(sort.buffer_bytes, check)?;
     let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?;
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
@@ -261,6 +294,8 @@ pub(crate) fn capture_full<'s>(
     let mut corners = corners.finish()?;
     let mut next = corners.next().transpose()?;
     let mut positioned = ExternalSorter::<FullCorner>::new(scratch, sort)?;
+    let mut mapped_bounds = Bounds::EMPTY;
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
         let ordinal = u64::try_from(ordinal).map_err(|_| overflow())?;
         let mut positions = source.reader(&p.position, sort.buffer_bytes);
@@ -280,10 +315,19 @@ pub(crate) fn capture_full<'s>(
                 if let Some((_, value)) = cached.filter(|(v, _)| *v == corner.vertex) {
                     value
                 } else {
-                    let position = bake(&p, &mut positions, corner.vertex)?;
+                    let world = source_position(&p, &mut positions, corner.vertex)?;
+                    let (position, jacobian) =
+                        frame.vertex(world, normals.is_some() || tangents.is_some())?;
+                    let position = canonical(position);
+                    mapped_bounds.include(position);
+                    for axis in 0..3 {
+                        source_bounds[0][axis] = source_bounds[0][axis].min(world[axis]);
+                        source_bounds[1][axis] = source_bounds[1][axis].max(world[axis]);
+                    }
                     let attributes = read_attributes(
                         &p,
                         corner.vertex,
+                        jacobian.as_ref(),
                         &mut normals,
                         &mut tangents,
                         &mut uvs,
@@ -320,6 +364,14 @@ pub(crate) fn capture_full<'s>(
         return Err(invariant("unmatched corner reference after POSITION join"));
     }
     drop(corners);
+    if let Some(expected) = frame.source_bounds() {
+        if source_bounds != expected {
+            return Err(invalid(
+                "mesh source geometry changed between preflight and capture",
+            ));
+        }
+        scan.bounds = mapped_bounds;
+    }
     let mut positioned = positioned.finish()?;
     let mut triangles = ExternalSorter::<FullTriangle>::new(scratch, sort)?;
     let cube = Cube::around(&scan.bounds);

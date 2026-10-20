@@ -125,7 +125,6 @@ pub(super) fn encode(
                 check: &poll,
             },
         )?;
-        drop(cell);
         let decoded = image::load_from_memory_with_format(&output.bytes, image::ImageFormat::Png)
             .map_err(|e| invalid(format!("proxy PNG independent readback {e}")))?
             .into_rgba8()

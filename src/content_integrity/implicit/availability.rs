@@ -131,6 +131,7 @@ impl Availability {
         storage: &Storage,
         shape: Shape,
         limits: &mut ImplicitLimits,
+        live: &mut u64,
     ) -> Result<Availability, FormatError> {
         let n = shape.branches;
         let tiles = shape.offset(shape.levels);
@@ -370,6 +371,41 @@ impl Availability {
         {
             return Err(limit("subtree exceeds host index range"));
         }
+        // A-I1-2 (VS-B-8): the index tables (rank table, offsets, slots and the transient
+        // per-source positions) are charged to the live-path limit before any allocation, and
+        // released with the subtree.
+        let tables = {
+            let mut used = Vec::new();
+            used.try_reserve_exact(distinct.len())
+                .map_err(|_| refused())?;
+            used.resize(distinct.len(), false);
+            let mut positions = 0u128;
+            for (source, _) in &contents {
+                if let Source::View(d) = source {
+                    if !used[*d] {
+                        used[*d] = true;
+                        positions += u128::from(distinct[*d].popcount);
+                    }
+                }
+            }
+            let rank = if tile_view.is_some() {
+                4 * u128::from(tiles.div_ceil(64))
+            } else {
+                0
+            };
+            let index = if entries > 0 {
+                4 * (u128::from(tile_popcount) + 1) + 2 * u128::from(entries) + 4 * positions
+            } else {
+                0
+            };
+            rank + index
+        };
+        if tables > u128::from(limits.live_subtree_bytes.saturating_sub(*live)) {
+            return Err(limit(
+                "subtree availability index exceeds the live subtree byte limit",
+            ));
+        }
+        *live += tables as u64;
         let mut availability = Availability {
             shape,
             tiles,
@@ -949,7 +985,9 @@ mod tests {
         let tiles = walk_with(&root, &mut archive, &mut limits).unwrap();
         assert_eq!(tiles.iter().map(|t| t.contents.len()).sum::<usize>(), 15);
         assert_eq!(limits.refs_remaining, 0);
-        // Reserved at once: after the first tile, 1 read + E = 3 are charged.
+        // Reserved at once: after the first tile, 1 read + E = 3 are charged. A new
+        // validation: the resolver's OD-7 record starts empty.
+        archive.subtrees.clear();
         let mut limits = super::super::test_support::limits();
         limits.refs_remaining = 7;
         let mut walk = root.walk();

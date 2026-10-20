@@ -67,24 +67,37 @@ pub(super) fn vertices(
     }
     Ok(vertices)
 }
-pub(super) fn bake(
+/// A referenced source position after its accumulated node transform, in f64.
+pub(super) fn source_position(
     p: &ScenePrimitive<'_>,
     positions: &mut ElementReader<'_>,
     vertex: u64,
-) -> Result<[f32; 3]> {
+) -> Result<[f64; 3]> {
     let vertex = usize::try_from(vertex).map_err(|_| overflow())?;
     let position = positions.vec3(vertex)?;
     if position.iter().any(|v| !v.is_finite()) {
         return Err(invalid("nonfinite accessor data"));
     }
     source::check_source_position(position)?;
-    let mut baked = source::bake_position(p.world, position)?;
-    for x in &mut baked {
+    source::world_position(p.world, position)
+}
+/// Positive zero for every zero component, so equal positions have equal bits.
+pub(super) fn canonical(mut position: [f32; 3]) -> [f32; 3] {
+    for x in &mut position {
         if *x == 0. {
             *x = 0.;
         }
     }
-    Ok(baked)
+    position
+}
+pub(super) fn bake(
+    p: &ScenePrimitive<'_>,
+    positions: &mut ElementReader<'_>,
+    vertex: u64,
+) -> Result<[f32; 3]> {
+    Ok(canonical(
+        source_position(p, positions, vertex)?.map(|x| x as f32),
+    ))
 }
 
 /// Read-only preflight scan gives the tight box of used baked corners. It observes payload
@@ -94,6 +107,18 @@ pub(crate) fn scan(
     buffer_bytes: usize,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SourceScan> {
+    Ok(scan_with_source_bounds(source, buffer_bytes, check)?.0)
+}
+
+/// [`scan`] plus the f64 bounds `[min, max]` of the used post-node corners, from which a
+/// source CRS chooses its origin. With a source CRS the f32 box is a local-frame placeholder
+/// that capture replaces with its mapped box.
+pub(crate) fn scan_with_source_bounds(
+    source: &StreamSource,
+    buffer_bytes: usize,
+    check: &mut dyn FnMut() -> Result<()>,
+) -> Result<(SourceScan, [[f64; 3]; 2])> {
+    let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     let mut bounds = Bounds::EMPTY;
     let mut triangles = 0u64;
     let mut geometry_bytes = 0u64;
@@ -115,16 +140,24 @@ pub(crate) fn scan(
                 check()?;
             }
             for vertex in vertices(&p, &mut indices, triangle)? {
-                bounds.include(bake(&p, &mut positions, vertex)?);
+                let world = source_position(&p, &mut positions, vertex)?;
+                for axis in 0..3 {
+                    source_bounds[0][axis] = source_bounds[0][axis].min(world[axis]);
+                    source_bounds[1][axis] = source_bounds[1][axis].max(world[axis]);
+                }
+                bounds.include(canonical(world.map(|x| x as f32)));
             }
         }
     }
     source.verify_unchanged()?;
-    Ok(SourceScan {
-        triangles,
-        bounds,
-        geometry_bytes,
-    })
+    Ok((
+        SourceScan {
+            triangles,
+            bounds,
+            geometry_bytes,
+        },
+        source_bounds,
+    ))
 }
 
 /// Reads all source geometry before returning a sorted stream that refers only to scratch.

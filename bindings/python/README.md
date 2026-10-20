@@ -56,7 +56,7 @@ results with required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `mesh_local_to_3tz(input, output, ...)` (deprecated) | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
 | `mesh_to_3tz(input, output, ...)` (deprecated) | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
@@ -70,7 +70,9 @@ results with required reports and cleanup diagnostics, as described below.
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
 scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
-force=False, callback=None)` is the single new public source-mesh operation.
+source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
+height_offset=None, force=False, callback=None)` is the single new public
+source-mesh operation.
 It runs capture, leaf payloads and implicit hierarchy delivery through one core
 run and publication; leaf directories/manifests are internal. Current output
 has full-detail leaves and empty parents. Certified LOD and proxy baking are
@@ -78,12 +80,28 @@ separate downstream work, with the same public request surface.
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
-scene translation. There is no source CRS inference/conversion, projected
-height adjustment, texture-format selector, explicit mode or leaf/proxy tuning.
+scene translation. Alternatively a declared [source CRS](../../docs/MESH.md#source-crs)
+(`source_crs="EPSG:3857"`, `source_axes="y-up"` by default or `"xyz"`, `source_offset=(E, N[, A])`
+added in double precision or a strict Metashape `source_offset_file`, and
+`height_offset` metres defaulting to 0) is mapped at capture,
+with the CLI's rules; it excludes the rigid placement keywords and `None` or
+`"local"` keeps local input. There is no CRS inference, geoid height adjustment,
+texture-format selector, explicit mode or leaf/proxy tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
 provisional; constants will be calibrated together after coarse levels and
 baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf
 texture exception; JPEG source decoding remains supported.
+
+A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
+level 2, then level 3, and, for pages sampled at level 0 only, delivered as an
+exact PNG; a mip-sampled page still failing at level 3 fails the call. Escalated
+pages are larger than the profile's own encoding (PNG fallback pages most of
+all). `result.report["escalated_pages"]` (`uastc_level2`, `uastc_level3`),
+`["lossless_fallback_pages"]`, `["escalation_diagnostics"]` (the first 32 pages:
+leaf, first, depth, page, slot, sources, step, misses) and
+`["escalation_diagnostics_omitted"]` describe them. Cancellation through the
+callback is polled before every re-encode step. See the
+[mesh guide](../../docs/MESH.md#profiles-and-resources).
 
 `jobs=None` means memory-aware auto. A positive integer is a maximum capped by
 cores and the stage's memory admission. Unknown memory uses one worker; a

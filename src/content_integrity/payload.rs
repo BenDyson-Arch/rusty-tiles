@@ -1,6 +1,7 @@
 //! Private immutable-byte GLB/glTF integrity owner. No paths or operation defaults.
 use super::{json, FormatError, PayloadError, PayloadLimits};
 use serde_json::value::RawValue;
+use sha2::{Digest, Sha256};
 use std::{borrow::Cow, collections::BTreeSet};
 mod ktx2;
 mod numbers;
@@ -34,6 +35,9 @@ pub(crate) fn legacy_magic(bytes: &[u8]) -> Option<&'static str> {
 }
 #[derive(Debug)]
 pub(crate) struct PayloadInspection {
+    /// Successful admission identity for the same member and resolved bytes.
+    /// The caller stores this with its bounded per-URI facts for phase-2 replay.
+    pub replay: ReplayAdmission,
     pub schema_uri: Option<String>,
     pub accessors_checked: u64,
     pub primitives_checked: u64,
@@ -41,7 +45,11 @@ pub(crate) struct PayloadInspection {
     pub elements_checked: u64,
     /// Bytes C1 materialized: owned external and data-URI buffers plus meshopt views.
     pub materialized_bytes: u64,
+    /// The inspector's own not-inspected labels.
     pub not_inspected: BTreeSet<String>,
+    /// Declared glTF extensions outside the supported set: archive-named labels, which the
+    /// operation bounds (VS-B-9).
+    pub extensions: BTreeSet<String>,
     /// C2 format-owned exclusion facts of this payload.
     pub exclusions: scene::ContentExclusions,
     /// `J(u)`: `value_nodes()` of the glTF JSON or GLB JSON chunk admitted here.
@@ -52,6 +60,49 @@ pub(crate) struct PayloadInspection {
     /// `Prim(u)`: Σ over the selected scene's instances (selected nodes with a
     /// mesh) of that mesh's primitive count; 0 without a selected scene.
     pub instance_primitives: u64,
+}
+/// Successful full-admission identity, also restorable from the operation's own
+/// trusted scratch record. No layout, values or paths are retained; replay must
+/// verify both byte identities before consumer events.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ReplayAdmission {
+    member: [u8; 32],
+    resources: [u8; 32],
+}
+impl ReplayAdmission {
+    /// Fixed-width encoding for the caller's private per-URI facts store.
+    pub(crate) fn to_stored_bytes(self) -> [u8; 64] {
+        let mut bytes = [0; 64];
+        bytes[..32].copy_from_slice(&self.member);
+        bytes[32..].copy_from_slice(&self.resources);
+        bytes
+    }
+    /// Restore a successful admission from the SAME operation's trusted store.
+    /// The caller retains its inspected-record guard and run/store lifetime.
+    /// Never decode this from user archive bytes, reports or metadata: these
+    /// digests prove byte identity, not that arbitrary bytes earned admission.
+    pub(crate) fn from_stored_bytes(bytes: [u8; 64]) -> Self {
+        Self {
+            member: bytes[..32].try_into().unwrap(),
+            resources: bytes[32..].try_into().unwrap(),
+        }
+    }
+}
+fn member_digest(kind: PayloadKind, bytes: &[u8]) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"rusty-tiles:C1:member:v1");
+    hash.update([match kind {
+        PayloadKind::Glb => 0,
+        PayloadKind::LocalGltf => 1,
+    }]);
+    hash.update(bytes);
+    hash.finalize().into()
+}
+fn resource_digest(hash: &mut Sha256, uri: &str, bytes: &[u8]) {
+    hash.update((uri.len() as u64).to_le_bytes());
+    hash.update(uri.as_bytes());
+    hash.update((bytes.len() as u64).to_le_bytes());
+    hash.update(bytes);
 }
 fn invalid(s: impl Into<String>) -> FormatError {
     FormatError::InvalidInput(s.into())
@@ -282,7 +333,7 @@ fn decode_meshopt(
     source: usize,
     buffers: &[Cow<'_, [u8]>],
     ceiling: usize,
-) -> FormatResult<(Vec<u8>, usize)> {
+) -> FormatResult<(Vec<u8>, usize, super::meshopt::Filter)> {
     let compressed = range(&buffers[source], off(e.offset)?, uint(e.length)?)?;
     let count = usize::try_from(work(e.count, ceiling as u64)?)
         .map_err(|_| limit("meshopt count outside host range"))?;
@@ -299,11 +350,17 @@ fn decode_meshopt(
     let filter = e
         .filter
         .map_or_else(|| Ok("NONE".to_owned()), |v| string(Some(v)))?;
-    if filter != "NONE" {
-        return Err(unsupported("meshopt filters other than NONE"));
-    }
+    let filter = super::meshopt::Filter::parse(&filter)
+        .ok_or_else(|| unsupported("meshopt filters other than NONE and OCTAHEDRAL"))?;
     let mode = string(e.mode)?;
+    let octahedral = filter == super::meshopt::Filter::Octahedral;
     match mode.as_str() {
+        "ATTRIBUTES" if octahedral && stride != 4 && stride != 8 => {
+            return Err(invalid("meshopt OCTAHEDRAL filter needs byteStride 4 or 8"))
+        }
+        "TRIANGLES" | "INDICES" if octahedral => {
+            return Err(invalid("meshopt index modes admit only the NONE filter"))
+        }
         "ATTRIBUTES" if stride > 0 && stride <= 256 && stride % 4 == 0 => {}
         "TRIANGLES" if [2, 4].contains(&stride) && count % 3 == 0 => {}
         "INDICES" if [2, 4].contains(&stride) => {}
@@ -318,8 +375,8 @@ fn decode_meshopt(
         _ => super::meshopt::Mode::Indices,
     };
     super::meshopt::check_header(compressed, mode)?;
-    let out = super::meshopt::decode(compressed, count, stride, mode)?;
-    Ok((out, stride))
+    let out = super::meshopt::decode_filtered(compressed, count, stride, mode, filter)?;
+    Ok((out, stride, filter))
 }
 // Extension declarations are semantic checks. Opaque extras and extension bodies
 // remain outside this traversal; JSON admission already checked their structure.
@@ -395,12 +452,60 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     bytes: &[u8],
     limits: PayloadLimits,
     remaining_components: u64,
+    resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
+    consumer: &mut C,
+) -> std::result::Result<PayloadInspection, SceneError<E, C::Error>> {
+    inspect_scene_inner(
+        kind,
+        bytes,
+        limits,
+        remaining_components,
+        resolve,
+        consumer,
+        None,
+    )
+}
+/// Reconstruct live views for a previously admitted immutable payload, without
+/// repeating the accessor-value or KTX2-container pass. Resource reads and
+/// their limits/order are unchanged. Byte mismatches never reach the consumer.
+/// The operation must select this only after its whole C1/exclusion/precheck
+/// phase succeeds; this function does not choose traversal or report policy.
+pub(crate) fn replay_scene<E, C: scene::SceneConsumer>(
+    kind: PayloadKind,
+    bytes: &[u8],
+    limits: PayloadLimits,
+    remaining_components: u64,
+    resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
+    consumer: &mut C,
+    admission: &ReplayAdmission,
+) -> std::result::Result<PayloadInspection, SceneError<E, C::Error>> {
+    inspect_scene_inner(
+        kind,
+        bytes,
+        limits,
+        remaining_components,
+        resolve,
+        consumer,
+        Some(admission),
+    )
+}
+fn inspect_scene_inner<E, C: scene::SceneConsumer>(
+    kind: PayloadKind,
+    bytes: &[u8],
+    limits: PayloadLimits,
+    remaining_components: u64,
     mut resolve: impl FnMut(&str, usize) -> std::result::Result<Vec<u8>, E>,
     consumer: &mut C,
+    replay: Option<&ReplayAdmission>,
 ) -> std::result::Result<PayloadInspection, SceneError<E, C::Error>> {
     if bytes.len() > limits.member_bytes {
         return Err(limit("payload exceeds member byte allowance").into());
     }
+    if replay.is_some_and(|admission| member_digest(kind, bytes) != admission.member) {
+        return Err(invalid("source archive changed during inspection").into());
+    }
+    let mut resolved_hash = Sha256::new();
+    resolved_hash.update(b"rusty-tiles:C1:external-resources:v1");
     let mut exclusions = scene::ContentExclusions::default();
     let (source, bin) = match kind {
         PayloadKind::Glb => envelope(bytes)?,
@@ -470,7 +575,8 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             usize::try_from(count).map_err(|_| limit("accessor count outside host range"))?;
         push(&mut accessor_plans, (a, count, shape), slots)?;
     }
-    let mut not_inspected = used
+    let mut not_inspected = BTreeSet::new();
+    let unsupported_extensions = used
         .iter()
         .filter(|s| !supported.contains(&s.as_str()))
         .cloned()
@@ -568,14 +674,14 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             .member_bytes
             .checked_sub(resource_bytes)
             .ok_or_else(|| limit("resource byte allowance exhausted"))?;
-        let mut data = if let Some(raw) = b.uri {
-            let uri = string(Some(raw))?;
+        let uri = b.uri.map(|raw| string(Some(raw))).transpose()?;
+        let mut data = if let Some(uri) = uri.as_deref() {
             if uri.starts_with("data:") {
-                Cow::Owned(decode_buffer_uri(&uri, limits.decoded_bytes, remaining)?)
+                Cow::Owned(decode_buffer_uri(uri, limits.decoded_bytes, remaining)?)
             } else {
                 external_resources += 1;
                 Cow::Owned(
-                    resolve(&uri, remaining)
+                    resolve(uri, remaining)
                         .map_err(|e| SceneError::Payload(PayloadError::Resolver(e)))?,
                 )
             }
@@ -604,6 +710,9 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         {
             return Err(invalid("buffer byteLength does not match actual resource").into());
         }
+        if let Some(uri) = uri.as_deref().filter(|uri| !uri.starts_with("data:")) {
+            resource_digest(&mut resolved_hash, uri, &data);
+        }
         match &mut data {
             Cow::Owned(bytes) => bytes.truncate(n),
             Cow::Borrowed(bytes) => *bytes = &bytes[..n],
@@ -613,6 +722,9 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     drop(placeholder_covered);
     drop(lengths);
     let mut views = Vec::new();
+    // Views whose bytes come from a meshopt filter; the extension specifies filter output
+    // only to one unit in the last place (Appendix B), so their declared bounds get that.
+    let mut filtered = Vec::new();
     let mut view_budget = 0usize;
     for plan in &mut plans {
         let remaining = limits
@@ -626,8 +738,9 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             if !used.contains("EXT_meshopt_compression") {
                 return Err(invalid("meshopt extension not declared").into());
             }
-            let (decoded, stride) =
+            let (decoded, stride, filter) =
                 decode_meshopt(&e, plan.meshopt_source.unwrap(), &buffers, remaining)?;
+            push(&mut filtered, filter != super::meshopt::Filter::None, slots)?;
             if decoded.len() != plan.length {
                 return Err(invalid("meshopt decoded size differs from bufferView").into());
             }
@@ -637,6 +750,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             }
             push(&mut views, Cow::Owned(decoded), slots)?;
         } else {
+            push(&mut filtered, false, slots)?;
             push(
                 &mut views,
                 Cow::Borrowed(range(&buffers[plan.buffer], plan.offset, plan.length)?),
@@ -736,65 +850,79 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             shortest_segment: usize::MAX,
             has_bounds: a.min.is_some() && a.max.is_some(),
         };
-        let mut min = allocation(parsed.components, f64::INFINITY)?;
-        let mut max = allocation(parsed.components, f64::NEG_INFINITY)?;
-        let reserved = match component {
-            5121 => 255.,
-            5123 => 65535.,
-            5125 => 4294967295.,
-            _ => f64::INFINITY,
-        };
-        let mut segment = 0usize;
-        for i in 0..count {
-            for c in 0..parsed.components {
-                let n = value(&parsed, &views, i, c);
-                if !n.is_finite() {
-                    return Err(invalid("nonfinite accessor float").into());
-                }
-                if parsed.components == 1 && c == 0 {
-                    if n == reserved {
-                        parsed.shortest_segment = parsed.shortest_segment.min(segment);
-                        segment = 0;
-                    } else {
-                        parsed.ordinary_max = parsed.ordinary_max.max(n);
-                        segment += 1;
-                    }
-                }
-                min[c] = min[c].min(n);
-                max[c] = max[c].max(n);
-            }
-        }
-        parsed.shortest_segment = parsed.shortest_segment.min(segment);
-        for (bound, actual) in [(a.min, &min), (a.max, &max)] {
-            if let Some(bound) = bound {
-                let declared = array::<&RawValue>(Some(bound), slots)?;
-                if declared.len() != parsed.components {
-                    return Err(invalid("accessor bounds shape mismatch").into());
-                }
-                for (raw, actual) in declared.iter().zip(actual) {
-                    let n = serde_json::from_str::<f64>(raw.get())
-                        .ok()
-                        .filter(|n| n.is_finite())
-                        .ok_or_else(|| invalid("accessor bound not finite number"))?;
-                    let n = if component == 5126 {
-                        f64::from(n as f32)
-                    } else {
-                        n
-                    };
+        if replay.is_none() {
+            let mut min = allocation(parsed.components, f64::INFINITY)?;
+            let mut max = allocation(parsed.components, f64::NEG_INFINITY)?;
+            let reserved = match component {
+                5121 => 255.,
+                5123 => 65535.,
+                5125 => 4294967295.,
+                _ => f64::INFINITY,
+            };
+            let mut segment = 0usize;
+            for i in 0..count {
+                for c in 0..parsed.components {
+                    let n = value(&parsed, &views, i, c);
+                    #[cfg(test)]
+                    replay_controls::scanned_component();
                     if !n.is_finite() {
-                        return Err(invalid("accessor bound outside finite component range").into());
+                        return Err(invalid("nonfinite accessor float").into());
                     }
-                    // Published arbitrary-bound exemption applies only to viewless nonsparse storage.
-                    if view.is_some() && n != *actual {
-                        return Err(
-                            invalid("declared accessor bounds differ from decoded values").into(),
-                        );
+                    if parsed.components == 1 && c == 0 {
+                        if n == reserved {
+                            parsed.shortest_segment = parsed.shortest_segment.min(segment);
+                            segment = 0;
+                        } else {
+                            parsed.ordinary_max = parsed.ordinary_max.max(n);
+                            segment += 1;
+                        }
+                    }
+                    min[c] = min[c].min(n);
+                    max[c] = max[c].max(n);
+                }
+            }
+            parsed.shortest_segment = parsed.shortest_segment.min(segment);
+            for (bound, actual) in [(a.min, &min), (a.max, &max)] {
+                if let Some(bound) = bound {
+                    let declared = array::<&RawValue>(Some(bound), slots)?;
+                    if declared.len() != parsed.components {
+                        return Err(invalid("accessor bounds shape mismatch").into());
+                    }
+                    for (raw, actual) in declared.iter().zip(actual) {
+                        let n = serde_json::from_str::<f64>(raw.get())
+                            .ok()
+                            .filter(|n| n.is_finite())
+                            .ok_or_else(|| invalid("accessor bound not finite number"))?;
+                        let n = if component == 5126 {
+                            f64::from(n as f32)
+                        } else {
+                            n
+                        };
+                        if !n.is_finite() {
+                            return Err(
+                                invalid("accessor bound outside finite component range").into()
+                            );
+                        }
+                        // Published arbitrary-bound exemption applies only to viewless nonsparse storage.
+                        // Filtered (OCTAHEDRAL) integer output is specified to one unit, which
+                        // conforming decoders use differently (SIMD rsqrt), so a declared bound
+                        // within one unit of this decoder's value is admitted there only.
+                        let tolerance = match view {
+                            Some(v) if filtered[v] && [5120, 5122].contains(&component) => 1.,
+                            _ => 0.,
+                        };
+                        if view.is_some() && (n - *actual).abs() > tolerance {
+                            return Err(invalid(
+                                "declared accessor bounds differ from decoded values",
+                            )
+                            .into());
+                        }
                     }
                 }
             }
+            parsed.min = min;
+            parsed.max = max;
         }
-        parsed.min = min;
-        parsed.max = max;
         push(&mut accessors, parsed, slots)?;
     }
     let mut view_roles = allocation(views.len(), 0u8)?;
@@ -1008,7 +1136,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
                     )
                     .into());
                 }
-                if semantic.starts_with("COLOR_") {
+                if semantic.starts_with("COLOR_") && replay.is_none() {
                     for raw in a.min.iter().chain(&a.max) {
                         let n = if a.normalized {
                             normalized(*raw, a.component)
@@ -1042,23 +1170,25 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
                         return Err(invalid("index view stride/target invalid").into());
                     }
                 }
-                let reserved = match a.component {
-                    5121 => 255.,
-                    5123 => 65535.,
-                    _ => 4294967295.,
-                };
-                let has_restart = a.max[0] == reserved;
-                if has_restart && !(restart && mode == 3) {
-                    return Err(invalid(
-                        "primitive restart index is not allowed for this core mode",
-                    )
-                    .into());
-                }
-                if has_restart && a.shortest_segment < 2 {
-                    return Err(unsupported("restart LINE_STRIP profile requires at least two vertices in every segment").into());
-                }
-                if a.ordinary_max >= count as f64 {
-                    return Err(invalid("primitive index outside POSITION count").into());
+                if replay.is_none() {
+                    let reserved = match a.component {
+                        5121 => 255.,
+                        5123 => 65535.,
+                        _ => 4294967295.,
+                    };
+                    let has_restart = a.max[0] == reserved;
+                    if has_restart && !(restart && mode == 3) {
+                        return Err(invalid(
+                            "primitive restart index is not allowed for this core mode",
+                        )
+                        .into());
+                    }
+                    if has_restart && a.shortest_segment < 2 {
+                        return Err(unsupported("restart LINE_STRIP profile requires at least two vertices in every segment").into());
+                    }
+                    if a.ordinary_max >= count as f64 {
+                        return Err(invalid("primitive index outside POSITION count").into());
+                    }
                 }
                 a.count
             } else {
@@ -1202,6 +1332,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
             resource_bytes = resource_bytes
                 .checked_add(data.len())
                 .ok_or_else(|| limit("image resource byte overflow"))?;
+            resource_digest(&mut resolved_hash, &uri, &data);
             (Cow::Owned(data), None)
         } else {
             let view = at(&views, image.view)?;
@@ -1222,7 +1353,12 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         if roles & 2 != 0 {
             match view {
                 Some(view) => ktx2_views[view] |= if roles & 4 != 0 { 3 } else { 1 },
-                None => ktx2::inspect(&data, roles & 4 != 0)?,
+                None if replay.is_none() => {
+                    #[cfg(test)]
+                    replay_controls::inspected_ktx2();
+                    ktx2::inspect(&data, roles & 4 != 0)?;
+                }
+                None => {}
             }
             not_inspected.insert("KTX2 level data and transcoding".into());
         }
@@ -1230,7 +1366,9 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     }
     // Container only: admitted bytes, no allocation, at most 32 levels; once per view.
     for (view, flags) in ktx2_views.into_iter().enumerate() {
-        if flags != 0 {
+        if flags != 0 && replay.is_none() {
+            #[cfg(test)]
+            replay_controls::inspected_ktx2();
             ktx2::inspect(&views[view], flags & 2 != 0)?;
         }
     }
@@ -1245,6 +1383,10 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
     // The operation removes this entry only when every reference is contained.
     not_inspected.insert("scene transforms".into());
     not_inspected.insert("metadata and feature semantics".into());
+    let resources: [u8; 32] = resolved_hash.finalize().into();
+    if replay.is_some_and(|admission| resources != admission.resources) {
+        return Err(invalid("source archive changed during inspection").into());
+    }
     // C2 admission follows C1 integrity: malformed scene/node records are
     // InvalidInput in every payload, selected or not.
     let graph = scene::admit(&root, &table, slots)?;
@@ -1260,6 +1402,10 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         .walk(&table, draws, consumer, slots)?
         .map_err(SceneError::Consumer)?;
     Ok(PayloadInspection {
+        replay: ReplayAdmission {
+            member: replay.map_or_else(|| member_digest(kind, bytes), |a| a.member),
+            resources,
+        },
         schema_uri,
         accessors_checked: accessors.len() as u64,
         primitives_checked: primitives,
@@ -1267,6 +1413,7 @@ pub(crate) fn inspect_scene<E, C: scene::SceneConsumer>(
         elements_checked: elements as u64,
         materialized_bytes: materialized,
         not_inspected,
+        extensions: unsupported_extensions,
         exclusions,
         json_nodes,
         external_resources,
@@ -2460,3 +2607,6 @@ mod controls;
 mod ktx2_controls;
 #[cfg(test)]
 mod meshopt_header_controls;
+
+#[cfg(test)]
+mod replay_controls;

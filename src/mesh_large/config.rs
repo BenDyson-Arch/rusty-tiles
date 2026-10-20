@@ -45,6 +45,17 @@ impl Profile {
             Self::Fast | Self::Balanced | Self::Quality | Self::Lossless => CONSUMER_TABLE_ROWS,
         }
     }
+
+    /// Leaf `NORMAL` storage (provisional): `Some(K)` stores K-bit octahedral codes through
+    /// the `EXT_meshopt_compression` OCTAHEDRAL filter, decoded by clients to normalized
+    /// SHORT VEC3 (KHR_mesh_quantization); `None` keeps the source f32 values. 12 bits keep
+    /// the angular error near 0.06 degrees; `lossless` keeps f32.
+    pub(crate) fn leaf_normal_octahedral_bits(self) -> Option<u8> {
+        match self {
+            Self::Fast | Self::Balanced | Self::Quality => Some(12),
+            Self::Lossless => None,
+        }
+    }
 }
 
 /// `--jobs`: `auto` (the default) or an explicit worker count.
@@ -73,6 +84,11 @@ pub(crate) struct TreeConfig {
     /// Parents of the private leaf/forest work directory and of the output, whose
     /// filesystems receive the admission output reservation; `None` reserves nothing.
     pub output_parents: Option<(PathBuf, PathBuf)>,
+    /// Declared source CRS applied at capture; `None` is local metres/Y-up.
+    pub source_crs: Option<super::MeshSourceCrs>,
+    /// Test seam: largest spill chunk of the capture scratch.
+    #[cfg(test)]
+    pub test_chunk_bytes: Option<usize>,
 }
 
 impl TreeConfig {
@@ -109,6 +125,9 @@ impl TreeConfig {
             height_cap: HEIGHT_CAP,
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
+            source_crs: None,
+            #[cfg(test)]
+            test_chunk_bytes: None,
         }
     }
 
@@ -533,17 +552,32 @@ impl SortSpill {
     /// Consuming this sort's stream while writing `outputs` bytes in proportion to progress:
     /// the unread input and the written output trade off linearly, so the larger of the two
     /// plus the partly read chunks bounds the stage.
+    ///
+    /// Assumption: output grows proportionally to the records consumed (each input record
+    /// emits a fixed amount, as every capture join and projection here does). A consumer that
+    /// emits its output in bursts late in the stream (e.g. buffering, or output per group of
+    /// variable size) can exceed this; such stages must be charged as `bytes + outputs`.
     pub(crate) fn flow(&self, outputs: u64) -> Option<u64> {
         self.bytes.max(outputs).checked_add(self.stream_slack)
     }
 }
 
 pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
+    sort_spill_with::<T>(records, sorter, crate::spill::CHUNK_BYTES)
+}
+
+/// [`sort_spill`] for a given largest chunk file (a scratch with smaller chunks is bounded by
+/// the production figure too, because slack only shrinks with the chunk).
+pub(crate) fn sort_spill_with<T: Record>(
+    records: u64,
+    sorter: SortConfig,
+    chunk_bytes: usize,
+) -> Option<SortSpill> {
     let bytes = records.checked_mul(T::SIZE as u64)?;
     let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
     let runs = records.div_ceil(run_records);
     let fan_in = sorter.fan_in as u64;
-    let chunk_bytes = crate::spill::chunk_records::<T>().checked_mul(T::SIZE as u64)?;
+    let chunk_bytes = ((chunk_bytes / T::SIZE).max(1) as u64).checked_mul(T::SIZE as u64)?;
     let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
     let push_peak = if runs >= fan_in.checked_mul(64)? {
         bytes.checked_add(slack)?
@@ -567,6 +601,20 @@ pub(crate) fn sort_spill<T: Record>(records: u64, sorter: SortConfig) -> Option<
 /// the pohnpei 24.36M-triangle archive measured 118.96 B/tri (2026-10-14 scale findings).
 /// An estimate, not a bound: texture payloads are charged separately from image bytes.
 pub(crate) const OUTPUT_BYTES_PER_TRIANGLE: u64 = 119;
+
+/// Estimated published texture bytes for `texels` admitted source texels: lossless leaf pages
+/// are PNG (up to 4 bytes per RGBA8 texel), lossy profiles KTX2/Basis (about 1 byte per texel
+/// for UASTC, less for ETC1S), each with a 4/3 mip chain. Atlas repacking keeps texels at
+/// source resolution; gutters and texels shared by several leaves are covered by the mip
+/// allowance, not proven. mgal 2048 (10M triangles, 373M texels) published 2.25 GB lossless
+/// against a 3.18 GB per-copy estimate.
+pub(crate) fn output_texture_bytes(profile: Profile, texels: u64) -> Option<u64> {
+    let per_texel = match profile {
+        Profile::Lossless => 4,
+        Profile::Fast | Profile::Balanced | Profile::Quality => 1,
+    };
+    Some(texels.checked_mul(per_texel)?.checked_mul(4)?.div_ceil(3))
+}
 
 /// Stage-1 sound lower bound on tiles: `⌈N/L⌉` leaves, plus the root when it must be internal.
 pub(crate) fn tile_lower_bound(triangles: u64, leaf_triangles: u64) -> u64 {

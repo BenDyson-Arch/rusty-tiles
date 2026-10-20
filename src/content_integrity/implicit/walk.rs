@@ -524,17 +524,20 @@ mod tests {
     }
 
     #[test]
-    fn repeated_subtree_members_are_unsupported() {
-        // A-11 across roots in one validation: the limits carry the set.
+    fn repeated_subtree_members_are_refused_by_the_resolver() {
+        // A-11 across roots in one validation. OD-7 is the resolver's rule (A-I1-3): every
+        // subtree member is resolved as `Base::Resolved`, once per name, before any charge.
         let tile = root_tile("QUADTREE", 1, 1, &[]);
         let mut archive = Archive::default().with("s/0/0/0.subtree", leaf(Av::Const(1)).build());
         let root = admit_root(&tile, "tileset.json", None).unwrap();
         let mut limits = limits();
         assert!(walk_with(&root, &mut archive, &mut limits).is_ok());
-        assert_unsupported(
-            format(walk_with(&root, &mut archive, &mut limits)),
-            "repeated subtree member s/0/0/0.subtree",
-        );
+        let charged = (limits.refs_remaining, limits.scan_remaining);
+        assert!(matches!(
+            walk_with(&root, &mut archive, &mut limits),
+            Err(ImplicitError::Resolver(m)) if m == "repeated subtree member s/0/0/0.subtree"
+        ));
+        assert_eq!((limits.refs_remaining, limits.scan_remaining), charged);
         // Within one root: `{x}{y}` names (1, 10) and (11, 0) alike at level 4.
         let mut tile = root_tile("QUADTREE", 2, 6, &[]);
         tile["implicitTiling"]["subtrees"]["uri"] = json!("s/{level}/{x}{y}.subtree");
@@ -550,10 +553,10 @@ mod tests {
                 }
             }
         }
-        assert_unsupported(
-            format(walk(&tile, &mut archive)),
-            "repeated subtree member s/4/",
-        );
+        assert!(matches!(
+            walk(&tile, &mut archive),
+            Err(ImplicitError::Resolver(m)) if m.starts_with("repeated subtree member s/4/")
+        ));
     }
 
     #[test]
@@ -573,6 +576,8 @@ mod tests {
         let bare = root_tile("QUADTREE", 1, 1, &[]);
         let mut archive = Archive::default().with("s/0/0/0.subtree", leaf(Av::Const(1)).build());
         assert!(walk(&bare, &mut archive).is_ok());
+        // A new validation: the resolver's OD-7 record starts empty.
+        archive.subtrees.clear();
         // finish() before the end, next() after a failure, next() after the end.
         let root = admit_root(&bare, "tileset.json", None).unwrap();
         let mut limits = limits();

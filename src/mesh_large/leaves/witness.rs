@@ -5,8 +5,10 @@
 //! - the decoded POSITION of every corner, in the leaf's local metres. These are the
 //!   writer's decoded lattice points: `u * s + t` in f32, which the writer proves equal
 //!   for fused and unfused client decode. Float storage holds the published f32 values.
-//! - the published NORMAL and TANGENT, when the primitive carries them. They are written
-//!   as FLOAT through a lossless meshopt stream, so they are stored exactly as written.
+//! - the NORMAL a renderer reads: in lossy profiles the 12-bit octahedral codes through
+//!   the reference meshopt OCTAHEDRAL decode, as normalized SHORT; in Lossless the
+//!   published f32. TANGENT is published as FLOAT through a lossless meshopt stream and
+//!   is stored exactly as written.
 //! - the source identity of each face: node, mesh, primitive, expanded instance ordinal,
 //!   material, source triangle and the face's global sorted rank.
 //! - each material slot binding exactly as published: page, TEXCOORD set, sampler and the
@@ -20,7 +22,7 @@
 //! The binary encoding is little-endian and versioned by its magic. Decoding refuses any
 //! count that the remaining input cannot back, and charges its owned bytes against a
 //! caller lease before it allocates.
-use super::super::attributes::{FullTriangle, NORMAL, TANGENT};
+use super::super::attributes::{FullTriangle, COLOR, NORMAL, TANGENT, UV0, UV1};
 use super::prepared::PreparedAtlas;
 use crate::{gltf_source::source::TextureSlot, JobError, JobErrorKind};
 use serde_json::Value;
@@ -38,6 +40,12 @@ pub(in crate::mesh_large) const SLOTS: [TextureSlot; 5] = [
 pub(in crate::mesh_large) const VERSION: u32 = 1;
 const MAGIC: &[u8; 8] = b"H8WIT\x01\0\0";
 const NONE_U32: u32 = u32::MAX;
+/// Every published attribute presence bit.
+const KNOWN_FLAGS: u8 = NORMAL | TANGENT | UV0 | UV1 | COLOR;
+/// A spacing is a positive finite length.
+fn valid_spacing(value: Option<f64>) -> bool {
+    value.is_none_or(|s| s.is_finite() && s > 0.)
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::mesh_large) struct LeafWitness {
@@ -145,14 +153,16 @@ pub(in crate::mesh_large) fn texel_spacing(p: [[f64; 3]; 3], uv: [[f64; 2]; 3]) 
     (sigma.is_finite() && sigma > 0.).then_some(sigma.next_up())
 }
 
-/// The witness of an accepted leaf. `positions` are the writer's decoded positions per
-/// primitive; `ranks` maps a source triangle identity to its global sorted rank.
+/// The witness of an accepted leaf. `positions` and `normals` are what the writer
+/// published per primitive, as a renderer decodes them; `ranks` maps a source triangle
+/// identity to its global sorted rank.
 pub(in crate::mesh_large) fn build(
     atlas: &PreparedAtlas,
     positions: &[Vec<[f32; 3]>],
+    normals: &[Vec<[f32; 3]>],
     ranks: &HashMap<(u32, u32, u32, u64), u64>,
 ) -> Result<LeafWitness, JobError> {
-    if positions.len() != atlas.primitives.len() {
+    if positions.len() != atlas.primitives.len() || normals.len() != atlas.primitives.len() {
         return Err(invalid("witness decoded primitive count"));
     }
     let mut leaf_spacing: Option<f64> = None;
@@ -160,7 +170,9 @@ pub(in crate::mesh_large) fn build(
     primitives
         .try_reserve_exact(atlas.primitives.len())
         .map_err(|_| resource("witness primitives"))?;
-    for (primitive, decoded) in atlas.primitives.iter().zip(positions) {
+    for ((primitive, decoded), renderer_normals) in
+        atlas.primitives.iter().zip(positions).zip(normals)
+    {
         let first: &FullTriangle = primitive
             .triangles
             .first()
@@ -177,6 +189,9 @@ pub(in crate::mesh_large) fn build(
             .map_err(|_| resource("witness faces"))?;
         for row in &primitive.triangles {
             let s = row.triangle.source;
+            // `(node, mesh, primitive, triangle)` names one face of the leaf only because
+            // `writer::encode` refuses duplicate source triangles in a prepared leaf; the
+            // rank map is keyed on that identity.
             let identity = (s.node, s.mesh, s.primitive, s.triangle);
             faces.push(FaceWitness {
                 triangle: s.triangle,
@@ -262,7 +277,10 @@ pub(in crate::mesh_large) fn build(
             faces,
             positions: decoded.clone(),
             normals: if flags & NORMAL != 0 {
-                corners().map(|c| c.normal).collect()
+                if renderer_normals.len() != count * 3 {
+                    return Err(invalid("witness renderer NORMAL count"));
+                }
+                renderer_normals.clone()
             } else {
                 Vec::new()
             },
@@ -319,6 +337,9 @@ impl LeafWitness {
             out.push(u8::from(v.is_some()));
             out.extend_from_slice(&v.unwrap_or(0.).to_le_bytes());
         };
+        if !valid_spacing(self.texel_spacing) {
+            return Err(invalid("witness leaf spacing"));
+        }
         out.extend_from_slice(MAGIC);
         optional(&mut out, self.texel_spacing);
         let count =
@@ -333,10 +354,23 @@ impl LeafWitness {
                     len == 0
                 }
             };
+            let mut bound = 0u8;
+            for b in &p.bindings {
+                if usize::from(b.slot) >= SLOTS.len()
+                    || bound & (1 << b.slot) != 0
+                    || b.sampler == Some(NONE_U32)
+                    || !valid_spacing(b.texel_spacing)
+                    || b.normal_scale.is_some_and(|v| !v.is_finite())
+                {
+                    return Err(invalid("witness binding is not representable"));
+                }
+                bound |= 1 << b.slot;
+            }
             if p.positions.len() != faces * 3
                 || !has(NORMAL, p.normals.len())
                 || !has(TANGENT, p.tangents.len())
-                || p.bindings.len() > SLOTS.len()
+                || p.flags & !KNOWN_FLAGS != 0
+                || p.faces.iter().any(|f| f.zero_raster & !bound != 0)
             {
                 return Err(invalid("witness primitive shape"));
             }
@@ -404,6 +438,9 @@ impl LeafWitness {
             return Err(corrupt());
         }
         let texel_spacing = r.optional()?;
+        if !valid_spacing(texel_spacing) {
+            return Err(corrupt());
+        }
         let count = u64::from(r.u32()?);
         // Every primitive needs at least its fixed record.
         if count * PRIMITIVE_BYTES > r.remaining() {
@@ -419,6 +456,7 @@ impl LeafWitness {
             let binding_count = u64::from(r.u32()?);
             let faces = u64::from(r.u32()?);
             if binding_count > SLOTS.len() as u64
+                || flags & !KNOWN_FLAGS != 0
                 || binding_count * BINDING_BYTES + faces * (FACE_BYTES + 3 * corner_bytes(flags))
                     > r.remaining()
             {
@@ -434,14 +472,20 @@ impl LeafWitness {
                             + if tangents { 48 } else { 0 }),
             )?;
             let mut bindings = Vec::with_capacity(binding_count as usize);
+            let mut bound = 0u8;
             for _ in 0..binding_count {
                 let slot = r.take(1)?[0];
                 let (page, texcoord, sampler) = (r.u32()?, r.u32()?, r.u32()?);
                 let normal_scale = r.optional()?;
                 let spacing = r.optional()?;
-                if usize::from(slot) >= SLOTS.len() {
+                if usize::from(slot) >= SLOTS.len()
+                    || bound & (1 << slot) != 0
+                    || !valid_spacing(spacing)
+                    || normal_scale.is_some_and(|v| !v.is_finite())
+                {
                     return Err(corrupt());
                 }
+                bound |= 1 << slot;
                 bindings.push(BindingWitness {
                     slot,
                     page,
@@ -469,7 +513,8 @@ impl LeafWitness {
                 let triangle = r.u64()?;
                 let rank = r.u64()?;
                 let zero_raster = r.take(1)?[0];
-                if zero_raster >> SLOTS.len() != 0 {
+                // Only a bound slot can fail to rasterise.
+                if zero_raster & !bound != 0 {
                     return Err(corrupt());
                 }
                 w.faces.push(FaceWitness {
@@ -542,6 +587,7 @@ impl Cursor<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content_integrity::meshopt::Filter;
     use crate::mesh_large::{
         bake_pass::{BakePass, LeafPreencode, ProxyBaker},
         leaves::producer::{mesh_to_leaf_payloads, LeafOutputRequest, LeafProfile},
@@ -549,7 +595,7 @@ mod tests {
     use crate::RunControl;
     use serde_json::json;
     use std::{
-        collections::BTreeMap,
+        collections::{BTreeMap, HashMap},
         fs,
         num::NonZeroUsize,
         path::{Path, PathBuf},
@@ -594,7 +640,7 @@ mod tests {
                         FaceWitness {
                             triangle: 5,
                             rank: 0,
-                            zero_raster: 0b10101,
+                            zero_raster: 0b00101,
                         },
                     ],
                     positions: (0..6)
@@ -698,6 +744,264 @@ mod tests {
     }
 
     #[test]
+    fn invalid_counts_slots_flags_and_values_are_refused_both_ways() {
+        let bytes = sample().encode().unwrap();
+        let refused = |edit: &dyn Fn(&mut Vec<u8>)| {
+            let mut b = bytes.clone();
+            edit(&mut b);
+            LeafWitness::decode(&b, u64::MAX).unwrap_err().kind()
+        };
+        let f64_at =
+            |b: &mut Vec<u8>, at: usize, v: f64| b[at..at + 8].copy_from_slice(&v.to_le_bytes());
+        // Layout of the sample: header 21, primitive record 21..54 (flags 45, binding
+        // count 46, face count 50), bindings at 54 and 85 (31 bytes each), faces at 116.
+        type Edit = Box<dyn Fn(&mut Vec<u8>)>;
+        let cases: [(&str, Edit); 11] = [
+            ("unknown flag bit", Box::new(|b| b[45] |= 0x80)),
+            (
+                "binding count",
+                Box::new(|b| b[46..50].copy_from_slice(&6u32.to_le_bytes())),
+            ),
+            (
+                "face count",
+                Box::new(|b| b[50..54].copy_from_slice(&u32::MAX.to_le_bytes())),
+            ),
+            ("duplicate slot", Box::new(|b| b[85] = b[54])),
+            ("zero spacing", Box::new(move |b| f64_at(b, 77, 0.))),
+            ("negative spacing", Box::new(move |b| f64_at(b, 77, -1.))),
+            (
+                "infinite spacing",
+                Box::new(move |b| f64_at(b, 77, f64::INFINITY)),
+            ),
+            (
+                "NaN leaf spacing",
+                Box::new(move |b| f64_at(b, 9, f64::NAN)),
+            ),
+            (
+                "NaN normal scale",
+                Box::new(move |b| f64_at(b, 99, f64::NAN)),
+            ),
+            (
+                "zero-raster on an unbound slot",
+                Box::new(|b| b[132] |= 0b10),
+            ),
+            (
+                "second face zero-raster on an unbound slot",
+                Box::new(|b| {
+                    let second = 132 + 1 + 3 * 40;
+                    b[second + 16] |= 0b1000;
+                }),
+            ),
+        ];
+        for (what, edit) in &cases {
+            assert_eq!(refused(edit.as_ref()), JobErrorKind::InvalidState, "{what}");
+        }
+        // The encoder refuses what decode would refuse, and the NONE sampler sentinel.
+        type Mutant = Box<dyn Fn(&mut LeafWitness)>;
+        let mutants: [(&str, Mutant); 5] = [
+            (
+                "sentinel sampler",
+                Box::new(|w| w.primitives[0].bindings[0].sampler = Some(NONE_U32)),
+            ),
+            (
+                "duplicate slot",
+                Box::new(|w| w.primitives[0].bindings[1].slot = 0),
+            ),
+            (
+                "unbound zero-raster",
+                Box::new(|w| w.primitives[0].faces[0].zero_raster = 0b10),
+            ),
+            (
+                "NaN spacing",
+                Box::new(|w| w.primitives[0].bindings[0].texel_spacing = Some(f64::NAN)),
+            ),
+            ("unknown flag", Box::new(|w| w.primitives[1].flags = 0x40)),
+        ];
+        for (what, mutate) in &mutants {
+            let mut w = sample();
+            mutate(&mut w);
+            assert_eq!(
+                w.encode().unwrap_err().kind(),
+                JobErrorKind::InvalidState,
+                "{what}"
+            );
+        }
+    }
+
+    /// `build` on a 8x2 page and a sheared triangle: metres per texel along the worst
+    /// direction is (1 + sqrt 5) / 4 here, and 2.06... with width and height swapped.
+    #[test]
+    fn spacing_uses_page_width_and_height_on_a_sheared_face() {
+        use super::super::super::{
+            attributes::{CornerAttributes, UV0},
+            records::{Provenance, TriangleRecord},
+        };
+        use super::super::prepared::{PreencodeLevel, PreencodePage, PreparedPrimitive};
+        let positions = [[0., 0., 0.], [4., 0., 0.], [1., 1., 0.]];
+        let row = FullTriangle {
+            triangle: TriangleRecord {
+                key: 0,
+                source: Provenance {
+                    node: 1,
+                    mesh: 2,
+                    primitive: 3,
+                    triangle: 4,
+                },
+                vertices: [0, 1, 2],
+                positions,
+                bytes: 0,
+                degenerate: false,
+            },
+            expanded_ordinal: 9,
+            material: 0,
+            flags: UV0,
+            corners: [CornerAttributes {
+                normal: [0., 0., 1.],
+                tangent: [1., 0., 0., 1.],
+                texcoords: [[0.; 2]; 2],
+                color: [1.; 4],
+            }; 3],
+        };
+        let page = |width: u32, height: u32| PreencodePage {
+            page: 0,
+            slot: "baseColor".into(),
+            class: "colour".into(),
+            width,
+            height,
+            levels: vec![PreencodeLevel {
+                width,
+                height,
+                rgba: Vec::new(),
+            }],
+            support: None,
+            min_filter: 9729,
+            mag_filter: 9729,
+            density_drop: 0,
+            source_mips: false,
+        };
+        let atlas = |width, height| PreparedAtlas {
+            primitives: vec![PreparedPrimitive {
+                triangles: vec![row],
+                corner_depths: vec![[0; 3]],
+                uvs: vec![vec![[0., 0.], [1., 0.], [0., 1.]]],
+                material: Some(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}})),
+                feature_id_textures: Vec::new(),
+            }],
+            pages: Vec::new(),
+            textures: vec![json!({"source":0,"sampler":0})],
+            samplers: vec![json!({"minFilter":9729,"magFilter":9729})],
+            preencode: vec![page(width, height)],
+        };
+        let ranks = HashMap::from([((1, 2, 3, 4), 7)]);
+        let decoded = vec![positions.to_vec()];
+        let no_normals = vec![Vec::new()];
+        let spacing = |w, h| {
+            let witness = build(&atlas(w, h), &decoded, &no_normals, &ranks).unwrap();
+            assert_eq!(witness.primitives[0].faces[0].rank, 7);
+            assert_eq!(witness.primitives[0].expanded_ordinal, 9);
+            let s = witness.primitives[0].bindings[0].texel_spacing.unwrap();
+            assert_eq!(witness.texel_spacing, Some(s));
+            s
+        };
+        let golden = (1. + 5f64.sqrt()) / 4.;
+        assert!((spacing(8, 2) - golden).abs() < 1e-12, "{}", spacing(8, 2));
+        assert!(
+            (spacing(2, 8) - golden).abs() > 1.,
+            "a width/height swap is visible"
+        );
+    }
+
+    #[test]
+    fn retained_witness_files_are_checked_and_released_with_their_leaf() {
+        use crate::mesh_large::{bake_pass::PreencodeStore, lod::handoff::ScratchBudget};
+        let dir = tempfile::tempdir().unwrap();
+        let store = PreencodeStore::new(
+            dir.path().join("pre"),
+            Arc::new(ScratchBudget::new(1 << 30)),
+        )
+        .unwrap();
+        let atlas = PreparedAtlas {
+            primitives: Vec::new(),
+            pages: Vec::new(),
+            textures: Vec::new(),
+            samplers: Vec::new(),
+            preencode: Vec::new(),
+        };
+        let witness = sample();
+        let path = dir.path().join("pre").join(format!("leaf-{:012}.wit", 3));
+        let write = || store.write_leaf(3, 0, &atlas, &witness).unwrap();
+        write();
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap().witness,
+            witness
+        );
+        let bytes = fs::read(&path).unwrap();
+        // Truncated, and stale-length (one byte longer than the head says).
+        fs::write(&path, &bytes[..bytes.len() - 1]).unwrap();
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
+            JobErrorKind::InvalidState
+        );
+        let mut longer = bytes.clone();
+        longer.push(0);
+        fs::write(&path, &longer).unwrap();
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
+            JobErrorKind::InvalidState
+        );
+        // Same length but corrupt content.
+        let mut flipped = bytes.clone();
+        flipped[45] |= 0x80;
+        fs::write(&path, &flipped).unwrap();
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
+            JobErrorKind::InvalidState
+        );
+        // Missing.
+        fs::remove_file(&path).unwrap();
+        assert_eq!(
+            store.read_leaf(3, 1 << 30, &|| Ok(())).unwrap_err().kind(),
+            JobErrorKind::Io
+        );
+        // The witness file and its decode are charged to the reader's lease: the
+        // smallest lease that reads the leaf grows by at least the witness bytes, and one
+        // byte less is a typed resource refusal.
+        fs::write(&path, &bytes).unwrap();
+        let threshold = |index: u64| {
+            let (mut lo, mut hi) = (0u64, 1 << 30);
+            while lo < hi {
+                let mid = (lo + hi) / 2;
+                match store.read_leaf(index, mid, &|| Ok(())) {
+                    Ok(_) => hi = mid,
+                    Err(e) => {
+                        assert_eq!(e.kind(), JobErrorKind::ResourceLimit);
+                        lo = mid + 1;
+                    }
+                }
+            }
+            lo
+        };
+        let small = LeafWitness {
+            texel_spacing: None,
+            primitives: Vec::new(),
+        };
+        store.write_leaf(4, 0, &atlas, &small).unwrap();
+        let (full, empty) = (threshold(3), threshold(4));
+        assert!(
+            full - empty >= witness.encoded_len() + witness.owned_bytes() - small.encoded_len()
+        );
+        store.release_leaf(4, u64::MAX, &|| Ok(())).unwrap();
+        // Released with its leaf, and the store returns to empty.
+        fs::write(&path, &bytes).unwrap();
+        store.release_leaf(3, u64::MAX, &|| Ok(())).unwrap();
+        assert!(!path.exists());
+        assert!(fs::read_dir(dir.path().join("pre"))
+            .unwrap()
+            .next()
+            .is_none());
+    }
+
+    #[test]
     fn texel_spacing_is_the_worst_direction_in_metres_per_texel() {
         let p = [[0., 0., 0.], [2., 0., 0.], [0., 3., 0.]];
         let uv = [[0., 0.], [1., 0.], [0., 1.]];
@@ -713,8 +1017,9 @@ mod tests {
         assert_eq!(texel_spacing(p, [[0., 0.], [1., 1.], [2., 2.]]), None);
     }
 
-    /// Two primitives: one with NORMAL, TANGENT, a LINEAR-sampled base colour and a
-    /// normal map with a literal negative scale; one mip-sampled base colour only.
+    /// Two meshes: one with NORMAL, TANGENT, a LINEAR-sampled base colour and a normal
+    /// map on TEXCOORD_1 with a literal negative scale, instanced twice; one mip-sampled
+    /// base colour only, with zero-area UV faces.
     /// `nudge` moves one source normal, to give a leaf whose published values differ.
     fn fixture(dir: &Path, g: usize, nudge: f32) -> PathBuf {
         fs::create_dir_all(dir).unwrap();
@@ -723,7 +1028,8 @@ mod tests {
         let half = g / 2;
         for (b, (i0, i1)) in [(0, half), (half, g)].into_iter().enumerate() {
             let w = g + 1;
-            let (mut pos, mut nrm, mut tan, mut uv) = (vec![], vec![], vec![], vec![]);
+            let (mut pos, mut nrm, mut tan, mut uv, mut uv1) =
+                (vec![], vec![], vec![], vec![], vec![]);
             for i in i0..=i1 {
                 for j in 0..=g {
                     let (x, z) = (i as f32 * 0.37, j as f32 * 0.41);
@@ -736,6 +1042,9 @@ mod tests {
                     // face of each of its quads has a zero-area page-UV triangle.
                     let jj = if b == 1 { j.max(1) } else { j };
                     uv.push([i as f32 / g as f32, (jj as f32 / g as f32).powf(1.3)]);
+                    // The normal map's own set: axes swapped and U halved, so a builder
+                    // that reads TEXCOORD_0 for it measures a different spacing.
+                    uv1.push([(jj as f32 / g as f32) * 0.5, i as f32 / g as f32]);
                 }
             }
             let m = [nrm[3][0] + nudge, nrm[3][1], nrm[3][2]];
@@ -791,8 +1100,12 @@ mod tests {
             accessors.push(
                 json!({"bufferView":i,"componentType":5125,"count":idx.len(),"type":"SCALAR"}),
             );
+            let u1 = push(floats(&uv1.iter().map(|v| v.to_vec()).collect::<Vec<_>>()));
+            accessors.push(
+                json!({"bufferView":u1,"componentType":5126,"count":uv1.len(),"type":"VEC2"}),
+            );
             let attributes = if b == 0 {
-                json!({"POSITION":first,"NORMAL":first+1,"TANGENT":first+2,"TEXCOORD_0":first+3})
+                json!({"POSITION":first,"NORMAL":first+1,"TANGENT":first+2,"TEXCOORD_0":first+3,"TEXCOORD_1":first+5})
             } else {
                 json!({"POSITION":first,"TEXCOORD_0":first+3})
             };
@@ -816,12 +1129,13 @@ mod tests {
             .save(dir.join(name))
             .unwrap();
         }
-        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,1]}],"nodes":[{"mesh":0},{"mesh":1}],
+        // Mesh 0 is instanced twice (nodes 0 and 2): two expanded instances.
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,1,2]}],"nodes":[{"mesh":0},{"mesh":1},{"mesh":0,"translation":[0,5,0]}],
             "meshes":meshes,"buffers":[{"uri":"scene.bin","byteLength":bin.len()}],"bufferViews":views,"accessors":accessors,
             "images":[{"uri":"colour.png"},{"uri":"normal.png"}],
             "samplers":[{"minFilter":9729,"magFilter":9729},{"minFilter":9987,"magFilter":9729}],
             "textures":[{"source":0,"sampler":0},{"source":1,"sampler":0},{"source":0,"sampler":1}],
-            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}},"normalTexture":{"index":1,"scale":-0.5}},
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}},"normalTexture":{"index":1,"texCoord":1,"scale":-0.5}},
                          {"pbrMetallicRoughness":{"baseColorTexture":{"index":2}}}]});
         let path = dir.join("scene.gltf");
         fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
@@ -832,9 +1146,21 @@ mod tests {
     #[derive(Debug, Default)]
     struct Probe {
         leaves: Mutex<BTreeMap<u64, LeafPreencode>>,
+        /// Rank oracle: every captured triangle's index in the sorted stream.
+        ranks: Mutex<HashMap<(u32, u32, u32, u64), u64>>,
     }
     impl ProxyBaker for Probe {
         fn bake(&self, pass: &BakePass<'_>) -> Result<(), JobError> {
+            let mut reader = pass.captured.triangles.reader()?;
+            let mut rank = 0u64;
+            while let Some(row) = reader.next().transpose()? {
+                let s = row.triangle.source;
+                self.ranks
+                    .lock()
+                    .unwrap()
+                    .insert((s.node, s.mesh, s.primitive, s.triangle), rank);
+                rank += 1;
+            }
             for node in pass.nodes()? {
                 let (first, depth) = node?;
                 for child in pass.frozen(first, depth, 1 << 30)?.children {
@@ -866,11 +1192,18 @@ mod tests {
             let e = &v["extensions"]["EXT_meshopt_compression"];
             let start = e["byteOffset"].as_u64().unwrap() as usize;
             let length = e["byteLength"].as_u64().unwrap() as usize;
-            crate::content_integrity::meshopt::decode(
+            // The consumer path: decompress, then the view's declared filter.
+            let filter = e
+                .get("filter")
+                .and_then(Value::as_str)
+                .map_or(Some(Filter::None), Filter::parse)
+                .unwrap();
+            crate::content_integrity::meshopt::decode_filtered(
                 &bin[start..start + length],
                 e["count"].as_u64().unwrap() as usize,
                 e["byteStride"].as_u64().unwrap() as usize,
                 crate::content_integrity::meshopt::Mode::Attributes,
+                filter,
             )
             .unwrap()
         };
@@ -918,13 +1251,30 @@ mod tests {
                     .map(|p| p.map(f32::to_bits))
                     .collect()
             };
+            // FLOAT normals as written; normalized SHORT (octahedral) as a renderer
+            // reads them: max(c / 32767, -1).
             let normals = attribute("NORMAL").map_or(Vec::new(), |a| {
-                floats(a)
-                    .as_chunks::<3>()
-                    .0
-                    .iter()
-                    .map(|p| p.map(f32::to_bits))
-                    .collect()
+                if a["componentType"] == 5122 {
+                    assert_eq!(a["normalized"], true);
+                    view(a["bufferView"].as_u64().unwrap() as usize)
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .map(|e| {
+                            std::array::from_fn(|c| {
+                                let v = i16::from_le_bytes([e[2 * c], e[2 * c + 1]]);
+                                (f32::from(v) / 32767.).max(-1.).to_bits()
+                            })
+                        })
+                        .collect()
+                } else {
+                    floats(a)
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
+                        .map(|p| p.map(f32::to_bits))
+                        .collect()
+                }
             });
             let tangents = attribute("TANGENT").map_or(Vec::new(), |a| {
                 floats(a)
@@ -953,12 +1303,50 @@ mod tests {
     }
 
     /// Every witness field against the published GLB (and the retained page sizes).
-    fn compare(leaf: &LeafPreencode, glb: &[u8], first: u64, end: u64) -> Result<(), String> {
+    /// `Ok(n)`: `n` bindings whose spacing differs if measured on another TEXCOORD set.
+    fn compare(
+        leaf: &LeafPreencode,
+        glb: &[u8],
+        (first, end): (u64, u64),
+        oracle: &HashMap<(u32, u32, u32, u64), u64>,
+    ) -> Result<usize, String> {
         let w = &leaf.witness;
         let (doc, published) = published(glb);
         if published.len() != w.primitives.len() {
             return Err("primitive count".into());
         }
+        // Expanded instance identity from the published source_primitive table.
+        let decoded = crate::mesh_large::lod::codec::decode(glb).map_err(|e| e.to_string())?;
+        let table = decoded
+            .tables
+            .iter()
+            .find(|t| t.class == "source_primitive")
+            .ok_or("source_primitive table")?;
+        for (k, p) in w.primitives.iter().enumerate() {
+            let face = decoded
+                .faces
+                .iter()
+                .find(|f| f.primitive as usize == k)
+                .ok_or("published primitive without faces")?;
+            let row = face.features[0].0 as usize;
+            let column = |name: &str| table.columns[name][row];
+            if (
+                column("node_index"),
+                column("mesh_index"),
+                column("primitive_index"),
+                column("expanded_ordinal"),
+                column("material_index"),
+            ) != (
+                u64::from(p.node),
+                u64::from(p.mesh),
+                u64::from(p.primitive),
+                p.expanded_ordinal,
+                u64::from(p.material),
+            ) {
+                return Err(format!("primitive {k} expanded instance identity"));
+            }
+        }
+        let mut other_set_differs = 0;
         let mut ranks = Vec::new();
         let mut leaf_spacing: Option<f64> = None;
         for (k, (p, g)) in w.primitives.iter().zip(&published).enumerate() {
@@ -981,6 +1369,9 @@ mod tests {
             for (face, (f, s)) in p.faces.iter().zip(&source.triangles).enumerate() {
                 if (p.node, p.mesh, p.primitive, f.triangle) != *s {
                     return Err(format!("primitive {k} face {face} source identity"));
+                }
+                if oracle.get(s) != Some(&f.rank) {
+                    return Err(format!("primitive {k} face {face} rank"));
                 }
                 ranks.push(f.rank);
             }
@@ -1018,6 +1409,29 @@ mod tests {
                         spacing = Some(spacing.map_or(s, |m| m.max(s)));
                     }
                 }
+                // The same binding measured on every other published set.
+                for (set, uvs) in g.uvs.iter().enumerate() {
+                    if set == texcoord as usize {
+                        continue;
+                    }
+                    let other = (0..p.faces.len())
+                        .filter_map(|face| {
+                            let pos = std::array::from_fn(|c| {
+                                g.positions[face * 3 + c].map(|v| f64::from(f32::from_bits(v)))
+                            });
+                            let uv = std::array::from_fn(|c| {
+                                let t = uvs[face * 3 + c];
+                                [
+                                    f64::from(t[0]) * f64::from(retained.width),
+                                    f64::from(t[1]) * f64::from(retained.height),
+                                ]
+                            });
+                            texel_spacing(pos, uv)
+                        })
+                        .reduce(f64::max);
+                    other_set_differs +=
+                        usize::from(other.map(f64::to_bits) != spacing.map(f64::to_bits));
+                }
                 for (face, zero) in raster.into_iter().enumerate() {
                     if (p.faces[face].zero_raster >> index) & 1 != u8::from(zero) {
                         return Err(format!("primitive {k} face {face} zero-raster"));
@@ -1051,30 +1465,33 @@ mod tests {
         if ranks != (first..end).collect::<Vec<_>>() {
             return Err("ranks are not the leaf's [first, end)".into());
         }
-        Ok(())
+        Ok(other_set_differs)
     }
 
+    type Oracle = HashMap<(u32, u32, u32, u64), u64>;
+    /// One run; with `bake`, also every leaf's retained packet and the rank oracle.
     fn run(
         dir: &Path,
         input: &Path,
         profile: LeafProfile,
-    ) -> (PathBuf, BTreeMap<u64, LeafPreencode>) {
+        bake: bool,
+    ) -> (PathBuf, BTreeMap<u64, LeafPreencode>, Oracle) {
         let out = dir.join("out");
         let scratch = dir.join("scratch");
         fs::create_dir_all(&scratch).unwrap();
         let probe = Arc::new(Probe::default());
-        mesh_to_leaf_payloads(
-            LeafOutputRequest::new(input, &out, profile)
-                .with_jobs(NonZeroUsize::new(2).unwrap())
-                .with_scratch_dir(&scratch)
-                .with_lod_target(256)
-                .with_leaf_triangles(1024)
-                .with_baker(probe.clone()),
-            &RunControl::default(),
-        )
-        .unwrap();
+        let mut request = LeafOutputRequest::new(input, &out, profile)
+            .with_jobs(NonZeroUsize::new(2).unwrap())
+            .with_scratch_dir(&scratch)
+            .with_lod_target(256)
+            .with_leaf_triangles(1024);
+        if bake {
+            request = request.with_baker(probe.clone());
+        }
+        mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
         let leaves = std::mem::take(&mut *probe.leaves.lock().unwrap());
-        (out, leaves)
+        let oracle = std::mem::take(&mut *probe.ranks.lock().unwrap());
+        (out, leaves, oracle)
     }
     fn rows(out: &Path) -> Vec<Value> {
         fs::read_to_string(out.join("leaves.jsonl"))
@@ -1087,20 +1504,63 @@ mod tests {
     #[test]
     fn witness_matches_the_published_leaf_decode_and_tracks_a_mutated_leaf() {
         let work = tempfile::tempdir().unwrap();
-        for profile in [LeafProfile::Balanced, LeafProfile::Quality] {
+        // Balanced publishes oct12 NORMAL and quantized POSITION; Lossless f32 for both.
+        let mut octahedral = 0;
+        for profile in [LeafProfile::Balanced, LeafProfile::Lossless] {
             let name = format!("{profile:?}");
             let input = fixture(&work.path().join(&name).join("src"), 48, 0.);
-            let (out, leaves) = run(&work.path().join(&name), &input, profile);
+            let (out, leaves, oracle) = run(&work.path().join(&name), &input, profile, true);
             let listed = rows(&out);
+            for row in &listed {
+                let glb = fs::read(out.join(row["uri"].as_str().unwrap())).unwrap();
+                let (doc, _) = published(&glb);
+                for mesh in doc["meshes"].as_array().unwrap() {
+                    let attributes = &mesh["primitives"][0]["attributes"];
+                    if let Some(n) = attributes.get("NORMAL") {
+                        let component =
+                            &doc["accessors"][n.as_u64().unwrap() as usize]["componentType"];
+                        let oct = *component == 5122;
+                        assert_eq!(
+                            oct,
+                            profile != LeafProfile::Lossless,
+                            "{name} NORMAL encoding"
+                        );
+                        octahedral += usize::from(oct);
+                    }
+                }
+            }
+            // Byte identity: the published leaves are the same without a baker.
+            let (plain, _, _) = run(
+                &work.path().join(format!("{name}-plain")),
+                &input,
+                profile,
+                false,
+            );
+            for row in &listed {
+                let uri = row["uri"].as_str().unwrap();
+                assert_eq!(
+                    fs::read(out.join(uri)).unwrap(),
+                    fs::read(plain.join(uri)).unwrap(),
+                    "{name} {uri}"
+                );
+            }
             assert!(listed.len() >= 3, "several leaves");
             assert_eq!(leaves.len(), listed.len(), "every leaf child read once");
-            let (mut spaced, mut zero_raster) = (0, 0);
+            let (mut spaced, mut zero_raster, mut other_set) = (0, 0, 0);
+            let mut instances =
+                BTreeMap::<(u32, u32), std::collections::BTreeSet<(u32, u64)>>::new();
             for (index, row) in listed.iter().enumerate() {
                 let leaf = &leaves[&(index as u64)];
                 let glb = fs::read(out.join(row["uri"].as_str().unwrap())).unwrap();
                 let (first, end) = (row["first"].as_u64().unwrap(), row["end"].as_u64().unwrap());
-                compare(leaf, &glb, first, end)
+                other_set += compare(leaf, &glb, (first, end), &oracle)
                     .unwrap_or_else(|e| panic!("{name} leaf {index}: {e}"));
+                for p in &leaf.witness.primitives {
+                    instances
+                        .entry((p.mesh, p.primitive))
+                        .or_default()
+                        .insert((p.node, p.expanded_ordinal));
+                }
                 spaced += usize::from(leaf.witness.texel_spacing.is_some());
                 zero_raster += leaf
                     .witness
@@ -1118,20 +1578,47 @@ mod tests {
                     .find(|p| !p.normals.is_empty())
                 {
                     p.normals[0][0] = p.normals[0][0].next_up();
-                    assert!(compare(&normal, &glb, first, end)
+                    assert!(compare(&normal, &glb, (first, end), &oracle)
                         .unwrap_err()
                         .contains("NORMAL"));
                 }
                 let mut position = leaf.clone();
                 position.witness.primitives[0].positions[1][2] += 1. / 64.;
-                assert!(compare(&position, &glb, first, end)
+                assert!(compare(&position, &glb, (first, end), &oracle)
                     .unwrap_err()
                     .contains("POSITION"));
                 let mut rank = leaf.clone();
                 rank.witness.primitives[0].faces[0].rank = end;
-                assert!(compare(&rank, &glb, first, end)
+                assert!(compare(&rank, &glb, (first, end), &oracle)
                     .unwrap_err()
-                    .contains("ranks"));
+                    .contains("rank"));
+                // Swapped ranks keep the sorted set but not the per-face mapping.
+                let mut swapped = leaf.clone();
+                let faces = &mut swapped.witness.primitives[0].faces;
+                if faces.len() > 1 {
+                    let (a, b) = (faces[0].rank, faces[1].rank);
+                    faces[0].rank = b;
+                    faces[1].rank = a;
+                    assert!(compare(&swapped, &glb, (first, end), &oracle)
+                        .unwrap_err()
+                        .contains("face 0 rank"));
+                }
+                let mut ordinal = leaf.clone();
+                ordinal.witness.primitives[0].expanded_ordinal ^= 1;
+                assert!(compare(&ordinal, &glb, (first, end), &oracle)
+                    .unwrap_err()
+                    .contains("expanded instance"));
+                let mut set = leaf.clone();
+                for p in &mut set.witness.primitives {
+                    for b in &mut p.bindings {
+                        b.texcoord ^= u32::from(b.slot == 2);
+                    }
+                }
+                if set != *leaf {
+                    assert!(compare(&set, &glb, (first, end), &oracle)
+                        .unwrap_err()
+                        .contains("bindings"));
+                }
                 let mut scale = leaf.clone();
                 for p in &mut scale.witness.primitives {
                     for b in &mut p.bindings {
@@ -1142,13 +1629,31 @@ mod tests {
                     }
                 }
                 if scale != *leaf {
-                    assert!(compare(&scale, &glb, first, end)
+                    assert!(compare(&scale, &glb, (first, end), &oracle)
                         .unwrap_err()
                         .contains("bindings"));
                 }
             }
             assert!(spaced > 0, "textured leaves carry a measured spacing");
             assert!(zero_raster > 0, "zero-area UV faces are kept and marked");
+            assert!(
+                other_set > 0,
+                "a builder reading the wrong TEXCOORD set would be caught"
+            );
+            // Mesh 0 is published as two expanded instances with distinct ordinals.
+            let both = instances.values().any(|seen| {
+                seen.len() >= 2
+                    && seen
+                        .iter()
+                        .map(|i| i.1)
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        == seen.len()
+            });
+            assert!(
+                both,
+                "{name}: the instanced mesh appears as distinct expanded instances: {instances:?}"
+            );
             // A leaf published from a mutated source normal: its own witness matches its
             // own GLB, and the original witness no longer does.
             let nudged = fixture(
@@ -1156,18 +1661,20 @@ mod tests {
                 48,
                 0.25,
             );
-            let (out2, leaves2) = run(
+            let (out2, leaves2, oracle2) = run(
                 &work.path().join(format!("{name}-nudged")),
                 &nudged,
                 profile,
+                true,
             );
             let mut differed = 0;
             for (index, row) in rows(&out2).iter().enumerate() {
                 let glb = fs::read(out2.join(row["uri"].as_str().unwrap())).unwrap();
                 let (first, end) = (row["first"].as_u64().unwrap(), row["end"].as_u64().unwrap());
-                compare(&leaves2[&(index as u64)], &glb, first, end).unwrap();
+                compare(&leaves2[&(index as u64)], &glb, (first, end), &oracle2).unwrap();
                 if let Some(original) = leaves.get(&(index as u64)) {
-                    differed += usize::from(compare(original, &glb, first, end).is_err());
+                    differed +=
+                        usize::from(compare(original, &glb, (first, end), &oracle2).is_err());
                 }
             }
             assert!(
@@ -1175,5 +1682,6 @@ mod tests {
                 "{name}: the original witness must not match the mutated leaf"
             );
         }
+        assert!(octahedral > 0, "Balanced leaves publish octahedral NORMAL");
     }
 }

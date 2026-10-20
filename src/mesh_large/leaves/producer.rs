@@ -136,10 +136,19 @@ pub struct LeafOutputReport {
     pub escalated_pages: EscalatedPages,
     /// Pages delivered as exact level-0 PNG after every lossy step missed.
     pub lossless_fallback_pages: u64,
+    /// Escalated pages (both counts above) by what the profile step missed.
+    pub escalation_reasons: EscalationReasons,
     /// The first [`ESCALATION_DIAGNOSTICS`] escalated pages in leaf order.
     pub escalation_diagnostics: Vec<EscalationDiagnostic>,
     /// Escalated pages beyond the bounded diagnostics list.
     pub escalation_diagnostics_omitted: u64,
+}
+/// Escalated pages by the profile step's miss: a decoded-image gate, or the
+/// codec's own verification floor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct EscalationReasons {
+    pub gate: u64,
+    pub codec_verify: u64,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct EscalatedPages {
@@ -172,6 +181,8 @@ pub struct EscalationSource {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EscalationMiss {
     pub step: &'static str,
+    /// `gate` or `codec_verify`.
+    pub reason: &'static str,
     pub mip: Option<u64>,
     pub gate: String,
 }
@@ -542,8 +553,9 @@ fn leaf_encode(
                     })?;
                     // Only the accepted density attempt reaches here.
                     let positions = std::mem::take(&mut leaf.positions);
+                    let normals = std::mem::take(&mut leaf.normals);
                     if let Some(store) = preencode {
-                        let witness = super::witness::build(atlas, &positions, &ranks)?;
+                        let witness = super::witness::build(atlas, &positions, &normals, &ranks)?;
                         store.write_leaf(index, density_drop, atlas, &witness)?;
                     }
                     Ok(leaf)
@@ -630,6 +642,7 @@ pub(crate) fn produce(
         proxy_bytes: 0,
         escalated_pages: EscalatedPages::default(),
         lossless_fallback_pages: 0,
+        escalation_reasons: EscalationReasons::default(),
         escalation_diagnostics: Vec::new(),
         escalation_diagnostics_omitted: 0,
     };
@@ -904,12 +917,17 @@ fn write_leaf(
     report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
     for page in escalations {
-        use super::delivery::Step;
+        use super::delivery::{MissReason, Step};
         match page.escalation.step {
             Step::UastcLevel2 => report.escalated_pages.uastc_level2 += 1,
             Step::UastcLevel3 => report.escalated_pages.uastc_level3 += 1,
             Step::LosslessPng => report.lossless_fallback_pages += 1,
             Step::Profile => return Err(invariant("unescalated page reported as escalated")),
+        }
+        match page.escalation.misses.first().map(|m| m.reason) {
+            Some(MissReason::Gate) => report.escalation_reasons.gate += 1,
+            Some(MissReason::CodecVerify) => report.escalation_reasons.codec_verify += 1,
+            None => return Err(invariant("escalated page without a miss")),
         }
         if report.escalation_diagnostics.len() >= ESCALATION_DIAGNOSTICS {
             report.escalation_diagnostics_omitted += 1;
@@ -936,6 +954,7 @@ fn write_leaf(
                 .iter()
                 .map(|m| EscalationMiss {
                     step: m.step.name(),
+                    reason: m.reason.name(),
                     mip: m.mip.map(|mip| mip as u64),
                     gate: m.gate.clone(),
                 })
@@ -1214,16 +1233,22 @@ mod tests {
     /// texture, like a photogrammetry atlas: a leaf's hull covers most of the
     /// texture while its charts are a small part of it.
     fn scattered_fixture(parent: &Path, count: usize, min_filter: u32) -> PathBuf {
-        textured_fixture(parent, count, min_filter, None, 1024)
+        textured_fixture(parent, count, min_filter, Texture::Smooth, 1024)
     }
-    /// [`scattered_fixture`]; `hard_every` replaces every n-th 4x4 texture
+    #[derive(Clone, Copy)]
+    enum Texture {
+        Smooth,
+        /// Every n-th 4x4 block holds four scattered random colours.
+        Hard(u64),
+    }
+    /// [`scattered_fixture`]; `Texture::Hard(n)` replaces every n-th 4x4 texture
     /// block with four scattered random colours (1: every block), so pages
     /// miss the colour gate at the profile's encoder setting.
     fn textured_fixture(
         parent: &Path,
         count: usize,
         min_filter: u32,
-        hard_every: Option<u64>,
+        pattern: Texture,
         edge: u32,
     ) -> PathBuf {
         fs::create_dir_all(parent).unwrap();
@@ -1270,7 +1295,7 @@ mod tests {
             h ^ (h >> 16)
         };
         let texture = image::RgbaImage::from_fn(edge, edge, |x, y| {
-            if let Some(every) = hard_every {
+            if let Texture::Hard(every) = pattern {
                 if hash(x / 4, y / 4, 77).is_multiple_of(every) {
                     let c = hash(x / 4, y / 4, (hash(x, y, 9) % 4) as u32);
                     return image::Rgba([c as u8, (c >> 8) as u8, (c >> 16) as u8, 255]);
@@ -1432,7 +1457,13 @@ mod tests {
     #[test]
     fn escalated_pages_are_reported_and_identical_across_jobs() {
         let work = tempfile::tempdir().unwrap();
-        let input = textured_fixture(&work.path().join("source"), 9_000, 9729, Some(4), 256);
+        let input = textured_fixture(
+            &work.path().join("source"),
+            9_000,
+            9729,
+            Texture::Hard(4),
+            256,
+        );
         let mut previous = None;
         for jobs in [1, 3] {
             let output = work.path().join(format!("balanced{jobs}"));
@@ -1517,7 +1548,13 @@ mod tests {
     #[test]
     fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
         let work = tempfile::tempdir().unwrap();
-        let input = textured_fixture(&work.path().join("source"), 640, 9987, Some(1), 256);
+        let input = textured_fixture(
+            &work.path().join("source"),
+            640,
+            9987,
+            Texture::Hard(1),
+            256,
+        );
         let failure = mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
@@ -1535,5 +1572,73 @@ mod tests {
         ] {
             assert!(message.contains(text), "{text}: {message}");
         }
+    }
+
+    /// Pages the codec's own verification refuses at the profile setting
+    /// escalate and are counted apart from gate misses.
+    #[test]
+    fn codec_verification_misses_are_reported_by_reason() {
+        let work = tempfile::tempdir().unwrap();
+        // One quad covering the whole 64x64 sharp texture, mip-sampled: a dedicated
+        // page whose authored levels are the texture's own class chain.
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+        let bytes: Vec<u8> = positions
+            .iter()
+            .chain(&uvs)
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(64, 64, |x, y| {
+            let v = |k: u32| ((x * 7 + y * 13 + k * 31) % 97 + 80) as u8;
+            image::Rgba([v(0), v(1), v(2), 255])
+        })
+        .save(source.join("sharp.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"sharp.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        let result = mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let report = &result.report;
+        let total = report.escalated_pages.uastc_level2
+            + report.escalated_pages.uastc_level3
+            + report.lossless_fallback_pages;
+        println!(
+            "codec-verify escalation {:?} {:?} png {}",
+            report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
+        );
+        assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+        assert_eq!(
+            report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
+            total
+        );
+        let codec = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "codec_verify")
+            .count() as u64;
+        assert_eq!(codec, report.escalation_reasons.codec_verify);
+        assert!(report
+            .escalation_diagnostics
+            .iter()
+            .all(|d| d.misses[0].step == "profile"));
     }
 }

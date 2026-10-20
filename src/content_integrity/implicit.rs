@@ -19,7 +19,6 @@
 
 use super::{FormatError, JsonLimits};
 use serde_json::{Map, Value};
-use std::collections::HashSet;
 
 mod availability;
 mod metadata;
@@ -60,13 +59,11 @@ pub(crate) struct ImplicitLimits {
     /// The live-path cap (`document_decoded_bytes`), not a remaining value.
     pub(crate) live_subtree_bytes: u64,
     pub(crate) json: JsonLimits,
-    /// Subtree members resolved so far in this validation (OD-7). Every entry
-    /// is an existing archive member, so this is bounded by the archive index.
-    subtrees: HashSet<String>,
 }
 
 impl ImplicitLimits {
-    /// One value per validation: it also carries the OD-7 repeated-subtree set.
+    /// One value per validation. The OD-7 repeated-subtree rule is the resolver's
+    /// (A-I1-3): it owns member identity.
     pub(crate) fn new(live_subtree_bytes: u64, json: JsonLimits) -> Self {
         Self {
             visits_remaining: 0,
@@ -74,7 +71,6 @@ impl ImplicitLimits {
             scan_remaining: 0,
             live_subtree_bytes,
             json,
-            subtrees: HashSet::new(),
         }
     }
 }
@@ -92,6 +88,10 @@ pub(crate) enum Base<'a> {
 
 /// The caller's resolver: `(name, base, maximum bytes)` to the member bytes.
 /// It charges one reference and the bytes read; the owner mirrors both.
+///
+/// OD-7 (A-I1-3): a [`Base::Resolved`] name is a subtree member. The resolver refuses a
+/// member already resolved as a subtree in this validation, before any charge, with its
+/// Unsupported failure `repeated subtree member NAME`, and otherwise records it.
 pub(crate) type Resolver<'a, E> = dyn FnMut(&str, Base<'_>, u64) -> Result<Vec<u8>, E> + 'a;
 
 #[derive(Debug)]
@@ -944,6 +944,8 @@ mod test_support {
         pub(super) members: HashMap<String, Vec<u8>>,
         /// `(resolved name, maximum)` per read.
         pub(super) reads: Vec<(String, u64)>,
+        /// Subtree members resolved so far (OD-7, the resolver's rule).
+        pub(super) subtrees: std::collections::HashSet<String>,
     }
 
     impl Archive {
@@ -958,7 +960,12 @@ mod test_support {
             maximum: u64,
         ) -> Result<Vec<u8>, String> {
             let name = match base {
-                Base::Resolved => name.to_owned(),
+                Base::Resolved => {
+                    if !self.subtrees.insert(name.to_owned()) {
+                        return Err(format!("repeated subtree member {name}"));
+                    }
+                    name.to_owned()
+                }
                 Base::Relative(from) => reference_uri(from, name)?,
             };
             self.reads.push((name.clone(), maximum));

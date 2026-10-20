@@ -126,6 +126,42 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(list(scratch.iterdir()), [])
         self.assertGreaterEqual(b.diagnostics["leaf_delivery"]["jobs"], 1)
 
+    def test_tiler_source_crs_matches_the_cli_contract(self):
+        source = self.root / "projected.glb"
+        write_local_mesh(source)
+        outputs = []
+        for offset in ((14812000.0, -1384000.0, 100.0), [14812000, -1384000, 100]):
+            output = self.root / f"crs-{len(outputs)}.3tz"
+            result = rusty_tiles.mesh_to_tileset(
+                source, output, jobs=1, source_crs="EPSG:3857", source_axes="y-up",
+                source_offset=offset, height_offset=0.0,
+            )
+            report = result.report
+            self.assertEqual(report["source_coordinates"], "source-crs")
+            self.assertEqual(report["coordinates"], "wgs84-ecef")
+            self.assertEqual(report["placement"]["kind"], "wgs84")
+            self.assertEqual(report["source_crs"]["definition"], "EPSG:3857")
+            self.assertEqual(report["source_crs"]["axes"], "y-up")
+            self.assertEqual(report["source_crs"]["source_offset"], [14812000.0, -1384000.0, 100.0])
+            self.assertEqual(len(report["root_transform"]), 16)
+            outputs.append(output.read_bytes())
+        self.assertEqual(outputs[0], outputs[1])
+        offset_file = self.root / "projected_offset.txt"
+        offset_file.write_text("E: 14812000\nN: -1384000\nA: 100\n")
+        defaults = rusty_tiles.mesh_to_tileset(
+            source, self.root / "crs-file.3tz", jobs=1, source_crs="EPSG:3857",
+            source_offset_file=offset_file,
+        )
+        self.assertEqual(defaults.report["source_crs"]["axes"], "y-up")
+        self.assertEqual(defaults.report["source_crs"]["height_offset_metres"], 0.0)
+        self.assertEqual((self.root / "crs-file.3tz").read_bytes(), outputs[0])
+        offset_file.write_text("E: 1\nN: 2\n")
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "bad.3tz", source_crs="EPSG:3857",
+                                        source_offset_file=offset_file)
+        local = rusty_tiles.mesh_to_tileset(source, self.root / "local.3tz", source_crs="local")
+        self.assertNotIn("source_crs", local.report)
+
     def test_tiler_python_request_errors_precede_source_io_and_callbacks(self):
         source = self.root / "missing.glb"
         output = self.root / "invalid.3tz"
@@ -135,6 +171,16 @@ class WheelAPI(unittest.TestCase):
             {"profile": "unknown"}, {"jobs": 0}, {"jobs": -1}, {"jobs": 2**128},
             {"orientation_xyzw": (0, 0, 0, 1)}, {"scene_offset": (0, 0, 0)},
             {"anchor": (153, -27, 0), "orientation_xyzw": (0, 0, 0, 2)},
+            {"source_crs": "auto", "source_axes": "y-up", "height_offset": 0.0},
+            {"source_crs": "EPSG:3857", "source_offset": (1.0, 2.0),
+             "source_offset_file": "offset.txt"},
+            {"source_offset_file": "offset.txt"},
+            {"source_crs": "EPSG:3857", "source_axes": "z-up", "height_offset": 0.0},
+            {"source_crs": "EPSG:3857", "source_axes": "y-up", "height_offset": 0.0,
+             "source_offset": (1.0,)},
+            {"source_axes": "xyz"}, {"source_offset": (1.0, 2.0)}, {"height_offset": 0.0},
+            {"source_crs": "EPSG:3857", "source_axes": "y-up", "height_offset": 0.0,
+             "anchor": (153, -27, 0)},
         ):
             with self.subTest(options=options):
                 with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
@@ -148,7 +194,7 @@ class WheelAPI(unittest.TestCase):
                 rusty_tiles.mesh_to_tileset(source, output, jobs=jobs)
         for keyword, value in (
             ("leaf_triangles", 1), ("root_proxy_triangles", 1),
-            ("max_proxy_error_metres", 1), ("source_crs", "auto"),
+            ("max_proxy_error_metres", 1), ("source_offset", "1 2"),
             ("texture_format", "jpeg"), ("explicit", True),
         ):
             with self.subTest(keyword=keyword), self.assertRaises(TypeError):

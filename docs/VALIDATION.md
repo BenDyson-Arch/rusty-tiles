@@ -40,7 +40,14 @@ numeric buffers, accessor layouts and primitive indices. Finite stored values an
 prove unit-length normals, rendered material meaning or source/LOD fidelity.
 KHR_mesh_quantization permits
 its specified extra attribute representations. EXT_meshopt_compression supports
-bounded decoding with the NONE filter; unavailable filters are unsupported. Each
+bounded decoding with the NONE and OCTAHEDRAL filters; QUATERNION and EXPONENTIAL
+are unsupported. OCTAHEDRAL needs ATTRIBUTES mode and a 4- or 8-byte stride, and
+every element must be a valid K-bit code (the third component encodes 1.0 as
+`(1 << (K - 1)) - 1`, and |x|, |y| do not exceed it); anything else is invalid.
+Because the extension specifies filter output only to one unit, declared bounds on a
+filtered BYTE/SHORT accessor may differ from the decoded values by one unit; all other
+bounds are exact. A compressed view may serve any role, including property-table values. See the
+[meshopt OCTAHEDRAL amendment](architecture/c1-meshopt-octahedral-amendment.md). Each
 compressed stream must start with the header byte the extension requires for its
 mode (`0xa0` ATTRIBUTES, `0xe1` TRIANGLES, `0xd1` INDICES); other codec versions,
 such as vertex v1 (`0xa1`) or index and sequence v0 (`0xe0`, `0xd0`), are invalid
@@ -149,7 +156,13 @@ frozen reasons are `derivedImplicitVolume` (slice 3; it replaces `implicitTiling
 `morphTargets`, `animation`, `quaternionWindow`, `numericSpan` and `workLimit`. H7 removed
 `rtcCenter`: its only carrier, a b3dm feature table, is Unsupported. Neither report success nor a matching
 stored geometric error establishes a source-surface or LOD error bound. The
-`notInspected` field records these boundaries explicitly. A required unsupported
+`notInspected` field records these boundaries explicitly. Unsupported glTF extension
+names declared by payloads are listed as they are named, at most the 64 byte-smallest
+of at most 256 bytes each; when any is left out the report adds
+`notInspectedTruncated: true`. Decoded containment streams only after the whole archive
+passed C1 with no exclusion and no precheck stop, from a log of the tiles and references
+seen while in domain, and replays each payload against digests of its own first, full
+inspection instead of inspecting it again. A required unsupported
 feature prevents success; an external validator run separately owns its own
 coverage and provenance.
 
@@ -188,16 +201,28 @@ Nonregular inputs are Unsupported; POSIX FIFO admission does not wait for a
 writer. Underlying archive read/seek errors retain their I/O causes, while actual
 premature byte exhaustion is InvalidInput.
 
-Fixed ceilings are 8 MiB JSON with depth 64, 131,072 JSON value nodes per
-document, 128 MiB per member, 1 GiB source archive and total stored member bytes,
-32 MiB central directory, 524,288 archive entries, 262,144 hierarchy visits,
-1,048,576 references, 4 million accessor elements per payload, 16 million total
-payload elements, 128 MiB decoded views per document, 128 levels of hierarchy
-depth, and 2 GiB explicit member-hash and payload/document read work including
-repeated reads and constructor index reads.
+Per-item ceilings are 8 MiB JSON with depth 64, 131,072 JSON value nodes per
+document, 128 MiB per member, 4 million accessor elements per payload, 128 MiB
+decoded views per document (which also holds an implicit subtree path's members,
+external buffers and availability index tables), 128 levels of hierarchy depth and
+256 MiB of tileset documents held at once on the external-tileset path (raw bytes
+plus 128 bytes per JSON value node, `liveDocumentBytes`; enforced, listed in
+`limits` from VS-C). Volume ceilings are 1 GiB source archive and total stored
+member bytes, 32 MiB central directory and 524,288 archive entries. The seven
+amplification budgets scale with S, the archive's admitted stored member bytes,
+and today's values are their floors: at least 262,144 and S/8 hierarchy visits,
+1,048,576 and S/8 references, 2 GiB and 4·S explicit member-hash and
+payload/document read work (repeated reads and constructor index reads included),
+16 million and 16·S total payload elements, and for decoded containment 2^29 and
+128·S work units, 2 GiB and 4·S re-read bytes and 2 GiB and 16·S decoded bytes. An
+archive with S up to 1 MB keeps exactly the floors; the report's `limits` shows
+the values in effect. S is fixed before any budgeted work and every byte of it is
+hashed, so a budget cannot grow from what traversal finds
+([traversal amendment](architecture/validator-traversal-scale-amendment.md)).
 Each placement of a shared external tileset is charged its full visits,
 references and document bytes, as if it were read and walked again. In fact each
-external-tileset document is parsed and checked once. Later placements re-check
+external-tileset document is parsed and checked once, while its summaries fit
+64 MiB (beyond that, later placements are walked again with the same result). Later placements re-check
 only what depends on the placement: the root's bounds and geometric error against
 the referencing tile, the depth limits, and decoded containment through that
 placement's ancestors. So `total_bytes_read` counts logical reads, which may exceed
@@ -210,13 +235,16 @@ The 178,956,970-member 3TZ ceiling, which producers also enforce, is a format
 rule rather than a limit: a larger declared count is Unsupported before the entry
 limit and before any directory allocation. At the ceiling the index is
 4,294,967,256 bytes.
-Implicit availability scans count toward the same 2 GiB `total_bytes_read` work
+Implicit availability scans count toward the same `total_bytes_read` work
 counter; an archive whose reads and scans together exceed it is refused with
 "availability scan exceeds total_bytes_read work limit".
 Separately bounded ZIP envelope/tail/header reads are outside that member-work
 counter. These admission limits
 are engineering bounds, not a total-process RSS promise. No request option
-bypasses them. The serialized `limits` describe the actual profile constants.
+bypasses them. The serialized `limits` describe the values in effect for the archive.
+Validation memory does not grow with tiles, references or payloads: the traversal
+keeps only its current path, per-payload facts go to scratch once they exceed
+100 MiB, and summaries of shared external tilesets are capped at 64 MiB.
 
 The entry, visit, reference, central-directory, value-node, member and decoded
 ceilings are sized for default (implicit) vector output at its 100,000-tile

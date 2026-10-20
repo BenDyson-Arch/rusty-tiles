@@ -57,17 +57,35 @@ impl Step {
         }
     }
 }
-/// One gate a ladder step missed: the step, the mip level when the gate is
-/// per level (the source-sampler check spans all levels) and the gate's text.
+/// Why a ladder step missed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MissReason {
+    /// A decoded-image gate of this module (channel, normal, MASK, source sampler).
+    Gate,
+    /// The codec's own mandatory verification: a decoded level missed its error
+    /// or detail floor (`basisu_ktx2::FloorMiss`). Structural failures stay hard.
+    CodecVerify,
+}
+impl MissReason {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            MissReason::Gate => "gate",
+            MissReason::CodecVerify => "codec_verify",
+        }
+    }
+}
+/// One check a ladder step missed: the step, the mip level when the check is
+/// per level (the source-sampler check spans all levels), why, and its text.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GateMiss {
     pub step: Step,
     pub mip: Option<usize>,
+    pub reason: MissReason,
     pub gate: String,
 }
 impl GateMiss {
     pub(crate) fn to_json(&self) -> Value {
-        json!({"step":self.step.name(),"mip":self.mip,"gate":self.gate})
+        json!({"step":self.step.name(),"mip":self.mip,"reason":self.reason.name(),"gate":self.gate})
     }
 }
 /// The step that delivered a page and every miss before it, in ladder order.
@@ -103,6 +121,7 @@ fn missed(error: JobError, step: Step, mip: Option<usize>) -> Result<GateMiss, J
         Ok(GateMiss {
             step,
             mip,
+            reason: MissReason::Gate,
             gate: error.message().to_owned(),
         })
     } else {
@@ -769,8 +788,13 @@ fn escalate(
     let tried: Vec<String> = misses
         .iter()
         .map(|m| match m.mip {
-            Some(mip) => format!("{} mip{mip}: {}", m.step.name(), m.gate),
-            None => format!("{}: {}", m.step.name(), m.gate),
+            Some(mip) => format!(
+                "{} mip{mip} ({}): {}",
+                m.step.name(),
+                m.reason.name(),
+                m.gate
+            ),
+            None => format!("{} ({}): {}", m.step.name(), m.reason.name(), m.gate),
         })
         .collect();
     Err(fidelity(format!(
@@ -910,7 +934,20 @@ fn lossy_step(
     }
     let (mode, params) = step_settings(slot, profile, step)?;
     let effort = params.effort;
-    let (bytes, mut decoded_levels) = codec::encode_ktx2_mips_decoded(&levels, mode, params)?;
+    // The codec's verification runs in full at every step; a decoded-level
+    // floor miss is a ladder miss like a gate miss, never accepted.
+    let (bytes, mut decoded_levels) =
+        match codec::encode_ktx2_mips_floor_checked(&levels, mode, params)? {
+            Ok(encoded) => encoded,
+            Err(miss) => {
+                return Ok(Err(GateMiss {
+                    step,
+                    mip: Some(miss.level as usize),
+                    reason: MissReason::CodecVerify,
+                    gate: miss.error.message().to_owned(),
+                }))
+            }
+        };
     let mut receipts = Vec::new();
     receipts
         .try_reserve_exact(chain.levels.len() * 3 + 1)
@@ -2115,5 +2152,110 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The sharp modular pattern that the codec's own detail-correlation floor
+    /// refuses at the profile step (found by the H27 witness fixture).
+    fn sharp_page(edge: usize) -> Vec<u8> {
+        (0..edge * edge)
+            .flat_map(|i| {
+                let (x, y) = (i % edge, i / edge);
+                let v = |k: usize| ((x * 7 + y * 13 + k * 31) % 97 + 80) as u8;
+                [v(0), v(1), v(2), 255]
+            })
+            .collect()
+    }
+    #[test]
+    fn codec_verification_floor_miss_escalates_and_every_step_is_still_verified() {
+        let profile = Profile::Balanced;
+        let edge = 64;
+        let rgba = sharp_page(edge);
+        let chain = chain(&rgba, edge);
+        // The codec check is not weakened: the profile setting is still refused by it.
+        let levels: Vec<_> = chain
+            .levels
+            .iter()
+            .map(|l| codec::MipLevel {
+                rgba: &l.rgba,
+                width: l.width,
+                height: l.height,
+            })
+            .collect();
+        let (mode, params) = codec_settings(TextureSlot::BaseColor, profile);
+        let refused = codec::encode_ktx2_mips_decoded(&levels, mode, params).unwrap_err();
+        assert_eq!(refused.kind(), JobErrorKind::InvalidState);
+        assert!(refused
+            .message()
+            .contains("detail does not follow the input"));
+        // The page escalates on that refusal and is delivered at UASTC level 2.
+        let out = encode(
+            [edge as u32; 2],
+            &rgba,
+            &vec![1; edge * edge],
+            TextureSlot::BaseColor,
+            profile,
+            MEMORY,
+            None,
+            LADDER,
+        )
+        .unwrap();
+        let escalation = out.escalation.as_ref().unwrap();
+        assert_eq!(escalation.step, Step::UastcLevel2);
+        assert_eq!(escalation.misses.len(), 1);
+        let miss = &escalation.misses[0];
+        assert_eq!(
+            (miss.step, miss.mip, miss.reason),
+            (Step::Profile, Some(0), MissReason::CodecVerify)
+        );
+        assert!(miss.gate.contains("KTX2 verification failed"), "{miss:?}");
+        // The delivered step passes the codec's own verification and the run gates.
+        let (mode, params) =
+            step_settings(TextureSlot::BaseColor, profile, Step::UastcLevel2).unwrap();
+        codec::verify_ktx2_mips(&out.bytes, &levels, mode, params).unwrap();
+        independently_gated(&out, &chain, profile);
+    }
+    #[test]
+    fn exhausted_mip_sampled_ladder_names_every_step_and_reason() {
+        use Step::{LosslessPng, UastcLevel2, UastcLevel3};
+        let profile = Profile::Balanced;
+        let rgba = sharp_page(64);
+        let chain = chain(&rgba, 64);
+        let run = |level0_sampled: bool| {
+            escalate(
+                &chain,
+                TextureSlot::BaseColor,
+                profile,
+                MEMORY,
+                None,
+                Ladder {
+                    level0_sampled,
+                    check: &no_check,
+                },
+                |_| Ok(Value::Null),
+                &corrupt_at(&[UastcLevel2, UastcLevel3]),
+            )
+        };
+        let error = run(false).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::Unsupported);
+        for text in [
+            "profile mip0 (codec_verify): KTX2 verification failed",
+            "uastc_level2 mip0 (gate)",
+            "uastc_level3 mip0 (gate)",
+            "no lossless PNG step",
+        ] {
+            assert!(error.message().contains(text), "{text}: {error}");
+        }
+        // Where the sampler reads level 0 only, the same misses end in exact PNG.
+        let out = run(true).unwrap();
+        let escalation = out.escalation.unwrap();
+        assert_eq!(escalation.step, LosslessPng);
+        assert_eq!(
+            escalation
+                .misses
+                .iter()
+                .map(|m| m.reason)
+                .collect::<Vec<_>>(),
+            [MissReason::CodecVerify, MissReason::Gate, MissReason::Gate]
+        );
     }
 }

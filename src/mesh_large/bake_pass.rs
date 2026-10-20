@@ -404,6 +404,8 @@ impl PreencodeStore {
             let path = self.page_path(index, head.drop, page.page);
             pages.push(read_page(page, &path, &mut lease, check)?);
         }
+        // The witness file is read under the same lease and cancellation, pinned to the
+        // size its head records; its decode is bounded by what the lease has left.
         if head.witness.version != WITNESS_VERSION {
             return Err(bad());
         }
@@ -416,8 +418,10 @@ impl PreencodeStore {
             "read leaf witness",
         )?;
         check()?;
-        // The decoder charges its owned structures against what remains of this lease.
+        // The decoder charges its owned structures against what remains of this lease,
+        // and the decoded witness stays charged while the packet is held.
         let witness = LeafWitness::decode(&bytes, lease.limit().saturating_sub(lease.used()))?;
+        lease.charge(witness.owned_bytes())?;
         Ok(LeafPreencode {
             pages,
             primitives: head.primitives,
@@ -1520,13 +1524,15 @@ fn audit_materials(
 }
 
 /// A feature-ID attribute stream holding `ids` (one per face, three corners each)
-/// EXACTLY, in the narrowest type glTF admits for a feature-ID vertex attribute:
+/// EXACTLY, in the narrowest type rusty-tiles writes for a feature-ID vertex attribute:
 /// UNSIGNED_BYTE up to 255, UNSIGNED_SHORT up to 65535, FLOAT up to 2^24 (every integer
-/// there is exact). glTF 2.0 says uint32 accessors SHOULD NOT be used for any vertex
-/// attribute, application-specific ones included (KhronosGroup/glTF 521a91d; the revision C1
-/// pins, 8e798b02, said MUST NOT, and C1 refuses it). For 0.4 an ID above 2^24 therefore
-/// has no exact attribute encoding and is refused rather than rounded. Elements are
-/// padded to a four-byte stride (vertex-attribute alignment, meshopt streams).
+/// there is exact). glTF 2.0 says UNSIGNED_INT accessors SHOULD NOT be used for vertex
+/// attributes, application-specific ones included (KhronosGroup/glTF 521a91d). That
+/// guidance is advisory, not a prohibition; rusty-tiles chooses not to write UNSIGNED_INT
+/// vertex attributes (and C1 validation refuses them). As a rusty-tiles policy, an ID
+/// above 2^24 therefore has no exact attribute encoding and is refused rather than
+/// rounded. Elements are padded to a four-byte stride (vertex-attribute alignment,
+/// meshopt streams).
 fn feature_id_stream(ids: &[u32]) -> Result<(u32, Vec<u8>), JobError> {
     let max = ids.iter().copied().max().unwrap_or(0);
     let component = match max {
@@ -1537,9 +1543,9 @@ fn feature_id_stream(ids: &[u32]) -> Result<(u32, Vec<u8>), JobError> {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(
-                    "feature ID {max} exceeds 2^24: a feature-ID attribute cannot hold it \
-                     exactly (glTF advises against UNSIGNED_INT vertex attributes and C1 refuses \
-                     them)"
+                    "feature ID {max} exceeds 2^24: rusty-tiles does not write UNSIGNED_INT \
+                     vertex attributes (glTF says they SHOULD NOT be used), so no feature-ID \
+                     attribute holds it exactly"
                 ),
             ))
         }

@@ -78,6 +78,12 @@ pub struct ValidationLimits {
     pub containment_decoded_bytes: u64,
     /// C2 precheck: maximum selected glTF node path depth.
     pub containment_node_depth: u64,
+    /// Tileset documents being traversed at once: `Σ (raw bytes + 128 · JSON value nodes)`
+    /// over the documents on the external-tileset path (VS-B-7). Not yet serialized in the
+    /// report's `limits`: VS-C adds it with the limit surface, so the pinned C1 report
+    /// bundles are amended once.
+    #[serde(skip_serializing)]
+    pub live_document_bytes: u64,
 }
 impl Default for ValidationLimits {
     fn default() -> Self {
@@ -102,6 +108,33 @@ impl Default for ValidationLimits {
             containment_bytes_read: 2 * 1024 * 1024 * 1024,
             containment_decoded_bytes: 2 * 1024 * 1024 * 1024,
             containment_node_depth: 64,
+            live_document_bytes: 256 * 1024 * 1024,
+        }
+    }
+}
+/// Amplification budget per stored byte (VS-B-2): `numerator / denominator`.
+struct Kappa(u64, u64);
+impl Kappa {
+    fn of(&self, stored_bytes: u64) -> u64 {
+        // Saturating: an over-u64 product is the largest budget.
+        u64::try_from(u128::from(stored_bytes) * u128::from(self.0) / u128::from(self.1))
+            .unwrap_or(u64::MAX)
+    }
+}
+impl ValidationLimits {
+    /// The seven amplification budgets at `max(self, κ·S)` for `S` admitted stored bytes;
+    /// every other field unchanged (VS-B-2). `self` holds the floors.
+    pub(crate) fn scaled(&self, stored_bytes: u64) -> Self {
+        let at_least = |floor: u64, kappa: Kappa| floor.max(kappa.of(stored_bytes));
+        Self {
+            hierarchy_visits: at_least(self.hierarchy_visits, Kappa(1, 8)),
+            references: at_least(self.references, Kappa(1, 8)),
+            total_bytes_read: at_least(self.total_bytes_read, Kappa(4, 1)),
+            total_payload_elements: at_least(self.total_payload_elements, Kappa(16, 1)),
+            containment_work_units: at_least(self.containment_work_units, Kappa(128, 1)),
+            containment_bytes_read: at_least(self.containment_bytes_read, Kappa(4, 1)),
+            containment_decoded_bytes: at_least(self.containment_decoded_bytes, Kappa(16, 1)),
+            ..self.clone()
         }
     }
 }
@@ -123,6 +156,9 @@ pub struct ValidationReport {
     pub entries: u64,
     pub checks: Vec<String>,
     pub not_inspected: Vec<String>,
+    /// Archive-named `notInspected` labels were dropped beyond the 64 kept (VS-B-9).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub not_inspected_truncated: bool,
     pub limits: ValidationLimits,
     /// One row per inspected payload URI, in URI byte order, read on demand.
     pub payloads: PayloadRows,
@@ -152,6 +188,9 @@ impl ValidationReport {
             "checks": self.checks,
             "notInspected": self.not_inspected,
         });
+        if self.not_inspected_truncated {
+            value["notInspectedTruncated"] = serde_json::Value::Bool(true);
+        }
         value["limits"] = serde_json::to_value(&self.limits)?;
         if let Some(scratch) = self.scratch {
             value["scratch"] = serde_json::to_value(scratch)?;
