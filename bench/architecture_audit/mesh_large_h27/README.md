@@ -181,3 +181,21 @@ Two appearance rules are owner-accepted for 0.4 and pinned by tests:
 
 Feature IDs above 2^24 stay refused: glTF says UNSIGNED_INT vertex attributes SHOULD
 NOT be used (advisory), and rusty-tiles chooses not to write them.
+
+Real-data findings fixed during integration (tex3 crop, 0.79M textured
+triangles, 63 proxies):
+
+- **Child density.** A leaf child's density is the world-area-weighted median of
+  its rasterising faces' texel spacing; a proxy child's is the same median over its
+  decoded charts, never finer than planned. The previous worst-face maximum made
+  one near-degenerate source UV triangle set kilometre texels, and the sliver rule
+  then left 18 of 63 proxies (all of depths 0-3) untextured.
+- **Admission.** `run_depth` bakes a depth on up to `jobs` workers with equal
+  memory shares and retries a tile that refuses its share (before any commit)
+  alone with the whole allowance, so `--jobs` changes neither admission nor
+  output (pinned by fake-bake tests; the crop is byte-identical at 4 and 8 jobs).
+- **Query cost.** Source witnesses are searched through a fine BVH over the
+  tile's resident triangles, child faces nearest-first, and colour lookups are
+  skipped when no source triangle has COLOR_0. Each change kept the profiling
+  sub-scene archive byte-identical; the crop's bake went from 7,021 s (4 CPUs)
+  to about 100 s (8 hardware threads).
