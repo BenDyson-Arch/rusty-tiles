@@ -174,13 +174,20 @@ check interval:
   `24·(N−1)` bytes);
 - traversal: before each task popped from the pending stack (tilesets, tiles, deferred
   references); each task's own work is bounded by the Class A limits;
+- the memo replay of a placement (VS-B EM-5.4), which registers a whole expansion inside one
+  traversal task: before each replayed event (a tile, a reference or a nested placement);
 - I1: before each implicit tile;
+- the phase-2 stream (VS-B-4), which runs after whole-archive admission: before each logged
+  tile or reference; each reference's stream is bounded by the Class A limits;
 - the payload rows: before the sort.
 
 Progress events (`RunEvent::Progress`) are emitted with phases `validate.hash` (done = members
-hashed, total = N), `validate.traverse` (done = tasks, no total) and `validate.rows`, at the
-phase start and then every 1,024 members or tasks, so a Python observer runs `check_signals` at
-the same interval. An observer error aborts the run (`observer_failure`); a Python callback's own
+hashed, total = N), `validate.traverse` (done = tasks, no total), `validate.stream` (done =
+logged entries streamed, total = the logged tiles and references; only when the archive is in
+the C2 domain and is streamed) and `validate.rows`, at the phase start and then every 1,024
+members, tasks or entries, so a Python observer runs `check_signals` at the same interval. A
+memo replay re-emits the current `validate.traverse` event (its task count unchanged) every 1,024
+replayed events. An observer error aborts the run (`observer_failure`); a Python callback's own
 exception (including `KeyboardInterrupt`) is re-raised unchanged. `inspect(request)` is
 `inspect_with` with a silent control.
 

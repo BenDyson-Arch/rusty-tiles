@@ -1580,7 +1580,8 @@ class WheelAPI(unittest.TestCase):
         events = []
         rusty_tiles.validate(archive, callback=events.append)
         self.assertEqual([event["phase"] for event in events],
-                         ["validate.hash", "validate.traverse", "validate.rows"])
+                         ["validate.hash", "validate.traverse", "validate.stream",
+                          "validate.rows"])
 
         def interrupt(event):
             raise KeyboardInterrupt

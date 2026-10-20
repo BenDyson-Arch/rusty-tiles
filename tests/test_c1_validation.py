@@ -31,7 +31,7 @@ def main():
     for case in manifest['cases']:
         path = args.corpus/case['path']
         assert hashlib.sha256(path.read_bytes()).hexdigest() == case['sha256']
-        try: report = module.validate(path)
+        try: report = module.validate(path, max_volume=case.get('maxVolume'))
         except Exception as error:
             assert case['expectedKind'] and isinstance(error, classes[case['expectedKind']]), (case['name'], repr(error))
             if cli: assert cli[case['name']]['report']['error']['code'] == case['expectedKind']

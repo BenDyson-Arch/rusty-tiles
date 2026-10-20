@@ -194,6 +194,8 @@ struct Progress<'a> {
     phase: &'static str,
     done: u64,
     total: Option<u64>,
+    /// Checks inside steps in this phase (`Progress::check`).
+    checks: u64,
 }
 const PROGRESS_STEP: u64 = 1024;
 #[cfg(test)]
@@ -202,6 +204,11 @@ thread_local! {
     static STOPPED: std::cell::Cell<Option<(&'static str, u64)>> = const { std::cell::Cell::new(None) };
     /// Cancels this handle when a step reaches this phase and count, between events.
     static CANCEL_AT: std::cell::RefCell<Option<(&'static str, u64, crate::CancellationHandle)>> =
+        const { std::cell::RefCell::new(None) };
+    /// Bare checks inside a step (`Progress::check`) on this thread since the last reset.
+    static CHECKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Cancels this handle when the bare check count reaches this value.
+    static CANCEL_AT_CHECK: std::cell::RefCell<Option<(u64, crate::CancellationHandle)>> =
         const { std::cell::RefCell::new(None) };
 }
 fn run_failure(error: crate::JobError) -> Error {
@@ -218,11 +225,12 @@ impl<'a> Progress<'a> {
             phase: "",
             done: 0,
             total: None,
+            checks: 0,
         }
     }
     /// Starts `phase`: checks the control and emits its first event.
     fn phase(&mut self, phase: &'static str, total: Option<u64>) -> Result<(), Error> {
-        (self.phase, self.done, self.total) = (phase, 0, total);
+        (self.phase, self.done, self.total, self.checks) = (phase, 0, total, 0);
         self.emit()
     }
     /// One unit of the current phase, before its work.
@@ -240,6 +248,36 @@ impl<'a> Progress<'a> {
             }
         });
         if self.done.is_multiple_of(PROGRESS_STEP) {
+            self.emit()
+        } else {
+            attempt.check().map_err(|error| self.stopped(error))
+        }
+    }
+    /// A cancellation check inside one step, counting no unit: the memo replay of a
+    /// placement (VS-B EM-5.4) registers a whole expansion in one traversal task, bounded by
+    /// the visit and reference budgets rather than by the Class A limits. Every
+    /// `PROGRESS_STEP` such checks re-emit the phase's current event, so an observer (a
+    /// Python callback's signal check) still runs at that interval.
+    fn check(&mut self) -> Result<(), Error> {
+        let Some(attempt) = self.attempt else {
+            return Ok(());
+        };
+        self.checks += 1;
+        #[cfg(test)]
+        {
+            let checks = CHECKS.with(|checks| {
+                checks.set(checks.get() + 1);
+                checks.get()
+            });
+            CANCEL_AT_CHECK.with(|cancel| {
+                if let Some((at, handle)) = &*cancel.borrow() {
+                    if *at == checks {
+                        handle.cancel();
+                    }
+                }
+            });
+        }
+        if self.checks.is_multiple_of(PROGRESS_STEP) {
             self.emit()
         } else {
             attempt.check().map_err(|error| self.stopped(error))
@@ -1638,6 +1676,10 @@ impl Check<'_> {
                 "phase-2 stream log missing for an archive in domain".into(),
             ));
         };
+        // VS-C-6: phase 2 runs after traversal, so it is its own progress phase, one step
+        // per logged tile or reference (each bounded by the Class A limits).
+        self.progress
+            .phase("validate.stream", Some(log.entries()))?;
         let log = log.finish(&self.scratch)?;
         let mut stream = Stream {
             arena: match self.c2.arena.take() {
@@ -1647,26 +1689,29 @@ impl Check<'_> {
             ..Stream::default()
         };
         self.c2.path = Vec::new();
-        log.for_each(|entry| match entry {
-            stream_log::Entry::Tile(fact) => self.c2.tile(fact).map(|_| ()),
-            stream_log::Entry::Reference {
-                tile,
-                content,
-                rank,
-            } => {
-                self.c2.build_levels(tile, content)?;
-                let stored = self.facts.get(rank)?;
-                let depth = self.c2.on_path(tile)?.depth;
-                stream_member(
-                    &mut self.resources,
-                    &mut stream,
-                    self.c2.caps,
-                    &self.c2.levels,
-                    depth,
+        log.for_each(|entry| {
+            self.progress.step()?;
+            match entry {
+                stream_log::Entry::Tile(fact) => self.c2.tile(fact).map(|_| ()),
+                stream_log::Entry::Reference {
+                    tile,
+                    content,
                     rank,
-                    stored.facts.t,
-                    Some(&stored.replay),
-                )
+                } => {
+                    self.c2.build_levels(tile, content)?;
+                    let stored = self.facts.get(rank)?;
+                    let depth = self.c2.on_path(tile)?.depth;
+                    stream_member(
+                        &mut self.resources,
+                        &mut stream,
+                        self.c2.caps,
+                        &self.c2.levels,
+                        depth,
+                        rank,
+                        stored.facts.t,
+                        Some(&stored.replay),
+                    )
+                }
             }
         })
     }
@@ -1914,6 +1959,8 @@ impl Check<'_> {
                 continue;
             };
             frame.next += 1;
+            // VS-C-6: one replayed event is bounded work; the expansion is not.
+            self.progress.check()?;
             let nested = match event {
                 Event::Tile {
                     parent,
@@ -2831,8 +2878,9 @@ pub fn inspect(request: ValidationRequest) -> Result<ValidationReport, Error> {
 }
 
 /// [`inspect`] under a run control (VS-C-6): cancellation through its handle is honoured at
-/// the next charge site, and its observer receives `validate.hash`, `validate.traverse` and
-/// `validate.rows` progress events. An observer error aborts the validation. The control is
+/// the next charge site, and its observer receives `validate.hash`, `validate.traverse`,
+/// `validate.stream` (only when the decoded content bounds are streamed) and `validate.rows`
+/// progress events. An observer error aborts the validation. The control is
 /// claimed once and cannot be reused.
 pub fn inspect_with(
     request: ValidationRequest,

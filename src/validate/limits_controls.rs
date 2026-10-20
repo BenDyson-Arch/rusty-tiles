@@ -523,12 +523,15 @@ struct CancelAt {
     phase: &'static str,
     done: u64,
     handle: OnceLock<CancellationHandle>,
-    events: Mutex<Vec<(String, u64)>>,
+    events: Mutex<Vec<(String, u64, Option<u64>)>>,
 }
 impl Observer for CancelAt {
     fn observe(&self, event: &RunEvent<'_>) -> Result<(), crate::JobError> {
-        if let RunEvent::Progress { phase, done, .. } = *event {
-            self.events.lock().unwrap().push((phase.to_owned(), done));
+        if let RunEvent::Progress { phase, done, total } = *event {
+            self.events
+                .lock()
+                .unwrap()
+                .push((phase.to_owned(), done, total));
             if phase == self.phase && done == self.done {
                 self.handle.get().unwrap().cancel();
             }
@@ -626,9 +629,24 @@ fn cancelled_between(path: &Path, phase: &'static str, done: u64) -> Option<(&'s
     STOPPED.with(std::cell::Cell::get)
 }
 
+/// The progress events of an uncancelled run of `path`.
+fn events(path: &Path) -> Vec<(String, u64, Option<u64>)> {
+    let observer = Arc::new(CancelAt {
+        phase: "",
+        done: u64::MAX,
+        handle: OnceLock::new(),
+        events: Mutex::new(Vec::new()),
+    });
+    let control = RunControl::new(Some(observer.clone()));
+    inspect_with(ValidationRequest::new(path), &control).unwrap();
+    let events = observer.events.lock().unwrap().clone();
+    events
+}
+
 /// K9: a cancellation is honoured at the next charge site. From an event it stops at once
 /// (the event is itself a check); between events it stops at the very step it was requested
-/// before (the next hashed member, traversal task, implicit tile or the end of the row sort).
+/// before (the next hashed member, traversal task, implicit tile, phase-2 stream entry or the
+/// end of the row sort).
 #[test]
 fn cancellation_stops_within_one_check_interval() {
     // 1 + 2,100 explicit tiles: more than two progress intervals of traversal tasks.
@@ -646,6 +664,9 @@ fn cancellation_stops_within_one_check_interval() {
         ("validate.traverse", 0),
         ("validate.traverse", 1024),
         ("validate.traverse", 2048),
+        ("validate.stream", 0),
+        ("validate.stream", 1024),
+        ("validate.stream", 2048),
         ("validate.rows", 0),
     ] {
         assert_eq!(
@@ -659,6 +680,9 @@ fn cancellation_stops_within_one_check_interval() {
         ("validate.traverse", 1),
         ("validate.traverse", 1500),
         ("validate.traverse", 2101),
+        ("validate.stream", 1),
+        ("validate.stream", 1500),
+        ("validate.stream", 2102),
         ("validate.rows", 1),
     ] {
         assert_eq!(
@@ -667,6 +691,13 @@ fn cancellation_stops_within_one_check_interval() {
             "{phase} {done}"
         );
     }
+    // Phase 2 (VS-B-4) streams after traversal, one step per logged tile and reference:
+    // 2,101 tiles and the one content reference.
+    let phases: Vec<_> = events(&explicit)
+        .into_iter()
+        .filter(|(phase, done, _)| phase == "validate.stream" && *done == 0)
+        .collect();
+    assert_eq!(phases, [("validate.stream".into(), 0, Some(2102))]);
     // Implicit tiles: 1,365 in one task.
     let (_work, implicit) = quadtree();
     assert!(inspect(ValidationRequest::new(&implicit)).is_ok());
@@ -678,6 +709,58 @@ fn cancellation_stops_within_one_check_interval() {
         cancelled_between(&implicit, "validate.traverse", 1300),
         Some(("validate.traverse", 1300))
     );
+}
+
+/// K9 for the memo (VS-B EM-5.4): the second placement of a shared document is replayed
+/// inside one traversal task, so the replay is checked before each event. A cancellation
+/// requested at a replayed event stops the run there, not at the next traversal task, and a
+/// long replay re-emits its phase's event every 1,024 events.
+#[test]
+fn cancellation_stops_a_memo_replay_at_its_next_event() {
+    let mut shared = tile(50., 5.);
+    shared["children"] = (0..2100)
+        .map(|i| tile(1. + f64::from(i) / 4096., 0.))
+        .collect();
+    let mut top = tile(100., 10.);
+    top["children"] = json!([
+        {"boundingVolume":{"box":[0,0,0,60,0,0,0,60,0,0,0,60]},"geometricError":9,
+            "content":{"uri":"d.json"}},
+        {"boundingVolume":{"box":[0,0,0,60,0,0,0,60,0,0,0,60]},"geometricError":8,
+            "content":{"uri":"d.json"}}
+    ]);
+    let (_work, path) = package(&vec![
+        ("tileset.json", tileset(top)),
+        ("d.json", tileset(shared)),
+    ]);
+    CHECKS.with(|checks| checks.set(0));
+    let all = events(&path);
+    // The second placement replays the shared document's 2,101 tiles.
+    let replayed = CHECKS.with(std::cell::Cell::get);
+    assert_eq!(replayed, 2101);
+    // The replay's heartbeat: two events with the placing task's unchanged count.
+    let traverse: Vec<_> = all
+        .iter()
+        .filter(|(phase, _, _)| phase == "validate.traverse")
+        .map(|(_, done, _)| *done)
+        .collect();
+    let placing = *traverse.last().unwrap();
+    assert_eq!(traverse.iter().filter(|&&done| done == placing).count(), 2);
+    for at in [1, 1024, 1500, 2101] {
+        let control = RunControl::default();
+        CANCEL_AT_CHECK
+            .with(|cancel| *cancel.borrow_mut() = Some((at, control.cancellation_handle())));
+        CHECKS.with(|checks| checks.set(0));
+        STOPPED.with(|stopped| stopped.set(None));
+        let result = inspect_with(ValidationRequest::new(&path), &control);
+        CANCEL_AT_CHECK.with(|cancel| *cancel.borrow_mut() = None);
+        assert!(matches!(result, Err(Error::Cancelled)), "{at}");
+        assert_eq!(CHECKS.with(std::cell::Cell::get), at);
+        assert_eq!(
+            STOPPED.with(std::cell::Cell::get),
+            Some(("validate.traverse", placing)),
+            "{at}"
+        );
+    }
 }
 
 /// An observer failure aborts the validation with its own category.

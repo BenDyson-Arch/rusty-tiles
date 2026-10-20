@@ -302,8 +302,9 @@ for memory-backed-only scratch), `usage`, `cancelled`, `observer_failure` and
 `EnvironmentError`), `InvalidRequestError`, `CancelledError`, `ObserverError` (a callback's
 own exception, including `KeyboardInterrupt`, propagates unchanged) and `TilesError`.
 Cancellation (`inspect_with`'s control, a Python callback or Ctrl-C) is checked before each
-hashed member, traversal task and implicit tile; progress events have the phases
-`validate.hash`, `validate.traverse` and `validate.rows` (CLI `--progress json`). `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
+hashed member, traversal task, memo-replayed event, implicit tile and phase-2 stream entry;
+progress events have the phases `validate.hash`, `validate.traverse`, `validate.stream` (only
+when decoded content bounds are streamed) and `validate.rows` (CLI `--progress json`). `InvalidState` reports an internal invariant breach (a C2 exact-arithmetic
 capacity fault); it is never a verdict about the archive.
 No job/publication failure wrapper is used for this read-only operation.
 
