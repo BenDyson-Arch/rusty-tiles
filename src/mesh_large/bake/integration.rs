@@ -133,80 +133,140 @@ impl root::ProxyBaker for ProxyTextureBaker {
             return Ok(());
         };
         let workers = pass.jobs.min(widest).max(1);
-        let failed = std::sync::atomic::AtomicBool::new(false);
-        let cancelled = || -> Result<(), JobError> {
-            if failed.load(std::sync::atomic::Ordering::Relaxed) {
-                return Err(JobError::new(
-                    crate::JobErrorKind::Cancelled,
-                    "another proxy bake worker failed",
-                ));
-            }
-            (pass.check)()
-        };
         for (depth, firsts) in levels.iter().rev() {
-            // A depth narrower than the worker pool splits the lease among the workers
-            // it actually runs, so shallow tiles (with the largest retained children)
-            // get the larger share.
-            let running = workers.min(firsts.len()).max(1);
-            let share = BakeLimits {
-                memory_bytes: limits.memory_bytes / running as u64,
-                ..limits
-            };
-            let share = &share;
-            let next = std::sync::atomic::AtomicUsize::new(0);
-            let results: Vec<Result<(), JobError>> = std::thread::scope(|scope| {
-                let handles: Vec<_> = (0..running)
-                    .map(|_| {
-                        scope.spawn(|| -> Result<(), JobError> {
-                            let mut check = || cancelled();
-                            let mut source = None;
-                            loop {
-                                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                let Some(&first) = firsts.get(i) else {
-                                    return Ok(());
-                                };
-                                let source = match &mut source {
-                                    Some(s) => s,
-                                    None => source.insert(CapturedSource::new(
-                                        pass.captured,
-                                        share.source_cache_bytes,
-                                        &mut check,
-                                    )?),
-                                };
-                                let outcome =
-                                    bake_tile(pass, *share, source, first, *depth, &mut check);
-                                if outcome.is_err() {
-                                    failed.store(true, std::sync::atomic::Ordering::Relaxed);
-                                    return outcome;
-                                }
-                            }
-                        })
-                    })
-                    .collect();
-                handles
-                    .into_iter()
-                    .map(|h| {
-                        h.join()
-                            .unwrap_or_else(|_| Err(invalid("a proxy bake worker panicked")))
-                    })
-                    .collect()
-            });
-            // Report the first real failure, not a sibling's induced cancellation.
-            let induced = |e: &JobError| {
-                e.kind() == crate::JobErrorKind::Cancelled
-                    && e.message() == "another proxy bake worker failed"
-            };
-            let errors: Vec<JobError> = results.into_iter().filter_map(Result::err).collect();
-            if let Some(e) = errors
-                .iter()
-                .position(|e| !induced(e))
-                .or((!errors.is_empty()).then_some(0))
-            {
-                return Err(errors.into_iter().nth(e).unwrap());
-            }
+            run_depth(
+                firsts,
+                workers,
+                limits,
+                pass.check,
+                |check| CapturedSource::new(pass.captured, limits.source_cache_bytes, check),
+                |source, share, first, check| bake_tile(pass, share, source, first, *depth, check),
+            )?;
         }
         Ok(())
     }
+}
+
+/// How one tile's bake ended.
+#[derive(Debug)]
+pub(super) enum TileOutcome {
+    Done,
+    /// A resource refusal before anything was committed or released: the tile may run
+    /// again, alone, with the whole allowance.
+    Retry(JobError),
+}
+
+/// Bake the tiles of one depth: first on up to `workers` threads, each with an equal
+/// share of `limits.memory_bytes`; then, one at a time with the whole allowance, every
+/// tile that refused its share. Admission therefore does not depend on the worker
+/// count: a tile that fits the whole allowance succeeds at any `--jobs`. Any other
+/// failure stops the depth; siblings stop at their next cancellation check and the
+/// first real failure is reported.
+pub(super) fn run_depth<S>(
+    firsts: &[u64],
+    workers: usize,
+    limits: BakeLimits,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    state: impl Fn(&mut dyn FnMut() -> Result<(), JobError>) -> Result<S, JobError> + Sync,
+    bake: impl Fn(
+            &mut S,
+            BakeLimits,
+            u64,
+            &mut dyn FnMut() -> Result<(), JobError>,
+        ) -> Result<TileOutcome, JobError>
+        + Sync,
+) -> Result<(), JobError> {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let running = workers.min(firsts.len()).max(1);
+    let share = BakeLimits {
+        memory_bytes: limits.memory_bytes / running as u64,
+        ..limits
+    };
+    let failed = AtomicBool::new(false);
+    let cancelled = || -> Result<(), JobError> {
+        if failed.load(Ordering::Relaxed) {
+            return Err(JobError::new(
+                crate::JobErrorKind::Cancelled,
+                "another proxy bake worker failed",
+            ));
+        }
+        check()
+    };
+    let next = AtomicUsize::new(0);
+    let deferred = std::sync::Mutex::new(Vec::new());
+    let results: Vec<Result<(), JobError>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..running)
+            .map(|_| {
+                scope.spawn(|| -> Result<(), JobError> {
+                    let mut check = || cancelled();
+                    let mut worker = None;
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(&first) = firsts.get(i) else {
+                            return Ok(());
+                        };
+                        let worker = match &mut worker {
+                            Some(s) => s,
+                            None => match state(&mut check) {
+                                Ok(s) => worker.insert(s),
+                                Err(e) => {
+                                    failed.store(true, Ordering::Relaxed);
+                                    return Err(e);
+                                }
+                            },
+                        };
+                        match bake(worker, share, first, &mut check) {
+                            Ok(TileOutcome::Done) => {}
+                            Ok(TileOutcome::Retry(_)) if running > 1 => deferred
+                                .lock()
+                                .map_err(|_| invalid("proxy bake retry list poisoned"))?
+                                .push(first),
+                            Ok(TileOutcome::Retry(e)) | Err(e) => {
+                                failed.store(true, Ordering::Relaxed);
+                                return Err(e);
+                            }
+                        }
+                    }
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err(invalid("a proxy bake worker panicked")))
+            })
+            .collect()
+    });
+    // Report the first real failure, not a sibling's induced cancellation.
+    let induced = |e: &JobError| {
+        e.kind() == crate::JobErrorKind::Cancelled
+            && e.message() == "another proxy bake worker failed"
+    };
+    let errors: Vec<JobError> = results.into_iter().filter_map(Result::err).collect();
+    if let Some(e) = errors
+        .iter()
+        .position(|e| !induced(e))
+        .or((!errors.is_empty()).then_some(0))
+    {
+        return Err(errors.into_iter().nth(e).unwrap());
+    }
+    let mut deferred = deferred
+        .into_inner()
+        .map_err(|_| invalid("proxy bake retry list poisoned"))?;
+    deferred.sort_unstable();
+    if deferred.is_empty() {
+        return Ok(());
+    }
+    let mut check = || check();
+    let mut worker = state(&mut check)?;
+    for first in deferred {
+        match bake(&mut worker, limits, first, &mut check)? {
+            TileOutcome::Done => {}
+            TileOutcome::Retry(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// One coarse tile: read the frozen packet and the certified member under exact leases,
@@ -220,40 +280,55 @@ fn bake_tile(
     first: u64,
     depth: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(), JobError> {
+) -> Result<TileOutcome, JobError> {
+    // Everything before the commit only reads: a resource refusal there may be retried.
+    let retryable = |e: JobError| {
+        if e.kind() == crate::JobErrorKind::ResourceLimit {
+            Ok(TileOutcome::Retry(e))
+        } else {
+            Err(e)
+        }
+    };
     check()?;
     // The decoded packet stays resident beside the core, so its exact lease comes off
     // the worker's allowance first; the core owns the remainder.
-    let lease = pass.frozen_lease_bytes(first, depth)?;
-    let core = limits
-        .memory_bytes
-        .checked_sub(lease)
-        .filter(|core| *core >= lease)
-        .ok_or_else(|| resource("frozen tile packet exceeds the bake memory lease"))?;
-    let frozen = pass.frozen(first, depth, lease)?;
-    let parent = node_record(&frozen)?;
-    let glb = pass.read_certified_proxy(first, depth, frozen.glb_bytes)?;
-    let children = child_bridge::load_children(pass, &frozen, &parent, core / 2, check)?;
-    let accepted = bake_one(
-        &frozen,
-        glb,
-        source,
-        &children,
-        BakeLimits {
-            memory_bytes: core,
-            ..limits
-        },
-        &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
-        check,
-    )?;
-    drop(children);
+    let prepared = (|| {
+        let lease = pass.frozen_lease_bytes(first, depth)?;
+        let core = limits
+            .memory_bytes
+            .checked_sub(lease)
+            .filter(|core| *core >= lease)
+            .ok_or_else(|| resource("frozen tile packet exceeds the bake memory lease"))?;
+        let frozen = pass.frozen(first, depth, lease)?;
+        let parent = node_record(&frozen)?;
+        let glb = pass.read_certified_proxy(first, depth, frozen.glb_bytes)?;
+        let children = child_bridge::load_children(pass, &frozen, &parent, core / 2, check)?;
+        let accepted = bake_one(
+            &frozen,
+            glb,
+            source,
+            &children,
+            BakeLimits {
+                memory_bytes: core,
+                ..limits
+            },
+            &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
+            check,
+        )?;
+        Ok((core, frozen, accepted))
+    })();
+    let (core, frozen, accepted) = match prepared {
+        Ok(p) => p,
+        Err(e) => return retryable(e),
+    };
     pass.commit(&frozen, accepted.assembly, core)?;
     if depth > 0 {
         child_bridge::persist(pass.preencode, &accepted.preencode, core, check)?;
     }
     drop(accepted.preencode);
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
-    pass.release(first, depth)
+    pass.release(first, depth)?;
+    Ok(TileOutcome::Done)
 }
 
 fn validate_transforms(frozen: &handoff::FrozenNode) -> Result<(), JobError> {
@@ -624,6 +699,101 @@ pub(super) fn handoff_fixture() -> handoff::FrozenNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn depth_limits(memory_bytes: u64) -> BakeLimits {
+        BakeLimits {
+            profile: crate::mesh_large::config::Profile::Balanced,
+            memory_bytes,
+            member_bytes: 1,
+            source_cache_bytes: 1,
+            query_work: 1,
+            max_page_edge: 4,
+            max_density_drops: 0,
+        }
+    }
+
+    /// Per attempt: tile, share of memory it got, and whether it fitted.
+    type Attempts = Vec<(u64, u64, bool)>;
+    /// A fake tile bake whose tile `first` needs `need(first)` bytes; records the share
+    /// each attempt got.
+    fn run(
+        tiles: &[u64],
+        workers: usize,
+        memory: u64,
+        need: impl Fn(u64) -> u64 + Sync,
+        fail: Option<u64>,
+    ) -> (Result<(), JobError>, Attempts) {
+        let log = std::sync::Mutex::new(Vec::new());
+        let result = run_depth(
+            tiles,
+            workers,
+            depth_limits(memory),
+            &|| Ok(()),
+            |_| Ok(()),
+            |_, share, first, check| {
+                check()?;
+                if fail == Some(first) {
+                    return Err(invalid("fake tile failure"));
+                }
+                let fits = need(first) <= share.memory_bytes;
+                log.lock().unwrap().push((first, share.memory_bytes, fits));
+                Ok(if fits {
+                    TileOutcome::Done
+                } else {
+                    TileOutcome::Retry(resource("fake tile needs more memory"))
+                })
+            },
+        );
+        let mut log = log.into_inner().unwrap();
+        log.sort_unstable();
+        (result, log)
+    }
+
+    #[test]
+    fn depth_admission_does_not_depend_on_worker_count() {
+        let tiles: Vec<u64> = (0..8).collect();
+        // Tiles 3 and 6 need more than an eighth of the allowance but fit all of it.
+        let need = |first: u64| {
+            if first.is_multiple_of(3) && first > 0 {
+                500
+            } else {
+                100
+            }
+        };
+        for workers in [1, 2, 4, 8, 16] {
+            let (result, log) = run(&tiles, workers, 1000, need, None);
+            result.unwrap();
+            let done: Vec<u64> = log.iter().filter(|e| e.2).map(|e| e.0).collect();
+            assert_eq!(done, tiles, "workers {workers}");
+            // A refused tile is retried alone with the whole allowance.
+            for e in log.iter().filter(|e| !e.2) {
+                assert!(log.contains(&(e.0, 1000, true)), "workers {workers}: {e:?}");
+            }
+        }
+        // With eight workers each share is 125 bytes: tiles 3 and 6 are retried.
+        let (_, log) = run(&tiles, 8, 1000, need, None);
+        assert!(log.contains(&(3, 125, false)) && log.contains(&(6, 125, false)));
+    }
+
+    #[test]
+    fn depth_refuses_a_tile_too_large_for_the_whole_allowance_and_reports_real_failures() {
+        let tiles: Vec<u64> = (0..6).collect();
+        for workers in [1, 4] {
+            let (result, _) = run(
+                &tiles,
+                workers,
+                1000,
+                |f| if f == 2 { 2000 } else { 1 },
+                None,
+            );
+            let e = result.unwrap_err();
+            assert_eq!(e.kind(), crate::JobErrorKind::ResourceLimit);
+            assert_eq!(e.message(), "fake tile needs more memory");
+            // A non-resource failure is reported as itself, not as a sibling cancellation.
+            let (result, _) = run(&tiles, workers, 1000, |_| 1, Some(4));
+            assert_eq!(result.unwrap_err().message(), "fake tile failure");
+        }
+    }
     #[test]
     fn handoff_maps_each_source_with_shared_material_gltf_and_original_attribute_numbers() {
         let frozen = handoff_fixture();

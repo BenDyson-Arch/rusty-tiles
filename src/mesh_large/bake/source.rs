@@ -102,7 +102,7 @@ fn build_bvh(
         let axis = (0..3)
             .max_by(|&a, &b| (chi[a] - clo[a]).total_cmp(&(chi[b] - clo[b])))
             .unwrap();
-        if end - start <= BVH_LEAF || !(chi[axis] > clo[axis]) {
+        if end - start <= BVH_LEAF || chi[axis].partial_cmp(&clo[axis]) != Some(Ordering::Greater) {
             nodes[at] = BvhNode {
                 lo,
                 hi,
