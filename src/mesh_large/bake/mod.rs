@@ -145,6 +145,13 @@ fn packet_charge(
 /// Resolve texture participation once from the admitted source binding closure.
 /// Scalar/COLOR-only faces retain generated normals and every immutable corner,
 /// but have no atlas/decoded-UV/tangent-map sampling obligation.
+///
+/// Feature IDs alone do not make a face rasterise. Every frozen feature value is
+/// constant over its face and published exactly as an integer attribute, as the
+/// leaves publish it; a categorical page would only repaint those values. Without a
+/// texture to follow, its density would fall to the geometric-error floor: on a small
+/// untextured terrain that was seven 4096x4096 ID pages for one proxy, hundreds of MB
+/// of tally workspace that a 1 GiB host refuses and a large host bakes for minutes.
 fn raster_faces(f: &FrozenNode, source: &CapturedSource<'_>) -> Result<Vec<bool>, JobError> {
     f.faces
         .iter()
@@ -161,7 +168,7 @@ fn raster_faces(f: &FrozenNode, source: &CapturedSource<'_>) -> Result<Vec<bool>
                     .next()
                     .is_some()
             };
-            Ok(textured || !face.features.is_empty())
+            Ok(textured)
         })
         .collect()
 }

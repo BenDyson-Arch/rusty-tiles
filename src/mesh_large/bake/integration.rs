@@ -17,6 +17,13 @@ use crate::{
 pub(crate) struct ProxyTextureBaker {
     limits: BakeLimits,
 }
+#[cfg(test)]
+thread_local! {
+    /// Test seam: resolve the bake allowance on this thread as on a host that reports
+    /// no available memory (macOS and Windows today), i.e. the fixed 1 GiB fallback.
+    pub(crate) static UNKNOWN_MEMORY_HOST: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
 impl ProxyTextureBaker {
     pub(crate) fn new(limits: BakeLimits) -> Result<Self, JobError> {
         if limits.memory_bytes == 0
@@ -54,7 +61,10 @@ impl ProxyTextureBaker {
             .memory
             .owned_metadata_bytes
             .saturating_add(captured.report.memory.geometry.document_bytes);
-        let memory_bytes = match available_memory() {
+        let available = available_memory();
+        #[cfg(test)]
+        let available = available.filter(|_| !UNKNOWN_MEMORY_HOST.with(std::cell::Cell::get));
+        let memory_bytes = match available {
             Some(a) => {
                 a.saturating_sub(tmpfs)
                     .saturating_sub(owned)

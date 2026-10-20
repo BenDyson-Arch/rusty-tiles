@@ -2234,6 +2234,31 @@ mod tests {
             .collect()
     }
 
+    /// The public path on a host that reports no available memory (the fixed 1 GiB bake
+    /// allowance of macOS and Windows) publishes the same textured archive as a large host.
+    #[test]
+    fn public_textured_path_is_the_same_under_the_unknown_memory_allowance() {
+        use crate::mesh_large::{bake::integration::UNKNOWN_MEMORY_HOST, TilerJobs, TilerRequest};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("textured"), 48);
+        let run = |unknown: bool| {
+            let output = work.path().join(format!("textured-{unknown}.3tz"));
+            UNKNOWN_MEMORY_HOST.with(|c| c.set(unknown));
+            let result = crate::mesh_large::mesh_to_tileset(
+                TilerRequest::new(&input, &output)
+                    .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap())),
+                &RunControl::default(),
+            );
+            UNKNOWN_MEMORY_HOST.with(|c| c.set(false));
+            result.unwrap();
+            fs::read(&output).unwrap()
+        };
+        assert!(
+            run(false) == run(true),
+            "archives differ under the 1 GiB allowance"
+        );
+    }
+
     /// A source without NORMAL or COLOR_0 (photogrammetry): leaves carry POSITION and
     /// TEXCOORD_0 only and render unlit, so baked proxies must carry the same shading
     /// inputs (no NORMAL, TANGENT or COLOR_0), keep the source material factors, publish
