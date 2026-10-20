@@ -239,9 +239,13 @@ impl Record for Row {
 ///   which an undirected owner count cannot see.
 /// - `kind` 1, a face whose three vertices are all cut (keys sorted `lo < hi < third`).
 ///   Two tiles holding the same such face cover it twice even when every edge is
-///   partnered (opposite windings: a fold over the seam). The source never puts one face
-///   in two tiles (coincident faces share a centroid key, hence a leaf), so this is always
-///   simplification-made.
+///   partnered (opposite windings: a fold over the seam). The source can also put one face
+///   in two tiles: coincident triangles share a centroid key, but an over-budget key group
+///   is split into rank-ordered runs, each its own leaf, so a double-sided face can straddle
+///   a run boundary (and then sit in two proxies too, at the depths between). The pre-pass
+///   marks coincident source faces special, and faces whose vertices are all special are
+///   excepted; faces only leaves hold are excepted as well (leaf faces are source-exact,
+///   and no leaf can re-run). What remains is simplification-made.
 ///
 /// The owner is a depth-`d` proxy or a leaf at depth `<= d` (`leaf`): a leaf at depth `d`
 /// has the same `owner_depth` as a proxy, but it is source and never re-runs, so its
@@ -2359,9 +2363,10 @@ fn audit(
             }
         };
         if first.kind == 1 {
-            // A face of seam vertices two tiles both hold covers the seam twice (unless the
-            // source itself repeats it there: its vertices are then special).
-            if owners.len() >= 2 && !first.special {
+            // A face of seam vertices two tiles both hold covers the seam twice, unless the
+            // source itself repeats it there (its vertices are then special) or only leaves
+            // hold it (source-exact faces; a leaf never re-runs).
+            if owners.len() >= 2 && !first.special && owners != leaves {
                 counts.overlapping += 1;
                 flag(
                     Defect::DuplicateFace { third: first.third },

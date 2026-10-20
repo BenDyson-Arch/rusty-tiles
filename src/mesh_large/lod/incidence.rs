@@ -8,9 +8,10 @@
 //!   triangles share one leaf;
 //! - `c3`: the least depth with three or more incident tiles (a seam endpoint);
 //! - `special`: incident to a degenerate triangle, a source boundary edge (one incident
-//!   triangle), a non-manifold edge (three or more), or an edge whose two triangles
-//!   traverse it in the same direction (a winding flip or a same-winding duplicate), or its
-//!   incidence overflowed the bounded group (then `c2 = c3 = 0`: kept at every depth).
+//!   triangle), a non-manifold edge (three or more), an edge whose two triangles traverse
+//!   it in the same direction (a winding flip or a same-winding duplicate), or two
+//!   coincident triangles (a double-sided face), or its incidence overflowed the bounded
+//!   group (then `c2 = c3 = 0`: kept at every depth).
 //!
 //! Tile identity at depth `d` is the length-`d` prefix of the leaf address (a shorter leaf
 //! is its own tile), so for lexicographically sorted distinct leaf addresses the number of
@@ -308,6 +309,22 @@ fn reduce(key: [u32; 3], group: &[Incidence]) -> (u8, u8, bool) {
         }
         i = j;
     }
+    // Coincident faces (two triangles on the same three vertices, either winding: a
+    // double-sided face). The tree may put them in different leaves (an over-budget key
+    // group is split into rank-ordered runs, and both sides share a key), and then two
+    // frontier tiles hold the same face as source; the seam audit's shared-face rule
+    // excepts faces whose vertices are all special.
+    let mut faces: Vec<[[u32; 3]; 2]> = group
+        .iter()
+        .map(|g| {
+            let [a, b] = g.others;
+            [a.min(b), a.max(b)]
+        })
+        .collect();
+    faces.sort_unstable();
+    if faces.windows(2).any(|w| w[0] == w[1]) {
+        special = true;
+    }
     let mut addresses: Vec<Address> = group.iter().map(|g| g.address).collect();
     addresses.sort_unstable();
     addresses.dedup();
@@ -513,8 +530,9 @@ mod tests {
 
     /// A closed fan whose triangles disagree in winding across one edge: every edge still
     /// has two triangles, but two traverse k-c the same way, so the vertex is special (the
-    /// directed seam audit cannot orient that edge's side). Opposite-winding coincident
-    /// pairs (a double-sided face) are consistent and stay ordinary.
+    /// directed seam audit cannot orient that edge's side). A double-sided face (two
+    /// coincident triangles, opposite windings) is consistently wound but special too: its
+    /// two sides may lie in different leaves, and then two tiles hold the same source face.
     #[test]
     fn winding_flips_are_special() {
         let k = [1, 2, 3];
@@ -533,12 +551,12 @@ mod tests {
         let (c2, _, special) = reduce(k, &flipped);
         assert!(special);
         assert_eq!(c2, 2, "cut depths are unchanged");
-        // A double-sided triangle split over two leaves is consistent.
+        // A double-sided triangle split over two leaves: consistently wound, but coincident.
         let pair = [
             inc(k, ring(a, b), &[1, 2], 0),
             inc(k, ring(b, a), &[1, 3], 1),
         ];
-        assert!(!reduce(k, &pair).2);
+        assert!(reduce(k, &pair).2);
     }
 
     #[test]

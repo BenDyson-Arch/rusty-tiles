@@ -546,6 +546,9 @@ impl Simplifier {
     /// tile across it can build the same face from its side (the composite's depth-6 case:
     /// a sliver L-H-P in both tiles, opposite windings, every seam edge still partnered);
     /// the two then cover it twice, and at the next depth the parents' seams disagree.
+    /// Collapses of a seam vertex (the forced removals, which both sides of a seam make
+    /// identically) are exempt: a flagged tile may still form such a face that way, which
+    /// consensus answers by keeping the removed seam vertices instead.
     fn spans_seam(&self, u: u32, v: u32) -> bool {
         let cut = |x: u32| self.cut.get(x as usize).copied().unwrap_or(false);
         if !self.strict_seams || cut(u) || !cut(v) {

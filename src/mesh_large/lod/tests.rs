@@ -1435,3 +1435,90 @@ fn winding_flip_across_seams_is_not_an_overlap() {
     assert_eq!(audit.cracks, 0, "{audit:?}");
     archive(&dir, &work.path().join("flipped.3tz"));
 }
+
+/// Double-sided faces whose two sides the tree puts in different tiles. With 3 triangles
+/// per leaf, each micro-cluster (all centroids in one depth-21 key cell) is an over-budget
+/// key group split into rank-ordered runs of 3, in source order; both sides of a
+/// double-sided face share a key and are adjacent in rank, so a run boundary can fall
+/// between them. Cell A holds 2 single-sided triangles and 2 pairs: 2 runs (leaves at depth
+/// 22), and its first pair straddles them, so two depth-22 LEAVES hold the face (the single
+/// triangles keep its depth-21 tile from simplifying to nothing: a tile cancels a whole
+/// double-sided face). Cell B holds a lone triangle and 15 pairs: 11 runs
+/// under two depth-22 run nodes, and the pair at triangles 23 and 24 straddles those, so
+/// two depth-22 PROXIES hold it. Neither is simplification-made; the run must pass and
+/// audit clean. (Before this fix the shared-face rule refused both, "a face of seam
+/// vertices that two tiles both hold"; excepting leaf-only holders alone still refuses B.)
+#[test]
+fn double_sided_faces_across_run_leaves_are_not_seam_defects() {
+    let work = tempfile::tempdir().unwrap();
+    let side = 5e-7f32;
+    let pairs = |origin: [f32; 3], singles: usize, count: usize, color: [f64; 4]| {
+        let mut m = Mesh {
+            positions: vec![],
+            indices: vec![],
+            color,
+        };
+        let mut add = |k: usize, orders: &[[u32; 3]]| {
+            let x = origin[0] + k as f32 * 2. * side;
+            let base = m.positions.len() as u32;
+            m.positions.extend([
+                [x, origin[1], origin[2]],
+                [x + side, origin[1], origin[2]],
+                [x, origin[1], origin[2] + side],
+            ]);
+            for o in orders {
+                m.indices.extend(o.map(|i| base + i));
+            }
+        };
+        for k in 0..singles {
+            add(k, &[[0, 1, 2]]);
+        }
+        for k in 0..count {
+            add(singles + k, &[[0, 1, 2], [0, 2, 1]]);
+        }
+        m
+    };
+    let frame = Mesh {
+        positions: vec![
+            [-500., -1., -500.],
+            [500., -1., -500.],
+            [-500., 1., 500.],
+            [500., 2., 500.],
+        ],
+        indices: vec![0, 2, 1, 1, 2, 3],
+        color: [0.5, 0.5, 0.5, 1.],
+    };
+    let source = vec![
+        pairs([0.1, 0.05, 0.1], 2, 2, [0.8, 0.2, 0.2, 1.]),
+        pairs([0.3, 0.05, 0.1], 1, 15, [0.2, 0.8, 0.2, 1.]),
+        frame,
+    ];
+    let input = write_gltf(&work.path().join("src"), &source);
+    let out = work.path().join("leaves");
+    let scratch = out.with_extension("scratch");
+    fs::create_dir_all(&scratch).unwrap();
+    let dir = mesh_to_leaf_payloads(
+        LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+            .with_jobs(NonZeroUsize::new(2).unwrap())
+            .with_scratch_dir(&scratch)
+            .with_lod_target(1024)
+            .with_leaf_triangles(3),
+        &RunControl::default(),
+    )
+    .unwrap()
+    .output;
+    // The premise: cell A's runs are depth-22 leaves, cell B's are depth-23 leaves under
+    // depth-22 run nodes (proxies).
+    let depths: BTreeMap<u64, usize> =
+        rows(&dir.join("leaves.jsonl"))
+            .iter()
+            .fold(BTreeMap::new(), |mut m, r| {
+                *m.entry(r["depth"].as_u64().unwrap()).or_default() += 1;
+                m
+            });
+    assert_eq!(depths.get(&22), Some(&2), "{depths:?}");
+    assert_eq!(depths.get(&23), Some(&11), "{depths:?}");
+    let audit = audit(&source, &dir);
+    eprintln!("run leaves: {audit:?} depths {depths:?}");
+    assert_eq!(audit.cracks, 0, "{audit:?}");
+}
