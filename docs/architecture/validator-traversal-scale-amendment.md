@@ -321,4 +321,4 @@ as floors: at the floors, today's bounds hold unchanged.
 
 - κ is provisional until VS-D measures producer use against it (rule of design §3.2).
 - The bits per rank are `3N/8` bytes, bounded by the format ceiling, not O(1) (OQ-1).
-- `storedBytes` in the report, opt-in volume caps and cancellation are VS-C's.
+- `storedBytes` in the report, opt-in volume caps and cancellation are VS-C's. Closed by VS-C ([limits amendment](validator-limits-amendment.md)): `storedBytes`, `limitDerivation`, opt-in caps, `inspect_with` cancellation, and `liveDocumentBytes` serialized in `limits`.

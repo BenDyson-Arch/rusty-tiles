@@ -715,10 +715,13 @@ def generate(directory):
     emit('polygon_accessor_reference_oob',glb(broken,polygon_data),'invalid_input','Optional polygon accessor reference99 exceeds five accessors.')
     broken=copy.deepcopy(polygon);broken['meshes'][0]['primitives'][0]['extensions']['EXT_mesh_polygon']['indicesOffsets']=0
     emit('polygon_accessor_wrong_scalar',glb(broken,polygon_data),'invalid_input','Polygon offset reference targets FLOAT VEC3 POSITION rather than unsigned SCALAR.')
-    def container_case(name, data, kind, fact):
-        path=directory/(name+'.3tz');path.write_bytes(data)
-        cases.append(dict(name=name,path=path.name,expectedKind=kind,exitCode=CODES.get(kind,0),analyticFact=fact,
-                          sha256=hashlib.sha256(data).hexdigest()))
+    def container_case(name, data, kind, fact, max_volume=None, path_name=None):
+        path=directory/((path_name or name)+'.3tz');path.write_bytes(data)
+        case=dict(name=name,path=path.name,expectedKind=kind,exitCode=CODES.get(kind,0),analyticFact=fact,
+                  sha256=hashlib.sha256(data).hexdigest())
+        if max_volume:
+            case['maxVolume']=max_volume
+        cases.append(case)
     path=directory/'index_offset_max.3tz'
     archive(path,{'tileset.json':json.dumps(tileset).encode(),'tile.glb':good},index_offset=2**64-1)
     container_case('index_offset_max',path.read_bytes(),'invalid_input','Valid stored ZIP and CRC, but every 3TZ index offset is u64MAX outside the file.')
@@ -735,10 +738,14 @@ def generate(directory):
              'ZIP64 claims u64MAX entries, above the 3TZ member ceiling; refused before limits and directory allocation.'),
             ('zip64_count_above_ceiling',ceiling+1,'unsupported',
              'ZIP64 claims 178,956,971 entries, one above the 3TZ member ceiling; refused before limits and directory allocation.'),
-            ('zip64_count_at_ceiling',ceiling,'resource_limit',
-             'ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it and the 524,288 default entry limit refuses it.')]:
+            ('zip64_count_at_ceiling',ceiling,'invalid_input',
+             'ZIP64 claims exactly the 178,956,970-member ceiling; the format admits it, no entry cap is set by default (VS-C), and the count needs more directory bytes than the directory has.')]:
         record=struct.pack('<4sQ2H2I4Q',b'PK\x06\x06',44,45,45,0,0,count,count,size,offset)
         container_case(name,raw[:end]+record+locator+ending,kind,fact)
+    # VS-C: the same bytes with the former default entry cap set explicitly keep the old refusal.
+    container_case('zip64_count_at_ceiling_capped',raw[:end]+record+locator+ending,'resource_limit',
+                   'The zip64_count_at_ceiling bytes with --maxVolume archiveEntries=524288: the opt-in entry cap refuses before the directory length check.',
+                   max_volume={'archiveEntries':524288},path_name='zip64_count_at_ceiling')
     zip_files = {'tileset.json': json.dumps(tileset).encode(), 'tile.glb': good}
     for field in ['crc', 'compressed_size', 'uncompressed_size']:
         container_case('zip_local_' + field + '_mismatch',
@@ -802,7 +809,8 @@ def snapshot(directory):
 def check_cli(binary, directory, manifest):
     before = snapshot(directory); results = []
     for case in manifest['cases']:
-        result = subprocess.run([str(binary), 'validate', str(directory / case['path']), '--json'],
+        flags = [f'--maxVolume={key}={value}' for key, value in case.get('maxVolume', {}).items()]
+        result = subprocess.run([str(binary), 'validate', str(directory / case['path']), '--json'] + flags,
                                 capture_output=True, text=True, timeout=20)
         report = json.loads(result.stdout)
         assert result.returncode == case['exitCode'], (case['name'], result.returncode, report, result.stderr)

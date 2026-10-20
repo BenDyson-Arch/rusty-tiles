@@ -929,10 +929,10 @@ fn disk_placement_skips_memory_backed_candidates_and_reports_a_last_resort() {
     drop(scratch);
     // Only memory-backed candidates: refused unless the owner reports it.
     let refused = make(vec![ram.clone()], false);
-    let SpillError::Io { operation, .. } = refused.new_file("x").err().unwrap() else {
+    let SpillError::MemoryBackedOnly { candidates } = refused.new_file("x").err().unwrap() else {
         panic!("typed refusal expected");
     };
-    assert_eq!(operation, "no disk-backed scratch directory");
+    assert_eq!(candidates, vec![ram.clone()]);
     assert!(!refused.is_created());
     assert_eq!(entries(&ram), 0);
     let reported = make(vec![ram.clone()], true);

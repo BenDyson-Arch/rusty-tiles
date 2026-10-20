@@ -59,6 +59,20 @@ pub(crate) struct ImplicitLimits {
     /// The live-path cap (`document_decoded_bytes`), not a remaining value.
     pub(crate) live_subtree_bytes: u64,
     pub(crate) json: JsonLimits,
+    /// The reservation a `ResourceLimit` refused and the amount it asked for (VS-C-5): set
+    /// before the refusal returns, so the caller can name the validation budget.
+    pub(crate) refused: Option<(Reservation, u128)>,
+}
+
+/// A validation-wide reservation of the I1 walk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reservation {
+    /// The availability scan, charged to `totalBytesRead`.
+    Scan,
+    /// Tile availability, charged to `hierarchyVisits`.
+    Visits,
+    /// Content entries, charged to `references`.
+    References,
 }
 
 impl ImplicitLimits {
@@ -71,6 +85,7 @@ impl ImplicitLimits {
             scan_remaining: 0,
             live_subtree_bytes,
             json,
+            refused: None,
         }
     }
 }

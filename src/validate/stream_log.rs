@@ -267,6 +267,11 @@ impl StreamLog {
         self.append(scratch)
     }
 
+    /// The tiles and references logged so far.
+    pub(super) fn entries(&self) -> u64 {
+        self.entries
+    }
+
     pub(super) fn finish(mut self, scratch: &Scratch) -> Result<Written, Error> {
         let mut trailer = vec![TRAILER];
         trailer.extend(self.entries.to_le_bytes());

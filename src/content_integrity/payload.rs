@@ -7,6 +7,7 @@ mod ktx2;
 mod numbers;
 mod records;
 pub(crate) mod scene;
+use crate::content_integrity::numbers::{exact, Unsigned};
 use numbers::{at, domain, off, uint, work};
 use records::{array, boolean, optional_record, pairs, push, record, string, Raw};
 type FormatResult<T> = std::result::Result<T, FormatError>;
@@ -544,13 +545,28 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
     }
     let accessor_docs = array::<records::Accessor<'_>>(root.accessors, slots)?;
     let element_cap = remaining_components.min(limits.accessor_components);
+    // VS-C-5: when the caller's remainder is the binding allowance, its refusal tells the
+    // consumer the planned total (a lower bound of the charge at a count-token refusal).
+    let archive_binds = remaining_components < limits.accessor_components;
     let mut planned_elements = 0u64;
     let mut accessor_plans = Vec::new();
     for a in accessor_docs {
         if a.sparse.is_some() {
             return Err(unsupported("sparse accessor").into());
         }
-        let count = work(a.count, element_cap.saturating_sub(planned_elements))?;
+        let count = match work(a.count, element_cap.saturating_sub(planned_elements)) {
+            Ok(count) => count,
+            Err(error) => {
+                if archive_binds {
+                    let count = match exact(a.count) {
+                        Ok(Unsigned::Native(count)) => count,
+                        _ => u64::MAX,
+                    };
+                    consumer.remainder_refused(planned_elements.saturating_add(count));
+                }
+                return Err(error.into());
+            }
+        };
         let shape = string(a.shape)?;
         let components = match shape.as_str() {
             "SCALAR" => 1,
@@ -569,6 +585,9 @@ fn inspect_scene_inner<E, C: scene::SceneConsumer>(
             )
             .ok_or_else(|| limit("accessor aggregate overflow"))?;
         if planned_elements > element_cap {
+            if archive_binds {
+                consumer.remainder_refused(planned_elements);
+            }
             return Err(limit("accessor elements exceed remaining document/archive budget").into());
         }
         let count =

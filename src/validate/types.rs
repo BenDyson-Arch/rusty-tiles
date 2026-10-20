@@ -1,19 +1,92 @@
 //! Public contract for bounded read-only archive inspection.
+use super::limits::{LimitDerivation, LimitKey, LimitPlan, LimitRefusal};
 use super::rows::PayloadRows;
 use serde::Serialize;
-use std::{io, path::PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 #[derive(Clone, Debug)]
 pub struct ValidationRequest {
     input: PathBuf,
+    plan: LimitPlan,
+    scratch_dir: Option<PathBuf>,
 }
 impl ValidationRequest {
     pub fn new(input: impl Into<PathBuf>) -> Self {
         Self {
             input: input.into(),
+            plan: LimitPlan::default(),
+            scratch_dir: None,
         }
     }
-    pub(crate) fn input(&self) -> &std::path::Path {
+    /// Overrides one configurable limit (VS-C-3): a Class B volume cap is set, a Class C
+    /// budget is replaced. Values below the default floors are allowed. A later call for the
+    /// same key replaces the earlier value.
+    pub fn max_volume(mut self, key: LimitKey, value: u64) -> Self {
+        self.plan.set(key, value);
+        self
+    }
+    /// Places validation scratch inside exactly this existing directory (VS-C-7).
+    pub fn scratch_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.scratch_dir = Some(dir.into());
+        self
+    }
+    pub(crate) fn input(&self) -> &Path {
         &self.input
+    }
+    pub(crate) fn plan(&self) -> &LimitPlan {
+        &self.plan
+    }
+    pub(crate) fn scratch(&self) -> Option<&Path> {
+        self.scratch_dir.as_deref()
+    }
+}
+/// A validator scratch failure (VS-C-5 T1): never a verdict on the archive.
+#[derive(Debug, thiserror::Error)]
+pub enum ScratchRefusal {
+    /// Every scratch candidate is memory-backed (tmpfs) where RAM scratch is not allowed.
+    #[error("every scratch candidate is memory-backed (tmpfs), which would hold the spill in RAM: {}; set TMPDIR to a disk-backed directory", .candidates.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", "))]
+    MemoryBackedOnly { candidates: Vec<PathBuf> },
+    /// The free-space preflight refused the directory.
+    #[error("{message}")]
+    InsufficientSpace {
+        path: PathBuf,
+        needed: u64,
+        available: u64,
+        message: String,
+    },
+    #[error(transparent)]
+    Io(io::Error),
+}
+impl ScratchRefusal {
+    /// The scratch refusals among spill failures; any other failure is returned unchanged.
+    pub(crate) fn from_spill(
+        error: crate::spill::SpillError,
+    ) -> Result<Self, crate::spill::SpillError> {
+        use crate::spill::SpillError;
+        match error {
+            SpillError::MemoryBackedOnly { candidates } => {
+                Ok(Self::MemoryBackedOnly { candidates })
+            }
+            SpillError::InsufficientSpace(cause) => Ok(Self::InsufficientSpace {
+                message: cause.to_string(),
+                path: cause.path,
+                needed: cause.needed,
+                available: cause.available,
+            }),
+            SpillError::Io { ref source, .. } => {
+                Ok(Self::Io(io::Error::new(source.kind(), error.to_string())))
+            }
+            other => Err(other),
+        }
+    }
+    /// `environment`/4 for a host without disk-backed scratch, otherwise `io`/1.
+    pub fn category(&self) -> (&'static str, u8) {
+        match self {
+            Self::MemoryBackedOnly { .. } => ("environment", 4),
+            Self::InsufficientSpace { .. } | Self::Io(_) => ("io", 1),
+        }
     }
 }
 #[derive(Debug, thiserror::Error)]
@@ -23,9 +96,22 @@ pub enum ValidationFailure {
     #[error("{0}")]
     Unsupported(String),
     #[error("{0}")]
-    ResourceLimit(String),
+    ResourceLimit(LimitRefusal),
     #[error(transparent)]
     Io(#[from] io::Error),
+    /// The validator's own scratch storage failed.
+    #[error("validation scratch: {0}")]
+    Scratch(ScratchRefusal),
+    /// The request itself is invalid (a scratch directory that is missing or not a
+    /// directory); raised before the input is opened.
+    #[error("{0}")]
+    InvalidRequest(String),
+    /// The run control was cancelled (`inspect_with`).
+    #[error("validation cancelled")]
+    Cancelled,
+    /// The run control's observer failed (`inspect_with`).
+    #[error("{0}")]
+    Observer(String),
     /// An internal invariant of the validator itself failed; never a verdict on the input.
     #[error("{0}")]
     InvalidState(String),
@@ -37,6 +123,10 @@ impl ValidationFailure {
             Self::Unsupported(_) => ("unsupported", 2),
             Self::ResourceLimit(_) => ("resource_limit", 3),
             Self::Io(_) => ("io", 1),
+            Self::Scratch(refusal) => refusal.category(),
+            Self::InvalidRequest(_) => ("usage", 2),
+            Self::Cancelled => ("cancelled", 1),
+            Self::Observer(_) => ("observer_failure", 1),
             Self::InvalidState(_) => ("invalid_state", 1),
         }
     }
@@ -47,7 +137,14 @@ impl ValidationFailure {
         Self::Unsupported(message.into())
     }
     pub(crate) fn limit(message: impl Into<String>) -> Self {
-        Self::ResourceLimit(message.into())
+        Self::ResourceLimit(LimitRefusal::from(message.into()))
+    }
+    /// The structured cause of a configurable-limit refusal, if this is one.
+    pub fn exceeded(&self) -> Option<&super::limits::LimitExceeded> {
+        match self {
+            Self::ResourceLimit(refusal) => refusal.limit.as_ref(),
+            _ => None,
+        }
     }
 }
 #[derive(Clone, Debug, Serialize)]
@@ -56,8 +153,10 @@ pub struct ValidationLimits {
     pub json_bytes: u64,
     pub json_depth: u64,
     pub member_bytes: u64,
-    pub archive_stored_bytes: u64,
-    pub archive_entries: u64,
+    /// Class B: an opt-in volume cap, `None` (JSON `null`) when unset.
+    pub archive_stored_bytes: Option<u64>,
+    /// Class B: an opt-in volume cap, `None` (JSON `null`) when unset.
+    pub archive_entries: Option<u64>,
     pub accessor_elements: u64,
     pub document_decoded_bytes: u64,
     pub hierarchy_visits: u64,
@@ -65,8 +164,10 @@ pub struct ValidationLimits {
     pub references: u64,
     pub total_payload_elements: u64,
     pub total_bytes_read: u64,
-    pub source_archive_bytes: u64,
-    pub central_directory_bytes: u64,
+    /// Class B: an opt-in volume cap, `None` (JSON `null`) when unset.
+    pub source_archive_bytes: Option<u64>,
+    /// Class B: an opt-in volume cap, `None` (JSON `null`) when unset.
+    pub central_directory_bytes: Option<u64>,
     pub document_items: u64,
     /// C2 decoded-content containment: maximum normative bit span of any exact quantity.
     pub containment_span_bits: u64,
@@ -79,10 +180,7 @@ pub struct ValidationLimits {
     /// C2 precheck: maximum selected glTF node path depth.
     pub containment_node_depth: u64,
     /// Tileset documents being traversed at once: `Σ (raw bytes + 128 · JSON value nodes)`
-    /// over the documents on the external-tileset path (VS-B-7). Not yet serialized in the
-    /// report's `limits`: VS-C adds it with the limit surface, so the pinned C1 report
-    /// bundles are amended once.
-    #[serde(skip_serializing)]
+    /// over the documents on the external-tileset path (VS-B-7).
     pub live_document_bytes: u64,
 }
 impl Default for ValidationLimits {
@@ -91,8 +189,8 @@ impl Default for ValidationLimits {
             json_bytes: 8 * 1024 * 1024,
             json_depth: 64,
             member_bytes: 128 * 1024 * 1024,
-            archive_stored_bytes: 1024 * 1024 * 1024,
-            archive_entries: 1 << 19,
+            archive_stored_bytes: None,
+            archive_entries: None,
             accessor_elements: 4_000_000,
             document_decoded_bytes: 128 * 1024 * 1024,
             hierarchy_visits: 1 << 18,
@@ -100,8 +198,8 @@ impl Default for ValidationLimits {
             references: 1 << 20,
             total_payload_elements: 16_000_000,
             total_bytes_read: 2 * 1024 * 1024 * 1024,
-            source_archive_bytes: 1024 * 1024 * 1024,
-            central_directory_bytes: 32 * 1024 * 1024,
+            source_archive_bytes: None,
+            central_directory_bytes: None,
             document_items: 1 << 17,
             containment_span_bits: 4096,
             containment_work_units: 1 << 29,
@@ -109,32 +207,6 @@ impl Default for ValidationLimits {
             containment_decoded_bytes: 2 * 1024 * 1024 * 1024,
             containment_node_depth: 64,
             live_document_bytes: 256 * 1024 * 1024,
-        }
-    }
-}
-/// Amplification budget per stored byte (VS-B-2): `numerator / denominator`.
-struct Kappa(u64, u64);
-impl Kappa {
-    fn of(&self, stored_bytes: u64) -> u64 {
-        // Saturating: an over-u64 product is the largest budget.
-        u64::try_from(u128::from(stored_bytes) * u128::from(self.0) / u128::from(self.1))
-            .unwrap_or(u64::MAX)
-    }
-}
-impl ValidationLimits {
-    /// The seven amplification budgets at `max(self, κ·S)` for `S` admitted stored bytes;
-    /// every other field unchanged (VS-B-2). `self` holds the floors.
-    pub(crate) fn scaled(&self, stored_bytes: u64) -> Self {
-        let at_least = |floor: u64, kappa: Kappa| floor.max(kappa.of(stored_bytes));
-        Self {
-            hierarchy_visits: at_least(self.hierarchy_visits, Kappa(1, 8)),
-            references: at_least(self.references, Kappa(1, 8)),
-            total_bytes_read: at_least(self.total_bytes_read, Kappa(4, 1)),
-            total_payload_elements: at_least(self.total_payload_elements, Kappa(16, 1)),
-            containment_work_units: at_least(self.containment_work_units, Kappa(128, 1)),
-            containment_bytes_read: at_least(self.containment_bytes_read, Kappa(4, 1)),
-            containment_decoded_bytes: at_least(self.containment_decoded_bytes, Kappa(16, 1)),
-            ..self.clone()
         }
     }
 }
@@ -159,7 +231,11 @@ pub struct ValidationReport {
     /// Archive-named `notInspected` labels were dropped beyond the 64 kept (VS-B-9).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub not_inspected_truncated: bool,
+    /// S: the admitted stored member bytes, the index included (VS-C-4).
+    pub stored_bytes: u64,
     pub limits: ValidationLimits,
+    /// How each amplification budget in `limits` was derived (VS-C-4).
+    pub limit_derivation: LimitDerivation,
     /// One row per inspected payload URI, in URI byte order, read on demand.
     pub payloads: PayloadRows,
     /// Present only when the catalog or the payload rows spilled to scratch.
@@ -191,7 +267,9 @@ impl ValidationReport {
         if self.not_inspected_truncated {
             value["notInspectedTruncated"] = serde_json::Value::Bool(true);
         }
+        value["storedBytes"] = self.stored_bytes.into();
         value["limits"] = serde_json::to_value(&self.limits)?;
+        value["limitDerivation"] = serde_json::to_value(&self.limit_derivation)?;
         if let Some(scratch) = self.scratch {
             value["scratch"] = serde_json::to_value(scratch)?;
         }

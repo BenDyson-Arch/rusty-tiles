@@ -1,5 +1,5 @@
 //! Independent, checked byte fixtures through public Rust and CLI entry points.
-use rusty_tiles::validate::{inspect, ValidationRequest};
+use rusty_tiles::validate::{inspect, LimitKey, ValidationRequest};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, process::Command};
@@ -26,7 +26,15 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
             case["sha256"].as_str().unwrap(),
             "fixture changed: {name}"
         );
-        let inspected = inspect(ValidationRequest::new(&path));
+        // VS-C: a case may set opt-in caps or budgets (`maxVolume`), on both surfaces.
+        let mut request = ValidationRequest::new(&path);
+        let mut flags = Vec::new();
+        for (key, value) in case["maxVolume"].as_object().into_iter().flatten() {
+            let value = value.as_u64().unwrap();
+            request = request.max_volume(key.parse::<LimitKey>().unwrap(), value);
+            flags.push(format!("--maxVolume={key}={value}"));
+        }
+        let inspected = inspect(request);
         match case["expectedKind"].as_str() {
             None => {
                 assert!(inspected.is_ok(), "{name}: {inspected:?}");
@@ -46,6 +54,7 @@ fn independent_corpus_rust_cli_parity_and_read_only_inputs() {
             .arg("validate")
             .arg(&path)
             .arg("--json")
+            .args(&flags)
             .output()
             .unwrap();
         let report: Value = serde_json::from_slice(&cli.stdout).unwrap_or_else(|e| {

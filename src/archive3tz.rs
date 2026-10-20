@@ -42,6 +42,9 @@ pub(crate) enum CodecError {
     MissingManifest,
     #[error("source changed while packing: {0}")]
     SourceChanged(PathBuf),
+    /// The catalog's scratch was refused (VS-C-5 T1).
+    #[error("archive catalog scratch: {0}")]
+    Scratch(crate::validate::ScratchRefusal),
 }
 impl CodecError {
     fn invalid(message: impl Into<String>) -> Self {
@@ -463,12 +466,13 @@ pub(crate) fn validate_open_3tz(file: File) -> Result<(), CodecError> {
 /// bounds, not a separate ZIP interpretation or invented engineering defaults.
 pub(crate) fn validate_reader_3tz(mut reader: impl Read + Seek) -> Result<(), CodecError> {
     let length = reader.seek(SeekFrom::End(0))?;
+    // No volume cap: the format's natural bounds (VS-C-2) are the only ones.
     let limits = ReadLimits {
-        source_archive_bytes: length,
-        central_directory_bytes: length,
-        archive_entries: length / 46,
+        source_archive_bytes: None,
+        central_directory_bytes: None,
+        archive_entries: None,
         member_bytes: length,
-        archive_stored_bytes: length,
+        archive_stored_bytes: None,
     };
     StoredArchive::new(reader, length, &limits)
         .map(|_| ())
@@ -481,7 +485,11 @@ pub(crate) fn validate_reader_3tz(mut reader: impl Read + Seek) -> Result<(), Co
             ReadError::InvalidInput(message)
             | ReadError::Unsupported(message)
             | ReadError::ResourceLimit(message) => CodecError::invalid(message),
-            ReadError::Scratch(error) => CodecError::Io(std::io::Error::other(error)),
+            ReadError::Cap { message, .. } => CodecError::invalid(message),
+            ReadError::Scratch(error) => match crate::validate::ScratchRefusal::from_spill(error) {
+                Ok(refusal) => CodecError::Scratch(refusal),
+                Err(error) => CodecError::Io(std::io::Error::other(error)),
+            },
         })
 }
 

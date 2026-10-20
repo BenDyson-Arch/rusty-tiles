@@ -349,17 +349,13 @@ impl Scratch {
                     }
                 }
             }
-        } else if let Some((parent, _)) = memory_backed.first() {
-            if first_error.is_none() {
-                return Err(SpillError::io(
-                    "no disk-backed scratch directory",
-                    parent.as_path(),
-                    io::Error::other(
-                        "every scratch candidate is memory-backed (tmpfs), which would hold the \
-                         spill in RAM; set TMPDIR to a disk-backed directory",
-                    ),
-                ));
-            }
+        } else if !memory_backed.is_empty() && first_error.is_none() {
+            return Err(SpillError::MemoryBackedOnly {
+                candidates: memory_backed
+                    .into_iter()
+                    .map(|(parent, _)| parent.clone())
+                    .collect(),
+            });
         }
         Err(first_error.unwrap_or_else(|| {
             SpillError::io(

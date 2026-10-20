@@ -96,3 +96,18 @@ limits JSON is unchanged. No archive, member pin, expectation or other selected 
 | File | Previous sha256 | Amended sha256 | Reason |
 | --- | --- | --- | --- |
 | `compiled_context_controls.rs` | `d89539a74d9cd804389a16845609dd1770596cbf0a1d2c810ecb8e114d160dfe` (H7 amendment) | `91cbe51512738bdcaea4120a698bde523687b134cbfd945b8ad01bb5959085b0` | `live_document_bytes` added at its default in the selected limits |
+
+## VS-C amendment (limits surface, 2026-10-14)
+
+The [VS-C limits amendment](../../../../../../docs/architecture/validator-limits-amendment.md)
+makes the four volume caps `Option<u64>` (VS-C-2), serializes `liveDocumentBytes` and adds
+`storedBytes` and `limitDerivation` to the report (VS-C-4). These controls select every limit
+explicitly, so the selected caps become `Some(..)` with their old values, the declared limits
+JSON gains `liveDocumentBytes`, the declared report gains `storedBytes` (computed here from the
+archive's central directory by the independent `zip` crate, never copied from the report) and
+`limitDerivation` (every budget `explicit` with the model-1 rule). No archive, member pin,
+expectation, verdict or other selected limit changed; `fixtures/manifest.json` is unchanged.
+
+| File | Previous sha256 | Amended sha256 | Reason |
+| --- | --- | --- | --- |
+| `compiled_context_controls.rs` | `91cbe51512738bdcaea4120a698bde523687b134cbfd945b8ad01bb5959085b0` (VS-B amendment) | `72c991cfb172db274d187fffea4824ce4b417ace25ed5c63b461d020aeb2229c` | caps `Some`, `liveDocumentBytes`, declared `storedBytes` and `limitDerivation` |

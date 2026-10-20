@@ -156,3 +156,13 @@ Fresh separate nonauthor final review, exact source/artifact receipts and all
 applicable PR/platform/wheel checks precede a develop merge. Do not claim A2
 format/lifecycle/metadata/viewer acceptance, decoded content bounds, generic ZIP
 conformance, legacy-operation removal or release completion from this slice.
+
+## VS-C amendment (limits surface, 2026-10-14)
+
+[validator-limits-amendment.md](validator-limits-amendment.md) governs. `ReadLimits`'s source,
+directory, entry and stored-byte caps are optional (VS-C-2). Unset, the natural bounds apply in
+this order: the source length, the 3TZ member ceiling (Unsupported), `46·N ≤` directory bytes,
+the directory inside the source, and disjoint member extents inside the source; a set cap is
+checked at its old site and order and refuses strictly above its value (typed `ReadError::Cap`).
+With no stored-byte cap, an overflow of the running stored sum is InvalidInput "stored member
+sizes overflow". The `validate_3tz` facade sets no cap.

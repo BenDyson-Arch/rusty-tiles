@@ -17,8 +17,8 @@ fn selected_limits() -> ValidationLimits {
         json_bytes: 65536,
         json_depth: 32,
         member_bytes: 262144,
-        archive_stored_bytes: 1048576,
-        archive_entries: 256,
+        archive_stored_bytes: Some(1048576),
+        archive_entries: Some(256),
         accessor_elements: 4096,
         document_decoded_bytes: 262144,
         hierarchy_visits: 128,
@@ -26,8 +26,8 @@ fn selected_limits() -> ValidationLimits {
         references: 1024,
         total_payload_elements: 16,
         total_bytes_read: 4194304,
-        source_archive_bytes: 1048576,
-        central_directory_bytes: 65536,
+        source_archive_bytes: Some(1048576),
+        central_directory_bytes: Some(65536),
         document_items: 8192,
         containment_span_bits: 4096,
         containment_work_units: 268435456,
@@ -62,7 +62,30 @@ fn declared_limits_json(limits: &ValidationLimits) -> Value {
         "containmentBytesRead": limits.containment_bytes_read,
         "containmentDecodedBytes": limits.containment_decoded_bytes,
         "containmentNodeDepth": limits.containment_node_depth,
+        "liveDocumentBytes": limits.live_document_bytes,
     })
+}
+
+/// VS-C-4 for explicitly selected limits: every budget is explicit, with the model-1 rule.
+fn declared_derivation() -> Value {
+    let rule = |floor: u64, p: u64, q: u64| json!({"floor": floor, "perStoredByte": [p, q], "source": "explicit"});
+    json!({"model": 1, "budgets": {
+        "hierarchyVisits": rule(262144, 1, 8),
+        "references": rule(1048576, 1, 8),
+        "totalBytesRead": rule(2147483648, 4, 1),
+        "totalPayloadElements": rule(16000000, 16, 1),
+        "containmentWorkUnits": rule(536870912, 128, 1),
+        "containmentBytesRead": rule(2147483648, 4, 1),
+        "containmentDecodedBytes": rule(2147483648, 16, 1),
+    }})
+}
+
+/// S, read by the independent `zip` crate: the stored sizes of every central-directory entry.
+fn declared_stored_bytes(bytes: &[u8]) -> u64 {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    (0..archive.len())
+        .map(|index| archive.by_index_raw(index).unwrap().compressed_size())
+        .sum()
 }
 
 fn fixture(name: &str) -> Value {
@@ -114,6 +137,8 @@ fn execution(case: &Value, fact: &str, limits: ValidationLimits, outcome: Outcom
         let mut expected = case["expectedReport"].clone();
         expected["archive"] = json!(path);
         expected["limits"] = selected.clone();
+        expected["storedBytes"] = json!(declared_stored_bytes(&before));
+        expected["limitDerivation"] = declared_derivation();
         assert_eq!(
             actual, expected,
             "{} {fact}: independently declared full report",

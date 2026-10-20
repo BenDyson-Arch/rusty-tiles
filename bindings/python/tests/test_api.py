@@ -1522,6 +1522,73 @@ class WheelAPI(unittest.TestCase):
         self.assertIn("decodedContentBounds.skin", report["notInspected"])
         self.assertIn("scene transforms", report["notInspected"])
 
+    def test_validate_limit_surface(self):
+        # VS-C: opt-in caps are None, overrides are validated before any I/O, a limit refusal
+        # carries its structured cause, and the callback sees progress and can stop the run.
+        data = self.root / "limits"
+        data.mkdir()
+        payload = struct.pack("<3f", 0, 0, 0)
+        document = json.dumps({
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}], "buffers": [{"byteLength": 12}],
+            "bufferViews": [{"buffer": 0, "byteLength": 12}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                           "count": 1, "min": [0, 0, 0], "max": [0, 0, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 0}]}],
+        }).encode()
+        document += b" " * (-len(document) % 4)
+        (data / "a.glb").write_bytes(
+            struct.pack("<4sII", b"glTF", 2, 28 + len(document) + 12)
+            + struct.pack("<I4s", len(document), b"JSON") + document
+            + struct.pack("<I4s", 12, b"BIN\0") + payload)
+        (data / "tileset.json").write_text(json.dumps({
+            "asset": {"version": "1.1"}, "geometricError": 0,
+            "root": {"boundingVolume": {"box": [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]},
+                     "geometricError": 0, "content": {"uri": "a.glb"}},
+        }))
+        archive = rusty_tiles.convert_to_3tz(data, self.root / "limits.3tz").output
+        with zipfile.ZipFile(archive) as opened:
+            stored = sum(info.compress_size for info in opened.infolist())
+        report = rusty_tiles.validate(archive)
+        self.assertEqual(report["storedBytes"], stored)
+        for key in ("sourceArchiveBytes", "archiveEntries", "centralDirectoryBytes",
+                    "archiveStoredBytes"):
+            self.assertIsNone(report["limits"][key])
+        self.assertEqual(report["limits"]["liveDocumentBytes"], 2**28)
+        self.assertEqual(report["limitDerivation"]["model"], 1)
+        self.assertEqual(report["limitDerivation"]["budgets"]["hierarchyVisits"],
+                         {"floor": 2**18, "perStoredByte": [1, 8], "source": "floor"})
+        capped = rusty_tiles.validate(archive, max_volume={"archiveStoredBytes": stored,
+                                                           "references": 2**64 - 1})
+        self.assertEqual(capped["limits"]["archiveStoredBytes"], stored)
+        self.assertEqual(capped["limitDerivation"]["budgets"]["references"]["source"], "explicit")
+        missing = self.root / "absent.3tz"
+        for bad in ({"jsonBytes": 1}, {"unknown": 1}, {"references": True},
+                    {"references": -1}, {"references": 2**64}, {"references": 1.0},
+                    {"references": "1"}, {1: 1}, [("references", 1)]):
+            with self.assertRaises(rusty_tiles.InvalidRequestError, msg=repr(bad)):
+                rusty_tiles.validate(missing, max_volume=bad)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.validate(missing, scratch_dir=self.root / "no-such-dir")
+        with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
+            rusty_tiles.validate(archive, max_volume={"archiveStoredBytes": stored - 1})
+        self.assertEqual(caught.exception.limit, {"limit": "archiveStoredBytes",
+                                                  "value": stored - 1, "observed": stored,
+                                                  "derivation": "cap"})
+        self.assertTrue(str(caught.exception).endswith(
+            f"(limit archiveStoredBytes={stored - 1}, cap)"))
+        events = []
+        rusty_tiles.validate(archive, callback=events.append)
+        self.assertEqual([event["phase"] for event in events],
+                         ["validate.hash", "validate.traverse", "validate.stream",
+                          "validate.rows"])
+
+        def interrupt(event):
+            raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            rusty_tiles.validate(archive, callback=interrupt)
+
     def test_validate_reads_implicit_roots_with_rust_parity(self):
         """I1 parity with tests/i1_implicit_read.rs: labels, counts and categories."""
         def point_glb():

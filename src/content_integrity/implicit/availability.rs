@@ -3,7 +3,7 @@
 //! the visit and content-entry reservations, the rank table and the sparse
 //! content index. Constant sources are decided in closed form and never read.
 use super::subtree::Storage;
-use super::{invalid, limit, refused, uint, FormatError, ImplicitLimits};
+use super::{invalid, limit, refused, uint, FormatError, ImplicitLimits, Reservation};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
@@ -216,6 +216,7 @@ impl Availability {
             .map(|d| storage.view(d.view).len() as u128)
             .sum::<u128>();
         if scan > u128::from(limits.scan_remaining) {
+            limits.refused = Some((Reservation::Scan, scan));
             return Err(FormatError::ResourceLimit(SCAN_LIMIT.into()));
         }
         limits.scan_remaining -= scan as u64;
@@ -341,6 +342,7 @@ impl Availability {
         }
         // 9. Visit reservation.
         if tile_popcount > u128::from(limits.visits_remaining) {
+            limits.refused = Some((Reservation::Visits, tile_popcount));
             return Err(limit(
                 "subtree tile availability exceeds remaining hierarchy visits",
             ));
@@ -361,6 +363,7 @@ impl Availability {
         );
         let entries = slot_popcounts.iter().map(|p| u128::from(*p)).sum::<u128>();
         if entries > u128::from(limits.refs_remaining) {
+            limits.refused = Some((Reservation::References, entries));
             return Err(limit("subtree content entries exceed remaining references"));
         }
         limits.refs_remaining -= entries as u64;

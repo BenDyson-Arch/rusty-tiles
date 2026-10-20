@@ -35,6 +35,11 @@ def run(args):
         'vs_b_amend', HERE.parents[1] / 'vs_b_budget_amendment/2026-10-14/amend.py')
     amend = importlib.util.module_from_spec(spec); spec.loader.exec_module(amend)
     generated, _ = amend.amend_cases(generated, fixtures)
+    # VS-C limits amendment (2026-10-14): storedBytes, limitDerivation, null caps, liveDocumentBytes.
+    spec = importlib.util.spec_from_file_location(
+        'vs_c_amend', HERE.parents[1] / 'vs_c_limits_amendment/2026-10-14/amend.py')
+    amend = importlib.util.module_from_spec(spec); spec.loader.exec_module(amend)
+    generated, _ = amend.amend_cases(generated, lambda case: (fixtures / case['path']).read_bytes())
     assert generated == manifest['cases'], 'regenerated fixtures differ from the frozen manifest'
     env = dict(os.environ, RAYON_NUM_THREADS='2', RUST_TEST_THREADS='2', CARGO_BUILD_JOBS='2')
     records = []

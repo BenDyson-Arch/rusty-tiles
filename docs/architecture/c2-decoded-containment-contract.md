@@ -1089,3 +1089,14 @@ archive becoming Unsupported; no other verdict changed.
   `J-without-b3dm-batch-table` retire; 90 fixture rows remain (102 before), every surviving row
   is byte-identical in `wb/manifest.json`, and the 14 remaining formula mutants flip their pairs.
   The GLB twins keep the JSON-node cost covered.
+
+## VS-C amendment (limits surface, 2026-10-14)
+
+[validator-limits-amendment.md](validator-limits-amendment.md) governs. A-C2-1: by default
+`containmentWorkUnits` is `max(2^29, 128·S)`, `containmentBytesRead` `max(2^31, 4·S)` and
+`containmentDecodedBytes` `max(2^31, 16·S)` (S = stored member bytes), each overridable, and the
+effective values are serialized with their derivation. The stated time bound becomes
+`(2^29 + 128·S)·τ`: 7.87 s plus 1,875 s per stored GB on the E-core of the C2-WB table (τ =
+14.65 ns) and 4.35 s plus 1,037 s per stored GB on a P-core (τ = 8.10 ns), replacing "≤ 7.87 s
+per validation". A-C2-3: the τ obligation and the mf2-lod3 ceilings are retained. An exceeded C2
+budget remains `notInspected: decodedContentBounds.workLimit`, never a refusal.
