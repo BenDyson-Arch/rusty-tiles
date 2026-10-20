@@ -328,6 +328,8 @@ pub(crate) struct CapturedSource<'a> {
     colorless: bool,
     /// Reused depth-first stack of the nearest-witness query.
     nearest_stack: Vec<(QueryNode, f64)>,
+    /// Attribute flags of each source primitive in the node, built on first use.
+    primitive_flags: Option<BTreeMap<SourceKey, u8>>,
     /// Fine hierarchy over `resident`, when its bytes fit beside them.
     bvh: Option<Bvh>,
     bvh_stack: Vec<(u32, f64)>,
@@ -423,6 +425,7 @@ impl<'a> CapturedSource<'a> {
             resident_first: 0,
             colorless: false,
             nearest_stack: Vec::new(),
+            primitive_flags: None,
             bvh: None,
             bvh_stack: Vec::new(),
             root: root.ok_or_else(|| invalid("empty captured hierarchy"))?,
@@ -445,6 +448,7 @@ impl<'a> CapturedSource<'a> {
         self.resident = Vec::new();
         self.bvh = None;
         self.colorless = false;
+        self.primitive_flags = None;
         Ok(())
     }
     /// Hold the current node's source triangles in memory when they fit `budget` bytes,
@@ -489,6 +493,30 @@ impl<'a> CapturedSource<'a> {
         self.resident = resident;
         self.resident_first = self.first;
         Ok(held)
+    }
+    /// The published attribute flags (NORMAL, TANGENT, COLOR, ...) of source primitive
+    /// `k` in the current node: what its leaves carry. 0 when the node has none of it.
+    pub(super) fn primitive_flags(
+        &mut self,
+        k: SourceKey,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<u8, JobError> {
+        if self.primitive_flags.is_none() {
+            let mut map = BTreeMap::new();
+            for (i, t) in self.tris(self.first, self.end)?.enumerate() {
+                if i.is_multiple_of(1 << 14) {
+                    check()?;
+                }
+                let t = t?;
+                *map.entry(key(&t)).or_insert(0u8) |= t.flags;
+            }
+            self.primitive_flags = Some(map);
+        }
+        Ok(self
+            .primitive_flags
+            .as_ref()
+            .and_then(|m| m.get(&k).copied())
+            .unwrap_or(0))
     }
     fn node(&self, i: u64) -> Result<QueryNode, JobError> {
         if let Some(n) = self.nodes.get(i as usize) {
@@ -559,7 +587,9 @@ impl<'a> CapturedSource<'a> {
         // closest box is searched first and the distance bound tightens early. The
         // result does not depend on visit order: candidates are compared by a strict
         // total order (distance, then lineage, triangle and rank), and a box is pruned
-        // only when its lower distance bound strictly exceeds the best distance.
+        // only when its lower distance bound exceeds the best distance by more than the
+        // arithmetic slack of a computed distance (as in the BVH path).
+        let slack = 1e-12 * (1. + math::dot(q, q));
         let mut stack = std::mem::take(&mut self.nearest_stack);
         stack.clear();
         if stack.capacity() < 8 * 65 {
@@ -585,8 +615,8 @@ impl<'a> CapturedSource<'a> {
             {
                 continue;
             }
-            if best.is_some_and(|b| lower > b.distance2)
-                && (fill.is_none() || unfiltered.is_some_and(|b| lower > b.distance2))
+            if best.is_some_and(|b| lower > b.distance2 + slack)
+                && (fill.is_none() || unfiltered.is_some_and(|b| lower > b.distance2 + slack))
             {
                 continue;
             }
@@ -719,6 +749,10 @@ impl<'a> CapturedSource<'a> {
     ) -> Result<[f32; 4], JobError> {
         // Both the weld match and the nearest-corner fallback return white for a
         // triangle without COLOR_0; when no resident triangle has it, skip the search.
+        // Two deliberate differences from the full search: it charges no query work,
+        // and on malformed input where the full search would find no same-primitive
+        // corner at all (and refuse) it returns white. A proxy face's own source
+        // triangle lies in the node, so admitted input always has such a corner.
         if self.colorless && !self.resident.is_empty() {
             return Ok([1.; 4]);
         }
@@ -1299,4 +1333,246 @@ pub(super) fn sample(
             v
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    use std::fs;
+
+    /// Deterministic xorshift in [0, 1).
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> f64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 >> 11) as f64 / (1u64 << 53) as f64
+        }
+    }
+
+    /// `count` random triangles in a 4 m box (every seventh an exact copy of the one
+    /// before, for distance ties), random per-vertex COLOR_0 or none, captured with
+    /// sixteen-triangle tree leaves so the streamed search has many boxes to prune.
+    fn capture(count: usize, color: bool, seed: u64) -> (tempfile::TempDir, full::FullCaptured) {
+        let work = tempfile::tempdir().unwrap();
+        let input = full::tests::fixture(work.path(), count);
+        let mut rng = Rng(seed);
+        let bin = input.parent().unwrap().join("attributes.bin");
+        let mut bytes = fs::read(&bin).unwrap();
+        let mut positions = Vec::with_capacity(count * 9);
+        for t in 0..count {
+            if t % 7 == 6 {
+                let previous: Vec<f32> = positions[(t - 1) * 9..t * 9].to_vec();
+                positions.extend(previous);
+            } else {
+                positions.extend((0..9).map(|_| (rng.next() * 4.) as f32));
+            }
+        }
+        for (i, v) in positions.iter().enumerate() {
+            bytes[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        // COLOR_0 is the last attribute: count * 3 corners of four floats.
+        let colors = bytes.len() - count * 48;
+        for i in 0..count * 12 {
+            let v = rng.next() as f32;
+            bytes[colors + i * 4..colors + i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        fs::write(&bin, &bytes).unwrap();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        let extreme = |pick: fn(f32, f32) -> f32| -> Vec<f64> {
+            (0..3)
+                .map(|a| {
+                    f64::from(
+                        positions
+                            .iter()
+                            .skip(a)
+                            .step_by(3)
+                            .copied()
+                            .reduce(pick)
+                            .unwrap(),
+                    )
+                })
+                .collect()
+        };
+        doc["accessors"][0]["min"] = serde_json::json!(extreme(f32::min));
+        doc["accessors"][0]["max"] = serde_json::json!(extreme(f32::max));
+        if !color {
+            doc["meshes"][0]["primitives"][0]["attributes"]
+                .as_object_mut()
+                .unwrap()
+                .remove("COLOR_0");
+        }
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let mut config = TreeConfig::new(Profile::Balanced);
+        config.jobs =
+            crate::mesh_large::config::Jobs::Fixed(std::num::NonZeroUsize::new(1).unwrap());
+        config.leaf_triangles = 16;
+        config.sort.run_bytes = 1 << 16;
+        config.scratch_dir = Some(work.path().join("scratch"));
+        fs::create_dir_all(config.scratch_dir.as_ref().unwrap()).unwrap();
+        let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+        (work, captured)
+    }
+
+    fn root(c: &full::FullCaptured) -> NodeRecord {
+        let n = c.triangles.len();
+        c.tree
+            .nodes
+            .reader()
+            .unwrap()
+            .map(Result::unwrap)
+            .find(|r| r.first == 0 && r.end == n)
+            .unwrap()
+    }
+
+    /// The exhaustive answer, written independently of both search paths.
+    fn brute(
+        tris: &[FullTriangle],
+        q: V3,
+        face: &FrozenFace,
+        normal: V3,
+    ) -> (Option<Witness>, Option<Witness>) {
+        let mut best: Option<Witness> = None;
+        let mut unfiltered: Option<Witness> = None;
+        let order = |w: &Witness| {
+            (
+                w.distance2,
+                w.triangle.triangle.source.triangle != face.source_triangle,
+                w.triangle.triangle.source.triangle,
+                w.rank,
+            )
+        };
+        let less = |a: &Witness, b: &Witness| {
+            let (x, y) = (order(a), order(b));
+            x.0 < y.0 || (x.0 == y.0 && (x.1, x.2, x.3) < (y.1, y.2, y.3))
+        };
+        for (rank, t) in tris.iter().enumerate() {
+            let rank = rank as u64;
+            if !face.donor_ranges.iter().any(|r| r.contains(&rank)) || key(t) != face.source {
+                continue;
+            }
+            let p = t.triangle.positions.map(|p| p.map(f64::from));
+            let bary = math::closest(q, p);
+            let w = Witness {
+                rank,
+                triangle: *t,
+                bary,
+                distance2: math::distance2(q, math::bary(p, bary)),
+                fill_fallback: false,
+            };
+            if face.fill_bound.is_some() && unfiltered.as_ref().is_none_or(|u| less(&w, u)) {
+                unfiltered = Some(w);
+            }
+            if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.)
+                && best.as_ref().is_none_or(|b| less(&w, b))
+            {
+                best = Some(w);
+            }
+        }
+        (best, unfiltered)
+    }
+
+    fn same(a: &Result<Witness, JobError>, b: &Result<Witness, JobError>) -> bool {
+        match (a, b) {
+            (Ok(a), Ok(b)) => {
+                a.rank == b.rank
+                    && a.distance2.to_bits() == b.distance2.to_bits()
+                    && a.bary.map(f64::to_bits) == b.bary.map(f64::to_bits)
+                    && a.fill_fallback == b.fill_fallback
+            }
+            (Err(a), Err(b)) => a.kind() == b.kind() && a.message() == b.message(),
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn bvh_streamed_and_exhaustive_nearest_witnesses_agree_including_ties() {
+        let ok = &mut || Ok(());
+        for (seed, color) in [
+            (0x9e37_79b9_7f4a_7c15, true),
+            (0x2545_f491_4f6c_dd1d, false),
+        ] {
+            let (_work, c) = capture(320, color, seed);
+            let node = root(&c);
+            let tris: Vec<FullTriangle> =
+                c.triangles.reader().unwrap().map(Result::unwrap).collect();
+            assert_eq!(tris.len(), 320);
+            let mut fast = CapturedSource::new(&c, 1 << 30, ok).unwrap();
+            fast.begin(node, u64::MAX / 4).unwrap();
+            assert!(fast.make_resident(1 << 30, ok).unwrap() > 0);
+            assert!(fast.bvh.as_ref().is_some_and(|b| b.nodes.len() > 8));
+            let mut slow = CapturedSource::new(&c, 1 << 30, ok).unwrap();
+            slow.begin(node, u64::MAX / 4).unwrap();
+            assert!(slow.bvh.is_none() && slow.resident.is_empty());
+            let mut rng = Rng(seed ^ 0xabcdef);
+            let base = FrozenFace {
+                ordinal: 0,
+                source: key(&tris[0]),
+                source_triangle: tris[40].triangle.source.triangle,
+                material: tris[0].material,
+                positions: tris[0].triangle.positions,
+                words: [crate::mesh_large::bake::types::PositionWord::Float([0; 3]); 3],
+                transform: Default::default(),
+                welds: [[0; 3]; 3],
+                features: Vec::new(),
+                fill_bound: None,
+                donor_ranges: std::iter::once(0..320).collect(),
+            };
+            let mut checked = 0;
+            for i in 0..600 {
+                let mut face = base.clone();
+                // Exact vertices and centroids of duplicated triangles tie on distance.
+                let q: V3 = match i % 3 {
+                    0 => tris[(i * 7 + 6) % 320].triangle.positions[i % 3].map(f64::from),
+                    1 => {
+                        let p = tris[(i * 7 + 5) % 320].triangle.positions;
+                        std::array::from_fn(|a| {
+                            (f64::from(p[0][a]) + f64::from(p[1][a]) + f64::from(p[2][a])) / 3.
+                        })
+                    }
+                    _ => std::array::from_fn(|_| rng.next() * 6. - 1.),
+                };
+                let normal = math::unit(std::array::from_fn(|_| rng.next() - 0.5)).unwrap();
+                if i % 4 == 1 {
+                    face.donor_ranges = vec![10..90, 150..151, 200..300];
+                }
+                if i % 5 == 2 {
+                    face.fill_bound = Some(rng.next() * 2.);
+                }
+                let (best, unfiltered) = brute(&tris, q, &face, normal);
+                let expected = fast.nearest_result(face.fill_bound, best, unfiltered);
+                let a = fast.nearest(q, &face, normal, ok);
+                let b = slow.nearest(q, &face, normal, ok);
+                assert!(same(&a, &expected), "BVH query {i}");
+                assert!(same(&b, &expected), "streamed query {i}");
+                checked += usize::from(expected.is_ok());
+            }
+            assert!(checked > 300);
+            // Corner colour: the resident shortcut agrees with the full search, both on
+            // every actual corner (weld matches) and off-vertex (nearest fallback).
+            assert_eq!(fast.colorless, !color);
+            for (i, t) in tris.iter().enumerate().step_by(3) {
+                for corner in 0..3 {
+                    let mut weld =
+                        t.triangle.positions[corner].map(|v| if v == 0. { 0 } else { v.to_bits() });
+                    if i % 2 == 1 {
+                        weld[0] = (f32::from_bits(weld[0]) + 0.013).to_bits();
+                    }
+                    let own = t.triangle.source.triangle;
+                    let a = fast.color(key(t), own, weld, ok).unwrap();
+                    let b = slow.color(key(t), own, weld, ok).unwrap();
+                    assert_eq!(a.map(f32::to_bits), b.map(f32::to_bits), "triangle {i}");
+                    if !color {
+                        assert_eq!(a, [1.; 4]);
+                    }
+                }
+            }
+        }
+    }
 }

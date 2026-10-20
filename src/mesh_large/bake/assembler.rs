@@ -16,6 +16,8 @@ struct Group {
     pages: [Option<usize>; 5],
     ids: Vec<usize>,
     no_raster: bool,
+    /// Source attributes the faces' leaves carry (NORMAL, COLOR).
+    attributes: u8,
 }
 
 #[derive(Debug)]
@@ -159,6 +161,7 @@ pub(super) fn prepare(
     if p.face_indices.len() != frozen.faces.len()
         || p.face_identities.len() != frozen.faces.len()
         || p.face_pages.len() != frozen.faces.len()
+        || p.face_attributes.len() != frozen.faces.len()
     {
         return Err(invalid("prepared adapter frozen face closure"));
     }
@@ -268,6 +271,7 @@ pub(super) fn prepare(
                 pages,
                 ids,
                 no_raster: no_raster[face_index],
+                attributes: p.face_attributes[face_index],
             })
             .or_default()
             .push(u32::try_from(face_index).map_err(|_| resource("prepared face index"))?);
@@ -314,11 +318,23 @@ pub(super) fn prepare(
             material: Some(material_index),
             // The owner checks this flag: only a no-raster group may detach source slots.
             no_raster: group.no_raster,
-            normals: Some(Vec::new()),
-            tangents: Some(Vec::new()),
-            colors: Some(Vec::new()),
             ..Default::default()
         };
+        // Shading inputs follow the leaves: NORMAL and COLOR_0 only where the source
+        // primitive's leaves carry them (a source without normals renders unlit in
+        // viewers, leaves and proxies alike). A baked normal map is authored in the
+        // emitted NORMAL/TANGENT frame, so it brings both; otherwise TANGENT, which only
+        // a normal map reads, is not published.
+        let normal_map = group.pages[super::slot_index(TextureSlot::Normal)].is_some();
+        if normal_map || group.attributes & crate::mesh_large::attributes::NORMAL != 0 {
+            primitive.normals = Some(Vec::new());
+        }
+        if normal_map {
+            primitive.tangents = Some(Vec::new());
+        }
+        if group.attributes & crate::mesh_large::attributes::COLOR != 0 {
+            primitive.colors = Some(Vec::new());
+        }
         let textured = group.pages.iter().any(Option::is_some) || !group.ids.is_empty();
         if textured {
             primitive.uvs.push(Vec::new());
@@ -336,9 +352,15 @@ pub(super) fn prepare(
                 if textured {
                     primitive.uvs[0].push(corner.uv);
                 }
-                primitive.normals.as_mut().unwrap().push(corner.normal);
-                primitive.tangents.as_mut().unwrap().push(corner.tangent);
-                primitive.colors.as_mut().unwrap().push(corner.color);
+                if let Some(n) = &mut primitive.normals {
+                    n.push(corner.normal);
+                }
+                if let Some(t) = &mut primitive.tangents {
+                    t.push(corner.tangent);
+                }
+                if let Some(c) = &mut primitive.colors {
+                    c.push(corner.color);
+                }
             }
         }
         for id in group.ids {
@@ -387,6 +409,11 @@ mod tests {
         PreparedNode {
             assembly_memory_bytes: 1 << 20,
             no_raster_faces: vec![1],
+            face_attributes: vec![
+                crate::mesh_large::attributes::NORMAL
+                    | crate::mesh_large::attributes::COLOR;
+                2
+            ],
             corners,
             face_indices: vec![[0, 1, 2], [3, 4, 5]],
             face_identities: core.faces.iter().map(FrozenFace::identity).collect(),
@@ -693,13 +720,18 @@ mod tests {
                     .map(f32::to_bits)
                     .collect::<Vec<_>>()
             );
-            assert_eq!(
-                attrs["TANGENT"],
-                vec![[1f32, 0., 0., 1.]; 3]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-            );
+            // TANGENT only where a baked normal map reads it (the rasterising face).
+            if primitive.faces == [0] {
+                assert_eq!(
+                    attrs["TANGENT"],
+                    vec![[1f32, 0., 0., 1.]; 3]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                );
+            } else {
+                assert!(!attrs.contains_key("TANGENT"));
+            }
             assert_eq!(
                 attrs["COLOR_0"],
                 vec![[0.2f32, 0.3, 0.4, 1.]; 3]

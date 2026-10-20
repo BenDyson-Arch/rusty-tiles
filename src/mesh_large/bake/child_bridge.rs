@@ -312,6 +312,16 @@ pub(super) fn persist(
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(), JobError> {
+    let bytes = encode_packet(child, memory, check)?;
+    store.write_proxy(child.node.first, child.node.depth(), &bytes)
+}
+/// A baked tile's exact packet for its parent, within `memory` bytes; nothing is
+/// written (see [`persist`]).
+pub(super) fn encode_packet(
+    child: &PreencodeChild,
+    memory: u64,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<Vec<u8>, JobError> {
     if child
         .pages
         .iter()
@@ -323,7 +333,7 @@ pub(super) fn persist(
     }
     let bytes = packet::encode(child, memory, check)?;
     check()?;
-    store.write_proxy(child.node.first, child.node.depth(), &bytes)
+    Ok(bytes)
 }
 /// The H1 identity of `parent`'s child in octant `slot`: a synthetic run step below a
 /// key-depth cell or inside a run, else a spatial child cell.

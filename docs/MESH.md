@@ -205,9 +205,9 @@ Known limitations (0.4):
   that ledger is a planned 0.4.x follow-up.
 - Baking dominates conversion time. Proxies of one depth bake in parallel
   (up to `--jobs`), but one proxy bakes on one thread, so the narrow top of the
-  tree runs serially. A 0.79M-triangle textured crop that converts in about
-  20 s untextured takes about two minutes with baking (eight hardware threads,
-  `--jobs 8`).
+  tree runs serially. On a 0.79M-triangle textured crop (eight hardware
+  threads, `--jobs 8`) the whole conversion took about two minutes, about
+  100 s of it baking 63 coarse tiles.
 - A proxy whose retained children do not fit its worker's share of the bake
   memory is baked again after its depth, alone with the whole allowance, so
   `--jobs` does not change which inputs convert (or their output) but can add

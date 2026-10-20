@@ -307,6 +307,14 @@ pub(crate) fn bake_node(
     } else {
         source.density_floor(check)?
     };
+    // What each face's leaves carry, so the proxy publishes the same shading inputs.
+    let mut face_attributes = Vec::with_capacity(f.faces.len());
+    for face in &f.faces {
+        let flags = source.primitive_flags(face.source, check)?;
+        face_attributes.push(
+            flags & (crate::mesh_large::attributes::NORMAL | crate::mesh_large::attributes::COLOR),
+        );
+    }
     let mut budget_receipts = Vec::new();
     for density_drop in 0..=limits.max_density_drops {
         check()?;
@@ -499,6 +507,7 @@ pub(crate) fn bake_node(
             "charts":layout.charts.iter().map(|c|serde_json::json!({"faces":c.faces.len(),"sigmaMin":c.sigma,"compensation":1./c.sigma,"pixelsPerMetre":c.pixels_per_metre,"page":c.page,"size":c.size})).collect::<Vec<_>>(),
             "gutter":layout.gutter,"subTexelNoRasterFaces":layout.subtexel_no_raster,"sourceQueryWork":source.work(),"completeOwnedProvisional":owned,"normalScaleAbsorbed":true,"geometryReencoded":false});
         let prepared = PreparedNode {
+            face_attributes: face_attributes.clone(),
             // Zero-area faces, and bound faces the layout demoted (sub-texel slivers).
             no_raster_faces: f
                 .faces

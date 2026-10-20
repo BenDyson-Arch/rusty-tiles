@@ -38,6 +38,10 @@ pub(super) fn bary(p: [V3; 3], w: V3) -> V3 {
 /// The smallest value whose cumulative weight reaches half the total weight, over
 /// `(value, weight)` samples with finite nonnegative weights; with no positive weight,
 /// the plain median. `None` when empty.
+///
+/// Robust to outliers that carry little weight, not to heavy ones: one sample holding
+/// more than half the total weight is the median whatever its value (for child density,
+/// a near-degenerate UV face covering most of a child's world area still sets it).
 pub(super) fn weighted_median(samples: &mut [(f64, f64)]) -> Option<f64> {
     if samples.is_empty() {
         return None;

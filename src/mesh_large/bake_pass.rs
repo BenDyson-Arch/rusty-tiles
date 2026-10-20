@@ -2234,6 +2234,243 @@ mod tests {
             .collect()
     }
 
+    /// A source without NORMAL or COLOR_0 (photogrammetry): leaves carry POSITION and
+    /// TEXCOORD_0 only and render unlit, so baked proxies must carry the same shading
+    /// inputs (no NORMAL, TANGENT or COLOR_0), keep the source material factors, publish
+    /// base colour with the leaves' sRGB transfer, and reproduce a flat source colour.
+    #[test]
+    fn real_baker_proxies_keep_the_leaves_shading_inputs_and_source_colour() {
+        use crate::mesh_large::bake::{integration::ProxyTextureBaker, BakeLimits};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("src"), 48);
+        let out = work.path().join("out");
+        let scratch = work.path().join("scratch");
+        fs::create_dir_all(&scratch).unwrap();
+        let baker = ProxyTextureBaker::new(BakeLimits {
+            profile: crate::mesh_large::config::Profile::Balanced,
+            memory_bytes: 2 << 30,
+            member_bytes: crate::mesh_large::config::TILE_BYTES,
+            source_cache_bytes: 256 << 20,
+            query_work: 1 << 40,
+            max_page_edge: 4096,
+            max_density_drops: 8,
+        })
+        .unwrap();
+        let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+            .with_jobs(NonZeroUsize::new(2).unwrap())
+            .with_scratch_dir(&scratch)
+            .with_lod_target(256)
+            .with_leaf_triangles(1024)
+            .with_baker(Arc::new(baker));
+        mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+        // (attribute names without feature IDs, materials, base-colour images) of a GLB.
+        type Member = (
+            Vec<std::collections::BTreeSet<String>>,
+            Vec<Value>,
+            Vec<Vec<u8>>,
+        );
+        let member = |path: &Path| -> Member {
+            let glb = fs::read(path).unwrap();
+            let n = u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize;
+            let doc: Value = serde_json::from_slice(&glb[20..20 + n]).unwrap();
+            let bin = &glb[(28 + n).min(glb.len())..];
+            let attributes = doc["meshes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|m| m["primitives"].as_array().unwrap().clone())
+                .map(|p| {
+                    p["attributes"]
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .filter(|k| !k.starts_with("_FEATURE_ID"))
+                        .cloned()
+                        .collect()
+                })
+                .collect();
+            let materials = doc["materials"].as_array().cloned().unwrap_or_default();
+            let mut images = Vec::new();
+            for m in &materials {
+                let Some(t) = m.pointer("/pbrMetallicRoughness/baseColorTexture/index") else {
+                    continue;
+                };
+                let texture = &doc["textures"][t.as_u64().unwrap() as usize];
+                let source = texture
+                    .pointer("/extensions/KHR_texture_basisu/source")
+                    .or_else(|| texture.get("source"))
+                    .unwrap();
+                let view = &doc["bufferViews"][doc["images"][source.as_u64().unwrap() as usize]
+                    ["bufferView"]
+                    .as_u64()
+                    .unwrap() as usize];
+                let at = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+                images.push(bin[at..at + view["byteLength"].as_u64().unwrap() as usize].to_vec());
+            }
+            (attributes, materials, images)
+        };
+        let glbs = |dir: &str| -> Vec<PathBuf> {
+            let mut v: Vec<PathBuf> = fs::read_dir(out.join(dir))
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .filter(|p| p.extension().is_some_and(|e| e == "glb"))
+                .collect();
+            v.sort();
+            v
+        };
+        let leaves: Vec<Member> = glbs("leaves").iter().map(|p| member(p)).collect();
+        let proxies: Vec<Member> = glbs("proxies").iter().map(|p| member(p)).collect();
+        assert!(!leaves.is_empty() && proxies.len() >= 3);
+        let leaf_sets: std::collections::BTreeSet<_> =
+            leaves.iter().flat_map(|l| l.0.clone()).collect();
+        assert!(leaf_sets
+            .iter()
+            .all(|s| !s.contains("NORMAL") && !s.contains("TANGENT") && !s.contains("COLOR_0")));
+        // KTX2 base colour: transfer function byte of the basic data format descriptor.
+        let transfer = |ktx2: &[u8]| -> u8 {
+            assert_eq!(&ktx2[..4], b"\xabKTX");
+            let dfd = u32::from_le_bytes(ktx2[48..52].try_into().unwrap()) as usize;
+            ktx2[dfd + 4 + 8 + 2]
+        };
+        let leaf_transfer: Vec<u8> = leaves
+            .iter()
+            .flat_map(|l| l.2.iter().map(|i| transfer(i)))
+            .collect();
+        assert!(!leaf_transfer.is_empty());
+        let mut decoded_texels = 0;
+        for (attributes, materials, images) in &proxies {
+            for set in attributes {
+                assert!(
+                    !set.contains("NORMAL") && !set.contains("TANGENT") && !set.contains("COLOR_0"),
+                    "proxy shading inputs differ from the leaves: {set:?}"
+                );
+                assert!(
+                    set.iter().all(|a| a == "POSITION" || a == "TEXCOORD_0"),
+                    "{set:?}"
+                );
+            }
+            for m in materials {
+                assert_eq!(
+                    m.pointer("/pbrMetallicRoughness/metallicFactor"),
+                    Some(&json!(0))
+                );
+                assert!(m.get("normalTexture").is_none());
+            }
+            assert!(!images.is_empty(), "proxy is textured");
+            for ktx2 in images {
+                assert_eq!(
+                    transfer(ktx2),
+                    leaf_transfer[0],
+                    "proxy base colour transfer"
+                );
+                let w = u32::from_le_bytes(ktx2[20..24].try_into().unwrap());
+                let h = u32::from_le_bytes(ktx2[24..28].try_into().unwrap());
+                let rgba = crate::basisu_ktx2::decode_level_rgba(ktx2, 0, w, h).unwrap();
+                // Covered texels sit near the flat source colour; count those that do.
+                let near = rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|p| {
+                        p[..3]
+                            .iter()
+                            .zip([120u8, 160, 90])
+                            .all(|(a, b)| a.abs_diff(b) <= 8)
+                    })
+                    .count();
+                assert!(
+                    near * 2 > rgba.len() / 4,
+                    "flat source colour: {near} of {}",
+                    rgba.len() / 4
+                );
+                decoded_texels += near;
+            }
+        }
+        assert!(decoded_texels > 0);
+        assert!(
+            leaf_transfer.iter().all(|t| *t == 2),
+            "leaf base colour is sRGB"
+        );
+    }
+
+    /// The real proxy texture baker through the production bake pass: a textured terrain
+    /// with fill holes, several proxies per depth, baked with one and with three workers,
+    /// publishes byte-identical leaves, proxies and manifest.
+    #[test]
+    fn real_baker_output_does_not_depend_on_the_worker_count() {
+        use crate::mesh_large::bake::{integration::ProxyTextureBaker, BakeLimits};
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("src"), 64);
+        let run = |jobs: usize| {
+            let out = work.path().join(format!("jobs-{jobs}"));
+            let scratch = work.path().join(format!("jobs-{jobs}-scratch"));
+            fs::create_dir_all(&scratch).unwrap();
+            let baker = ProxyTextureBaker::new(BakeLimits {
+                profile: crate::mesh_large::config::Profile::Balanced,
+                memory_bytes: 2 << 30,
+                member_bytes: crate::mesh_large::config::TILE_BYTES,
+                source_cache_bytes: 256 << 20,
+                query_work: 1 << 40,
+                max_page_edge: 4096,
+                max_density_drops: 8,
+            })
+            .unwrap();
+            let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(jobs).unwrap())
+                .with_scratch_dir(&scratch)
+                .with_lod_target(256)
+                .with_leaf_triangles(1024)
+                .with_baker(Arc::new(baker));
+            mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+            let mut files = BTreeMap::new();
+            let mut stack = vec![out.clone()];
+            while let Some(dir) = stack.pop() {
+                for entry in fs::read_dir(&dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else {
+                        let name = path.strip_prefix(&out).unwrap().to_owned();
+                        // Runtime resource diagnostics (worker counts, leases) describe the
+                        // run, not the published payload, and differ by design.
+                        if name != Path::new("resources.json") {
+                            files.insert(name, fs::read(&path).unwrap());
+                        }
+                    }
+                }
+            }
+            files
+        };
+        let one = run(1);
+        let three = run(3);
+        let rows: Vec<Value> = String::from_utf8_lossy(&one[Path::new("proxies.jsonl")])
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert!(rows.len() >= 3, "several proxies: {}", rows.len());
+        // Every proxy member is baked: it carries images.
+        for (name, bytes) in &one {
+            if name.starts_with("proxies") && name.extension().is_some_and(|e| e == "glb") {
+                let n = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+                let doc: Value = serde_json::from_slice(&bytes[20..20 + n]).unwrap();
+                assert!(
+                    doc["images"].as_array().is_some_and(|a| !a.is_empty()),
+                    "{name:?}"
+                );
+            }
+        }
+        assert_eq!(
+            one.keys().collect::<Vec<_>>(),
+            three.keys().collect::<Vec<_>>()
+        );
+        for (name, bytes) in &one {
+            assert!(
+                three[name] == *bytes,
+                "{name:?} differs between 1 and 3 workers"
+            );
+        }
+    }
+
     /// The handoff end to end on real H8 + H17 output: packets are complete and consistent,
     /// leaf pre-encode pages are retained, the baked members carry the certified geometry
     /// unchanged with every table, and the archive validates with decoded containment.

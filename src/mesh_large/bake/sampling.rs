@@ -234,7 +234,13 @@ impl<'a> ChildQuery<'a> {
                         old.face,
                     )
                 };
-                if best.is_none_or(|(old, entry, _)| d < old || (d == old && tie(entry))) {
+                // total_cmp: a NaN distance orders after every finite one, so it never
+                // sticks as the best candidate.
+                if best.is_none_or(|(old, entry, _)| match d.total_cmp(&old) {
+                    std::cmp::Ordering::Less => true,
+                    std::cmp::Ordering::Equal => tie(entry),
+                    std::cmp::Ordering::Greater => false,
+                }) {
                     best = Some((d, e, bary));
                 }
             }
@@ -528,4 +534,139 @@ fn taps(
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh_large::{
+        bake::types::{ChildFace, PositionWord, SourceKey},
+        records::{Bounds, NodeKind, NodeRecord},
+    };
+
+    /// Distance, ordering key (own lineage, lineage, child, face) and barycentrics.
+    type Expected = (f64, (bool, u64, usize, usize), V3);
+
+    #[test]
+    fn child_nearest_matches_exhaustive_search_including_ties() {
+        let mut state = 0x853c_49e6_748f_ea9bu64;
+        let mut rng = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let frame = Frame {
+            tangent: [1., 0., 0.],
+            bitangent: [0., 1., 0.],
+            normal: [0., 0., 1.],
+        };
+        let source = |primitive| SourceKey {
+            node: 0,
+            mesh: 0,
+            primitive,
+            instance: 0,
+        };
+        // Four children of 90 faces over two sources and two materials; every fifth face
+        // repeats the previous one exactly, so distances tie.
+        let children: Vec<PreencodeChild> = (0..4u64)
+            .map(|c| {
+                let mut faces: Vec<ChildFace> = Vec::new();
+                for i in 0..90u64 {
+                    let positions = if i % 5 == 4 {
+                        faces.last().unwrap().positions
+                    } else {
+                        std::array::from_fn(|_| std::array::from_fn(|_| (rng() * 3.) as f32))
+                    };
+                    faces.push(ChildFace {
+                        source: source((i % 2) as u32),
+                        source_triangle: (c * 1000 + i) % 7,
+                        material: (i % 3 == 0) as u32,
+                        positions,
+                        frames: [frame; 3],
+                        bindings: [None; 5],
+                    });
+                }
+                PreencodeChild {
+                    node: NodeRecord {
+                        cell_depth: 1,
+                        cell: c,
+                        path_len: 0,
+                        path: 0,
+                        last_octant: 0,
+                        kind: NodeKind::Leaf,
+                        children: 0,
+                        first: c * 90,
+                        end: c * 90 + 90,
+                        bytes: 0,
+                        bounds: Bounds::EMPTY,
+                    },
+                    texel_size: 0.,
+                    faces,
+                    pages: Vec::new(),
+                }
+            })
+            .collect();
+        let mut query = ChildQuery::new(&children, 1 << 30, u64::MAX / 4).unwrap();
+        assert!(query.tree.len() > 16);
+        let ok = &mut || Ok(());
+        let mut checked = 0;
+        for i in 0..800usize {
+            let face = FrozenFace {
+                ordinal: 0,
+                source: source((i % 2) as u32),
+                source_triangle: (i % 7) as u64,
+                material: (i % 4 == 0) as u32,
+                positions: [[0.; 3]; 3],
+                words: [PositionWord::Float([0; 3]); 3],
+                transform: Default::default(),
+                welds: [[0; 3]; 3],
+                features: Vec::new(),
+                fill_bound: None,
+                donor_ranges: Vec::new(),
+            };
+            let q: V3 = if i % 2 == 0 {
+                let c = &children[i % 4].faces[(i * 3) % 90];
+                c.positions[i % 3].map(f64::from)
+            } else {
+                std::array::from_fn(|_| rng() * 4. - 0.5)
+            };
+            let n = math::unit(std::array::from_fn(|_| rng() - 0.5)).unwrap();
+            // Exhaustive: same filters, then (distance, own-lineage, lineage, child, face).
+            let mut expected: Option<Expected> = None;
+            for (ci, child) in children.iter().enumerate() {
+                for (fi, c) in child.faces.iter().enumerate() {
+                    if c.source != face.source || c.material != face.material {
+                        continue;
+                    }
+                    let p = c.positions.map(|p| p.map(f64::from));
+                    if !math::face_normal(p).is_some_and(|cn| math::dot(cn, n) > 0.) {
+                        continue;
+                    }
+                    let bary = math::closest(q, p);
+                    let d = math::distance2(q, math::bary(p, bary));
+                    let order = (
+                        c.source_triangle != face.source_triangle,
+                        c.source_triangle,
+                        ci,
+                        fi,
+                    );
+                    if expected.is_none_or(|(od, oo, _)| d < od || (d == od && order < oo)) {
+                        expected = Some((d, order, bary));
+                    }
+                }
+            }
+            let actual = query.nearest(q, &face, n, ok).unwrap();
+            match (actual, expected) {
+                (None, None) => {}
+                (Some((e, bary)), Some((_, (_, _, ci, fi), eb))) => {
+                    assert_eq!((e.child, e.face), (ci, fi), "query {i}");
+                    assert_eq!(bary.map(f64::to_bits), eb.map(f64::to_bits));
+                    checked += 1;
+                }
+                other => panic!("query {i}: {:?}", other.0.map(|(e, _)| (e.child, e.face))),
+            }
+        }
+        assert!(checked > 400);
+    }
 }

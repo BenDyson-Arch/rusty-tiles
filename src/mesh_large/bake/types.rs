@@ -207,6 +207,10 @@ pub(crate) struct PreparedNode {
     /// These exact faces have zero geometric area: retain every corner/feature/
     /// source/COLOR, with no invented texture support or appearance claim.
     pub no_raster_faces: Vec<usize>,
+    /// Per face, the vertex attributes its source primitive's leaves carry
+    /// (`attributes::NORMAL`, `attributes::COLOR`): a proxy publishes NORMAL and COLOR_0
+    /// only where its leaves do, so both render with the same shading model.
+    pub face_attributes: Vec<u8>,
     pub corners: Vec<RenderCorner>,
     pub face_indices: Vec<[u32; 3]>,
     pub face_identities: Vec<FaceIdentity>,

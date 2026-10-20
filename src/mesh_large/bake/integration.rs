@@ -139,7 +139,9 @@ impl root::ProxyBaker for ProxyTextureBaker {
                 workers,
                 limits,
                 pass.check,
-                |check| CapturedSource::new(pass.captured, limits.source_cache_bytes, check),
+                |limits, check| {
+                    CapturedSource::new(pass.captured, limits.source_cache_bytes, check)
+                },
                 |source, share, first, check| bake_tile(pass, share, source, first, *depth, check),
             )?;
         }
@@ -167,7 +169,7 @@ pub(super) fn run_depth<S>(
     workers: usize,
     limits: BakeLimits,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    state: impl Fn(&mut dyn FnMut() -> Result<(), JobError>) -> Result<S, JobError> + Sync,
+    state: impl Fn(BakeLimits, &mut dyn FnMut() -> Result<(), JobError>) -> Result<S, JobError> + Sync,
     bake: impl Fn(
             &mut S,
             BakeLimits,
@@ -178,8 +180,13 @@ pub(super) fn run_depth<S>(
 ) -> Result<(), JobError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     let running = workers.min(firsts.len()).max(1);
+    // The source cache is part of each tile's charge, so it is capped by the worker's
+    // share too; otherwise a cache sized for the whole allowance alone could make every
+    // tile refuse its share. A smaller cache changes only residency, never results.
+    let memory_bytes = limits.memory_bytes / running as u64;
     let share = BakeLimits {
-        memory_bytes: limits.memory_bytes / running as u64,
+        memory_bytes,
+        source_cache_bytes: limits.source_cache_bytes.min(memory_bytes / 4),
         ..limits
     };
     let failed = AtomicBool::new(false);
@@ -207,7 +214,7 @@ pub(super) fn run_depth<S>(
                         };
                         let worker = match &mut worker {
                             Some(s) => s,
-                            None => match state(&mut check) {
+                            None => match state(share, &mut check) {
                                 Ok(s) => worker.insert(s),
                                 Err(e) => {
                                     failed.store(true, Ordering::Relaxed);
@@ -259,7 +266,7 @@ pub(super) fn run_depth<S>(
         return Ok(());
     }
     let mut check = || check();
-    let mut worker = state(&mut check)?;
+    let mut worker = state(limits, &mut check)?;
     for first in deferred {
         match bake(&mut worker, limits, first, &mut check)? {
             TileOutcome::Done => {}
@@ -281,7 +288,10 @@ fn bake_tile(
     depth: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<TileOutcome, JobError> {
-    // Everything before the commit only reads: a resource refusal there may be retried.
+    // Nothing is written before the commit's own write: every memory-leased step (the
+    // packet and member reads, the bake, the parent packet's encoding and the commit's
+    // decoded readback) comes first, so a resource refusal anywhere in them may be
+    // retried alone with the whole allowance. Only the scratch writes come after.
     let retryable = |e: JobError| {
         if e.kind() == crate::JobErrorKind::ResourceLimit {
             Ok(TileOutcome::Retry(e))
@@ -315,17 +325,30 @@ fn bake_tile(
             &mut |prepared, memory| pass.assemble(&frozen, prepared, memory),
             check,
         )?;
-        Ok((core, frozen, accepted))
+        drop(children);
+        // The parent's packet, encoded in memory before anything is written.
+        let packet = if depth > 0 {
+            Some(child_bridge::encode_packet(
+                &accepted.preencode,
+                core,
+                check,
+            )?)
+        } else {
+            None
+        };
+        Ok((core, frozen, accepted.assembly, packet))
     })();
-    let (core, frozen, accepted) = match prepared {
+    let (core, frozen, assembly, packet) = match prepared {
         Ok(p) => p,
         Err(e) => return retryable(e),
     };
-    pass.commit(&frozen, accepted.assembly, core)?;
-    if depth > 0 {
-        child_bridge::persist(pass.preencode, &accepted.preencode, core, check)?;
+    // Its readback runs (and may refuse) before the member is written.
+    if let Err(e) = pass.commit(&frozen, assembly, core) {
+        return retryable(e);
     }
-    drop(accepted.preencode);
+    if let Some(bytes) = packet {
+        pass.preencode.write_proxy(first, depth, &bytes)?;
+    }
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
     pass.release(first, depth)?;
     Ok(TileOutcome::Done)
@@ -729,7 +752,7 @@ mod tests {
             workers,
             depth_limits(memory),
             &|| Ok(()),
-            |_| Ok(()),
+            |_, _| Ok(()),
             |_, share, first, check| {
                 check()?;
                 if fail == Some(first) {
@@ -773,6 +796,37 @@ mod tests {
         // With eight workers each share is 125 bytes: tiles 3 and 6 are retried.
         let (_, log) = run(&tiles, 8, 1000, need, None);
         assert!(log.contains(&(3, 125, false)) && log.contains(&(6, 125, false)));
+    }
+
+    #[test]
+    fn worker_state_and_tiles_get_a_source_cache_within_their_share() {
+        let mut limits = depth_limits(4000);
+        limits.source_cache_bytes = 3000;
+        let seen = std::sync::Mutex::new(Vec::new());
+        run_depth(
+            &[1, 2, 3, 4],
+            4,
+            limits,
+            &|| Ok(()),
+            |share, _| {
+                seen.lock()
+                    .unwrap()
+                    .push(("state", share.memory_bytes, share.source_cache_bytes));
+                Ok(())
+            },
+            |_, share, _, _| {
+                seen.lock()
+                    .unwrap()
+                    .push(("tile", share.memory_bytes, share.source_cache_bytes));
+                Ok(TileOutcome::Done)
+            },
+        )
+        .unwrap();
+        let seen = seen.into_inner().unwrap();
+        // One state per worker that took a tile (scheduling decides how many).
+        assert_eq!(seen.iter().filter(|e| e.0 == "tile").count(), 4);
+        assert!((1..=4).contains(&seen.iter().filter(|e| e.0 == "state").count()));
+        assert!(seen.iter().all(|e| e.1 == 1000 && e.2 == 250));
     }
 
     #[test]
