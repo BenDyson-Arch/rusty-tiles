@@ -96,7 +96,8 @@ pub(crate) struct FrozenNode {
     pub original_glb: Vec<u8>,
     pub original_sha256: [u8; 32],
     pub geometric_error: f64,
-    /// Maximum actual post-drop child texel spacing in local metres.
+    /// Maximum over the retained children of their texel spacing in local metres (a
+    /// leaf child's is its area-weighted median face spacing; see `child_bridge`).
     pub child_texel_size: f64,
     pub faces: Vec<FrozenFace>,
 }

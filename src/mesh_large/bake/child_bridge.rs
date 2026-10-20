@@ -404,6 +404,12 @@ fn leaf_frame(
 /// the same order, ranks inside the child, and each slot's zero-raster bit equal to the
 /// retained page-UV/decoded-position footprint and implied by zero geometric area (the
 /// bake's no-raster rule).
+///
+/// The child's density is the world-area-weighted median of its rasterising faces'
+/// texel spacing (each face at its coarsest binding), not the witness maximum: one
+/// near-degenerate source UV triangle has an unbounded worst-direction spacing, and
+/// the maximum would make the parent's texel kilometres wide. The witness maximum is
+/// checked as an upper bound of every recomputed face spacing.
 pub(super) fn from_witness(
     parent: &NodeRecord,
     child: &handoff::FrozenChild,
@@ -421,12 +427,17 @@ pub(super) fn from_witness(
         .iter()
         .try_fold(0u64, |n, p| n.checked_add(p.faces.len() as u64))
         .ok_or_else(|| resource("leaf witness face count"))?;
+    // Each face also leaves one (spacing, area) density sample until the median is taken.
     if count
-        .checked_mul(std::mem::size_of::<ChildFace>() as u64)
+        .checked_mul(std::mem::size_of::<ChildFace>() as u64 + 16)
         .is_none_or(|n| n > memory)
     {
         return Err(resource("leaf child face lease"));
     }
+    let mut density = Vec::new();
+    density
+        .try_reserve_exact(count as usize)
+        .map_err(|_| resource("leaf child density reserve"))?;
     let mut faces = Vec::new();
     faces
         .try_reserve_exact(count as usize)
@@ -451,6 +462,7 @@ pub(super) fn from_witness(
             let positions: [[f32; 3]; 3] = std::array::from_fn(|c| p.positions[3 * i + c]);
             let p64 = positions.map(|v| v.map(f64::from));
             let geometric = super::math::face_normal(p64);
+            let mut face_spacing: Option<f64> = None;
             for b in &p.bindings {
                 let page = leaf
                     .pages
@@ -469,13 +481,21 @@ pub(super) fn from_witness(
                     ]
                 });
                 let zero = face.zero_raster & (1 << b.slot) != 0;
-                if zero != witness::texel_spacing(p64, uv).is_none()
-                    || (geometric.is_none() && !zero)
-                {
+                let spacing = witness::texel_spacing(p64, uv);
+                if zero != spacing.is_none() || (geometric.is_none() && !zero) {
                     return Err(invalid(
                         "leaf zero-raster witness disagrees with its footprint or no-raster geometry",
                     ));
                 }
+                if let Some(s) = spacing {
+                    if w.texel_spacing.is_none_or(|max| s > max) {
+                        return Err(invalid("leaf witness understates a face's texel spacing"));
+                    }
+                    face_spacing = Some(face_spacing.map_or(s, |m: f64| m.max(s)));
+                }
+            }
+            if let Some(s) = face_spacing {
+                density.push((s, super::math::triangle_area(p64)));
             }
             let frames = std::array::from_fn(|c| {
                 leaf_frame(
@@ -500,7 +520,10 @@ pub(super) fn from_witness(
         }
     }
     // No rasterising bound face: this leaf sets no density floor for its parent.
-    let texel_size = w.texel_spacing.unwrap_or(0.);
+    if density.is_empty() != w.texel_spacing.is_none() {
+        return Err(invalid("leaf witness texel spacing presence"));
+    }
+    let texel_size = super::math::weighted_median(&mut density).unwrap_or(0.);
     if !texel_size.is_finite() || texel_size < 0. {
         return Err(invalid("leaf witness texel spacing"));
     }
@@ -770,8 +793,9 @@ mod tests {
             BindingWitness, FaceWitness, LeafWitness, PrimitiveWitness,
         };
         let (mut leaf, _) = fixture();
+        // Base colour spans 2 m over half a texel (4 m per texel); the normal map 2 m.
         leaf.witness = LeafWitness {
-            texel_spacing: Some(2.5),
+            texel_spacing: Some(4.0f64.next_up()),
             primitives: vec![PrimitiveWitness {
                 node: 7,
                 mesh: 8,
@@ -786,7 +810,7 @@ mod tests {
                         texcoord: 0,
                         sampler: Some(0),
                         normal_scale: None,
-                        texel_spacing: Some(2.5),
+                        texel_spacing: Some(4.0f64.next_up()),
                     },
                     BindingWitness {
                         slot: 2,
@@ -794,7 +818,7 @@ mod tests {
                         texcoord: 1,
                         sampler: Some(1),
                         normal_scale: Some(2.),
-                        texel_spacing: Some(2.),
+                        texel_spacing: Some(2.0f64.next_up()),
                     },
                 ],
                 faces: vec![FaceWitness {
@@ -845,7 +869,7 @@ mod tests {
         .unwrap();
         assert_eq!(ok.node.parent(), Some(parent.identity()));
         assert_eq!((ok.node.cell_depth, ok.node.cell), (3, 9 << 3 | 6));
-        assert_eq!(ok.texel_size, 2.5);
+        assert_eq!(ok.texel_size, 4.0f64.next_up());
         assert!(ok.pages.is_empty());
         let face = &ok.faces[0];
         assert_eq!((face.source.instance, face.source_triangle), (123, 11));
@@ -870,14 +894,16 @@ mod tests {
             &mut || Ok(())
         )
         .is_err());
-        let zero = from_witness(
-            &parent,
-            &child,
-            &witness_leaf(line, 0b101),
-            1 << 20,
-            &mut || Ok(()),
-        )
-        .unwrap();
+        // No face rasterises, so the witness (as H8 writes it) states no spacing; a
+        // stated spacing with nothing to measure is refused.
+        let mut line_leaf = witness_leaf(line, 0b101);
+        assert!(from_witness(&parent, &child, &line_leaf, 1 << 20, &mut || Ok(())).is_err());
+        line_leaf.witness.texel_spacing = None;
+        for b in &mut line_leaf.witness.primitives[0].bindings {
+            b.texel_spacing = None;
+        }
+        let zero = from_witness(&parent, &child, &line_leaf, 1 << 20, &mut || Ok(())).unwrap();
+        assert_eq!(zero.texel_size, 0.);
         assert_eq!(zero.faces.len(), 1);
         // Ranks outside the child and a too-small lease are refused.
         let mut outside = witness_leaf(flat, 0);
@@ -890,5 +916,68 @@ mod tests {
                 .kind(),
             JobErrorKind::ResourceLimit
         );
+    }
+
+    #[test]
+    fn leaf_child_density_ignores_a_near_degenerate_uv_outlier() {
+        let parent = NodeRecord {
+            cell_depth: 2,
+            cell: 9,
+            path_len: 0,
+            path: 0,
+            last_octant: 0,
+            kind: NodeKind::Internal,
+            children: 1,
+            first: 4,
+            end: 7,
+            bytes: 0,
+            bounds: Bounds::EMPTY,
+        };
+        let child = handoff::FrozenChild {
+            first: 4,
+            end: 7,
+            depth: 3,
+            slot: 6,
+            leaf: Some(handoff::LeafChild {
+                index: 0,
+                density_drop: 0,
+            }),
+        };
+        let flat = [[0., 0., 0.], [2., 0., 0.], [0., 1., 0.]];
+        let mut leaf = witness_leaf(flat, 0);
+        // Two more faces: a second ordinary face, and a 1 m^2 face whose base-colour UVs
+        // are almost collinear (a photogrammetry atlas sliver): its worst-direction
+        // spacing is about 2e6 m per texel.
+        let sliver_uv: [[f32; 2]; 3] = [[0., 0.], [0.5, 0.], [0.25, 1e-6]];
+        let retained = &mut leaf.primitives[0];
+        retained.triangles = vec![(7, 8, 9, 11), (7, 8, 9, 12), (7, 8, 9, 13)];
+        let base = retained.uvs[0].clone();
+        let normal = retained.uvs[1].clone();
+        retained.uvs[0] = [base.clone(), base, sliver_uv.to_vec()].concat();
+        retained.uvs[1] = [normal.clone(), normal.clone(), normal].concat();
+        let w = &mut leaf.witness.primitives[0];
+        let face = w.faces[0];
+        w.faces = (0..3)
+            .map(|k| crate::mesh_large::leaves::witness::FaceWitness {
+                triangle: 11 + k,
+                rank: 4 + k,
+                ..face
+            })
+            .collect();
+        let square = [[0., 0., 0.], [1., 0., 0.], [0., 2., 0.]];
+        w.positions = [flat, flat, square].concat();
+        w.normals = vec![[0., 0., 2.]; 9];
+        let outlier = crate::mesh_large::leaves::witness::texel_spacing(
+            square.map(|p| p.map(f64::from)),
+            sliver_uv.map(|t| t.map(f64::from)),
+        )
+        .unwrap();
+        assert!(outlier > 1e5);
+        // A witness maximum below a face's recomputed spacing is refused.
+        assert!(from_witness(&parent, &child, &leaf, 1 << 20, &mut || Ok(())).is_err());
+        leaf.witness.texel_spacing = Some(outlier);
+        let ok = from_witness(&parent, &child, &leaf, 1 << 20, &mut || Ok(())).unwrap();
+        assert_eq!(ok.faces.len(), 3);
+        assert_eq!(ok.texel_size, 4.0f64.next_up());
     }
 }

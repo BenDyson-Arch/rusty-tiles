@@ -32,6 +32,8 @@ pub(super) struct Raster {
     pub masks: Vec<Vec<mask::SurfaceSample>>,
     pub owner: Vec<Vec<usize>>,
     pub receipt: serde_json::Value,
+    /// Density reported to the parent: area-weighted median decoded spacing, at least
+    /// the planned texel.
     pub texel_size: f64,
 }
 fn identity() -> Frame {
@@ -518,6 +520,38 @@ pub(super) fn build(
             owners.push(owner);
         }
     }
+    // The density this proxy reports to its parent: the world-area-weighted median of
+    // its rasterised faces' decoded worst-direction spacing, never finer than planned.
+    // A face whose 16-bit UVs land just above the collapse threshold has an unbounded
+    // spacing, and the maximum (kept in the receipt) would coarsen the whole parent.
+    let rasterised: u64 = layout.charts.iter().map(|c| c.faces.len() as u64).sum();
+    charged = rasterised
+        .checked_mul(16)
+        .and_then(|b| charged.checked_add(b))
+        .ok_or_else(|| resource("proxy density sample lease overflow"))?;
+    if charged > limits.memory_bytes {
+        return Err(resource("proxy density samples exceed lease"));
+    }
+    let mut density = Vec::with_capacity(rasterised as usize);
+    for plan in &layout.pages {
+        for &ci in &plan.charts {
+            for &fi in &layout.charts[ci].faces {
+                check()?;
+                let points = f.faces[fi].positions.map(|p| p.map(f64::from));
+                let t = layout.uv[fi].map(|p| {
+                    [
+                        f64::from(p[0]) * f64::from(plan.size[0]),
+                        f64::from(p[1]) * f64::from(plan.size[1]),
+                    ]
+                });
+                if let Some(s) = math::pixel_size(points, t) {
+                    density.push((s, math::triangle_area(points)));
+                }
+            }
+        }
+    }
+    let median_texel = math::weighted_median(&mut density).unwrap_or(0.);
+    drop(density);
     Ok(Raster {
         pages,
         face_pages,
@@ -527,8 +561,8 @@ pub(super) fn build(
         colors,
         masks,
         owner: owners,
-        texel_size: maximum_texel.max(layout.texel_size),
-        receipt: serde_json::json!({"directSamples":direct,"recursiveSamples":recursive,"fillUnfilteredFallbackSamples":fallback,
+        texel_size: median_texel.max(layout.texel_size),
+        receipt: serde_json::json!({"maximumTexel":maximum_texel,"medianTexel":median_texel,"directSamples":direct,"recursiveSamples":recursive,"fillUnfilteredFallbackSamples":fallback,
         "surfaceWitnessDisplacement":witness_distance,"supportDisplacementUpper":support_distance,"centroidSamples":centroid_samples,"witnessMeaning":"actual deterministic source-surface witness; centroid and support are separate, not a closest-source certificate",
         "appearanceDisplacement":displacement,"deepDriftMaxByte":drift,"supportAreaQuantizationMax":area_error,"supportQByPage":support_scales,"finiteQuadrature":"4x4 and clipped centroid","owningProvisionalBytes":charged}),
     })

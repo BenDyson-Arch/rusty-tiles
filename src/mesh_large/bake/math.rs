@@ -35,6 +35,38 @@ pub(super) fn unit(a: V3) -> Option<V3> {
 pub(super) fn bary(p: [V3; 3], w: V3) -> V3 {
     std::array::from_fn(|i| p[0][i] * w[0] + p[1][i] * w[1] + p[2][i] * w[2])
 }
+/// The smallest value whose cumulative weight reaches half the total weight, over
+/// `(value, weight)` samples with finite nonnegative weights; with no positive weight,
+/// the plain median. `None` when empty.
+pub(super) fn weighted_median(samples: &mut [(f64, f64)]) -> Option<f64> {
+    if samples.is_empty() {
+        return None;
+    }
+    samples.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let total: f64 = samples.iter().map(|s| s.1).sum();
+    if !(total.is_finite() && total > 0.) {
+        return Some(samples[(samples.len() - 1) / 2].0);
+    }
+    let mut acc = 0.;
+    for &(value, weight) in samples.iter() {
+        acc += weight;
+        if acc >= total / 2. {
+            return Some(value);
+        }
+    }
+    samples.last().map(|s| s.0)
+}
+
+/// Half the cross-product length; 0 for a degenerate or non-finite triangle.
+pub(super) fn triangle_area(p: [V3; 3]) -> f64 {
+    let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+    let a = 0.5 * dot(n, n).sqrt();
+    if a.is_finite() {
+        a
+    } else {
+        0.
+    }
+}
 pub(super) fn face_normal(p: [V3; 3]) -> Option<V3> {
     unit(cross(sub(p[1], p[0]), sub(p[2], p[0])))
 }
@@ -197,4 +229,25 @@ pub(super) fn box_distance_lower(q: V3, lo: V3, hi: V3) -> f64 {
         sum = (sum + (d * d).next_down().max(0.0)).next_down().max(0.0);
     }
     sum
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn weighted_median_takes_half_the_weight() {
+        assert_eq!(weighted_median(&mut []), None);
+        assert_eq!(weighted_median(&mut [(3., 1.)]), Some(3.));
+        // Sorted by value: the outlier carries almost no weight.
+        assert_eq!(
+            weighted_median(&mut [(5000., 1e-6), (2., 1.), (1., 1.), (3., 1.)]),
+            Some(2.)
+        );
+        assert_eq!(weighted_median(&mut [(1., 1.), (9., 3.)]), Some(9.));
+        // No positive weight: the plain (lower) median.
+        assert_eq!(
+            weighted_median(&mut [(4., 0.), (1., 0.), (2., 0.)]),
+            Some(2.)
+        );
+    }
 }
