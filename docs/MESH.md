@@ -418,14 +418,12 @@ bounded viewer finding, not a claim about all devices or other viewers. The
 tiler keeps its class-correct textures; it does not bake a viewer-specific
 colour correction.
 
-The retained investigation is
-`~/.cache/rusty-tiles-evidence/h19-cesium-srgb-scope-20261013/report.md`, SHA-256
-`4ca7085ed6317de75709283d0eb9b9ea96640df4353b3705d1734ce4595d89c0`, with
-`target-report.json`, SHA-256
-`cad4371f2a93a432438945cff15c67dcbdec64e002bfb0eccf8dc23553d0be7d`.
-Its generic uncompressed KTX2 diagnostic is not a legal Basis glTF binding.
-This documentation uses retained evidence; it adds no new browser execution or
-upstream issue.
+The measured cause is that CesiumJS 1.146.0 uploads KTX2 sRGB colour textures
+as linear (UNORM) formats on the ASTC, BC7, ETC2 and uncompressed paths, so
+filtering happens on encoded values. The worst case measured was 72/255 on
+high-contrast test textures. Linear data textures are unaffected. The limitation
+is documented rather than worked around: it is not filed upstream, and the tiler
+adds no viewer-specific compensation.
 
 Worker diagnostics describe capture and active leaf workspace admission. Capture
 scratch bounds cover capture files only; accumulated leaf/forest intermediates

@@ -50,8 +50,9 @@ The shared layout is a bounded implicit forest. Producer naming/partition detail
 ### mesh
 
 Streams one static glTF/GLB scene, local metre/Y-up or in a declared source CRS,
-through capture, leaf encoding and Tiles 1.1 implicit `.3tz` delivery. Current parents have no coarse content;
-certified LOD and proxy baking are downstream work. See the [mesh guide](MESH.md)
+through capture, leaf encoding, certified coarse levels and Tiles 1.1 implicit `.3tz` delivery. Every parent
+tile carries a simplified proxy whose geometric error bounds its two-way distance to the source, with proxy
+textures baked from the source appearance. See the [mesh guide](MESH.md)
 for admitted sources, placement, resources, migration and the known Cesium
 KTX2 colour-filtering limitation. The preparatory leaf/delivery commands and
 Rust exports are now internal.
@@ -275,6 +276,11 @@ rusty-tiles validate output/example.3tz
 `INPUT` is a self-contained `.3tz` archive. Inspection is read-only and uses the
 fixed [C1 validation profile](VALIDATION.md). Directories, including T1 terrain
 and raster outputs, are rejected as invalid input; package supported content before inspection.
+
+| Option | Alias | Default | Meaning |
+| --- | --- | --- | --- |
+| `--maxVolume KEY=N` | `--max-volume` | profile defaults | Set an opt-in volume cap or replace an amplification budget; repeatable, once per key. `KEY` is one of `sourceArchiveBytes`, `archiveEntries`, `centralDirectoryBytes`, `archiveStoredBytes`, `hierarchyVisits`, `references`, `totalBytesRead`, `totalPayloadElements`, `containmentWorkUnits`, `containmentBytesRead` or `containmentDecodedBytes`; `N` is a decimal integer. Values may be below the defaults (stricter); per-item format limits are fixed. See [validation limits](VALIDATION.md) |
+| `--scratchDir DIR` | `--scratch-dir` | `TMPDIR`, then the user cache directory, then the system temporary directory | Put validation scratch files inside this existing directory |
 
 The typed JSON report lists `checks` and `notInspected`, per-payload accessor,
 primitive and vertex counts, archive counts, and fixed admission `limits`.

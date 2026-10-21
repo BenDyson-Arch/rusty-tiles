@@ -8,7 +8,7 @@ The optional **`native-geospatial` build** adds imagery, terrain, other OGR vect
 
 ![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
-**MIT licensed** · **Runs locally** · **0.4.0 development documentation** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
+**Licence `MIT AND Apache-2.0 AND BSD-3-Clause`** ([details](#licence)) · **Runs locally** · **0.4.0 development documentation** · [Release notes](CHANGELOG.md) · [Build status](https://github.com/BenDyson-Arch/rusty-tiles/actions/workflows/ci.yml) · [Report an issue](https://github.com/BenDyson-Arch/rusty-tiles/issues)
 
 This branch describes the upcoming 0.4.0 release. Build `develop` to use its new capabilities; published 0.3.0 downloads have the feature set documented at that tag.
 
@@ -31,8 +31,7 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 
 | Your data | Command | Output | Needs `native-geospatial` |
 | --- | --- | --- | --- |
-| Textured GLB or glTF meshes | `mesh-to-3tz` | 3D Tiles with mesh level of detail, as `.3tz` | Only for CRS operations outside the grid-free tier |
-| Local metre/Y-up GLB/glTF with core PBR and full-detail leaves | `mesh-local-to-3tz` | Explicit `.3tz`, optionally rigidly placed at a WGS84 anchor | No; bounded source profile |
+| Static textured GLB or glTF meshes, in local metres or a declared source CRS | `mesh` | Streamed 3D Tiles 1.1 implicit tileset with certified coarse levels, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | GeoPackage or GeoJSON | `vector` | Experimental glTF vector tiles, as `.3tz` | Only for CRS operations outside the grid-free tier |
 | Shapefile or other OGR vector formats | `vector` | Experimental glTF vector tiles, as `.3tz` | Yes |
@@ -40,9 +39,11 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | Elevation rasters | `terrain` | Bounded 3D Tiles terrain meshes | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 
+`mesh` is the one public mesh entry point; see the [mesh guide](docs/MESH.md). The older `mesh-to-3tz` and `mesh-local-to-3tz` commands are deprecated, remain only until the new tiler is fully accepted, and are not aliases of `mesh`. Existing scripts can follow the [migration notes](docs/MESH.md#migration-from-older-mesh-converters).
+
 Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
 
-`mesh-to-3tz`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud and vector output was removed in 0.4.0; only the legacy `mesh-to-3tz` keeps `--explicit`. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
+`mesh`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud and vector output was removed in 0.4.0; only the deprecated `mesh-to-3tz` keeps `--explicit`. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
 
 ## Install
 
@@ -129,25 +130,24 @@ The `Dockerfile` builds a Python-free image with GDAL 3.12.4 and PROJ 9.8.1.
 
 ## Quick start
 
-This example works with the prebuilt binary or either Cargo build. It converts a tiny invented pyramid, places it near Brisbane, checks the archive and opens the local viewer. You need `curl`, `unzip` and Node.js with npm for the viewer setup.
+This example needs a 0.4 build: the published 0.3 download has no `mesh` command, so install from `develop` with either Cargo build. It converts a tiny invented pyramid, places it near Brisbane, checks the archive and opens the local viewer. You need `curl`, `unzip` and Node.js with npm for the viewer setup.
 
 ### 1. Check readiness
 
 ```sh
-rusty-tiles doctor --command mesh-to-3tz
+rusty-tiles doctor --command mesh
 ```
 
-Look for `mesh-to-3tz: ready`. The standard build can run this command without GDAL. `doctor` exits with code 4 if a selected command is missing a dependency.
+Look for `mesh: ready`. The standard build can run this command without GDAL. `doctor` exits with code 2 if a selected command is not ready.
 
 ### 2. Make tiles
 
-Download the example (or copy `tests/fixtures/example.gltf` from a source checkout):
+Download the example (or copy `tests/fixtures/example.glb` from a source checkout):
 
 ```sh
-curl -fsSLo example.gltf https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/v0.3.0/tests/fixtures/example.gltf
+curl -fsSLo example.glb https://raw.githubusercontent.com/BenDyson-Arch/rusty-tiles/develop/tests/fixtures/example.glb
 mkdir -p output
-rusty-tiles mesh-to-3tz -i example.gltf -o output/example.3tz \
-  --cartographic-position-degrees 153.02 -27.47 0
+rusty-tiles mesh -i example.glb -o output/example.3tz --anchor 153.02 -27.47 0
 ```
 
 The converter prints what it wrote and the next command. Outputs are not overwritten; choose a new path or add `--force` to repeat the conversion.
@@ -158,7 +158,7 @@ The converter prints what it wrote and the next command. Outputs are not overwri
 rusty-tiles validate output/example.3tz
 ```
 
-A successful check prints `Validated output/example.3tz: 1 tiles, 1 content references`.
+A successful check prints `Inspected output/example.3tz: N tiles, M content references` with the archive's counts, followed by a `Not inspected:` line naming any checks the profile does not cover.
 
 ### 4. Preview
 
@@ -171,7 +171,7 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
   --mesh output/example
 ```
 
-Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the pyramid; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
+Open [http://127.0.0.1:9227/](http://127.0.0.1:9227/). Use **3D mesh extent** to frame the model; press Ctrl+C to stop the server. After the one-time Cesium install, the viewer works offline and needs no ion token.
 
 From a 0.4 source checkout, try the [invented vector fixture](tests/fixtures/vector.geojson) with the standard build too. This example needs 0.4; the published 0.3 standard binary does not include vector conversion:
 
@@ -186,8 +186,7 @@ Every converter takes `-i` for input and `-o` for output. The file names below a
 
 | Data | Example | Build and details |
 | --- | --- | --- |
-| Mesh | `rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz` | Standard; [mesh placement](docs/FORMATS.md#meshes) may need native CRS support |
-| Bounded core PBR mesh | `rusty-tiles mesh-local-to-3tz -i local.glb -o output/local.3tz --leaf-triangles 1000` | Standard; local source metres/Y-up and full-detail leaves; [explicit placement](docs/CLI.md#mesh-local-to-3tz) |
+| Mesh | `rusty-tiles mesh -i model.glb -o output/model.3tz` | Standard; local metres/Y-up, optional `--anchor`; a declared `--source-crs` outside the grid-free tier needs native; [mesh guide](docs/MESH.md) |
 | Local point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs local` | Standard; [point-cloud guide](docs/FORMATS.md#point-clouds) |
 | Georeferenced point cloud | `rusty-tiles point-cloud -i cloud.laz -o output/cloud.3tz --source-crs header --height-offset 0` | Standard for grid-free CRS; otherwise native; [CRS limits](docs/FORMATS.md#point-clouds) |
 | Vector layer | `rusty-tiles vector -i mapping.gpkg -o output/mapping.3tz --layer roads` | Standard for grid-free CRS; otherwise native; [vector guide](docs/VECTOR.md) |
@@ -197,6 +196,8 @@ Every converter takes `-i` for input and `-o` for output. The file names below a
 A height offset of 0 is correct only when source heights are already ellipsoidal metres. Read [Coordinates and height](#coordinates-and-height) before you choose one.
 
 Outputs are never overwritten by default. Add `--force` to replace an existing output after a successful conversion.
+
+The deprecated `mesh-to-3tz` and `mesh-local-to-3tz` commands are documented in the [command reference](docs/CLI.md#mesh-to-3tz) for existing scripts only; new work should use `mesh`.
 
 To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged payloads are recovered byte for byte from the earlier archive's published tiles instead of being re-encoded. The earlier archive must come from the same converter build and settings; archives from earlier releases need one fresh conversion first. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
 
@@ -249,15 +250,15 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 
 | Input | Rule |
 | --- | --- |
-| Bounded mesh foundation | `mesh-local-to-3tz` accepts local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. See the [placement contract](docs/architecture/f1c1-contract.md). |
-| Legacy broader mesh | `mesh-to-3tz` uses `--cartographic-position-degrees` or a horizontal CRS with explicit axes/height offset. These distinct source-conversion routes remain advertised pending migration; bounded rigid placement does not certify or replace them. See [mesh placement](docs/FORMATS.md#mesh-placement). |
+| Mesh | `mesh` takes local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. For a projected or geographic source, declare `--source-crs` (with `--source-axes`, `--source-offset` or `--source-offset-file`, and `--height-offset`) instead; it excludes the anchor options. See [placement](docs/MESH.md#source-and-placement) and [source CRS](docs/MESH.md#source-crs). |
+| Deprecated legacy mesh | `mesh-local-to-3tz` takes the same rigid placement options. `mesh-to-3tz` uses `--cartographic-position-degrees` or a horizontal CRS with explicit axes/height offset. Both are retired with the new tiler's acceptance; see the [migration notes](docs/MESH.md#migration-from-older-mesh-converters) and [mesh placement](docs/FORMATS.md#mesh-placement). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Legacy general mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Legacy `mesh-to-3tz`, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
 
-The bounded mesh foundation uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. Schema 7, profile `f1d2-adaptive-root-proxy-gltf-v1`, reports source/output coordinates, normalized placement and the exact root matrix. The F1c2 candidate carries source node/mesh/primitive identity and exact triangle provenance in two labeled standard feature sets; see the [identity contract](docs/architecture/f1c2-contract.md). The wrapping candidate preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). Broader legacy mesh APIs still require separate migration; this does not imply release acceptance.
+Rigid placement (`mesh`, `glb-to-3tz` and the deprecated `mesh-local-to-3tz`) uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. The [identity contract](docs/architecture/f1c2-contract.md) describes the source node/mesh/primitive and exact triangle provenance carried by source-mesh output. `glb-to-3tz` preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). This does not imply release acceptance.
 
 ## Library use
 
@@ -272,15 +273,24 @@ For the current development API, [build and install a wheel from `develop`](docs
 ```python
 import rusty_tiles
 
-result = rusty_tiles.mesh_to_3tz(
-    "example.gltf", "example.3tz", cartographic=(153.02, -27.47, 0.0)
+result = rusty_tiles.mesh_to_tileset(
+    "example.glb", "example.3tz", anchor=(153.02, -27.47, 0.0)
 )
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits.
+The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits, and the [mesh guide](docs/MESH.md#python) for `mesh_to_tileset`. The `mesh_to_3tz` and `mesh_local_to_3tz` functions are deprecated.
 
-Each converter has a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
+The Rust mesh entry point is `mesh_to_tileset`. It takes a `TilerRequest` (with `with_profile`, `with_jobs`, `with_placement` and `with_source_crs` builders) and a `RunControl` for observation and cancellation, and returns a `TilerResult`:
+
+```rust
+use rusty_tiles::{mesh_to_tileset, RunControl, TilerRequest};
+
+let result = mesh_to_tileset(TilerRequest::new("model.glb", "model.3tz"), &RunControl::new(None))?;
+println!("wrote {}", result.output.display());
+```
+
+The other converters, and the deprecated `mesh-to-3tz` converter shown here, have a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
 
 ```rust
 use rusty_tiles::{tile::mesh_to_3tz_reported, MeshTo3tzOptions, Reporter};
@@ -291,12 +301,13 @@ println!("wrote {} (archive: {})", result.output.display(), result.archive);
 
 The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
 
-`ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The library's `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
+`ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The deprecated `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
 
 ## Where to go next
 
 - [Installation guide](docs/INSTALL.md): released downloads, development builds and Python wheels.
 - [Converter guide](docs/CONVERTERS.md): choose a command, build and placement policy.
+- [Mesh tiling guide](docs/MESH.md): `mesh` sources, placement, source CRS, profiles, resources and migration.
 - [Command reference](docs/CLI.md): every option, exit codes, JSON output and progress events.
 - [Mesh, point cloud and imagery guide](docs/FORMATS.md): fidelity, limits and advanced options.
 - [Vector guide](docs/VECTOR.md): layers, budgets, reuse, styling and picking.
@@ -304,6 +315,6 @@ The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_me
 - [Contributing](CONTRIBUTING.md): build, test and release.
 - [Demo-data suite](CONTRIBUTING.md#demo-data-acceptance-and-benchmarks): opt-in native acceptance and benchmarks against the pinned public corpus.
 
-Licensed under [MIT](LICENSE).
+## Licence
 
-The [F1d2 approximation contract](docs/architecture/f1d2-certificate-contract.md) defines one explicitly requested certified root proxy over unchanged leaves. Complete dyadic proof patches tighten the surface bound without changing output geometry. Paired `--root-proxy-triangles` and `--max-proxy-error-metres` arguments admit opaque, untextured, positions-only geometry, with region-level provenance for coarse picks. Full detail remains the default. Proof depth and work limits can refuse a request even at zero true distance; final-source evidence and review govern acceptance.
+The Cargo licence expression is `MIT AND Apache-2.0 AND BSD-3-Clause`. The project's own code is [MIT](LICENSE). The Apache-2.0 and BSD-3-Clause terms cover the vendored [Basis Universal](vendor/README.md) texture encoder (Apache-2.0) and the Zstandard code it bundles (BSD-3-Clause), which the in-process KTX2 encoder compiles in; their licence texts are in `vendor/basis_universal/`. Basis Universal also bundles a few MIT and BSD-3-Clause headers, noted in `vendor/README.md`.
