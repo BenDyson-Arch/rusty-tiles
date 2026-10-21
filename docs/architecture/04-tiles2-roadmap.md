@@ -32,10 +32,13 @@ retain code only for the domain independently established by its evidence.
   Prove directory/server delivery, direct archive loading or a documented archive
   bridge from actual consumer loads; do not assume a viewer loads `.3tz` directly.
   Reassess packaging and derive new encoding limits at the 0.6.0 transition.
-- Migrate producers through the shared output contract. Local mesh input stays
-  local static metres with rigid geographic placement; the mesh tiler does not
-  gain source-CRS conversion. Other producers keep their independently established
-  coordinate domains while their boundaries are audited.
+- Migrate producers through the shared output contract. Mesh input is a local
+  static scene in local metres with rigid geographic placement, or a declared 2D
+  horizontal source CRS (EPSG/WKT/PROJ, with explicit or Metashape E/N/A offsets)
+  mapped once at capture; there is no automatic CRS detection (owner decision
+  2026-10-14, [#218](https://github.com/BenDyson-Arch/rusty-tiles/pull/218)). Other
+  producers keep their independently established coordinate domains while their
+  boundaries are audited.
 - Optional AEC semantics, splats, voxels, time, horizon and shapes are later work.
   They do not expand this roadmap's supported domain or delay 0.4.0 shipping.
 
@@ -131,7 +134,8 @@ alongside the earlier tiler slices. Only milestone 4 waits for both milestones.
 Preserve the following agreed large-mesh requirements:
 
 - One local static glTF/GLB scene, confined snapshot dependencies, local metres
-  and rigid anchor/orientation/offset placement. Keep the established PBR slot,
+  and rigid anchor/orientation/offset placement, or a declared source CRS mapped
+  at capture (#218). Keep the established PBR slot,
   UV, tangent and colour domain and its explicit unsupported cases.
 - Streaming input and output with memory bounded by declared configuration;
   scratch preflight by stage, memory-backed scratch reporting, cleanup on
@@ -182,8 +186,10 @@ Recorded decisions for the tiler:
   leaf-directory and H16 delivery APIs become internal. `--jobs N` is a
   memory-capped maximum and reports the jobs it actually used; the default is
   auto and memory-aware. Output is `.3tz` only in 0.4. Profiles stay
-  provisional. Placement is rigid local metres. mesh-to-3tz retires after full
-  tiler acceptance, with a migration note.
+  provisional. Placement is rigid local metres or a declared source CRS (#218).
+  `mesh-to-3tz` and `mesh-local-to-3tz` retire after full tiler acceptance and
+  before the 0.4.0 tag: their removal is a 0.4.0 gate (owner decision
+  2026-10-21), and old scripts fail loudly with a migration note.
 - Leaf size. The 8192-triangle cap per leaf stays. Measured: CesiumJS 1.146
   resolves mesh picks through one property table per model. 32k-triangle leaves
   split into 4 tables picked correctly only 8 of 56 times and could not refine
@@ -339,8 +345,6 @@ each version line has one meaning:
 
 - **0.4.x: completion and fixes, no new public capability.**
   - H27 proxy-bake leftovers.
-  - Retiring the legacy `mesh-to-3tz` / `mesh-local-to-3tz` paths once the new
-    tiler is accepted.
   - Finalizing the provisional profile presets from flythrough evidence.
   - Documentation of known consumer limitations, and follow-ups from the
     large-mesh scale runs.
