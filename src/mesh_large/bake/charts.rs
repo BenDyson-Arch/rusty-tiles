@@ -41,6 +41,10 @@ pub(super) struct Layout {
     pub texel_size: f64,
     pub gutter: u32,
 }
+/// Least cosine between a chart face's normal and its seed's. A chart rasterises at
+/// `1 / (texel * sigma)` so every face meets the density, so this bounds the texel
+/// area overhead of a whole chart at `1 / CHART_CONE_COS^2` (about 1.23).
+const CHART_CONE_COS: f64 = 0.9;
 fn project(p: V3, x: V3, y: V3) -> P2 {
     [math::dot(p, x), math::dot(p, y)]
 }
@@ -60,9 +64,51 @@ pub(super) const SUBTEXEL_DEMOTION_TEXELS: f64 = 1.;
 fn subtexel_sliver(texels: [P2; 3]) -> bool {
     orient(texels[0], texels[1], texels[2]).abs() / 2. < SUBTEXEL_DEMOTION_TEXELS
 }
+/// Two faces sharing exactly one corner `v` have disjoint interiors iff their corner
+/// wedges at `v` are disjoint, which holds iff each wedge's rays lie strictly outside
+/// the other wedge. Every such separation must survive moving each corner by `slack`
+/// (UV storage), and near-zero arithmetic has no proof: both report overlap.
+fn wedges_disjoint(v: P2, a: [P2; 2], b: [P2; 2], slack: f64) -> bool {
+    let ray = |p: P2| [p[0] - v[0], p[1] - v[1]];
+    let len = |r: P2| r[0].hypot(r[1]);
+    // Signed cross product, or zero when its sign is not proven under `slack`.
+    let cross = |u: P2, w: P2| {
+        let c = u[0] * w[1] - u[1] * w[0];
+        let margin = 2. * slack * (len(u) + len(w))
+            + 4. * slack * slack
+            + 8. * f64::EPSILON * ((u[0] * w[1]).abs() + (u[1] * w[0]).abs());
+        if c.abs() > margin {
+            c
+        } else {
+            0.
+        }
+    };
+    // Counterclockwise rays of a nondegenerate wedge.
+    let wedge = |[p, q]: [P2; 2]| {
+        let (p, q) = (ray(p), ray(q));
+        let c = cross(p, q);
+        (c != 0.).then_some(if c > 0. { [p, q] } else { [q, p] })
+    };
+    let (Some(wa), Some(wb)) = (wedge(a), wedge(b)) else {
+        return false;
+    };
+    let outside = |w: [P2; 2], r: P2| cross(w[0], r) < 0. || cross(w[1], r) > 0.;
+    wb.iter().all(|&r| outside(wa, r)) && wa.iter().all(|&r| outside(wb, r))
+}
 /// A separating axis proves no strict interior overlap. Near-zero arithmetic
-/// has no such proof and conservatively splits the chart.
-fn overlap(a: [P2; 3], b: [P2; 3]) -> bool {
+/// has no such proof and conservatively splits the chart. Faces touching at one
+/// shared corner, which every separating line passes through, use their wedges.
+fn overlap(a: [P2; 3], b: [P2; 3], slack: f64) -> bool {
+    let in_b = a.map(|p| b.contains(&p));
+    let shared = in_b.iter().filter(|s| **s).count();
+    if shared == 1 {
+        let i = in_b.iter().position(|s| *s).unwrap();
+        let j = b.iter().position(|p| *p == a[i]).unwrap();
+        let others = |t: [P2; 3], k: usize| [t[(k + 1) % 3], t[(k + 2) % 3]];
+        if wedges_disjoint(a[i], others(a, i), others(b, j), slack) {
+            return false;
+        }
+    }
     for t in [a, b] {
         for i in 0..3 {
             let edge = [t[(i + 1) % 3][0] - t[i][0], t[(i + 1) % 3][1] - t[i][1]];
@@ -74,18 +120,21 @@ fn overlap(a: [P2; 3], b: [P2; 3]) -> bool {
             let amax = av.into_iter().fold(f64::NEG_INFINITY, f64::max);
             let bmin = bv.into_iter().fold(f64::INFINITY, f64::min);
             let bmax = bv.into_iter().fold(f64::NEG_INFINITY, f64::max);
+            // A gap that UV storage (each corner moved by `slack`) could close is no proof.
             let guard =
-                32. * f64::EPSILON * amin.abs().max(amax.abs()).max(bmin.abs()).max(bmax.abs());
+                32. * f64::EPSILON * amin.abs().max(amax.abs()).max(bmin.abs()).max(bmax.abs())
+                    + 2. * slack * axis[0].hypot(axis[1]);
             if amax < bmin - guard || bmax < amin - guard {
                 return false;
             }
             // Exact common edge, with the remaining corners strictly on opposite sides.
-            let shared: Vec<P2> = a.into_iter().filter(|p| b.contains(p)).collect();
-            if shared.len() == 2 {
-                let ac = a.into_iter().find(|p| !shared.contains(p)).unwrap();
-                let bc = b.into_iter().find(|p| !shared.contains(p)).unwrap();
-                let aa = orient(shared[0], shared[1], ac);
-                let bb = orient(shared[0], shared[1], bc);
+            if shared == 2 {
+                let k = in_b.iter().position(|s| !*s).unwrap();
+                let (s0, s1) = (a[(k + 1) % 3], a[(k + 2) % 3]);
+                let ac = a[k];
+                let bc = b.into_iter().find(|p| *p != s0 && *p != s1).unwrap();
+                let aa = orient(s0, s1, ac);
+                let bb = orient(s0, s1, bc);
                 if aa * bb < 0. {
                     return false;
                 }
@@ -139,6 +188,16 @@ pub(super) fn build(
         a.sort_unstable();
     }
     drop(edges);
+    // Chart metres per page texel are at most `texel` (sigma <= 1, boosts >= 1), and
+    // storage moves a UV by at most one 16-bit step of the largest admitted page.
+    let slack = f64::from(limits.max_page_edge) / 65535. * texel;
+    let gutter = if limits.profile == Profile::Lossless {
+        4
+    } else {
+        2
+    };
+    // Largest chart interior, in texels, that packs on one page (the ceil adds one).
+    let max_interior = f64::from(limits.max_page_edge.saturating_sub(2 * gutter + 3));
     let mut assigned = vec![false; n];
     let mut charts = Vec::new();
     let mut work = 0u64;
@@ -182,6 +241,14 @@ pub(super) fn build(
             size: [0; 2],
         };
         assigned[seed] = true;
+        let bounds = |t: [P2; 3]| {
+            let lo = [0, 1].map(|a| t.iter().map(|p| p[a]).fold(f64::INFINITY, f64::min));
+            let hi = [0, 1].map(|a| t.iter().map(|p| p[a]).fold(f64::NEG_INFINITY, f64::max));
+            [lo, hi]
+        };
+        let seed_projected = p.map(|p| project(p, x, y));
+        let [mut lo, mut hi] = bounds(seed_projected);
+        let mut members = vec![(seed_projected, [lo, hi])];
         let mut queue = VecDeque::from([seed]);
         while let Some(current) = queue.pop_front() {
             for &candidate in &adjacent[current] {
@@ -198,24 +265,35 @@ pub(super) fn build(
                     continue;
                 };
                 let sigma = math::dot(normal, cn);
-                if sigma < 0.5 {
+                if sigma < CHART_CONE_COS {
                     continue;
                 }
                 let projected = cp.map(|p| project(p, x, y));
+                let [clo, chi] = bounds(projected);
+                // The chart must still fit one page after every repack boost (at most
+                // 2^3) at its lowest normal agreement; a larger region starts new charts.
+                let grown_sigma = chart.sigma.min(sigma);
+                let fits = (0..2).all(|a| {
+                    (hi[a].max(chi[a]) - lo[a].min(clo[a])) * 8. / (texel * grown_sigma)
+                        <= max_interior
+                });
+                if !fits {
+                    continue;
+                }
                 let mut intersects = false;
-                for &other in &chart.faces {
+                for &(other, [olo, ohi]) in &members {
                     work = work
                         .checked_add(1)
                         .ok_or_else(|| resource("chart overlap work"))?;
                     if work > limits.query_work {
                         return Err(resource("chart overlap work budget"));
                     }
-                    if overlap(
-                        projected,
-                        f.faces[other]
-                            .positions
-                            .map(|p| project(p.map(f64::from), x, y)),
-                    ) {
+                    // Boxes apart by more than storage can move them cannot overlap.
+                    if (0..2).any(|a| clo[a] > ohi[a] + 2. * slack || olo[a] > chi[a] + 2. * slack)
+                    {
+                        continue;
+                    }
+                    if overlap(projected, other, slack) {
                         intersects = true;
                         break;
                     }
@@ -224,8 +302,13 @@ pub(super) fn build(
                     continue;
                 }
                 assigned[candidate] = true;
-                chart.sigma = chart.sigma.min(sigma);
+                chart.sigma = grown_sigma;
                 chart.faces.push(candidate);
+                members.push((projected, [clo, chi]));
+                for a in 0..2 {
+                    lo[a] = lo[a].min(clo[a]);
+                    hi[a] = hi[a].max(chi[a]);
+                }
                 queue.push_back(candidate);
             }
         }
@@ -241,11 +324,6 @@ pub(super) fn build(
         }
         charts.push(chart);
     }
-    let gutter = if limits.profile == Profile::Lossless {
-        4
-    } else {
-        2
-    };
     let mut boosts = vec![1.; charts.len()];
     for attempt in 0..4 {
         let mut pages: Vec<Page> = Vec::new();
@@ -416,6 +494,147 @@ mod tests {
             fill_bound: None,
             donor_ranges: std::iter::once(ordinal..ordinal + 1).collect(),
         }
+    }
+
+    #[test]
+    fn faces_touching_at_one_corner_overlap_only_when_their_wedges_do() {
+        let a = [[0., 0.], [1., 0.], [0., 1.]];
+        // Opposite quadrant: collinear opposite rays, disjoint interiors.
+        assert!(!overlap(a, [[0., 0.], [-1., 0.], [0., -1.]], 0.));
+        assert!(!overlap(a, [[0., -1.], [0., 0.], [-1., 0.]], 0.));
+        // Strip neighbour across a shared corner.
+        assert!(!overlap(
+            [[0., 0.], [1., 0.], [0., 1.]],
+            [[1., 0.], [2., 0.], [1., 1.]],
+            0.
+        ));
+        // A ray inside the other wedge, and a face nested in the other's wedge.
+        assert!(overlap(a, [[0., 0.], [1., 1.], [-1., 0.]], 0.));
+        assert!(overlap(a, [[0., 0.], [0.5, 0.1], [0.1, 0.5]], 0.));
+        // Rays in the same direction (T-junction) have no strict separation.
+        assert!(overlap(a, [[0., 0.], [0., 2.], [-1., 0.]], 0.));
+        // A separation that 16-bit UV storage could close is not proven.
+        let b = [[0., 0.], [1., -1e-3], [-1., 0.]];
+        assert!(!overlap(a, b, 0.));
+        assert!(overlap(a, b, 1e-3));
+        // Disjoint and edge-sharing faces keep their existing rules.
+        assert!(!overlap(a, [[2., 2.], [3., 2.], [2., 3.]], 0.));
+        assert!(!overlap(a, [[1., 0.], [0., 1.], [1., 1.]], 0.));
+        assert!(overlap(a, [[1., 0.], [0., 1.], [0.2, 0.2]], 0.));
+    }
+
+    fn grid_faces(cells: usize) -> Vec<FrozenFace> {
+        let mut faces = Vec::new();
+        let p = |i: usize, j: usize| [i as f32, j as f32, 0.];
+        for j in 0..cells {
+            for i in 0..cells {
+                let ordinal = faces.len() as u64;
+                faces.push(face(ordinal, 0, [p(i, j), p(i + 1, j), p(i + 1, j + 1)]));
+                faces.push(face(
+                    ordinal + 1,
+                    0,
+                    [p(i, j), p(i + 1, j + 1), p(i, j + 1)],
+                ));
+            }
+        }
+        faces
+    }
+
+    fn fan_faces(sides: usize) -> Vec<FrozenFace> {
+        let rim = |k: usize| {
+            let a = std::f64::consts::TAU * (k % sides) as f64 / sides as f64;
+            [a.cos() as f32, a.sin() as f32, 0.]
+        };
+        (0..sides)
+            .map(|k| face(k as u64, 0, [[0.; 3], rim(k), rim(k + 1)]))
+            .collect()
+    }
+
+    /// The raster's double-coverage invariant on the decoded UVs of every chart.
+    fn assert_single_coverage(f: &FrozenNode, layout: &Layout) {
+        for (pi, page) in layout.pages.iter().enumerate() {
+            let [w, h] = page.size;
+            let mut weights = vec![0.; w as usize * h as usize];
+            for c in layout.charts.iter().filter(|c| c.page == pi) {
+                for &fi in &c.faces {
+                    let p = f.faces[fi].positions.map(|p| p.map(f64::from));
+                    assert!(math::face_normal(p).is_some());
+                    let t = layout.uv[fi].map(|p| {
+                        [
+                            f64::from(p[0]) * f64::from(w),
+                            f64::from(p[1]) * f64::from(h),
+                        ]
+                    });
+                    let lo = [0, 1].map(|a| t.iter().map(|p| p[a]).fold(f64::INFINITY, f64::min));
+                    let hi = [0, 1].map(|a| t.iter().map(|p| p[a]).fold(0., f64::max));
+                    for y in lo[1].floor() as u32..(hi[1].ceil() as u32).min(h) {
+                        for x in lo[0].floor() as u32..(hi[0].ceil() as u32).min(w) {
+                            weights[(y * w + x) as usize] +=
+                                super::super::raster::coverage(t, x, y).0;
+                        }
+                    }
+                }
+            }
+            assert!(
+                weights.iter().all(|v| *v <= 1. + 1e-8),
+                "double coverage on page {pi}"
+            );
+        }
+    }
+
+    #[test]
+    fn connected_planar_grids_and_closed_fans_form_one_chart() {
+        let limits = BakeLimits {
+            profile: Profile::Balanced,
+            memory_bytes: 64 << 20,
+            member_bytes: 16 << 20,
+            source_cache_bytes: 16 << 20,
+            query_work: 1_000_000,
+            max_page_edge: 2048,
+            max_density_drops: 4,
+        };
+        for faces in [grid_faces(4), fan_faces(6), fan_faces(5)] {
+            let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+            f.faces = faces;
+            let n = f.faces.len();
+            let layout = build(&f, &vec![true; n], limits, 0.125, &mut || Ok(())).unwrap();
+            assert_eq!(layout.charts.len(), 1, "{n} welded coplanar faces");
+            assert_eq!(layout.charts[0].faces, (0..n).collect::<Vec<_>>());
+            assert_eq!(layout.subtexel_no_raster, 0);
+            assert_single_coverage(&f, &layout);
+        }
+    }
+
+    #[test]
+    fn regions_wider_than_a_page_split_into_charts_that_pack() {
+        let limits = BakeLimits {
+            profile: Profile::Balanced,
+            memory_bytes: 64 << 20,
+            member_bytes: 16 << 20,
+            source_cache_bytes: 16 << 20,
+            query_work: 1_000_000_000,
+            max_page_edge: 2048,
+            max_density_drops: 4,
+        };
+        // 40 m of grid at 8 texels per metre is 320 texels, over the 2041 / 8 = 255
+        // texel chart extent that still fits a page after every repack boost.
+        let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+        f.faces = grid_faces(40);
+        let n = f.faces.len();
+        let layout = build(&f, &vec![true; n], limits, 0.125, &mut || Ok(())).unwrap();
+        assert!(layout.charts.len() > 1);
+        assert!(layout.charts.len() < 16, "{} charts", layout.charts.len());
+        let mut faces: Vec<_> = layout.charts.iter().flat_map(|c| c.faces.clone()).collect();
+        faces.sort_unstable();
+        assert_eq!(faces, (0..n).collect::<Vec<_>>());
+        for c in &layout.charts {
+            // Interior within a boost-8 eighth of the page, plus gutters and the ceil.
+            assert!(c
+                .size
+                .iter()
+                .all(|s| *s <= limits.max_page_edge / 8 + 2 * 2 + 3));
+        }
+        assert_single_coverage(&f, &layout);
     }
 
     #[test]
