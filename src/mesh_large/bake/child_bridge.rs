@@ -594,12 +594,8 @@ pub(super) fn load_children(
             let bytes =
                 pass.preencode
                     .read_proxy(child.first, child.depth, remaining, pass.check)?;
-            let (decoded, owned) = packet::decode_owned(
-                &bytes,
-                &pass.captured.material_classes,
-                remaining,
-                check,
-            )?;
+            let (decoded, owned) =
+                packet::decode_owned(&bytes, &pass.captured.material_classes, remaining, check)?;
             if decoded.node.first != child.first
                 || decoded.node.end != child.end
                 || decoded.node.depth() != child.depth

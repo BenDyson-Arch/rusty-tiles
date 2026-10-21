@@ -189,8 +189,7 @@ fn pack(
     max_edge: u32,
     mask_classes: &[Option<u32>],
 ) -> Result<Vec<PagePlan>, JobError> {
-    let mut buckets =
-        BTreeMap::<(u8, u32, u32, Option<usize>, Option<u32>), Vec<usize>>::new();
+    let mut buckets = BTreeMap::<(u8, u32, u32, Option<usize>, Option<u32>), Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
         let (mips, mask) = if b.source_mips {
             (Some(i), None)

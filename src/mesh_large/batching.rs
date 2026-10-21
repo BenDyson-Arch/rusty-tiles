@@ -173,12 +173,14 @@ fn interiors_overlap(a: &Fixed, b: &Fixed) -> bool {
             let e = [t[(i + 1) % 3][0] - t[i][0], t[(i + 1) % 3][1] - t[i][1]];
             let axis = [-e[1], e[0]];
             let project = |p: &[i128; 2]| axis[0] * p[0] + axis[1] * p[1];
-            let (amin, amax) = a.iter().map(project).fold((i128::MAX, i128::MIN), |m, v| {
-                (m.0.min(v), m.1.max(v))
-            });
-            let (bmin, bmax) = b.iter().map(project).fold((i128::MAX, i128::MIN), |m, v| {
-                (m.0.min(v), m.1.max(v))
-            });
+            let (amin, amax) = a
+                .iter()
+                .map(project)
+                .fold((i128::MAX, i128::MIN), |m, v| (m.0.min(v), m.1.max(v)));
+            let (bmin, bmax) = b
+                .iter()
+                .map(project)
+                .fold((i128::MAX, i128::MIN), |m, v| (m.0.min(v), m.1.max(v)));
             if amax <= bmin || bmax <= amin {
                 return false;
             }
@@ -219,9 +221,16 @@ pub(in crate::mesh_large) fn shared_footprints(
             Some(_) => {}
             None => shared[i] = true,
         }
-        let lo = [0, 1].map(|a| t.iter().map(|p| f64::from(p[a])).fold(f64::INFINITY, f64::min));
-        let hi =
-            [0, 1].map(|a| t.iter().map(|p| f64::from(p[a])).fold(f64::NEG_INFINITY, f64::max));
+        let lo = [0, 1].map(|a| {
+            t.iter()
+                .map(|p| f64::from(p[a]))
+                .fold(f64::INFINITY, f64::min)
+        });
+        let hi = [0, 1].map(|a| {
+            t.iter()
+                .map(|p| f64::from(p[a]))
+                .fold(f64::NEG_INFINITY, f64::max)
+        });
         // A non-finite box overlaps everything near it; it is already shared.
         let lo = lo.map(|v| if v.is_nan() { f64::NEG_INFINITY } else { v });
         let hi = hi.map(|v| if v.is_nan() { f64::INFINITY } else { v });
@@ -256,7 +265,9 @@ pub(in crate::mesh_large) fn shared_footprints(
 }
 
 fn page_of(atlas: &PreparedAtlas, texture: &Value) -> Option<usize> {
-    let texture = atlas.textures.get(usize::try_from(texture.as_u64()?).ok()?)?;
+    let texture = atlas
+        .textures
+        .get(usize::try_from(texture.as_u64()?).ok()?)?;
     texture
         .get("source")
         .or_else(|| texture.pointer("/extensions/KHR_texture_basisu/source"))
@@ -316,12 +327,15 @@ pub(in crate::mesh_large) fn leaf_shared_triangles(
         let mut owners = Vec::new();
         for &(p, set) in users {
             let uv = &atlas.primitives[p].uvs[set];
-            for (i, corners) in uv.chunks_exact(3).enumerate() {
+            for (i, corners) in uv.as_chunks::<3>().0.iter().enumerate() {
                 footprints.push([corners[0], corners[1], corners[2]]);
                 owners.push((p, i));
             }
         }
-        for (k, flag) in shared_footprints(&footprints, check)?.into_iter().enumerate() {
+        for (k, flag) in shared_footprints(&footprints, check)?
+            .into_iter()
+            .enumerate()
+        {
             if flag {
                 let (p, i) = owners[k];
                 *shared[p].get_mut(i).ok_or_else(invalid)? = true;
@@ -363,7 +377,10 @@ mod tests {
         }
         // MASK cutoffs are part of the class; an OPAQUE cutoff is ignored by glTF.
         let mask = |c: f64| json!({"alphaMode":"MASK","alphaCutoff":c});
-        assert_ne!(material_key(&mask(0.5), false), material_key(&mask(0.25), false));
+        assert_ne!(
+            material_key(&mask(0.5), false),
+            material_key(&mask(0.25), false)
+        );
         assert_eq!(
             material_key(&mask(0.5), false),
             material_key(&json!({"alphaMode":"MASK"}), false)
@@ -464,7 +481,10 @@ mod tests {
         assert_eq!(fixed(0.), Some(0));
         assert_eq!(fixed(-0.), Some(0));
         assert_eq!(fixed(0.5), Some(1 << 55));
-        assert_eq!(fixed(1. / 3.).map(|v| v as f64 / (1u64 << 56) as f64), Some(f64::from(1f32 / 3.)));
+        assert_eq!(
+            fixed(1. / 3.).map(|v| v as f64 / (1u64 << 56) as f64),
+            Some(f64::from(1f32 / 3.))
+        );
         // A power of two is on the grid however small; its next float is not.
         assert_eq!(fixed(2f32.powi(-40)), Some(1 << 16));
         assert_eq!(fixed(f32::from_bits(2f32.powi(-40).to_bits() + 1)), None);

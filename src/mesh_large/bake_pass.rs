@@ -2411,7 +2411,14 @@ mod tests {
             for i in i0..i1 {
                 for j in 0..g {
                     let v = |a: usize, c: usize| ((a - i0) * w + c) as u32;
-                    idx.extend([v(i, j), v(i, j + 1), v(i + 1, j), v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                    idx.extend([
+                        v(i, j),
+                        v(i, j + 1),
+                        v(i + 1, j),
+                        v(i + 1, j),
+                        v(i, j + 1),
+                        v(i + 1, j + 1),
+                    ]);
                 }
             }
             let mut push = |bytes: Vec<u8>| {
@@ -2420,18 +2427,23 @@ mod tests {
                 views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bin.len()-start}));
                 views.len() - 1
             };
-            let (lo, hi) = pos.iter().fold(([f32::MAX; 3], [f32::MIN; 3]), |(l, h), p| {
-                (
-                    std::array::from_fn(|a| l[a].min(p[a])),
-                    std::array::from_fn(|a| h[a].max(p[a])),
-                )
-            });
+            let (lo, hi) = pos
+                .iter()
+                .fold(([f32::MAX; 3], [f32::MIN; 3]), |(l, h), p| {
+                    (
+                        std::array::from_fn(|a| l[a].min(p[a])),
+                        std::array::from_fn(|a| h[a].max(p[a])),
+                    )
+                });
             let p = push(pos.iter().flatten().flat_map(|v| v.to_le_bytes()).collect());
             accessors.push(json!({"bufferView":p,"componentType":5126,"count":pos.len(),"type":"VEC3","min":lo,"max":hi}));
             let t = push(uv.iter().flatten().flat_map(|v| v.to_le_bytes()).collect());
-            accessors.push(json!({"bufferView":t,"componentType":5126,"count":uv.len(),"type":"VEC2"}));
+            accessors
+                .push(json!({"bufferView":t,"componentType":5126,"count":uv.len(),"type":"VEC2"}));
             let i = push(idx.iter().flat_map(|v| v.to_le_bytes()).collect());
-            accessors.push(json!({"bufferView":i,"componentType":5125,"count":idx.len(),"type":"SCALAR"}));
+            accessors.push(
+                json!({"bufferView":i,"componentType":5125,"count":idx.len(),"type":"SCALAR"}),
+            );
             meshes.push(json!({"primitives":[{"attributes":{"POSITION":accessors.len()-3,"TEXCOORD_0":accessors.len()-2},"indices":accessors.len()-1,"material":b}]}));
         }
         fs::write(dir.join("scene.bin"), &bin).unwrap();
@@ -2470,7 +2482,9 @@ mod tests {
         for (id_textures, mipmapped) in [(false, false), (true, false), (false, true)] {
             let input = class_fixture(&work.path().join(format!("src-{mipmapped}")), 48, mipmapped);
             let out = work.path().join(format!("out-{id_textures}-{mipmapped}"));
-            let scratch = work.path().join(format!("scratch-{id_textures}-{mipmapped}"));
+            let scratch = work
+                .path()
+                .join(format!("scratch-{id_textures}-{mipmapped}"));
             fs::create_dir_all(&scratch).unwrap();
             let baker = ProxyTextureBaker::new(BakeLimits {
                 profile: crate::mesh_large::config::Profile::Balanced,
@@ -2519,7 +2533,8 @@ mod tests {
                     let mut classes = vec![BTreeSet::new(); gltf.len()];
                     let mut materials = vec![BTreeSet::new(); gltf.len()];
                     for face in &decoded.faces {
-                        let (row, table) = face.feature(&decoded.tables, "source_primitive").unwrap();
+                        let (row, table) =
+                            face.feature(&decoded.tables, "source_primitive").unwrap();
                         let m = decoded.tables[table].columns["material_index"][row as usize];
                         classes[face.primitive as usize].insert(class(m));
                         materials[face.primitive as usize].insert(m);
@@ -2544,7 +2559,11 @@ mod tests {
             }
             assert!(merged > 0, "some primitive merges source materials");
             assert_eq!(texture_sets > 0, id_textures, "baked feature-ID textures");
-            assert_eq!(split_leaves > 0, mipmapped, "dedicated mip pages split leaves");
+            assert_eq!(
+                split_leaves > 0,
+                mipmapped,
+                "dedicated mip pages split leaves"
+            );
         }
     }
 

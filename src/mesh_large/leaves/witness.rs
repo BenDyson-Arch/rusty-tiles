@@ -1305,7 +1305,10 @@ mod tests {
                     uvs: vec![Vec::new(); uvs.len()],
                     material: material.clone(),
                 });
-                assert_eq!(piece.material, material, "one source primitive, one material");
+                assert_eq!(
+                    piece.material, material,
+                    "one source primitive, one material"
+                );
                 piece.positions.push(positions[corner]);
                 if !normals.is_empty() {
                     piece.normals.push(normals[corner]);

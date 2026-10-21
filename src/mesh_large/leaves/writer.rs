@@ -410,7 +410,9 @@ fn canonical_zero(x: f32) -> f32 {
 fn exact_offset(translation: f32, scale: f32) -> Result<i64, JobError> {
     let q = f64::from(translation) / f64::from(scale);
     if !q.is_finite() || q.fract() != 0. || q.abs() > (1u64 << 40) as f64 {
-        return Err(invalid("leaf position translation is not an exact code offset"));
+        return Err(invalid(
+            "leaf position translation is not an exact code offset",
+        ));
     }
     Ok(q as i64)
 }
@@ -631,9 +633,10 @@ pub(super) fn encode(
                         for a in 0..3 {
                             // Exact integer rebase onto the group offset; never re-quantized.
                             // Both client decode orders must give the member's own bits.
-                            let value = u16::try_from(i64::from(code[a]) + shift[a]).map_err(
-                                |_| invalid("merged leaf position code exceeds UNSIGNED_SHORT"),
-                            )?;
+                            let value =
+                                u16::try_from(i64::from(code[a]) + shift[a]).map_err(|_| {
+                                    invalid("merged leaf position code exceeds UNSIGNED_SHORT")
+                                })?;
                             let plain = canonical_zero(f32::from(value) * scale + translation[a]);
                             let fused =
                                 canonical_zero(f32::from(value).mul_add(scale, translation[a]));
@@ -665,8 +668,7 @@ pub(super) fn encode(
                 let mut values = Vec::with_capacity(count);
                 let mut extent = Bounds::EMPTY;
                 for &i in &group.order {
-                    let PositionStorage::Float { positions: stored } = &positions[i].storage
-                    else {
+                    let PositionStorage::Float { positions: stored } = &positions[i].storage else {
                         return Err(invalid("merged leaf primitive mixes position storage").into());
                     };
                     values.extend(stored.iter().map(|p| p.to_vec()));
@@ -1452,7 +1454,11 @@ mod tests {
     fn source_primitive(primitive: u32, count: usize, x: f32) -> PreparedPrimitive {
         let triangles: Vec<FullTriangle> = (0..count)
             .map(|i| {
-                let mut t = row(100 * u64::from(primitive) + i as u64, x + i as f32 * 0.5, false);
+                let mut t = row(
+                    100 * u64::from(primitive) + i as u64,
+                    x + i as f32 * 0.5,
+                    false,
+                );
                 t.triangle.source.primitive = primitive;
                 t.material = primitive;
                 t
@@ -1520,9 +1526,13 @@ mod tests {
                     .map(|e| {
                         std::array::from_fn(|a| {
                             let u = f32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]]));
-                            let p = u * s[a].as_f64().unwrap() as f32
-                                + t[a].as_f64().unwrap() as f32;
-                            if p == 0. { 0 } else { p.to_bits() }
+                            let p =
+                                u * s[a].as_f64().unwrap() as f32 + t[a].as_f64().unwrap() as f32;
+                            if p == 0. {
+                                0
+                            } else {
+                                p.to_bits()
+                            }
                         })
                     })
                     .collect()
@@ -1532,18 +1542,23 @@ mod tests {
                     .as_chunks::<12>()
                     .0
                     .iter()
-                    .map(|e| std::array::from_fn(|a| u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())))
+                    .map(|e| {
+                        std::array::from_fn(|a| {
+                            u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())
+                        })
+                    })
                     .collect()
             };
             let ids = |set: usize| {
                 f32s(
                     &doc,
                     bin,
-                    &doc["accessors"][attributes[format!("_FEATURE_ID_{set}")].as_u64().unwrap() as usize],
+                    &doc["accessors"]
+                        [attributes[format!("_FEATURE_ID_{set}")].as_u64().unwrap() as usize],
                 )
             };
             let (primitive_ids, triangle_ids) = (ids(0), ids(1));
-            for (k, corner) in corners.chunks_exact(3).enumerate() {
+            for (k, corner) in corners.as_chunks::<3>().0.iter().enumerate() {
                 let (p, t) = (primitive_ids[3 * k] as usize, triangle_ids[3 * k] as usize);
                 assert_eq!(primitive_ids[3 * k + 2], p as f32);
                 assert_eq!(triangle_ids[3 * k + 2], t as f32);
@@ -1565,10 +1580,14 @@ mod tests {
     ) -> Vec<([[u32; 3]; 3], (u64, u64, u64), (u64, u64))> {
         let mut out = Vec::new();
         for p in &input.primitives {
-            let points: Vec<_> = p.triangles.iter().flat_map(|t| t.triangle.positions).collect();
+            let points: Vec<_> = p
+                .triangles
+                .iter()
+                .flat_map(|t| t.triangle.positions)
+                .collect();
             let depths: Vec<_> = p.corner_depths.iter().flatten().copied().collect();
             let decoded = lattice.encode(&points, &depths, 1).unwrap().decoded;
-            for (t, corners) in p.triangles.iter().zip(decoded.chunks_exact(3)) {
+            for (t, corners) in p.triangles.iter().zip(decoded.as_chunks::<3>().0) {
                 let s = t.triangle.source;
                 out.push((
                     std::array::from_fn(|c| corners[c].map(f32::to_bits)),
@@ -1588,7 +1607,12 @@ mod tests {
     /// corner bits and its source_primitive/source_triangle rows, in every profile.
     #[test]
     fn same_class_primitives_merge_with_identical_positions_and_identity() {
-        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality, Profile::Lossless] {
+        for profile in [
+            Profile::Fast,
+            Profile::Balanced,
+            Profile::Quality,
+            Profile::Lossless,
+        ] {
             let mut input = atlas();
             input.primitives = vec![
                 source_primitive(4, 3, -999_999.75),
@@ -1611,17 +1635,33 @@ mod tests {
             assert_eq!(published(&leaf.glb), reference, "{profile:?}");
             // The witness hand-off stays per prepared primitive.
             for (p, decoded) in input.primitives.iter().zip(&leaf.positions) {
-                let points: Vec<_> =
-                    p.triangles.iter().flat_map(|t| t.triangle.positions).collect();
+                let points: Vec<_> = p
+                    .triangles
+                    .iter()
+                    .flat_map(|t| t.triangle.positions)
+                    .collect();
                 let expected = lattice.encode(&points, &vec![1; points.len()], 1).unwrap();
                 assert_eq!(
-                    decoded.iter().map(|c| c.map(f32::to_bits)).collect::<Vec<_>>(),
-                    expected.decoded.iter().map(|c| c.map(f32::to_bits)).collect::<Vec<_>>()
+                    decoded
+                        .iter()
+                        .map(|c| c.map(f32::to_bits))
+                        .collect::<Vec<_>>(),
+                    expected
+                        .decoded
+                        .iter()
+                        .map(|c| c.map(f32::to_bits))
+                        .collect::<Vec<_>>()
                 );
             }
-            assert_eq!(leaf.normals.iter().map(Vec::len).collect::<Vec<_>>(), [9, 6, 3]);
+            assert_eq!(
+                leaf.normals.iter().map(Vec::len).collect::<Vec<_>>(),
+                [9, 6, 3]
+            );
             let tables = &doc["extensions"]["EXT_structural_metadata"]["propertyTables"];
-            assert_eq!((tables[0]["count"].as_u64(), tables[1]["count"].as_u64()), (Some(3), Some(6)));
+            assert_eq!(
+                (tables[0]["count"].as_u64(), tables[1]["count"].as_u64()),
+                (Some(3), Some(6))
+            );
         }
     }
     /// H28 splits: material class (a factor), texture identity (another page), attribute
@@ -1642,7 +1682,8 @@ mod tests {
             input.textures.push(json!({"source":1,"sampler":0}));
             input
         };
-        let mutations: [(&str, fn(&mut PreparedAtlas)); 4] = [
+        type Mutation = (&'static str, fn(&mut PreparedAtlas));
+        let mutations: [Mutation; 4] = [
             ("factor", |a| {
                 a.primitives[1].material.as_mut().unwrap()["pbrMetallicRoughness"]
                     ["roughnessFactor"] = json!(0.5)
@@ -1674,9 +1715,16 @@ mod tests {
             assert_eq!(leaf.primitives, 2, "{name}");
             let (doc, _) = parse(&leaf.glb);
             assert_eq!(doc["meshes"].as_array().unwrap().len(), 2, "{name}");
-            assert_eq!(published(&leaf.glb), per_primitive_reference(&input, &lattice), "{name}");
+            assert_eq!(
+                published(&leaf.glb),
+                per_primitive_reference(&input, &lattice),
+                "{name}"
+            );
             if name == "window" {
-                assert_ne!(doc["nodes"][0]["translation"], doc["nodes"][1]["translation"]);
+                assert_ne!(
+                    doc["nodes"][0]["translation"],
+                    doc["nodes"][1]["translation"]
+                );
             }
         }
         // Float profiles have no window: the far primitive still merges.
@@ -1698,11 +1746,23 @@ mod tests {
             hi: [hi, 0, -(1 << 15)],
         };
         let joined = q(0.25, 0, 40_000).join(q(0.25, 1 << 15, (1 << 15) + 32_767));
-        assert!(matches!(joined, Some(Window::Quantized { lo: [0, 0, _], hi: [65_535, 0, _], .. })));
-        assert!(q(0.25, 0, 40_000).join(q(0.25, 1 << 15, (1 << 15) + 32_768)).is_none());
+        assert!(matches!(
+            joined,
+            Some(Window::Quantized {
+                lo: [0, 0, _],
+                hi: [65_535, 0, _],
+                ..
+            })
+        ));
+        assert!(q(0.25, 0, 40_000)
+            .join(q(0.25, 1 << 15, (1 << 15) + 32_768))
+            .is_none());
         assert!(q(0.25, 0, 1).join(q(0.5, 0, 1)).is_none());
         assert!(q(0.25, 0, 1).join(Window::Float).is_none());
-        assert!(matches!(Window::Float.join(Window::Float), Some(Window::Float)));
+        assert!(matches!(
+            Window::Float.join(Window::Float),
+            Some(Window::Float)
+        ));
         // Negative offsets rebase exactly too.
         assert!(q(0.25, -(1 << 16), -(1 << 16) + 100)
             .join(q(0.25, -(1 << 15), -(1 << 15) + 100))

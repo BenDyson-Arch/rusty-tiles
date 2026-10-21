@@ -609,7 +609,15 @@ mod tests {
             let mut f = crate::mesh_large::bake::controls::immutable_fixture();
             f.faces = faces;
             let n = f.faces.len();
-            let layout = build(&f, &vec![true; n], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
+            let layout = build(
+                &f,
+                &vec![true; n],
+                limits,
+                0.125,
+                &MaterialClasses::EMPTY,
+                &mut || Ok(()),
+            )
+            .unwrap();
             assert_eq!(layout.charts.len(), 1, "{n} welded coplanar faces");
             assert_eq!(layout.charts[0].faces, (0..n).collect::<Vec<_>>());
             assert_eq!(layout.subtexel_no_raster, 0);
@@ -634,7 +642,15 @@ mod tests {
         let mut f = crate::mesh_large::bake::controls::immutable_fixture();
         f.faces = grid_faces(40);
         let n = f.faces.len();
-        let layout = build(&f, &vec![true; n], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
+        let layout = build(
+            &f,
+            &vec![true; n],
+            limits,
+            0.125,
+            &MaterialClasses::EMPTY,
+            &mut || Ok(()),
+        )
+        .unwrap();
         assert!(layout.charts.len() > 1);
         assert!(layout.charts.len() < 16, "{} charts", layout.charts.len());
         let mut faces: Vec<_> = layout.charts.iter().flat_map(|c| c.faces.clone()).collect();
@@ -669,7 +685,15 @@ mod tests {
             max_density_drops: 4,
             id_textures: false,
         };
-        let layout = build(&f, &[true, true], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
+        let layout = build(
+            &f,
+            &[true, true],
+            limits,
+            0.125,
+            &MaterialClasses::EMPTY,
+            &mut || Ok(()),
+        )
+        .unwrap();
         assert_eq!(layout.subtexel_no_raster, 1);
         assert_eq!(layout.raster_faces, [true, false]);
         assert!(layout.charts.iter().all(|c| !c.faces.contains(&1)));

@@ -696,11 +696,20 @@ mod tests {
     fn child_packet_exact_bits_determinism_and_bounded_counts() {
         let original = child();
         let bytes = encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
-        assert_eq!(bytes, encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap());
+        assert_eq!(
+            bytes,
+            encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap()
+        );
         let decoded = decode(&bytes, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
         assert_eq!(decoded.texel_size.to_bits(), original.texel_size.to_bits());
         assert_eq!(decoded.node, original.node);
-        assert!(decode(&bytes, &MaterialClasses::EMPTY, bytes.len() as u64, &mut || Ok(())).is_err());
+        assert!(decode(
+            &bytes,
+            &MaterialClasses::EMPTY,
+            bytes.len() as u64,
+            &mut || Ok(())
+        )
+        .is_err());
         let mut corrupt = bytes.clone();
         let faces = 8 + NodeRecord::SIZE + 8;
         corrupt[faces..faces + 8].copy_from_slice(&u64::MAX.to_le_bytes());
@@ -713,11 +722,14 @@ mod tests {
     #[test]
     fn decoded_owner_is_exactly_the_lease_beyond_the_encoded_bytes() {
         let bytes = encode(&child(), &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
-        let (_, owned) = decode_owned(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
+        let (_, owned) =
+            decode_owned(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
         assert!(owned >= std::mem::size_of::<PreencodeChild>() as u64);
         let exact = bytes.len() as u64 + owned;
         assert_eq!(
-            decode_owned(&bytes, &MaterialClasses::EMPTY, exact, &mut || Ok(())).unwrap().1,
+            decode_owned(&bytes, &MaterialClasses::EMPTY, exact, &mut || Ok(()))
+                .unwrap()
+                .1,
             owned
         );
         assert_eq!(
@@ -775,7 +787,10 @@ mod tests {
         });
         let bytes = encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
         let decoded = decode(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
-        assert_eq!(bytes, encode(&decoded, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap());
+        assert_eq!(
+            bytes,
+            encode(&decoded, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap()
+        );
         assert_eq!(
             decoded.faces[0].positions[0][0].to_bits(),
             (-0.0f32).to_bits()
