@@ -89,6 +89,7 @@ wherever the concrete scope has not adopted them.
 - [H1 independent capture, tree and resource evidence](../../bench/architecture_audit/mesh_large_h1/README.md)
 - [H16 streamed hierarchy and 3TZ delivery contract](h16-delivery-contract.md)
 - [H16 real-mesh, scale and consumer acceptance](../../bench/architecture_audit/mesh_large_h16/README.md)
+- [H28 per-tile primitive batching contract](h28-tile-batching-contract.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
 - [P implicit layout contract: the bounded implicit forest](p-impl-layout-contract.md)
