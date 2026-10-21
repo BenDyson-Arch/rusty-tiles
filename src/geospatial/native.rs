@@ -49,17 +49,61 @@ pub(crate) struct Dataset {
     handle: NonNull<c_void>,
 }
 
+/// Vector drivers that open other datasets, query services, download schemas, run
+/// algorithms or start processes named inside a source file. A source must not
+/// make a conversion read beyond it.
+const DEREFERENCING_VECTOR_DRIVERS: [&CStr; 7] = [
+    c"OGR_VRT",
+    c"GDALG",
+    c"GPSBabel",
+    c"WFS",
+    c"OAPIF",
+    c"CSW",
+    c"GMLAS",
+];
+
+/// Short names of the registered vector drivers a source file may select.
+fn vector_drivers() -> Vec<CString> {
+    // SAFETY: Drivers are registered by `init`; the driver handles and their
+    // metadata strings are process-lifetime and only read here.
+    unsafe {
+        (0..gdal_sys::GDALGetDriverCount())
+            .map(|i| gdal_sys::GDALGetDriver(i))
+            .filter(|d| {
+                let vector = gdal_sys::GDALGetMetadataItem(*d, c"DCAP_VECTOR".as_ptr(), null());
+                !vector.is_null() && CStr::from_ptr(vector) == c"YES"
+            })
+            .map(|d| CStr::from_ptr(gdal_sys::GDALGetDriverShortName(d)).to_owned())
+            .filter(|name| !DEREFERENCING_VECTOR_DRIVERS.contains(&name.as_c_str()))
+            .collect()
+    }
+}
+
 impl Dataset {
-    /// Open a vector read-only with the given driver open options.
+    /// Open a vector read-only with the given driver open options, by any
+    /// registered vector driver that does not dereference other sources.
     pub(crate) fn open_vector(
         path: &Path,
         open_options: &[&CStr],
         context: &str,
     ) -> Result<Self, Error> {
-        Self::open(path, VECTOR, open_options, context)
+        init()?;
+        let drivers = vector_drivers();
+        if drivers.is_empty() {
+            return Err(Error::Environment(
+                "GDAL has no admitted vector drivers".into(),
+            ));
+        }
+        Self::open(path, VECTOR, &drivers, open_options, context)
     }
 
-    fn open(path: &Path, flags: u32, open_options: &[&CStr], context: &str) -> Result<Self, Error> {
+    fn open(
+        path: &Path,
+        flags: u32,
+        drivers: &[CString],
+        open_options: &[&CStr],
+        context: &str,
+    ) -> Result<Self, Error> {
         init()?;
         let _errors = QuietErrors::new();
         let path = c_path(path)?;
@@ -68,14 +112,15 @@ impl Dataset {
             .map(|o| o.as_ptr())
             .chain([null()])
             .collect();
-        // SAFETY: The filename and null-terminated option list stay live for
-        // the call; null driver/sibling lists select installed drivers. Flags
-        // never include GDAL_OF_UPDATE, so the dataset is read-only.
+        let drivers: Vec<_> = drivers.iter().map(|d| d.as_ptr()).chain([null()]).collect();
+        // SAFETY: The filename and the null-terminated driver and option lists
+        // stay live for the call; a null sibling list lets GDAL probe siblings.
+        // Flags never include GDAL_OF_UPDATE, so the dataset is read-only.
         let raw = unsafe {
             gdal_sys::GDALOpenEx(
                 path.as_ptr(),
                 flags,
-                null(),
+                drivers.as_ptr(),
                 if open_options.is_empty() {
                     null()
                 } else {
@@ -186,6 +231,58 @@ mod tests {
                 Err(Error::Data(_))
             ));
         }
+    }
+
+    #[test]
+    fn vector_sources_cannot_select_dereferencing_drivers() {
+        init().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("secret.geojson");
+        std::fs::write(
+            &secret,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"type":"Point","coordinates":[1,2]}}]}"#,
+        )
+        .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let vrt = root.path().join("source.vrt");
+        std::fs::write(
+            &vrt,
+            format!(
+                "<OGRVRTDataSource><OGRVRTLayer name=\"secret\"><SrcDataSource>{}</SrcDataSource></OGRVRTLayer></OGRVRTDataSource>",
+                secret.display()
+            ),
+        )
+        .unwrap();
+        // Control: with every installed driver, the VRT opens the outside file.
+        let filename = c_path(&vrt).unwrap();
+        // SAFETY: Live terminated filename; read-only vector flags, null lists.
+        let handle =
+            unsafe { gdal_sys::GDALOpenEx(filename.as_ptr(), VECTOR, null(), null(), null()) };
+        // SAFETY: This new independent handle has no other owner.
+        let control = unsafe { Dataset::adopt(handle, "cannot open") }.unwrap();
+        // SAFETY: The dataset is live; the driver name is process-lifetime.
+        let driver = unsafe {
+            CStr::from_ptr(gdal_sys::GDALGetDriverShortName(
+                gdal_sys::GDALGetDatasetDriver(control.raw()),
+            ))
+        };
+        assert_eq!(driver, c"OGR_VRT");
+        // SAFETY: The dataset is live; its first layer is borrowed while it is.
+        let features = unsafe {
+            gdal_sys::OGR_L_GetFeatureCount(gdal_sys::GDALDatasetGetLayer(control.raw(), 0), 1)
+        };
+        assert_eq!(features, 1, "the control reads the outside file's feature");
+        control.finish("cannot finish").unwrap();
+        assert!(matches!(
+            Dataset::open_vector(&vrt, &[], "cannot open"),
+            Err(Error::Data(_))
+        ));
+        assert!(Dataset::open_vector(&secret, &[], "cannot open").is_ok());
+        let drivers = vector_drivers();
+        assert!(drivers.iter().any(|d| d.as_c_str() == c"GeoJSON"));
+        assert!(!drivers
+            .iter()
+            .any(|d| DEREFERENCING_VECTOR_DRIVERS.contains(&d.as_c_str())));
     }
 
     #[test]

@@ -13,6 +13,11 @@ in standard and native builds. Native geometry operations remain independent
 of source parsing. GeoJSON under other extensions and GeoJSON text sequences
 are refused; they cannot bypass the shared admission rules through OGR.
 Native GeoPackage and other admitted OGR formats retain their native reader.
+Drivers that open other datasets, query services, download schemas, run
+algorithms or start processes named inside a source (`OGR_VRT`, `GDALG`,
+`GPSBabel`, `WFS`, `OAPIF`, `CSW`, `GMLAS`) are not admitted. Other drivers keep
+GDAL's own behaviour, including any network access the installed GDAL allows; the
+native container's GDAL is built without network support.
 
 Rust callers use one `vector::vector_to_archive(VectorRequest, &RunControl)`
 entry point. Construct `VectorRequest::new(input, output, VectorOptions)` and
