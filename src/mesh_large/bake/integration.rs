@@ -105,6 +105,7 @@ impl ProxyTextureBaker {
                 Profile::Balanced | Profile::Quality => 4096,
             },
             max_density_drops: 8,
+            id_textures: false,
         })
     }
     pub(crate) fn limits(&self) -> BakeLimits {
@@ -340,6 +341,7 @@ fn bake_tile(
         let packet = if depth > 0 {
             Some(child_bridge::encode_packet(
                 &accepted.preencode,
+                &pass.captured.material_classes,
                 core,
                 check,
             )?)
@@ -742,6 +744,7 @@ mod tests {
             query_work: 1,
             max_page_edge: 4,
             max_density_drops: 0,
+            id_textures: false,
         }
     }
 

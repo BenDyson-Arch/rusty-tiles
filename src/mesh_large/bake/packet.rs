@@ -2,7 +2,10 @@
 //! emitted texture codecs are never read back as donor appearance.
 use super::{frames::Frame, invalid, resource, types::*};
 use crate::{
-    gltf_source::source::TextureSlot, mesh_large::records::NodeRecord, spill::Record, JobError,
+    gltf_source::source::TextureSlot,
+    mesh_large::{batching::MaterialClasses, records::NodeRecord},
+    spill::Record,
+    JobError,
 };
 use serde_json::Value;
 use std::io::Write;
@@ -468,8 +471,10 @@ fn sample_equal(a: &TerminalSample, b: &TerminalSample) -> bool {
         && a.weight == b.weight
         && a.centre_is_centroid == b.centre_is_centroid
 }
+/// `classes` maps a face's source material to the class a page serves (H28).
 pub(super) fn validate(
     child: &PreencodeChild,
+    classes: &MaterialClasses,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(), JobError> {
     let node = &child.node;
@@ -498,7 +503,7 @@ pub(super) fn validate(
                     .get(binding.page)
                     .ok_or_else(|| invalid("child packet binding page"))?;
                 if slot_index(page.slot) != slot
-                    || page.material != face.material
+                    || page.material != classes.of(face.material)
                     || binding.uv.iter().flatten().any(|v| !v.is_finite())
                 {
                     return Err(invalid("child packet slot/material/UV binding"));
@@ -584,10 +589,11 @@ pub(super) fn validate(
 /// Other live caller owners remain under the caller aggregate stage lease.
 pub(super) fn encode(
     child: &PreencodeChild,
+    classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<u8>, JobError> {
-    validate(child, check)?;
+    validate(child, classes, check)?;
     let memory = memory
         .checked_sub(resident_bytes(child)?)
         .ok_or_else(|| resource("child resident plus serialized output lease"))?;
@@ -622,15 +628,17 @@ pub(super) fn encode(
 }
 pub(super) fn decode(
     bytes: &[u8],
+    classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<PreencodeChild, JobError> {
-    decode_owned(bytes, memory, check).map(|(child, _)| child)
+    decode_owned(bytes, classes, memory, check).map(|(child, _)| child)
 }
 /// [`decode`], also returning the bytes charged for the decoded child alone (the lease
 /// minus the encoded input), which stay owned after `bytes` is dropped.
 pub(super) fn decode_owned(
     bytes: &[u8],
+    classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(PreencodeChild, u64), JobError> {
@@ -653,7 +661,7 @@ pub(super) fn decode_owned(
         return Err(invalid("child packet trailing bytes"));
     }
     let owned = r.used - bytes.len() as u64;
-    validate(&child, check)?;
+    validate(&child, classes, check)?;
     Ok((child, owned))
 }
 
@@ -687,33 +695,45 @@ mod tests {
     #[test]
     fn child_packet_exact_bits_determinism_and_bounded_counts() {
         let original = child();
-        let bytes = encode(&original, 4096, &mut || Ok(())).unwrap();
-        assert_eq!(bytes, encode(&original, 4096, &mut || Ok(())).unwrap());
-        let decoded = decode(&bytes, 4096, &mut || Ok(())).unwrap();
+        let bytes = encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
+        assert_eq!(
+            bytes,
+            encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap()
+        );
+        let decoded = decode(&bytes, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
         assert_eq!(decoded.texel_size.to_bits(), original.texel_size.to_bits());
         assert_eq!(decoded.node, original.node);
-        assert!(decode(&bytes, bytes.len() as u64, &mut || Ok(())).is_err());
+        assert!(decode(
+            &bytes,
+            &MaterialClasses::EMPTY,
+            bytes.len() as u64,
+            &mut || Ok(())
+        )
+        .is_err());
         let mut corrupt = bytes.clone();
         let faces = 8 + NodeRecord::SIZE + 8;
         corrupt[faces..faces + 8].copy_from_slice(&u64::MAX.to_le_bytes());
-        assert!(decode(&corrupt, 4096, &mut || Ok(())).is_err());
+        assert!(decode(&corrupt, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).is_err());
         let mut trailing = bytes;
         trailing.push(0);
-        assert!(decode(&trailing, 4096, &mut || Ok(())).is_err());
+        assert!(decode(&trailing, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).is_err());
     }
 
     #[test]
     fn decoded_owner_is_exactly_the_lease_beyond_the_encoded_bytes() {
-        let bytes = encode(&child(), 4096, &mut || Ok(())).unwrap();
-        let (_, owned) = decode_owned(&bytes, 1 << 20, &mut || Ok(())).unwrap();
+        let bytes = encode(&child(), &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
+        let (_, owned) =
+            decode_owned(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
         assert!(owned >= std::mem::size_of::<PreencodeChild>() as u64);
         let exact = bytes.len() as u64 + owned;
         assert_eq!(
-            decode_owned(&bytes, exact, &mut || Ok(())).unwrap().1,
+            decode_owned(&bytes, &MaterialClasses::EMPTY, exact, &mut || Ok(()))
+                .unwrap()
+                .1,
             owned
         );
         assert_eq!(
-            decode(&bytes, exact - 1, &mut || Ok(()))
+            decode(&bytes, &MaterialClasses::EMPTY, exact - 1, &mut || Ok(()))
                 .err()
                 .unwrap()
                 .kind(),
@@ -765,9 +785,12 @@ mod tests {
                 })
             }),
         });
-        let bytes = encode(&original, 1 << 20, &mut || Ok(())).unwrap();
-        let decoded = decode(&bytes, 1 << 20, &mut || Ok(())).unwrap();
-        assert_eq!(bytes, encode(&decoded, 1 << 20, &mut || Ok(())).unwrap());
+        let bytes = encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
+        let decoded = decode(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
+        assert_eq!(
+            bytes,
+            encode(&decoded, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap()
+        );
         assert_eq!(
             decoded.faces[0].positions[0][0].to_bits(),
             (-0.0f32).to_bits()
@@ -775,15 +798,15 @@ mod tests {
         assert_eq!(decoded.pages[2].normal_samples[0].chart, 17);
         assert_eq!(decoded.pages[4].samples[0].source_rank, 4);
         original.faces[0].frames[0].tangent = [0.6, 0., 0.8];
-        assert!(encode(&original, 1 << 20, &mut || Ok(())).is_ok());
+        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_ok());
         original.faces[0].frames[0].tangent = [2., 0., 0.];
-        assert!(encode(&original, 1 << 20, &mut || Ok(())).is_err());
+        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
         original.faces[0].frames[0].tangent = [0., 0., 1.];
-        assert!(encode(&original, 1 << 20, &mut || Ok(())).is_err());
+        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
         original.faces[0].frames[0] = frame;
         original.pages[0].receipt = Value::String("x".repeat(65536));
         assert_eq!(
-            encode(&original, 1 << 20, &mut || Ok(()))
+            encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(()))
                 .err()
                 .unwrap()
                 .kind(),
@@ -791,6 +814,6 @@ mod tests {
         );
         original.pages[0].receipt = serde_json::json!({"immutable":18446744073709551615u64});
         original.pages[0].samples[0].barycentric = [0.5, 0.25, 0.25];
-        assert!(encode(&original, 1 << 20, &mut || Ok(())).is_err());
+        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
     }
 }

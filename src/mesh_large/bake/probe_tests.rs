@@ -77,6 +77,7 @@ fn limits() -> BakeLimits {
         query_work: 1_000_000,
         max_page_edge: 2048,
         max_density_drops: 4,
+        id_textures: false,
     }
 }
 #[test]
@@ -159,6 +160,7 @@ fn five_aliased_slots_raster_and_normal_mips_use_original_captured_samples() {
         &raster_faces(&f, &source).unwrap(),
         l,
         0.125,
+        &c.material_classes,
         &mut || Ok(()),
     )
     .unwrap();
@@ -238,6 +240,7 @@ fn all_and_mixed_degenerate_textured_capture_keeps_colour_and_geometry_without_e
             &raster_faces(&f, &source).unwrap(),
             l,
             0.125,
+            &c.material_classes,
             &mut || Ok(()),
         )
         .unwrap();
@@ -908,6 +911,7 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
             &raster_faces(&f, &source).unwrap(),
             l,
             0.125,
+            &c.material_classes,
             &mut || Ok(()),
         )
         .unwrap();

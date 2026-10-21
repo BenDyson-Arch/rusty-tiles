@@ -290,8 +290,11 @@ mod tests {
         (rows.finish().unwrap(), nodes.finish().unwrap())
     }
     fn empty_resources() -> AtlasResources<'static> {
+        static CLASSES: crate::mesh_large::batching::MaterialClasses =
+            crate::mesh_large::batching::MaterialClasses::EMPTY;
         AtlasResources {
             materials: &[],
+            classes: &CLASSES,
             textures: &[],
             samplers: &[],
             image_info: &[],
@@ -387,8 +390,10 @@ mod tests {
             width: 4096,
             height: 1,
         }];
+        let classes = crate::mesh_large::batching::MaterialClasses::default();
         let resources = AtlasResources {
             materials: document.materials(),
+            classes: &classes,
             textures: document.textures(),
             samplers: document.samplers(),
             image_info: &info,

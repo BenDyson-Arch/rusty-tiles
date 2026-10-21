@@ -180,23 +180,30 @@ fn pack_islands(
 /// Stable shelves ordered by descending crop dimensions and canonical binding order.
 /// When a bucket fits one page, the shelf width is the power of two that
 /// minimises the page area; otherwise shelves span the maximum page edge.
+///
+/// A source-mip binding keeps a dedicated page (its original-source chain). MASK
+/// base-colour bindings share pages per material class (H28): one class has one alpha
+/// factor and cutoff, so its coverage guard is the same for every binding on the page.
 fn pack(
     bindings: &mut [Binding],
     max_edge: u32,
-    masked: &[bool],
+    mask_classes: &[Option<u32>],
 ) -> Result<Vec<PagePlan>, JobError> {
-    let mut buckets = BTreeMap::<(u8, u32, u32, Option<usize>), Vec<usize>>::new();
+    let mut buckets = BTreeMap::<(u8, u32, u32, Option<usize>, Option<u32>), Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
-        let mask = if b.source_mips {
-            Some(i)
+        let (mips, mask) = if b.source_mips {
+            (Some(i), None)
+        } else if b.slot == TextureSlot::BaseColor {
+            (None, mask_classes[b.primitive])
         } else {
-            (b.slot == TextureSlot::BaseColor && masked[b.primitive]).then_some(b.primitive)
+            (None, None)
         };
         buckets
             .entry((
                 role(b.slot),
                 b.sampler.min_filter,
                 b.sampler.mag_filter,
+                mips,
                 mask,
             ))
             .or_default()
@@ -638,6 +645,8 @@ fn sampler_samples(
 #[derive(Clone, Copy)]
 pub(in crate::mesh_large) struct AtlasResources<'a> {
     pub materials: &'a [source::Material],
+    /// H28 material classes of `materials`.
+    pub classes: &'a crate::mesh_large::batching::MaterialClasses,
     pub textures: &'a [Value],
     pub samplers: &'a [Value],
     pub image_info: &'a [source::ImageInfo],
@@ -785,6 +794,7 @@ fn layout(
     };
     let mut bindings = Vec::new();
     let mut masked = vec![false; primitives.len()];
+    let mut mask_classes = vec![None; primitives.len()];
     for (pi, p) in primitives.iter_mut().enumerate() {
         check()?;
         let id = p.triangles[0].material;
@@ -793,6 +803,7 @@ fn layout(
         }
         let material = resources.materials.get(id as usize).ok_or_else(invariant)?;
         masked[pi] = material.mask().is_some();
+        mask_classes[pi] = masked[pi].then(|| resources.classes.of(id));
         for (output_uv, b) in material.bindings().enumerate() {
             let texture = resources.textures.get(b.texture).ok_or_else(invariant)?;
             let image = texture["source"]
@@ -842,7 +853,7 @@ fn layout(
             });
         }
     }
-    let plans = pack(&mut bindings, max_edge, &masked)?;
+    let plans = pack(&mut bindings, max_edge, &mask_classes)?;
     for b in &bindings {
         let page = &plans[b.page];
         for (corner, uv) in primitives[b.primitive].uvs[b.output_uv]
@@ -1350,6 +1361,7 @@ pub(super) fn prepare(
     let captured = services.captured;
     let resources = AtlasResources {
         materials: &captured.materials,
+        classes: &captured.material_classes,
         textures: &captured.textures,
         samplers: &captured.samplers,
         image_info: &captured.image_info,

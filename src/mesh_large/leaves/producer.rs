@@ -142,6 +142,41 @@ pub struct LeafOutputReport {
     pub escalation_diagnostics: Vec<EscalationDiagnostic>,
     /// Escalated pages beyond the bounded diagnostics list.
     pub escalation_diagnostics_omitted: u64,
+    /// H28 texture-space editability of the published tiles.
+    pub texel_ownership: TexelOwnership,
+}
+/// H28 texture-space editability: a tile is `unique` when no two of its triangles'
+/// published decoded-UV footprints share interior area on any page, so a texel edit
+/// changes exactly one triangle; otherwise `shared` (overlapping, mirrored or repeated
+/// source UVs), and the tile is editable in vertex space only. Never a refusal.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct TexelOwnership {
+    pub unique_leaves: u64,
+    pub shared_leaves: u64,
+    /// Triangles of shared leaves whose footprint shares area with another's.
+    pub shared_triangles: u64,
+    /// Coarse tiles: unique by construction (non-overlapping charts on disjoint packed
+    /// rectangles, and the raster's double-coverage refusal).
+    pub unique_proxies: u64,
+    /// The first [`TEXEL_OWNERSHIP_DIAGNOSTICS`] shared leaves, in leaf order; every
+    /// leaf not listed (and not omitted) is unique.
+    pub shared: Vec<SharedTexels>,
+    pub shared_omitted: u64,
+}
+/// Bound of [`TexelOwnership::shared`].
+pub const TEXEL_OWNERSHIP_DIAGNOSTICS: usize = 64;
+/// One leaf whose texels are not uniquely owned.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SharedTexels {
+    /// Leaf member, `leaves/<index>.glb` in the leaf stage.
+    pub leaf: String,
+    /// Archive tile `f<first>-d<depth>`.
+    pub first: u64,
+    pub depth: u32,
+    /// Always `shared`.
+    pub texel_ownership: &'static str,
+    /// Triangles whose footprint shares area with another's.
+    pub triangles: u64,
 }
 /// Escalated pages by the profile step's miss: a decoded-image gate, or the
 /// codec's own verification floor.
@@ -429,6 +464,10 @@ struct LeafEncoded {
     escalations: Vec<atlas::PageEscalation>,
     density_drop: u32,
     density_reasons: Vec<serde_json::Value>,
+    /// Published glTF primitives (H28).
+    primitives: usize,
+    /// Triangles whose decoded-UV footprint shares a page texel area with another's.
+    shared_triangles: u64,
 }
 fn read_leaf(
     node: NodeRecord,
@@ -552,6 +591,11 @@ fn leaf_encode(
                         )
                     })?;
                     // Only the accepted density attempt reaches here.
+                    leaf.shared_triangles = timing::time(Stage::GlbWrite, || {
+                        crate::mesh_large::batching::leaf_shared_triangles(atlas, &mut || {
+                            (services.check)()
+                        })
+                    })?;
                     let positions = std::mem::take(&mut leaf.positions);
                     let normals = std::mem::take(&mut leaf.normals);
                     if let Some(store) = preencode {
@@ -578,6 +622,8 @@ fn leaf_encode(
         escalations: appearance.escalations,
         density_drop,
         density_reasons,
+        primitives: glb.primitives,
+        shared_triangles: glb.shared_triangles,
     })
 }
 
@@ -645,6 +691,7 @@ pub(crate) fn produce(
         escalation_reasons: EscalationReasons::default(),
         escalation_diagnostics: Vec::new(),
         escalation_diagnostics_omitted: 0,
+        texel_ownership: TexelOwnership::default(),
     };
     let jobs = usize::try_from(stage.jobs).map_err(|_| resource("delivery jobs overflow"))?;
     let window = usize::try_from(stage.window).map_err(|_| resource("delivery window overflow"))?;
@@ -785,6 +832,7 @@ pub(crate) fn produce(
         )
     })?;
     report.proxies = lod.proxies;
+    report.texel_ownership.unique_proxies = lod.proxies;
     report.proxy_bytes = lod.proxy_bytes;
     // The bake hook: capture and staging are still live here.
     if let (Some(baker), Some(handoff), Some(preencode)) = (baker, &handoff, &preencode) {
@@ -893,12 +941,14 @@ fn write_leaf(
         escalations,
         density_drop,
         density_reasons,
+        primitives,
+        shared_triangles,
     } = encoded;
     if name != format!("{:012}.glb", report.leaves) {
         return Err(invariant("leaf member order differs from manifest order"));
     }
     timing::count(Counter::Leaves, 1);
-    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"plannedFootprint":{"densityDrop":plan.density_drop,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
+    let receipt = json!({"schemaVersion":1,"uri":format!("leaves/{name}"),"sha256":sha256,"bytes":bytes,"first":node.first,"end":node.end,"cellDepth":node.cell_depth,"cell":node.cell,"pathLength":node.path_len,"path":node.path,"lastOctant":node.last_octant,"depth":node.depth(),"packed":node.is_packed(),"bounds":{"min":bounds.min.map(f64::from),"max":bounds.max.map(f64::from)},"geometryError":geometry_error,"densityDrop":density_drop,"densityReasons":density_reasons,"primitives":primitives,"texelOwnership":if shared_triangles == 0 {"unique"} else {"shared"},"sharedTriangles":shared_triangles,"plannedFootprint":{"densityDrop":plan.density_drop,"pages":plan.pages,"baseTexels":plan.base_texels,"chainTexels":plan.chain_texels,"geometryBytes":plan.geometry_bytes,"planningOwnedBytes":plan.owned_bytes},"appearance":appearance});
     serde_json::to_writer(&mut *manifest, &receipt)
         .map_err(|e| invariant(&format!("leaf manifest serialization: {e}")))?;
     manifest
@@ -916,6 +966,24 @@ fn write_leaf(
     report.maximum_glb_bytes = report.maximum_glb_bytes.max(bytes);
     report.maximum_geometry_error = report.maximum_geometry_error.max(geometry_error);
     report.density_reduced_leaves += u64::from(density_drop != 0);
+    let ownership = &mut report.texel_ownership;
+    if shared_triangles == 0 {
+        ownership.unique_leaves += 1;
+    } else {
+        ownership.shared_leaves += 1;
+        ownership.shared_triangles += shared_triangles;
+        if ownership.shared.len() < TEXEL_OWNERSHIP_DIAGNOSTICS {
+            ownership.shared.push(SharedTexels {
+                leaf: format!("leaves/{name}"),
+                first: node.first,
+                depth: node.depth(),
+                texel_ownership: "shared",
+                triangles: shared_triangles,
+            });
+        } else {
+            ownership.shared_omitted += 1;
+        }
+    }
     for page in escalations {
         use super::delivery::{MissReason, Step};
         match page.escalation.step {

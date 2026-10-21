@@ -6,7 +6,7 @@ use super::super::{
     records::Bounds,
 };
 use super::{
-    geometry::{LatticePlan, PositionStorage},
+    geometry::{EncodedPositions, LatticePlan, PositionStorage},
     prepared::PreparedAtlas,
 };
 use crate::{
@@ -23,13 +23,19 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
-    /// Decoded published POSITION per primitive, in corner order (the lattice decode the
-    /// writer proves client-order exact).
+    /// Decoded published POSITION per PREPARED (source) primitive, in atlas order and
+    /// corner order (the lattice decode the writer proves client-order exact, unchanged by
+    /// H28 merging).
     pub positions: Vec<Vec<[f32; 3]>>,
-    /// The NORMAL a renderer reads per primitive, in corner order (empty without
+    /// The NORMAL a renderer reads per prepared primitive, in corner order (empty without
     /// NORMAL): the octahedral codes decoded by the reference meshopt filter and read
     /// as normalized SHORT, or the published f32 values.
     pub normals: Vec<Vec<[f32; 3]>>,
+    /// Published glTF primitives (H28: one per material class, texture set, attribute
+    /// set and exact position window).
+    pub primitives: usize,
+    /// Set by the producer for the accepted attempt (texel ownership, H28).
+    pub shared_triangles: u64,
 }
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]
@@ -350,6 +356,163 @@ fn validate_closure(atlas: &PreparedAtlas) -> Result<bool, JobError> {
     Ok(basis)
 }
 
+/// How one published glTF primitive stores POSITION: a quantization window (the shared
+/// scale and, per axis, the lowest member offset `lo` and highest member code `hi`, both
+/// in codes) or raw f32.
+#[derive(Clone, Copy, Debug)]
+enum Window {
+    Quantized {
+        scale: f32,
+        lo: [i64; 3],
+        hi: [i64; 3],
+    },
+    Float,
+}
+impl Window {
+    /// The window holding both, when every rebased code still fits UNSIGNED_SHORT on one
+    /// shared scale; `None` otherwise (H28: split, never re-quantize).
+    fn join(self, other: Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Float, Self::Float) => Some(Self::Float),
+            (
+                Self::Quantized { scale, lo, hi },
+                Self::Quantized {
+                    scale: other_scale,
+                    lo: other_lo,
+                    hi: other_hi,
+                },
+            ) if scale.to_bits() == other_scale.to_bits() => {
+                let lo: [i64; 3] = std::array::from_fn(|a| lo[a].min(other_lo[a]));
+                let hi: [i64; 3] = std::array::from_fn(|a| hi[a].max(other_hi[a]));
+                (0..3)
+                    .all(|a| hi[a] - lo[a] <= i64::from(u16::MAX))
+                    .then_some(Self::Quantized { scale, lo, hi })
+            }
+            _ => None,
+        }
+    }
+}
+/// Prepared (source) primitives published as one glTF primitive, in atlas order.
+#[derive(Debug)]
+struct Group {
+    order: Vec<usize>,
+    window: Window,
+}
+fn canonical_zero(x: f32) -> f32 {
+    if x == 0.0 {
+        0.0
+    } else {
+        x
+    }
+}
+/// A quantized node translation in codes: `t / s` is exact (power-of-two `s`) and must be
+/// an integer, as the frozen lattice writes it.
+fn exact_offset(translation: f32, scale: f32) -> Result<i64, JobError> {
+    let q = f64::from(translation) / f64::from(scale);
+    if !q.is_finite() || q.fract() != 0. || q.abs() > (1u64 << 40) as f64 {
+        return Err(invalid(
+            "leaf position translation is not an exact code offset",
+        ));
+    }
+    Ok(q as i64)
+}
+/// Encode every prepared primitive on the frozen lattice exactly as before H28, then group
+/// them into the fewest glTF primitives: equal material class and textures (canonical
+/// remapped material), attribute flags, UV sets and extra feature-ID sets, first-fit into
+/// quantization windows. Groups are ordered by their first member.
+fn publish_groups(
+    atlas: &PreparedAtlas,
+    lattice: &LatticePlan,
+    depth: u8,
+) -> Result<(Vec<Group>, Vec<EncodedPositions>), JobError> {
+    let mut positions = Vec::with_capacity(atlas.primitives.len());
+    let mut keys = BTreeMap::<String, Vec<Group>>::new();
+    for (index, primitive) in atlas.primitives.iter().enumerate() {
+        let flags = primitive.triangles[0].flags;
+        if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
+            return Err(invalid("prepared primitive mixes attribute presence"));
+        }
+        let points: Vec<_> = primitive
+            .triangles
+            .iter()
+            .flat_map(|t| t.triangle.positions)
+            .collect();
+        let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
+        let position = lattice.encode(&points, &depths, u32::from(depth))?;
+        let window = match &position.storage {
+            PositionStorage::Quantized {
+                codes,
+                translation,
+                scale,
+            } => {
+                let lo = [
+                    exact_offset(translation[0], *scale)?,
+                    exact_offset(translation[1], *scale)?,
+                    exact_offset(translation[2], *scale)?,
+                ];
+                let hi: [i64; 3] = std::array::from_fn(|a| {
+                    lo[a] + i64::from(codes.iter().map(|c| c[a]).max().unwrap_or(0))
+                });
+                Window::Quantized {
+                    scale: *scale,
+                    lo,
+                    hi,
+                }
+            }
+            PositionStorage::Float { .. } => Window::Float,
+        };
+        positions.push(position);
+        let key = json!([
+            primitive
+                .material
+                .as_ref()
+                .map(|m| super::super::batching::material_key(m, true)),
+            flags,
+            primitive.uvs.len(),
+            primitive.feature_id_textures,
+        ])
+        .to_string();
+        let windows = keys.entry(key).or_default();
+        match windows
+            .iter_mut()
+            .find_map(|g| g.window.join(window).map(|w| (g, w)))
+        {
+            Some((group, joined)) => {
+                group.window = joined;
+                group.order.push(index);
+            }
+            None => windows.push(Group {
+                order: vec![index],
+                window,
+            }),
+        }
+    }
+    let mut groups: Vec<Group> = keys.into_values().flatten().collect();
+    groups.sort_by_key(|g| g.order[0]);
+    Ok((groups, positions))
+}
+/// Hand a merged primitive's renderer NORMALs back to its prepared primitives.
+fn split_normals(
+    order: &[usize],
+    atlas: &PreparedAtlas,
+    normals: Vec<[f32; 3]>,
+    out: &mut [Vec<[f32; 3]>],
+) -> Result<(), JobError> {
+    let mut rest = normals.as_slice();
+    for &i in order {
+        let n = atlas.primitives[i].triangles.len() * 3;
+        if rest.len() < n {
+            return Err(invalid("merged leaf NORMAL count"));
+        }
+        out[i] = rest[..n].to_vec();
+        rest = &rest[n..];
+    }
+    if !rest.is_empty() {
+        return Err(invalid("merged leaf NORMAL count"));
+    }
+    Ok(())
+}
+
 pub(super) fn encode(
     atlas: &PreparedAtlas,
     lattice: &LatticePlan,
@@ -417,6 +580,7 @@ pub(super) fn encode(
         .enumerate()
         .map(|(i, k)| (*k, i))
         .collect();
+    let (groups, mut positions) = publish_groups(atlas, lattice, depth)?;
     let mut wire = Wire::new();
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
@@ -425,42 +589,71 @@ pub(super) fn encode(
     let mut geometry_error = 0.0_f64;
     let mut rank = 0usize;
     let mut quantized = false;
-    let mut decoded_positions = Vec::with_capacity(atlas.primitives.len());
-    let mut renderer_normals = Vec::with_capacity(atlas.primitives.len());
+    let mut renderer_normals = vec![Vec::new(); atlas.primitives.len()];
+    let mut rows: Vec<&FullTriangle> = Vec::with_capacity(total);
     let octahedral = lattice.profile().leaf_normal_octahedral_bits();
-    for primitive in &atlas.primitives {
-        let flags = primitive.triangles[0].flags;
-        if flags & !31 != 0 || primitive.triangles.iter().any(|p| p.flags != flags) {
-            return Err(invalid("prepared primitive mixes attribute presence").into());
-        }
-        let points: Vec<_> = primitive
-            .triangles
+    for group in &groups {
+        let first = &atlas.primitives[group.order[0]];
+        let flags = first.triangles[0].flags;
+        let triangles: Vec<&FullTriangle> = group
+            .order
             .iter()
-            .flat_map(|t| t.triangle.positions)
+            .flat_map(|&i| atlas.primitives[i].triangles.iter())
             .collect();
-        let depths: Vec<_> = primitive.corner_depths.iter().flatten().copied().collect();
-        let mut position = lattice.encode(&points, &depths, u32::from(depth))?;
-        bounds.union(&position.bounds);
-        geometry_error = geometry_error.max(position.correspondence_error);
-        let count = points.len();
+        let count = triangles.len().checked_mul(3).ok_or_else(overflow)?;
         let mut node = json!({"mesh":meshes.len()});
-        let pos = match &position.storage {
-            PositionStorage::Quantized {
-                codes,
-                translation,
-                scale,
-            } => {
+        let pos = match group.window {
+            Window::Quantized { scale, lo, .. } => {
                 quantized = true;
+                // `lo` is one member's aligned offset: |lo| <= 2^38 and a multiple of 2^15,
+                // so `lo as f32` and its power-of-two product are exact (geometry.rs).
+                let translation: [f32; 3] = std::array::from_fn(|a| lo[a] as f32 * scale);
                 let mut bytes = allocate(count.checked_mul(8).ok_or_else(overflow)?)?;
                 let mut min = [u16::MAX; 3];
                 let mut max = [0u16; 3];
-                for code in codes {
-                    for (a, value) in code.iter().enumerate() {
-                        bytes.extend_from_slice(&value.to_le_bytes());
-                        min[a] = min[a].min(*value);
-                        max[a] = max[a].max(*value);
+                for &i in &group.order {
+                    let encoded = &positions[i];
+                    let PositionStorage::Quantized {
+                        codes,
+                        translation: own,
+                        scale: own_scale,
+                    } = &encoded.storage
+                    else {
+                        return Err(invalid("merged leaf primitive mixes position storage").into());
+                    };
+                    if own_scale.to_bits() != scale.to_bits() {
+                        return Err(invalid("merged leaf primitive mixes position scales").into());
                     }
-                    bytes.extend_from_slice(&[0, 0]);
+                    let shift: [i64; 3] = [
+                        exact_offset(own[0], scale)? - lo[0],
+                        exact_offset(own[1], scale)? - lo[1],
+                        exact_offset(own[2], scale)? - lo[2],
+                    ];
+                    for (code, decoded) in codes.iter().zip(&encoded.decoded) {
+                        for a in 0..3 {
+                            // Exact integer rebase onto the group offset; never re-quantized.
+                            // Both client decode orders must give the member's own bits.
+                            let value =
+                                u16::try_from(i64::from(code[a]) + shift[a]).map_err(|_| {
+                                    invalid("merged leaf position code exceeds UNSIGNED_SHORT")
+                                })?;
+                            let plain = canonical_zero(f32::from(value) * scale + translation[a]);
+                            let fused =
+                                canonical_zero(f32::from(value).mul_add(scale, translation[a]));
+                            if plain.to_bits() != decoded[a].to_bits()
+                                || fused.to_bits() != decoded[a].to_bits()
+                            {
+                                return Err(invalid(
+                                    "merged leaf position decode differs from its source primitive",
+                                )
+                                .into());
+                            }
+                            bytes.extend_from_slice(&value.to_le_bytes());
+                            min[a] = min[a].min(value);
+                            max[a] = max[a].max(value);
+                        }
+                        bytes.extend_from_slice(&[0, 0]);
+                    }
                 }
                 let id = wire.attribute(&bytes, count, 8, 5123, "VEC3")?;
                 wire.accessors[id]["min"] = json!(min);
@@ -468,23 +661,31 @@ pub(super) fn encode(
                 // Promote BEFORE Value/JSON construction; f32 shortest decimals
                 // parsed as f64 can otherwise define a different real transform.
                 node["translation"] = json!(translation.map(f64::from));
-                let scale_values = [f64::from(*scale); 3];
-                node["scale"] = json!(scale_values);
+                node["scale"] = json!([f64::from(scale), f64::from(scale), f64::from(scale)]);
                 id
             }
-            PositionStorage::Float { positions } => {
-                let rows: Vec<_> = positions.iter().map(|p| p.to_vec()).collect();
-                let id = wire.floats(&rows, "VEC3")?;
-                wire.accessors[id]["min"] = json!(position.bounds.min.map(f64::from));
-                wire.accessors[id]["max"] = json!(position.bounds.max.map(f64::from));
+            Window::Float => {
+                let mut values = Vec::with_capacity(count);
+                let mut extent = Bounds::EMPTY;
+                for &i in &group.order {
+                    let PositionStorage::Float { positions: stored } = &positions[i].storage else {
+                        return Err(invalid("merged leaf primitive mixes position storage").into());
+                    };
+                    values.extend(stored.iter().map(|p| p.to_vec()));
+                    extent.union(&positions[i].bounds);
+                }
+                let id = wire.floats(&values, "VEC3")?;
+                wire.accessors[id]["min"] = json!(extent.min.map(f64::from));
+                wire.accessors[id]["max"] = json!(extent.max.map(f64::from));
                 id
             }
         };
-        decoded_positions.push(std::mem::take(&mut position.decoded));
-        if flags & NORMAL == 0 {
-            renderer_normals.push(Vec::new());
+        for &i in &group.order {
+            bounds.union(&positions[i].bounds);
+            geometry_error = geometry_error.max(positions[i].correspondence_error);
         }
         let mut attributes = json!({"POSITION":pos});
+        let corners = || triangles.iter().flat_map(|t| t.corners.iter());
         for (flag, name, shape) in [
             (NORMAL, "NORMAL", "VEC3"),
             (TANGENT, "TANGENT", "VEC4"),
@@ -494,45 +695,38 @@ pub(super) fn encode(
                 continue;
             }
             if let (NORMAL, Some(bits)) = (flag, octahedral) {
-                let normals: Vec<[f32; 3]> = primitive
-                    .triangles
-                    .iter()
-                    .flat_map(|t| t.corners.iter().map(|c| c.normal))
-                    .collect();
+                let normals: Vec<[f32; 3]> = corners().map(|c| c.normal).collect();
                 let (id, decoded) = wire.octahedral(&normals, bits)?;
                 attributes[name] = json!(id);
-                renderer_normals.push(decoded);
+                split_normals(&group.order, atlas, decoded, &mut renderer_normals)?;
                 quantized = true;
             } else {
                 if flag == NORMAL {
-                    renderer_normals.push(
-                        primitive
-                            .triangles
-                            .iter()
-                            .flat_map(|t| t.corners.iter().map(|c| c.normal))
-                            .collect(),
-                    );
+                    let normals = corners().map(|c| c.normal).collect();
+                    split_normals(&group.order, atlas, normals, &mut renderer_normals)?;
                 }
-                let rows: Vec<Vec<f32>> = primitive
-                    .triangles
-                    .iter()
-                    .flat_map(|t| t.corners.iter())
+                let values: Vec<Vec<f32>> = corners()
                     .map(|c| match flag {
                         NORMAL => c.normal.to_vec(),
                         TANGENT => c.tangent.to_vec(),
                         _ => c.color.to_vec(),
                     })
                     .collect();
-                attributes[name] = json!(wire.floats(&rows, shape)?);
+                attributes[name] = json!(wire.floats(&values, shape)?);
             }
         }
-        for (set, uv) in primitive.uvs.iter().enumerate() {
-            let rows: Vec<_> = uv.iter().map(|p| p.to_vec()).collect();
-            attributes[format!("TEXCOORD_{set}")] = json!(wire.floats(&rows, "VEC2")?);
+        for set in 0..first.uvs.len() {
+            let values: Vec<_> = group
+                .order
+                .iter()
+                .flat_map(|&i| atlas.primitives[i].uvs[set].iter())
+                .map(|p| p.to_vec())
+                .collect();
+            attributes[format!("TEXCOORD_{set}")] = json!(wire.floats(&values, "VEC2")?);
         }
         for set in 0..2 {
             let mut bytes = allocate(count.checked_mul(4).ok_or_else(overflow)?)?;
-            for (i, row) in primitive.triangles.iter().enumerate() {
+            for (i, row) in triangles.iter().enumerate() {
                 let id = if set == 0 {
                     primitive_ids[&key(row)]
                 } else {
@@ -549,20 +743,20 @@ pub(super) fn encode(
             json!({"featureCount":primitive_ids.len(),"attribute":0,"propertyTable":0,"label":"source_primitive"}),
             json!({"featureCount":total,"attribute":1,"propertyTable":1,"label":"source_triangle"}),
         ];
-        feature_ids.extend(primitive.feature_id_textures.iter().cloned());
+        feature_ids.extend(first.feature_id_textures.iter().cloned());
         let mut output = json!({"attributes":attributes,"mode":4,"extensions":{"EXT_mesh_features":{"featureIds":feature_ids}}});
-        if let Some(material) = &primitive.material {
+        if let Some(material) = &first.material {
             output["material"] = json!(materials.len());
             materials.push(material.clone());
         }
         meshes.push(json!({"primitives":[output]}));
         nodes.push(node);
-        rank += primitive.triangles.len();
+        rank += triangles.len();
+        rows.extend(triangles);
     }
-    let rows: Vec<&FullTriangle> = atlas
-        .primitives
-        .iter()
-        .flat_map(|p| p.triangles.iter())
+    let decoded_positions: Vec<Vec<[f32; 3]>> = positions
+        .iter_mut()
+        .map(|p| std::mem::take(&mut p.decoded))
         .collect();
     let mut classes = Map::new();
     let mut tables = Vec::new();
@@ -672,6 +866,8 @@ pub(super) fn encode(
         geometry_error,
         positions: decoded_positions,
         normals: renderer_normals,
+        primitives: groups.len(),
+        shared_triangles: 0,
     })
 }
 
@@ -1252,6 +1448,377 @@ mod tests {
             }
             assert_eq!(leaf.geometry_error, 0.0);
         }
+    }
+    /// A prepared primitive of source primitive `primitive`, `count` triangles from `x`,
+    /// with the fixture atlas material and five UV sets.
+    fn source_primitive(primitive: u32, count: usize, x: f32) -> PreparedPrimitive {
+        let triangles: Vec<FullTriangle> = (0..count)
+            .map(|i| {
+                let mut t = row(
+                    100 * u64::from(primitive) + i as u64,
+                    x + i as f32 * 0.5,
+                    false,
+                );
+                t.triangle.source.primitive = primitive;
+                t.material = primitive;
+                t
+            })
+            .collect();
+        PreparedPrimitive {
+            corner_depths: vec![[1; 3]; count],
+            uvs: (0..5)
+                .map(|set| vec![[set as f32 / 8.0, 0.25]; 3 * count])
+                .collect(),
+            material: atlas().primitives[0].material.clone(),
+            feature_id_textures: Vec::new(),
+            triangles,
+        }
+    }
+    fn f32s(doc: &Value, bin: &[u8], accessor: &Value) -> Vec<f32> {
+        view(doc, bin, accessor["bufferView"].as_u64().unwrap() as usize)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect()
+    }
+    /// Every published triangle, in published order: decoded corner bits (client order
+    /// `u * s + t` in f32, or the stored f32), and its `source_primitive` and
+    /// `source_triangle` rows as (node, mesh, primitive) and (primitive, triangle).
+    #[allow(clippy::type_complexity)]
+    fn published(glb: &[u8]) -> Vec<([[u32; 3]; 3], (u64, u64, u64), (u64, u64))> {
+        let (doc, bin) = parse(glb);
+        let column = |table: usize, name: &str| -> Vec<u64> {
+            let width = match name {
+                "node_index" | "mesh_index" | "primitive_index" => 4,
+                _ => 8,
+            };
+            column(&doc, bin, table, name)
+                .chunks_exact(width)
+                .map(|c| {
+                    let mut b = [0; 8];
+                    b[..width].copy_from_slice(c);
+                    u64::from_le_bytes(b)
+                })
+                .collect()
+        };
+        let (nodes, meshes, primitives) = (
+            column(0, "node_index"),
+            column(0, "mesh_index"),
+            column(0, "primitive_index"),
+        );
+        let (triangle_primitives, triangles) =
+            (column(1, "primitive_index"), column(1, "triangle_index"));
+        let mut out = Vec::new();
+        for node in doc["nodes"].as_array().unwrap() {
+            let mesh = &doc["meshes"][node["mesh"].as_u64().unwrap() as usize];
+            assert_eq!(mesh["primitives"].as_array().unwrap().len(), 1);
+            let attributes = &mesh["primitives"][0]["attributes"];
+            let accessor = &doc["accessors"][attributes["POSITION"].as_u64().unwrap() as usize];
+            let bytes = view(&doc, bin, accessor["bufferView"].as_u64().unwrap() as usize);
+            let corners: Vec<[u32; 3]> = if accessor["componentType"] == 5123 {
+                let t = &node["translation"];
+                let s = &node["scale"];
+                bytes
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|e| {
+                        std::array::from_fn(|a| {
+                            let u = f32::from(u16::from_le_bytes([e[2 * a], e[2 * a + 1]]));
+                            let p =
+                                u * s[a].as_f64().unwrap() as f32 + t[a].as_f64().unwrap() as f32;
+                            if p == 0. {
+                                0
+                            } else {
+                                p.to_bits()
+                            }
+                        })
+                    })
+                    .collect()
+            } else {
+                assert!(node.get("translation").is_none() && node.get("scale").is_none());
+                bytes
+                    .as_chunks::<12>()
+                    .0
+                    .iter()
+                    .map(|e| {
+                        std::array::from_fn(|a| {
+                            u32::from_le_bytes(e[4 * a..4 * a + 4].try_into().unwrap())
+                        })
+                    })
+                    .collect()
+            };
+            let ids = |set: usize| {
+                f32s(
+                    &doc,
+                    bin,
+                    &doc["accessors"]
+                        [attributes[format!("_FEATURE_ID_{set}")].as_u64().unwrap() as usize],
+                )
+            };
+            let (primitive_ids, triangle_ids) = (ids(0), ids(1));
+            for (k, corner) in corners.as_chunks::<3>().0.iter().enumerate() {
+                let (p, t) = (primitive_ids[3 * k] as usize, triangle_ids[3 * k] as usize);
+                assert_eq!(primitive_ids[3 * k + 2], p as f32);
+                assert_eq!(triangle_ids[3 * k + 2], t as f32);
+                out.push((
+                    [corner[0], corner[1], corner[2]],
+                    (nodes[p], meshes[p], primitives[p]),
+                    (triangle_primitives[t], triangles[t]),
+                ));
+            }
+        }
+        out
+    }
+    /// What the pre-H28 writer published per triangle: each prepared primitive encoded on
+    /// its own by the frozen lattice, in atlas order.
+    #[allow(clippy::type_complexity)]
+    fn per_primitive_reference(
+        input: &PreparedAtlas,
+        lattice: &LatticePlan,
+    ) -> Vec<([[u32; 3]; 3], (u64, u64, u64), (u64, u64))> {
+        let mut out = Vec::new();
+        for p in &input.primitives {
+            let points: Vec<_> = p
+                .triangles
+                .iter()
+                .flat_map(|t| t.triangle.positions)
+                .collect();
+            let depths: Vec<_> = p.corner_depths.iter().flatten().copied().collect();
+            let decoded = lattice.encode(&points, &depths, 1).unwrap().decoded;
+            for (t, corners) in p.triangles.iter().zip(decoded.as_chunks::<3>().0) {
+                let s = t.triangle.source;
+                out.push((
+                    std::array::from_fn(|c| corners[c].map(f32::to_bits)),
+                    (u64::from(s.node), u64::from(s.mesh), u64::from(s.primitive)),
+                    (u64::from(s.primitive), s.triangle),
+                ));
+            }
+        }
+        out
+    }
+    fn sorted<T: PartialOrd + Clone>(mut v: Vec<T>) -> Vec<T> {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v
+    }
+    /// H28: source primitives of one material class, texture set, attribute set and
+    /// position window publish as ONE glTF primitive. Every triangle keeps its decoded
+    /// corner bits and its source_primitive/source_triangle rows, in every profile.
+    #[test]
+    fn same_class_primitives_merge_with_identical_positions_and_identity() {
+        for profile in [
+            Profile::Fast,
+            Profile::Balanced,
+            Profile::Quality,
+            Profile::Lossless,
+        ] {
+            let mut input = atlas();
+            input.primitives = vec![
+                source_primitive(4, 3, -999_999.75),
+                source_primitive(2, 2, -999_990.25),
+                source_primitive(9, 1, -999_995.0),
+            ];
+            // Same class as written differently: an explicit default and integer numbers.
+            let material = input.primitives[1].material.as_mut().unwrap();
+            material["pbrMetallicRoughness"]["metallicFactor"] = json!(1);
+            material["normalTexture"]["scale"] = json!(-2);
+            let lattice = plan(profile);
+            let leaf = encode(&input, &lattice, 1, TILE_LIMIT).unwrap();
+            let (doc, _) = parse(&leaf.glb);
+            assert_eq!(leaf.primitives, 1, "{profile:?}");
+            assert_eq!(doc["meshes"].as_array().unwrap().len(), 1);
+            assert_eq!(doc["nodes"].as_array().unwrap().len(), 1);
+            assert_eq!(doc["materials"].as_array().unwrap().len(), 1);
+            let reference = per_primitive_reference(&input, &lattice);
+            // Atlas order is kept inside the merged primitive.
+            assert_eq!(published(&leaf.glb), reference, "{profile:?}");
+            // The witness hand-off stays per prepared primitive.
+            for (p, decoded) in input.primitives.iter().zip(&leaf.positions) {
+                let points: Vec<_> = p
+                    .triangles
+                    .iter()
+                    .flat_map(|t| t.triangle.positions)
+                    .collect();
+                let expected = lattice.encode(&points, &vec![1; points.len()], 1).unwrap();
+                assert_eq!(
+                    decoded
+                        .iter()
+                        .map(|c| c.map(f32::to_bits))
+                        .collect::<Vec<_>>(),
+                    expected
+                        .decoded
+                        .iter()
+                        .map(|c| c.map(f32::to_bits))
+                        .collect::<Vec<_>>()
+                );
+            }
+            assert_eq!(
+                leaf.normals.iter().map(Vec::len).collect::<Vec<_>>(),
+                [9, 6, 3]
+            );
+            let tables = &doc["extensions"]["EXT_structural_metadata"]["propertyTables"];
+            assert_eq!(
+                (tables[0]["count"].as_u64(), tables[1]["count"].as_u64()),
+                (Some(3), Some(6))
+            );
+        }
+    }
+    /// H28 rebase across a lattice cell boundary: members on each side of an aligned cell
+    /// edge (depth 1, scale 2^-8, 128 m cells; the edge is -7812 * 128 = -999936) carry
+    /// different own translations, so merging them shifts codes by a nonzero amount. The
+    /// published decode still equals the per-primitive reference bit for bit.
+    #[test]
+    fn merge_across_a_cell_boundary_rebases_a_nonzero_shift() {
+        for profile in [Profile::Fast, Profile::Balanced] {
+            let mut input = atlas();
+            input.primitives = vec![
+                source_primitive(4, 2, -999_936.5),
+                source_primitive(2, 2, -999_935.5),
+                source_primitive(9, 1, -999_999.75),
+            ];
+            let lattice = plan(profile);
+            let own: Vec<[f32; 3]> = input
+                .primitives
+                .iter()
+                .map(|p| {
+                    let points: Vec<_> = p
+                        .triangles
+                        .iter()
+                        .flat_map(|t| t.triangle.positions)
+                        .collect();
+                    let depths: Vec<_> = p.corner_depths.iter().flatten().copied().collect();
+                    match lattice.encode(&points, &depths, 1).unwrap().storage {
+                        PositionStorage::Quantized { translation, .. } => translation,
+                        PositionStorage::Float { .. } => panic!("{profile:?} must quantize"),
+                    }
+                })
+                .collect();
+            assert!(own[0][0] < own[1][0], "{profile:?}: {own:?}");
+            // One 128 m cell apart: a shift of 2^15 codes for the upper member.
+            assert_eq!(own[1][0] - own[0][0], 128., "{profile:?}: {own:?}");
+            let leaf = encode(&input, &lattice, 1, TILE_LIMIT).unwrap();
+            let (doc, _) = parse(&leaf.glb);
+            assert_eq!(leaf.primitives, 1, "{profile:?}");
+            // The group offset is the lowest member offset, so the shifts are nonzero.
+            let group = doc["nodes"][0]["translation"][0].as_f64().unwrap();
+            assert_eq!(
+                group,
+                f64::from(own.iter().map(|t| t[0]).fold(f32::MAX, f32::min))
+            );
+            assert!(own.iter().any(|t| f64::from(t[0]) != group));
+            assert_eq!(
+                published(&leaf.glb),
+                per_primitive_reference(&input, &lattice),
+                "{profile:?}"
+            );
+        }
+    }
+    /// H28 splits: material class (a factor), texture identity (another page), attribute
+    /// set (no COLOR_0) and an exact position window that UNSIGNED_SHORT cannot hold.
+    /// Each split keeps every triangle's decoded corners and identity.
+    #[test]
+    fn class_texture_attribute_and_window_differences_split() {
+        let base = || {
+            let mut input = atlas();
+            input.primitives = vec![
+                source_primitive(1, 2, -999_999.75),
+                source_primitive(2, 2, -999_998.25),
+            ];
+            input.pages.push(PreparedPage {
+                bytes: input.pages[0].bytes.clone(),
+                mime: "image/png",
+            });
+            input.textures.push(json!({"source":1,"sampler":0}));
+            input
+        };
+        type Mutation = (&'static str, fn(&mut PreparedAtlas));
+        let mutations: [Mutation; 4] = [
+            ("factor", |a| {
+                a.primitives[1].material.as_mut().unwrap()["pbrMetallicRoughness"]
+                    ["roughnessFactor"] = json!(0.5)
+            }),
+            ("texture", |a| {
+                a.primitives[1].material.as_mut().unwrap()["normalTexture"]["index"] = json!(1)
+            }),
+            ("attributes", |a| {
+                for t in &mut a.primitives[1].triangles {
+                    t.flags &= !COLOR;
+                }
+            }),
+            ("window", |a| {
+                // 1000 m away: each primitive fits its own window, the two do not.
+                for (i, t) in a.primitives[1].triangles.iter_mut().enumerate() {
+                    for p in &mut t.triangle.positions {
+                        p[0] += 999.0 + i as f32;
+                    }
+                }
+            }),
+        ];
+        let lattice = plan(Profile::Balanced);
+        let merged = encode(&base(), &lattice, 1, TILE_LIMIT).unwrap();
+        assert_eq!(merged.primitives, 1);
+        for (name, mutate) in mutations {
+            let mut input = base();
+            mutate(&mut input);
+            let leaf = encode(&input, &lattice, 1, TILE_LIMIT).unwrap();
+            assert_eq!(leaf.primitives, 2, "{name}");
+            let (doc, _) = parse(&leaf.glb);
+            assert_eq!(doc["meshes"].as_array().unwrap().len(), 2, "{name}");
+            assert_eq!(
+                published(&leaf.glb),
+                per_primitive_reference(&input, &lattice),
+                "{name}"
+            );
+            if name == "window" {
+                assert_ne!(
+                    doc["nodes"][0]["translation"],
+                    doc["nodes"][1]["translation"]
+                );
+            }
+        }
+        // Float profiles have no window: the far primitive still merges.
+        let mut far = base();
+        (mutations[3].1)(&mut far);
+        let lossless = plan(Profile::Lossless);
+        let leaf = encode(&far, &lossless, 1, TILE_LIMIT).unwrap();
+        assert_eq!(leaf.primitives, 1);
+        assert_eq!(
+            sorted(published(&leaf.glb)),
+            sorted(per_primitive_reference(&far, &lossless))
+        );
+    }
+    #[test]
+    fn quantization_windows_join_only_within_unsigned_short_on_one_scale() {
+        let q = |scale: f32, lo: i64, hi: i64| Window::Quantized {
+            scale,
+            lo: [lo, 0, -(1 << 15)],
+            hi: [hi, 0, -(1 << 15)],
+        };
+        let joined = q(0.25, 0, 40_000).join(q(0.25, 1 << 15, (1 << 15) + 32_767));
+        assert!(matches!(
+            joined,
+            Some(Window::Quantized {
+                lo: [0, 0, _],
+                hi: [65_535, 0, _],
+                ..
+            })
+        ));
+        assert!(q(0.25, 0, 40_000)
+            .join(q(0.25, 1 << 15, (1 << 15) + 32_768))
+            .is_none());
+        assert!(q(0.25, 0, 1).join(q(0.5, 0, 1)).is_none());
+        assert!(q(0.25, 0, 1).join(Window::Float).is_none());
+        assert!(matches!(
+            Window::Float.join(Window::Float),
+            Some(Window::Float)
+        ));
+        // Negative offsets rebase exactly too.
+        assert!(q(0.25, -(1 << 16), -(1 << 16) + 100)
+            .join(q(0.25, -(1 << 15), -(1 << 15) + 100))
+            .is_some());
+        assert_eq!(exact_offset(-8.0, 0.25).unwrap(), -32);
+        assert!(exact_offset(0.1, 0.25).is_err());
     }
     #[test]
     fn complete_budget_and_missing_slot_uv_are_typed_failures() {

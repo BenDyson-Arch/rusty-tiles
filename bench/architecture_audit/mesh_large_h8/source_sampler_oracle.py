@@ -261,6 +261,9 @@ def verify(truth_path,output,decoded,run_controls,failure_path=None):
                 quality=wire.decoded_metrics(wanted[2],received[2],[1]*(wanted[0]*wanted[1]),role,profile)
                 metrics.append({'uri':receipt['uri'],'page':page_id,'mip':mip,'storedTexelQuality':quality})
             page_count+=1
+        # H28 publishes one glTF primitive per material class; this fixture's two
+        # materials differ (normal scale, MASK), so each node is one source primitive.
+        # A merging fixture must split nodes by _FEATURE_ID_0 (the source_primitive row).
         for pi,node in enumerate(doc['nodes']):
             primitive=doc['meshes'][node['mesh']]['primitives'][0];values={name:wire.accessor(doc,views,i) for name,i in primitive['attributes'].items()};wire.check_features(primitive['extensions']['EXT_mesh_features']['featureIds'],tables)
             rows=[];points=[]

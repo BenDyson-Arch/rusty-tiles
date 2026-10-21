@@ -92,7 +92,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     }
     const bounds = report.bounds.map(C.Math.toRadians);
     const terrain = window.terrain = await C.Cesium3DTileset.fromUrl(config.terrain, {
-      maximumScreenSpaceError: 8, enableCollision: true,
+      maximumScreenSpaceError: 16, enableCollision: true,
       // REPLACE pyramid: load only tiles that can be drawn, not every ancestor.
       skipLevelOfDetail: true,
     });
@@ -158,7 +158,7 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
   }
   for (const [name, label] of [['mesh', '3D mesh'], ['annotations', 'Annotations'], ['point-cloud', 'Point cloud']]) {
     if (!config[name]) continue;
-    const tiles = await C.Cesium3DTileset.fromUrl(config[name], {maximumScreenSpaceError: 8, backFaceCulling: name === 'mesh'});
+    const tiles = await C.Cesium3DTileset.fromUrl(config[name], {maximumScreenSpaceError: 16, backFaceCulling: name === 'mesh'});
     viewer.scene.primitives.add(tiles);
     tiles.tileFailed.addEventListener(fail);
     if (name === 'annotations') {

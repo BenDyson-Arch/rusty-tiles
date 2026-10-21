@@ -6,6 +6,7 @@ use crate::{
     gltf_source::source::TextureSlot,
     mesh_large::{
         bake_pass::{BakePass, LeafPreencode, PreencodeStore},
+        batching::MaterialClasses,
         lod::handoff,
         records::NodeRecord,
     },
@@ -300,7 +301,8 @@ pub(super) fn from_leaf(
     };
     // The exact packet validator also checks every source ledger/mip/frame and
     // the final density. Encoding here is unnecessary: validate without a copy.
-    packet::validate(&child, check)?;
+    // A leaf child's page witness serves the material of its binding (no class merge).
+    packet::validate(&child, &MaterialClasses::EMPTY, check)?;
     Ok(child)
 }
 
@@ -309,16 +311,18 @@ pub(super) fn from_leaf(
 pub(super) fn persist(
     store: &PreencodeStore,
     child: &PreencodeChild,
+    classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(), JobError> {
-    let bytes = encode_packet(child, memory, check)?;
+    let bytes = encode_packet(child, classes, memory, check)?;
     store.write_proxy(child.node.first, child.node.depth(), &bytes)
 }
 /// A baked tile's exact packet for its parent, within `memory` bytes; nothing is
 /// written (see [`persist`]).
 pub(super) fn encode_packet(
     child: &PreencodeChild,
+    classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Vec<u8>, JobError> {
@@ -331,7 +335,7 @@ pub(super) fn encode_packet(
             "proxy preencode normal scale must be absorbed exactly once",
         ));
     }
-    let bytes = packet::encode(child, memory, check)?;
+    let bytes = packet::encode(child, classes, memory, check)?;
     check()?;
     Ok(bytes)
 }
@@ -543,7 +547,8 @@ pub(super) fn from_witness(
         faces,
         pages: Vec::new(),
     };
-    packet::validate(&child, check)?;
+    // A leaf child's page witness serves the material of its binding (no class merge).
+    packet::validate(&child, &MaterialClasses::EMPTY, check)?;
     Ok(child)
 }
 
@@ -589,7 +594,8 @@ pub(super) fn load_children(
             let bytes =
                 pass.preencode
                     .read_proxy(child.first, child.depth, remaining, pass.check)?;
-            let (decoded, owned) = packet::decode_owned(&bytes, remaining, check)?;
+            let (decoded, owned) =
+                packet::decode_owned(&bytes, &pass.captured.material_classes, remaining, check)?;
             if decoded.node.first != child.first
                 || decoded.node.end != child.end
                 || decoded.node.depth() != child.depth

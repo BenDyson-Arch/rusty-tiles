@@ -7,6 +7,7 @@
 mod attributes;
 mod bake;
 pub(in crate::mesh_large) mod bake_pass;
+mod batching;
 mod capture;
 mod config;
 mod delivery;

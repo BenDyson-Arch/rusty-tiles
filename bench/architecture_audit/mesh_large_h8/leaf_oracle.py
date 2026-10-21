@@ -744,6 +744,9 @@ def verify(truth_path, output, decode_cache=None, controls=False, ktx_decoded=No
                         artifact_metrics.append({'uri':receipt['uri'],'page':image_id,'mip':mip,'role':role,'metrics':metrics,'controls':probes})
         require(len(doc['nodes']) == len(doc['meshes']),'one geometry node per prepared primitive')
         counted = 0
+        # H28 publishes one glTF primitive per material class; this fixture's two
+        # materials differ (normal scale, MASK), so each node is one source primitive.
+        # A merging fixture must split nodes by _FEATURE_ID_0 (the source_primitive row).
         for pi,node in enumerate(doc['nodes']):
             require(node['mesh'] == pi and set(node) <= {'mesh','translation','scale'},'local diagonal node closure')
             primitive = doc['meshes'][pi]['primitives'][0]

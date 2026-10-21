@@ -880,6 +880,10 @@ impl<'a> CapturedSource<'a> {
         best.map(|(_, c)| c)
             .ok_or_else(|| invalid("proxy colour key has no same-primitive source corner"))
     }
+    /// The H28 material class representative of a source material (`u32::MAX` stays).
+    pub(super) fn class(&self, material: u32) -> u32 {
+        self.captured.material_classes.of(material)
+    }
     pub(super) fn material(&self, index: u32) -> Result<serde_json::Value, JobError> {
         if index == u32::MAX {
             return Ok(serde_json::json!({}));
