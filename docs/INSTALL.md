@@ -37,7 +37,7 @@ git clone --branch develop https://github.com/BenDyson-Arch/rusty-tiles.git
 cd rusty-tiles
 cargo install --path . --locked
 rusty-tiles --version
-rusty-tiles doctor --command mesh-to-3tz --command point-cloud --command vector
+rusty-tiles doctor --command mesh --command point-cloud --command vector
 ```
 
 Do not set `LIBSQLITE3_SYS_USE_PKG_CONFIG` for this build: standard builds bundle SQLite. No GDAL/PROJ/GEOS SDK is needed.
@@ -98,7 +98,7 @@ Release wheels target Linux glibc 2.28+ on x86_64 and ARM64, macOS 15+ on Intel 
 For standard conversion:
 
 ```sh
-rusty-tiles doctor --command mesh-to-3tz --command point-cloud --command vector --json
+rusty-tiles doctor --command mesh --command point-cloud --command vector --json
 ```
 
 For native conversion:
@@ -107,6 +107,6 @@ For native conversion:
 rusty-tiles doctor --command raster --command terrain --command vector --json
 ```
 
-The JSON includes `nativeGeospatial` and per-command backends and CRS tiers. A standard binary reports native-geospatial as unavailable; that is expected and does not prevent supported standard conversions. An unrestricted `doctor` checks every converter, so it reports missing raster/terrain capability and exits with code 4 in a standard build. Select the commands you intend to use. Readiness checks the build and resources; conversion still validates each input and exact CRS operation.
+The JSON includes `nativeGeospatial` and per-command backends and CRS tiers. A standard binary reports native-geospatial as unavailable; that is expected and does not prevent supported standard conversions. An unrestricted `doctor` checks every converter, so it reports missing raster/terrain capability and exits with code 2 in a standard build. Select the commands you intend to use. Readiness checks the build and resources; conversion still validates each input and exact CRS operation.
 
 Continue with the [mesh quick start](../README.md#quick-start) or the [standard-package demos](DEMOS.md#standard-package). Native imagery/terrain demos are in a separate section. Preview and archive validation are included in both CLI builds: the standard CLI can preview imagery and terrain generated elsewhere, although it cannot convert those sources. `.3tz` archives must be extracted before previewing; `validate` checks archives, not imagery or terrain directories.

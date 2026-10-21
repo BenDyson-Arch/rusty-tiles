@@ -94,6 +94,12 @@ jobs:
           mkdir -p smoke dist stage
           "$binary" mesh-to-3tz -i tests/fixtures/example.gltf -o smoke/example.3tz --cartographic-position-degrees 153.02 -27.47 0
           "$binary" validate smoke/example.3tz
+          "$binary" doctor --command mesh
+          "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
+          "$binary" validate smoke/mesh.3tz
+          # A textured source exercises the in-process KTX2/Basis encoder of this binary.
+          "$binary" mesh -i tests/fixtures/f1b/basecolor-jpeg.glb -o smoke/mesh-ktx2.3tz --anchor 153.02 -27.47 0
+          "$binary" validate smoke/mesh-ktx2.3tz
           cp "$binary" LICENSE stage/
           python=python3
           if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi

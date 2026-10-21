@@ -6,13 +6,13 @@ These examples use invented data committed in this repository. Clone the source 
 
 These commands use the 0.4 standard CLI, with no GDAL/PROJ/GEOS installation. The native CLI also supports them. The Python wheel exposes conversion functions rather than these shell commands; use the [Python example](../bindings/python/README.md#install-and-convert) for that package.
 
-The [mesh quick start](../README.md#quick-start) covers installation, conversion, archive validation and preview of `tests/fixtures/example.gltf`. The same tiny model can be packaged without generating LOD:
+The [mesh quick start](../README.md#quick-start) covers installation, conversion with `mesh`, archive validation and preview of `tests/fixtures/example.glb`. The same tiny model can be packaged without generating LOD:
 
 ```sh
 mkdir -p output
-rusty-tiles doctor --command mesh-to-3tz --command glb-to-3tz --command point-cloud --command vector
-rusty-tiles glb-to-3tz -i tests/fixtures/example.gltf -o output/packaged.3tz \
-  --cartographic-position-degrees 153.02 -27.47 0
+rusty-tiles doctor --command mesh --command glb-to-3tz --command point-cloud --command vector
+rusty-tiles glb-to-3tz -i tests/fixtures/example.glb -o output/packaged.3tz \
+  --anchor 153.02 -27.47 0
 rusty-tiles validate output/packaged.3tz
 ```
 

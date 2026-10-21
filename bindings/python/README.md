@@ -74,9 +74,10 @@ source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` is the single new public
 source-mesh operation.
 It runs capture, leaf payloads and implicit hierarchy delivery through one core
-run and publication; leaf directories/manifests are internal. Current output
-has full-detail leaves and empty parents. Certified LOD and proxy baking are
-separate downstream work, with the same public request surface.
+run and publication; leaf directories/manifests are internal. Output has
+full-detail leaves under certified coarse parent tiles (simplified proxies whose
+geometric error bounds their distance to the source), with proxy textures baked
+from the source appearance as an approximation that carries no certificate.
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source

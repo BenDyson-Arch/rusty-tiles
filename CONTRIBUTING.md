@@ -261,7 +261,7 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 
 | Path | Role |
 | --- | --- |
-| `tests/fixtures/example.gltf`, `tests/fixtures/vector.geojson` | The README mesh and vector examples |
+| `tests/fixtures/example.glb`, `tests/fixtures/vector.geojson` | The README mesh and vector examples (`example.glb` packs `example.gltf`, which the legacy release smoke test still uses) |
 | `tests/fixtures/vector_oracle/` | The original Python vector modules, kept unchanged for comparison |
 | `tests/fixtures/terrain_oracle.py` | The original Python terrain converter, compared at every grid size |
 | `tests/fixtures/*.cjs` | Browser probes, described below |
@@ -344,7 +344,7 @@ scripts/compare_outputs.sh develop
 
 The comparison script builds each revision in its own release target directory. It runs 12 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
 
-These recipes use `--explicit` for the three spatial converters; the script omits the flag for baseline binaries that predate it. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately. The implicit vector fingerprint includes the subtree emitter and uses a different tiling configuration. The explicit fingerprint retains the reviewed 0.3.0 baseline for byte identity; changes to explicit encoding must update that identity deliberately.
+Only the two deprecated `mesh-to-3tz` recipes pass `--explicit`, the one converter that still has an explicit mode (see `tests/support/mod.rs`); the script omits the flag for baseline binaries that predate it. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. The new `mesh` tiler has no recipe here. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
 
 ## Release checklist
 
@@ -424,5 +424,5 @@ Other durable facts:
 - The official validator 0.6.1 passes the standard mesh and uncompressed vector fixtures with zero errors. It warns about the draft vector extension it does not implement.
 - Validation led to two producer fixes. Parent boxes now contain child thickness and rounding. Feature attributes use padded uint16, or float32 for larger tables.
 - The issue #54 fixture of 3,000 twelve-vertex polygons measured the effect of geometry batching.
-- Locked encoder dependencies are `gdal-sys` 0.12.0, `las` 0.11.1 with `laz` 0.13.0, `meshopt` 0.6.2 with meshoptimizer 0.25, and `tiny_http` 0.12.0. The native matrix was also checked locally with GDAL 3.12.4 and 3.13.3.
+- Locked encoder dependencies are `gdal-sys` 0.12.0, `las` 0.11.1 with `laz` 0.13.0, and `meshopt` 0.6.2 with meshoptimizer 0.25. The native matrix was also checked locally with GDAL 3.12.4 and 3.13.3.
 - Vector compression runs in process. The library field `VectorOptions.meshopt_encoder` is ignored.

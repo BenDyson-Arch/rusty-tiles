@@ -18,6 +18,8 @@ for notice in LICENSE third_party/basis_universal/LICENSE third_party/basis_univ
 done
 [ -s "$fixtures/vector.geojson" ]
 [ -s "$fixtures/d1-rgb.tif" ]
+[ -s "$fixtures/example.glb" ]
+[ -s "$fixtures/f1b/basecolor-jpeg.glb" ]
 
 # The CI container also disables networking; this prevents PROJ grid downloads.
 PROJ_NETWORK=OFF
@@ -33,6 +35,13 @@ rusty-tiles vector -i "$fixtures/vector.geojson" -o "$work/vector.3tz" \
 [ -s "$work/vector.3tz" ]
 rusty-tiles validate "$work/vector.3tz" --json
 
+rusty-tiles doctor --command mesh --json
+rusty-tiles mesh -i "$fixtures/example.glb" -o "$work/mesh.3tz" --anchor 153.02 -27.47 0 --json
+rusty-tiles validate "$work/mesh.3tz" --json
+rusty-tiles mesh -i "$fixtures/f1b/basecolor-jpeg.glb" -o "$work/mesh-ktx2.3tz" \
+    --anchor 153.02 -27.47 0 --json
+rusty-tiles validate "$work/mesh-ktx2.3tz" --json
+
 rusty-tiles raster -i "$fixtures/d1-rgb.tif" -o "$work/imagery" \
     --min-zoom 0 --max-zoom 0 --json
 [ -s "$work/imagery/tilejson.json" ]
@@ -40,4 +49,4 @@ rusty-tiles raster -i "$fixtures/d1-rgb.tif" -o "$work/imagery" \
 [ -s "$work/imagery/source.cog.tif" ]
 [ -s "$work/imagery/tiles/0/0/0.png" ]
 # validate accepts .3tz archives; raster directory readiness is checked above.
-printf 'packaged runtime acceptance passed (vector archive and native raster)\n'
+printf 'packaged runtime acceptance passed (mesh and vector archives, native raster)\n'
