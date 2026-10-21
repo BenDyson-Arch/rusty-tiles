@@ -552,14 +552,23 @@ fn inside(parent: &Volume, p: [f64; 3], radius: f64) -> bool {
 fn contains(parent: &Volume, child: &Volume, m: &[f64]) -> Result<bool, Error> {
     match (parent, child) {
         (Volume::Region(p), Volume::Region(c)) => {
-            let width = |r: &Vec<f64>| (r[2] - r[0]).rem_euclid(2. * std::f64::consts::PI);
-            let offset = (c[0] - p[0]).rem_euclid(2. * std::f64::consts::PI);
-            let pw = if p[2] - p[0] >= 2. * std::f64::consts::PI - 1e-12 {
-                2. * std::f64::consts::PI
-            } else {
-                width(p)
+            use std::f64::consts::TAU;
+            // Eastward longitude span from west: east < west crosses the antimeridian,
+            // and [-π, π] is the whole circle (not the empty span `rem_euclid` gives).
+            let width = |r: &Vec<f64>| r[2] - r[0] + if r[2] < r[0] { TAU } else { 0. };
+            let pw = width(p);
+            let longitude = pw >= TAU - 1e-12 || {
+                // The child's west within the parent's span; a west a rounding step
+                // before the parent's wraps to just under zero, not to almost TAU.
+                let offset = (c[0] - p[0]).rem_euclid(TAU);
+                let offset = if offset > TAU - 1e-12 {
+                    offset - TAU
+                } else {
+                    offset
+                };
+                offset + width(c) <= pw + 1e-12
             };
-            Ok(offset + width(c) <= pw + 1e-12
+            Ok(longitude
                 && c[1] >= p[1] - 1e-12
                 && c[3] <= p[3] + 1e-12
                 && c[4] >= p[4] - 1e-6
@@ -3834,6 +3843,33 @@ mod tests {
         assert!(contains(&p, &child, &IDENTITY).unwrap());
         let outside = Volume::Region(vec![2.9, -0.1, -3.1, 0.1, 10., 90.]);
         assert!(!contains(&p, &outside, &IDENTITY).unwrap());
+    }
+    #[test]
+    fn region_containment_spans_the_whole_longitude_circle() {
+        use std::f64::consts::PI;
+        let region = |w: f64, e: f64| Volume::Region(vec![w, -0.1, e, 0.1, 10., 90.]);
+        let globe = Volume::Region(vec![-PI, -0.5, PI, 0.5, 0., 100.]);
+        let globe_child = region(-PI, PI);
+        // A whole-circle child escapes every narrower parent, crossing or not.
+        assert!(!contains(&region(3., -3.), &globe_child, &IDENTITY).unwrap());
+        assert!(!contains(&region(-PI, 0.1), &globe_child, &IDENTITY).unwrap());
+        assert!(!contains(&region(-3., 3.), &globe_child, &IDENTITY).unwrap());
+        // A whole-circle parent holds any child, including antimeridian crossings.
+        assert!(contains(&globe, &globe_child, &IDENTITY).unwrap());
+        assert!(contains(&globe, &region(3., -3.), &IDENTITY).unwrap());
+        assert!(contains(&globe, &region(-1., 1.), &IDENTITY).unwrap());
+        // The rounding tolerance applies at the parent's west edge as at its east.
+        let parent = Volume::Region(vec![-1., -0.5, 1., 0.5, 0., 100.]);
+        let west = (-1f64).next_down();
+        assert!(contains(&parent, &region(west, 0.), &IDENTITY).unwrap());
+        assert!(contains(&parent, &region(0., 1f64.next_up()), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(-1.001, 0.), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(0., 1.001), &IDENTITY).unwrap());
+        // Zero-width children on the parent's edges, and widths past the east edge.
+        assert!(contains(&parent, &region(1., 1.), &IDENTITY).unwrap());
+        assert!(contains(&parent, &region(-1., -1.), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(1., 1.1), &IDENTITY).unwrap());
+        assert!(!contains(&parent, &region(1.1, 1.1), &IDENTITY).unwrap());
     }
     #[test]
     fn degenerate_box_checks_out_of_plane_and_sphere_extent() {
