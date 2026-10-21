@@ -169,7 +169,7 @@ Every coarse (proxy) tile is baked after its certified geometry is fixed. The
 bake keeps the proxy's exact POSITION words, node transform, face order, source
 and material identity and every feature-ID set, adds new chart UVs, and fills
 each present PBR slot (base colour, metallic-roughness, normal, occlusion,
-emissive) plus categorical ID pages by sampling the captured source images.
+emissive) by sampling the captured source images.
 Lossy profiles deliver proxy pages through the same KTX2/Basis gates and
 escalation ladder as leaves; `lossless` delivers a PNG base level. The complete
 proxy GLB is read back before it replaces the untextured one, and a tile that
@@ -270,6 +270,41 @@ individual-item and format limits still apply. The 3TZ member ceiling is
 texture-format option, external encoder fallback or compression bypass on
 `mesh`.
 
+### Primitives, atlases and editability
+
+Each tile publishes as few glTF primitives as glTF allows
+([H28 contract](architecture/h28-tile-batching-contract.md)). Source primitives
+share one node, mesh, primitive, material and texture page set when their
+materials belong to one class and they carry the same vertex attributes. A class
+means equal factors, `alphaMode`, MASK `alphaCutoff`, `doubleSided`, the same bound
+slots with equal normal scale and occlusion strength, and equal source min/mag
+filters. An omitted value equals its glTF default; texture identity and wrap
+modes do not count. A leaf's
+merged positions are rebased onto one shared quantization offset without being
+quantized again, so every decoded vertex is bit-identical to a per-primitive
+encoding. Primitives split only where those properties differ, where a mipmapped
+source sampler keeps a dedicated leaf page in a lossy profile, or where a class
+overflows one page. Picking is unchanged: every triangle keeps its
+`source_primitive` and `source_triangle` (leaf) or `proxy_source` (proxy)
+feature ID, with one property table per feature-ID set.
+
+Proxies carry no `baked_feature_id_*` textures. Each proxy feature-ID set is
+already an exact per-face vertex attribute against the same property table,
+which those textures only repeated.
+
+Editability:
+
+- **Leaves** are exact in vertex space: every triangle keeps its source
+  provenance. They are also exact in texture space when no two triangles'
+  decoded UVs share interior area on a page, so each texel has one owner. The
+  tiler checks this exactly after atlasing. Overlapping, mirrored or repeated
+  source UVs make a leaf `shared`, which is editable in vertex space only; such a
+  leaf is never refused.
+- **Proxies** are exact in texture space, because charts never overlap. In
+  vertex space they are exact only to the source primitive, or to the majority
+  source: a proxy triangle comes from simplified geometry, and its
+  `proxy_source` row names one source triangle (or a fill).
+
 ## Python
 
 ```python
@@ -331,7 +366,12 @@ its `leaf`, `first` source triangle rank and `depth`, `page`, `slot`, `sources`
 (`image`, `material`), delivering `step`, and every gate it missed on the way
 (`misses`: `step`, `mip` or null for the all-level sampler check, `gate`).
 `escalation_diagnostics_omitted` counts escalated pages beyond that bounded
-list. `source_coordinates` is `local-gltf` or
+list. `texel_ownership` reports texture-space editability:
+`unique_leaves`, `shared_leaves`, the `shared_triangles` of shared leaves,
+`unique_proxies` (always every proxy), and `shared`. That list holds the first
+64 shared leaves (`leaf`, `first`, `depth`, `texel_ownership: "shared"`,
+`triangles`); `shared_omitted` counts the rest. Every leaf that is not listed
+or omitted is `unique`. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
 `native` operation, the chosen origin, `jacobian_lattice_cells` and

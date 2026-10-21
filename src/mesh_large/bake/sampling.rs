@@ -286,7 +286,7 @@ impl<'a> ChildQuery<'a> {
             .pages
             .get(binding.page)
             .ok_or_else(|| invalid("child slot binding page closure"))?;
-        if page.slot != slot || page.material != face.material {
+        if page.slot != slot || page.material != source.class(face.material) {
             return Err(invalid("child semantic binding closure"));
         }
         let uv =

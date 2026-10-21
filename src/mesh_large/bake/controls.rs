@@ -798,6 +798,7 @@ fn actual_raster_fragment_frame_interpolates_emitted_corner_fan_attributes() {
         query_work: 1_000_000,
         max_page_edge: 2048,
         max_density_drops: 4,
+        id_textures: false,
     };
     let mut source =
         source::CapturedSource::new(&captured, limits.source_cache_bytes, &mut || Ok(())).unwrap();

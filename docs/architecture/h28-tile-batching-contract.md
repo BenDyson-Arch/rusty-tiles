@@ -54,8 +54,11 @@ H28 makes each tile emit as few primitives as glTF semantics allow.
      UNSIGNED_SHORT. Leaves group first-fit in source-primitive order. The
      frozen plan bounds every tile's span to 2^15 codes per axis, so one window
      always fits; the split path is defensive and tested directly. Proxies
-     never cross frozen glTF primitives. Those are split only by flat material
-     (always a different class) or the 8,192-face `proxy_source` chunk.
+     never cross frozen glTF primitives. H17 now groups source primitives by
+     flat material *class* (the same canonical comparison, so flat materials
+     written differently share one node and one lattice encoding, whose decode
+     is unchanged), so frozen glTF primitives split only by a different class or
+     by the 8,192-face `proxy_source` chunk.
 4. **Shared atlases per class.** The leaf atlas already shares pages across
    source primitives by slot and filter. H28 also lets MASK base-colour bindings
    of one class share a page (before H28, one page per primitive). Proxy page packing groups
@@ -113,7 +116,10 @@ primitives.
 
 - A mipmapped source sampler in a non-lossless profile keeps a dedicated leaf page
   per binding (an original-source mip chain), so its source primitives do not
-  merge. A class that overflows one page splits by page. Both are recorded
+  merge in leaves. A texture without a sampler resolves to mipmapped sampling,
+  so this is the common case for exported scenes; proxies still merge them.
+  Sharing mip-chain pages needs its own appearance design (crops aligned per
+  level, a truncated chain) and is left open. A class that overflows one page splits by page. Both are recorded
   limits, not refusals.
 - "Fewest" is exact for the key above. The quantization grouping is first-fit,
   which is optimal whenever one window fits, as it always does under the frozen

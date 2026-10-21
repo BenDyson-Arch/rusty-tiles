@@ -127,6 +127,8 @@ pub(crate) struct FullCaptured {
     pub images: Vec<ImageSnapshot>,
     pub image_info: Vec<ImageInfo>,
     pub materials: Vec<Material>,
+    /// Source material ID to its H28 batching class representative.
+    pub material_classes: super::batching::MaterialClasses,
     pub textures: Vec<Value>,
     pub samplers: Vec<Value>,
     pub lattice: LatticePlan,
@@ -828,8 +830,12 @@ pub(crate) fn capture_admitted(
             }
             extents[depth] = summary.maximum_extent;
         }
+        // H28: material classes are resolved once here; both tile writers consume them.
+        let material_classes =
+            super::batching::MaterialClasses::new(&materials, &textures, &samplers)?;
         let resources = AtlasResources {
             materials: &materials,
+            classes: &material_classes,
             textures: &textures,
             samplers: &samplers,
             image_info: &image_info,
@@ -875,6 +881,7 @@ pub(crate) fn capture_admitted(
             images,
             image_info,
             materials,
+            material_classes,
             textures,
             samplers,
             lattice,
@@ -890,6 +897,7 @@ pub(crate) fn capture_admitted(
             images,
             image_info,
             materials,
+            material_classes,
             textures,
             samplers,
             lattice,
@@ -902,6 +910,7 @@ pub(crate) fn capture_admitted(
             images,
             image_info,
             materials,
+            material_classes,
             textures,
             samplers,
             lattice,

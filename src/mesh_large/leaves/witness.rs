@@ -1,7 +1,9 @@
 //! Accepted-leaf renderer witness for the H27 proxy bake (requests #3 and #4).
 //!
 //! The witness is taken from the accepted density attempt, after the leaf writer has
-//! published it. It holds, in published primitive, face and corner order:
+//! published it. It holds, per prepared (source) primitive in atlas order, and in face
+//! and corner order (H28 may publish several source primitives as one glTF primitive;
+//! the witness never indexes glTF primitives):
 //! - the decoded POSITION of every corner, in the leaf's local metres. These are the
 //!   writer's decoded lattice points: `u * s + t` in f32, which the writer proves equal
 //!   for fused and unfused client decode. Float storage holds the published f32 values.
@@ -1174,7 +1176,7 @@ mod tests {
         }
     }
 
-    /// One published primitive, decoded from the GLB alone (meshopt + node TRS).
+    /// One published source primitive, decoded from the GLB alone (meshopt + node TRS).
     #[derive(Clone, Debug, PartialEq)]
     struct Published {
         positions: Vec<[u32; 3]>,
@@ -1215,7 +1217,7 @@ mod tests {
                 .map(|b| f32::from_le_bytes(*b))
                 .collect()
         };
-        let mut out = Vec::new();
+        let mut out = BTreeMap::<usize, Published>::new();
         for (n, node) in doc["nodes"].as_array().unwrap().iter().enumerate() {
             let primitive =
                 &doc["meshes"][node["mesh"].as_u64().unwrap() as usize]["primitives"][0];
@@ -1284,22 +1286,39 @@ mod tests {
                     .map(|p| p.map(f32::to_bits))
                     .collect()
             });
-            let uvs = (0..)
+            let uvs: Vec<Vec<[f32; 2]>> = (0..)
                 .map_while(|set| attribute(&format!("TEXCOORD_{set}")))
                 .map(|a| floats(a).as_chunks::<2>().0.to_vec())
                 .collect();
             let material = primitive
                 .get("material")
                 .map(|m| doc["materials"][m.as_u64().unwrap() as usize].clone());
-            out.push(Published {
-                positions,
-                normals,
-                tangents,
-                uvs,
-                material,
-            });
+            // H28: one glTF primitive may hold several source primitives. Split it back by
+            // `_FEATURE_ID_0` (the source_primitive row, which is the prepared primitive's
+            // index: both are in ascending (node, mesh, primitive) order).
+            let rows = floats(attribute("_FEATURE_ID_0").unwrap());
+            for (corner, row) in rows.iter().enumerate() {
+                let piece = out.entry(*row as usize).or_insert_with(|| Published {
+                    positions: Vec::new(),
+                    normals: Vec::new(),
+                    tangents: Vec::new(),
+                    uvs: vec![Vec::new(); uvs.len()],
+                    material: material.clone(),
+                });
+                assert_eq!(piece.material, material, "one source primitive, one material");
+                piece.positions.push(positions[corner]);
+                if !normals.is_empty() {
+                    piece.normals.push(normals[corner]);
+                }
+                if !tangents.is_empty() {
+                    piece.tangents.push(tangents[corner]);
+                }
+                for (set, uv) in uvs.iter().enumerate() {
+                    piece.uvs[set].push(uv[corner]);
+                }
+            }
         }
-        (doc, out)
+        (doc, out.into_values().collect())
     }
 
     /// Every witness field against the published GLB (and the retained page sizes).
@@ -1326,8 +1345,8 @@ mod tests {
             let face = decoded
                 .faces
                 .iter()
-                .find(|f| f.primitive as usize == k)
-                .ok_or("published primitive without faces")?;
+                .find(|f| f.features[0].0 as usize == k)
+                .ok_or("published source primitive without faces")?;
             let row = face.features[0].0 as usize;
             let column = |name: &str| table.columns[name][row];
             if (

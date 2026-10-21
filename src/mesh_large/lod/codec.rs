@@ -697,17 +697,19 @@ pub(crate) fn encode(
             .collect();
         add_table(&mut wire, "proxy_source", &columns, 0..total_faces)
     });
-    // One glTF primitive per distinct material: consecutive source primitives with equal
-    // flat materials share one (the caller orders them by material). CesiumJS charges the
-    // property-table bytes once per glTF primitive, so fewer primitives load lighter.
-    let mut groups: Vec<(Value, Vec<usize>)> = Vec::new();
+    // One glTF primitive per distinct material class: consecutive source primitives with
+    // equal flat materials (H28: numbers by value, glTF defaults filled) share one; the
+    // caller orders them by class. CesiumJS charges the property-table bytes once per glTF
+    // primitive, so fewer primitives load lighter.
+    let mut groups: Vec<(Value, Value, Vec<usize>)> = Vec::new();
     for (row, p) in primitives.iter().enumerate() {
         let material = materials.get(p.material as usize).cloned().unwrap_or_else(
             || json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
         );
+        let key = crate::mesh_large::batching::material_key(&material, false);
         match groups.last_mut() {
-            Some((m, rows)) if *m == material => rows.push(row),
-            _ => groups.push((material, vec![row])),
+            Some((k, _, rows)) if *k == key => rows.push(row),
+            _ => groups.push((key, material, vec![row])),
         }
     }
     let mut face_base = 0usize;
@@ -715,7 +717,7 @@ pub(crate) fn encode(
     let mut meshes = Vec::new();
     let mut out_faces = Vec::new();
     let mut materials_json = Vec::with_capacity(groups.len());
-    for (material_index, (material, rows)) in groups.into_iter().enumerate() {
+    for (material_index, (_, material, rows)) in groups.into_iter().enumerate() {
         materials_json.push(material);
         // The group's faces in primitive order, re-indexed into one vertex space.
         let mut offsets = Vec::with_capacity(rows.len());

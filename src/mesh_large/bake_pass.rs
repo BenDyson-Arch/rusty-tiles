@@ -11,6 +11,10 @@
 //! images, samplers and materials, counts the complete GLB, and reads all of it back from the
 //! actual bytes. Only an `Assembly::Fit` result may be committed; the tile's geometric error
 //! never changes. Nothing here decodes PNG/KTX2 as donor input.
+// The literal (non-texture) factors a baked material keeps from its source materials
+// (glTF defaults filled, numbers by value) are owned by H28 batching, which merges
+// source materials by the same factors.
+use super::batching::literal_factors;
 use super::{
     config::Profile,
     full::FullCaptured,
@@ -1366,47 +1370,6 @@ fn check_transforms(frozen: &FrozenNode) -> Result<(), JobError> {
     Ok(())
 }
 
-/// The literal (non-texture) factors a baked material must keep from its source material,
-/// with glTF defaults filled in.
-/// Numbers as f64 (so `1` and `1.0` agree), recursively through arrays.
-fn normalized(value: Value) -> Value {
-    match value {
-        Value::Number(n) => n.as_f64().map_or(Value::Null, |f| json!(f)),
-        Value::Array(a) => Value::Array(a.into_iter().map(normalized).collect()),
-        other => other,
-    }
-}
-
-fn literal_factors(material: &Value) -> [Value; 7] {
-    literal_factors_raw(material).map(normalized)
-}
-
-fn literal_factors_raw(material: &Value) -> [Value; 7] {
-    let pbr = |k: &str, default: Value| {
-        material
-            .get("pbrMetallicRoughness")
-            .and_then(|p| p.get(k))
-            .cloned()
-            .unwrap_or(default)
-    };
-    let top = |k: &str, default: Value| material.get(k).cloned().unwrap_or(default);
-    let alpha = top("alphaMode", json!("OPAQUE"));
-    let mask = alpha == json!("MASK");
-    [
-        pbr("baseColorFactor", json!([1.0, 1.0, 1.0, 1.0])),
-        pbr("metallicFactor", json!(1.0)),
-        pbr("roughnessFactor", json!(1.0)),
-        top("emissiveFactor", json!([0.0, 0.0, 0.0])),
-        top("doubleSided", json!(false)),
-        alpha,
-        if mask {
-            top("alphaCutoff", json!(0.5))
-        } else {
-            Value::Null
-        },
-    ]
-}
-
 /// Material, remap and no-raster semantics at the owner, independent of the baker:
 /// every texture, image, sampler and UV-set reference resolves; a normal texture is
 /// published with scale 1 (the source scale is absorbed into the baked normals); each
@@ -1812,7 +1775,12 @@ mod tests {
         validate::{inspect, ValidationRequest},
         RunControl,
     };
-    use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, sync::Mutex};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        num::NonZeroUsize,
+        sync::Arc,
+        sync::Mutex,
+    };
 
     /// A textured wavy grid over two primitives (shared seam), enough for several leaves.
     fn fixture(dir: &Path, g: usize) -> PathBuf {
@@ -2279,6 +2247,7 @@ mod tests {
             query_work: 1 << 40,
             max_page_edge: 4096,
             max_density_drops: 8,
+            id_textures: false,
         })
         .unwrap();
         let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
@@ -2418,6 +2387,167 @@ mod tests {
         );
     }
 
+    /// Four textured strips of the wavy grid, one source primitive each. Materials 0, 1
+    /// and 2 form one class (equal factors written differently; 0 and 2 share an image,
+    /// 1 has its own); material 3 is another class (roughness). Both textures use a
+    /// LINEAR sampler, or none (mipmapped by default) when `mipmapped`.
+    fn class_fixture(dir: &Path, g: usize, mipmapped: bool) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        let mut bin = Vec::new();
+        let (mut views, mut accessors, mut meshes) = (vec![], vec![], vec![]);
+        for b in 0..4 {
+            let (i0, i1) = (b * g / 4, (b + 1) * g / 4);
+            let w = g + 1;
+            let mut pos = Vec::new();
+            let mut uv = Vec::new();
+            for i in i0..=i1 {
+                for j in 0..=g {
+                    let (x, z) = (i as f32 * 0.5, j as f32 * 0.5);
+                    pos.push([x, 3. * (x / 3.).sin() * (z / 4.).cos(), z]);
+                    uv.push([i as f32 / g as f32, j as f32 / g as f32]);
+                }
+            }
+            let mut idx = Vec::new();
+            for i in i0..i1 {
+                for j in 0..g {
+                    let v = |a: usize, c: usize| ((a - i0) * w + c) as u32;
+                    idx.extend([v(i, j), v(i, j + 1), v(i + 1, j), v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                }
+            }
+            let mut push = |bytes: Vec<u8>| {
+                let start = bin.len();
+                bin.extend(bytes);
+                views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bin.len()-start}));
+                views.len() - 1
+            };
+            let (lo, hi) = pos.iter().fold(([f32::MAX; 3], [f32::MIN; 3]), |(l, h), p| {
+                (
+                    std::array::from_fn(|a| l[a].min(p[a])),
+                    std::array::from_fn(|a| h[a].max(p[a])),
+                )
+            });
+            let p = push(pos.iter().flatten().flat_map(|v| v.to_le_bytes()).collect());
+            accessors.push(json!({"bufferView":p,"componentType":5126,"count":pos.len(),"type":"VEC3","min":lo,"max":hi}));
+            let t = push(uv.iter().flatten().flat_map(|v| v.to_le_bytes()).collect());
+            accessors.push(json!({"bufferView":t,"componentType":5126,"count":uv.len(),"type":"VEC2"}));
+            let i = push(idx.iter().flat_map(|v| v.to_le_bytes()).collect());
+            accessors.push(json!({"bufferView":i,"componentType":5125,"count":idx.len(),"type":"SCALAR"}));
+            meshes.push(json!({"primitives":[{"attributes":{"POSITION":accessors.len()-3,"TEXCOORD_0":accessors.len()-2},"indices":accessors.len()-1,"material":b}]}));
+        }
+        fs::write(dir.join("scene.bin"), &bin).unwrap();
+        for name in ["a.png", "b.png"] {
+            image::RgbaImage::from_pixel(64, 64, image::Rgba([120, 160, 90, 255]))
+                .save(dir.join(name))
+                .unwrap();
+        }
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,1,2,3]}],
+            "nodes":[{"mesh":0},{"mesh":1},{"mesh":2},{"mesh":3}],
+            "meshes":meshes,"buffers":[{"uri":"scene.bin","byteLength":bin.len()}],"bufferViews":views,"accessors":accessors,
+            "images":[{"uri":"a.png"},{"uri":"b.png"}],
+            "samplers":[{"minFilter":9729,"magFilter":9729}],
+            "textures":if mipmapped {json!([{"source":0},{"source":1}])} else {json!([{"source":0,"sampler":0},{"source":1,"sampler":0}])},
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0}},
+                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":1},"metallicFactor":0.0}},
+                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":1}},
+                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":0.5}}]});
+        let path = dir.join("scene.gltf");
+        fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
+        path
+    }
+
+    /// H28 through the production producer and bake: every published leaf and proxy has
+    /// one textured glTF primitive per material class present (source materials 0, 1 and
+    /// 2 merge although they read two images), each primitive's faces belong to one class,
+    /// leaf texels are uniquely owned, and proxies carry baked feature-ID textures only
+    /// through the internal switch. A mipmapped source sampler keeps a dedicated leaf page
+    /// per binding (its original-source chain), so those leaves split by page; proxies
+    /// still merge per class.
+    #[test]
+    fn leaves_and_proxies_publish_one_primitive_per_material_class() {
+        use crate::mesh_large::bake::{integration::ProxyTextureBaker, BakeLimits};
+        let work = tempfile::tempdir().unwrap();
+        let class = |material: u64| if material == 3 { 3 } else { 0 };
+        for (id_textures, mipmapped) in [(false, false), (true, false), (false, true)] {
+            let input = class_fixture(&work.path().join(format!("src-{mipmapped}")), 48, mipmapped);
+            let out = work.path().join(format!("out-{id_textures}-{mipmapped}"));
+            let scratch = work.path().join(format!("scratch-{id_textures}-{mipmapped}"));
+            fs::create_dir_all(&scratch).unwrap();
+            let baker = ProxyTextureBaker::new(BakeLimits {
+                profile: crate::mesh_large::config::Profile::Balanced,
+                memory_bytes: 2 << 30,
+                member_bytes: crate::mesh_large::config::TILE_BYTES,
+                source_cache_bytes: 256 << 20,
+                query_work: 1 << 40,
+                max_page_edge: 4096,
+                max_density_drops: 8,
+                id_textures,
+            })
+            .unwrap();
+            let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap())
+                .with_scratch_dir(&scratch)
+                .with_lod_target(256)
+                .with_leaf_triangles(1024)
+                .with_baker(Arc::new(baker));
+            let result = mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+            let ownership = &result.report.texel_ownership;
+            assert_eq!(ownership.shared_leaves, 0);
+            assert_eq!(ownership.unique_leaves, result.report.leaves);
+            assert_eq!(ownership.unique_proxies, result.report.proxies);
+            let rows = fs::read_to_string(out.join("leaves.jsonl")).unwrap();
+            for row in rows.lines() {
+                let row: Value = serde_json::from_str(row).unwrap();
+                assert_eq!(row["texelOwnership"], "unique");
+                assert_eq!(row["sharedTriangles"], 0);
+            }
+            let (mut merged, mut texture_sets, mut split_leaves) = (0, 0, 0);
+            for dir in ["leaves", "proxies"] {
+                for entry in fs::read_dir(out.join(dir)).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.extension().is_none_or(|e| e != "glb") {
+                        continue;
+                    }
+                    let glb = fs::read(&path).unwrap();
+                    let decoded = codec::decode(&glb).unwrap();
+                    let doc = codec::readback(&glb).unwrap().doc;
+                    let gltf: Vec<&Value> = doc["meshes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .flat_map(|m| m["primitives"].as_array().unwrap())
+                        .collect();
+                    let mut classes = vec![BTreeSet::new(); gltf.len()];
+                    let mut materials = vec![BTreeSet::new(); gltf.len()];
+                    for face in &decoded.faces {
+                        let (row, table) = face.feature(&decoded.tables, "source_primitive").unwrap();
+                        let m = decoded.tables[table].columns["material_index"][row as usize];
+                        classes[face.primitive as usize].insert(class(m));
+                        materials[face.primitive as usize].insert(m);
+                    }
+                    let mut textured = BTreeSet::new();
+                    for (k, p) in gltf.iter().enumerate() {
+                        assert_eq!(classes[k].len(), 1, "{path:?} primitive {k}");
+                        merged += usize::from(materials[k].len() > 1);
+                        if p["attributes"].get("TEXCOORD_0").is_some()
+                            && !textured.insert(classes[k].first().copied())
+                        {
+                            // Only dedicated mipmapped leaf pages may split a class.
+                            assert!(mipmapped && dir == "leaves", "{path:?}: class split");
+                            split_leaves += 1;
+                        }
+                        let sets = p["extensions"]["EXT_mesh_features"]["featureIds"]
+                            .as_array()
+                            .unwrap();
+                        texture_sets += sets.iter().filter(|s| s.get("texture").is_some()).count();
+                    }
+                }
+            }
+            assert!(merged > 0, "some primitive merges source materials");
+            assert_eq!(texture_sets > 0, id_textures, "baked feature-ID textures");
+            assert_eq!(split_leaves > 0, mipmapped, "dedicated mip pages split leaves");
+        }
+    }
+
     /// The real proxy texture baker through the production bake pass: a textured terrain
     /// with fill holes, several proxies per depth, baked with one and with three workers,
     /// publishes byte-identical leaves, proxies and manifest.
@@ -2438,6 +2568,7 @@ mod tests {
                 query_work: 1 << 40,
                 max_page_edge: 4096,
                 max_density_drops: 8,
+                id_textures: false,
             })
             .unwrap();
             let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)

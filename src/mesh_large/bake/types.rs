@@ -110,6 +110,10 @@ pub(crate) struct BakeLimits {
     pub query_work: u64,
     pub max_page_edge: u32,
     pub max_density_drops: u32,
+    /// Bake categorical feature-ID texture pages (`baked_feature_id_*`). Off in
+    /// production (H28): every proxy feature-ID set is already an exact per-face vertex
+    /// attribute against the same table. Kept reachable for a future annotate pass.
+    pub id_textures: bool,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct RenderCorner {
@@ -127,6 +131,7 @@ pub(crate) struct EncodedPage {
     pub mime: &'static str,
     pub size: [u32; 2],
     pub slot: TextureSlot,
+    /// The material class representative of every face on the page (H28).
     pub material: u32,
     pub sampler: serde_json::Value,
     pub receipt: serde_json::Value,
@@ -164,6 +169,8 @@ pub(crate) struct SignalPage {
     /// Complete unadjusted semantic chain, retained before codec and MASK guard.
     pub levels: Vec<SignalLevel>,
     pub sampler: serde_json::Value,
+    /// The material class representative of every face on the page (H28); a leaf page
+    /// witness names the material of the binding it serves.
     pub material: u32,
     pub receipt: serde_json::Value,
     /// Finite renderer-frame witnesses owned once, never replicated per mip.
@@ -215,9 +222,12 @@ pub(crate) struct PreparedNode {
     pub face_indices: Vec<[u32; 3]>,
     pub face_identities: Vec<FaceIdentity>,
     pub pages: Vec<EncodedPage>,
-    /// Complete literal material closure keyed by ORIGINAL source material ID.
+    /// Complete literal material closure keyed by material CLASS representative (H28):
+    /// every source material of a class has equal literal factors and slots.
     pub source_materials: std::collections::BTreeMap<u32, serde_json::Value>,
-    /// Page indexes by source face and TextureSlot order; multiple materials never merge.
+    /// The class representative of each source material present (H28).
+    pub material_classes: std::collections::BTreeMap<u32, u32>,
+    /// Page indexes by source face and TextureSlot order; a page serves one material class.
     pub face_pages: Vec<[Option<usize>; 5]>,
     /// Arbitrary feature sets keep their original integer attributes. These
     /// additional exact PNG texture sets are appended by the complete writer.

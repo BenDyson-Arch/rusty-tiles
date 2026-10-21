@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Group {
     gltf: u32,
+    /// Material class representative (H28): source materials of one class merge.
     material: u32,
     pages: [Option<usize>; 5],
     ids: Vec<usize>,
@@ -238,6 +239,10 @@ pub(super) fn prepare(
             .primitives
             .get(face.source as usize)
             .ok_or_else(|| invalid("prepared adapter source row"))?;
+        let class = *p
+            .material_classes
+            .get(&source.material)
+            .ok_or_else(|| invalid("prepared adapter material class closure"))?;
         let pages = p.face_pages[face_index];
         if no_raster[face_index] && pages.iter().any(Option::is_some) {
             return Err(invalid("no-raster face unexpectedly owns a texture page"));
@@ -248,8 +253,8 @@ pub(super) fn prepare(
                     .pages
                     .get(*page)
                     .ok_or_else(|| invalid("prepared binding page"))?;
-                if encoded.material != source.material || super::slot_index(encoded.slot) != slot {
-                    return Err(invalid("prepared binding source material/slot mismatch"));
+                if encoded.material != class || super::slot_index(encoded.slot) != slot {
+                    return Err(invalid("prepared binding material class/slot mismatch"));
                 }
             }
         }
@@ -267,7 +272,7 @@ pub(super) fn prepare(
         groups
             .entry(Group {
                 gltf: face.gltf,
-                material: source.material,
+                material: class,
                 pages,
                 ids,
                 no_raster: no_raster[face_index],
@@ -382,6 +387,19 @@ pub(super) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    impl EncodedPage {
+        fn clone_page(&self) -> Self {
+            Self {
+                bytes: self.bytes.clone(),
+                mime: self.mime,
+                size: self.size,
+                slot: self.slot,
+                material: self.material,
+                sampler: self.sampler.clone(),
+                receipt: self.receipt.clone(),
+            }
+        }
+    }
     fn prepared() -> PreparedNode {
         let frozen = super::super::integration::handoff_fixture();
         let core =
@@ -426,6 +444,7 @@ mod tests {
                 sampler: json!({"minFilter":9729,"magFilter":9729}),
                 receipt: Value::Null,
             }],
+            material_classes: BTreeMap::from([(5, 5)]),
             source_materials: BTreeMap::from([(
                 5,
                 json!({
@@ -465,6 +484,38 @@ mod tests {
             empty_material["pbrMetallicRoughness"]["roughnessFactor"],
             json!(0.3)
         );
+    }
+    /// H28: faces of different source materials of one class share one output primitive,
+    /// one material and the class page; another class keeps its own primitive and page.
+    #[test]
+    fn faces_of_one_material_class_share_a_primitive() {
+        let mut frozen = super::super::integration::handoff_fixture();
+        frozen.primitives[1].material = 6;
+        let mut p = prepared();
+        p.no_raster_faces.clear();
+        p.face_pages = vec![[None, None, Some(0), None, None]; 2];
+        p.material_classes = BTreeMap::from([(5, 5), (6, 5)]);
+        let packet = prepare(&frozen, &p, &mut || Ok(())).unwrap();
+        assert_eq!(packet.node.primitives.len(), 1);
+        assert_eq!(packet.node.primitives[0].faces, [0, 1]);
+        assert_eq!(packet.node.materials.len(), 1);
+        assert_eq!(packet.node.textures.len(), 1);
+        // A face of another class cannot read this class's page...
+        p.material_classes.insert(6, 6);
+        assert_eq!(
+            prepare(&frozen, &p, &mut || Ok(())).unwrap_err().kind(),
+            crate::JobErrorKind::InvalidState
+        );
+        // ...and on its own class page it is its own primitive and material.
+        let mut page = p.pages[0].clone_page();
+        page.material = 6;
+        p.pages.push(page);
+        p.face_pages[1] = [None, None, Some(1), None, None];
+        let six = p.source_materials[&5].clone();
+        p.source_materials.insert(6, six);
+        let packet = prepare(&frozen, &p, &mut || Ok(())).unwrap();
+        assert_eq!(packet.node.primitives.len(), 2);
+        assert_eq!(packet.node.materials.len(), 2);
     }
     #[test]
     fn translation_refuses_unabsorbed_scale_mislabeled_page_and_unsupported_budget() {

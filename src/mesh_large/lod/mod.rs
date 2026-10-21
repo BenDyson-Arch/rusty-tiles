@@ -2581,13 +2581,14 @@ pub(crate) fn produce(
             value
         })
         .collect();
+    // H28: equal means the same material class (numbers by value, glTF defaults filled),
+    // so flat materials written differently still share one glTF primitive and node.
+    let keys: Vec<Value> = materials
+        .iter()
+        .map(|m| super::batching::material_key(m, false))
+        .collect();
     let material_rank: Vec<u32> = (0..materials.len())
-        .map(|i| {
-            materials
-                .iter()
-                .position(|m| *m == materials[i])
-                .unwrap_or(i) as u32
-        })
+        .map(|i| keys.iter().position(|k| *k == keys[i]).unwrap_or(i) as u32)
         .collect();
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;

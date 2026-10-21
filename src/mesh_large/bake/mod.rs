@@ -361,15 +361,29 @@ pub(crate) fn bake_node(
             memory_bytes: chart_bytes,
             ..local
         };
-        let layout = charts::build(f, &raster_faces, chart_limits, texel, check)?;
+        let captured = source.captured;
+        let layout = charts::build(
+            f,
+            &raster_faces,
+            chart_limits,
+            texel,
+            &captured.material_classes,
+            check,
+        )?;
         let mut query = sampling::ChildQuery::new(children, query_bytes, limits.query_work)?;
         let mut raster = raster::build(f, &layout, source, &mut query, raster_limits, check)?;
         drop(query);
-        let mut materials = BTreeMap::new();
-        for i in f
+        // H28: one output material per class, from its representative; every source
+        // material of a class has equal literal factors, slots and slot filters.
+        let material_classes: BTreeMap<u32, u32> = f
             .faces
             .iter()
-            .map(|f| f.material)
+            .map(|f| (f.material, source.class(f.material)))
+            .collect();
+        let mut materials = BTreeMap::new();
+        for i in material_classes
+            .values()
+            .copied()
             .collect::<std::collections::BTreeSet<_>>()
         {
             let mut material = source.material(i)?;
@@ -475,15 +489,21 @@ pub(crate) fn bake_node(
             }
             encoded.push(output);
         }
-        let ids = ids::bake(
-            f,
-            &layout,
-            available
-                .checked_sub(owned)
-                .ok_or_else(|| resource("categorical residual lease"))?,
-            limits.query_work,
-            check,
-        )?;
+        // H28: categorical ID pages only repeat the exact per-face feature-ID attributes,
+        // so they are baked only on request (a future annotate pass).
+        let ids = if limits.id_textures {
+            ids::bake(
+                f,
+                &layout,
+                available
+                    .checked_sub(owned)
+                    .ok_or_else(|| resource("categorical residual lease"))?,
+                limits.query_work,
+                check,
+            )?
+        } else {
+            Vec::new()
+        };
         for packet in &ids {
             for page in &packet.texture.pages {
                 for bytes in &page.levels {
@@ -534,6 +554,7 @@ pub(crate) fn bake_node(
             face_identities: f.faces.iter().map(FrozenFace::identity).collect(),
             pages: encoded,
             source_materials: materials,
+            material_classes: material_classes.clone(),
             face_pages: raster.face_pages.clone(),
             ids,
             receipts: receipts.clone(),

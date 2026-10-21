@@ -170,6 +170,8 @@ pub struct TilerReport {
     pub source_coordinates: &'static str,
     pub coordinates: &'static str,
     pub root_transform: Option<[f64; 16]>,
+    /// H28 texture-space editability per tile (`unique` unless listed as `shared`).
+    pub texel_ownership: producer::TexelOwnership,
     /// The resolved source CRS; omitted for local sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_crs: Option<MeshSourceCrsReport>,
@@ -224,6 +226,7 @@ impl TilerReport {
                 "local-gltf"
             },
             root_transform: facts.root_transform,
+            texel_ownership: leaf.texel_ownership.clone(),
             source_crs: capture.source_crs.clone(),
         }
     }

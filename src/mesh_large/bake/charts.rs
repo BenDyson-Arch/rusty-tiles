@@ -6,7 +6,10 @@ use super::{
     types::{BakeLimits, FrozenNode},
     unsupported,
 };
-use crate::{mesh_large::config::Profile, JobError};
+use crate::{
+    mesh_large::{batching::MaterialClasses, config::Profile},
+    JobError,
+};
 use std::collections::{BTreeMap, VecDeque};
 type P2 = [f64; 2];
 pub(super) struct Chart {
@@ -24,6 +27,8 @@ pub(super) struct Chart {
     pub size: [u32; 2],
 }
 pub(super) struct Page {
+    /// Material class representative (H28): charts of every source material of one
+    /// class share pages.
     pub material: u32,
     pub size: [u32; 2],
     pub charts: Vec<usize>,
@@ -148,6 +153,7 @@ pub(super) fn build(
     raster_faces: &[bool],
     limits: BakeLimits,
     texel: f64,
+    classes: &MaterialClasses,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Layout, JobError> {
     if raster_faces.len() != f.faces.len()
@@ -327,9 +333,13 @@ pub(super) fn build(
     let mut boosts = vec![1.; charts.len()];
     for attempt in 0..4 {
         let mut pages: Vec<Page> = Vec::new();
-        // Stable chart order within each material; shelf state resets only at page boundaries.
+        // Stable chart order within each material class (H28: one page set per class,
+        // not per source material); shelf state resets only at page boundaries.
         let mut order: Vec<usize> = (0..charts.len()).collect();
-        order.sort_by_key(|&i| (charts[i].material, charts[i].faces[0]));
+        order.sort_by_key(|&i| {
+            let m = charts[i].material;
+            (classes.of(m), m, charts[i].faces[0])
+        });
         let mut shelf = (0u32, 0u32, 0u32);
         let mut current = None;
         for i in order {
@@ -347,10 +357,11 @@ pub(super) fn build(
             if c.size.iter().any(|s| *s > limits.max_page_edge) {
                 return Err(resource("proxy chart exceeds admitted page edge"));
             }
-            if current.is_none_or(|p: usize| pages[p].material != c.material) {
+            let class = classes.of(c.material);
+            if current.is_none_or(|p: usize| pages[p].material != class) {
                 current = Some(pages.len());
                 pages.push(Page {
-                    material: c.material,
+                    material: class,
                     size: [4; 2],
                     charts: Vec::new(),
                 });
@@ -364,7 +375,7 @@ pub(super) fn build(
             if shelf.1 + c.size[1] > limits.max_page_edge {
                 current = Some(pages.len());
                 pages.push(Page {
-                    material: c.material,
+                    material: class,
                     size: [4; 2],
                     charts: Vec::new(),
                 });
@@ -592,12 +603,13 @@ mod tests {
             query_work: 1_000_000,
             max_page_edge: 2048,
             max_density_drops: 4,
+            id_textures: false,
         };
         for faces in [grid_faces(4), fan_faces(6), fan_faces(5)] {
             let mut f = crate::mesh_large::bake::controls::immutable_fixture();
             f.faces = faces;
             let n = f.faces.len();
-            let layout = build(&f, &vec![true; n], limits, 0.125, &mut || Ok(())).unwrap();
+            let layout = build(&f, &vec![true; n], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
             assert_eq!(layout.charts.len(), 1, "{n} welded coplanar faces");
             assert_eq!(layout.charts[0].faces, (0..n).collect::<Vec<_>>());
             assert_eq!(layout.subtexel_no_raster, 0);
@@ -615,13 +627,14 @@ mod tests {
             query_work: 1_000_000_000,
             max_page_edge: 2048,
             max_density_drops: 4,
+            id_textures: false,
         };
         // 40 m of grid at 8 texels per metre is 320 texels, over the 2041 / 8 = 255
         // texel chart extent that still fits a page after every repack boost.
         let mut f = crate::mesh_large::bake::controls::immutable_fixture();
         f.faces = grid_faces(40);
         let n = f.faces.len();
-        let layout = build(&f, &vec![true; n], limits, 0.125, &mut || Ok(())).unwrap();
+        let layout = build(&f, &vec![true; n], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
         assert!(layout.charts.len() > 1);
         assert!(layout.charts.len() < 16, "{} charts", layout.charts.len());
         let mut faces: Vec<_> = layout.charts.iter().flat_map(|c| c.faces.clone()).collect();
@@ -654,8 +667,9 @@ mod tests {
             query_work: 1_000_000,
             max_page_edge: 2048,
             max_density_drops: 4,
+            id_textures: false,
         };
-        let layout = build(&f, &[true, true], limits, 0.125, &mut || Ok(())).unwrap();
+        let layout = build(&f, &[true, true], limits, 0.125, &MaterialClasses::EMPTY, &mut || Ok(())).unwrap();
         assert_eq!(layout.subtexel_no_raster, 1);
         assert_eq!(layout.raster_faces, [true, false]);
         assert!(layout.charts.iter().all(|c| !c.faces.contains(&1)));
