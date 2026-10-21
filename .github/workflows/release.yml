@@ -15,6 +15,9 @@ jobs:
   check:
     name: Check release tag
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.tag.outputs.version }}
       prerelease: ${{ steps.tag.outputs.prerelease }}
@@ -37,6 +40,19 @@ jobs:
             *-*) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
             *) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
           esac
+      - name: Require green CI for the tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          passed=$(gh run list --workflow ci.yml --commit "$RELEASE_SHA" --status success \
+            --json databaseId --jq length)
+          if [ "$passed" -lt 1 ]; then
+            echo "::error::no successful CI run for $RELEASE_SHA; wait for (or re-run) CI on main, then re-run this workflow"
+            exit 1
+          fi
       - name: Test the checksum-verifying installer
         run: python3 -m unittest discover -s tests -p test_install.py -v
 
@@ -81,7 +97,10 @@ jobs:
           key: portable-${{ matrix.target }}
       - name: Build and test the default CLI
         run: |
-          cargo test --locked --target "$RELEASE_TARGET"
+          # Peak-RSS slack in this test is sensitive to shared runner load; CI runs it
+          # for the same source, so it does not gate publication here.
+          cargo test --locked --target "$RELEASE_TARGET" -- \
+            --skip spill::tests::spill_memory_is_flat_in_input_size
           cargo build --locked --release --target "$RELEASE_TARGET"
       - name: Package and smoke test
         run: |
@@ -119,6 +138,8 @@ jobs:
   pypi:
     name: Publish Python wheels to PyPI
     needs: [check, binaries, wheels, container]
+    # PyPI uploads cannot be replaced; release candidates stay on GitHub only.
+    if: needs.check.outputs.prerelease == 'false'
     runs-on: ubuntu-24.04
     environment:
       name: pypi
@@ -179,7 +200,12 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [check, binaries, container, pypi]
+    needs: [check, binaries, wheels, container, pypi]
+    # A prerelease skips PyPI; anything else needs PyPI to have succeeded.
+    if: >-
+      !cancelled() && needs.binaries.result == 'success' && needs.wheels.result == 'success' &&
+      needs.container.result == 'success' &&
+      (needs.pypi.result == 'success' || (needs.pypi.result == 'skipped' && needs.check.outputs.prerelease == 'true'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
