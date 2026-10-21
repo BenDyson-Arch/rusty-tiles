@@ -17,7 +17,9 @@
   sets. They repeated the exact per-face feature-ID attributes against the same
   property tables. The ID-texture machinery stays available internally for a
   later annotate pass.
-- `preview` uses CesiumJS's default maximum screen-space error of 16 (was 8).
+- `preview` uses CesiumJS's default maximum screen-space error of 16 (was 8). This
+  applies to every preview layer (meshes, terrain, annotations and point clouds), not
+  only to the mesh tiles H28 batches.
 
 ### Added
 

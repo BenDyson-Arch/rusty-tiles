@@ -1450,6 +1450,11 @@ fn audit_materials(
         }
         // Source materials of the primitive's faces (identity survives local splits).
         let mut seen = BTreeSet::new();
+        // Material class of the faces' sources, computed here from the authored materials
+        // (not the baker's `MaterialClasses` table): every source in one published
+        // primitive must agree on literal factors, slot presence and slot extras. Source
+        // sampler filters are not visible at this owner and stay with the table's tests.
+        let mut class: Option<(u32, Value)> = None;
         for &f in &p.faces {
             let Some(face) = frozen.faces.get(f as usize) else {
                 return bad(format!("primitive {k} names no frozen face {f}"));
@@ -1467,6 +1472,17 @@ fn audit_materials(
             let Some(material) = material else {
                 return bad(format!("primitive {k} drops source material {id}"));
             };
+            let key = super::batching::material_key(source.literal(), false);
+            match &class {
+                None => class = Some((id, key)),
+                Some((first, first_key)) if *first_key != key => {
+                    return bad(format!(
+                        "primitive {k} merges source materials {first} and {id} of different \
+                         classes"
+                    ));
+                }
+                Some(_) => {}
+            }
             if literal_factors(material) != literal_factors(source.literal()) {
                 return bad(format!(
                     "primitive {k} changes literal factors of source material {id}"
@@ -2392,6 +2408,18 @@ mod tests {
     /// 1 has its own); material 3 is another class (roughness). Both textures use a
     /// LINEAR sampler, or none (mipmapped by default) when `mipmapped`.
     fn class_fixture(dir: &Path, g: usize, mipmapped: bool) -> PathBuf {
+        class_fixture_with(
+            dir,
+            g,
+            mipmapped,
+            json!([{"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0}},
+                   {"pbrMetallicRoughness":{"baseColorTexture":{"index":1},"metallicFactor":0.0}},
+                   {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":1}},
+                   {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":0.5}}]),
+        )
+    }
+    /// [`class_fixture`] with the four source materials given.
+    fn class_fixture_with(dir: &Path, g: usize, mipmapped: bool, materials: Value) -> PathBuf {
         fs::create_dir_all(dir).unwrap();
         let mut bin = Vec::new();
         let (mut views, mut accessors, mut meshes) = (vec![], vec![], vec![]);
@@ -2458,10 +2486,7 @@ mod tests {
             "images":[{"uri":"a.png"},{"uri":"b.png"}],
             "samplers":[{"minFilter":9729,"magFilter":9729}],
             "textures":if mipmapped {json!([{"source":0},{"source":1}])} else {json!([{"source":0,"sampler":0},{"source":1,"sampler":0}])},
-            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0}},
-                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":1},"metallicFactor":0.0}},
-                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":1}},
-                         {"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicFactor":0,"roughnessFactor":0.5}}]});
+            "materials":materials});
         let path = dir.join("scene.gltf");
         fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
         path
@@ -2564,6 +2589,86 @@ mod tests {
                 mipmapped,
                 "dedicated mip pages split leaves"
             );
+        }
+    }
+
+    /// H28 pooled MASK pages: same-class MASK base-colour bindings (equal factors and
+    /// cutoff, one written with the default cutoff, reading two images) share one leaf
+    /// page, and that page carries the MASK coverage receipts. A different `alphaCutoff`
+    /// is another class and gets its own page.
+    #[test]
+    fn mask_base_colour_bindings_share_a_page_per_class() {
+        let work = tempfile::tempdir().unwrap();
+        let mask = |image: u64, cutoff: Option<f64>| {
+            let mut m = json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":image},
+                "metallicFactor":0},"alphaMode":"MASK"});
+            if let Some(c) = cutoff {
+                m["alphaCutoff"] = json!(c);
+            }
+            m
+        };
+        let input = class_fixture_with(
+            &work.path().join("src"),
+            8,
+            false,
+            json!([
+                mask(0, Some(0.5)),
+                mask(1, Some(0.5)),
+                mask(0, None),
+                mask(0, Some(0.75))
+            ]),
+        );
+        let out = work.path().join("out");
+        let scratch = work.path().join("scratch");
+        fs::create_dir_all(&scratch).unwrap();
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap())
+                .with_scratch_dir(&scratch)
+                .with_leaf_triangles(1024),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let rows = fs::read_to_string(out.join("leaves.jsonl")).unwrap();
+        assert_eq!(rows.lines().count(), 1, "one leaf holds every material");
+        let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
+        let pages: Vec<&Value> = row["appearance"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r.get("levels").is_some())
+            .collect();
+        let page_of = |primitive: u64| {
+            row["appearance"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r.get("islands").is_some() && r["primitive"] == primitive)
+                .map(|r| r["page"].as_u64().unwrap())
+                .unwrap()
+        };
+        // Sources 0, 1 and 2 (two images, the default cutoff spelled out or omitted) pool
+        // one page; the 0.75 cutoff is a different class and keeps its own.
+        assert_eq!(pages.len(), 2);
+        assert_eq!(page_of(0), page_of(1));
+        assert_eq!(page_of(0), page_of(2));
+        assert_ne!(page_of(0), page_of(3));
+        assert_eq!(row["primitives"], 2, "one published primitive per class");
+        for page in &pages {
+            let receipts: Vec<&Value> = page["quality"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|l| l.get("mask_target").is_some())
+                .collect();
+            assert!(
+                !receipts.is_empty(),
+                "page {} has no coverage receipt",
+                page["page"]
+            );
+            for r in receipts {
+                assert!(r["residual"].as_f64().unwrap() <= r["allowed"].as_f64().unwrap());
+            }
         }
     }
 
@@ -2878,6 +2983,34 @@ mod tests {
                 let mut p = good.clone();
                 p.materials[0]["pbrMetallicRoughness"]["roughnessFactor"] = json!(0.25);
                 assert!(refused(&frozen, &p), "changed literal factor");
+                // A wrong class table: one published primitive whose faces come from sources
+                // of different classes (its last face retargeted to a copy of its source
+                // primitive with another class's material).
+                {
+                    use super::super::batching::material_key;
+                    let key = |m: u32| material_key(materials[m as usize].literal(), false);
+                    let last = *good.primitives[0].faces.last().unwrap() as usize;
+                    assert_ne!(last, good.primitives[0].faces[0] as usize);
+                    let source = frozen.faces[last].source as usize;
+                    let material = frozen.primitives[source].material;
+                    let other = (0..materials.len() as u32)
+                        .find(|&m| key(m) != key(material))
+                        .expect("the fixture has two material classes");
+                    let mut f = frozen.clone();
+                    let mut extra = f.primitives[source].clone();
+                    extra.material = other;
+                    f.primitives.push(extra);
+                    f.faces[last].source = (f.primitives.len() - 1) as _;
+                    // Called directly: `FrozenNode::validate` would refuse this tampering first.
+                    let message = audit_materials(&f, &good, materials)
+                        .err()
+                        .map(|e| e.to_string())
+                        .unwrap_or_default();
+                    assert!(
+                        message.contains("different classes"),
+                        "mixed-class primitive: {message}"
+                    );
+                }
                 let mut p = good.clone();
                 p.textures[0]["source"] = json!(9);
                 assert!(refused(&frozen, &p), "texture names no image");

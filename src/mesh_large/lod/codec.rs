@@ -1010,3 +1010,72 @@ pub(crate) fn readback(bytes: &[u8]) -> Result<Readback, JobError> {
         images,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::{config::Profile, records::Bounds};
+    use super::*;
+
+    fn triangle(x: f32, material: u32) -> ProxyPrimitive {
+        ProxyPrimitive {
+            key: (0, 0, material),
+            expanded_ordinal: u64::from(material),
+            material,
+            positions: vec![[x, 0., 0.], [x + 1., 0., 0.], [x, 1., 0.]],
+            ell: vec![1; 3],
+            faces: vec![[0, 1, 2]],
+            origins: vec![super::super::mesh::Origin {
+                node: 0,
+                mesh: 0,
+                primitive: material,
+                triangle: 0,
+            }],
+        }
+    }
+
+    /// H17 groups flat materials by class, not by spelling. Sources A, B, A' with A' the
+    /// same class as A written differently (`metallicFactor` 0.0 against 0 and an explicit
+    /// default `roughnessFactor`): the class rank orders A, A', B, so the codec writes two
+    /// glTF primitives with each class contiguous. In source order it would write three.
+    #[test]
+    fn flat_materials_group_by_class_not_by_spelling() {
+        let a = json!({"pbrMetallicRoughness":{"metallicFactor":0}});
+        let b = json!({"pbrMetallicRoughness":{"metallicFactor":0.5}});
+        let a2 = json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1}});
+        let materials = vec![a, b, a2];
+        let rank = super::super::material_ranks(&materials);
+        assert_eq!(rank, [0, 1, 0]);
+        let lattice = LatticePlan::new(
+            Profile::Balanced,
+            Bounds {
+                min: [-16.; 3],
+                max: [16.; 3],
+            },
+            &[32., 4.],
+        )
+        .unwrap();
+        let encode = |order: &[u32]| {
+            let primitives: Vec<_> = order.iter().map(|&m| triangle(m as f32 * 2., m)).collect();
+            let encoded = encode(&primitives, &materials, &lattice, 1, &[]).unwrap();
+            let decoded = decode(&encoded.glb).unwrap();
+            let published = decoded.primitives.len();
+            (decoded, published)
+        };
+        // The faces' source materials per decoded glTF primitive, in published order.
+        let classes = |order: &[u32]| {
+            let (decoded, published) = encode(order);
+            let mut groups = vec![Vec::new(); published];
+            for (face, &m) in decoded.faces.iter().zip(order) {
+                groups[face.primitive as usize].push(rank[m as usize]);
+            }
+            groups
+        };
+        // Ordered by class rank (what the LOD builder does): A, A' then B.
+        let mut ordered = vec![0, 1, 2];
+        ordered.sort_by_key(|&m| (rank[m as usize], m));
+        assert_eq!(ordered, [0, 2, 1]);
+        assert_eq!(classes(&ordered), [vec![0, 0], vec![1]]);
+        // Control: source order A, B, A' is not contiguous, so the codec cannot merge.
+        assert_eq!(classes(&[0, 1, 2]), [vec![0], vec![1], vec![0]]);
+    }
+}

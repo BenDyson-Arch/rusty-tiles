@@ -371,7 +371,11 @@ list. `texel_ownership` reports texture-space editability:
 `unique_proxies` (always every proxy), and `shared`. That list holds the first
 64 shared leaves (`leaf`, `first`, `depth`, `texel_ownership: "shared"`,
 `triangles`); `shared_omitted` counts the rest. Every leaf that is not listed
-or omitted is `unique`. `source_coordinates` is `local-gltf` or
+or omitted is `unique`. Ownership is all-or-nothing per leaf: one pair of
+overlapping footprints marks the whole leaf `shared`, so use `shared_triangles` (and
+a leaf row's `sharedTriangles`) over the leaf's `triangles` for the fraction of the
+leaf that is affected. `unique_proxies` is vacuous when no baker runs: untextured
+proxies have no pages to share. `source_coordinates` is `local-gltf` or
 `source-crs`; `coordinates` is `local-gltf` or `wgs84-ecef`. A source CRS adds
 `source_crs` (definition, axes, source offset, height offset, `portable` or
 `native` operation, the chosen origin, `jacobian_lattice_cells` and

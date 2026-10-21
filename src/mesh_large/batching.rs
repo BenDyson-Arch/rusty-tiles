@@ -189,6 +189,9 @@ fn interiors_overlap(a: &Fixed, b: &Fixed) -> bool {
     true
 }
 
+/// Pair examinations between cancellation checks in the texel-ownership sweep.
+const SHARED_SWEEP_CHECK_PAIRS: u32 = 1 << 16;
+
 /// Per footprint, whether its decoded-UV interior shares area with another footprint on
 /// the same page. Exact for coordinates on the 2^-56 grid below 8 in magnitude; a
 /// footprint outside that domain, and any footprint whose box overlaps its box, counts as
@@ -238,6 +241,9 @@ pub(in crate::mesh_large) fn shared_footprints(
     }
     order.sort_by(|x, y| x.1[0].total_cmp(&y.1[0]).then(x.0.cmp(&y.0)));
     let mut active: Vec<usize> = Vec::new();
+    // Candidate pairs examined since the last cancellation check: a dense page makes the
+    // sweep quadratic, so the cost is bounded per pair, not per outer iteration.
+    let mut pairs = 0u32;
     for (k, &(i, lo, hi)) in order.iter().enumerate() {
         if k % 4096 == 0 {
             check()?;
@@ -246,8 +252,17 @@ pub(in crate::mesh_large) fn shared_footprints(
         // separates them, so their interiors are disjoint.
         active.retain(|&j| order[j].2[0] > lo[0]);
         for &j in &active {
+            pairs += 1;
+            if pairs >= SHARED_SWEEP_CHECK_PAIRS {
+                pairs = 0;
+                check()?;
+            }
             let (o, olo, ohi) = order[j];
             if ohi[1] <= lo[1] || hi[1] <= olo[1] {
+                continue;
+            }
+            // Both already shared: the exact test cannot change either answer.
+            if shared[i] && shared[o] {
                 continue;
             }
             let overlap = match (&exact[i], &exact[o]) {

@@ -887,6 +887,19 @@ struct Outcome {
 }
 
 /// Faces of a mesh grouped by flat material, then label (stable): the GLB face order.
+/// Material ID to the lowest ID of its class (H28: `material_key`, numbers by value and
+/// glTF defaults filled). Faces order by this rank, so a class is contiguous and the
+/// proxy codec writes it as one glTF primitive.
+fn material_ranks(materials: &[Value]) -> Vec<u32> {
+    let keys: Vec<Value> = materials
+        .iter()
+        .map(|m| super::batching::material_key(m, false))
+        .collect();
+    (0..materials.len())
+        .map(|i| keys.iter().position(|k| *k == keys[i]).unwrap_or(i) as u32)
+        .collect()
+}
+
 fn by_label(faces: &[Face], mesh: &KeyMesh, rank: &[u32]) -> Vec<Face> {
     let mut out = faces.to_vec();
     out.sort_by_key(|f| {
@@ -2583,13 +2596,7 @@ pub(crate) fn produce(
         .collect();
     // H28: equal means the same material class (numbers by value, glTF defaults filled),
     // so flat materials written differently still share one glTF primitive and node.
-    let keys: Vec<Value> = materials
-        .iter()
-        .map(|m| super::batching::material_key(m, false))
-        .collect();
-    let material_rank: Vec<u32> = (0..materials.len())
-        .map(|i| keys.iter().position(|k| *k == keys[i]).unwrap_or(i) as u32)
-        .collect();
+    let material_rank = material_ranks(&materials);
     let sidecars = input.scratch.path().join("lod-sidecars");
     fs::create_dir_all(&sidecars).map_err(|e| JobError::io("create LOD sidecars", &sidecars, e))?;
     let runs = match input.handoff {

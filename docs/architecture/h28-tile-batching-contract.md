@@ -61,7 +61,11 @@ H28 makes each tile emit as few primitives as glTF semantics allow.
      by the 8,192-face `proxy_source` chunk.
 4. **Shared atlases per class.** The leaf atlas already shares pages across
    source primitives by slot and filter. H28 also lets MASK base-colour bindings
-   of one class share a page (before H28, one page per primitive). Proxy page packing groups
+   of one class share a page (before H28, one page per primitive). A pooled
+   page's MASK coverage fitting and receipts are aggregate: its surface samples
+   are the union of its bindings' samples under the class's one alpha factor and
+   cutoff, and one receipt set covers the page (a different cutoff is another
+   class and another page). Proxy page packing groups
    charts by material class instead of source material. Charts stay per
    (source primitive, material), and the raster still samples each face's own
    source texture. A page's `material` is the class representative (the lowest
@@ -83,6 +87,9 @@ H28 makes each tile emit as few primitives as glTF semantics allow.
    shared triangles, proxies (all unique), and the first 64 shared leaves by
    `(first, depth)` with an omitted count. Overlapping or wrapping source UVs
    never refuse a tile; such a tile is only vertex-space editable.
+   Ownership is all-or-nothing per leaf; `sharedTriangles` over the leaf's
+   triangle count gives the affected fraction. `unique_proxies` is vacuous when no
+   baker runs (proxies carry no pages then).
 
 ## Proxy baked feature-ID textures
 

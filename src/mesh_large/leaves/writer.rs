@@ -1664,6 +1664,56 @@ mod tests {
             );
         }
     }
+    /// H28 rebase across a lattice cell boundary: members on each side of an aligned cell
+    /// edge (depth 1, scale 2^-8, 128 m cells; the edge is -7812 * 128 = -999936) carry
+    /// different own translations, so merging them shifts codes by a nonzero amount. The
+    /// published decode still equals the per-primitive reference bit for bit.
+    #[test]
+    fn merge_across_a_cell_boundary_rebases_a_nonzero_shift() {
+        for profile in [Profile::Fast, Profile::Balanced] {
+            let mut input = atlas();
+            input.primitives = vec![
+                source_primitive(4, 2, -999_936.5),
+                source_primitive(2, 2, -999_935.5),
+                source_primitive(9, 1, -999_999.75),
+            ];
+            let lattice = plan(profile);
+            let own: Vec<[f32; 3]> = input
+                .primitives
+                .iter()
+                .map(|p| {
+                    let points: Vec<_> = p
+                        .triangles
+                        .iter()
+                        .flat_map(|t| t.triangle.positions)
+                        .collect();
+                    let depths: Vec<_> = p.corner_depths.iter().flatten().copied().collect();
+                    match lattice.encode(&points, &depths, 1).unwrap().storage {
+                        PositionStorage::Quantized { translation, .. } => translation,
+                        PositionStorage::Float { .. } => panic!("{profile:?} must quantize"),
+                    }
+                })
+                .collect();
+            assert!(own[0][0] < own[1][0], "{profile:?}: {own:?}");
+            // One 128 m cell apart: a shift of 2^15 codes for the upper member.
+            assert_eq!(own[1][0] - own[0][0], 128., "{profile:?}: {own:?}");
+            let leaf = encode(&input, &lattice, 1, TILE_LIMIT).unwrap();
+            let (doc, _) = parse(&leaf.glb);
+            assert_eq!(leaf.primitives, 1, "{profile:?}");
+            // The group offset is the lowest member offset, so the shifts are nonzero.
+            let group = doc["nodes"][0]["translation"][0].as_f64().unwrap();
+            assert_eq!(
+                group,
+                f64::from(own.iter().map(|t| t[0]).fold(f32::MAX, f32::min))
+            );
+            assert!(own.iter().any(|t| f64::from(t[0]) != group));
+            assert_eq!(
+                published(&leaf.glb),
+                per_primitive_reference(&input, &lattice),
+                "{profile:?}"
+            );
+        }
+    }
     /// H28 splits: material class (a factor), texture identity (another page), attribute
     /// set (no COLOR_0) and an exact position window that UNSIGNED_SHORT cannot hold.
     /// Each split keeps every triangle's decoded corners and identity.
