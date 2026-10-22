@@ -301,7 +301,9 @@ pub(super) fn run_depth<S>(
     if deferred.is_empty() {
         return Ok(0);
     }
-    let mut check = || check();
+    // Alone, the lock is uncontended but still a sixth of a retried tile's CPU.
+    let mut calls = 0;
+    let mut check = || cancelled(&mut calls);
     let mut worker = state(limits, &mut check)?;
     for &first in &deferred {
         match bake(&mut worker, limits, first, &mut check)? {
