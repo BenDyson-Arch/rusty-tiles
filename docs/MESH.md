@@ -403,7 +403,8 @@ not alter its semantic bytes. They include `requested_jobs`, `capture`,
 `proxy_bake`. `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
 `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and
 `archive` (the three middle LOD phases summed over depths). `proxy_bake` holds
-the baked `tiles`, worker seconds per bake step (charts, raster, encode,
+the baked `tiles`, `retried_tiles` (tiles that refused their worker's share of
+the bake memory and were baked again alone, serially), worker seconds per bake step (charts, raster, encode,
 assemble, commit; summed over workers, so they overlap) and the appearance
 fallback counts (`facing_fallback_samples`, `_faces`, `_tiles`;
 `fill_fallback_samples`). Stage objects describe
@@ -416,8 +417,9 @@ nullable totals: `conversion`, `capture`, then inside the leaf stage
 `leaf_build` (leaves), `lod_prepass`, `lod_simplify`, `seam_resolution` and
 `lod_finish` (each counting finished depths), `proxy_bake` (tiles), then
 `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase, and each
-LOD depth, also logs its wall seconds and the run's elapsed seconds as a `log`
-event. Required events finish before publication; the returned
+LOD and bake depth, also logs its wall seconds and the run's elapsed seconds as
+a `log` event; a proxy tile that takes the facing fallback logs its id.
+Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
 remains success with cleanup diagnostics.
 
