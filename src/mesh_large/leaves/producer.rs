@@ -11,6 +11,7 @@ use super::{
     schedule::{MemoryGate, SourceCache},
     writer,
 };
+use crate::mesh_large::phases::{Phase, Phases};
 use crate::spill::SequenceReader;
 use crate::stage_timing::{self as timing, Counter, Stage};
 use crate::{
@@ -641,9 +642,13 @@ pub(crate) fn produce(
     mutation: super::super::lod::Mutation,
     target: usize,
     baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
+    phases: &Phases<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
     use super::super::{bake_pass, lod::handoff::HandoffSink};
+    let leaf_started = std::time::Instant::now();
+    let total_leaves = captured.tree.stats.leaves;
+    phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
     // With a baker: owned scratch for the accepted leaf pre-encode pages and the frozen
     // tile packets.
     let bake_dir = captured.scratch.path().join("bake");
@@ -793,6 +798,9 @@ pub(crate) fn produce(
                     let (encoded, input) = encoded?;
                     write_leaf(&mut manifest, &manifest_path, &mut report, &input, encoded)?;
                     written += 1;
+                    if written != total_leaves {
+                        phases.progress(Phase::LeafBuild, written, Some(total_leaves))?;
+                    }
                 }
             }
         })();
@@ -816,6 +824,8 @@ pub(crate) fn produce(
         .flush()
         .and_then(|_| manifest.get_ref().sync_all())
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
+    phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
+    phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     let mut lod = timing::time(Stage::Lod, || {
         super::super::lod::produce(
             super::super::lod::LodInput {
@@ -827,6 +837,7 @@ pub(crate) fn produce(
                 mutation,
                 target,
                 handoff: handoff.as_ref(),
+                phases,
             },
             check,
         )
@@ -844,9 +855,16 @@ pub(crate) fn produce(
             path,
             handoff,
             preencode,
+            phases,
             check,
         );
-        baker.bake(&pass)?;
+        let bake_started = std::time::Instant::now();
+        let baked = baker.bake(&pass);
+        // The totals are logged on failure too: they show how far the bake got.
+        let summary = phases.bake_summary();
+        baked?;
+        summary?;
+        phases.finished(Phase::ProxyBake, bake_started.elapsed().as_secs_f64())?;
         // The manifest reports the published (baked) proxy bytes, and keeps the certified
         // untextured figure beside them.
         let baked = pass.finish()?;
@@ -1083,6 +1101,7 @@ pub fn mesh_to_leaf_payloads(
         request.lod_mutation,
         request.lod_target,
         request.baker.as_deref(),
+        &Phases::silent(),
         &|| attempt.check(),
     );
     let cleanup_path = captured.scratch.path().to_owned();

@@ -47,6 +47,9 @@ pub(super) struct Signal {
     pub terminal: TerminalSample,
     pub direct: bool,
     pub fill_fallback: bool,
+    /// A direct sample whose witness faces away from the proxy: no same-primitive
+    /// source triangle faces it (see `CapturedSource::nearest_result`).
+    pub facing_fallback: bool,
     pub displacement: f64,
     pub drift: f64,
     pub witness_distance: f64,
@@ -391,6 +394,7 @@ impl<'a> ChildQuery<'a> {
             terminal,
             direct: false,
             fill_fallback: false,
+            facing_fallback: false,
             displacement,
             drift,
             witness_distance: math::distance_upper(
@@ -461,6 +465,7 @@ fn direct_signal(
         terminal,
         direct: true,
         fill_fallback: w.fill_fallback,
+        facing_fallback: w.facing_fallback,
         displacement: math::distance_upper(p, q),
         drift: 0.,
         witness_distance: math::distance_upper(p, q),

@@ -108,6 +108,39 @@ fn cli_report_is_the_archive_report_with_separate_resource_diagnostics() {
         .any(|event| event["phase"] == "ready_to_publish"));
     assert_eq!(events.last().unwrap()["phase"], "conversion");
     assert_eq!(events.last().unwrap()["done"], 1);
+    // The work inside the leaf stage is reported as named phases with the unchanged
+    // progress schema, and each finished phase logs its wall seconds.
+    let phases: Vec<&str> = events
+        .iter()
+        .filter(|e| e["event"] == "progress")
+        .map(|e| e["phase"].as_str().unwrap())
+        .collect();
+    for phase in ["capture", "leaf_build", "leaf_payloads", "archive"] {
+        assert!(phases.contains(&phase), "{phase} in {phases:?}");
+    }
+    for event in events.iter().filter(|e| e["event"] == "progress") {
+        let mut keys: Vec<&str> = event
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.as_str())
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["done", "event", "phase", "total"]);
+    }
+    assert!(events.iter().any(|e| e["event"] == "log"
+        && e["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("mesh phase leaf_build: ")));
+    let seconds = &envelope["diagnostics"]["phase_seconds"];
+    for phase in ["capture", "leaf_build", "proxy_bake", "archive"] {
+        assert!(seconds[phase].as_f64().unwrap() >= 0., "{phase}");
+    }
+    assert_eq!(
+        envelope["diagnostics"]["proxy_bake"]["facing_fallback_faces"],
+        0
+    );
 }
 
 #[test]

@@ -5,6 +5,7 @@ use super::{
     full,
     input::StreamSource,
     leaves::producer,
+    phases::{Phase, PhaseSeconds, Phases, ProxyBakeDiagnostics},
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
 };
 use crate::{
@@ -257,6 +258,10 @@ pub struct TilerDiagnostics {
     pub leaf_delivery: LeafStageDiagnostics,
     pub archive_bytes: u64,
     pub peak_held_records: u64,
+    /// Wall seconds of each named phase of the run.
+    pub phase_seconds: PhaseSeconds,
+    /// Proxy bake totals: tiles, per-step worker seconds, appearance fallbacks.
+    pub proxy_bake: ProxyBakeDiagnostics,
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -361,6 +366,9 @@ pub fn mesh_to_tileset(
     let work_path = work.path().to_owned();
     // Capture admission also reserves output-side space where leaves and the archive stage.
     config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
+    let emit = |event: &RunEvent<'_>| attempt.emit(event);
+    let phases = Phases::new(&emit);
+    let capture_started = std::time::Instant::now();
     let captured = match attempt
         .emit(&RunEvent::Progress {
             phase: "capture",
@@ -391,6 +399,7 @@ pub fn mesh_to_tileset(
             done: 1,
             total: Some(1),
         })?;
+        phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
         let plan = producer::stage_plan(config.profile, &captured, config.jobs)?;
         // H27: the coarse tiles are textured by the bake core, with its stage policy
         // resolved once from this run (memory, source cache, query work, page edge).
@@ -405,6 +414,7 @@ pub fn mesh_to_tileset(
             super::lod::Mutation::None,
             super::lod::TARGET_FACES,
             Some(&baker),
+            &phases,
             &|| attempt.check(),
         )?;
         attempt.emit(&RunEvent::Progress {
@@ -417,6 +427,8 @@ pub fn mesh_to_tileset(
         let delivery_request = MeshTilesetRequest::new(work.path(), &output);
         // A source CRS derives the root placement from the captured origin.
         let placement = captured.placement.clone().unwrap_or(placement);
+        let archive_started = std::time::Instant::now();
+        phases.progress(Phase::Archive, 0, Some(1))?;
         let prepared = delivery::prepare_tiler(
             &delivery_request,
             placement,
@@ -433,6 +445,8 @@ pub fn mesh_to_tileset(
             staging.writer(),
             work.path(),
         )?;
+        phases.progress(Phase::Archive, 1, Some(1))?;
+        phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
         let c = &captured.report;
         // Every spill stage after capture (H17 pre-pass, coarse levels, bake) shares the
         // admitted scratch: the whole-run peak must stay within the declared need. LOD proxy
@@ -466,6 +480,8 @@ pub fn mesh_to_tileset(
             leaf_delivery: leaf.diagnostics,
             archive_bytes,
             peak_held_records: delivered.peak_held_records,
+            phase_seconds: phases.seconds(),
+            proxy_bake: phases.bake(),
         };
         Ok::<_, JobError>((report, diagnostics))
     })();

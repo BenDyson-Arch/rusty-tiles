@@ -16,6 +16,7 @@ mod images;
 mod input;
 mod leaves;
 mod lod;
+mod phases;
 mod pipeline;
 mod records;
 mod source_crs;

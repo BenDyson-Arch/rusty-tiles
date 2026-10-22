@@ -77,7 +77,14 @@ fn bytes(w: u32, h: u32) -> Result<usize, JobError> {
 fn byte(x: f64) -> u8 {
     (x.clamp(0.0, 1.0) * 255.0).round() as u8
 }
+/// sRGB byte to linear, from a table of [`linear_exact`] (bit-identical): colour
+/// reduction converts every source texel of every footprint, and `powf` per call was
+/// about a third of proxy bake CPU when source mip chains are rebuilt.
 fn linear(x: u8) -> f64 {
+    static TABLE: std::sync::OnceLock<[f64; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| std::array::from_fn(|i| linear_exact(i as u8)))[usize::from(x)]
+}
+fn linear_exact(x: u8) -> f64 {
     let x = f64::from(x) / 255.0;
     if x <= 0.04045 {
         x / 12.92
@@ -394,6 +401,12 @@ mod tests {
     use super::*;
     fn make(w: u32, h: u32, p: Vec<u8>, c: Class, m: Option<Mask>) -> Chain {
         build(w, h, p, c, m, 1 << 20).unwrap()
+    }
+    #[test]
+    fn linear_table_is_the_exact_conversion() {
+        for x in 0..=255u8 {
+            assert_eq!(linear(x).to_bits(), linear_exact(x).to_bits());
+        }
     }
     #[test]
     fn gamma_and_linear_data_are_distinct() {

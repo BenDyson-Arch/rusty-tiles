@@ -612,6 +612,8 @@ pub(in crate::mesh_large) struct BakePass<'a> {
     pub jobs: usize,
     pub handoff: &'a HandoffSink,
     pub preencode: &'a PreencodeStore,
+    /// Bake progress, per-step seconds and appearance fallbacks (diagnostics only).
+    pub phases: &'a super::phases::Phases<'a>,
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
     stage: PathBuf,
 }
@@ -626,6 +628,7 @@ impl<'a> BakePass<'a> {
         stage: &Path,
         handoff: &'a HandoffSink,
         preencode: &'a PreencodeStore,
+        phases: &'a super::phases::Phases<'a>,
         check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
     ) -> Self {
         Self {
@@ -635,6 +638,7 @@ impl<'a> BakePass<'a> {
             jobs,
             handoff,
             preencode,
+            phases,
             check,
             stage: stage.to_owned(),
         }

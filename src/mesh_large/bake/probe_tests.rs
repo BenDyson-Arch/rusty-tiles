@@ -215,6 +215,121 @@ fn five_aliased_slots_raster_and_normal_mips_use_original_captured_samples() {
         33071
     );
 }
+/// Simplification can turn a proxy face away from every source triangle of its own
+/// primitive (a flipped sliver or fold); here the face is its source triangle with the
+/// winding reversed. Such a face still has a defined, deterministic appearance: each
+/// texel takes the nearest same-primitive witness regardless of orientation, by the same
+/// strict order as a facing one, and the fallback is counted. Before, the bake refused
+/// the whole run with "proxy has no facing same-primitive source appearance donor".
+#[test]
+fn proxy_face_turned_away_from_every_same_primitive_donor_takes_the_nearest_witness() {
+    let (_work, c) = capture(2, |input| {
+        let mut doc: serde_json::Value = serde_json::from_slice(&fs::read(input).unwrap()).unwrap();
+        doc["materials"][0]["pbrMetallicRoughness"]["metallicRoughnessTexture"] =
+            serde_json::json!({"index":0,"texCoord":0});
+        doc["materials"][0]["normalTexture"] = serde_json::json!({"index":0,"texCoord":1});
+        fs::write(input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    });
+    let mut f = packet(&c);
+    let flipped = &mut f.faces[0];
+    flipped.positions.swap(1, 2);
+    flipped.words.swap(1, 2);
+    flipped.welds.swap(1, 2);
+    let ok = &mut || Ok(());
+    let l = limits();
+    let mut source = CapturedSource::new(&c, l.source_cache_bytes, ok).unwrap();
+    source.begin(f.node, l.query_work).unwrap();
+    let (up, down) = ([0., 0., 1.], [0., 0., -1.]);
+    // Both source triangles face +z; a -z proxy normal faces none of them.
+    let mut face = f.faces[0].clone();
+    face.source_triangle = 1;
+    let w = source.nearest([0.25, 0.25, 0.], &face, down, ok).unwrap();
+    assert!(w.facing_fallback && !w.fill_fallback);
+    assert_eq!(w.distance2, 0.);
+    assert_eq!(
+        w.triangle.triangle.source.triangle, 1,
+        "the facing order still applies: lineage breaks the distance tie"
+    );
+    let facing = source.nearest([0.25, 0.25, 0.], &face, up, ok).unwrap();
+    assert!(!facing.facing_fallback);
+    assert_eq!(facing.rank, w.rank);
+    // Off the surface, the witness is the nearest surface point, whatever the facing.
+    let above = source
+        .nearest([0.25, 0.25, 0.5], &f.faces[0], down, ok)
+        .unwrap();
+    assert!(above.facing_fallback);
+    assert_eq!(above.distance2, 0.25);
+    assert_eq!(above.bary, [0.5, 0.25, 0.25]);
+    // The whole raster: the flipped face bakes the source appearance; the other does
+    // not take the fallback.
+    let layout = charts::build(
+        &f,
+        &raster_faces(&f, &source).unwrap(),
+        l,
+        0.125,
+        &c.material_classes,
+        ok,
+    )
+    .unwrap();
+    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+    let raster = raster::build(&f, &layout, &mut source, &mut child, l, ok).unwrap();
+    assert_eq!(raster.facing_fallback_faces, 1);
+    assert!(raster.facing_fallback_samples > 0);
+    assert_eq!(raster.fill_fallback_samples, 0);
+    assert_eq!(raster.receipt["facingFallbackFaces"], 1);
+    assert_eq!(
+        raster.receipt["facingFallbackSamples"],
+        raster.facing_fallback_samples
+    );
+    assert_eq!(raster.pages.len(), 3);
+    assert!(
+        raster
+            .face_pages
+            .iter()
+            .flatten()
+            .filter(|p| p.is_some())
+            .count()
+            >= 6
+    );
+    for page in &raster.pages {
+        assert!(page.support.iter().any(|w| *w > 0));
+        if page.slot == TextureSlot::Normal {
+            // Re-expressed in the proxy frame, the source normal keeps its world direction.
+            let expected = frames::effective_direction(
+                [120. / 127.5 - 1., 80. / 127.5 - 1., 40. / 127.5 - 1.],
+                1.,
+            )
+            .unwrap();
+            for (i, w) in page.support.iter().enumerate() {
+                if *w > 0 {
+                    let raw = std::array::from_fn(|a| f64::from(page.rgba[i * 4 + a]) / 127.5 - 1.);
+                    let actual = page.levels[0].frames[i].transform(raw).unwrap();
+                    assert!(
+                        math::dot(actual, expected)
+                            .clamp(-1., 1.)
+                            .acos()
+                            .to_degrees()
+                            < 1.
+                    );
+                }
+            }
+        } else {
+            for (pixel, w) in page.rgba.as_chunks::<4>().0.iter().zip(&page.support) {
+                if *w > 0 {
+                    assert_eq!(pixel, &[120, 80, 40, 255]);
+                }
+            }
+        }
+    }
+    // Deterministic: the same packet bakes the same pages.
+    let mut again = CapturedSource::new(&c, l.source_cache_bytes, ok).unwrap();
+    again.begin(f.node, l.query_work).unwrap();
+    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+    let repeat = raster::build(&f, &layout, &mut again, &mut child, l, ok).unwrap();
+    for (a, b) in raster.pages.iter().zip(&repeat.pages) {
+        assert_eq!(a.rgba, b.rgba);
+    }
+}
 #[test]
 fn all_and_mixed_degenerate_textured_capture_keeps_colour_and_geometry_without_empty_delivery() {
     for count in [1usize, 2] {

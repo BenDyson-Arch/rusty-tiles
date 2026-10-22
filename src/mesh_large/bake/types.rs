@@ -254,6 +254,20 @@ pub(crate) struct BakedNode {
     pub glb: Vec<u8>,
     pub preencode: PreencodeChild,
     pub receipts: serde_json::Value,
+    pub stats: BakeStats,
+}
+/// Run diagnostics of one tile's bake, never part of any output bytes: wall seconds
+/// of its steps over every density attempt, and the accepted attempt's appearance
+/// fallbacks.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct BakeStats {
+    pub charts_seconds: f64,
+    pub raster_seconds: f64,
+    pub encode_seconds: f64,
+    pub assemble_seconds: f64,
+    pub facing_fallback_samples: u64,
+    pub facing_fallback_faces: u64,
+    pub fill_fallback_samples: u64,
 }
 pub(super) fn slot_index(slot: TextureSlot) -> usize {
     match slot {

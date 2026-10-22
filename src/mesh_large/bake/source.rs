@@ -142,12 +142,54 @@ struct Query<'q> {
     key: SourceKey,
     lineage: u64,
     ranges: &'q [std::ops::Range<u64>],
+    /// An accepted fill: its unfiltered candidate is bounded by the fill's certified
+    /// distance, so boxes are pruned against it too.
     fill: bool,
+    /// A completed query of this same face (key, ranges, normal) found no triangle that
+    /// faces the proxy, so `best` stays empty whatever the point: boxes are pruned
+    /// against the unfiltered candidate alone.
+    no_facing: bool,
 }
+impl Query<'_> {
+    /// Whether a box at squared distance `lower` cannot beat the candidates so far.
+    fn pruned(
+        &self,
+        lower: f64,
+        slack: f64,
+        best: Option<Witness>,
+        unfiltered: Option<Witness>,
+    ) -> bool {
+        let beaten = |w: Option<Witness>| w.is_some_and(|b| lower > b.distance2 + slack);
+        if self.no_facing {
+            return beaten(unfiltered);
+        }
+        beaten(best) && (!self.fill || beaten(unfiltered))
+    }
+}
+/// The face a completed query proved to have no facing donor. A face's normal and donor
+/// ranges are fixed, so the proof holds for every later point of the same face.
+struct NoFacing {
+    key: SourceKey,
+    ranges: Vec<std::ops::Range<u64>>,
+    normal: [u64; 3],
+}
+impl NoFacing {
+    fn matches(&self, key: SourceKey, ranges: &[std::ops::Range<u64>], normal: V3) -> bool {
+        self.key == key && self.ranges == ranges && self.normal == normal.map(f64::to_bits)
+    }
+}
+/// How far a donor may lie from a face with no facing donor, in longest face edges.
+const FALLBACK_EDGES: f64 = 2.;
 /// One candidate of a nearest-witness query, shared by both search paths: a triangle
 /// of the face's own source primitive inside its donor ranges; `best` must also face
-/// the proxy normal, `unfiltered` (fills only) need not. Ties are broken by lineage,
-/// source triangle and rank, so the winner is a strict minimum.
+/// the proxy normal, `unfiltered` need not. Ties are broken by lineage, source triangle
+/// and rank, so the winner is a strict minimum.
+///
+/// `unfiltered` is tracked for every face. A fill uses it beyond its facing bound; any
+/// other face uses it only when no candidate faces the proxy at all (see
+/// [`CapturedSource::nearest_result`]). Pruning consults it for a non-fill face only
+/// once the face is known to have no facing candidate ([`Query::no_facing`]), so
+/// tracking it never changes which facing witness wins.
 fn consider(
     query: &Query<'_>,
     rank: u64,
@@ -161,7 +203,7 @@ fn consider(
         key: k,
         lineage,
         ranges,
-        fill,
+        ..
     } = *query;
     if !(ranges.iter().any(|r| r.contains(&rank)) && key(&t) == k) {
         return Ok(());
@@ -178,6 +220,7 @@ fn consider(
         bary,
         distance2: d,
         fill_fallback: false,
+        facing_fallback: false,
     };
     let earlier = |b: Witness| {
         d < b.distance2
@@ -192,13 +235,21 @@ fn consider(
                     b.rank,
                 ))
     };
-    if fill && unfiltered.is_none_or(earlier) {
+    if unfiltered.is_none_or(earlier) {
         *unfiltered = Some(witness);
     }
     if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.) && best.is_none_or(earlier) {
         *best = Some(witness);
     }
     Ok(())
+}
+
+/// The longest edge of a proxy face.
+fn longest_edge(face: &FrozenFace) -> f64 {
+    let p = face.positions.map(|p| p.map(f64::from));
+    (0..3)
+        .map(|i| math::distance2(p[i], p[(i + 1) % 3]).sqrt())
+        .fold(0., f64::max)
 }
 
 /// Source triangles of a rank range: a resident slice or a spill stream.
@@ -307,6 +358,9 @@ pub(super) struct Witness {
     pub bary: V3,
     pub distance2: f64,
     pub fill_fallback: bool,
+    /// No same-primitive candidate faces the proxy: this is the nearest one regardless
+    /// of orientation.
+    pub facing_fallback: bool,
 }
 struct Cache {
     image: usize,
@@ -328,6 +382,8 @@ pub(crate) struct CapturedSource<'a> {
     colorless: bool,
     /// Reused depth-first stack of the nearest-witness query.
     nearest_stack: Vec<(QueryNode, f64)>,
+    /// The latest face found to have no facing donor in the current node.
+    no_facing: Option<NoFacing>,
     /// Attribute flags of each source primitive in the node, built on first use.
     primitive_flags: Option<BTreeMap<SourceKey, u8>>,
     /// Fine hierarchy over `resident`, when its bytes fit beside them.
@@ -425,6 +481,7 @@ impl<'a> CapturedSource<'a> {
             resident_first: 0,
             colorless: false,
             nearest_stack: Vec::new(),
+            no_facing: None,
             primitive_flags: None,
             bvh: None,
             bvh_stack: Vec::new(),
@@ -449,6 +506,7 @@ impl<'a> CapturedSource<'a> {
         self.bvh = None;
         self.colorless = false;
         self.primitive_flags = None;
+        self.no_facing = None;
         Ok(())
     }
     /// Hold the current node's source triangles in memory when they fit `budget` bytes,
@@ -578,10 +636,17 @@ impl<'a> CapturedSource<'a> {
             lineage,
             ranges,
             fill: fill.is_some(),
+            no_facing: fill.is_none()
+                && self
+                    .no_facing
+                    .as_ref()
+                    .is_some_and(|m| m.matches(k, ranges, normal)),
         };
+        let limit = FALLBACK_EDGES * longest_edge(face);
         if self.bvh.is_some() {
             self.nearest_bvh(&query, &mut best, &mut unfiltered, check)?;
-            return self.nearest_result(fill, best, unfiltered);
+            self.remember_no_facing(&query, best);
+            return self.nearest_result(fill, best, unfiltered, limit);
         }
         // Nearest-first depth-first search: children are pushed farthest first, so the
         // closest box is searched first and the distance bound tightens early. The
@@ -615,9 +680,7 @@ impl<'a> CapturedSource<'a> {
             {
                 continue;
             }
-            if best.is_some_and(|b| lower > b.distance2 + slack)
-                && (fill.is_none() || unfiltered.is_some_and(|b| lower > b.distance2 + slack))
-            {
+            if query.pruned(lower, slack, best, unfiltered) {
                 continue;
             }
             if n.count > 0 {
@@ -651,7 +714,22 @@ impl<'a> CapturedSource<'a> {
         }
         // An early error return drops the buffer; the next query reallocates it.
         self.nearest_stack = stack;
-        self.nearest_result(fill, best, unfiltered)
+        self.remember_no_facing(&query, best);
+        self.nearest_result(fill, best, unfiltered, limit)
+    }
+    /// A finished query that found no facing triangle visited every candidate of the
+    /// face (nothing is pruned while `best` is empty), so no triangle of this face's
+    /// key and ranges faces its normal. Later points of the face then prune against the
+    /// nearest candidate alone and select the same unfiltered witness.
+    fn remember_no_facing(&mut self, query: &Query<'_>, best: Option<Witness>) {
+        if best.is_some() || query.fill || query.no_facing {
+            return;
+        }
+        self.no_facing = Some(NoFacing {
+            key: query.key,
+            ranges: query.ranges.to_vec(),
+            normal: query.normal.map(f64::to_bits),
+        });
     }
     /// [`Self::nearest`] over the fine hierarchy of the resident triangles. A box is
     /// pruned only when its lower bound exceeds the best distance by more than the
@@ -677,9 +755,7 @@ impl<'a> CapturedSource<'a> {
         while let Some((i, lower)) = stack.pop() {
             check()?;
             self.charge()?;
-            if best.is_some_and(|b| lower > b.distance2 + slack)
-                && (!query.fill || unfiltered.is_some_and(|b| lower > b.distance2 + slack))
-            {
+            if query.pruned(lower, slack, *best, *unfiltered) {
                 continue;
             }
             let n = bvh.nodes[i as usize];
@@ -714,6 +790,7 @@ impl<'a> CapturedSource<'a> {
         fill: Option<f64>,
         best: Option<Witness>,
         unfiltered: Option<Witness>,
+        limit: f64,
     ) -> Result<Witness, JobError> {
         if let Some(bound) = fill {
             if best.is_none_or(|b| {
@@ -735,9 +812,31 @@ impl<'a> CapturedSource<'a> {
                 return Ok(w);
             }
         }
-        best.ok_or_else(|| {
-            unsupported("proxy has no facing same-primitive source appearance donor")
-        })
+        if let Some(b) = best {
+            return Ok(b);
+        }
+        // No triangle of the face's own primitive in its donor ranges faces the proxy:
+        // simplification turned the face away from every same-primitive donor (a flipped
+        // sliver or fold). Its appearance is then the nearest same-primitive surface
+        // point regardless of orientation: the same material and texture, the surface the
+        // face approximates, chosen by the same strict order. Both searches prune only
+        // once a facing witness exists, so with none this is the exhaustive nearest over
+        // the face's candidates, within the same query work budget.
+        let mut w =
+            unfiltered.ok_or_else(|| invalid("proxy face has no same-primitive source donor"))?;
+        // A donor far beyond the face's own size is no longer the surface the face
+        // approximates; refuse it instead of baking an unrelated appearance. A NaN
+        // distance or limit refuses too.
+        let distance = w.distance2.sqrt();
+        if distance.is_nan() || limit.is_nan() || distance > limit {
+            return Err(unsupported(format!(
+                "proxy has no facing same-primitive source appearance donor; the nearest \
+                 same-primitive triangle is {distance:.3e} away, beyond the {limit:.3e} \
+                 limit of {FALLBACK_EDGES} face edges"
+            )));
+        }
+        w.facing_fallback = true;
+        Ok(w)
     }
     /// The weld key, not the replacement face's Origin, selects canonical colour.
     pub(super) fn color(
@@ -917,6 +1016,7 @@ impl<'a> CapturedSource<'a> {
             bary,
             distance2: 0.,
             fill_fallback: false,
+            facing_fallback: false,
         })
     }
     pub(super) fn lod(&self, w: Witness, slot: TextureSlot, texel: f64) -> Result<f64, JobError> {
@@ -1469,8 +1569,9 @@ mod tests {
                 bary,
                 distance2: math::distance2(q, math::bary(p, bary)),
                 fill_fallback: false,
+                facing_fallback: false,
             };
-            if face.fill_bound.is_some() && unfiltered.as_ref().is_none_or(|u| less(&w, u)) {
+            if unfiltered.as_ref().is_none_or(|u| less(&w, u)) {
                 unfiltered = Some(w);
             }
             if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.)
@@ -1489,10 +1590,162 @@ mod tests {
                     && a.distance2.to_bits() == b.distance2.to_bits()
                     && a.bary.map(f64::to_bits) == b.bary.map(f64::to_bits)
                     && a.fill_fallback == b.fill_fallback
+                    && a.facing_fallback == b.facing_fallback
             }
             (Err(a), Err(b)) => a.kind() == b.kind() && a.message() == b.message(),
             _ => false,
         }
+    }
+
+    fn unit_normal(t: &FullTriangle) -> Option<V3> {
+        math::face_normal(t.triangle.positions.map(|p| p.map(f64::from)))
+    }
+
+    /// Both searches against the brute-force answer for one query, returning the result.
+    fn check_query(
+        fast: &mut CapturedSource<'_>,
+        slow: &mut CapturedSource<'_>,
+        tris: &[FullTriangle],
+        face: &FrozenFace,
+        q: V3,
+        normal: V3,
+        what: &str,
+    ) -> Result<Witness, JobError> {
+        let ok = &mut || Ok(());
+        let (best, unfiltered) = brute(tris, q, face, normal);
+        let limit = FALLBACK_EDGES * longest_edge(face);
+        let expected = fast.nearest_result(face.fill_bound, best, unfiltered, limit);
+        let a = fast.nearest(q, face, normal, ok);
+        let b = slow.nearest(q, face, normal, ok);
+        assert!(same(&a, &expected), "BVH {what}");
+        assert!(same(&b, &expected), "streamed {what}");
+        expected
+    }
+
+    /// Many points of one face whose donors none faces: after the first, the memo prunes
+    /// against the nearest donor alone, yet every point selects exactly the donor the
+    /// exhaustive scan does, with less query work.
+    fn repeated_faces_agree_with_the_exhaustive_scan(
+        fast: &mut CapturedSource<'_>,
+        slow: &mut CapturedSource<'_>,
+        tris: &[FullTriangle],
+        base: &FrozenFace,
+        seed: u64,
+    ) {
+        let mut rng = Rng(seed ^ 0x1234_5678);
+        let (mut faces, mut cheaper, mut accepted, mut refused) = (0, 0, 0, 0);
+        for f in 0..60 {
+            let mut face = base.clone();
+            // Alternate faces too small for their donors (refused beyond the limit) and
+            // large ones (always accepted).
+            let size = if f % 3 == 0 { 0.05 } else { 40. };
+            face.positions = [[0., 0., 0.], [size, 0., 0.], [0., size, 0.]];
+            let k = (f * 11 % 300) as u64;
+            face.donor_ranges = match f % 3 {
+                0 => std::iter::once(k..k + 1).collect(),
+                1 => vec![k..k + 2, k + 5..k + 9],
+                _ => std::iter::once(10..120).collect(),
+            };
+            // A normal that no donor of the face faces.
+            let probe: V3 = [1., 1., 1.];
+            let normal = (0..4000).find_map(|_| {
+                let n = math::unit(std::array::from_fn(|_| rng.next() - 0.5))?;
+                brute(tris, probe, &face, n).0.is_none().then_some(n)
+            });
+            let Some(normal) = normal else { continue };
+            faces += 1;
+            let mut works = Vec::new();
+            for i in 0..14 {
+                let q: V3 = std::array::from_fn(|_| rng.next() * 6. - 1.);
+                let before = fast.work.get();
+                let r = check_query(fast, slow, tris, &face, q, normal, &format!("face {f}/{i}"));
+                works.push(fast.work.get() - before);
+                match r {
+                    Ok(w) => {
+                        assert!(w.facing_fallback);
+                        accepted += 1;
+                    }
+                    Err(e) => {
+                        assert_eq!(e.kind(), crate::JobErrorKind::Unsupported);
+                        assert!(
+                            e.message().contains(" away, beyond the "),
+                            "{}",
+                            e.message()
+                        );
+                        refused += 1;
+                    }
+                }
+            }
+            // The first query paid for every candidate; later ones never more, and on
+            // the larger donor sets less in total.
+            assert!(
+                works[1..].iter().all(|&w| w <= works[0]),
+                "face {f}: {works:?}"
+            );
+            cheaper += usize::from(works[1..].iter().sum::<u64>() < works[0] * 13);
+        }
+        assert!(faces > 30, "{faces} faces with a non-facing normal");
+        assert!(
+            accepted > 100 && refused > 20,
+            "{accepted} accepted, {refused} refused"
+        );
+        assert!(
+            cheaper * 3 > faces,
+            "{cheaper} of {faces} faces got cheaper"
+        );
+    }
+
+    /// One face with donors of varying normals, queried with a normal that some donor
+    /// faces and one that none does, alternately: only the second falls back, and a
+    /// proof recorded for it never leaks to the first.
+    fn varying_normals_on_one_face_do_not_share_the_no_facing_proof(
+        fast: &mut CapturedSource<'_>,
+        slow: &mut CapturedSource<'_>,
+        tris: &[FullTriangle],
+        base: &FrozenFace,
+        seed: u64,
+    ) {
+        let mut rng = Rng(seed ^ 0x77);
+        let mut mixed = 0;
+        for start in 0..40u64 {
+            let mut face = base.clone();
+            face.positions = [[0., 0., 0.], [40., 0., 0.], [0., 40., 0.]];
+            face.donor_ranges = std::iter::once(start * 7..start * 7 + 4).collect();
+            let donors: Vec<V3> = (start * 7..start * 7 + 4)
+                .filter(|&r| key(&tris[r as usize]) == face.source)
+                .filter_map(|r| unit_normal(&tris[r as usize]))
+                .collect();
+            let Some(&facing) = donors.first() else {
+                continue;
+            };
+            // Normals of the donors differ, yet some normal turns every one away.
+            let probe: V3 = [1., 1., 1.];
+            let away = (0..4000).find_map(|_| {
+                let n = math::unit(std::array::from_fn(|_| rng.next() - 0.5))?;
+                brute(tris, probe, &face, n).0.is_none().then_some(n)
+            });
+            let Some(away) = away else { continue };
+            if donors.iter().all(|d| math::dot(*d, facing) > 0.99) {
+                continue;
+            }
+            mixed += 1;
+            for i in 0..12 {
+                let q: V3 = std::array::from_fn(|_| rng.next() * 6. - 1.);
+                let toward = i % 2 == 0;
+                let r = check_query(
+                    fast,
+                    slow,
+                    tris,
+                    &face,
+                    q,
+                    if toward { facing } else { away },
+                    &format!("mixed face {start}/{i}"),
+                );
+                let w = r.expect("size 40 accepts every donor");
+                assert_eq!(w.facing_fallback, !toward, "face {start}/{i}");
+            }
+        }
+        assert!(mixed > 5, "{mixed} faces with varying donor normals");
     }
 
     #[test]
@@ -1529,6 +1782,7 @@ mod tests {
                 donor_ranges: std::iter::once(0..320).collect(),
             };
             let mut checked = 0;
+            let mut facing_fallbacks = 0;
             for i in 0..600 {
                 let mut face = base.clone();
                 // Exact vertices and centroids of duplicated triangles tie on distance.
@@ -1546,18 +1800,30 @@ mod tests {
                 if i % 4 == 1 {
                     face.donor_ranges = vec![10..90, 150..151, 200..300];
                 }
+                // One or two candidates: often none faces the proxy (the facing fallback).
+                if i % 7 == 3 {
+                    let k = ((i * 13) % 318) as u64;
+                    face.donor_ranges = vec![k..k + 1, k + 2..k + 3];
+                }
                 if i % 5 == 2 {
                     face.fill_bound = Some(rng.next() * 2.);
                 }
                 let (best, unfiltered) = brute(&tris, q, &face, normal);
-                let expected = fast.nearest_result(face.fill_bound, best, unfiltered);
+                let limit = FALLBACK_EDGES * longest_edge(&face);
+                let expected = fast.nearest_result(face.fill_bound, best, unfiltered, limit);
                 let a = fast.nearest(q, &face, normal, ok);
                 let b = slow.nearest(q, &face, normal, ok);
                 assert!(same(&a, &expected), "BVH query {i}");
                 assert!(same(&b, &expected), "streamed query {i}");
                 checked += usize::from(expected.is_ok());
+                facing_fallbacks += usize::from(expected.is_ok_and(|w| w.facing_fallback));
             }
             assert!(checked > 300);
+            assert!(facing_fallbacks > 10, "{facing_fallbacks} facing fallbacks");
+            repeated_faces_agree_with_the_exhaustive_scan(&mut fast, &mut slow, &tris, &base, seed);
+            varying_normals_on_one_face_do_not_share_the_no_facing_proof(
+                &mut fast, &mut slow, &tris, &base, seed,
+            );
             // Corner colour: the resident shortcut agrees with the full search, both on
             // every actual corner (weld matches) and off-vertex (nearest fallback).
             assert_eq!(fast.colorless, !color);
