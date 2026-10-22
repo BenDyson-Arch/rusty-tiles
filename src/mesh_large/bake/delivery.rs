@@ -12,18 +12,16 @@ use crate::{
     },
     JobError,
 };
-pub(super) fn encode(
-    page: &mut SignalPage,
-    samples: &[mask::SurfaceSample],
-    material: &serde_json::Value,
+/// What [`encode`] needs of its lease for a `size` page with `normal_samples` renderer
+/// witnesses, beyond what the page already owns: the extra proxy frame/terminal ledger
+/// of its complete chain, and the H8 codec workspace. A smaller lease is refused.
+pub(super) fn need(
+    size: [u32; 2],
+    normal_samples: usize,
     profile: Profile,
-    memory: u64,
-    work_limit: u64,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<EncodedPage, JobError> {
-    check()?;
+) -> Result<(u64, u64), JobError> {
     let mut texels = 0u64;
-    let (mut w, mut h) = (page.width, page.height);
+    let (mut w, mut h) = (size[0], size[1]);
     loop {
         texels = texels
             .checked_add(u64::from(w) * u64::from(h))
@@ -42,13 +40,30 @@ pub(super) fn encode(
                 + std::mem::size_of::<super::types::TerminalSample>()
                 + 32) as u64,
         )
-        .and_then(|n| n.checked_add((page.normal_samples.len() as u64).checked_mul(512)?))
+        .and_then(|n| n.checked_add((normal_samples as u64).checked_mul(512)?))
         .and_then(|n| n.checked_add(512 * 1024))
         .ok_or_else(|| resource("proxy delivery ledger lease"))?;
+    Ok((extra, delivery::workspace_charge(size, profile)?))
+}
+pub(super) fn encode(
+    page: &mut SignalPage,
+    samples: &[mask::SurfaceSample],
+    material: &serde_json::Value,
+    profile: Profile,
+    memory: u64,
+    work_limit: u64,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<EncodedPage, JobError> {
+    check()?;
+    let (extra, workspace) = need(
+        [page.width, page.height],
+        page.normal_samples.len(),
+        profile,
+    )?;
     let codec_memory = memory
         .checked_sub(extra)
         .ok_or_else(|| resource("proxy delivery complete ledger lease"))?;
-    if delivery::workspace_charge([page.width, page.height], profile)? > codec_memory {
+    if workspace > codec_memory {
         return Err(resource("proxy delivery codec plus semantic ledger peak"));
     }
     let chain = mips::build(page, memory, work_limit, check)?;

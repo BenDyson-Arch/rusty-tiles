@@ -1,7 +1,10 @@
 //! H17's immutable handoff adapter and H27's real complete-member protocol.
 //! Missing owner leases/retained leaf frames are explicit integration errors;
 //! no untextured or geometry-only substitute can satisfy this entry point.
-use super::{assembler, bake_node, child_bridge, invalid, resource, types::*, CapturedSource};
+use super::{
+    assembler, bake_node, child_bridge, invalid, resource, types::*, CapturedSource, ChildView,
+    SourceImages,
+};
 use crate::{
     mesh_large::{
         bake_pass as root,
@@ -16,6 +19,8 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct ProxyTextureBaker {
     limits: BakeLimits,
+    /// Child texel tiles parents read from retained packets (diagnostics).
+    child_tile_reads: std::sync::atomic::AtomicU64,
 }
 #[cfg(test)]
 thread_local! {
@@ -35,14 +40,25 @@ impl ProxyTextureBaker {
         {
             return Err(invalid("resolved proxy bake resource policy"));
         }
-        Ok(Self { limits })
+        Ok(Self {
+            limits,
+            child_tile_reads: Default::default(),
+        })
+    }
+    /// Child texel tiles parents have read from retained packets so far.
+    #[cfg(test)]
+    pub(crate) fn child_tile_reads(&self) -> u64 {
+        self.child_tile_reads
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
     /// The production policy, resolved once from the actual run before the bake stage:
     /// - memory: half of what the host reports available after the captured state's
     ///   owned scratch (memory-backed), metadata and the stage reserve; a host that cannot
     ///   report its memory gets a fixed 1 GiB, never an unbounded allowance;
     /// - source cache: the source sampler's peak for the largest image (24 bytes per
-    ///   pixel, its encoded bytes and 64 MiB), at most a quarter of the memory;
+    ///   pixel, its encoded bytes and 64 MiB), at most a quarter of the memory, and for
+    ///   the workers' shared cache of decoded images, room for every image's sampling
+    ///   chain (4 bytes per pixel, a third more for its mips), at most an eighth;
     /// - query work: a finite runaway guard of 2^40 index visits per tile;
     /// - page edge: the profile's leaf page edge; eight complete-member density drops.
     pub(crate) fn for_stage(
@@ -88,6 +104,19 @@ impl ProxyTextureBaker {
             .max()
             .unwrap_or(1 << 20)
             .min(memory_bytes / 4);
+        let shared_image_bytes = captured
+            .image_info
+            .iter()
+            .map(|i| {
+                (u64::from(i.width) * u64::from(i.height))
+                    .saturating_mul(4)
+                    .saturating_mul(4)
+                    / 3
+                    + 4096
+            })
+            .fold(0u64, u64::saturating_add)
+            .min(memory_bytes / 8);
+        let child_texel_bytes = super::CHILD_TEXEL_CACHE;
         if memory_bytes < 64 << 20 {
             return Err(resource(
                 "available memory cannot hold the proxy texture bake stage",
@@ -98,6 +127,8 @@ impl ProxyTextureBaker {
             memory_bytes,
             member_bytes: crate::mesh_large::config::TILE_BYTES,
             source_cache_bytes,
+            shared_image_bytes,
+            child_texel_bytes,
             query_work: 1 << 40,
             max_page_edge: match profile {
                 Profile::Fast => 2048,
@@ -146,6 +177,8 @@ impl root::ProxyBaker for ProxyTextureBaker {
         pass.phases
             .begin_bake(levels.values().map(|l| l.len() as u64).sum())?;
         let workers = pass.jobs.min(widest).max(1);
+        // Decoded source images are shared by every worker of every depth.
+        let images = std::sync::Arc::new(SourceImages::new(limits.source_cache_bytes));
         for (depth, firsts) in levels.iter().rev() {
             let started = std::time::Instant::now();
             let retried = run_depth(
@@ -153,10 +186,26 @@ impl root::ProxyBaker for ProxyTextureBaker {
                 workers,
                 limits,
                 pass.check,
+                &|capacity| images.set_capacity(capacity),
                 |limits, check| {
-                    CapturedSource::new(pass.captured, limits.source_cache_bytes, check)
+                    CapturedSource::shared(
+                        pass.captured,
+                        limits.source_cache_bytes,
+                        images.clone(),
+                        check,
+                    )
                 },
-                |source, share, first, check| bake_tile(pass, share, source, first, *depth, check),
+                |source, share, first, check| {
+                    bake_tile(
+                        pass,
+                        share,
+                        source,
+                        first,
+                        *depth,
+                        check,
+                        &self.child_tile_reads,
+                    )
+                },
             )?;
             pass.phases.baked_depth(
                 *depth,
@@ -174,7 +223,7 @@ impl root::ProxyBaker for ProxyTextureBaker {
 pub(super) enum TileOutcome {
     Done,
     /// A resource refusal before anything was committed or released: the tile may run
-    /// again, alone, with the whole allowance.
+    /// again with a larger share of the allowance.
     Retry(JobError),
 }
 
@@ -211,16 +260,20 @@ impl CheckThrottle {
 }
 
 /// Bake the tiles of one depth: first on up to `workers` threads, each with an equal
-/// share of `limits.memory_bytes`; then, one at a time with the whole allowance, every
-/// tile that refused its share. Admission therefore does not depend on the worker
-/// count: a tile that fits the whole allowance succeeds at any `--jobs`. Any other
-/// failure stops the depth; siblings stop at their next cancellation check and the
-/// first real failure is reported. Returns how many tiles were retried alone.
+/// share of `limits.memory_bytes`; then every tile that refused its share runs again on
+/// half as many threads, each share twice as large, and so on until a tile that still
+/// refuses runs alone with the whole allowance. Admission therefore does not depend on
+/// the worker count: a tile that fits the whole allowance succeeds at any `--jobs`, and
+/// tiles too large for the first share still bake in parallel when two or more of them
+/// fit a larger one. Any other failure stops the depth; siblings stop at their next
+/// cancellation check and the first real failure is reported. Returns how many tiles
+/// were retried with a larger share.
 pub(super) fn run_depth<S>(
     firsts: &[u64],
     workers: usize,
     limits: BakeLimits,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    images: &(dyn Fn(u64) + Sync),
     state: impl Fn(BakeLimits, &mut dyn FnMut() -> Result<(), JobError>) -> Result<S, JobError> + Sync,
     bake: impl Fn(
             &mut S,
@@ -230,17 +283,52 @@ pub(super) fn run_depth<S>(
         ) -> Result<TileOutcome, JobError>
         + Sync,
 ) -> Result<u64, JobError> {
+    let mut running = workers.min(firsts.len()).max(1);
+    let mut pending = run_pass(firsts, running, limits, check, images, &state, &bake)?;
+    let retried = pending.len() as u64;
+    while !pending.is_empty() {
+        pending.sort_unstable();
+        running = (running / 2).min(pending.len()).max(1);
+        pending = run_pass(&pending, running, limits, check, images, &state, &bake)?;
+    }
+    Ok(retried)
+}
+
+/// One pass of [`run_depth`] over `firsts` on `running` threads, each with an equal
+/// share of the allowance. Returns the tiles that refused their share; with one thread
+/// (the whole allowance) a refusal is the depth's failure.
+fn run_pass<S>(
+    firsts: &[u64],
+    running: usize,
+    limits: BakeLimits,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    images: &(dyn Fn(u64) + Sync),
+    state: &(impl Fn(BakeLimits, &mut dyn FnMut() -> Result<(), JobError>) -> Result<S, JobError>
+          + Sync),
+    bake: &(impl Fn(
+        &mut S,
+        BakeLimits,
+        u64,
+        &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<TileOutcome, JobError>
+          + Sync),
+) -> Result<Vec<u64>, JobError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    let running = workers.min(firsts.len()).max(1);
-    // The source cache is part of each tile's charge, so it is capped by the worker's
+    // The source cache reservation (a decode peak, and a part of the shared cache of
+    // decoded images) is part of each tile's charge, so it is capped by the worker's
     // share too; otherwise a cache sized for the whole allowance alone could make every
     // tile refuse its share. A smaller cache changes only residency, never results.
     let memory_bytes = limits.memory_bytes / running as u64;
     let share = BakeLimits {
         memory_bytes,
-        source_cache_bytes: limits.source_cache_bytes.min(memory_bytes / 4),
+        source_cache_bytes: limits
+            .source_cache_bytes
+            .saturating_add(limits.shared_image_bytes / running as u64)
+            .min(memory_bytes / 4),
         ..limits
     };
+    // The shared source image cache holds what the running workers reserve for it.
+    images(share.source_cache_bytes.saturating_mul(running as u64));
     let failed = AtomicBool::new(false);
     // Source, colour and child queries check for cancellation at every visited node and
     // candidate, and the run's check takes its shared state lock. Four workers convoyed
@@ -323,24 +411,9 @@ pub(super) fn run_depth<S>(
     {
         return Err(errors.into_iter().nth(e).unwrap());
     }
-    let mut deferred = deferred
+    deferred
         .into_inner()
-        .map_err(|_| invalid("proxy bake retry list poisoned"))?;
-    deferred.sort_unstable();
-    if deferred.is_empty() {
-        return Ok(0);
-    }
-    // Alone, the lock is uncontended but still a sixth of a retried tile's CPU.
-    let mut throttle = CheckThrottle::new();
-    let mut check = || cancelled(&mut throttle);
-    let mut worker = state(limits, &mut check)?;
-    for &first in &deferred {
-        match bake(&mut worker, limits, first, &mut check)? {
-            TileOutcome::Done => {}
-            TileOutcome::Retry(e) => return Err(e),
-        }
-    }
-    Ok(deferred.len() as u64)
+        .map_err(|_| invalid("proxy bake retry list poisoned"))
 }
 
 /// One coarse tile: read the frozen packet and the certified member under exact leases,
@@ -354,13 +427,16 @@ fn bake_tile(
     first: u64,
     depth: u32,
     check: &mut dyn FnMut() -> Result<(), JobError>,
+    reads: &std::sync::atomic::AtomicU64,
 ) -> Result<TileOutcome, JobError> {
     // Nothing is written before the commit's own write: every memory-leased step (the
-    // packet and member reads, the bake, the parent packet's encoding and the commit's
-    // decoded readback) comes first, so a resource refusal anywhere in them may be
-    // retried alone with the whole allowance. Only the scratch writes come after.
+    // packet and member reads, the bake and the commit's decoded readback) comes first,
+    // so a resource refusal anywhere in them may be retried with a larger share. Only
+    // the scratch writes (the member, then this tile's packet for its parent) come after.
     let retryable = |e: JobError| {
         if e.kind() == crate::JobErrorKind::ResourceLimit {
+            pass.phases
+                .refused_tile(first, depth, limits.memory_bytes, e.message())?;
             Ok(TileOutcome::Retry(e))
         } else {
             Err(e)
@@ -393,40 +469,36 @@ fn bake_tile(
             check,
         )?;
         drop(children);
-        let commit_started = std::time::Instant::now();
-        // The parent's packet, encoded in memory before anything is written.
-        let packet = if depth > 0 {
-            Some(child_bridge::encode_packet(
-                &accepted.preencode,
-                &pass.captured.material_classes,
-                core,
-                check,
-            )?)
-        } else {
-            None
-        };
-        Ok((
-            core,
-            frozen,
-            accepted.assembly,
-            packet,
-            accepted.stats,
-            commit_started,
-        ))
+        Ok((core, frozen, accepted, std::time::Instant::now()))
     })();
-    let (core, frozen, assembly, packet, stats, commit_started) = match prepared {
+    let (core, frozen, accepted, commit_started) = match prepared {
         Ok(p) => p,
         Err(e) => return retryable(e),
     };
+    let AcceptedNode {
+        assembly,
+        preencode,
+        stats,
+        ..
+    } = accepted;
     // Its readback runs (and may refuse) before the member is written.
     if let Err(e) = pass.commit(&frozen, assembly, core) {
         return retryable(e);
     }
-    if let Some(bytes) = packet {
-        pass.preencode.write_proxy(first, depth, &bytes)?;
+    // The parent's packet is streamed from the baked appearance after the commit, so
+    // it is never held whole in memory beside it.
+    if depth > 0 {
+        child_bridge::persist_packet(
+            pass.preencode,
+            &preencode,
+            &pass.captured.material_classes,
+            check,
+        )?;
     }
+    drop(preencode);
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
     pass.release(first, depth)?;
+    reads.fetch_add(stats.child_tile_reads, std::sync::atomic::Ordering::Relaxed);
     pass.phases
         .baked_tile(first, depth, &stats, commit_started.elapsed().as_secs_f64())?;
     Ok(TileOutcome::Done)
@@ -538,7 +610,7 @@ fn features(
 pub(super) fn frozen_node(
     frozen: &handoff::FrozenNode,
     original_glb: Vec<u8>,
-    children: &[PreencodeChild],
+    children: &[ChildView],
     memory_bytes: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<FrozenNode, JobError> {
@@ -665,7 +737,7 @@ pub(super) fn bake_one(
     frozen: &handoff::FrozenNode,
     original_glb: Vec<u8>,
     source: &mut CapturedSource<'_>,
-    children: &[PreencodeChild],
+    children: &[ChildView],
     limits: BakeLimits,
     assemble: &mut LeasedAssembler<'_>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
@@ -809,6 +881,8 @@ mod tests {
             memory_bytes,
             member_bytes: 1,
             source_cache_bytes: 1,
+            shared_image_bytes: 0,
+            child_texel_bytes: 256 << 20,
             query_work: 1,
             max_page_edge: 4,
             max_density_drops: 0,
@@ -833,6 +907,7 @@ mod tests {
             workers,
             depth_limits(memory),
             &|| Ok(()),
+            &|_| {},
             |_, _| Ok(()),
             |_, share, first, check| {
                 check()?;
@@ -849,10 +924,15 @@ mod tests {
             },
         )
         .map(|retried| {
-            assert_eq!(
-                retried,
-                log.lock().unwrap().iter().filter(|e| !e.2).count() as u64
-            );
+            // Distinct tiles that refused a share (a tile may refuse more than one).
+            let refused: std::collections::BTreeSet<u64> = log
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|e| !e.2)
+                .map(|e| e.0)
+                .collect();
+            assert_eq!(retried, refused.len() as u64);
         });
         let mut log = log.into_inner().unwrap();
         log.sort_unstable();
@@ -875,14 +955,23 @@ mod tests {
             result.unwrap();
             let done: Vec<u64> = log.iter().filter(|e| e.2).map(|e| e.0).collect();
             assert_eq!(done, tiles, "workers {workers}");
-            // A refused tile is retried alone with the whole allowance.
+            // A refused tile is retried with a larger share and then fits.
             for e in log.iter().filter(|e| !e.2) {
-                assert!(log.contains(&(e.0, 1000, true)), "workers {workers}: {e:?}");
+                assert!(
+                    log.iter().any(|f| f.0 == e.0 && f.1 > e.1 && f.2),
+                    "workers {workers}: {e:?}"
+                );
             }
         }
-        // With eight workers each share is 125 bytes: tiles 3 and 6 are retried.
+        // With eight workers each share is 125 bytes: tiles 3 and 6 are refused, then
+        // both bake together on two workers with 500 bytes each.
         let (_, log) = run(&tiles, 8, 1000, need, None);
         assert!(log.contains(&(3, 125, false)) && log.contains(&(6, 125, false)));
+        assert!(log.contains(&(3, 500, true)) && log.contains(&(6, 500, true)));
+        // A tile that fits only the whole allowance halves its way down to it alone.
+        let (result, log) = run(&tiles, 8, 1000, |f| if f == 3 { 900 } else { 100 }, None);
+        result.unwrap();
+        assert!(log.contains(&(3, 125, false)) && log.contains(&(3, 1000, true)));
     }
 
     #[test]
@@ -913,6 +1002,7 @@ mod tests {
                     Ok(())
                 }
             },
+            &|_| {},
             |_, _| Ok(()),
             |_, _, _, check| {
                 // The first call consults, so the run is not yet cancelled.
@@ -946,6 +1036,7 @@ mod tests {
             4,
             limits,
             &|| Ok(()),
+            &|_| {},
             |share, _| {
                 seen.lock()
                     .unwrap()

@@ -406,10 +406,15 @@ not alter its semantic bytes. They include `requested_jobs`, `capture`,
 `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and
 `archive` (the three middle LOD phases summed over depths). `proxy_bake` holds
 the baked `tiles`, `retried_tiles` (tiles that refused their worker's share of
-the bake memory and were baked again alone, serially), worker seconds per bake step (charts, raster, encode,
-assemble, commit; summed over workers, so they overlap) and the appearance
+the bake memory and were baked again on half as many workers with twice the
+share, down to one worker with the whole allowance; the first refusals each log
+their reason), worker seconds per bake step (charts, raster, encode,
+assemble, commit; summed over workers, so they overlap), the appearance
 fallback counts (`facing_fallback_samples`, `_faces`, `_tiles`;
-`fill_fallback_samples`). Stage objects describe
+`fill_fallback_samples`), the source images decoded (`source_decodes`,
+`source_decode_worker_seconds`; the bake's workers share one byte-bounded cache
+of decoded images) and the child texel tiles parents read from retained child
+packets (`child_tile_reads`). Stage objects describe
 worker admission and owned memory/scratch resources; their declared accounting
 is not an automatically measured RSS guarantee. Absolute scratch paths and
 resource observations are diagnostics, not semantic profile constants.

@@ -10,7 +10,7 @@ use crate::{
 use serde_json::Value;
 use std::io::Write;
 
-const MAGIC: &[u8; 8] = b"H27CHD\x01\0";
+const MAGIC: &[u8; 8] = b"H27CHD\x02\0";
 
 pub(super) fn page_owned_bytes(page: &SignalPage) -> Result<u64, JobError> {
     fn add(total: &mut u64, n: usize, width: usize) -> Result<(), JobError> {
@@ -65,29 +65,12 @@ pub(super) fn page_owned_bytes(page: &SignalPage) -> Result<u64, JobError> {
         .ok_or_else(|| resource("child JSON owner overflow"))
 }
 
-fn resident_bytes(child: &PreencodeChild) -> Result<u64, JobError> {
-    let faces = (child.faces.capacity() as u64)
-        .checked_mul(std::mem::size_of::<ChildFace>() as u64)
-        .ok_or_else(|| resource("child resident face owner overflow"))?;
-    let pages = (child.pages.capacity() as u64)
-        .checked_mul(std::mem::size_of::<SignalPage>() as u64)
-        .ok_or_else(|| resource("child resident page owner overflow"))?;
-    let mut total = (std::mem::size_of::<PreencodeChild>() as u64)
-        .checked_add(faces)
-        .and_then(|n| n.checked_add(pages))
-        .ok_or_else(|| resource("child resident owner overflow"))?;
-    for page in &child.pages {
-        total = total
-            .checked_add(page_owned_bytes(page)?)
-            .ok_or_else(|| resource("child resident owner overflow"))?;
-    }
-    Ok(total)
-}
-
 struct Writer<'c> {
     check: Option<&'c mut dyn FnMut() -> Result<(), JobError>>,
     checkpoint: usize,
     bytes: Option<Vec<u8>>,
+    /// A streaming sink (and its path, for errors) instead of `bytes`.
+    io: Option<(&'c mut dyn Write, &'c std::path::Path)>,
     count: usize,
     limit: u64,
 }
@@ -108,6 +91,10 @@ impl Writer<'_> {
         }
         if let Some(out) = &mut self.bytes {
             out.extend_from_slice(bytes);
+        }
+        if let Some((out, path)) = &mut self.io {
+            out.write_all(bytes)
+                .map_err(|e| JobError::io("write pre-encode store", path, e))?;
         }
         Ok(())
     }
@@ -314,6 +301,7 @@ impl Wire for Value {
             check: None,
             checkpoint: 0,
             bytes: None,
+            io: None,
             count: 0,
             limit: w.limit.min(65535),
         };
@@ -585,91 +573,426 @@ pub(super) fn validate(
     Ok(())
 }
 
-/// `memory` covers the resident child AND additional encoded output bytes.
-/// Other live caller owners remain under the caller aggregate stage lease.
-pub(super) fn encode(
+/// Texels per tile edge in a packet body: a parent reads child texels a tile at a time.
+pub(super) const TILE: u32 = 16;
+/// Wire bytes of one [`TerminalSample`] (the field order of its `Wire` encoding).
+const SAMPLE_WIRE: usize = 8 + 4 * 24 + 4 + 1;
+/// Wire bytes of one body texel: its RGBA, then its terminal sample.
+pub(super) const TEXEL_WIRE: usize = 4 + SAMPLE_WIRE;
+
+/// What a parent reads of one child page besides its texels.
+pub(super) struct PageHead {
+    pub width: u32,
+    pub height: u32,
+    pub slot: TextureSlot,
+    pub sampler: Value,
+    pub material: u32,
+    pub normal_scale: f64,
+    /// Every level's dimensions, the base first and the terminal 1x1 last.
+    pub levels: Vec<[u32; 2]>,
+}
+fields!(
+    PageHead,
+    width,
+    height,
+    slot,
+    sampler,
+    material,
+    normal_scale,
+    levels
+);
+struct Head {
+    node: NodeRecord,
+    texel_size: f64,
+    faces: Vec<ChildFace>,
+    pages: Vec<PageHead>,
+}
+fields!(Head, node, texel_size, faces, pages);
+
+/// The same bytes as `Head::write` of `child`'s head, without building it.
+fn write_head(child: &PreencodeChild, w: &mut Writer<'_>) -> Result<(), JobError> {
+    child.node.write(w)?;
+    child.texel_size.write(w)?;
+    child.faces.write(w)?;
+    child.pages.len().write(w)?;
+    for p in &child.pages {
+        PageHead {
+            width: p.width,
+            height: p.height,
+            slot: p.slot,
+            sampler: p.sampler.clone(),
+            material: p.material,
+            normal_scale: p.normal_scale,
+            levels: p.levels.iter().map(|l| [l.width, l.height]).collect(),
+        }
+        .write(w)?;
+    }
+    Ok(())
+}
+fn head_len(
     child: &PreencodeChild,
-    classes: &MaterialClasses,
-    memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Vec<u8>, JobError> {
-    validate(child, classes, check)?;
-    let memory = memory
-        .checked_sub(resident_bytes(child)?)
-        .ok_or_else(|| resource("child resident plus serialized output lease"))?;
+) -> Result<u64, JobError> {
     let mut count = Writer {
         check: Some(check),
         checkpoint: 0,
         bytes: None,
+        io: None,
         count: 0,
-        limit: memory,
+        limit: u64::MAX,
     };
-    count.put(MAGIC)?;
-    child.write(&mut count)?;
-    let byte_count = count.count;
-    drop(count);
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(byte_count)
-        .map_err(|_| resource("child packet output reserve"))?;
-    let mut out = Writer {
-        check: Some(check),
-        checkpoint: 0,
-        bytes: Some(bytes),
-        count: 0,
-        limit: memory,
-    };
-    out.put(MAGIC)?;
-    child.write(&mut out)?;
-    let bytes = out.bytes.take().unwrap();
-    drop(out);
-    check()?;
-    Ok(bytes)
+    write_head(child, &mut count)?;
+    Ok(count.count as u64)
 }
-pub(super) fn decode(
-    bytes: &[u8],
+fn body_len(mut levels: impl Iterator<Item = [u32; 2]>) -> Result<u64, JobError> {
+    levels.try_fold(0u64, |sum, [w, h]| {
+        (u64::from(w) * u64::from(h))
+            .checked_mul(TEXEL_WIRE as u64)
+            .and_then(|n| sum.checked_add(n))
+            .ok_or_else(|| resource("child packet body length"))
+    })
+}
+/// Tile `(tx, ty)` of a `width` x `height` level: the position of its first texel in
+/// the level's body, and its clipped width and height. Tiles are stored row-major, and
+/// the texels of a tile row-major.
+pub(super) fn tile_span(width: u32, height: u32, tx: u32, ty: u32) -> (u64, u32, u32) {
+    let th = TILE.min(height - ty * TILE);
+    let tw = TILE.min(width - tx * TILE);
+    (
+        u64::from(ty) * u64::from(TILE) * u64::from(width)
+            + u64::from(tx) * u64::from(TILE) * u64::from(th),
+        tw,
+        th,
+    )
+}
+fn put_sample(b: &mut Vec<u8>, s: &TerminalSample) {
+    b.extend_from_slice(&s.source_rank.to_le_bytes());
+    for v in s
+        .barycentric
+        .iter()
+        .chain(&s.centre)
+        .chain(&s.support_min)
+        .chain(&s.support_max)
+    {
+        b.extend_from_slice(&v.to_bits().to_le_bytes());
+    }
+    b.extend_from_slice(&s.weight.to_le_bytes());
+    b.push(u8::from(s.centre_is_centroid));
+}
+fn get_sample(b: &[u8]) -> Result<TerminalSample, JobError> {
+    let u64_at = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let v3 = |o: usize| std::array::from_fn(|a| f64::from_bits(u64_at(o + 8 * a)));
+    Ok(TerminalSample {
+        source_rank: u64_at(0),
+        barycentric: v3(8),
+        centre: v3(32),
+        support_min: v3(56),
+        support_max: v3(80),
+        weight: u32::from_le_bytes(b[104..108].try_into().unwrap()),
+        centre_is_centroid: match b[108] {
+            0 => false,
+            1 => true,
+            _ => return Err(invalid("child packet boolean")),
+        },
+    })
+}
+
+/// The exact byte length of `child`'s packet (a size known before any write).
+pub(super) fn size(
+    child: &PreencodeChild,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<u64, JobError> {
+    let body = body_len(
+        child
+            .pages
+            .iter()
+            .flat_map(|p| p.levels.iter().map(|l| [l.width, l.height])),
+    )?;
+    (16 + head_len(child, check)?)
+        .checked_add(body)
+        .ok_or_else(|| resource("child packet length"))
+}
+
+/// Stream `child`'s packet to `out` (`path` names it in errors) after validating the
+/// whole child; returns the bytes written. The packet holds what a parent samples and
+/// nothing else: the magic, the head length and head (node, density, faces and page
+/// metadata), then each page level's texels, RGBA and terminal sample, in
+/// [`TILE`]-square tiles ([`tile_span`]). Its parent decodes the head and reads texels
+/// a tile at a time ([`open`], [`read_tile`]), so neither side holds it whole.
+pub(super) fn write(
+    child: &PreencodeChild,
+    classes: &MaterialClasses,
+    out: &mut dyn Write,
+    path: &std::path::Path,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<u64, JobError> {
+    validate(child, classes, check)?;
+    let head = head_len(child, check)?;
+    let mut w = Writer {
+        check: Some(&mut *check),
+        checkpoint: 0,
+        bytes: None,
+        io: Some((&mut *out, path)),
+        count: 0,
+        limit: u64::MAX,
+    };
+    w.put(MAGIC)?;
+    head.write(&mut w)?;
+    write_head(child, &mut w)?;
+    if w.count as u64 != 16 + head {
+        return Err(invalid("child packet head length"));
+    }
+    drop(w);
+    let mut total = 16 + head;
+    let mut buf = Vec::with_capacity((TILE * TILE) as usize * TEXEL_WIRE);
+    for page in &child.pages {
+        for level in &page.levels {
+            let (width, height) = (level.width, level.height);
+            for ty in 0..height.div_ceil(TILE) {
+                check()?;
+                for tx in 0..width.div_ceil(TILE) {
+                    let (_, tw, th) = tile_span(width, height, tx, ty);
+                    buf.clear();
+                    for y in ty * TILE..ty * TILE + th {
+                        for x in tx * TILE..tx * TILE + tw {
+                            let i = y as usize * width as usize + x as usize;
+                            buf.extend_from_slice(&level.rgba[i * 4..i * 4 + 4]);
+                            put_sample(&mut buf, &level.samples[i]);
+                        }
+                    }
+                    out.write_all(&buf)
+                        .map_err(|e| JobError::io("write pre-encode store", path, e))?;
+                    total += buf.len() as u64;
+                }
+            }
+        }
+    }
+    Ok(total)
+}
+
+fn read_exact_at(
+    file: &std::fs::File,
+    path: &std::path::Path,
+    mut offset: u64,
+    mut out: &mut [u8],
+) -> Result<(), JobError> {
+    while !out.is_empty() {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, out, offset);
+        #[cfg(windows)]
+        let read = std::os::windows::fs::FileExt::seek_read(file, out, offset);
+        match read {
+            Ok(0) => return Err(invalid("truncated child packet")),
+            Ok(n) => {
+                offset += n as u64;
+                out = &mut out[n..];
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(JobError::io("read pre-encode store", path, e)),
+        }
+    }
+    Ok(())
+}
+
+/// A child packet's decoded head, as its parent holds it while texels are read.
+pub(super) struct Opened {
+    pub node: NodeRecord,
+    pub texel_size: f64,
+    pub faces: Vec<ChildFace>,
+    pub pages: Vec<PageHead>,
+    /// Byte offset in the packet of each page level's body, by page then level.
+    pub offsets: Vec<Vec<u64>>,
+    /// Bytes charged for what stays owned (the decoded head and offsets): the lease
+    /// minus the transient head bytes.
+    pub owned: u64,
+}
+
+/// The head checks of [`validate`] that need no texel: node and density, face geometry,
+/// frames and bindings, and each page's level chain.
+fn validate_head(
+    head: &Head,
+    classes: &MaterialClasses,
+    check: &mut dyn FnMut() -> Result<(), JobError>,
+) -> Result<(), JobError> {
+    let node = &head.node;
+    if node.first >= node.end
+        || node.cell_depth > 21
+        || node.path_len > 21
+        || node.last_octant > 7
+        || !head.texel_size.is_finite()
+        || head.texel_size < 0.
+    {
+        return Err(invalid("child packet node/density"));
+    }
+    for face in &head.faces {
+        check()?;
+        if face.positions.iter().flatten().any(|v| !v.is_finite())
+            || face.frames.iter().any(|f| !frame_ok(*f))
+            || (face.bindings[slot_index(TextureSlot::Normal)].is_some()
+                && face.frames.iter().any(|f| !frame_invertible(*f)))
+        {
+            return Err(invalid("child packet decoded geometry/frame"));
+        }
+        for (slot, binding) in face.bindings.iter().enumerate() {
+            if let Some(binding) = binding {
+                let page = head
+                    .pages
+                    .get(binding.page)
+                    .ok_or_else(|| invalid("child packet binding page"))?;
+                if slot_index(page.slot) != slot
+                    || page.material != classes.of(face.material)
+                    || binding.uv.iter().flatten().any(|v| !v.is_finite())
+                {
+                    return Err(invalid("child packet slot/material/UV binding"));
+                }
+            }
+        }
+    }
+    for page in &head.pages {
+        check()?;
+        if page.width == 0
+            || page.height == 0
+            || !page.normal_scale.is_finite()
+            || page.levels.first() != Some(&[page.width, page.height])
+            || page.levels.last() != Some(&[1, 1])
+        {
+            return Err(invalid("child page base shape/scale"));
+        }
+        let mut dims = [page.width, page.height];
+        for (i, level) in page.levels.iter().enumerate() {
+            if *level != dims || (*level == [1, 1] && i + 1 != page.levels.len()) {
+                return Err(invalid("child mip semantic shape"));
+            }
+            dims = [(dims[0] / 2).max(1), (dims[1] / 2).max(1)];
+        }
+    }
+    Ok(())
+}
+
+/// Decode the head of the packet in `file` within `memory` bytes (the transient head
+/// bytes and every decoded owner are charged before allocation), validate it, and check
+/// the body has exactly the length the head implies. No texel is read.
+pub(super) fn open(
+    file: &std::fs::File,
+    path: &std::path::Path,
     classes: &MaterialClasses,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<PreencodeChild, JobError> {
-    decode_owned(bytes, classes, memory, check).map(|(child, _)| child)
-}
-/// [`decode`], also returning the bytes charged for the decoded child alone (the lease
-/// minus the encoded input), which stay owned after `bytes` is dropped.
-pub(super) fn decode_owned(
-    bytes: &[u8],
-    classes: &MaterialClasses,
-    memory: u64,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(PreencodeChild, u64), JobError> {
+) -> Result<Opened, JobError> {
     check()?;
-    let mut r = Reader {
-        check,
-        checkpoint: 0,
-        bytes,
-        offset: 0,
-        used: 0,
-        limit: memory,
-    };
-    r.charge(bytes.len() as u64)?;
-    r.charge(std::mem::size_of::<PreencodeChild>() as u64)?;
-    if r.take(8)? != MAGIC {
+    let len = file
+        .metadata()
+        .map_err(|e| JobError::io("inspect pre-encode store", path, e))?
+        .len();
+    if len < 16 {
+        return Err(invalid("truncated child packet"));
+    }
+    let mut fixed = [0u8; 16];
+    read_exact_at(file, path, 0, &mut fixed)?;
+    if &fixed[..8] != MAGIC {
         return Err(invalid("child packet magic"));
     }
-    let child = PreencodeChild::read(&mut r)?;
-    if r.offset != bytes.len() {
-        return Err(invalid("child packet trailing bytes"));
+    let head_len = u64::from_le_bytes(fixed[8..].try_into().unwrap());
+    if head_len > len - 16 {
+        return Err(invalid("truncated child packet"));
     }
-    let owned = r.used - bytes.len() as u64;
-    validate(&child, classes, check)?;
-    Ok((child, owned))
+    if head_len > memory {
+        return Err(resource("child packet decoded ownership lease"));
+    }
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(head_len as usize)
+        .map_err(|_| resource("child packet head reserve"))?;
+    bytes.resize(head_len as usize, 0);
+    for (i, chunk) in bytes.chunks_mut(1 << 20).enumerate() {
+        check()?;
+        read_exact_at(file, path, 16 + (i as u64) * (1 << 20), chunk)?;
+    }
+    let (head, owned) = {
+        let mut r = Reader {
+            check: &mut *check,
+            checkpoint: 0,
+            bytes: &bytes,
+            offset: 0,
+            used: 0,
+            limit: memory,
+        };
+        r.charge(head_len)?;
+        r.charge(std::mem::size_of::<Opened>() as u64)?;
+        let head = Head::read(&mut r)?;
+        if r.offset != bytes.len() {
+            return Err(invalid("child packet trailing head bytes"));
+        }
+        let levels: u64 = head.pages.iter().map(|p| p.levels.len() as u64).sum();
+        r.charge(levels * 8 + (head.pages.len() as u64) * std::mem::size_of::<Vec<u64>>() as u64)?;
+        let owned = r.used - head_len;
+        (head, owned)
+    };
+    drop(bytes);
+    validate_head(&head, classes, check)?;
+    let mut at = 16 + head_len;
+    let mut offsets = Vec::with_capacity(head.pages.len());
+    for page in &head.pages {
+        let mut levels = Vec::with_capacity(page.levels.len());
+        for &level in &page.levels {
+            levels.push(at);
+            at = at
+                .checked_add(body_len(std::iter::once(level))?)
+                .ok_or_else(|| resource("child packet body length"))?;
+        }
+        offsets.push(levels);
+    }
+    if at != len {
+        return Err(invalid("child packet body length differs from its head"));
+    }
+    Ok(Opened {
+        node: head.node,
+        texel_size: head.texel_size,
+        faces: head.faces,
+        pages: head.pages,
+        offsets,
+        owned,
+    })
+}
+
+/// Read tile `(tx, ty)` of a `level` (`[width, height]`) whose body starts at byte
+/// `offset` of `file`: its RGBA into `rgba` and its terminal samples into `samples`
+/// (row-major inside the tile; `buf` is reused wire space). Every sample must name a
+/// source rank of `node` (or be the empty sample), as [`validate`] requires.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn read_tile(
+    file: &std::fs::File,
+    path: &std::path::Path,
+    node: &NodeRecord,
+    level: [u32; 2],
+    offset: u64,
+    tile: [u32; 2],
+    buf: &mut Vec<u8>,
+    rgba: &mut [u8],
+    samples: &mut Vec<TerminalSample>,
+) -> Result<(), JobError> {
+    let (first, tw, th) = tile_span(level[0], level[1], tile[0], tile[1]);
+    let n = (tw * th) as usize;
+    buf.resize(n * TEXEL_WIRE, 0);
+    read_exact_at(file, path, offset + first * TEXEL_WIRE as u64, buf)?;
+    samples.clear();
+    for (i, texel) in buf.as_chunks::<TEXEL_WIRE>().0.iter().enumerate() {
+        rgba[i * 4..i * 4 + 4].copy_from_slice(&texel[..4]);
+        let s = get_sample(&texel[4..])?;
+        if !sample_ok(&s, node) {
+            return Err(invalid("child terminal source witness"));
+        }
+        samples.push(s);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::mesh_large::records::{Bounds, NodeKind};
-    fn child() -> PreencodeChild {
+    use std::path::Path;
+    pub(in crate::mesh_large::bake) fn child() -> PreencodeChild {
         PreencodeChild {
             node: NodeRecord {
                 cell_depth: 0,
@@ -692,53 +1015,218 @@ mod tests {
             pages: Vec::new(),
         }
     }
+    fn try_encode(child: &PreencodeChild) -> Result<Vec<u8>, JobError> {
+        let mut bytes = Vec::new();
+        let n = write(
+            child,
+            &MaterialClasses::EMPTY,
+            &mut bytes,
+            Path::new("packet"),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(n, bytes.len() as u64);
+        assert_eq!(size(child, &mut || Ok(())).unwrap(), n);
+        Ok(bytes)
+    }
+    pub(in crate::mesh_large::bake) fn encode(child: &PreencodeChild) -> Vec<u8> {
+        try_encode(child).unwrap()
+    }
+    /// The packet `bytes` in a file of its own.
+    pub(in crate::mesh_large::bake) fn file(
+        bytes: &[u8],
+    ) -> (tempfile::TempDir, std::path::PathBuf, std::fs::File) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("child.pre");
+        std::fs::write(&path, bytes).unwrap();
+        let file = std::fs::File::open(&path).unwrap();
+        (dir, path, file)
+    }
+    fn open_bytes(bytes: &[u8], memory: u64) -> Result<Opened, JobError> {
+        let (_dir, path, file) = file(bytes);
+        open(
+            &file,
+            &path,
+            &MaterialClasses::EMPTY,
+            memory,
+            &mut || Ok(()),
+        )
+    }
+    /// A valid `width` x `height` page with every level down to 1x1, whose texels are
+    /// distinct (RGBA and terminal samples derived from `seed`, level and position).
+    pub(in crate::mesh_large::bake) fn page(
+        width: u32,
+        height: u32,
+        slot: TextureSlot,
+        seed: u64,
+    ) -> SignalPage {
+        let frame = Frame {
+            tangent: [1., 0., 0.],
+            bitangent: [0., 1., 0.],
+            normal: [0., 0., 1.],
+        };
+        let mut levels = Vec::new();
+        let (mut w, mut h) = (width, height);
+        loop {
+            let n = (w * h) as usize;
+            let mut rgba = Vec::with_capacity(n * 4);
+            let mut samples = Vec::with_capacity(n);
+            for i in 0..n as u64 {
+                let k = seed
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                    .wrapping_add((levels.len() as u64) << 40 | i);
+                rgba.extend_from_slice(&k.to_le_bytes()[..4]);
+                let b = (k % 1000) as f64 / 1000.;
+                samples.push(TerminalSample {
+                    source_rank: 4,
+                    barycentric: [b, 1. - b, 0.],
+                    centre: [i as f64, -(levels.len() as f64), b],
+                    support_min: [-1., -1., -(k as f64)],
+                    support_max: [1., 1., k as f64],
+                    weight: (k % 7) as u32,
+                    centre_is_centroid: k.is_multiple_of(2),
+                });
+            }
+            levels.push(SignalLevel {
+                width: w,
+                height: h,
+                rgba,
+                support: vec![1; n],
+                frames: vec![frame; n],
+                samples,
+                world_normals: if slot == TextureSlot::Normal {
+                    vec![[0., 0., 1.]; n]
+                } else {
+                    Vec::new()
+                },
+            });
+            if (w, h) == (1, 1) {
+                break;
+            }
+            (w, h) = ((w / 2).max(1), (h / 2).max(1));
+        }
+        SignalPage {
+            width,
+            height,
+            rgba: levels[0].rgba.clone(),
+            support: levels[0].support.clone(),
+            slot,
+            samples: levels[0].samples.clone(),
+            levels,
+            sampler: serde_json::json!({"minFilter":9987,"magFilter":9729,"wrapS":33071,"wrapT":33071}),
+            material: 9,
+            receipt: serde_json::json!({"fixture":seed}),
+            normal_samples: Vec::new(),
+            normal_scale: 1.,
+        }
+    }
+    fn same(a: &TerminalSample, b: &TerminalSample) -> bool {
+        sample_equal(a, b)
+    }
     #[test]
     fn child_packet_exact_bits_determinism_and_bounded_counts() {
         let original = child();
-        let bytes = encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
+        let bytes = encode(&original);
+        assert_eq!(bytes, encode(&original));
+        let opened = open_bytes(&bytes, 4096).unwrap();
+        assert_eq!(opened.texel_size.to_bits(), original.texel_size.to_bits());
+        assert_eq!(opened.node, original.node);
         assert_eq!(
-            bytes,
-            encode(&original, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap()
-        );
-        let decoded = decode(&bytes, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
-        assert_eq!(decoded.texel_size.to_bits(), original.texel_size.to_bits());
-        assert_eq!(decoded.node, original.node);
-        assert!(decode(
-            &bytes,
-            &MaterialClasses::EMPTY,
-            bytes.len() as u64,
-            &mut || Ok(())
-        )
-        .is_err());
-        let mut corrupt = bytes.clone();
-        let faces = 8 + NodeRecord::SIZE + 8;
-        corrupt[faces..faces + 8].copy_from_slice(&u64::MAX.to_le_bytes());
-        assert!(decode(&corrupt, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).is_err());
-        let mut trailing = bytes;
-        trailing.push(0);
-        assert!(decode(&trailing, &MaterialClasses::EMPTY, 4096, &mut || Ok(())).is_err());
-    }
-
-    #[test]
-    fn decoded_owner_is_exactly_the_lease_beyond_the_encoded_bytes() {
-        let bytes = encode(&child(), &MaterialClasses::EMPTY, 4096, &mut || Ok(())).unwrap();
-        let (_, owned) =
-            decode_owned(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
-        assert!(owned >= std::mem::size_of::<PreencodeChild>() as u64);
-        let exact = bytes.len() as u64 + owned;
-        assert_eq!(
-            decode_owned(&bytes, &MaterialClasses::EMPTY, exact, &mut || Ok(()))
-                .unwrap()
-                .1,
-            owned
-        );
-        assert_eq!(
-            decode(&bytes, &MaterialClasses::EMPTY, exact - 1, &mut || Ok(()))
+            open_bytes(&bytes, bytes.len() as u64 - 16)
                 .err()
                 .unwrap()
                 .kind(),
             crate::JobErrorKind::ResourceLimit
         );
+        let mut corrupt = bytes.clone();
+        let faces = 16 + NodeRecord::SIZE + 8;
+        corrupt[faces..faces + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(open_bytes(&corrupt, 4096).is_err());
+        let mut trailing = bytes.clone();
+        trailing.push(0);
+        assert!(open_bytes(&trailing, 4096).is_err());
+        let mut short = bytes;
+        short.pop();
+        assert!(open_bytes(&short, 4096).is_err());
+    }
+
+    #[test]
+    fn opened_owner_is_exactly_the_lease_beyond_the_head_bytes() {
+        let mut c = child();
+        c.pages.push(page(5, 3, TextureSlot::BaseColor, 1));
+        let bytes = encode(&c);
+        let head = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+        let owned = open_bytes(&bytes, 1 << 20).unwrap().owned;
+        assert!(owned >= std::mem::size_of::<Opened>() as u64);
+        assert_eq!(open_bytes(&bytes, head + owned).unwrap().owned, owned);
+        assert_eq!(
+            open_bytes(&bytes, head + owned - 1).err().unwrap().kind(),
+            crate::JobErrorKind::ResourceLimit
+        );
+    }
+
+    #[test]
+    fn tiled_body_returns_every_texel_of_every_level_exactly() {
+        let mut c = child();
+        // Edges that are and are not tile multiples, and a tall thin page.
+        for (i, (w, h)) in [(37u32, 21u32), (32, 16), (3, 70)].into_iter().enumerate() {
+            c.pages.push(page(w, h, TextureSlot::BaseColor, i as u64));
+        }
+        let bytes = encode(&c);
+        let (_dir, path, file) = file(&bytes);
+        let opened = open(&file, &path, &MaterialClasses::EMPTY, 1 << 20, &mut || {
+            Ok(())
+        })
+        .unwrap();
+        let (mut buf, mut rgba, mut samples) = (Vec::new(), vec![0; 4 * 256], Vec::new());
+        for (p, page) in c.pages.iter().enumerate() {
+            assert_eq!(opened.pages[p].levels.len(), page.levels.len());
+            for (l, level) in page.levels.iter().enumerate() {
+                let dims = [level.width, level.height];
+                assert_eq!(opened.pages[p].levels[l], dims);
+                for ty in 0..level.height.div_ceil(TILE) {
+                    for tx in 0..level.width.div_ceil(TILE) {
+                        read_tile(
+                            &file,
+                            &path,
+                            &opened.node,
+                            dims,
+                            opened.offsets[p][l],
+                            [tx, ty],
+                            &mut buf,
+                            &mut rgba,
+                            &mut samples,
+                        )
+                        .unwrap();
+                        let (_, tw, th) = tile_span(level.width, level.height, tx, ty);
+                        assert_eq!(samples.len(), (tw * th) as usize);
+                        for y in 0..th {
+                            for x in 0..tw {
+                                let j = (y * tw + x) as usize;
+                                let i = ((ty * TILE + y) * level.width + tx * TILE + x) as usize;
+                                assert_eq!(rgba[j * 4..j * 4 + 4], level.rgba[i * 4..i * 4 + 4]);
+                                assert!(same(&samples[j], &level.samples[i]));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // A sample naming a rank outside the child is refused when its tile is read.
+        let mut node = opened.node;
+        node.first = 5;
+        node.end = 6;
+        assert!(read_tile(
+            &file,
+            &path,
+            &node,
+            [18, 10],
+            opened.offsets[0][1],
+            [0, 0],
+            &mut buf,
+            &mut rgba,
+            &mut samples
+        )
+        .is_err());
     }
 
     #[test]
@@ -785,35 +1273,51 @@ mod tests {
                 })
             }),
         });
-        let bytes = encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
-        let decoded = decode(&bytes, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap();
+        let bytes = encode(&original);
+        let (_dir, path, file) = file(&bytes);
+        let opened = open(&file, &path, &MaterialClasses::EMPTY, 1 << 20, &mut || {
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(
-            bytes,
-            encode(&decoded, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).unwrap()
-        );
-        assert_eq!(
-            decoded.faces[0].positions[0][0].to_bits(),
+            opened.faces[0].positions[0][0].to_bits(),
             (-0.0f32).to_bits()
         );
-        assert_eq!(decoded.pages[2].normal_samples[0].chart, 17);
-        assert_eq!(decoded.pages[4].samples[0].source_rank, 4);
+        assert_eq!(opened.faces[0].source.instance, u64::from(u32::MAX) + 1);
+        assert_eq!(opened.faces[0].bindings[4].unwrap().page, 4);
+        assert_eq!(opened.pages[2].slot, TextureSlot::Normal);
+        assert_eq!(opened.pages[3].sampler["minFilter"], 9728);
+        let (mut buf, mut rgba, mut samples) = (Vec::new(), vec![0; 4 * 256], Vec::new());
+        read_tile(
+            &file,
+            &path,
+            &opened.node,
+            [1, 1],
+            opened.offsets[4][0],
+            [0, 0],
+            &mut buf,
+            &mut rgba,
+            &mut samples,
+        )
+        .unwrap();
+        assert_eq!(rgba[..4], [129, 87, 255, 213]);
+        assert!(same(&samples[0], &sample));
+        assert_eq!(samples[0].centre[1].to_bits(), (-0.0f64).to_bits());
         original.faces[0].frames[0].tangent = [0.6, 0., 0.8];
-        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_ok());
+        assert!(try_encode(&original).is_ok());
         original.faces[0].frames[0].tangent = [2., 0., 0.];
-        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
+        assert!(try_encode(&original).is_err());
         original.faces[0].frames[0].tangent = [0., 0., 1.];
-        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
+        assert!(try_encode(&original).is_err());
         original.faces[0].frames[0] = frame;
-        original.pages[0].receipt = Value::String("x".repeat(65536));
+        original.pages[0].sampler = Value::String("x".repeat(65536));
         assert_eq!(
-            encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(()))
-                .err()
-                .unwrap()
-                .kind(),
+            try_encode(&original).err().unwrap().kind(),
             crate::JobErrorKind::ResourceLimit
         );
-        original.pages[0].receipt = serde_json::json!({"immutable":18446744073709551615u64});
+        original.pages[0].sampler =
+            serde_json::json!({"minFilter":9728,"magFilter":9728,"wrapS":33071,"wrapT":33071});
         original.pages[0].samples[0].barycentric = [0.5, 0.25, 0.25];
-        assert!(encode(&original, &MaterialClasses::EMPTY, 1 << 20, &mut || Ok(())).is_err());
+        assert!(try_encode(&original).is_err());
     }
 }

@@ -77,8 +77,9 @@ impl PhaseSeconds {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ProxyBakeDiagnostics {
     pub tiles: u64,
-    /// Tiles that refused their worker's share of the bake memory and were baked again
-    /// alone, after their depth, with the whole allowance (serial time).
+    /// Tiles that refused their worker's share of the bake memory and were baked again,
+    /// after their depth's first pass, on fewer workers with larger shares (down to one
+    /// worker with the whole allowance).
     pub retried_tiles: u64,
     pub charts_worker_seconds: f64,
     pub raster_worker_seconds: f64,
@@ -94,10 +95,18 @@ pub struct ProxyBakeDiagnostics {
     pub facing_fallback_tiles: u64,
     /// Fill texels beyond their certified facing bound (the fill fallback).
     pub fill_fallback_samples: u64,
+    /// Source images decoded (with their sampling mip chain) by the bake, over every
+    /// worker, and the worker seconds those decodes took.
+    pub source_decodes: u64,
+    pub source_decode_worker_seconds: f64,
+    /// Child texel tiles read from retained packets by parent bakes.
+    pub child_tile_reads: u64,
 }
 
 /// Tiles with facing-fallback faces that get a log line of their own.
 const FALLBACK_TILE_LINES: u64 = 16;
+/// Tiles that refused their worker's memory share and get a log line of their own.
+const REFUSED_TILE_LINES: u64 = 32;
 
 type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 
@@ -105,6 +114,7 @@ struct State {
     seconds: PhaseSeconds,
     bake: ProxyBakeDiagnostics,
     bake_total: u64,
+    refused_lines: u64,
 }
 
 /// The run's phase reporter. Calls may come from worker threads; events are emitted
@@ -130,6 +140,7 @@ impl<'a> Phases<'a> {
                 seconds: PhaseSeconds::default(),
                 bake: ProxyBakeDiagnostics::default(),
                 bake_total: 0,
+                refused_lines: 0,
             }),
         }
     }
@@ -231,6 +242,9 @@ impl<'a> Phases<'a> {
         b.facing_fallback_faces += stats.facing_fallback_faces;
         b.facing_fallback_tiles += u64::from(stats.facing_fallback_faces > 0);
         b.fill_fallback_samples += stats.fill_fallback_samples;
+        b.source_decodes += stats.source_decodes;
+        b.source_decode_worker_seconds += stats.source_decode_seconds;
+        b.child_tile_reads += stats.child_tile_reads;
         if stats.facing_fallback_faces > 0 {
             let n = b.facing_fallback_tiles;
             if n <= FALLBACK_TILE_LINES {
@@ -249,13 +263,36 @@ impl<'a> Phases<'a> {
         let (done, total) = (state.bake.tiles, state.bake_total);
         self.progress_locked(Phase::ProxyBake, done, Some(total.max(done)))
     }
+    /// A tile refused the memory share it was baked with (`share` bytes) and will run
+    /// again with more; the first `REFUSED_TILE_LINES` such refusals get a line each.
+    pub(crate) fn refused_tile(
+        &self,
+        first: u64,
+        depth: u32,
+        share: u64,
+        reason: &str,
+    ) -> Result<(), JobError> {
+        let n = {
+            let mut state = self.lock();
+            state.refused_lines += 1;
+            state.refused_lines
+        };
+        if n > REFUSED_TILE_LINES {
+            return Ok(());
+        }
+        self.note(&format!(
+            "mesh proxy bake tile f{first}-d{depth}: refused a {:.3} GiB share: {reason}",
+            share as f64 / f64::from(1u32 << 30)
+        ))
+    }
     /// The bake totals as one log line.
     pub(crate) fn bake_summary(&self) -> Result<(), JobError> {
         let b = self.bake();
         self.note(&format!(
-            "mesh proxy bake: {} tiles ({} retried alone); worker seconds charts {:.3}, \
+            "mesh proxy bake: {} tiles ({} retried with a larger share); worker seconds charts {:.3}, \
              raster {:.3}, encode {:.3}, assemble {:.3}, commit {:.3}; facing fallback {} \
-             samples on {} faces in {} tiles; fill fallback {} samples",
+             samples on {} faces in {} tiles; fill fallback {} samples; {} source image \
+             decodes in {:.3} worker seconds; {} child texel tiles read",
             b.tiles,
             b.retried_tiles,
             b.charts_worker_seconds,
@@ -266,10 +303,14 @@ impl<'a> Phases<'a> {
             b.facing_fallback_samples,
             b.facing_fallback_faces,
             b.facing_fallback_tiles,
-            b.fill_fallback_samples
+            b.fill_fallback_samples,
+            b.source_decodes,
+            b.source_decode_worker_seconds,
+            b.child_tile_reads
         ))
     }
-    /// One finished bake depth: its tiles, how many were retried alone, wall seconds.
+    /// One finished bake depth: its tiles, how many were retried with a larger share,
+    /// and its wall seconds.
     pub(crate) fn baked_depth(
         &self,
         depth: u32,
@@ -286,9 +327,9 @@ impl<'a> Phases<'a> {
             )
         };
         self.note(&format!(
-            "mesh proxy bake depth {depth}: {tiles} tiles ({retried} retried alone with the \
-             whole allowance) in {seconds:.3} s (run elapsed {:.3} s); facing fallback so far \
-             on {faces} faces in {fallback_tiles} tiles",
+            "mesh proxy bake depth {depth}: {tiles} tiles ({retried} retried with a larger \
+             share) in {seconds:.3} s (run elapsed {:.3} s); facing fallback so far on {faces} \
+             faces in {fallback_tiles} tiles",
             self.elapsed()
         ))
     }
@@ -368,12 +409,11 @@ mod tests {
         assert_eq!(bake.commit_worker_seconds, 0.5);
         assert_eq!(bake.retried_tiles, 1);
         assert!(events.iter().any(|e| e
-            .starts_with("mesh proxy bake depth 7: 2 tiles (1 retried alone")
+            .starts_with("mesh proxy bake depth 7: 2 tiles (1 retried with a larger share")
             && e.ends_with("facing fallback so far on 2 faces in 1 tiles")));
-        assert!(events.iter().any(
-            |e| e.starts_with("mesh proxy bake: 2 tiles (1 retried alone)")
-                && e.contains("facing fallback 7 samples on 2 faces in 1 tiles")
-        ));
+        assert!(events.iter().any(|e| e
+            .starts_with("mesh proxy bake: 2 tiles (1 retried with a larger share)")
+            && e.contains("facing fallback 7 samples on 2 faces in 1 tiles")));
         // A silent reporter still records.
         let silent = Phases::silent();
         silent.finished(Phase::Archive, 3.).unwrap();

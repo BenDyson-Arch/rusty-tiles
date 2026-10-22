@@ -362,11 +362,158 @@ pub(super) struct Witness {
     /// of orientation.
     pub facing_fallback: bool,
 }
-struct Cache {
-    image: usize,
-    class: mips::Class,
+/// One decoded source image (with its sampling mip chain) in a [`SourceImages`] cache.
+/// Its bytes count against the cache from its decode until its last holder drops it.
+pub(super) struct CachedImage {
     chain: mips::Chain,
-    sampler: crops::SourceSampler,
+    bytes: u64,
+    live: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+impl Drop for CachedImage {
+    fn drop(&mut self) {
+        self.live
+            .fetch_sub(self.bytes, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+type ImageKey = (usize, mips::Class);
+struct ImageEntry {
+    image: std::sync::Arc<CachedImage>,
+    last: u64,
+}
+struct ImageState {
+    capacity: u64,
+    entries: std::collections::HashMap<ImageKey, ImageEntry>,
+    tick: u64,
+    /// Decode peaks reserved by workers decoding now.
+    reserved: u64,
+}
+impl ImageState {
+    /// Drop least recently used entries (never `keep`) while `live + extra` exceeds the
+    /// capacity. An entry a worker still holds stays counted until that worker drops it.
+    fn evict(&mut self, live: &std::sync::atomic::AtomicU64, extra: u64, keep: Option<ImageKey>) {
+        let over = |state: &Self| {
+            live.load(std::sync::atomic::Ordering::Relaxed) + state.reserved + extra
+                > state.capacity
+        };
+        while over(self) {
+            let Some(oldest) = self
+                .entries
+                .iter()
+                .filter(|(k, _)| Some(**k) != keep)
+                .min_by_key(|(_, e)| e.last)
+                .map(|(k, _)| *k)
+            else {
+                return;
+            };
+            self.entries.remove(&oldest);
+        }
+    }
+}
+/// The decoded source images of a bake, shared by its workers: a least recently used
+/// cache of decoded images and their sampling mip chains, bounded by bytes.
+///
+/// Each worker reserves `cache_limit` bytes of the bake lease for source images (its
+/// tile charge), and the cache's capacity is the sum of the reservations of the workers
+/// running. A worker holds at most one image outside the cache and drops it before it
+/// decodes another, and every image's decode peak is within its worker's reservation,
+/// so once the unheld entries are evicted, every worker's held image or decode peak
+/// fits its own reservation. Which images are resident never changes a sample.
+pub(crate) struct SourceImages {
+    state: std::sync::Mutex<ImageState>,
+    /// Bytes of decoded images alive, cached or held.
+    live: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Images decoded, and the seconds they took (diagnostics).
+    decodes: std::sync::atomic::AtomicU64,
+}
+impl SourceImages {
+    pub(crate) fn new(capacity: u64) -> Self {
+        Self {
+            state: std::sync::Mutex::new(ImageState {
+                capacity,
+                entries: Default::default(),
+                tick: 0,
+                reserved: 0,
+            }),
+            live: Default::default(),
+            decodes: Default::default(),
+        }
+    }
+    fn lock(&self) -> std::sync::MutexGuard<'_, ImageState> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    /// Set the capacity (the reservations of the workers about to run), evicting least
+    /// recently used images down to it.
+    pub(crate) fn set_capacity(&self, capacity: u64) {
+        let mut state = self.lock();
+        state.capacity = capacity;
+        state.evict(&self.live, 0, None);
+    }
+    /// Bytes of decoded images alive now.
+    #[cfg(test)]
+    pub(crate) fn live_bytes(&self) -> u64 {
+        self.live.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    /// Images decoded so far.
+    pub(crate) fn decodes(&self) -> u64 {
+        self.decodes.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    /// The cached image `key`, else `decode` it (outside the lock) within `peak`
+    /// reserved bytes and cache it. Returns the image and whether it was decoded now.
+    fn get(
+        &self,
+        key: ImageKey,
+        peak: u64,
+        decode: impl FnOnce() -> Result<mips::Chain, JobError>,
+    ) -> Result<(std::sync::Arc<CachedImage>, bool), JobError> {
+        {
+            let mut state = self.lock();
+            state.tick += 1;
+            let tick = state.tick;
+            if let Some(e) = state.entries.get_mut(&key) {
+                e.last = tick;
+                return Ok((e.image.clone(), false));
+            }
+            state.evict(&self.live, peak, None);
+            state.reserved += peak;
+        }
+        let decoded = decode();
+        let mut state = self.lock();
+        state.reserved -= peak;
+        let chain = decoded?;
+        self.decodes
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let bytes = chain
+            .levels
+            .iter()
+            .map(|l| l.rgba.capacity() as u64)
+            .sum::<u64>()
+            .max(chain.charged_bytes as u64);
+        self.live
+            .fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+        let image = std::sync::Arc::new(CachedImage {
+            chain,
+            bytes,
+            live: self.live.clone(),
+        });
+        state.tick += 1;
+        let tick = state.tick;
+        // A sibling may have decoded the same image meanwhile: keep the cached one.
+        let image = match state.entries.entry(key) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                e.get_mut().last = tick;
+                e.get().image.clone()
+            }
+            std::collections::hash_map::Entry::Vacant(e) => e
+                .insert(ImageEntry {
+                    image: image.clone(),
+                    last: tick,
+                })
+                .image
+                .clone(),
+        };
+        state.evict(&self.live, 0, Some(key));
+        Ok((image, true))
+    }
 }
 pub(crate) struct CapturedSource<'a> {
     pub(super) captured: &'a FullCaptured,
@@ -395,12 +542,34 @@ pub(crate) struct CapturedSource<'a> {
     work: Cell<u64>,
     limit: u64,
     cache_limit: u64,
-    cache: Option<Cache>,
+    /// The bake's decoded source images, shared by its workers.
+    images: std::sync::Arc<SourceImages>,
+    /// The image this worker sampled last (it holds at most this one outside the cache).
+    current: Option<(ImageKey, std::sync::Arc<CachedImage>)>,
+    /// Images this worker decoded so far, and the seconds they took (diagnostics).
+    decodes: u64,
+    decode_seconds: f64,
 }
 impl<'a> CapturedSource<'a> {
+    /// A source with a decoded-image cache of its own, of `cache_limit` bytes.
     pub(crate) fn new(
         captured: &'a FullCaptured,
         cache_limit: u64,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<Self, JobError> {
+        Self::shared(
+            captured,
+            cache_limit,
+            std::sync::Arc::new(SourceImages::new(cache_limit)),
+            check,
+        )
+    }
+    /// A worker's source: `cache_limit` bytes of the lease are its reservation in the
+    /// bake's shared decoded-image cache `images`.
+    pub(crate) fn shared(
+        captured: &'a FullCaptured,
+        cache_limit: u64,
+        images: std::sync::Arc<SourceImages>,
         check: &mut dyn FnMut() -> Result<(), JobError>,
     ) -> Result<Self, JobError> {
         let mut writer = SequenceWriter::new(&captured.scratch, "proxy-source-index", 4096)?;
@@ -491,7 +660,10 @@ impl<'a> CapturedSource<'a> {
             work: Cell::new(0),
             limit: 0,
             cache_limit,
-            cache: None,
+            images,
+            current: None,
+            decodes: 0,
+            decode_seconds: 0.,
         })
     }
     pub(super) fn begin(&mut self, node: NodeRecord, limit: u64) -> Result<(), JobError> {
@@ -1191,12 +1363,10 @@ impl<'a> CapturedSource<'a> {
             TextureSlot::Normal => mips::Class::Data,
             _ => mips::Class::Data,
         };
-        if self
-            .cache
-            .as_ref()
-            .is_none_or(|c| c.image != image || c.class != class)
-        {
-            self.cache = None;
+        let key = (image, class);
+        if self.current.as_ref().is_none_or(|(k, _)| *k != key) {
+            // Hold no image while fetching another (see [`SourceImages`]).
+            self.current = None;
             let snapshot = self
                 .captured
                 .images
@@ -1215,34 +1385,38 @@ impl<'a> CapturedSource<'a> {
                 .and_then(|n| n.checked_add(snapshot.identity.encoded_bytes))
                 .and_then(|n| n.checked_add(64 << 20))
                 .ok_or_else(|| resource("source decode charge"))?;
+            // Every image switch is admitted against this worker's reservation, cached
+            // or not, so admission does not depend on what is resident.
             if peak > self.cache_limit {
                 return Err(resource("source image decode/cache budget"));
             }
-            let encoded = snapshot.reconstruct(check)?;
-            let (_, rgba) = source::decode_image_admitted(
-                &encoded,
-                snapshot.identity.mime.as_deref(),
-                source::DecodeAdmission::LARGE_MESH,
-                &mut || check(),
-            )?;
-            drop(encoded);
-            let chain = mips::build(
-                info.width,
-                info.height,
-                rgba,
-                class,
-                None,
-                usize::try_from(self.cache_limit).map_err(|_| resource("source cache budget"))?,
-            )?;
-            self.cache = Some(Cache {
-                image,
-                class,
-                chain,
-                sampler,
-            });
+            let started = std::time::Instant::now();
+            let cache_limit = self.cache_limit;
+            let (cached, decoded) = self.images.get(key, peak, || {
+                let encoded = snapshot.reconstruct(check)?;
+                let (_, rgba) = source::decode_image_admitted(
+                    &encoded,
+                    snapshot.identity.mime.as_deref(),
+                    source::DecodeAdmission::LARGE_MESH,
+                    &mut || check(),
+                )?;
+                drop(encoded);
+                mips::build(
+                    info.width,
+                    info.height,
+                    rgba,
+                    class,
+                    None,
+                    usize::try_from(cache_limit).map_err(|_| resource("source cache budget"))?,
+                )
+            })?;
+            if decoded {
+                self.decodes += 1;
+                self.decode_seconds += started.elapsed().as_secs_f64();
+            }
+            self.current = Some((key, cached));
         }
-        let c = self.cache.as_mut().unwrap();
-        c.sampler = sampler;
+        let c = &self.current.as_ref().unwrap().1.chain;
         let uv: [f64; 2] = std::array::from_fn(|a| {
             (0..3)
                 .map(|i| {
@@ -1251,7 +1425,7 @@ impl<'a> CapturedSource<'a> {
                 .sum()
         });
         Ok(Some((
-            sample(&c.chain.levels, c.class, sampler, uv, lod)?,
+            sample(&c.levels, c.class, sampler, uv, lod)?,
             binding.texcoord,
         )))
     }
@@ -1260,6 +1434,10 @@ impl<'a> CapturedSource<'a> {
     }
     pub(super) fn cache_limit(&self) -> u64 {
         self.cache_limit
+    }
+    /// Images decoded into the cache so far, and their seconds (diagnostics).
+    pub(super) fn decodes(&self) -> (u64, f64) {
+        (self.decodes, self.decode_seconds)
     }
     pub(super) fn density_floor(
         &mut self,
@@ -1844,5 +2022,84 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A distinct 16x16 chain for image `i` (5,456 bytes of levels).
+    fn chain(i: usize) -> mips::Chain {
+        let rgba = (0..16 * 16 * 4).map(|k| (k * 7 + i * 31) as u8).collect();
+        mips::build(16, 16, rgba, mips::Class::Colour, None, 1 << 20).unwrap()
+    }
+    fn chain_bytes() -> u64 {
+        chain(0)
+            .levels
+            .iter()
+            .map(|l| l.rgba.capacity() as u64)
+            .sum::<u64>()
+            .max(chain(0).charged_bytes as u64)
+    }
+
+    #[test]
+    fn shared_images_hit_evict_least_recent_and_count_held_images() {
+        let bytes = chain_bytes();
+        let peak = bytes;
+        // Room for two images, or one beside a decode.
+        let images = SourceImages::new(2 * bytes);
+        let key = |i: usize| (i, mips::Class::Colour);
+        let get = |i: usize| images.get(key(i), peak, || Ok(chain(i))).unwrap();
+        for i in 0..2 {
+            let (image, decoded) = get(i);
+            assert!(decoded);
+            assert_eq!(image.chain.levels[0].rgba, chain(i).levels[0].rgba);
+        }
+        // A hit decodes nothing and refreshes the entry.
+        assert!(!get(0).1);
+        // Image 2 needs its decode peak beside the two cached: the least recent (1) goes.
+        assert!(get(2).1);
+        assert_eq!(images.decodes(), 3);
+        assert!(!get(0).1 && !get(2).1);
+        assert!(get(1).1);
+        assert!(images.live_bytes() <= 2 * bytes);
+        // A held image stays counted after its eviction, until its holder drops it.
+        let held = get(3).0;
+        images.set_capacity(0);
+        assert_eq!(images.live_bytes(), bytes);
+        drop(held);
+        assert_eq!(images.live_bytes(), 0);
+        // A failed decode releases its reservation and caches nothing.
+        images.set_capacity(2 * bytes);
+        assert!(images
+            .get(key(9), peak, || Err(invalid("decode failure")))
+            .is_err());
+        assert!(get(9).1);
+    }
+
+    #[test]
+    fn shared_images_across_workers_return_exact_chains_within_the_reservations() {
+        let bytes = chain_bytes();
+        // Four workers, each reserving one decode peak (here one image).
+        let images = SourceImages::new(4 * bytes);
+        std::thread::scope(|scope| {
+            for w in 0..4usize {
+                let images = &images;
+                scope.spawn(move || {
+                    let mut held: Option<std::sync::Arc<CachedImage>> = None;
+                    for step in 0..400usize {
+                        let i = (step * 7 + w * 3) % 11;
+                        // A worker drops its image before it fetches another.
+                        drop(held.take());
+                        let (image, _) = images
+                            .get((i, mips::Class::Colour), bytes, || Ok(chain(i)))
+                            .unwrap();
+                        assert_eq!(image.chain.levels[0].rgba, chain(i).levels[0].rgba);
+                        assert!(images.live_bytes() <= 4 * bytes);
+                        held = Some(image);
+                    }
+                    drop(held);
+                });
+            }
+        });
+        assert!(images.decodes() >= 11);
+        images.set_capacity(0);
+        assert_eq!(images.live_bytes(), 0);
     }
 }

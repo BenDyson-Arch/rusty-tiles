@@ -15,12 +15,18 @@ mod packet;
 #[cfg(test)]
 mod probe_tests;
 mod raster;
+mod retained;
 mod sampling;
 mod source;
 mod types;
 use crate::{mesh_large::config::Profile, JobError, JobErrorKind};
+pub(crate) use retained::ChildView;
+#[cfg(test)]
+pub(crate) use retained::{
+    MIN_SLOTS as CHILD_TEXEL_MIN_SLOTS, SLOT_BYTES as CHILD_TEXEL_SLOT_BYTES,
+};
 use sha2::{Digest, Sha256};
-pub(crate) use source::CapturedSource;
+pub(crate) use source::{CapturedSource, SourceImages};
 use std::collections::BTreeMap;
 pub(crate) use types::*;
 fn invalid(message: impl Into<String>) -> JobError {
@@ -59,7 +65,7 @@ fn json_charge(value: &serde_json::Value) -> u64 {
 }
 fn packet_charge(
     f: &FrozenNode,
-    children: &[PreencodeChild],
+    children: &[ChildView],
     limits: BakeLimits,
 ) -> Result<u64, JobError> {
     let mut total = 0;
@@ -101,47 +107,22 @@ fn packet_charge(
             limits.memory_bytes,
         )?;
     }
+    // A child owns its faces and page metadata; its texels are resident only when the
+    // child was held whole, else they stay in its packet behind the parent's texel cache.
     for c in children {
         add_charge(
             &mut total,
             (c.faces.capacity() as u64) * std::mem::size_of::<ChildFace>() as u64,
             limits.memory_bytes,
         )?;
-        for p in &c.pages {
-            add_charge(
-                &mut total,
-                p.rgba.capacity() as u64
-                    + (p.support.capacity() as u64) * 4
-                    + (p.samples.capacity() as u64) * std::mem::size_of::<TerminalSample>() as u64,
-                limits.memory_bytes,
-            )?;
-            add_charge(
-                &mut total,
-                (p.normal_samples.capacity() as u64) * std::mem::size_of::<NormalSample>() as u64,
-                limits.memory_bytes,
-            )?;
-            for l in &p.levels {
-                add_charge(
-                    &mut total,
-                    l.rgba.capacity() as u64
-                        + (l.support.capacity() as u64) * 4
-                        + (l.frames.capacity() as u64)
-                            * std::mem::size_of::<frames::Frame>() as u64
-                        + (l.samples.capacity() as u64)
-                            * std::mem::size_of::<TerminalSample>() as u64,
-                    limits.memory_bytes,
-                )?;
-                add_charge(
-                    &mut total,
-                    (l.world_normals.capacity() as u64) * 24,
-                    limits.memory_bytes,
-                )?;
-            }
-        }
+        add_charge(&mut total, c.owned_bytes(), limits.memory_bytes)?;
     }
     add_charge(&mut total, limits.source_cache_bytes, limits.memory_bytes)?;
     Ok(total)
 }
+/// The most bytes a parent's child texel cache may own in production (see
+/// [`retained::TexelCache`]): about nine thousand 16x16 tiles.
+pub(crate) const CHILD_TEXEL_CACHE: u64 = 256 << 20;
 /// Resolve texture participation once from the admitted source binding closure.
 /// Scalar/COLOR-only faces retain generated normals and every immutable corner,
 /// but have no atlas/decoded-UV/tangent-map sampling obligation.
@@ -178,7 +159,7 @@ fn raster_faces(f: &FrozenNode, source: &CapturedSource<'_>) -> Result<Vec<bool>
 pub(crate) fn bake_node(
     f: &FrozenNode,
     source: &mut CapturedSource<'_>,
-    children: &[PreencodeChild],
+    children: &[ChildView],
     limits: BakeLimits,
     assemble: &mut Assemble<'_>,
     check: &mut dyn FnMut() -> Result<(), JobError>,
@@ -202,7 +183,7 @@ pub(crate) fn bake_node(
     if !children.is_empty() {
         // The at-most-eight immediate children must form the exact rank
         // partition of this actual tree node, including synthetic run paths.
-        let mut ordered: [Option<&PreencodeChild>; 8] = [None; 8];
+        let mut ordered: [Option<&ChildView>; 8] = [None; 8];
         for (i, c) in children.iter().enumerate() {
             ordered[i] = Some(c);
         }
@@ -282,6 +263,7 @@ pub(crate) fn bake_node(
         }
     }
     let raster_faces = raster_faces(f, source)?;
+    let decodes_before = source.decodes();
     let available = limits
         .memory_bytes
         .checked_sub(borrowed)
@@ -348,8 +330,16 @@ pub(crate) fn bake_node(
                     .and_then(|b| sum.checked_add(b))
             })
             .ok_or_else(|| resource("resident child-query lease overflow"))?;
+        // Children whose texels stay in their packets are read through one cache of
+        // fixed size: an eighth of the lease, at most the policy's bytes.
+        let texel_bytes = if children.iter().any(ChildView::reads_packet) {
+            (available / 8).min(limits.child_texel_bytes)
+        } else {
+            0
+        };
         let resident = chart_bytes
             .checked_add(query_bytes)
+            .and_then(|b| b.checked_add(texel_bytes))
             .ok_or_else(|| resource("resident chart/query lease overflow"))?;
         // Combined admission precedes either owner's node-sized allocations;
         // each constructor receives only its own reservation.
@@ -374,11 +364,6 @@ pub(crate) fn bake_node(
             check,
         )?;
         stats.charts_seconds += seconds(started);
-        let started = std::time::Instant::now();
-        let mut query = sampling::ChildQuery::new(children, query_bytes, limits.query_work)?;
-        let mut raster = raster::build(f, &layout, source, &mut query, raster_limits, check)?;
-        drop(query);
-        stats.raster_seconds += seconds(started);
         // H28: one output material per class, from its representative; every source
         // material of a class has equal literal factors, slots and slot filters.
         let material_classes: BTreeMap<u32, u32> = f
@@ -400,6 +385,44 @@ pub(crate) fn bake_node(
             }
             materials.insert(i, material);
         }
+        // Every page encode refuses its lease when the pages' owned ledgers, its extra
+        // chain ledger and its codec workspace exceed what remains (`delivery::encode`).
+        // The layout fixes the pages and the bytes each owns once rasterised, which only
+        // grow from there, so a tile that must refuse at an encode refuses here, with the
+        // same reason, before the raster's work rather than after it.
+        // The raster's own charge (its corner attributes and every page's workspace)
+        // is likewise fixed by the layout and refused against its lease in the same way.
+        let planned_pages = raster::planned_pages(f, &layout, source)?;
+        let raster_charge = planned_pages
+            .iter()
+            .fold((f.faces.len() as u64).saturating_mul(2048), |sum, p| {
+                sum.saturating_add(p.raster_charge)
+            });
+        if raster_charge > raster_limits.memory_bytes {
+            return Err(resource("raster semantic pages exceed lease"));
+        }
+        let mut floor = (f.faces.len() as u64)
+            .checked_mul(4096)
+            .ok_or_else(|| resource("chart/attribute/identity owning lease"))?;
+        for material in materials.values() {
+            floor = floor.saturating_add(json_charge(material));
+        }
+        for p in &planned_pages {
+            floor = floor.saturating_add(raster::page_bytes(p.size, p.slot).unwrap_or(u64::MAX));
+        }
+        for p in &planned_pages {
+            let (extra, workspace) = delivery::need(p.size, 0, limits.profile)?;
+            if floor.saturating_add(extra).saturating_add(workspace) > available {
+                return Err(resource("proxy delivery codec plus semantic ledger peak"));
+            }
+        }
+        let started = std::time::Instant::now();
+        let mut query =
+            sampling::ChildQuery::new(children, query_bytes, texel_bytes, limits.query_work)?;
+        let mut raster = raster::build(f, &layout, source, &mut query, raster_limits, check)?;
+        stats.child_tile_reads += query.tile_reads();
+        drop(query);
+        stats.raster_seconds += seconds(started);
         let mut encoded = Vec::new();
         let mut owned = 0u64;
         add_charge(
@@ -633,6 +656,8 @@ pub(crate) fn bake_node(
                         facing_fallback_samples: raster.facing_fallback_samples,
                         facing_fallback_faces: raster.facing_fallback_faces,
                         fill_fallback_samples: raster.fill_fallback_samples,
+                        source_decodes: source.decodes().0 - decodes_before.0,
+                        source_decode_seconds: source.decodes().1 - decodes_before.1,
                         ..stats
                     },
                 });

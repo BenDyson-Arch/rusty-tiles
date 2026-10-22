@@ -1,12 +1,14 @@
 //! Pre-encode child correspondence and terminal source ledgers. Codec bytes
-//! never enter this owner. The resident child BVH is bounded by the node lease.
+//! never enter this owner. The resident child BVH is bounded by the node lease, and
+//! child texels are read through a cache of fixed size ([`TexelCache`]).
 use super::{
     frames::Frame,
     invalid,
     math::{self, V3},
     resource,
+    retained::{ChildLevel, ChildView, TexelCache},
     source::{CapturedSource, Witness},
-    types::{slot_index, FrozenFace, PreencodeChild, TerminalSample},
+    types::{slot_index, FrozenFace, TerminalSample},
 };
 use crate::{gltf_source::source::TextureSlot, mesh_large::leaves::crops, JobError};
 #[derive(Clone, Copy)]
@@ -24,7 +26,8 @@ struct Branch {
     children: Option<[usize; 2]>,
 }
 pub(super) struct ChildQuery<'a> {
-    children: &'a [PreencodeChild],
+    children: &'a [ChildView],
+    texels: TexelCache,
     entries: Vec<Entry>,
     tree: Vec<Branch>,
     /// Reused depth-first stack of [`ChildQuery::nearest`]: branch and lower bound.
@@ -73,9 +76,11 @@ fn colour(slot: TextureSlot) -> bool {
     matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive)
 }
 impl<'a> ChildQuery<'a> {
+    /// `memory` bounds the child BVH; `texels` bounds the child texel cache.
     pub(super) fn new(
-        children: &'a [PreencodeChild],
+        children: &'a [ChildView],
         memory: u64,
+        texels: u64,
         limit: u64,
     ) -> Result<Self, JobError> {
         if children.len() > 8 {
@@ -111,6 +116,7 @@ impl<'a> ChildQuery<'a> {
         }
         let mut out = Self {
             children,
+            texels: TexelCache::new(children, texels)?,
             entries,
             tree: Vec::new(),
             stack: Vec::new(),
@@ -124,6 +130,10 @@ impl<'a> ChildQuery<'a> {
             out.branch(0..count)?;
         }
         Ok(out)
+    }
+    /// Child tiles read from packets so far (diagnostics).
+    pub(super) fn tile_reads(&self) -> u64 {
+        self.texels.reads
     }
     fn branch(&mut self, range: std::ops::Range<usize>) -> Result<usize, JobError> {
         let lo = std::array::from_fn(|a| {
@@ -311,16 +321,14 @@ impl<'a> ChildQuery<'a> {
         let mut hi = [f64::NEG_INFINITY; 3];
         let mut best = None;
         let mut total = 0.;
-        for (level, i, weight) in taps {
+        for (level, [x, y], weight) in taps {
             if weight == 0. {
                 continue;
             }
-            let l = &page.levels[level];
-            let t = *l
-                .samples
-                .get(i)
-                .ok_or_else(|| invalid("child terminal ledger shape"))?;
-            let raw = std::array::from_fn::<_, 4, _>(|a| f64::from(l.rgba[i * 4 + a]) / 255.);
+            let (rgba, t) = self
+                .texels
+                .texel(self.children, e.child, binding.page, level, x, y)?;
+            let raw = std::array::from_fn::<_, 4, _>(|a| f64::from(rgba[a]) / 255.);
             if t.source_rank == u64::MAX {
                 return direct(source, check);
             }
@@ -472,12 +480,14 @@ fn direct_signal(
         support_distance: math::support_distance_upper(p, support_min, support_max),
     }))
 }
+/// The level and clamped texel `[x, y]` of each tap of a child page sample, with its
+/// weight.
 fn taps(
-    levels: &[super::types::SignalLevel],
+    levels: &[ChildLevel],
     s: crops::SourceSampler,
     uv: [f64; 2],
     lod: f64,
-) -> Result<Vec<(usize, usize, f64)>, JobError> {
+) -> Result<Vec<(usize, [u32; 2], f64)>, JobError> {
     if levels.is_empty() || !lod.is_finite() || uv.iter().any(|v| !v.is_finite()) {
         return Err(invalid("child page sample coordinates"));
     }
@@ -514,8 +524,10 @@ fn taps(
             uv[1].clamp(0., 1.) * f64::from(level.height) - 0.5,
         ];
         let index = |x: i64, y: i64| {
-            y.clamp(0, i64::from(level.height) - 1) as usize * level.width as usize
-                + x.clamp(0, i64::from(level.width) - 1) as usize
+            [
+                x.clamp(0, i64::from(level.width) - 1) as u32,
+                y.clamp(0, i64::from(level.height) - 1) as u32,
+            ]
         };
         if matches!(filter, 9728 | 9984 | 9986) {
             out.push((
@@ -545,7 +557,7 @@ fn taps(
 mod tests {
     use super::*;
     use crate::mesh_large::{
-        bake::types::{ChildFace, PositionWord, SourceKey},
+        bake::types::{ChildFace, PositionWord, PreencodeChild, SourceKey},
         records::{Bounds, NodeKind, NodeRecord},
     };
 
@@ -612,7 +624,8 @@ mod tests {
                 }
             })
             .collect();
-        let mut query = ChildQuery::new(&children, 1 << 30, u64::MAX / 4).unwrap();
+        let children: Vec<ChildView> = children.into_iter().map(ChildView::resident).collect();
+        let mut query = ChildQuery::new(&children, 1 << 30, 0, u64::MAX / 4).unwrap();
         assert!(query.tree.len() > 16);
         let ok = &mut || Ok(());
         let mut checked = 0;
