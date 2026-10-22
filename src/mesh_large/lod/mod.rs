@@ -20,6 +20,7 @@ pub(in crate::mesh_large) mod mesh;
 #[cfg(test)]
 mod tests;
 
+use crate::mesh_large::phases::Phase;
 pub(crate) use geom::Mutation;
 
 use self::{
@@ -2480,6 +2481,8 @@ pub(crate) struct LodInput<'a> {
     pub target: usize,
     /// Write one frozen packet per final tile for the bake pass (H13).
     pub handoff: Option<&'a handoff::HandoffSink>,
+    /// Progress and wall time of the pre-pass, simplification, seam and finishing phases.
+    pub phases: &'a crate::mesh_large::phases::Phases<'a>,
 }
 
 /// Build, certify and write every coarse tile; returns the report. Writes `proxies/` and
@@ -2562,6 +2565,7 @@ pub(crate) fn produce(
         crate::spill::PreflightStage::Lod,
     )?;
     let prepass = std::time::Instant::now();
+    input.phases.progress(Phase::LodPrepass, 0, Some(1))?;
     // The pre-pass is capture's declared `lod_prepass` stage (full::ScratchStages): measure it
     // and fail closed above its bound, like every capture stage.
     input.scratch.begin_stage();
@@ -2582,6 +2586,10 @@ pub(crate) fn produce(
         )));
     }
     report.prepass_seconds = prepass.elapsed().as_secs_f64();
+    input.phases.progress(Phase::LodPrepass, 1, Some(1))?;
+    input
+        .phases
+        .finished(Phase::LodPrepass, report.prepass_seconds)?;
     // Flat proxy materials without names, so equal flat materials share a glTF primitive.
     let materials: Vec<Value> = captured
         .materials
@@ -2633,8 +2641,15 @@ pub(crate) fn produce(
     report.max_error_by_depth = vec![0.; deepest + 1];
     let mut sidecar_live = 0u64;
     let mut sidecar_bytes: BTreeMap<u32, u64> = BTreeMap::new();
+    let depths = deepest as u64 + 1;
     for d in (0..=deepest as u32).rev() {
         check()?;
+        let depths_done = depths - u64::from(d);
+        // Wall seconds of this depth's topology pass (round 0), seam audit and consensus
+        // re-runs, and finishing pass.
+        let mut simplify_seconds = 0f64;
+        let mut seam_seconds = 0f64;
+        let mut finish_seconds = 0f64;
         let mut seam_log =
             crate::spill::SequenceWriter::<SeamEdge>::new(input.scratch, "lod-seams", 1 << 16)?;
         let mut forced_log =
@@ -2658,6 +2673,7 @@ pub(crate) fn produce(
         let mut finishing = false;
         let mut final_counts: Option<AuditCounts> = None;
         let counts = loop {
+            let pass_started = std::time::Instant::now();
             // List this depth's internal tiles (all, or the re-run selection) and their
             // children from the preorder stream, and process them in windows.
             let mut nodes = captured.tree.nodes.reader()?;
@@ -2780,6 +2796,20 @@ pub(crate) fn produce(
                 &mut failed,
                 &mut report.tile_runs,
             )?;
+            let pass_seconds = pass_started.elapsed().as_secs_f64();
+            let audit_started = std::time::Instant::now();
+            if finishing {
+                finish_seconds += pass_seconds;
+            } else if round == 0 {
+                simplify_seconds += pass_seconds;
+                input
+                    .phases
+                    .progress(Phase::LodSimplify, depths_done, Some(depths))?;
+            } else {
+                seam_seconds += pass_seconds;
+            }
+            // Everything after a topology pass is seam audit and consensus.
+            let mut seams = || seam_seconds += audit_started.elapsed().as_secs_f64();
             if finishing {
                 break final_counts
                     .take()
@@ -2816,6 +2846,10 @@ pub(crate) fn produce(
                     final_counts = Some(counts);
                     finishing = true;
                     selected = None;
+                    seams();
+                    input
+                        .phases
+                        .progress(Phase::SeamResolution, depths_done, Some(depths))?;
                     continue;
                 }
                 // Consensus acts on this depth's proxies only. A leaf at depth `d` is a
@@ -2922,7 +2956,15 @@ pub(crate) fn produce(
             }
             keep.append(&mut contested);
             selected = Some(rerun);
+            seams();
         };
+        input
+            .phases
+            .progress(Phase::LodFinish, depths_done, Some(depths))?;
+        let phases = input.phases;
+        phases.finished_depth(Phase::LodSimplify, d, simplify_seconds)?;
+        phases.finished_depth(Phase::SeamResolution, d, seam_seconds)?;
+        phases.finished_depth(Phase::LodFinish, d, finish_seconds)?;
         drop(forced_log);
         drop(seam_log);
         let mut written = 0u64;

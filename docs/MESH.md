@@ -197,6 +197,15 @@ Appearance rules:
   UNSIGNED_SHORT or FLOAT, and FLOAT holds every integer only up to 2^24. A
   larger ID is `unsupported` rather than rounded.
 
+- **A face turned away from its source samples the nearest source surface.**
+  A proxy texel samples the nearest point of a source triangle of the face's own
+  primitive that faces the proxy face. Simplification can fold or flip a face so
+  that no triangle of its primitive in the tile faces it (a flipped sliver); that
+  face then samples the nearest same-primitive surface point regardless of
+  orientation, with the same material, texture and tie-break order, and its
+  normal-map texels keep the source's world-space direction. The run
+  diagnostics count these texels, faces and tiles (`proxy_bake`).
+
 Known limitations (0.4):
 
 - A proxy directly above leaf tiles samples the original source images, not
@@ -390,13 +399,25 @@ geometry or geometric error.
 
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,
-`leaf_delivery`, `archive_bytes` and `peak_held_records`. Stage objects describe
+`leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds` and
+`proxy_bake`. `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
+`lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and
+`archive` (the three middle LOD phases summed over depths). `proxy_bake` holds
+the baked `tiles`, worker seconds per bake step (charts, raster, encode,
+assemble, commit; summed over workers, so they overlap) and the appearance
+fallback counts (`facing_fallback_samples`, `_faces`, `_tiles`;
+`fill_fallback_samples`). Stage objects describe
 worker admission and owned memory/scratch resources; their declared accounting
 is not an automatically measured RSS guarantee. Absolute scratch paths and
 resource observations are diagnostics, not semantic profile constants.
 
 `--progress json` emits NDJSON work events on stderr with named phases and
-nullable totals. Required events finish before publication; the returned
+nullable totals: `conversion`, `capture`, then inside the leaf stage
+`leaf_build` (leaves), `lod_prepass`, `lod_simplify`, `seam_resolution` and
+`lod_finish` (each counting finished depths), `proxy_bake` (tiles), then
+`leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase, and each
+LOD depth, also logs its wall seconds and the run's elapsed seconds as a `log`
+event. Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
 remains success with cleanup diagnostics.
 

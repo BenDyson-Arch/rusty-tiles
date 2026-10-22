@@ -323,6 +323,8 @@ pub(crate) fn bake_node(
         );
     }
     let mut budget_receipts = Vec::new();
+    let mut stats = BakeStats::default();
+    let seconds = |t: std::time::Instant| t.elapsed().as_secs_f64();
     for density_drop in 0..=limits.max_density_drops {
         check()?;
         let texel = planned
@@ -362,6 +364,7 @@ pub(crate) fn bake_node(
             ..local
         };
         let captured = source.captured;
+        let started = std::time::Instant::now();
         let layout = charts::build(
             f,
             &raster_faces,
@@ -370,9 +373,12 @@ pub(crate) fn bake_node(
             &captured.material_classes,
             check,
         )?;
+        stats.charts_seconds += seconds(started);
+        let started = std::time::Instant::now();
         let mut query = sampling::ChildQuery::new(children, query_bytes, limits.query_work)?;
         let mut raster = raster::build(f, &layout, source, &mut query, raster_limits, check)?;
         drop(query);
+        stats.raster_seconds += seconds(started);
         // H28: one output material per class, from its representative; every source
         // material of a class has equal literal factors, slots and slot filters.
         let material_classes: BTreeMap<u32, u32> = f
@@ -454,6 +460,7 @@ pub(crate) fn bake_node(
                 available,
             )?;
         }
+        let started = std::time::Instant::now();
         for (i, page) in raster.pages.iter_mut().enumerate() {
             check()?;
             let material = source.material(page.material)?;
@@ -489,6 +496,7 @@ pub(crate) fn bake_node(
             }
             encoded.push(output);
         }
+        stats.encode_seconds += seconds(started);
         // H28: categorical ID pages only repeat the exact per-face feature-ID attributes,
         // so they are baked only on request (a future annotate pass).
         let ids = if limits.id_textures {
@@ -560,7 +568,10 @@ pub(crate) fn bake_node(
             receipts: receipts.clone(),
         };
         check()?;
-        match assemble(&prepared)? {
+        let started = std::time::Instant::now();
+        let assembled = assemble(&prepared)?;
+        stats.assemble_seconds += seconds(started);
+        match assembled {
             Assembly::PhysicalBudget { actual_bytes } => {
                 if actual_bytes <= limits.member_bytes {
                     return Err(invalid(
@@ -618,6 +629,12 @@ pub(crate) fn bake_node(
                         pages: raster.pages,
                     },
                     receipts,
+                    stats: BakeStats {
+                        facing_fallback_samples: raster.facing_fallback_samples,
+                        facing_fallback_faces: raster.facing_fallback_faces,
+                        fill_fallback_samples: raster.fill_fallback_samples,
+                        ..stats
+                    },
                 });
             }
         }

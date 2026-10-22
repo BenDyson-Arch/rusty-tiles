@@ -143,9 +143,12 @@ impl root::ProxyBaker for ProxyTextureBaker {
         let Some(widest) = levels.values().map(Vec::len).max() else {
             return Ok(());
         };
+        pass.phases
+            .begin_bake(levels.values().map(|l| l.len() as u64).sum())?;
         let workers = pass.jobs.min(widest).max(1);
         for (depth, firsts) in levels.iter().rev() {
-            run_depth(
+            let started = std::time::Instant::now();
+            let retried = run_depth(
                 firsts,
                 workers,
                 limits,
@@ -154,6 +157,12 @@ impl root::ProxyBaker for ProxyTextureBaker {
                     CapturedSource::new(pass.captured, limits.source_cache_bytes, check)
                 },
                 |source, share, first, check| bake_tile(pass, share, source, first, *depth, check),
+            )?;
+            pass.phases.baked_depth(
+                *depth,
+                firsts.len() as u64,
+                retried,
+                started.elapsed().as_secs_f64(),
             )?;
         }
         Ok(())
@@ -174,7 +183,7 @@ pub(super) enum TileOutcome {
 /// tile that refused its share. Admission therefore does not depend on the worker
 /// count: a tile that fits the whole allowance succeeds at any `--jobs`. Any other
 /// failure stops the depth; siblings stop at their next cancellation check and the
-/// first real failure is reported.
+/// first real failure is reported. Returns how many tiles were retried alone.
 pub(super) fn run_depth<S>(
     firsts: &[u64],
     workers: usize,
@@ -188,7 +197,7 @@ pub(super) fn run_depth<S>(
             &mut dyn FnMut() -> Result<(), JobError>,
         ) -> Result<TileOutcome, JobError>
         + Sync,
-) -> Result<(), JobError> {
+) -> Result<u64, JobError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     let running = workers.min(firsts.len()).max(1);
     // The source cache is part of each tile's charge, so it is capped by the worker's
@@ -274,17 +283,17 @@ pub(super) fn run_depth<S>(
         .map_err(|_| invalid("proxy bake retry list poisoned"))?;
     deferred.sort_unstable();
     if deferred.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     let mut check = || check();
     let mut worker = state(limits, &mut check)?;
-    for first in deferred {
+    for &first in &deferred {
         match bake(&mut worker, limits, first, &mut check)? {
             TileOutcome::Done => {}
             TileOutcome::Retry(e) => return Err(e),
         }
     }
-    Ok(())
+    Ok(deferred.len() as u64)
 }
 
 /// One coarse tile: read the frozen packet and the certified member under exact leases,
@@ -337,6 +346,7 @@ fn bake_tile(
             check,
         )?;
         drop(children);
+        let commit_started = std::time::Instant::now();
         // The parent's packet, encoded in memory before anything is written.
         let packet = if depth > 0 {
             Some(child_bridge::encode_packet(
@@ -348,9 +358,16 @@ fn bake_tile(
         } else {
             None
         };
-        Ok((core, frozen, accepted.assembly, packet))
+        Ok((
+            core,
+            frozen,
+            accepted.assembly,
+            packet,
+            accepted.stats,
+            commit_started,
+        ))
     })();
-    let (core, frozen, assembly, packet) = match prepared {
+    let (core, frozen, assembly, packet, stats, commit_started) = match prepared {
         Ok(p) => p,
         Err(e) => return retryable(e),
     };
@@ -363,6 +380,8 @@ fn bake_tile(
     }
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
     pass.release(first, depth)?;
+    pass.phases
+        .baked_tile(&stats, commit_started.elapsed().as_secs_f64())?;
     Ok(TileOutcome::Done)
 }
 
@@ -585,6 +604,7 @@ pub(super) struct AcceptedNode {
     pub assembly: root::Assembly,
     pub preencode: PreencodeChild,
     pub receipts: serde_json::Value,
+    pub stats: BakeStats,
 }
 /// A real, owner-leased complete assembler. Its allowance includes translated
 /// packet, native meshopt/codec, document, decoded readback and output ownership.
@@ -643,6 +663,7 @@ pub(super) fn bake_one(
         },
         preencode: baked.preencode,
         receipts: baked.receipts,
+        stats: baked.stats,
     })
 }
 
@@ -779,7 +800,13 @@ mod tests {
                     TileOutcome::Retry(resource("fake tile needs more memory"))
                 })
             },
-        );
+        )
+        .map(|retried| {
+            assert_eq!(
+                retried,
+                log.lock().unwrap().iter().filter(|e| !e.2).count() as u64
+            );
+        });
         let mut log = log.into_inner().unwrap();
         log.sort_unstable();
         (result, log)
