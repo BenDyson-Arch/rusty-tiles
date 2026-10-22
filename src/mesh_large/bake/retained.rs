@@ -121,11 +121,16 @@ impl ChildView {
                     .collect(),
             })
             .collect();
+        // The decode charged the faces too; they are charged with every child's faces.
+        let faces = (opened.faces.capacity() * std::mem::size_of::<ChildFace>()) as u64;
         Self {
             node: opened.node,
             texel_size: opened.texel_size,
             faces: opened.faces,
-            owned: opened.owned.max(metadata_bytes(&pages)),
+            owned: opened
+                .owned
+                .saturating_sub(faces)
+                .max(metadata_bytes(&pages)),
             pages,
             texels: Texels::Packet {
                 file,
