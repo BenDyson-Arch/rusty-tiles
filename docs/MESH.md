@@ -203,8 +203,10 @@ Appearance rules:
   that no triangle of its primitive in the tile faces it (a flipped sliver); that
   face then samples the nearest same-primitive surface point regardless of
   orientation, with the same material, texture and tie-break order, and its
-  normal-map texels keep the source's world-space direction. The run
-  diagnostics count these texels, faces and tiles (`proxy_bake`).
+  normal-map texels keep the source's world-space direction. A donor farther
+  than two longest edges of the face is refused as `unsupported`, with the
+  distance in the message. The run diagnostics count these texels, faces and
+  tiles (`proxy_bake`).
 
 Known limitations (0.4):
 
@@ -418,7 +420,8 @@ nullable totals: `conversion`, `capture`, then inside the leaf stage
 `lod_finish` (each counting finished depths), `proxy_bake` (tiles), then
 `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase, and each
 LOD and bake depth, also logs its wall seconds and the run's elapsed seconds as
-a `log` event; a proxy tile that takes the facing fallback logs its id.
+a `log` event; the first 16 proxy tiles that take the facing fallback log their
+id, then one line says the rest are only counted.
 Required events finish before publication; the returned
 successful result establishes installation. A post-install cleanup problem
 remains success with cleanup diagnostics.

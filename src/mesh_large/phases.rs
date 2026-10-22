@@ -96,6 +96,9 @@ pub struct ProxyBakeDiagnostics {
     pub fill_fallback_samples: u64,
 }
 
+/// Tiles with facing-fallback faces that get a log line of their own.
+const FALLBACK_TILE_LINES: u64 = 16;
+
 type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 
 struct State {
@@ -206,9 +209,13 @@ impl<'a> Phases<'a> {
         state.bake.tiles = 0;
         self.progress_locked(Phase::ProxyBake, 0, Some(total))
     }
-    /// One baked tile.
+    /// One baked tile. A tile with facing-fallback faces logs a line of its own, for the
+    /// first `FALLBACK_TILE_LINES` such tiles; the next one logs a single line saying the
+    /// rest are counted only in the depth lines and the bake totals.
     pub(crate) fn baked_tile(
         &self,
+        first: u64,
+        depth: u32,
         stats: &BakeStats,
         commit_seconds: f64,
     ) -> Result<(), JobError> {
@@ -224,7 +231,22 @@ impl<'a> Phases<'a> {
         b.facing_fallback_faces += stats.facing_fallback_faces;
         b.facing_fallback_tiles += u64::from(stats.facing_fallback_faces > 0);
         b.fill_fallback_samples += stats.fill_fallback_samples;
-        let (done, total) = (b.tiles, state.bake_total);
+        if stats.facing_fallback_faces > 0 {
+            let n = b.facing_fallback_tiles;
+            if n <= FALLBACK_TILE_LINES {
+                self.note(&format!(
+                    "mesh proxy bake tile f{first}-d{depth}: facing fallback on {} faces \
+                     ({} texels)",
+                    stats.facing_fallback_faces, stats.facing_fallback_samples
+                ))?;
+            } else if n == FALLBACK_TILE_LINES + 1 {
+                self.note(&format!(
+                    "mesh proxy bake: facing fallback on more than {FALLBACK_TILE_LINES} tiles; \
+                     no further per-tile lines, see the per-depth lines and the bake totals"
+                ))?;
+            }
+        }
+        let (done, total) = (state.bake.tiles, state.bake_total);
         self.progress_locked(Phase::ProxyBake, done, Some(total.max(done)))
     }
     /// The bake totals as one log line.
@@ -307,8 +329,10 @@ mod tests {
             facing_fallback_faces: 2,
             ..Default::default()
         };
-        phases.baked_tile(&stats, 0.25).unwrap();
-        phases.baked_tile(&BakeStats::default(), 0.25).unwrap();
+        phases.baked_tile(1, 7, &stats, 0.25).unwrap();
+        phases
+            .baked_tile(2, 7, &BakeStats::default(), 0.25)
+            .unwrap();
         phases.baked_depth(7, 2, 1, 4.).unwrap();
         phases.bake_summary().unwrap();
         let (seconds, bake) = (phases.seconds(), phases.bake());
@@ -354,5 +378,47 @@ mod tests {
         let silent = Phases::silent();
         silent.finished(Phase::Archive, 3.).unwrap();
         assert_eq!(silent.seconds().archive, 3.);
+    }
+
+    #[test]
+    fn per_tile_fallback_lines_stop_after_sixteen_tiles_with_one_summary() {
+        let events = Mutex::new(Vec::new());
+        let emit = |e: &RunEvent<'_>| {
+            if let RunEvent::Note { message } = e {
+                events.lock().unwrap().push(message.to_string());
+            }
+            Ok(())
+        };
+        let phases = Phases::new(&emit);
+        phases.begin_bake(40).unwrap();
+        let stats = BakeStats {
+            facing_fallback_samples: 3,
+            facing_fallback_faces: 1,
+            ..Default::default()
+        };
+        for first in 0..40 {
+            // Every other tile has no fallback.
+            let s = if first % 2 == 0 {
+                &stats
+            } else {
+                &BakeStats::default()
+            };
+            phases.baked_tile(first, 6, s, 0.).unwrap();
+        }
+        let fallback_tiles = phases.bake().facing_fallback_tiles;
+        let events = events.into_inner().unwrap();
+        let tile_lines = events
+            .iter()
+            .filter(|e| e.starts_with("mesh proxy bake tile f"))
+            .count();
+        assert_eq!(tile_lines, 16);
+        assert!(events[0].starts_with("mesh proxy bake tile f0-d6"));
+        let summaries: Vec<_> = events
+            .iter()
+            .filter(|e| e.contains("facing fallback on more than 16 tiles"))
+            .collect();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(events.len(), 17);
+        assert_eq!(fallback_tiles, 20);
     }
 }

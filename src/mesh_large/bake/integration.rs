@@ -178,8 +178,37 @@ pub(super) enum TileOutcome {
     Retry(JobError),
 }
 
-/// A bake worker consults the run's cancellation state on one call in this many.
+/// A bake worker consults the run's cancellation state on one call in this many, and
+/// on any call once [`CHECK_AFTER`] has passed since its last consultation.
 const CHECK_EVERY: u32 = 64;
+/// The longest a worker goes without consulting the run's cancellation state. The call
+/// count alone would let coarse sites (a density drop, a page, a chart pass) wait about
+/// `CHECK_EVERY` steps; the clock bounds that wait whatever the step length.
+const CHECK_AFTER: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// One worker's throttle on the run's cancellation check.
+pub(super) struct CheckThrottle {
+    calls: u32,
+    last: std::time::Instant,
+}
+impl CheckThrottle {
+    pub(super) fn new() -> Self {
+        Self {
+            calls: 0,
+            last: std::time::Instant::now(),
+        }
+    }
+    /// Whether this call should consult the run's check: the first, every
+    /// `CHECK_EVERY`-th, and any after `CHECK_AFTER` without one.
+    pub(super) fn due(&mut self) -> bool {
+        self.calls = self.calls.wrapping_add(1);
+        if self.calls % CHECK_EVERY == 1 || self.last.elapsed() >= CHECK_AFTER {
+            self.last = std::time::Instant::now();
+            return true;
+        }
+        false
+    }
+}
 
 /// Bake the tiles of one depth: first on up to `workers` threads, each with an equal
 /// share of `limits.memory_bytes`; then, one at a time with the whole allowance, every
@@ -218,17 +247,17 @@ pub(super) fn run_depth<S>(
     // on it: a sixth of bake CPU on a 10M-triangle textured run, and on a 0.79M-triangle
     // vertex-colour crop 712 s of system time and 3232 worker seconds of raster (243 s
     // without it). A worker consults it on every `CHECK_EVERY`-th call (the first
-    // included) and the sibling-failure flag on every call. Only cancellation latency
-    // changes.
-    let cancelled = |calls: &mut u32| -> Result<(), JobError> {
+    // included) and after every `CHECK_AFTER` of calls without one, and the
+    // sibling-failure flag on every call. Only cancellation latency changes, and the
+    // clock bounds it for coarse sites whose calls are few and far apart.
+    let cancelled = |throttle: &mut CheckThrottle| -> Result<(), JobError> {
         if failed.load(Ordering::Relaxed) {
             return Err(JobError::new(
                 crate::JobErrorKind::Cancelled,
                 "another proxy bake worker failed",
             ));
         }
-        *calls = calls.wrapping_add(1);
-        if *calls % CHECK_EVERY == 1 {
+        if throttle.due() {
             check()
         } else {
             Ok(())
@@ -240,8 +269,8 @@ pub(super) fn run_depth<S>(
         let handles: Vec<_> = (0..running)
             .map(|_| {
                 scope.spawn(|| -> Result<(), JobError> {
-                    let mut calls = 0;
-                    let mut check = || cancelled(&mut calls);
+                    let mut throttle = CheckThrottle::new();
+                    let mut check = || cancelled(&mut throttle);
                     let mut worker = None;
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
@@ -302,8 +331,8 @@ pub(super) fn run_depth<S>(
         return Ok(0);
     }
     // Alone, the lock is uncontended but still a sixth of a retried tile's CPU.
-    let mut calls = 0;
-    let mut check = || cancelled(&mut calls);
+    let mut throttle = CheckThrottle::new();
+    let mut check = || cancelled(&mut throttle);
     let mut worker = state(limits, &mut check)?;
     for &first in &deferred {
         match bake(&mut worker, limits, first, &mut check)? {
@@ -398,14 +427,8 @@ fn bake_tile(
     }
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
     pass.release(first, depth)?;
-    if stats.facing_fallback_faces > 0 {
-        pass.phases.note(&format!(
-            "mesh proxy bake tile f{first}-d{depth}: facing fallback on {} faces ({} texels)",
-            stats.facing_fallback_faces, stats.facing_fallback_samples
-        ))?;
-    }
     pass.phases
-        .baked_tile(&stats, commit_started.elapsed().as_secs_f64())?;
+        .baked_tile(first, depth, &stats, commit_started.elapsed().as_secs_f64())?;
     Ok(TileOutcome::Done)
 }
 
@@ -860,6 +883,57 @@ mod tests {
         // With eight workers each share is 125 bytes: tiles 3 and 6 are retried.
         let (_, log) = run(&tiles, 8, 1000, need, None);
         assert!(log.contains(&(3, 125, false)) && log.contains(&(6, 125, false)));
+    }
+
+    #[test]
+    fn throttled_cancellation_check_is_bounded_by_calls_and_by_time() {
+        let mut throttle = CheckThrottle::new();
+        let due = (0..200).filter(|_| throttle.due()).count();
+        // Calls 1, 65, 129 and 193; this loop is far shorter than CHECK_AFTER.
+        assert!(due >= 4, "{due} consultations");
+        assert!(due <= 4 + 1, "{due} consultations");
+        // A single call after a long pause consults at once.
+        std::thread::sleep(CHECK_AFTER * 2);
+        assert!(throttle.due());
+        assert!(!throttle.due());
+    }
+
+    #[test]
+    fn a_coarse_step_sees_cancellation_once_the_time_bound_has_passed() {
+        let cancelled = std::sync::atomic::AtomicBool::new(false);
+        let calls_after = std::sync::atomic::AtomicU32::new(0);
+        let result = run_depth(
+            &[1],
+            1,
+            depth_limits(1000),
+            &|| {
+                if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+                    Err(JobError::new(crate::JobErrorKind::Cancelled, "stop"))
+                } else {
+                    Ok(())
+                }
+            },
+            |_, _| Ok(()),
+            |_, _, _, check| {
+                // The first call consults, so the run is not yet cancelled.
+                check()?;
+                cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+                // Hot-path calls in a burst are batched and miss the cancellation.
+                for _ in 0..10 {
+                    check()?;
+                }
+                // A coarse step that took longer than the bound does not wait for 64
+                // calls: the very next check sees it.
+                std::thread::sleep(CHECK_AFTER * 2);
+                calls_after.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                check()?;
+                calls_after.fetch_add(100, std::sync::atomic::Ordering::SeqCst);
+                Ok(TileOutcome::Done)
+            },
+        );
+        let e = result.unwrap_err();
+        assert_eq!(e.kind(), crate::JobErrorKind::Cancelled);
+        assert_eq!(calls_after.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
