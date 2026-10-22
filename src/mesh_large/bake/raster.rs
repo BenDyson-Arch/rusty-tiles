@@ -32,6 +32,11 @@ pub(super) struct Raster {
     pub masks: Vec<Vec<mask::SurfaceSample>>,
     pub owner: Vec<Vec<usize>>,
     pub receipt: serde_json::Value,
+    /// Run diagnostics (never output bytes): samples, and faces with at least one
+    /// sample, whose witness took the facing fallback; samples that took the fill one.
+    pub facing_fallback_samples: u64,
+    pub facing_fallback_faces: u64,
+    pub fill_fallback_samples: u64,
     /// Density reported to the parent: area-weighted median decoded spacing, at least
     /// the planned texel.
     pub texel_size: f64,
@@ -165,6 +170,8 @@ pub(super) fn build(
     let mut direct = 0u64;
     let mut recursive = 0u64;
     let mut fallback = 0u64;
+    let mut facing_fallback = 0u64;
+    let mut facing_faces = vec![false; f.faces.len()];
     let mut displacement = 0f64;
     let mut drift = 0f64;
     let mut witness_distance = 0f64;
@@ -329,6 +336,10 @@ pub(super) fn build(
                                 }
                                 if signal.fill_fallback {
                                     fallback += 1;
+                                }
+                                if signal.facing_fallback {
+                                    facing_fallback += 1;
+                                    facing_faces[fi] = true;
                                 }
                                 displacement = displacement.max(signal.displacement);
                                 drift = drift.max(signal.drift);
@@ -552,6 +563,7 @@ pub(super) fn build(
     }
     let median_texel = math::weighted_median(&mut density).unwrap_or(0.);
     drop(density);
+    let facing_fallback_faces = facing_faces.iter().filter(|&&b| b).count() as u64;
     Ok(Raster {
         pages,
         face_pages,
@@ -562,7 +574,11 @@ pub(super) fn build(
         masks,
         owner: owners,
         texel_size: median_texel.max(layout.texel_size),
+        facing_fallback_samples: facing_fallback,
+        facing_fallback_faces,
+        fill_fallback_samples: fallback,
         receipt: serde_json::json!({"maximumTexel":maximum_texel,"medianTexel":median_texel,"directSamples":direct,"recursiveSamples":recursive,"fillUnfilteredFallbackSamples":fallback,
+        "facingFallbackSamples":facing_fallback,"facingFallbackFaces":facing_fallback_faces,
         "surfaceWitnessDisplacement":witness_distance,"supportDisplacementUpper":support_distance,"centroidSamples":centroid_samples,"witnessMeaning":"actual deterministic source-surface witness; centroid and support are separate, not a closest-source certificate",
         "appearanceDisplacement":displacement,"deepDriftMaxByte":drift,"supportAreaQuantizationMax":area_error,"supportQByPage":support_scales,"finiteQuadrature":"4x4 and clipped centroid","owningProvisionalBytes":charged}),
     })

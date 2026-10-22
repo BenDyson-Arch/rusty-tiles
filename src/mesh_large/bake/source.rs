@@ -6,7 +6,6 @@ use super::{
     math::{self, V3},
     resource,
     types::{FrozenFace, SourceKey},
-    unsupported,
 };
 use crate::{
     gltf_source::source::{self, TextureSlot},
@@ -142,12 +141,19 @@ struct Query<'q> {
     key: SourceKey,
     lineage: u64,
     ranges: &'q [std::ops::Range<u64>],
+    /// An accepted fill: its unfiltered candidate is bounded by the fill's certified
+    /// distance, so boxes are pruned against it too.
     fill: bool,
 }
 /// One candidate of a nearest-witness query, shared by both search paths: a triangle
 /// of the face's own source primitive inside its donor ranges; `best` must also face
-/// the proxy normal, `unfiltered` (fills only) need not. Ties are broken by lineage,
-/// source triangle and rank, so the winner is a strict minimum.
+/// the proxy normal, `unfiltered` need not. Ties are broken by lineage, source triangle
+/// and rank, so the winner is a strict minimum.
+///
+/// `unfiltered` is tracked for every face. A fill uses it beyond its facing bound; any
+/// other face uses it only when no candidate faces the proxy at all (see
+/// [`CapturedSource::nearest_result`]). Pruning never consults it for a non-fill face,
+/// so tracking it does not change which facing witness wins.
 fn consider(
     query: &Query<'_>,
     rank: u64,
@@ -161,7 +167,7 @@ fn consider(
         key: k,
         lineage,
         ranges,
-        fill,
+        fill: _,
     } = *query;
     if !(ranges.iter().any(|r| r.contains(&rank)) && key(&t) == k) {
         return Ok(());
@@ -178,6 +184,7 @@ fn consider(
         bary,
         distance2: d,
         fill_fallback: false,
+        facing_fallback: false,
     };
     let earlier = |b: Witness| {
         d < b.distance2
@@ -192,7 +199,7 @@ fn consider(
                     b.rank,
                 ))
     };
-    if fill && unfiltered.is_none_or(earlier) {
+    if unfiltered.is_none_or(earlier) {
         *unfiltered = Some(witness);
     }
     if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.) && best.is_none_or(earlier) {
@@ -307,6 +314,9 @@ pub(super) struct Witness {
     pub bary: V3,
     pub distance2: f64,
     pub fill_fallback: bool,
+    /// No same-primitive candidate faces the proxy: this is the nearest one regardless
+    /// of orientation.
+    pub facing_fallback: bool,
 }
 struct Cache {
     image: usize,
@@ -735,9 +745,20 @@ impl<'a> CapturedSource<'a> {
                 return Ok(w);
             }
         }
-        best.ok_or_else(|| {
-            unsupported("proxy has no facing same-primitive source appearance donor")
-        })
+        if let Some(b) = best {
+            return Ok(b);
+        }
+        // No triangle of the face's own primitive in its donor ranges faces the proxy:
+        // simplification turned the face away from every same-primitive donor (a flipped
+        // sliver or fold). Its appearance is then the nearest same-primitive surface
+        // point regardless of orientation: the same material and texture, the surface the
+        // face approximates, chosen by the same strict order. Both searches prune only
+        // once a facing witness exists, so with none this is the exhaustive nearest over
+        // the face's candidates, within the same query work budget.
+        let mut w =
+            unfiltered.ok_or_else(|| invalid("proxy face has no same-primitive source donor"))?;
+        w.facing_fallback = true;
+        Ok(w)
     }
     /// The weld key, not the replacement face's Origin, selects canonical colour.
     pub(super) fn color(
@@ -917,6 +938,7 @@ impl<'a> CapturedSource<'a> {
             bary,
             distance2: 0.,
             fill_fallback: false,
+            facing_fallback: false,
         })
     }
     pub(super) fn lod(&self, w: Witness, slot: TextureSlot, texel: f64) -> Result<f64, JobError> {
@@ -1469,8 +1491,9 @@ mod tests {
                 bary,
                 distance2: math::distance2(q, math::bary(p, bary)),
                 fill_fallback: false,
+                facing_fallback: false,
             };
-            if face.fill_bound.is_some() && unfiltered.as_ref().is_none_or(|u| less(&w, u)) {
+            if unfiltered.as_ref().is_none_or(|u| less(&w, u)) {
                 unfiltered = Some(w);
             }
             if math::face_normal(p).is_some_and(|n| math::dot(n, normal) > 0.)
@@ -1489,6 +1512,7 @@ mod tests {
                     && a.distance2.to_bits() == b.distance2.to_bits()
                     && a.bary.map(f64::to_bits) == b.bary.map(f64::to_bits)
                     && a.fill_fallback == b.fill_fallback
+                    && a.facing_fallback == b.facing_fallback
             }
             (Err(a), Err(b)) => a.kind() == b.kind() && a.message() == b.message(),
             _ => false,
@@ -1529,6 +1553,7 @@ mod tests {
                 donor_ranges: std::iter::once(0..320).collect(),
             };
             let mut checked = 0;
+            let mut facing_fallbacks = 0;
             for i in 0..600 {
                 let mut face = base.clone();
                 // Exact vertices and centroids of duplicated triangles tie on distance.
@@ -1546,6 +1571,11 @@ mod tests {
                 if i % 4 == 1 {
                     face.donor_ranges = vec![10..90, 150..151, 200..300];
                 }
+                // One or two candidates: often none faces the proxy (the facing fallback).
+                if i % 7 == 3 {
+                    let k = ((i * 13) % 318) as u64;
+                    face.donor_ranges = vec![k..k + 1, k + 2..k + 3];
+                }
                 if i % 5 == 2 {
                     face.fill_bound = Some(rng.next() * 2.);
                 }
@@ -1556,8 +1586,10 @@ mod tests {
                 assert!(same(&a, &expected), "BVH query {i}");
                 assert!(same(&b, &expected), "streamed query {i}");
                 checked += usize::from(expected.is_ok());
+                facing_fallbacks += usize::from(expected.is_ok_and(|w| w.facing_fallback));
             }
             assert!(checked > 300);
+            assert!(facing_fallbacks > 10, "{facing_fallbacks} facing fallbacks");
             // Corner colour: the resident shortcut agrees with the full search, both on
             // every actual corner (weld matches) and off-vertex (nearest fallback).
             assert_eq!(fast.colorless, !color);
