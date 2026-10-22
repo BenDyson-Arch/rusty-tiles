@@ -107,7 +107,16 @@ jobs:
       - name: Test native build
         shell: bash
         run: |
-          cargo test --locked --features native-jpeg -- --nocapture --test-threads=1 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          # Library unit tests run in parallel, except two that run serially below: the C1
+          # context controls, whose stderr receipt lines must not interleave, and a test that
+          # changes the process working directory. Bins, integration tests (several change the
+          # working directory) and doctests stay serial.
+          serial_lib=(payload_context_acceptance:: vector_compression::tests::callback_cwd_change_cannot_redirect_relative_source_or_publication)
+          skips=(); for name in "${serial_lib[@]}"; do skips+=(--skip "$name"); done
+          cargo test --locked --features native-jpeg --lib -- "${skips[@]}"
+          cargo test --locked --features native-jpeg --lib -- --nocapture --test-threads=1 "${serial_lib[@]}" 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --features native-jpeg --bins --test '*' -- --nocapture --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --features native-jpeg --doc -- --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
           python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
       - name: Check streamed forest memory alone
         run: cargo test --locked --lib --features native-jpeg -- --ignored --exact --nocapture implicit::tileset::records_tests::streamed_forest_memory_is_bounded_by_one_document
