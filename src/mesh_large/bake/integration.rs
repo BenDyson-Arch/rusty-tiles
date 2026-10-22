@@ -178,6 +178,9 @@ pub(super) enum TileOutcome {
     Retry(JobError),
 }
 
+/// A bake worker consults the run's cancellation state on one call in this many.
+const CHECK_EVERY: u32 = 64;
+
 /// Bake the tiles of one depth: first on up to `workers` threads, each with an equal
 /// share of `limits.memory_bytes`; then, one at a time with the whole allowance, every
 /// tile that refused its share. Admission therefore does not depend on the worker
@@ -210,14 +213,26 @@ pub(super) fn run_depth<S>(
         ..limits
     };
     let failed = AtomicBool::new(false);
-    let cancelled = || -> Result<(), JobError> {
+    // Source, colour and child queries check for cancellation at every visited node and
+    // candidate, and the run's check takes its shared state lock. Four workers convoyed
+    // on it: a sixth of bake CPU on a 10M-triangle textured run, and on a 0.79M-triangle
+    // vertex-colour crop 712 s of system time and 3232 worker seconds of raster (243 s
+    // without it). A worker consults it on every `CHECK_EVERY`-th call (the first
+    // included) and the sibling-failure flag on every call. Only cancellation latency
+    // changes.
+    let cancelled = |calls: &mut u32| -> Result<(), JobError> {
         if failed.load(Ordering::Relaxed) {
             return Err(JobError::new(
                 crate::JobErrorKind::Cancelled,
                 "another proxy bake worker failed",
             ));
         }
-        check()
+        *calls = calls.wrapping_add(1);
+        if *calls % CHECK_EVERY == 1 {
+            check()
+        } else {
+            Ok(())
+        }
     };
     let next = AtomicUsize::new(0);
     let deferred = std::sync::Mutex::new(Vec::new());
@@ -225,7 +240,8 @@ pub(super) fn run_depth<S>(
         let handles: Vec<_> = (0..running)
             .map(|_| {
                 scope.spawn(|| -> Result<(), JobError> {
-                    let mut check = || cancelled();
+                    let mut calls = 0;
+                    let mut check = || cancelled(&mut calls);
                     let mut worker = None;
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
