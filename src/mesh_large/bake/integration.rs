@@ -396,6 +396,12 @@ fn bake_tile(
     }
     child_bridge::release_children(pass.preencode, &frozen, core, pass.check)?;
     pass.release(first, depth)?;
+    if stats.facing_fallback_faces > 0 {
+        pass.phases.note(&format!(
+            "mesh proxy bake tile f{first}-d{depth}: facing fallback on {} faces ({} texels)",
+            stats.facing_fallback_faces, stats.facing_fallback_samples
+        ))?;
+    }
     pass.phases
         .baked_tile(&stats, commit_started.elapsed().as_secs_f64())?;
     Ok(TileOutcome::Done)

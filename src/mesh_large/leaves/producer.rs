@@ -859,25 +859,12 @@ pub(crate) fn produce(
             check,
         );
         let bake_started = std::time::Instant::now();
-        baker.bake(&pass)?;
+        let baked = baker.bake(&pass);
+        // The totals are logged on failure too: they show how far the bake got.
+        let summary = phases.bake_summary();
+        baked?;
+        summary?;
         phases.finished(Phase::ProxyBake, bake_started.elapsed().as_secs_f64())?;
-        let b = phases.bake();
-        phases.note(&format!(
-            "mesh proxy bake: {} tiles ({} retried alone); worker seconds charts {:.3}, raster {:.3}, encode {:.3}, \
-             assemble {:.3}, commit {:.3}; facing fallback {} samples on {} faces in {} tiles; \
-             fill fallback {} samples",
-            b.tiles,
-            b.retried_tiles,
-            b.charts_worker_seconds,
-            b.raster_worker_seconds,
-            b.encode_worker_seconds,
-            b.assemble_worker_seconds,
-            b.commit_worker_seconds,
-            b.facing_fallback_samples,
-            b.facing_fallback_faces,
-            b.facing_fallback_tiles,
-            b.fill_fallback_samples
-        ))?;
         // The manifest reports the published (baked) proxy bytes, and keeps the certified
         // untextured figure beside them.
         let baked = pass.finish()?;

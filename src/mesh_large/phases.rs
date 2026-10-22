@@ -227,6 +227,26 @@ impl<'a> Phases<'a> {
         let (done, total) = (b.tiles, state.bake_total);
         self.progress_locked(Phase::ProxyBake, done, Some(total.max(done)))
     }
+    /// The bake totals as one log line.
+    pub(crate) fn bake_summary(&self) -> Result<(), JobError> {
+        let b = self.bake();
+        self.note(&format!(
+            "mesh proxy bake: {} tiles ({} retried alone); worker seconds charts {:.3}, \
+             raster {:.3}, encode {:.3}, assemble {:.3}, commit {:.3}; facing fallback {} \
+             samples on {} faces in {} tiles; fill fallback {} samples",
+            b.tiles,
+            b.retried_tiles,
+            b.charts_worker_seconds,
+            b.raster_worker_seconds,
+            b.encode_worker_seconds,
+            b.assemble_worker_seconds,
+            b.commit_worker_seconds,
+            b.facing_fallback_samples,
+            b.facing_fallback_faces,
+            b.facing_fallback_tiles,
+            b.fill_fallback_samples
+        ))
+    }
     /// One finished bake depth: its tiles, how many were retried alone, wall seconds.
     pub(crate) fn baked_depth(
         &self,
@@ -235,10 +255,18 @@ impl<'a> Phases<'a> {
         retried: u64,
         seconds: f64,
     ) -> Result<(), JobError> {
-        self.lock().bake.retried_tiles += retried;
+        let (faces, fallback_tiles) = {
+            let mut state = self.lock();
+            state.bake.retried_tiles += retried;
+            (
+                state.bake.facing_fallback_faces,
+                state.bake.facing_fallback_tiles,
+            )
+        };
         self.note(&format!(
             "mesh proxy bake depth {depth}: {tiles} tiles ({retried} retried alone with the \
-             whole allowance) in {seconds:.3} s (run elapsed {:.3} s)",
+             whole allowance) in {seconds:.3} s (run elapsed {:.3} s); facing fallback so far \
+             on {faces} faces in {fallback_tiles} tiles",
             self.elapsed()
         ))
     }
@@ -282,6 +310,7 @@ mod tests {
         phases.baked_tile(&stats, 0.25).unwrap();
         phases.baked_tile(&BakeStats::default(), 0.25).unwrap();
         phases.baked_depth(7, 2, 1, 4.).unwrap();
+        phases.bake_summary().unwrap();
         let (seconds, bake) = (phases.seconds(), phases.bake());
         let events = events.into_inner().unwrap();
         let leaf: Vec<_> = events
@@ -314,9 +343,13 @@ mod tests {
         );
         assert_eq!(bake.commit_worker_seconds, 0.5);
         assert_eq!(bake.retried_tiles, 1);
-        assert!(events
-            .iter()
-            .any(|e| e.starts_with("mesh proxy bake depth 7: 2 tiles (1 retried alone")));
+        assert!(events.iter().any(|e| e
+            .starts_with("mesh proxy bake depth 7: 2 tiles (1 retried alone")
+            && e.ends_with("facing fallback so far on 2 faces in 1 tiles")));
+        assert!(events.iter().any(
+            |e| e.starts_with("mesh proxy bake: 2 tiles (1 retried alone)")
+                && e.contains("facing fallback 7 samples on 2 faces in 1 tiles")
+        ));
         // A silent reporter still records.
         let silent = Phases::silent();
         silent.finished(Phase::Archive, 3.).unwrap();
