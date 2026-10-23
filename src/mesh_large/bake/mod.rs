@@ -6,6 +6,7 @@ mod child_bridge;
 #[cfg(test)]
 mod controls;
 mod delivery;
+mod experiment;
 mod frames;
 mod ids;
 pub(in crate::mesh_large) mod integration;

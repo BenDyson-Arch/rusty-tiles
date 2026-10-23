@@ -222,6 +222,7 @@ pub(super) fn build(
     limits: BakeLimits,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<Raster, JobError> {
+    let exp = super::experiment::options();
     let generated = frames::generate(f, layout, limits.memory_bytes, limits.query_work, check)?;
     let frames = generated.frames;
     let normal_attributes = generated.normals;
@@ -343,6 +344,19 @@ pub(super) fn build(
                         .ceil()
                         .max(0.) as u32
                 });
+                let projected = if exp.inverse && face.fill_bound.is_none() {
+                    Some(super::experiment::draw(
+                        source,
+                        face,
+                        t,
+                        lo,
+                        [hi[0].min(width), hi[1].min(height)],
+                        f.geometric_error.min(2. * actual_texel),
+                        check,
+                    )?)
+                } else {
+                    None
+                };
                 for y in lo[1]..hi[1].min(height) {
                     for x in lo[0]..hi[0].min(width) {
                         check()?;
@@ -351,7 +365,7 @@ pub(super) fn build(
                             continue;
                         }
                         let mut points2 = Vec::with_capacity(16);
-                        for sy in 0..4 {
+                        for sy in 0..if exp.centroid { 0 } else { 4 } {
                             for sx in 0..4 {
                                 let p = [
                                     f64::from(x) + (sx as f64 + 0.5) / 4.,
@@ -381,8 +395,19 @@ pub(super) fn build(
                                 corners.map(|f| f.bitangent),
                                 bary,
                             )?;
-                            let signal = children
-                                .signal(
+                            let projected_witness = projected.as_ref().and_then(|d| d.get(x, y));
+                            let signal = if let Some(w) = projected_witness {
+                                super::sampling::direct_signal(
+                                    source,
+                                    w,
+                                    p,
+                                    frame,
+                                    slot,
+                                    actual_texel,
+                                    check,
+                                )?
+                            } else {
+                                children.signal(
                                     source,
                                     ProxySample {
                                         face,
@@ -396,7 +421,8 @@ pub(super) fn build(
                                     slot,
                                     check,
                                 )?
-                                .ok_or_else(|| invalid("proxy slot missing from source closure"))?;
+                            }
+                            .ok_or_else(|| invalid("proxy slot missing from source closure"))?;
                             if signal.direct {
                                 direct += 1;
                             } else {

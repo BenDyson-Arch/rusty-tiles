@@ -580,7 +580,13 @@ pub(super) fn load_children(
             let owned = (decoded.faces.len() as u64)
                 .checked_mul(std::mem::size_of::<ChildFace>() as u64)
                 .ok_or_else(|| resource("retained leaf child owner overflow"))?;
-            (ChildView::resident(decoded), owned)
+            let view = if super::experiment::options().plain {
+                ChildView::plain_leaf(decoded, &packet)?
+            } else {
+                ChildView::resident(decoded)
+            };
+            let owned = owned + view.owned_bytes();
+            (view, owned)
         } else {
             let (file, path) = pass.preencode.open_proxy(child.first, child.depth)?;
             let opened = packet::open(

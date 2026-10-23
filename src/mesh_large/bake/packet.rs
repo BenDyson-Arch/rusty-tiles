@@ -579,6 +579,13 @@ pub(super) const TILE: u32 = 16;
 const SAMPLE_WIRE: usize = 8 + 4 * 24 + 4 + 1;
 /// Wire bytes of one body texel: its RGBA, then its terminal sample.
 pub(super) const TEXEL_WIRE: usize = 4 + SAMPLE_WIRE;
+fn texel_wire() -> usize {
+    if super::experiment::options().plain {
+        4
+    } else {
+        TEXEL_WIRE
+    }
+}
 
 /// What a parent reads of one child page besides its texels.
 pub(super) struct PageHead {
@@ -647,7 +654,7 @@ fn head_len(
 fn body_len(mut levels: impl Iterator<Item = [u32; 2]>) -> Result<u64, JobError> {
     levels.try_fold(0u64, |sum, [w, h]| {
         (u64::from(w) * u64::from(h))
-            .checked_mul(TEXEL_WIRE as u64)
+            .checked_mul(texel_wire() as u64)
             .and_then(|n| sum.checked_add(n))
             .ok_or_else(|| resource("child packet body length"))
     })
@@ -757,7 +764,9 @@ pub(super) fn write(
                         for x in tx * TILE..tx * TILE + tw {
                             let i = y as usize * width as usize + x as usize;
                             buf.extend_from_slice(&level.rgba[i * 4..i * 4 + 4]);
-                            put_sample(&mut buf, &level.samples[i]);
+                            if !super::experiment::options().plain {
+                                put_sample(&mut buf, &level.samples[i]);
+                            }
                         }
                     }
                     out.write_all(&buf)
@@ -973,12 +982,16 @@ pub(super) fn read_tile(
 ) -> Result<(), JobError> {
     let (first, tw, th) = tile_span(level[0], level[1], tile[0], tile[1]);
     let n = (tw * th) as usize;
-    buf.resize(n * TEXEL_WIRE, 0);
-    read_exact_at(file, path, offset + first * TEXEL_WIRE as u64, buf)?;
+    buf.resize(n * texel_wire(), 0);
+    read_exact_at(file, path, offset + first * texel_wire() as u64, buf)?;
     samples.clear();
-    for (i, texel) in buf.as_chunks::<TEXEL_WIRE>().0.iter().enumerate() {
+    for (i, texel) in buf.chunks_exact(texel_wire()).enumerate() {
         rgba[i * 4..i * 4 + 4].copy_from_slice(&texel[..4]);
-        let s = get_sample(&texel[4..])?;
+        let s = if super::experiment::options().plain {
+            super::experiment::placeholder(node.first)
+        } else {
+            get_sample(&texel[4..])?
+        };
         if !sample_ok(&s, node) {
             return Err(invalid("child terminal source witness"));
         }

@@ -40,6 +40,8 @@ native-jpeg = []
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
 # Test-only: `RUSTY_TILES_FORCED_SPILL=1` puts the validator catalog on scratch (parity runs).
 validate-forced-spill = []
+# Research only: intentionally weaker appearance transfer, never a production profile.
+fast-lod-experiments = []
 
 [dependencies]
 base64 = "0.22"

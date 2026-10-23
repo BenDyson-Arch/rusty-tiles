@@ -32,6 +32,7 @@ pub(crate) struct ChildPage {
     pub levels: Vec<ChildLevel>,
 }
 enum Texels {
+    PlainResident(Vec<Vec<Vec<u8>>>),
     /// RGBA and terminal samples of every level, by page then level.
     Resident(Vec<Vec<(Vec<u8>, Vec<TerminalSample>)>>),
     /// The child's packet and the body offset of each page level in it.
@@ -101,6 +102,118 @@ impl ChildView {
             texels: Texels::Resident(texels),
             owned,
         }
+    }
+    /// Research base-colour leaf bridge: ordinary pre-encode pixels, no ledger.
+    pub(super) fn plain_leaf(
+        mut child: PreencodeChild,
+        leaf: &crate::mesh_large::bake_pass::LeafPreencode,
+    ) -> Result<Self, JobError> {
+        use super::types::ChildBinding;
+        let mut pages = Vec::new();
+        let mut pixels = Vec::new();
+        let mut owned = 0;
+        let mut maps = std::collections::BTreeMap::new();
+        let mut at = 0;
+        for (w, p) in leaf.witness.primitives.iter().zip(&leaf.primitives) {
+            for b in &w.bindings {
+                // Prototype only changes base colour. Other PBR slots use direct source.
+                if b.slot != 0 {
+                    continue;
+                }
+                let key = (b.page, w.material);
+                let page_index = if let Some(&i) = maps.get(&key) {
+                    i
+                } else {
+                    let raw = leaf
+                        .pages
+                        .iter()
+                        .find(|p| p.page == b.page)
+                        .ok_or_else(|| invalid("experiment leaf page"))?;
+                    let mut levels: Vec<ChildLevel> = raw
+                        .levels
+                        .iter()
+                        .map(|l| ChildLevel {
+                            width: l.width,
+                            height: l.height,
+                        })
+                        .collect();
+                    let mut data: Vec<Vec<u8>> =
+                        raw.levels.iter().map(|l| l.rgba.clone()).collect();
+                    while levels.last().is_some_and(|l| l.width > 1 || l.height > 1) {
+                        let old = levels.last().unwrap();
+                        let width = (old.width / 2).max(1);
+                        let height = (old.height / 2).max(1);
+                        let mut next = vec![0; (width * height * 4) as usize];
+                        let prev = data.last().unwrap();
+                        for y in 0..height {
+                            for x in 0..width {
+                                for c in 0..4 {
+                                    let mut v = 0.;
+                                    for dy in 0..2 {
+                                        for dx in 0..2 {
+                                            let i = ((((2 * y + dy).min(old.height - 1))
+                                                * old.width
+                                                + (2 * x + dx).min(old.width - 1))
+                                                * 4
+                                                + c)
+                                                as usize;
+                                            let a = f64::from(prev[i]) / 255.;
+                                            v += if c < 3 {
+                                                if a <= 0.04045 {
+                                                    a / 12.92
+                                                } else {
+                                                    ((a + 0.055) / 1.055).powf(2.4)
+                                                }
+                                            } else {
+                                                a
+                                            };
+                                        }
+                                    }
+                                    v /= 4.;
+                                    if c < 3 {
+                                        v = if v <= 0.0031308 {
+                                            v * 12.92
+                                        } else {
+                                            1.055 * v.powf(1. / 2.4) - 0.055
+                                        };
+                                    }
+                                    next[((y * width + x) * 4 + c) as usize] =
+                                        (v * 255.).round().clamp(0., 255.) as u8;
+                                }
+                            }
+                        }
+                        levels.push(ChildLevel { width, height });
+                        data.push(next);
+                    }
+                    owned += data.iter().map(|p| p.capacity() as u64).sum::<u64>();
+                    let i = pages.len();
+                    pages.push(ChildPage {width:raw.width,height:raw.height,slot:TextureSlot::BaseColor,
+                        material:w.material,sampler:serde_json::json!({"minFilter":raw.min_filter,"magFilter":raw.mag_filter,"wrapS":33071,"wrapT":33071}),normal_scale:1.,levels});
+                    pixels.push(data);
+                    maps.insert(key, i);
+                    i
+                };
+                let uv = &p.uvs[b.texcoord as usize];
+                for i in 0..w.faces.len() {
+                    if w.faces[i].zero_raster & 1 == 0 {
+                        child.faces[at + i].bindings[0] = Some(ChildBinding {
+                            page: page_index,
+                            uv: std::array::from_fn(|c| uv[3 * i + c]),
+                        });
+                    }
+                }
+            }
+            at += w.faces.len();
+        }
+        owned += metadata_bytes(&pages);
+        Ok(Self {
+            node: child.node,
+            texel_size: child.texel_size,
+            faces: child.faces,
+            pages,
+            texels: Texels::PlainResident(pixels),
+            owned,
+        })
     }
     /// A child whose texels stay in its packet `file` (`path`), from its opened head.
     pub(super) fn packet(opened: packet::Opened, file: std::fs::File, path: PathBuf) -> Self {
@@ -259,6 +372,13 @@ impl TexelCache {
             return Err(invalid("child terminal ledger shape"));
         }
         let (file, path, offset) = match &view.texels {
+            Texels::PlainResident(levels) => {
+                let i = (y as usize * shape.width as usize + x as usize) * 4;
+                return Ok((
+                    levels[page][level][i..i + 4].try_into().unwrap(),
+                    super::experiment::placeholder(view.node.first),
+                ));
+            }
             Texels::Resident(levels) => {
                 let (rgba, samples) = &levels[page][level];
                 let i = y as usize * shape.width as usize + x as usize;

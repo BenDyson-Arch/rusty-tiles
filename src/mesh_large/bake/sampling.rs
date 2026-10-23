@@ -299,7 +299,10 @@ impl<'a> ChildQuery<'a> {
             .pages
             .get(binding.page)
             .ok_or_else(|| invalid("child slot binding page closure"))?;
-        if page.slot != slot || page.material != source.class(face.material) {
+        if page.slot != slot
+            || (page.material != source.class(face.material)
+                && !(super::experiment::options().plain && page.material == face.material))
+        {
             return Err(invalid("child semantic binding closure"));
         }
         let uv =
@@ -358,8 +361,13 @@ impl<'a> ChildQuery<'a> {
         terminal.support_max = hi;
         terminal.weight = 1;
         terminal.centre_is_centroid = true;
+        if super::experiment::options().plain {
+            terminal.centre = p;
+            terminal.support_min = p;
+            terminal.support_max = p;
+        }
         let displacement = math::distance_upper(p, terminal.centre);
-        if displacement > error {
+        if !super::experiment::options().plain && displacement > error {
             return direct(source, check);
         }
         let rgb = if slot == TextureSlot::Normal {
@@ -390,7 +398,7 @@ impl<'a> ChildQuery<'a> {
         // Deep recursive drift is measured against the independent captured
         // source path, never used as an unannounced direct-only replacement.
         let mut drift = 0.;
-        if depth >= 6 {
+        if !super::experiment::options().plain && depth >= 6 {
             if let Some(reference) = direct(source, check)? {
                 drift = (0..4)
                     .map(|a| (rgba[a] - reference.rgba[a]).abs() * 255.)
@@ -405,18 +413,22 @@ impl<'a> ChildQuery<'a> {
             facing_fallback: false,
             displacement,
             drift,
-            witness_distance: math::distance_upper(
-                p,
-                math::bary(
-                    source
-                        .record(terminal.source_rank, terminal.barycentric)?
-                        .triangle
-                        .triangle
-                        .positions
-                        .map(|p| p.map(f64::from)),
-                    terminal.barycentric,
-                ),
-            ),
+            witness_distance: if super::experiment::options().plain {
+                0.
+            } else {
+                math::distance_upper(
+                    p,
+                    math::bary(
+                        source
+                            .record(terminal.source_rank, terminal.barycentric)?
+                            .triangle
+                            .triangle
+                            .positions
+                            .map(|p| p.map(f64::from)),
+                        terminal.barycentric,
+                    ),
+                )
+            },
             support_distance: math::support_distance_upper(
                 p,
                 terminal.support_min,
@@ -425,7 +437,7 @@ impl<'a> ChildQuery<'a> {
         }))
     }
 }
-fn direct_signal(
+pub(super) fn direct_signal(
     source: &mut CapturedSource<'_>,
     w: Witness,
     p: V3,

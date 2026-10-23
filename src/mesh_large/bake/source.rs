@@ -786,6 +786,58 @@ impl<'a> CapturedSource<'a> {
         }
         Ok(())
     }
+    /// Research-only broad phase: one box query per proxy face, followed by drawing.
+    pub(super) fn projection_candidates(
+        &self,
+        face: &FrozenFace,
+        pad: f64,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<Vec<Witness>, JobError> {
+        let Some(bvh) = &self.bvh else {
+            return Ok(Vec::new());
+        };
+        let p = face.positions.map(|p| p.map(f64::from));
+        let lo: V3 =
+            std::array::from_fn(|a| p.iter().map(|p| p[a]).fold(f64::INFINITY, f64::min) - pad);
+        let hi: V3 =
+            std::array::from_fn(|a| p.iter().map(|p| p[a]).fold(f64::NEG_INFINITY, f64::max) + pad);
+        let normal = math::face_normal(p).unwrap();
+        let mut out = Vec::new();
+        let mut stack = vec![0];
+        while let Some(i) = stack.pop() {
+            check()?;
+            let n = bvh.nodes[i];
+            if (0..3).any(|a| n.hi[a] < lo[a] || n.lo[a] > hi[a]) {
+                continue;
+            }
+            if n.len == 0 {
+                stack.push(n.start as usize);
+                stack.push(n.start as usize + 1);
+                continue;
+            }
+            for &local in &bvh.order[n.start as usize..(n.start + n.len) as usize] {
+                let rank = self.resident_first + u64::from(local);
+                let t = self.resident[local as usize];
+                if key(&t) != face.source || !face.donor_ranges.iter().any(|r| r.contains(&rank)) {
+                    continue;
+                }
+                if !math::face_normal(t.triangle.positions.map(|p| p.map(f64::from)))
+                    .is_some_and(|n| math::dot(n, normal) > 0.)
+                {
+                    continue;
+                }
+                out.push(Witness {
+                    rank,
+                    triangle: t,
+                    bary: [1., 0., 0.],
+                    distance2: 0.,
+                    fill_fallback: false,
+                    facing_fallback: false,
+                });
+            }
+        }
+        Ok(out)
+    }
     /// Stable nearest actual surface witness. Distance never participates in H17
     /// acceptance: source appearance may move arbitrarily on a certified proxy.
     pub(super) fn nearest(
