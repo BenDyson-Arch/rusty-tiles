@@ -39,7 +39,9 @@ internal NoData hole) used 123,204 KiB / **120.316 MiB** peak child RSS against
 whole final scratch allocation including directories was 38,637,568 bytes.
 Samples and a logical persistent-file estimate are separately labelled, not
 called exact instantaneous disk maxima. The run emitted 1,365 meshopt/quantized
-tiles in 33.248 s after a 503.3 s measurement-lock wait. Input hash was preserved,
+tiles; probe elapsed was 33.248 s (including post-exit inventory hashing),
+after a 503.3 s measurement-lock wait. Independent nonauthor review supports
+this bounded terrain acceptance with no blocking production defect. Input hash was preserved,
 no staging remained, the task scratch was deleted, and Cargo clean removed
 3.6 GiB from its dedicated target.
 
@@ -47,7 +49,7 @@ Full commands, native versions, final binary/source hashes, resource preparation
 and receipts are in `~/.cache/rusty-tiles-evidence/040-bar-terrain/README.md`.
 The frozen `receipt-manifest.json` in that directory pins those execution files
 and README by SHA-256; manifest SHA-256:
-`a4bc1fc82e55fe540980cc2de8cd409552420453b2fb45d97cb397aa1eed3ad9`.
+`b4a54a407d4bb2a26a39198ee5eac96d1530509434275ca11fefc32c22c38616`.
 The tested functional commit is the pin above; subsequent changes are receipts,
 a tooling-contract amendment and assertion formatting only. The required
 `chrt -i 0 nice -n 19` recipe was used; observed policy was SCHED_IDLE. Because
