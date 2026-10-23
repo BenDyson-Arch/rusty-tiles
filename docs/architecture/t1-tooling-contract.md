@@ -288,3 +288,15 @@ Static observations above were confirmed by execution:
 - **Imagery check is release-only.** The imagery probe is a
   release-acceptance browser step, not a `cargo test`, because it needs node,
   Playwright, Chromium and Cesium.
+
+## Amendment — terrain GTiff category, 2026-10-24
+
+The approved finite terrain 0.4 bar supersedes the terrain half of the historical
+GTiff divergence above. Terrain checks the registered GTiff reader after native
+initialization and before source open. Missing GTiff is `Unsupported`/2 in Rust,
+CLI and doctor; malformed DEM bytes with GTiff present remain `InvalidInput`/3.
+`native_terrain::missing_gtiff_is_unsupported_before_open_and_preserves_output`
+and `native_doctor::native_refusals_report_the_category_and_exit_of_execution`
+check this distinction and output preservation. D1 is the remaining recorded
+GTiff exception and stays with the separate imagery work; terrain's amendment
+does not claim that D1 is fixed or add a producer capability resolver.
