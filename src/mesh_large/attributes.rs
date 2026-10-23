@@ -849,28 +849,27 @@ mod tests {
         }
     }
 
-    /// Capture under the run's attribute layout yields the records the full layout does,
-    /// through spilled sorts, while spilling fewer bytes; a layout missing a selected
+    /// Captures the scene at `input` under the full layout and under the run's attribute
+    /// layout (which must equal `expected`) through spilled sorts; the records must be
+    /// byte-equal and the compact run must spill fewer bytes. A layout missing a selected
     /// primitive's attribute is refused before any record is written.
-    #[test]
-    fn compact_attribute_layout_captures_identical_records() {
-        let (dir, input) = fixture();
-        let mut doc: serde_json::Value =
-            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
-        doc["meshes"][0]["primitives"][0]["attributes"] =
-            json!({"POSITION":0,"NORMAL":1,"COLOR_0":5});
-        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
-        let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+    fn assert_compact_captures_full(
+        dir: &tempfile::TempDir,
+        input: &std::path::Path,
+        expected: Layout,
+        run_bytes: usize,
+    ) -> Vec<Vec<u8>> {
+        let source = StreamSource::open(input, &mut || Ok(())).unwrap();
         let scan = super::super::capture::scan(&source, 16, &mut || Ok(())).unwrap();
         let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
         let sort = SortConfig {
-            run_bytes: 512,
+            run_bytes,
             fan_in: 2,
             buffer_bytes: 16,
             jobs: 1,
         };
         let layout = attribute_layout(&source);
-        assert_eq!(layout, Layout(NORMAL | COLOR));
+        assert_eq!(layout, expected);
         let run = |layout: Layout| {
             let mut scan = scan;
             let sorted = capture_full_in(
@@ -891,9 +890,50 @@ mod tests {
         assert_eq!(compact, full);
         assert!(compact_spilled > 0);
         assert!(compact_spilled < full_spilled);
-        let error = run(Layout(NORMAL)).unwrap_err();
+        let error = run(Layout(NORMAL & expected.0)).unwrap_err();
         assert_eq!(error.kind(), JobErrorKind::InvalidState);
         assert_eq!(scratch.live_bytes(), 0);
+        compact
+    }
+
+    /// Capture under the run's attribute layout yields the records the full layout does,
+    /// through spilled sorts, while spilling fewer bytes.
+    #[test]
+    fn compact_attribute_layout_captures_identical_records() {
+        let (dir, input) = fixture();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        doc["meshes"][0]["primitives"][0]["attributes"] =
+            json!({"POSITION":0,"NORMAL":1,"COLOR_0":5});
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        assert_compact_captures_full(&dir, &input, Layout(NORMAL | COLOR), 512);
+    }
+
+    /// Primitives that carry different attributes share one run layout: records of a
+    /// positions-only primitive are zero-filled, those of a NORMAL+COLOR_0 primitive and a
+    /// COLOR_0-only primitive keep their fields, and every sort path still reproduces the
+    /// full-layout records byte for byte.
+    #[test]
+    fn compact_layout_with_mixed_primitives_captures_identical_records() {
+        let (dir, input) = fixture();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        doc["meshes"][0]["primitives"] = json!([
+            {"attributes":{"POSITION":0,"NORMAL":1,"COLOR_0":5},"material":0},
+            {"attributes":{"POSITION":0}},
+            {"attributes":{"POSITION":0,"COLOR_0":5},"material":0},
+        ]);
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        for run_bytes in [512, 1024] {
+            let rows =
+                assert_compact_captures_full(&dir, &input, Layout(NORMAL | COLOR), run_bytes);
+            assert_eq!(rows.len(), 12);
+            // Byte 105 of the wire form is the flags: all three primitive kinds are present.
+            let mut flags: Vec<u8> = rows.iter().map(|row| row[105]).collect();
+            flags.sort_unstable();
+            flags.dedup();
+            assert_eq!(flags, [0, COLOR, NORMAL | COLOR]);
+        }
     }
 
     #[test]
