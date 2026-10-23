@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
+mod interrupt;
+
 use clap::builder::{PossibleValue, PossibleValuesParser};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
@@ -18,7 +20,7 @@ use rusty_tiles::{
     MeshApproximation, MeshPlacement, MeshRequest, MeshResult, MeshSourceCrs, ModelManifestRequest,
     ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
     RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest, RasterResult,
-    Reporter, RunControl, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
+    Reporter, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -738,6 +740,8 @@ fn main() -> ExitCode {
     let json = cli.json && !internal;
     let events = cli.progress.is_some() && !internal;
     let name = cli.command.name();
+    // SIGINT/SIGTERM cancel the run so its scratch is cleaned before exit.
+    interrupt::install();
     // NDJSON progress mode keeps stderr machine-readable.
     let reporter = if events {
         Reporter::ndjson_stderr()
@@ -822,10 +826,15 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let (category, code) = match &error {
+            let (category, mut code) = match &error {
                 Error::Job(failure) => job_category(failure.error.kind()),
                 _ => error.category(),
             };
+            if let (Some(signal), Error::Job(failure)) = (interrupt::signal(), &error) {
+                if failure.error.kind() == JobErrorKind::Cancelled {
+                    code = interrupt::exit_status(signal);
+                }
+            }
             if json {
                 let failure = error_summary(&error, category, code);
                 println!("{failure}");
@@ -1229,7 +1238,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             Outcome::Tiler(Box::new(rusty_tiles::mesh_to_tileset(
                 request,
-                &RunControl::new(observer),
+                &interrupt::run_control(observer),
             )?))
         }
         Command::Validate {
@@ -1254,7 +1263,8 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 request = request.scratch_dir(dir);
             }
             let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let report = rusty_tiles::validate::inspect_with(request, &RunControl::new(observer))?;
+            let report =
+                rusty_tiles::validate::inspect_with(request, &interrupt::run_control(observer))?;
             if !json {
                 println!(
                     "Inspected {}: {} tiles, {} content references",
@@ -1325,7 +1335,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::EncodeVectorContent { input } => {
             let result = rusty_tiles::compress_vector_file(
                 rusty_tiles::VectorCompressionRequest::new(input),
-                &RunControl::default(),
+                &interrupt::run_control(None),
             )?;
             println!("{}", result.report_json());
             Outcome::Done
@@ -1341,7 +1351,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             Outcome::ModelManifest(Box::new(rusty_tiles::model_to_manifest(
                 request,
-                &RunControl::new(observer),
+                &interrupt::run_control(observer),
             )?))
         }
         Command::PointCloud(a) => {
@@ -1375,7 +1385,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                 .with_policy(policy);
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = interrupt::run_control(observer);
             Outcome::PointCloud(Box::new(rusty_tiles::point_cloud::point_cloud_to_archive(
                 request, &run,
             )?))
@@ -1383,7 +1393,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::Convert(a) => {
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = interrupt::run_control(observer);
             let policy = if a.force {
                 OutputPolicy::Replace
             } else {
@@ -1403,13 +1413,13 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
             Outcome::ModelArchive(Box::new(rusty_tiles::model_to_archive(
                 request,
-                &RunControl::new(observer),
+                &interrupt::run_control(observer),
             )?))
         }
         Command::RasterTileToDirectory(a) => {
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = interrupt::run_control(observer);
             let request =
                 RasterDirectoryRequest::web_mercator_rgb(a.input, a.output, a.zoom, a.x, a.y)
                     .with_policy(if a.force {
@@ -1422,7 +1432,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::MeshLocalTo3tz(a) => {
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = interrupt::run_control(observer);
             let policy = if a.io.force {
                 OutputPolicy::Replace
             } else {
@@ -1453,7 +1463,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
             )?)
         }
         Command::Vector(a) => {
-            let run = RunControl::new(Some(Arc::new(VectorCliObserver {
+            let run = interrupt::run_control(Some(Arc::new(VectorCliObserver {
                 progress_json: pack_events,
             })));
             let policy = if a.io.force {
@@ -1498,7 +1508,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         Command::Terrain(a) => {
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
+            let run = interrupt::run_control(observer);
             let policy = if a.io.force {
                 OutputPolicy::Replace
             } else {
@@ -1518,7 +1528,7 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
         }
         Command::Raster(a) => {
             let observer = pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let control = RunControl::new(observer);
+            let control = interrupt::run_control(observer);
             Outcome::Raster(Box::new(rusty_tiles::raster_to_pyramid(
                 raster_request(a)?,
                 &control,
