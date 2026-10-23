@@ -35,7 +35,10 @@ path = "bench/demodata_suite.rs"
 required-features = ["native-geospatial"]
 
 [features]
-default = []
+# `cli` is what the binary needs beyond the library (signal handling); the Python
+# bindings depend on the library with default features off.
+default = ["cli"]
+cli = ["dep:signal-hook"]
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
 # Test-only: `RUSTY_TILES_FORCED_SPILL=1` puts the validator catalog on scratch (parity runs).
 validate-forced-spill = []
@@ -91,3 +94,4 @@ zip = { version = "2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+signal-hook = { version = "0.3", optional = true, default-features = false, features = ["iterator"] }

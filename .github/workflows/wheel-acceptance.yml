@@ -2,23 +2,9 @@ name: Wheel acceptance
 
 # Run against a candidate commit before creating a release tag. This workflow
 # builds and tests artifacts only; it has no package or release publishing steps.
+# It is part of the full CI tier (ci.yml calls it on pushes, nightly and manual runs), not of
+# pull-request CI, and release.yml calls it for every tag.
 on:
-  pull_request:
-    branches: [develop]
-    paths:
-      - '.github/workflows/wheel-acceptance.yml'
-      - '.github/workflows/release.yml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - '.cargo/**'
-      - 'src/**'
-      - 'vendor/**'
-      - 'bindings/python/**'
-      - 'scripts/*wheel*'
-      - 'scripts/*blender*'
-      - 'tests/test_wheel_runners.py'
-      - 'tests/fixtures/**'
   workflow_dispatch:
     inputs:
       test-blender:
@@ -37,7 +23,7 @@ permissions:
 
 concurrency:
   group: wheel-acceptance-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   wheels:

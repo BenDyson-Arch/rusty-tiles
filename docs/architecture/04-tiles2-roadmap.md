@@ -170,7 +170,7 @@ Preserve the following agreed large-mesh requirements:
   drops. `lossless` preserves its agreed texel-exact leaf requirement and typed
   refusal where a page cannot fit. Profile constants remain provisional until
   the final acceptance milestone.
-- The profiles are provisional until LOD (H17) and texture baking (H13) exist.
+- The profiles are provisional until LOD (H17) and texture baking (H13, delivered as H27) exist.
   That covers texture resolution caps, encoder effort and leaf size, including
   the current 8192-triangle cap that Cesium per-triangle picking needs. They get
   one unified design during milestone-4 acceptance, using real-mesh
@@ -269,6 +269,45 @@ reuse-identity guidance and migration documentation changed together; see the
 Review the retained public surface explicitly. Closing this milestone requires
 the final acceptance evidence; document consolidation alone does not close
 [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113) or authorize a release.
+
+#### Status at 2026-10-23
+
+An item is marked done only where a merged PR delivered it. Merged work shows
+that a slice exists; it does not close the acceptance item it feeds. Milestone
+4 waits for milestone 3, so the tiler slices are listed first. PR numbers are
+merged into `develop`.
+
+Tiler prerequisites (milestone 3):
+
+- [x] Streamed capture, sort and tree: [#180](https://github.com/BenDyson-Arch/rusty-tiles/pull/180), with the external sort in [#166](https://github.com/BenDyson-Arch/rusty-tiles/pull/166).
+- [x] Full-detail leaves with the in-process KTX2/Basis encoder: [#187](https://github.com/BenDyson-Arch/rusty-tiles/pull/187), [#199](https://github.com/BenDyson-Arch/rusty-tiles/pull/199) (the encoder draft #163 was closed unmerged).
+- [x] Streamed Tiles 1.1 forest in `.3tz`: [#192](https://github.com/BenDyson-Arch/rusty-tiles/pull/192).
+- [x] Certified geometry LOD: [#209](https://github.com/BenDyson-Arch/rusty-tiles/pull/209); seam overlap fix [#236](https://github.com/BenDyson-Arch/rusty-tiles/pull/236).
+- [x] Proxy texture baking in `mesh`: [#215](https://github.com/BenDyson-Arch/rusty-tiles/pull/215), [#216](https://github.com/BenDyson-Arch/rusty-tiles/pull/216), [#231](https://github.com/BenDyson-Arch/rusty-tiles/pull/231), [#233](https://github.com/BenDyson-Arch/rusty-tiles/pull/233), [#237](https://github.com/BenDyson-Arch/rusty-tiles/pull/237); chart growth [#242](https://github.com/BenDyson-Arch/rusty-tiles/pull/242) and facing fallback [#246](https://github.com/BenDyson-Arch/rusty-tiles/pull/246).
+- [x] One public entry point, `mesh` / `mesh_to_tileset`: [#213](https://github.com/BenDyson-Arch/rusty-tiles/pull/213); source CRS [#218](https://github.com/BenDyson-Arch/rusty-tiles/pull/218); docs lead with it [#238](https://github.com/BenDyson-Arch/rusty-tiles/pull/238).
+- [x] Per-tile primitive batching (H28): [#244](https://github.com/BenDyson-Arch/rusty-tiles/pull/244).
+- [x] Page escalation, archive size and scratch admission: [#229](https://github.com/BenDyson-Arch/rusty-tiles/pull/229), [#234](https://github.com/BenDyson-Arch/rusty-tiles/pull/234), [#226](https://github.com/BenDyson-Arch/rusty-tiles/pull/226), [#228](https://github.com/BenDyson-Arch/rusty-tiles/pull/228), [#230](https://github.com/BenDyson-Arch/rusty-tiles/pull/230).
+
+Milestone-4 items:
+
+- [x] Validator scale support (milestone 3 handoff): VS-A catalog [#206](https://github.com/BenDyson-Arch/rusty-tiles/pull/206), VS-B traversal and containment [#217](https://github.com/BenDyson-Arch/rusty-tiles/pull/217), VS-C limits with opt-in caps, derived budgets and cancellation [#214](https://github.com/BenDyson-Arch/rusty-tiles/pull/214). KTX2 admission: [#202](https://github.com/BenDyson-Arch/rusty-tiles/pull/202).
+- [x] Legacy payload retirement in `validate` (H7): [#200](https://github.com/BenDyson-Arch/rusty-tiles/pull/200). Explicit point-cloud and vector output (H6): [#188](https://github.com/BenDyson-Arch/rusty-tiles/pull/188).
+- [x] Scale-gate harness, bench only: [#190](https://github.com/BenDyson-Arch/rusty-tiles/pull/190), combined (d) case [#193](https://github.com/BenDyson-Arch/rusty-tiles/pull/193). These add generators and budgets, not passing runs.
+- [x] Release gating on CI, release candidates kept off PyPI: [#239](https://github.com/BenDyson-Arch/rusty-tiles/pull/239).
+- [x] Public-surface decisions recorded: [#182](https://github.com/BenDyson-Arch/rusty-tiles/pull/182), [#243](https://github.com/BenDyson-Arch/rusty-tiles/pull/243). The review of the retained surface itself is not closed (below).
+
+Remaining before 0.4.0:
+
+- [ ] VS-D: independent validator acceptance on the final tiler output (full audit tier), including every profile.
+- [ ] Scale gate (a): the spilled 5.26x10^8-triangle (526,174,760) production octree run through `mesh`, with peak memory, scratch, wall time and consumer load against budgets.
+- [ ] Scale gates (b) and (c): the 10^4-primitives and 10^4-holes density case, and the procedural-texture bake case, run through `mesh`.
+- [ ] Scale gate (d): the combined archive (at least 2^22 tiles and over 4 GiB) run against the final `validate` and a Cesium load. #193 provides the fixture only.
+- [ ] Preset finalisation: freeze profile constants (texture caps, encoder effort, leaf size, octahedral bit count, per-tile budgets) from real-mesh measurements.
+- [ ] Retire `mesh-to-3tz` and `mesh-local-to-3tz` (Rust, CLI and Python), with migration notes, help, defaults and reuse-identity guidance updated together. This is a 0.4.0 gate (owner decision 2026-10-21; recorded in #243).
+- [ ] Final retained-public-surface review, and removal of the superseded exporters, codecs and helpers that the retired commands used.
+- [ ] Platform CI, installed-wheel and official-Blender checks on the accepted final sources and artifacts.
+- [ ] Coordinate, picking, seam, topology, hole/island, appearance and geometric-error controls on the final production output across profiles (only the controls inside merged slices exist today).
+- [ ] The release itself: [#110](https://github.com/BenDyson-Arch/rusty-tiles/pull/110) (develop to main) is open.
 
 ## Immediate queue and first new implementation slice
 

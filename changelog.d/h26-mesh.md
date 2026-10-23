@@ -4,4 +4,8 @@
 
 ### Changed
 
-- Breaking: the preparatory leaf-directory/delivery Rust exports and hidden `mesh-leaf-payloads`, `mesh-leaves-to-3tz` and `mesh-large-to-3tz` commands are replaced by the single source-mesh facade. Legacy mesh converters remain temporarily available with deprecated help pending complete tiler acceptance.
+- Breaking: the preparatory leaf-directory/delivery Rust exports and hidden `mesh-leaf-payloads`, `mesh-leaves-to-3tz` and `mesh-large-to-3tz` commands are replaced by the single source-mesh facade. Legacy mesh converters (`mesh-to-3tz`, `mesh-local-to-3tz` and their Python functions) remain temporarily available with deprecated help; their removal is a 0.4.0 gate, not 0.4.x work.
+
+### Deprecated
+
+- `mesh-to-3tz`, `mesh-local-to-3tz`, Python `mesh_to_3tz` and `mesh_local_to_3tz`: use `mesh` / `mesh_to_tileset`. Options do not carry over one to one; see the mesh migration notes.

@@ -10,5 +10,6 @@
   with published `lod_vanished` / `lod_filled` records, and both reopen deeper. Proxies
   hold one glTF primitive per flat material and at most 8,192 faces; each proxy triangle
   names the source triangle it descends from (one `proxy_source` table per proxy, keyed
-  with the `source_primitive` feature ID). Proxies are untextured (flat material factors)
-  until H13 bakes textures.
+  with the `source_primitive` feature ID). H17 on its own publishes untextured proxies
+  (flat material factors); the H27 integration bakes their textures (see the textured
+  coarse tiles entry).

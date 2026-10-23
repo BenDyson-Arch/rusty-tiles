@@ -254,7 +254,7 @@ they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
 added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
 staging and a replaced destination: three copies of an estimate of 119 bytes per
-triangle plus the encoded image bytes at admission, raised once image dimensions
+triangle (measured before the archive-size reduction, which brought it to about 47; kept as a conservative estimate) plus the encoded image bytes at admission, raised once image dimensions
 are known to 4 bytes per source texel for `lossless` PNG pages or 1 byte per
 texel for KTX2 profiles, each with a 4/3 mip allowance (a texture-stage
 recheck). These are estimates, not bounds. Output demands are added to the
@@ -498,6 +498,52 @@ filtering happens on encoded values. The worst case measured was 72/255 on
 high-contrast test textures. Linear data textures are unaffected. The limitation
 is documented rather than worked around: it is not filed upstream, and the tiler
 adds no viewer-specific compensation.
+
+### Colour space and lighting in CesiumJS
+
+What the tiler writes. Base colour and emissive pages of leaves and of baked
+coarse (proxy) tiles are sRGB-encoded: lossy profiles carry the sRGB transfer in
+the KTX2 container, and proxy pages are averaged in linear light and re-encoded
+to sRGB when baked. Metallic-roughness, occlusion and normal pages are linear
+data. The tiler's tests pin that a proxy's base colour uses the same sRGB
+transfer as its leaves and reproduces a flat source colour.
+
+Lit and unlit tiles. Whether a tile is lit depends on its vertex attributes, not
+on a setting of the tiler. A source without NORMAL (typical photogrammetry
+exports) gives leaves with POSITION and TEXCOORD_0 only, and CesiumJS 1.146
+draws such tiles unlit, so the texture colour is shown as sampled. Before
+commit `bc6b3710` (#237) the proxies of such a source also published NORMAL,
+TANGENT and COLOR_0. Cesium lit the proxies (darker, with a blue cast) and drew
+the leaves unlit, so a view that mixed the two showed hard seams and a visible
+tint step. Proxy primitives now publish NORMAL and COLOR_0 only where their
+source primitive's leaves carry them, and TANGENT only with a baked normal map
+(which brings NORMAL). Leaves and proxies of one source therefore shade the same
+way. A source that does carry normals is lit in Cesium for leaves and proxies
+alike, so its apparent brightness follows Cesium's lighting.
+
+What is verified and what is not.
+
+- Verified: the 72/255 and 61/255 worst-case errors above (base colour and
+  emissive) in the H19 probe, with numeric shader samples of KTX2 pages; the
+  lit-versus-unlit mismatch and its removal on one 0.79M-triangle photogrammetry
+  crop in CesiumJS 1.146 (a visual check by the maintainer, not a pixel measurement);
+  and the attribute set of proxies against leaves, which the tests pin.
+- Not verified: how much of the filtering error shows on the unlit path as
+  against the lit one (H19 measured sampled values, not a full rendered
+  appearance); other CesiumJS versions, GPUs, browsers and viewers; whether PNG
+  pages (`lossless` profile) avoid the error (PNG loading was outside the H19
+  measurement); and any lighting setting that hides a tint step on a source that
+  carries normals.
+
+What to configure. Nothing in the tiler or in the viewer is required for valid
+output, and the tiler has no option for a tile's colour space or lighting. The
+filtering limitation affects how high-contrast base colour and emissive
+textures blend between texels and mip levels. The authored sRGB mip levels and
+transfer metadata are correct, so do not edit the pages to compensate. The H19
+probe found that uploading the same KTX2 payload with a matching sRGB format
+removes the error. This is the loader's behaviour, and no CesiumJS release or
+setting that does it has been tested here. If colour accuracy matters, check
+the result in your own viewer.
 
 Worker diagnostics describe capture and active leaf workspace admission. Capture
 scratch bounds cover capture files only; accumulated leaf/forest intermediates

@@ -148,3 +148,11 @@ carry them under `third_party/basis_universal/`, the wheels under `.dist-info/li
 `/usr/share/doc/rusty-tiles/third_party/`. Release, wheel acceptance and CI's Rust job (crate,
 also held under crates.io's 10 MB limit) check them byte for byte; the packaged-runtime test
 checks the image.
+
+Scope: this covers the vendored native code only. It does not cover the Rust crates that Cargo
+resolves (275 in the default build and 288 with all features at 2026-10-23, mostly
+`MIT OR Apache-2.0` or `MIT`). Their licence and NOTICE files are not yet bundled in binaries,
+wheels or the container image, and `third_party_notices.py` does not check them. About 20 of
+those crates publish no licence file in their package, so a bundle needs the licence text from
+their repository or the SPDX text. Closing this needs a generated notice file per target and
+feature set and a decision on how it is produced and wired into each artefact.
