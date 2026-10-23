@@ -12,5 +12,9 @@
   tallest first on the power-of-two width whose pages need the fewest texels,
   with ties going to the squarest. On a 0.79M-triangle photogrammetry crop, proxy
   page texels fall from 53.7M to 7.1M, the archive from 84.3 MB to 73.0 MB, and
-  the explicit depth 0–4 contents from 3.49 MB to 1.87 MB. Leaf tiles are
+  the explicit depth 0–4 contents from 3.49 MB to 1.87 MB. On the 2048-texture
+  "mgal_detail_offset" model the archive falls from 1.74 GB to 1.54 GB, the
+  explicit depth 0–4 contents from 48.8 MB to 34.1 MB (base texels 70M to 20M),
+  and the proxy bake from 99 to 51 minutes. The bake now rasterises each page's
+  faces by source, so the shared image cache keeps its hits. Leaf tiles are
   byte-identical.
