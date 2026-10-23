@@ -105,9 +105,11 @@ and disappear on success, refusal and cancellation.
 
 Revised-S1 incidence is admitted before S2: exact groups have a fixed, charged
 65,536-leaf capacity and refuse before growth. The overlap allowance remains
-256 bytes/source triangle, checked prospectively for retained candidates, full
-probe sort/merge spill and row-sort growth above the admitted exact-row baseline.
-The final row-stream envelope includes that allowance too. Mixed-step candidate
+256 extra bytes/source triangle. All live candidate bytes and full probe/row
+sort-and-stream spill are checked prospectively against the admitted interface
+stage envelope. Exact-item space is reusable after its stream has been consumed;
+no record is pushed before the prospective total fits. The final row-stream
+envelope includes the overlap allowance too. Mixed-step candidate
 selection expands guest boxes beyond the minimum host tolerance at each level;
 a streamed global rounding floor is paid in hosts. Broad-phase padding doubles
 those radii to cover the predicate’s independent axial and perpendicular offsets

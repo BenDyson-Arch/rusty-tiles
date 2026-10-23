@@ -571,21 +571,25 @@ fn push_group(group: &mut Vec<Item>, item: Item) -> Result<(), JobError> {
     Ok(())
 }
 
-/// The allowance pays for retained candidates, all probe spill/merge generations,
-/// and row-sort growth above the already admitted six rows per source triangle.
-/// Check the prospective record count BEFORE pushing, including compaction jumps.
+/// Charge all live join streams against the admitted interface-stage envelope:
+/// retained candidates, full probe spill/merge generations and the complete row sort.
+/// Earlier exact-item space is reusable after its stream is consumed. Check the
+/// prospective count BEFORE pushing, including compaction jumps; no late overshoot.
 struct JoinBudget {
     limit: u64,
     candidates: u64,
-    base_rows: u64,
     sorter: SortConfig,
 }
 impl JoinBudget {
     fn new(n: u64, candidates: u64, sorter: SortConfig) -> Result<Self, JobError> {
         Ok(Self {
-            limit: n.saturating_mul(OVERLAP_BYTES_PER_TRIANGLE),
+            limit: scratch_need(n, sorter).ok_or_else(|| {
+                JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    "interface spill arithmetic overflow",
+                )
+            })?,
             candidates: candidates.saturating_mul(Candidate::SIZE as u64),
-            base_rows: Self::spill::<InterfaceRow>(n.saturating_mul(6), sorter)?,
             sorter,
         })
     }
@@ -600,12 +604,11 @@ impl JoinBudget {
             })
     }
     fn check(&self, probes: u64, rows: u64) -> Result<(), JobError> {
-        let extra_rows =
-            Self::spill::<InterfaceRow>(rows, self.sorter)?.saturating_sub(self.base_rows);
+        let row_bytes = Self::spill::<InterfaceRow>(rows, self.sorter)?;
         let need = self
             .candidates
             .saturating_add(Self::spill::<Probe>(probes, self.sorter)?)
-            .saturating_add(extra_rows);
+            .saturating_add(row_bytes);
         if need > self.limit {
             return Err(JobError::new(
                 JobErrorKind::ResourceLimit,
