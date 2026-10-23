@@ -7,7 +7,7 @@
 //! chunk as soon as it is consumed, so a streamed merge and its consumer's output share disk
 //! space instead of adding up, and an intermediate merge frees its inputs while it writes.
 //! Chunking changes no record order or content.
-use super::{scratch::SpillFile, Record, Scratch, SpillError};
+use super::{record_size, scratch::SpillFile, Layout, Record, Scratch, SpillError};
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, VecDeque},
@@ -123,11 +123,11 @@ pub(crate) const CHUNK_BYTES: usize = 8 << 20;
 
 /// Records per chunk file for `T` at the production [`CHUNK_BYTES`] (the scratch model).
 pub(crate) fn chunk_records<T: Record>() -> u64 {
-    chunk_records_of::<T>(CHUNK_BYTES)
+    chunk_records_of(CHUNK_BYTES, T::SIZE)
 }
 
-fn chunk_records_of<T: Record>(chunk_bytes: usize) -> u64 {
-    (chunk_bytes / T::SIZE).max(1) as u64
+fn chunk_records_of(chunk_bytes: usize, record_bytes: usize) -> u64 {
+    (chunk_bytes / record_bytes).max(1) as u64
 }
 
 struct Chunk {
@@ -182,12 +182,18 @@ struct RunReader<T> {
     in_chunk: u64,
     remaining: u64,
     records: u64,
+    layout: Layout,
     encoded: Vec<u8>,
     _record: PhantomData<T>,
 }
 
 impl<T: Record> RunReader<T> {
-    fn open(scratch: &Scratch, run: Run, buffer_bytes: usize) -> Result<Self, SpillError> {
+    fn open(
+        scratch: &Scratch,
+        run: Run,
+        buffer_bytes: usize,
+        layout: Layout,
+    ) -> Result<Self, SpillError> {
         let mut reader = Self {
             reader: None,
             chunks: run.chunks,
@@ -196,7 +202,8 @@ impl<T: Record> RunReader<T> {
             in_chunk: 0,
             remaining: run.records,
             records: run.records,
-            encoded: vec![0; T::SIZE],
+            layout,
+            encoded: vec![0; record_size::<T>(layout)?],
             _record: PhantomData,
         };
         reader.open_front()?;
@@ -276,7 +283,7 @@ impl<T: Record> Cursor<T> for RunReader<T> {
         }
         self.in_chunk -= 1;
         self.remaining -= 1;
-        Ok(Some(T::decode(&self.encoded)))
+        Ok(Some(T::decode_in(self.layout, &self.encoded)))
     }
 }
 
@@ -351,7 +358,7 @@ struct OpenChunk {
 }
 
 impl OpenChunk {
-    fn close<T: Record>(mut self) -> Result<Chunk, SpillError> {
+    fn close(mut self, record_bytes: usize) -> Result<Chunk, SpillError> {
         self.writer
             .flush()
             .map_err(|e| SpillError::io("write spill run", self.file.path(), e))?;
@@ -362,7 +369,7 @@ impl OpenChunk {
         } = self;
         drop(writer);
         let bytes = records
-            .checked_mul(T::SIZE as u64)
+            .checked_mul(record_bytes as u64)
             .ok_or(SpillError::Overflow)?;
         file.completed(bytes);
         Ok(Chunk { file, records })
@@ -372,17 +379,19 @@ impl OpenChunk {
 fn write_run<T: Record>(
     scratch: &Scratch,
     buffer_bytes: usize,
+    layout: Layout,
     records: &mut impl Cursor<T>,
 ) -> Result<Run, SpillError> {
-    let per_chunk = chunk_records_of::<T>(scratch.chunk_bytes());
+    let size = record_size::<T>(layout)?;
+    let per_chunk = chunk_records_of(scratch.chunk_bytes(), size);
     let mut chunks = VecDeque::new();
     let mut open: Option<OpenChunk> = None;
-    let mut encoded = vec![0; T::SIZE];
+    let mut encoded = vec![0; size];
     let mut count = 0u64;
     while let Some(record) = records.next_record()? {
         if open.as_ref().is_none_or(|chunk| chunk.records == per_chunk) {
             if let Some(full) = open.take() {
-                chunks.push_back(full.close::<T>()?);
+                chunks.push_back(full.close(size)?);
             }
             let file = scratch.new_file("run")?;
             let writer = BufWriter::with_capacity(
@@ -399,14 +408,13 @@ fn write_run<T: Record>(
             });
         }
         let chunk = open.as_mut().expect("a chunk is open");
-        record.encode(&mut encoded);
+        record.encode_in(layout, &mut encoded);
         let next = chunk.records.checked_add(1).ok_or(SpillError::Overflow)?;
         // A failing write_all may write a prefix before returning its error. Pre-account
         // the entire attempted record so failure peaks cannot omit that prefix.
-        chunk.file.completed(
-            next.checked_mul(T::SIZE as u64)
-                .ok_or(SpillError::Overflow)?,
-        );
+        chunk
+            .file
+            .completed(next.checked_mul(size as u64).ok_or(SpillError::Overflow)?);
         chunk
             .writer
             .write_all(&encoded)
@@ -415,7 +423,7 @@ fn write_run<T: Record>(
         count = count.checked_add(1).ok_or(SpillError::Overflow)?;
     }
     if let Some(last) = open.take() {
-        chunks.push_back(last.close::<T>()?);
+        chunks.push_back(last.close(size)?);
     }
     Ok(Run {
         chunks,
@@ -455,6 +463,8 @@ pub(crate) struct ExternalSorter<'s, T: Record> {
     scratch: &'s Scratch,
     config: SortConfig,
     run_records: usize,
+    /// Run-level encoding of every spilled record.
+    layout: Layout,
     buffer: Vec<T>,
     runs: Vec<Run>,
     stats: SortStats,
@@ -463,11 +473,22 @@ pub(crate) struct ExternalSorter<'s, T: Record> {
 
 impl<'s, T: Record> ExternalSorter<'s, T> {
     pub(crate) fn new(scratch: &'s Scratch, config: SortConfig) -> Result<Self, SpillError> {
+        Self::with_layout(scratch, config, Layout::FULL)
+    }
+
+    /// A sorter spilling every record under `layout`; resident runs are unaffected.
+    pub(crate) fn with_layout(
+        scratch: &'s Scratch,
+        config: SortConfig,
+        layout: Layout,
+    ) -> Result<Self, SpillError> {
         let run_records = config.run_records::<T>()?;
+        record_size::<T>(layout)?;
         Ok(Self {
             scratch,
             config,
             run_records,
+            layout,
             buffer: Vec::new(),
             runs: Vec::new(),
             stats: SortStats::default(),
@@ -532,10 +553,20 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             .map(|part| SliceCursor(part.iter()))
             .collect();
         let run = if parts.len() == 1 {
-            write_run(self.scratch, self.config.buffer_bytes, &mut parts[0])?
+            write_run(
+                self.scratch,
+                self.config.buffer_bytes,
+                self.layout,
+                &mut parts[0],
+            )?
         } else {
             let mut merger = Merger::new(parts)?;
-            write_run(self.scratch, self.config.buffer_bytes, &mut merger)?
+            write_run(
+                self.scratch,
+                self.config.buffer_bytes,
+                self.layout,
+                &mut merger,
+            )?
         };
         self.stats.runs += 1;
         self.stats.spilled_bytes += run.file_bytes();
@@ -578,10 +609,17 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
             let readers = self
                 .runs
                 .drain(first..first + self.config.fan_in)
-                .map(|run| RunReader::<T>::open(self.scratch, run, self.config.buffer_bytes))
+                .map(|run| {
+                    RunReader::<T>::open(self.scratch, run, self.config.buffer_bytes, self.layout)
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             let mut merger = Merger::new(readers)?;
-            let mut run = write_run(self.scratch, self.config.buffer_bytes, &mut merger)?;
+            let mut run = write_run(
+                self.scratch,
+                self.config.buffer_bytes,
+                self.layout,
+                &mut merger,
+            )?;
             run.generation = generation.checked_add(1).ok_or(SpillError::Overflow)?;
             self.stats.spilled_bytes += run.file_bytes();
             self.stats.merge_levels = self.stats.merge_levels.max(u64::from(run.generation));
@@ -645,11 +683,21 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
                     let readers = group
                         .into_iter()
                         .map(|run| {
-                            RunReader::<T>::open(self.scratch, run, self.config.buffer_bytes)
+                            RunReader::<T>::open(
+                                self.scratch,
+                                run,
+                                self.config.buffer_bytes,
+                                self.layout,
+                            )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     let mut merger = Merger::new(readers)?;
-                    let run = write_run(self.scratch, self.config.buffer_bytes, &mut merger)?;
+                    let run = write_run(
+                        self.scratch,
+                        self.config.buffer_bytes,
+                        self.layout,
+                        &mut merger,
+                    )?;
                     self.stats.spilled_bytes += run.file_bytes();
                     // Inputs were removed chunk by chunk as the merge read them; dropping
                     // the merger removes any remainder (e.g. after an error).
@@ -700,7 +748,7 @@ impl<'s, T: Record> ExternalSorter<'s, T> {
         }
         let readers = std::mem::take(&mut self.runs)
             .into_iter()
-            .map(|run| RunReader::open(self.scratch, run, self.config.buffer_bytes))
+            .map(|run| RunReader::open(self.scratch, run, self.config.buffer_bytes, self.layout))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(SortedStream {
             source: Some(Source::Disk(Merger::new(readers)?)),

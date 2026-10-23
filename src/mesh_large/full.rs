@@ -239,6 +239,7 @@ fn image_preflight(
 }
 fn scratch_need(
     scan: SourceScan,
+    layout: crate::spill::Layout,
     config: &TreeConfig,
     unit: u64,
     image_count: u64,
@@ -253,9 +254,13 @@ fn scratch_need(
     let n = scan.triangles;
     let corners = mul(n, 3)?;
     let corner_refs = config::sort_spill::<CornerRef>(corners, sorter).ok_or_else(overflow)?;
+    // Capture's attribute records spill under the run's attribute layout.
+    let chunk = crate::spill::CHUNK_BYTES;
     let positioned =
-        config::sort_spill::<attributes::FullCorner>(corners, sorter).ok_or_else(overflow)?;
-    let full = config::sort_spill::<FullTriangle>(n, sorter).ok_or_else(overflow)?;
+        config::sort_spill_in::<attributes::FullCorner>(corners, sorter, chunk, layout)
+            .ok_or_else(overflow)?;
+    let full =
+        config::sort_spill_in::<FullTriangle>(n, sorter, chunk, layout).ok_or_else(overflow)?;
     let projection = config::sort_spill::<TriangleRecord>(n, sorter).ok_or_else(overflow)?;
     let nodes = config::node_bound(n, scan.geometry_bytes, config);
     let node_sort = config::sort_spill::<NodeRecord>(nodes, sorter).ok_or_else(overflow)?;
@@ -584,6 +589,7 @@ pub(crate) fn capture_admitted(
     };
     let source_crs = frame.placement();
     let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
+    let layout = attributes::attribute_layout(&source);
     let parent = config
         .scratch_dir
         .clone()
@@ -591,6 +597,7 @@ pub(crate) fn capture_admitted(
     let volume = crate::spill::inspect_volume(&parent).map_err(|e| super::failure(e.into()))?;
     let need = scratch_need(
         scan,
+        layout,
         config,
         volume.allocation_unit_bytes,
         image_count,
@@ -675,15 +682,17 @@ pub(crate) fn capture_admitted(
             &mut frame,
             &scratch,
             config.sorter(workers),
+            layout,
             &mut scan,
             check,
         )?;
         peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
         begin_stage(&scratch, &need, stages.projection)?;
-        let mut full_writer = SequenceWriter::<FullTriangle>::new(
+        let mut full_writer = SequenceWriter::<FullTriangle>::with_layout(
             &scratch,
             "full-triangles",
             config.sort.buffer_bytes,
+            layout,
         )?;
         let mut projection =
             ExternalSorter::<TriangleRecord>::new(&scratch, config.sorter(workers))?;
@@ -1948,7 +1957,7 @@ pub(super) mod tests {
             },
             geometry_bytes: 2000,
         };
-        let need = scratch_need(scan, &cfg, 4096, 2, 8192).unwrap();
+        let need = scratch_need(scan, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192).unwrap();
         // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860, projection 930. One
         // run per sort, so no merge slack: the positioned stream beside the full-triangle sort
         // bounds capture; the full stream, its sequence and the projection bound projection.
@@ -1988,7 +1997,7 @@ pub(super) mod tests {
             ..scan
         };
         assert_eq!(
-            scratch_need(overflow, &cfg, 4096, 2, 8192)
+            scratch_need(overflow, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192)
                 .unwrap_err()
                 .kind(),
             JobErrorKind::ResourceLimit

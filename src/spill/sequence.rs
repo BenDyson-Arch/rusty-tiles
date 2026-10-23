@@ -1,8 +1,9 @@
 //! Sequential spill: records written once, in order, and read back in that order any number of
 //! times. Files live in the owned scratch directory and are accounted like sort runs.
 use super::{
+    record_size,
     scratch::{read_exact_at, SpillFile},
-    Record, Scratch, SpillError, SpillIo,
+    Layout, Record, Scratch, SpillError, SpillIo,
 };
 use std::{
     fs::File,
@@ -19,6 +20,7 @@ pub(crate) struct SequenceWriter<T: Record> {
     io: Arc<dyn SpillIo>,
     buffer_bytes: usize,
     records: u64,
+    layout: Layout,
     encoded: Vec<u8>,
     _record: PhantomData<T>,
 }
@@ -29,12 +31,20 @@ impl<T: Record> SequenceWriter<T> {
         stem: &str,
         buffer_bytes: usize,
     ) -> Result<Self, SpillError> {
+        Self::with_layout(scratch, stem, buffer_bytes, Layout::FULL)
+    }
+
+    /// A writer encoding every record under `layout`; the sequence keeps it for its readers.
+    pub(crate) fn with_layout(
+        scratch: &Scratch,
+        stem: &str,
+        buffer_bytes: usize,
+        layout: Layout,
+    ) -> Result<Self, SpillError> {
         if buffer_bytes == 0 {
             return Err(SpillError::InvalidConfig("stream buffer must be nonzero"));
         }
-        if T::SIZE == 0 {
-            return Err(SpillError::InvalidConfig("record size must be nonzero"));
-        }
+        let size = record_size::<T>(layout)?;
         let file = scratch.new_file(stem)?;
         let io = scratch.io_handle();
         let inner = io
@@ -46,7 +56,8 @@ impl<T: Record> SequenceWriter<T> {
             io,
             buffer_bytes,
             records: 0,
-            encoded: vec![0; T::SIZE],
+            layout,
+            encoded: vec![0; size],
             _record: PhantomData,
         })
     }
@@ -54,9 +65,9 @@ impl<T: Record> SequenceWriter<T> {
     pub(crate) fn push(&mut self, record: &T) -> Result<(), SpillError> {
         let records = self.records.checked_add(1).ok_or(SpillError::Overflow)?;
         let bytes = records
-            .checked_mul(T::SIZE as u64)
+            .checked_mul(self.encoded.len() as u64)
             .ok_or(SpillError::Overflow)?;
-        record.encode(&mut self.encoded);
+        record.encode_in(self.layout, &mut self.encoded);
         // Include the attempted record before writing: a failed write may have emitted a
         // strict prefix. Counting its full size remains conservative on that failure path.
         self.file.completed(bytes);
@@ -81,11 +92,13 @@ impl<T: Record> SequenceWriter<T> {
             io,
             buffer_bytes,
             records,
+            layout,
+            encoded,
             ..
         } = self;
         drop(writer);
         let bytes = records
-            .checked_mul(T::SIZE as u64)
+            .checked_mul(encoded.len() as u64)
             .ok_or(SpillError::Overflow)?;
         file.completed(bytes);
         Ok(Sequence {
@@ -93,6 +106,7 @@ impl<T: Record> SequenceWriter<T> {
             io,
             buffer_bytes,
             records,
+            layout,
             _record: PhantomData,
         })
     }
@@ -104,12 +118,24 @@ pub(crate) struct Sequence<T: Record> {
     io: Arc<dyn SpillIo>,
     buffer_bytes: usize,
     records: u64,
+    /// Run-level encoding of every record (its width was checked by the writer).
+    layout: Layout,
     _record: PhantomData<T>,
 }
 
 impl<T: Record> Sequence<T> {
     pub(crate) fn len(&self) -> u64 {
         self.records
+    }
+
+    /// The run-level encoding of the records.
+    pub(crate) fn layout(&self) -> Layout {
+        self.layout
+    }
+
+    /// Encoded bytes per record.
+    fn size(&self) -> usize {
+        T::size_in(self.layout)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -126,7 +152,7 @@ impl<T: Record> Sequence<T> {
             reader: Some(BufReader::with_capacity(self.buffer_bytes, inner)),
             sequence: self,
             remaining: self.records,
-            encoded: vec![0; T::SIZE],
+            encoded: vec![0; self.size()],
             ranged: false,
         })
     }
@@ -144,7 +170,7 @@ impl<T: Record> Sequence<T> {
             ));
         }
         let offset = first
-            .checked_mul(T::SIZE as u64)
+            .checked_mul(self.size() as u64)
             .ok_or(SpillError::Overflow)?;
         let inner = self
             .io
@@ -154,7 +180,7 @@ impl<T: Record> Sequence<T> {
             reader: Some(BufReader::with_capacity(buffer_bytes, inner)),
             sequence: self,
             remaining: end - first,
-            encoded: vec![0; T::SIZE],
+            encoded: vec![0; self.size()],
             ranged: true,
         })
     }
@@ -171,6 +197,7 @@ impl<T: Record> Sequence<T> {
             file,
             path: self.file.path().to_owned(),
             records: self.records,
+            layout: self.layout,
             _record: PhantomData,
         })
     }
@@ -181,6 +208,7 @@ pub(crate) struct RandomRecords<T: Record> {
     file: File,
     path: std::path::PathBuf,
     records: u64,
+    layout: Layout,
     _record: PhantomData<T>,
 }
 
@@ -199,11 +227,10 @@ impl<T: Record> RandomRecords<T> {
             .ok_or(SpillError::InvalidConfig(
                 "record range outside the sequence",
             ))?;
-        let bytes = count.checked_mul(T::SIZE).ok_or(SpillError::Overflow)?;
+        let size = T::size_in(self.layout);
+        let bytes = count.checked_mul(size).ok_or(SpillError::Overflow)?;
         encoded.resize(bytes, 0);
-        let offset = first
-            .checked_mul(T::SIZE as u64)
-            .ok_or(SpillError::Overflow)?;
+        let offset = first.checked_mul(size as u64).ok_or(SpillError::Overflow)?;
         read_exact_at(&self.file, encoded, offset).map_err(|e| {
             if e.kind() == io::ErrorKind::UnexpectedEof {
                 SpillError::CorruptRun {
@@ -215,7 +242,11 @@ impl<T: Record> RandomRecords<T> {
             }
         })?;
         out.clear();
-        out.extend((0..count).map(|i| T::decode(&encoded[i * T::SIZE..(i + 1) * T::SIZE])));
+        out.extend(
+            encoded
+                .chunks_exact(size)
+                .map(|bytes| T::decode_in(self.layout, bytes)),
+        );
         Ok(())
     }
 }
@@ -405,7 +436,7 @@ impl<T: Record> SequenceReader<'_, T> {
             ));
         }
         self.remaining -= 1;
-        Ok(Some(T::decode(&self.encoded)))
+        Ok(Some(T::decode_in(self.sequence.layout, &self.encoded)))
     }
 }
 

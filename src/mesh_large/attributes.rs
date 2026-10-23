@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     gltf_source::source::ScenePrimitive,
-    spill::{ExternalSorter, Record, Scratch, SortConfig, SortedStream},
+    spill::{ExternalSorter, Layout, Record, Scratch, SortConfig, SortedStream},
     JobError, JobErrorKind,
 };
 use std::cmp::Ordering;
@@ -31,6 +31,29 @@ pub(crate) const TANGENT: u8 = 2;
 pub(crate) const UV0: u8 = 4;
 pub(crate) const UV1: u8 = 8;
 pub(crate) const COLOR: u8 = 16;
+/// Every attribute flag; a layout's other bits are ignored.
+const ALL: u8 = NORMAL | TANGENT | UV0 | UV1 | COLOR;
+/// The run-level attribute layout of [`FullTriangle`] and [`FullCorner`]: the union of the
+/// selected scene's primitive attribute flags. An attribute no primitive carries is the
+/// default (zero) in every record, so the run's sorts and sequences omit it; decode restores
+/// it, and the records consumers read are unchanged.
+pub(crate) fn attribute_layout(source: &StreamSource) -> Layout {
+    Layout(
+        source
+            .document
+            .scene_primitives()
+            .fold(0, |union, p| union | flags(&p)),
+    )
+}
+/// Encoded bytes of one corner's attributes under `layout`.
+pub(crate) fn corner_attribute_bytes(layout: Layout) -> usize {
+    let bits = layout.0;
+    [(NORMAL, 12), (TANGENT, 16), (UV0, 8), (UV1, 8), (COLOR, 16)]
+        .iter()
+        .filter(|(flag, _)| bits & flag != 0)
+        .map(|(_, bytes)| bytes)
+        .sum()
+}
 fn flags(p: &ScenePrimitive<'_>) -> u8 {
     (u8::from(p.normal.is_some()) * NORMAL)
         | (u8::from(p.tangent.is_some()) * TANGENT)
@@ -46,29 +69,56 @@ pub(crate) struct CornerAttributes {
     pub color: [f32; 4],
 }
 impl CornerAttributes {
-    fn encode(&self, out: &mut [u8]) {
-        for (dst, v) in out.as_chunks_mut::<4>().0.iter_mut().zip(
-            self.normal
-                .iter()
-                .chain(self.tangent.iter())
-                .chain(self.texcoords.iter().flatten())
-                .chain(self.color.iter()),
-        ) {
+    /// The fields `layout` keeps, in wire order (normal, tangent, UV0, UV1, color).
+    fn fields(&self, layout: Layout) -> impl Iterator<Item = &f32> {
+        fn keep(layout: Layout, flag: u8, values: &[f32]) -> std::slice::Iter<'_, f32> {
+            let kept: &[f32] = if layout.0 & flag != 0 { values } else { &[] };
+            kept.iter()
+        }
+        let keep = |flag, values| keep(layout, flag, values);
+        keep(NORMAL, &self.normal)
+            .chain(keep(TANGENT, &self.tangent))
+            .chain(keep(UV0, &self.texcoords[0]))
+            .chain(keep(UV1, &self.texcoords[1]))
+            .chain(keep(COLOR, &self.color))
+    }
+    /// Writes the fields `layout` keeps (`out.len() == corner_attribute_bytes(layout)`); the
+    /// omitted fields must be zero, which capture guarantees by flag.
+    fn encode(&self, layout: Layout, out: &mut [u8]) {
+        // Decode restores omitted fields as +0.0: any other bits would not round-trip.
+        debug_assert!(
+            self.fields(Layout(!layout.0)).all(|v| v.to_bits() == 0),
+            "attribute layout omits a nonzero field"
+        );
+        for (dst, v) in out
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(self.fields(layout))
+        {
             dst.copy_from_slice(&v.to_le_bytes());
         }
     }
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode(layout: Layout, bytes: &[u8]) -> Self {
         let mut values = bytes
             .as_chunks::<4>()
             .0
             .iter()
             .map(|b| f32::from_le_bytes(*b));
-        Self {
-            normal: std::array::from_fn(|_| values.next().unwrap()),
-            tangent: std::array::from_fn(|_| values.next().unwrap()),
-            texcoords: std::array::from_fn(|_| std::array::from_fn(|_| values.next().unwrap())),
-            color: std::array::from_fn(|_| values.next().unwrap()),
-        }
+        let mut read = |flag: u8, out: &mut [f32]| {
+            if layout.0 & flag != 0 {
+                for v in out {
+                    *v = values.next().unwrap();
+                }
+            }
+        };
+        let mut out = Self::default();
+        read(NORMAL, &mut out.normal);
+        read(TANGENT, &mut out.tangent);
+        read(UV0, &mut out.texcoords[0]);
+        read(UV1, &mut out.texcoords[1]);
+        read(COLOR, &mut out.color);
+        out
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -105,29 +155,44 @@ impl Ord for FullTriangle {
             ))
     }
 }
+/// The triangle, expanded ordinal, material and flags; three corners' attributes follow.
+const FULL_TRIANGLE_HEAD: usize = 106;
 impl Record for FullTriangle {
     const SIZE: usize = 286;
     fn encode(&self, out: &mut [u8]) {
+        self.encode_in(Layout::FULL, out);
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        Self::decode_in(Layout::FULL, bytes)
+    }
+    fn size_in(layout: Layout) -> usize {
+        FULL_TRIANGLE_HEAD + 3 * corner_attribute_bytes(layout)
+    }
+    fn encode_in(&self, layout: Layout, out: &mut [u8]) {
+        debug_assert_eq!(self.flags & ALL & !layout.0, 0);
         self.triangle.encode(&mut out[..93]);
         out[93..101].copy_from_slice(&self.expanded_ordinal.to_le_bytes());
         out[101..105].copy_from_slice(&self.material.to_le_bytes());
         out[105] = self.flags;
+        let width = corner_attribute_bytes(layout);
         for (a, b) in self
             .corners
             .iter()
-            .zip(out[106..].as_chunks_mut::<60>().0.iter_mut())
+            .zip(out[FULL_TRIANGLE_HEAD..].chunks_exact_mut(width.max(1)))
         {
-            a.encode(b);
+            a.encode(layout, b);
         }
     }
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
+        let width = corner_attribute_bytes(layout);
         Self {
             triangle: TriangleRecord::decode(&bytes[..93]),
             expanded_ordinal: u64::from_le_bytes(bytes[93..101].try_into().unwrap()),
             material: u32::from_le_bytes(bytes[101..105].try_into().unwrap()),
             flags: bytes[105],
             corners: std::array::from_fn(|i| {
-                CornerAttributes::decode(&bytes[106 + i * 60..166 + i * 60])
+                let start = FULL_TRIANGLE_HEAD + i * width;
+                CornerAttributes::decode(layout, &bytes[start..start + width])
             }),
         }
     }
@@ -156,13 +221,22 @@ impl Ord for FullCorner {
 impl Record for FullCorner {
     const SIZE: usize = 97;
     fn encode(&self, out: &mut [u8]) {
-        self.corner.encode(&mut out[..37]);
-        self.attributes.encode(&mut out[37..]);
+        self.encode_in(Layout::FULL, out);
     }
     fn decode(bytes: &[u8]) -> Self {
+        Self::decode_in(Layout::FULL, bytes)
+    }
+    fn size_in(layout: Layout) -> usize {
+        37 + corner_attribute_bytes(layout)
+    }
+    fn encode_in(&self, layout: Layout, out: &mut [u8]) {
+        self.corner.encode(&mut out[..37]);
+        self.attributes.encode(layout, &mut out[37..]);
+    }
+    fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
         Self {
             corner: CornerPosition::decode(&bytes[..37]),
-            attributes: CornerAttributes::decode(&bytes[37..]),
+            attributes: CornerAttributes::decode(layout, &bytes[37..]),
         }
     }
 }
@@ -253,22 +327,36 @@ pub(crate) fn capture_full<'s>(
         &mut SourceFrame::Local,
         scratch,
         sort,
+        attribute_layout(source),
         &mut scan,
         check,
     )
 }
 /// [`capture_full`] in a resolved frame. A source CRS frame checks the used post-node source
 /// bounds against the scan's and replaces `scan.bounds` with the mapped box before the cube
-/// keys are assigned; the scan never maps positions.
+/// keys are assigned; the scan never maps positions. Both sorts spill under `layout`, which
+/// must hold every selected primitive's attributes ([`attribute_layout`]).
 pub(crate) fn capture_full_in<'s>(
     source: &StreamSource,
     frame: &mut SourceFrame,
     scratch: &'s Scratch,
     sort: SortConfig,
+    layout: Layout,
     scan: &mut SourceScan,
     check: &mut dyn FnMut() -> Result<()>,
 ) -> Result<SortedStream<'s, FullTriangle>> {
     source.validate_payload(sort.buffer_bytes, check)?;
+    // Only a primitive's own attributes are ever nonzero, so a layout holding them all drops
+    // nothing but zeros. Checked once per primitive, never per record.
+    if source
+        .document
+        .scene_primitives()
+        .any(|p| flags(&p) & !layout.0 != 0)
+    {
+        return Err(invariant(
+            "attribute layout omits a selected primitive's attribute",
+        ));
+    }
     let mut corners = ExternalSorter::<CornerRef>::new(scratch, sort)?;
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
         check()?;
@@ -293,7 +381,7 @@ pub(crate) fn capture_full_in<'s>(
     }
     let mut corners = corners.finish()?;
     let mut next = corners.next().transpose()?;
-    let mut positioned = ExternalSorter::<FullCorner>::new(scratch, sort)?;
+    let mut positioned = ExternalSorter::<FullCorner>::with_layout(scratch, sort, layout)?;
     let mut mapped_bounds = Bounds::EMPTY;
     let mut source_bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for (ordinal, p) in source.document.scene_primitives().enumerate() {
@@ -373,7 +461,7 @@ pub(crate) fn capture_full_in<'s>(
         scan.bounds = mapped_bounds;
     }
     let mut positioned = positioned.finish()?;
-    let mut triangles = ExternalSorter::<FullTriangle>::new(scratch, sort)?;
+    let mut triangles = ExternalSorter::<FullTriangle>::with_layout(scratch, sort, layout)?;
     let cube = Cube::around(&scan.bounds);
     let mut count = 0u64;
     let mut bounds = Bounds::EMPTY;
@@ -510,6 +598,135 @@ mod tests {
         assert!(triangle < later);
     }
 
+    /// A record whose present attributes are all nonzero (a normal of -0.0 included) and
+    /// whose absent ones are zero, as capture builds them.
+    fn layout_row(flags: u8) -> FullTriangle {
+        let large = u64::from(u32::MAX) + 17;
+        let full = CornerAttributes {
+            normal: [-0., 0.25, 1.],
+            tangent: [1., -0.5, 0.125, -1.],
+            texcoords: [[-2., 7.], [0.25, 0.75]],
+            color: [0.1, 0.5, 1., 0.75],
+        };
+        let mut corners = [CornerAttributes::default(); 3];
+        for (i, corner) in corners.iter_mut().enumerate() {
+            let shift = i as f32;
+            if flags & NORMAL != 0 {
+                corner.normal = full.normal.map(|v| v * (shift + 1.));
+            }
+            if flags & TANGENT != 0 {
+                corner.tangent = full.tangent.map(|v| v + shift);
+            }
+            if flags & UV0 != 0 {
+                corner.texcoords[0] = full.texcoords[0].map(|v| v - shift);
+            }
+            if flags & UV1 != 0 {
+                corner.texcoords[1] = full.texcoords[1].map(|v| v * 3. + shift);
+            }
+            if flags & COLOR != 0 {
+                corner.color = full.color.map(|v| v / (shift + 2.));
+            }
+        }
+        FullTriangle {
+            triangle: TriangleRecord {
+                key: 17,
+                source: Provenance {
+                    node: 2,
+                    mesh: 3,
+                    primitive: 4,
+                    triangle: large,
+                },
+                vertices: [large, large + 1, large + 2],
+                positions: [[0., -0., 1.], [2., 3., 4.], [5., 6., 7.]],
+                bytes: 236,
+                degenerate: false,
+            },
+            expanded_ordinal: large + 3,
+            material: 9,
+            flags,
+            corners,
+        }
+    }
+
+    /// Every attribute layout round-trips every record whose attributes it holds, byte for
+    /// byte against the full encoding, at exactly the documented width; the full layout is
+    /// the unchanged 286/97-byte wire.
+    #[test]
+    fn attribute_layouts_round_trip_at_their_widths() {
+        assert_eq!(corner_attribute_bytes(Layout::FULL), 60);
+        assert_eq!(FullTriangle::size_in(Layout::FULL), FullTriangle::SIZE);
+        assert_eq!(FullCorner::size_in(Layout::FULL), FullCorner::SIZE);
+        // The evidence inputs: crop3 (NORMAL, COLOR_0), tex3 (TEXCOORD_0), positions only.
+        assert_eq!(FullTriangle::size_in(Layout(NORMAL | COLOR)), 190);
+        assert_eq!(FullTriangle::size_in(Layout(UV0)), 130);
+        assert_eq!(FullTriangle::size_in(Layout(0)), 106);
+        assert_eq!(FullCorner::size_in(Layout(UV0)), 45);
+        for flags in 0..=ALL {
+            let row = layout_row(flags);
+            let full = wire(&row);
+            for extra in [0, ALL, !0] {
+                let layout = Layout(flags | extra);
+                let size = FullTriangle::size_in(layout);
+                assert_eq!(size, 106 + 3 * corner_attribute_bytes(layout));
+                let mut bytes = vec![0; size];
+                row.encode_in(layout, &mut bytes);
+                assert_eq!(wire(&FullTriangle::decode_in(layout, &bytes)), full);
+                let corner = FullCorner {
+                    corner: CornerPosition {
+                        primitive: 1,
+                        triangle: 2,
+                        corner: 1,
+                        vertex: 3,
+                        position: [1., 2., 3.],
+                    },
+                    attributes: row.corners[1],
+                };
+                let mut bytes = vec![0; FullCorner::size_in(layout)];
+                corner.encode_in(layout, &mut bytes);
+                assert_eq!(wire(&FullCorner::decode_in(layout, &bytes)), wire(&corner));
+            }
+        }
+    }
+
+    /// A compact sequence reads back the same records sequentially, by range and by
+    /// position, and its file holds only the layout's bytes.
+    #[test]
+    fn compact_sequences_read_back_every_access_path() {
+        use crate::spill::SequenceWriter;
+        let scratch = Scratch::create(None, 0).unwrap();
+        let layout = Layout(UV0 | COLOR);
+        let rows: Vec<_> = (0..7)
+            .map(|i| {
+                let mut row = layout_row(if i % 2 == 0 { UV0 } else { UV0 | COLOR });
+                row.expanded_ordinal = i;
+                row
+            })
+            .collect();
+        let mut writer = SequenceWriter::with_layout(&scratch, "compact", 16, layout).unwrap();
+        for row in &rows {
+            writer.push(row).unwrap();
+        }
+        let sequence = writer.finish().unwrap();
+        assert_eq!(sequence.layout(), layout);
+        assert_eq!(
+            scratch.live_bytes(),
+            7 * FullTriangle::size_in(layout) as u64
+        );
+        let expected: Vec<_> = rows.iter().map(wire).collect();
+        let read = |it: crate::spill::SequenceReader<'_, FullTriangle>| -> Vec<Vec<u8>> {
+            it.map(|row| wire(&row.unwrap())).collect()
+        };
+        assert_eq!(read(sequence.reader().unwrap()), expected);
+        assert_eq!(read(sequence.range(2, 5, 16).unwrap()), expected[2..5]);
+        let (mut encoded, mut out) = (Vec::new(), Vec::new());
+        sequence
+            .random()
+            .unwrap()
+            .read(3, 4, &mut encoded, &mut out)
+            .unwrap();
+        assert_eq!(out.iter().map(wire).collect::<Vec<_>>(), expected[3..7]);
+    }
+
     fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let input = dir.path().join("scene.gltf");
@@ -630,6 +847,53 @@ mod tests {
             assert_eq!(corner.normal[2], 0.);
             assert_eq!(corner.tangent, [0.; 4]);
         }
+    }
+
+    /// Capture under the run's attribute layout yields the records the full layout does,
+    /// through spilled sorts, while spilling fewer bytes; a layout missing a selected
+    /// primitive's attribute is refused before any record is written.
+    #[test]
+    fn compact_attribute_layout_captures_identical_records() {
+        let (dir, input) = fixture();
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+        doc["meshes"][0]["primitives"][0]["attributes"] =
+            json!({"POSITION":0,"NORMAL":1,"COLOR_0":5});
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+        let scan = super::super::capture::scan(&source, 16, &mut || Ok(())).unwrap();
+        let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+        let sort = SortConfig {
+            run_bytes: 512,
+            fan_in: 2,
+            buffer_bytes: 16,
+            jobs: 1,
+        };
+        let layout = attribute_layout(&source);
+        assert_eq!(layout, Layout(NORMAL | COLOR));
+        let run = |layout: Layout| {
+            let mut scan = scan;
+            let sorted = capture_full_in(
+                &source,
+                &mut SourceFrame::Local,
+                &scratch,
+                sort,
+                layout,
+                &mut scan,
+                &mut || Ok(()),
+            )?;
+            let spilled = sorted.stats().spilled_bytes;
+            let rows = sorted.map(|row| row.map(|row| wire(&row)));
+            Ok::<_, JobError>((rows.collect::<std::result::Result<Vec<_>, _>>()?, spilled))
+        };
+        let (full, full_spilled) = run(Layout::FULL).unwrap();
+        let (compact, compact_spilled) = run(layout).unwrap();
+        assert_eq!(compact, full);
+        assert!(compact_spilled > 0);
+        assert!(compact_spilled < full_spilled);
+        let error = run(Layout(NORMAL)).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::InvalidState);
+        assert_eq!(scratch.live_bytes(), 0);
     }
 
     #[test]
