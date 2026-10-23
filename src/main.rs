@@ -830,10 +830,8 @@ fn main() -> ExitCode {
                 Error::Job(failure) => job_category(failure.error.kind()),
                 _ => error.category(),
             };
-            if let (Some(signal), Error::Job(failure)) = (interrupt::signal(), &error) {
-                if failure.error.kind() == JobErrorKind::Cancelled {
-                    code = interrupt::exit_status(signal);
-                }
+            if let Some(signal) = interrupt::signal().filter(|_| is_cancellation(&error)) {
+                code = interrupt::exit_status(signal);
             }
             if json {
                 let failure = error_summary(&error, category, code);
@@ -849,6 +847,18 @@ fn main() -> ExitCode {
             }
             ExitCode::from(code)
         }
+    }
+}
+
+/// Cancellation surfaces as a job failure from every producer except the validator, which
+/// reports its own `ValidationFailure::Cancelled`.
+fn is_cancellation(error: &Error) -> bool {
+    match error {
+        Error::Job(failure) => failure.error.kind() == JobErrorKind::Cancelled,
+        Error::Validation(failure) => {
+            matches!(failure, rusty_tiles::validate::ValidationFailure::Cancelled)
+        }
+        _ => false,
     }
 }
 
