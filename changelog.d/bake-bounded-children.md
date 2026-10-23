@@ -1,0 +1,3 @@
+### Changed
+
+- Mesh proxy bake: a parent tile's memory no longer grows with its children's full texture data. Child packets are written in a smaller format (packet v2) holding only what a parent samples, and parents read child texels a tile at a time through a bounded cache. Decoded source images are shared by the bake's workers through one byte-bounded cache, which cuts the number of image decodes by roughly 10x on a textured input. A tile that must refuse is now refused before it rasterises, and a refused tile reruns on fewer workers with a larger share down to one worker with the whole allowance. Output bytes are unchanged. The 2048-texture "mgal_detail_offset" input, which could not finish its depth-6 tiles, now completes.
