@@ -373,7 +373,7 @@ The `mesh` recipe runs the tiler with the lossless profile, so its digests do no
    docker run --rm --platform linux/amd64 --network none ghcr.io/bendyson-arch/rusty-tiles:vVERSION doctor --json
    ```
 
-The standalone downloads are default builds using the portable JPEG encoder. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
+The standalone downloads are default builds. Linux builds use Ubuntu 22.04 (glibc 2.35+ and libstdc++); macOS builds use macOS 15. The installer checks the release checksum before running or installing a binary. `cargo-binstall` uses the same archive layout via the manifest metadata; publishing to crates.io is a separate maintainer action.
 
 A new version changes converter and cache identity. Consumers must invalidate derivative caches. Vector archives from another encoder identity, schema, library version, CRS or setting need a fresh baseline before reuse. The terrain manifest keeps `heightOverlay` version 1 with south-to-north rows. Echidna keeps its own Python raster and height helpers, separate from this runtime.
 

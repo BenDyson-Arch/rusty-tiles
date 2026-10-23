@@ -12,7 +12,7 @@ Choose **native-geospatial** when you need imagery, terrain, other OGR vector fo
 | --- | --- | --- |
 | CLI installer, release ZIP/tarball or `cargo-binstall` | Standard | The `rusty-tiles` executable; no system geospatial libraries needed |
 | PyPI wheel | Standard | The `rusty_tiles` Python module and its conversion APIs; no CLI executable, preview server or native fallback |
-| Cargo with no extra features | Standard | CLI or Rust library, using bundled SQLite and portable JPEG |
+| Cargo with no extra features | Standard | CLI or Rust library, using bundled SQLite |
 | Published native container | Native-geospatial | CLI plus GDAL/PROJ/GEOS/SQLite runtime libraries |
 | Cargo with `--features native-geospatial` | Native-geospatial | CLI or Rust library linked to system geospatial libraries you install |
 
