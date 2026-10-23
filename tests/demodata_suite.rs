@@ -27,9 +27,9 @@ fn tiny_manifest(root: &std::path::Path) -> runner::Manifest {
 fn manifest_pins_all_recipes_and_selects_profiles_without_silent_skips() {
     let manifest = runner::Manifest::load().unwrap();
     assert_eq!(manifest.files.len(), 416);
-    assert_eq!(manifest.cases.len(), 28);
-    assert_eq!(manifest.select("smoke", &[]).unwrap().len(), 8);
-    assert_eq!(manifest.select("core", &[]).unwrap().len(), 21);
+    assert_eq!(manifest.cases.len(), 22);
+    assert_eq!(manifest.select("smoke", &[]).unwrap().len(), 7);
+    assert_eq!(manifest.select("core", &[]).unwrap().len(), 15);
     assert_eq!(manifest.select("scale", &[]).unwrap().len(), 7);
     assert!(manifest.select("all", &["typo".into()]).is_err());
     assert!(manifest.select("typo", &[]).is_err());
@@ -125,49 +125,6 @@ fn measurement_records_success_and_failure_with_empty_executable_path() {
     )
     .unwrap();
     assert_eq!(bad.exit_code, Some(2));
-}
-
-#[test]
-fn mesh_audit_rejects_changed_winding_even_when_archive_validation_passes() {
-    let work = tempfile::tempdir().unwrap();
-    let input = work.path().join("source.glb");
-    let output = work.path().join("mesh.3tz");
-    let write = |indices| {
-        fs::write(
-            &input,
-            support::write_glb(&support::Primitive {
-                positions: vec![[0., 0., 0.], [10., 0., 0.], [0., 10., 0.]],
-                normals: vec![[0., 0., 1.]; 3],
-                uvs: vec![[0., 0.]; 3],
-                indices,
-                png: None,
-            }),
-        )
-        .unwrap();
-    };
-    write(vec![0, 1, 2]);
-    let result = support::rusty_tiles()
-        .args(["mesh-to-3tz", "-i"])
-        .arg(&input)
-        .arg("-o")
-        .arg(&output)
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    runner::audit::check("mesh", &input, &output).unwrap();
-    write(vec![0, 2, 1]);
-    assert!(
-        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
-            .is_ok()
-    );
-    assert!(runner::audit::check("mesh", &input, &output)
-        .unwrap_err()
-        .to_string()
-        .contains("changed triangle or winding"));
 }
 
 #[test]

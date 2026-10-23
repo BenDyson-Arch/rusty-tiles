@@ -16,7 +16,6 @@ pub(crate) use texture::{decode_image_admitted, probe_image_admitted, DecodeAdmi
 
 pub(crate) const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const MAX_TRIANGLES: usize = 100_000;
-pub(crate) const MAX_LEAVES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
 /// Local-metre source and transformed position domain shared by both admission profiles.
 const MAX_LOCAL_COORDINATE: f64 = 1_000_000.;
@@ -103,12 +102,10 @@ pub(crate) struct SourceIdentity {
     pub primitive_index: u32,
     pub triangle_index: u32,
 }
-impl SourceIdentity {
-    pub fn primitive(self) -> (u32, u32, u32) {
-        (self.node_index, self.mesh_index, self.primitive_index)
-    }
-}
 
+// `decode` is the full source admission check of the W1 model producers, which
+// read only the triangle count. The decoded IR stays whole so admission is unchanged.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct Triangle {
     pub source: SourceIdentity,
@@ -122,6 +119,9 @@ pub(crate) struct Triangle {
     pub material: Option<usize>,
 }
 
+// `decode` is the full source admission check of the W1 model producers, which
+// read only the triangle count. The decoded IR stays whole so admission is unchanged.
+#[allow(dead_code)]
 pub(crate) struct Image {
     pub bytes: Vec<u8>,
     pub mime_type: &'static str,
@@ -144,6 +144,9 @@ pub(crate) fn original_bounds(
     original_bounds::evaluate(document, supplied_buffers, check)
 }
 
+// `decode` is the full source admission check of the W1 model producers, which
+// read only the triangle count. The decoded IR stays whole so admission is unchanged.
+#[allow(dead_code)]
 pub(crate) struct Geometry {
     pub node_names: Vec<Option<String>>,
     pub triangles: Vec<Triangle>,

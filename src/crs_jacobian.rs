@@ -1,8 +1,7 @@
 //! Central-difference Jacobians of a declared horizontal source CRS at mesh
 //! vertices, mapped into one local ENU frame (glTF Y-up). The `mesh` tiler's
-//! source-CRS capture uses them for normals and tangents; the deprecated legacy
-//! `mesh-to-3tz` general CRS bake shares them until it is removed. Source
-//! projection, datum and offline-grid eligibility remain the shared resolver's.
+//! source-CRS capture uses them for normals and tangents. Source projection,
+//! datum and offline-grid eligibility remain the shared resolver's.
 use crate::{
     crs::Transform,
     georef::{EnuFrame, SourceAxes},
@@ -199,8 +198,7 @@ pub(crate) fn inverse_transpose(
 #[cfg(test)]
 mod tests {
     //! Analytic checks of the shared helpers through [`vertex_jacobian`], the
-    //! path the tiler's capture uses. They cover the same projections, domain
-    //! edges and units as the legacy bake's tests, so those can retire with it.
+    //! path the tiler's capture uses: projections, domain edges and units.
     use super::*;
     use crate::georef::{ecef_to_cartographic, root_transform, SourceOffset};
 

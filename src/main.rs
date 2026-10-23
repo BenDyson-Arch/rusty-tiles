@@ -8,17 +8,13 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
 
 use rusty_tiles::error::Error;
-use rusty_tiles::georef::{
-    parse_metashape_offset, Cartographic, RotationDegrees, SourceAxes, SourceCrs, SourceOffset,
-};
+use rusty_tiles::georef::SourceAxes;
 use rusty_tiles::package::{package, PackageRequest, PackageResult};
-use rusty_tiles::tile::{mesh_to_3tz_reported, MeshTo3tzOptions};
 use rusty_tiles::{
-    doctor, mesh_to_archive, terrain, vector, ConversionResult, JobError, JobErrorKind,
-    MeshApproximation, MeshPlacement, MeshRequest, MeshResult, MeshSourceCrs, ModelManifestRequest,
-    ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer, OutputPolicy,
-    RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest, RasterResult,
-    Reporter, RunControl, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
+    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs,
+    ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer,
+    OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest,
+    RasterResult, RunControl, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -87,12 +83,6 @@ enum Command {
     /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(ModelArchiveArgs),
-    /// Deprecated: legacy mesh converter, removed before 0.4.0; use mesh
-    #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
-    MeshTo3tz(MeshArgs),
-    /// Deprecated: old bounded local-mesh writer, removed before 0.4.0; use mesh
-    #[command(name = "mesh-local-to-3tz")]
-    MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
     Vector(VectorArgs),
     /// LAS/LAZ → point-cloud 3D Tiles with native disk-backed spatial LOD
@@ -106,18 +96,6 @@ enum Command {
 }
 
 impl Command {
-    /// The stderr notice for a deprecated legacy mesh command run.
-    fn deprecation(&self) -> Option<String> {
-        matches!(self, Self::MeshTo3tz(_) | Self::MeshLocalTo3tz(_)).then(|| {
-            format!(
-                "{} is deprecated and will be removed before the 0.4.0 release; use \
-                 `rusty-tiles mesh` instead (see \"Migration from older mesh converters\" \
-                 in docs/MESH.md)",
-                self.name()
-            )
-        })
-    }
-
     fn name(&self) -> &'static str {
         match self {
             Self::Mesh(_) => "mesh",
@@ -128,8 +106,6 @@ impl Command {
             Self::CreateTilesetJson(_) => "createTilesetJson",
             Self::Convert(_) => "convert",
             Self::GlbTo3tz(_) => "glb-to-3tz",
-            Self::MeshTo3tz(_) => "mesh-to-3tz",
-            Self::MeshLocalTo3tz(_) => "mesh-local-to-3tz",
             Self::Vector(_) => "vector",
             Self::PointCloud(_) => "point-cloud",
             Self::Terrain(_) => "terrain",
@@ -238,27 +214,6 @@ struct RasterTileArgs {
     x: u32,
     #[arg(long)]
     y: u32,
-}
-
-/// 3d-tiles-tools placement of the generated root tile.
-#[derive(Args)]
-struct PlacementArgs {
-    /// lon lat [height_m] — 3d-tiles-tools --cartographicPositionDegrees
-    #[arg(
-        long = "cartographicPositionDegrees",
-        visible_alias = "cartographic-position-degrees",
-        num_args = 2..=3,
-        allow_hyphen_values = true
-    )]
-    cartographic_position_degrees: Vec<f64>,
-    /// heading pitch roll (degrees) — 3d-tiles-tools --rotationDegrees
-    #[arg(
-        long = "rotationDegrees",
-        visible_alias = "rotation-degrees",
-        num_args = 3,
-        allow_hyphen_values = true
-    )]
-    rotation_degrees: Vec<f64>,
 }
 
 #[derive(Args)]
@@ -558,109 +513,6 @@ struct VectorArgs {
 }
 
 #[derive(Args)]
-struct MeshArgs {
-    #[command(flatten)]
-    io: IoArgs,
-    /// Keep the legacy explicit tileset hierarchy and median partitioning.
-    #[arg(long)]
-    explicit: bool,
-    #[command(flatten)]
-    placement: PlacementArgs,
-    /// Texture output: fast full-chroma JPEG, smaller WebP, GPU UASTC, or exact PNG.
-    #[arg(
-        long = "textureFormat",
-        visible_alias = "texture-format",
-        value_enum,
-        default_value = "jpeg"
-    )]
-    texture_format: rusty_tiles::tile::TextureFormat,
-    /// Basis Universal encoder executable (required for UASTC output).
-    #[arg(long = "basisu", default_value = "basisu")]
-    basisu: PathBuf,
-    /// Stop splitting a node at this many triangles (default 20000).
-    #[arg(
-        long = "maxTriangles",
-        visible_alias = "max-triangles",
-        default_value_t = rusty_tiles::DEFAULT_MAX_TRIANGLES
-    )]
-    max_triangles: usize,
-    /// Source-file wrap threshold in bytes (default 204800). Split stop is
-    /// `--maxTriangles`; written tiles are meshopt-compressed unless `--noMeshopt`.
-    #[arg(
-        long = "maxBytes",
-        visible_alias = "max-bytes",
-        default_value_t = rusty_tiles::DEFAULT_MAX_BYTES
-    )]
-    max_bytes: u64,
-    /// Leaf atlas edge (default 2048). Oversized individual triangles retain
-    /// their texels in larger atlases. Parent atlases are capped at 1024.
-    #[arg(
-        long = "tileSize",
-        visible_alias = "tile-size",
-        default_value_t = rusty_tiles::DEFAULT_TILE_SIZE
-    )]
-    tile_size: u32,
-    /// Must be 0: leaf texels are preserved at source resolution.
-    #[arg(
-        long = "maxTexelDensity",
-        visible_alias = "max-texel-density",
-        default_value_t = rusty_tiles::DEFAULT_MAX_TEXEL_DENSITY
-    )]
-    max_texel_density: f64,
-    /// Source CRS: auto/legacy adapters, or an EPSG, WKT or PROJ horizontal CRS.
-    #[arg(
-        long = "sourceCrs",
-        visible_alias = "source-crs",
-        default_value = "auto"
-    )]
-    source_crs: String,
-    /// General CRS axes after node transforms: xyz (E,N,height), y-up (E,height,-N).
-    #[arg(long = "sourceAxes", visible_alias = "source-axes", value_enum)]
-    source_axes: Option<SourceAxes>,
-    /// Metres added to source height plus A to give ellipsoidal height; required for general CRS.
-    #[arg(
-        long = "heightOffset",
-        visible_alias = "height-offset",
-        allow_hyphen_values = true
-    )]
-    height_offset: Option<f64>,
-    /// Source shift E N [A]: E/N in horizontal CRS units, A metres; added in f64.
-    #[arg(
-        long = "sourceOffset",
-        visible_alias = "source-offset",
-        num_args = 2..=3,
-        allow_hyphen_values = true
-    )]
-    source_offset: Vec<f64>,
-    /// Offset file: E/N in source horizontal units and optional A in metres.
-    #[arg(long = "sourceOffsetFile", visible_alias = "source-offset-file")]
-    source_offset_file: Option<PathBuf>,
-    /// Disable lossless meshopt compression. Both modes retain float32 geometry.
-    #[arg(long = "noMeshopt", visible_alias = "no-meshopt")]
-    no_meshopt: bool,
-    /// Preserve source glTF nodes as pickable features with a name property
-    #[arg(long = "nodeFeatures", visible_alias = "node-features")]
-    node_features: bool,
-}
-
-#[derive(Args)]
-struct LocalMeshArgs {
-    #[command(flatten)]
-    io: IoArgs,
-    /// Positive maximum triangle count per leaf; not a byte or memory budget
-    #[arg(long = "leaf-triangles")]
-    leaf_triangles: usize,
-    /// Maximum triangles in one certified coarse root; requires --max-proxy-error-metres
-    #[arg(long, requires = "max_proxy_error_metres")]
-    root_proxy_triangles: Option<usize>,
-    /// Finite positive geometric error budget in local metres; requires --root-proxy-triangles
-    #[arg(long, requires = "root_proxy_triangles")]
-    max_proxy_error_metres: Option<f64>,
-    #[command(flatten)]
-    placement: RigidPlacementArgs,
-}
-
-#[derive(Args)]
 struct RigidPlacementArgs {
     /// WGS84 longitude/latitude degrees and ellipsoidal height metres
     #[arg(long, num_args = 3, allow_hyphen_values = true)]
@@ -712,12 +564,8 @@ enum Outcome {
     Report(Value),
     /// A validation report, written streamed: its payload rows are never materialized.
     Validation(Box<rusty_tiles::validate::ValidationReport>),
-    /// A published conversion.
-    Converted(ConversionResult),
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
-    /// Published local mesh with its finalized report.
-    Mesh(Box<MeshResult>),
     Tiler(Box<TilerResult>),
     ModelArchive(Box<ModelWrapResult>),
     ModelManifest(Box<ModelManifestResult>),
@@ -751,22 +599,16 @@ fn main() -> ExitCode {
     let events = cli.progress.is_some() && !internal;
     let name = cli.command.name();
     // NDJSON progress mode keeps stderr machine-readable.
-    let reporter = if events {
-        Reporter::ndjson_stderr()
-    } else {
-        Reporter::human_stderr()
-    };
-    if let Some(message) = cli.command.deprecation() {
+    let progress = |done: u64| {
         if events {
-            let detail =
-                json!({"code":"deprecated","command":name,"replacement":"mesh","message":message});
-            reporter.warn(&message, Some(&detail));
-        } else {
-            eprintln!("warning: {message}");
+            eprintln!(
+                "{}",
+                json!({"event":"progress","phase":"conversion","done":done,"total":1})
+            );
         }
-    }
-    reporter.progress("conversion", 0, 1);
-    match run(cli, &reporter) {
+    };
+    progress(0);
+    match run(cli) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {
             println!("{report}");
             let code = report["exitCode"]
@@ -775,7 +617,7 @@ fn main() -> ExitCode {
             ExitCode::from(code.unwrap_or(4))
         }
         Ok(outcome) => {
-            reporter.progress("conversion", 1, 1);
+            progress(1);
             let summary = match outcome {
                 Outcome::Report(report) => {
                     if json {
@@ -797,12 +639,7 @@ fn main() -> ExitCode {
                     }
                     None
                 }
-                Outcome::Converted(result) => Some((
-                    output_summary(&result.output, result.report.as_ref(), result.archive),
-                    result.output,
-                )),
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
-                Outcome::Mesh(result) => Some((mesh_summary(&result), result.output)),
                 Outcome::Tiler(result) => Some((tiler_summary(&result), result.output)),
                 Outcome::ModelArchive(result) => Some((
                     model_summary(
@@ -1002,14 +839,6 @@ fn vector_summary(result: &vector::VectorResult) -> Value {
 fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> Value {
     let report = json!(&result.report);
     let mut summary = output_summary(&result.output, Some(&report), true);
-    summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
-    summary
-}
-
-fn mesh_summary(result: &MeshResult) -> Value {
-    let report = json!(&result.report);
-    let mut summary = output_summary(&result.output, Some(&report), true);
-    summary["meshReport"] = report;
     summary["cleanupDiagnostics"] = cleanup_diagnostics_summary(&result.cleanup_diagnostics);
     summary
 }
@@ -1226,7 +1055,7 @@ fn parse_max_volume(value: &str) -> Result<(rusty_tiles::validate::LimitKey, u64
     Ok((key, number))
 }
 
-fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
+fn run(cli: Cli) -> Result<Outcome, Error> {
     let pack_events = cli.progress.is_some();
     let json = cli.json;
     Ok(match cli.command {
@@ -1440,39 +1269,6 @@ fn run(cli: Cli, reporter: &Reporter) -> Result<Outcome, Error> {
                     });
             Outcome::RasterDirectory(rusty_tiles::raster_to_directory(request, &run)?)
         }
-        Command::MeshLocalTo3tz(a) => {
-            let observer: Option<Arc<dyn Observer>> =
-                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            let run = RunControl::new(observer);
-            let policy = if a.io.force {
-                OutputPolicy::Replace
-            } else {
-                OutputPolicy::CreateNew
-            };
-            let placement = a.placement.resolve()?;
-            let approximation = match (a.root_proxy_triangles, a.max_proxy_error_metres) {
-                (Some(triangle_limit), Some(max_error_metres)) => MeshApproximation::RootProxy {
-                    triangle_limit,
-                    max_error_metres,
-                },
-                (None, None) => MeshApproximation::FullDetail,
-                _ => unreachable!("clap requires paired proxy arguments"),
-            };
-            let request = MeshRequest::local_gltf(a.io.input, a.io.output, a.leaf_triangles)
-                .with_policy(policy)
-                .with_placement(placement)
-                .with_approximation(approximation);
-            Outcome::Mesh(Box::new(mesh_to_archive(request, &run)?))
-        }
-        Command::MeshTo3tz(a) => {
-            let opts = mesh_opts(&a)?;
-            Outcome::Converted(mesh_to_3tz_reported(
-                &a.io.input,
-                &a.io.output,
-                &opts,
-                reporter,
-            )?)
-        }
         Command::Vector(a) => {
             let run = RunControl::new(Some(Arc::new(VectorCliObserver {
                 progress_json: pack_events,
@@ -1606,83 +1402,6 @@ fn raster_request(args: RasterArgs) -> Result<RasterRequest, Error> {
         }))
 }
 
-fn legacy_mesh_placement(
-    a: &PlacementArgs,
-) -> Result<(Option<Cartographic>, Option<RotationDegrees>), Error> {
-    let cartographic = if a.cartographic_position_degrees.is_empty() {
-        None
-    } else {
-        let v = &a.cartographic_position_degrees;
-        Some(Cartographic::new(
-            v[0],
-            v[1],
-            v.get(2).copied().unwrap_or(0.0),
-        ))
-    };
-    let rotation = if a.rotation_degrees.is_empty() {
-        None
-    } else {
-        Some(RotationDegrees {
-            heading: a.rotation_degrees[0],
-            pitch: a.rotation_degrees[1],
-            roll: a.rotation_degrees[2],
-        })
-    };
-    if rotation.is_some() && cartographic.is_none() {
-        return Err(Error::msg(
-            "--rotationDegrees requires --cartographicPositionDegrees",
-        ));
-    }
-    Ok((cartographic, rotation))
-}
-
-fn mesh_opts(a: &MeshArgs) -> Result<MeshTo3tzOptions, Error> {
-    let (cartographic, rotation) = legacy_mesh_placement(&a.placement)?;
-    if !a.source_offset.is_empty() && a.source_offset_file.is_some() {
-        return Err(Error::msg(
-            "pass only one of --sourceOffset and --sourceOffsetFile",
-        ));
-    }
-    let source_offset = if !a.source_offset.is_empty() {
-        let v = &a.source_offset;
-        Some(SourceOffset {
-            easting: v[0],
-            northing: v[1],
-            height: v.get(2).copied().unwrap_or(0.0),
-        })
-    } else if let Some(path) = &a.source_offset_file {
-        let text = std::fs::read_to_string(path)?;
-        Some(parse_metashape_offset(&text)?)
-    } else {
-        None
-    };
-    let mut options = MeshTo3tzOptions {
-        explicit: a.explicit,
-        texture_format: a.texture_format,
-        basisu: a.basisu.clone(),
-        cartographic,
-        rotation,
-        force: a.io.force,
-        max_triangles: a.max_triangles,
-        max_bytes: a.max_bytes,
-        tile_size: a.tile_size,
-        max_texel_density: a.max_texel_density,
-        source_offset,
-        source_axes: a.source_axes,
-        height_offset: a.height_offset,
-        meshopt: !a.no_meshopt,
-        node_features: a.node_features,
-        ..MeshTo3tzOptions::default()
-    };
-    options.set_source_crs(&a.source_crs)?;
-    if source_offset.is_some() && options.source_crs == SourceCrs::Geographic {
-        return Err(Error::msg(
-            "--sourceOffset requires --sourceCrs auto or epsg:3857",
-        ));
-    }
-    Ok(options)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1792,44 +1511,17 @@ mod tests {
     }
 
     #[test]
-    fn local_mesh_requires_explicit_limit_and_rejects_legacy_options() {
-        assert!(Cli::try_parse_from([
-            "rusty-tiles",
-            "mesh-local-to-3tz",
-            "-i",
-            "in.glb",
-            "-o",
-            "out.3tz"
-        ])
-        .is_err());
-        let parsed = Cli::try_parse_from([
-            "rusty-tiles",
-            "mesh-local-to-3tz",
-            "-i",
-            "in.glb",
-            "-o",
-            "out.3tz",
-            "--leaf-triangles",
-            "1",
-        ])
-        .unwrap();
-        let Command::MeshLocalTo3tz(args) = parsed.command else {
-            panic!("wrong command")
-        };
-        assert_eq!(args.leaf_triangles, 1);
-        assert!(Cli::try_parse_from([
-            "rusty-tiles",
-            "mesh-local-to-3tz",
-            "-i",
-            "in.glb",
-            "-o",
-            "out.3tz",
-            "--leaf-triangles",
-            "1",
-            "--source-crs",
-            "auto"
-        ])
-        .is_err());
+    fn removed_legacy_mesh_commands_are_unknown_subcommands() {
+        for name in ["mesh-to-3tz", "meshTo3tz", "mesh-local-to-3tz"] {
+            let error = Cli::try_parse_from(["rusty-tiles", name, "-i", "in.glb", "-o", "o.3tz"])
+                .err()
+                .unwrap_or_else(|| panic!("{name} still parses"));
+            assert_eq!(
+                error.kind(),
+                clap::error::ErrorKind::InvalidSubcommand,
+                "{name}"
+            );
+        }
     }
 
     #[test]
@@ -1876,38 +1568,6 @@ mod tests {
             panic!("wrong command");
         };
         assert!(parsed.force);
-    }
-
-    #[test]
-    fn root_proxy_arguments_are_one_explicit_choice() {
-        let base = [
-            "rusty-tiles",
-            "mesh-local-to-3tz",
-            "-i",
-            "in.glb",
-            "-o",
-            "out.3tz",
-            "--leaf-triangles",
-            "32",
-        ];
-        for partial in [
-            ["--root-proxy-triangles", "8"],
-            ["--max-proxy-error-metres", "2"],
-        ] {
-            assert!(Cli::try_parse_from(base.into_iter().chain(partial)).is_err());
-        }
-        let parsed = Cli::try_parse_from(base.into_iter().chain([
-            "--root-proxy-triangles",
-            "8",
-            "--max-proxy-error-metres",
-            "2",
-        ]))
-        .unwrap();
-        let Command::MeshLocalTo3tz(args) = parsed.command else {
-            panic!("wrong command")
-        };
-        assert_eq!(args.root_proxy_triangles, Some(8));
-        assert_eq!(args.max_proxy_error_metres, Some(2.0));
     }
 
     #[test]
@@ -1968,7 +1628,7 @@ mod tests {
             "rusty-tiles",
             "doctor",
             "--command",
-            "meshTo3tz",
+            "glbTo3tz",
             "--command",
             "create-tileset-json",
         ])
@@ -1979,7 +1639,7 @@ mod tests {
         assert_eq!(
             args.commands,
             [
-                doctor::Command::MeshTo3tz,
+                doctor::Command::GlbTo3tz,
                 doctor::Command::CreateTilesetJson
             ]
         );

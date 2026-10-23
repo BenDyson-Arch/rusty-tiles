@@ -4,13 +4,9 @@ use crate::geospatial::{self, QuietErrors};
 use std::{ffi::c_void, ptr::NonNull};
 
 /// Silence GDAL/GEOS geometry warnings unless native diagnostics are enabled
-/// with `RUSTY_TILES_NATIVE_DIAGNOSTICS=1`. The deprecated
-/// `RUSTY_TILES_PYTHON_TRACEBACK=1` is honoured when the new name is unset.
+/// with `RUSTY_TILES_NATIVE_DIAGNOSTICS=1`.
 pub(in super::super) fn quiet_unless_diagnostics() -> Option<QuietErrors> {
-    let enabled = match std::env::var("RUSTY_TILES_NATIVE_DIAGNOSTICS") {
-        Ok(value) => value == "1",
-        Err(_) => std::env::var("RUSTY_TILES_PYTHON_TRACEBACK").as_deref() == Ok("1"),
-    };
+    let enabled = std::env::var("RUSTY_TILES_NATIVE_DIAGNOSTICS").as_deref() == Ok("1");
     (!enabled).then(QuietErrors::new)
 }
 
