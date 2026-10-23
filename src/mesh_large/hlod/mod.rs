@@ -156,7 +156,7 @@ pub(crate) fn plan(
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(TileGeometry::charge(cap as u64));
     let sorter = config.sorter(1);
-    let incidence = interfaces::memory_need(sorter, leaf_cap);
+    let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
     let buffer = config.sort.buffer_bytes as u64;
     // Five sequence readers plus the interface stream's merge buffers.
     let streams = buffer

@@ -225,13 +225,10 @@ impl Record for Candidate {
 
 /// Deepest grid level (cells of `side / 2^30`).
 const MAX_LEVEL: u8 = 30;
-/// Declared scratch allowance of the overlap join per source triangle; a run that needs
-/// more is refused (`resource_limit`) before the join is written.
+/// Declared scratch allowance of the overlap join per source triangle (see
+/// `overlap_allowance`); a run that needs more is refused (`resource_limit`).
 const OVERLAP_BYTES_PER_TRIANGLE: u64 = 256;
-/// Most hosts one grid cell may hold at once; more is `unsupported`. A host's cell is under
-/// twice its extent, so this many same-scale open segments in one cell is a pathological
-/// heap, and the cap bounds both the cell's memory and each guest's tests.
-pub(crate) const MAX_CELL_HOSTS: usize = 1 << 12;
+const OVERLAP_FLOOR_BYTES: u64 = 64 << 20;
 
 /// Worst-case spill of the exact pass plus the overlap allowance, for `triangles` source
 /// triangles: every triangle contributes at most three point and three segment items, and
@@ -241,7 +238,7 @@ pub(crate) fn scratch_need(triangles: u64, sorter: SortConfig) -> Option<u64> {
     let items = triangles.checked_mul(6)?;
     let item: SortSpill = config::sort_spill::<Item>(items, sorter)?;
     let rows: SortSpill = config::sort_spill::<InterfaceRow>(items, sorter)?;
-    let overlap = triangles.checked_mul(OVERLAP_BYTES_PER_TRIANGLE)?;
+    let overlap = overlap_allowance(triangles);
     let reduce = item
         .bytes
         .checked_add(item.stream_slack)?
@@ -252,14 +249,19 @@ pub(crate) fn scratch_need(triangles: u64, sorter: SortConfig) -> Option<u64> {
 }
 
 /// Resident bound of the pass: two sorters live at once (items or probes streamed into
-/// rows), one leaf's deduplicated items, and one grid cell's hosts.
-pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64) -> u64 {
+/// rows), one leaf's deduplicated items, one item group (at most one item per leaf, in a
+/// vector at most twice that), one grid cell's hosts (twice: held and a dense cell's scan
+/// chunk) and the sequences a dense cell's split keeps open.
+pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, leaves: u64) -> u64 {
+    let item = std::mem::size_of::<Item>() as u64;
     sorter
         .memory_bound::<Probe>()
         .max(sorter.memory_bound::<Item>())
         .saturating_add(sorter.memory_bound::<InterfaceRow>())
-        .saturating_add(leaf_triangles.saturating_mul(12 * std::mem::size_of::<Item>() as u64))
-        .saturating_add((MAX_CELL_HOSTS as u64).saturating_mul(std::mem::size_of::<Probe>() as u64))
+        .saturating_add(leaf_triangles.saturating_mul(12 * item))
+        .saturating_add(leaves.saturating_mul(2 * item))
+        .saturating_add(2 * (CELL_HOSTS as u64) * std::mem::size_of::<Probe>() as u64)
+        .saturating_add(SPLIT_STREAMS.saturating_mul(sorter.buffer_bytes as u64))
 }
 
 /// Totals of the pass, for the report.
@@ -277,6 +279,10 @@ pub(crate) struct IncidenceStats {
     pub open_segments: u64,
     pub open_points: u64,
     pub probes: u64,
+    /// Grid cells denser than `CELL_HOSTS` hosts: spilled, split and scanned in chunks.
+    pub dense_cells: u64,
+    pub dense_splits: u64,
+    pub dense_chunks: u64,
     /// Open points of one leaf found on an open segment of another (T-junctions and
     /// collinear overlaps).
     pub overlaps: u64,
@@ -475,8 +481,9 @@ pub(crate) fn build<'s>(
     let mut rows = ExternalSorter::<InterfaceRow>::new(scratch, sorter)?;
     let mut hosts = SequenceWriter::<Candidate>::new(scratch, "hlod-hosts", sorter.buffer_bytes)?;
     let mut guests = SequenceWriter::<Candidate>::new(scratch, "hlod-guests", sorter.buffer_bytes)?;
-    let mut host_levels = 0u32;
+    let mut guest_tol = 0f32;
     let mut group: Vec<Item> = Vec::new();
+    let leaves = u64::from(leaf);
     let mut flush = |group: &mut Vec<Item>,
                      rows: &mut ExternalSorter<'s, InterfaceRow>,
                      hosts: &mut SequenceWriter<Candidate>,
@@ -511,11 +518,10 @@ pub(crate) fn build<'s>(
                 tol: g.tol,
             };
             if a == b {
+                guest_tol = guest_tol.max(f32::from_bits(g.tol));
                 guests.push(&candidate)?;
                 stats.open_points += 1;
             } else {
-                let tol = f64::from(f32::from_bits(g.tol)) + rounding(&[a, b]);
-                host_levels |= 1 << host_level(cube, a, b, tol);
                 hosts.push(&candidate)?;
                 stats.open_segments += 1;
             }
@@ -536,7 +542,13 @@ pub(crate) fn build<'s>(
         {
             flush(&mut group, &mut rows, &mut hosts, &mut guests, &mut stats)?;
         }
-        // Items are unique per leaf and sorted, so the group's leaves ascend strictly.
+        // Items are unique per leaf and sorted, so the group's leaves ascend strictly and a
+        // group holds at most one item per leaf (charged in `memory_need`).
+        if group.len() as u64 >= leaves {
+            return Err(state(
+                "an interface item group holds more items than leaves",
+            ));
+        }
         group.push(item);
     }
     if !group.is_empty() {
@@ -544,13 +556,22 @@ pub(crate) fn build<'s>(
     }
     let hosts = hosts.finish()?;
     let guests = guests.finish()?;
+    // The rounding floor of any point in (or near) the cube.
+    let magnitude = (0..3)
+        .map(|i| cube.origin[i].abs().max((cube.origin[i] + cube.side).abs()))
+        .fold(0., f64::max);
+    let join = Join {
+        cube,
+        guest_tol: f64::from(guest_tol),
+        floor: magnitude * f64::from(f32::EPSILON) * 8.,
+    };
     overlaps(
         scratch,
         sorter,
-        cube,
+        join,
+        triangles.len(),
         &hosts,
         &guests,
-        host_levels,
         &mut rows,
         &mut stats,
         check,
@@ -566,47 +587,110 @@ fn cell(cube: Cube, level: u8, p: [f64; 3]) -> [i32; 3] {
     })
 }
 
-/// The grid join of open points (guests) against open segments of other leaves (hosts).
+/// The overlap join's index geometry: every host is padded by the largest tolerance any
+/// pair may use (its own or any guest's, plus a rounding floor for the whole cube), so a
+/// guest within a pair's tolerance of a host always lies in one of the host's cells.
+#[derive(Clone, Copy)]
+struct Join {
+    cube: Cube,
+    guest_tol: f64,
+    floor: f64,
+}
+
+impl Join {
+    fn pad(&self, h: &Candidate) -> f64 {
+        f64::from(f32::from_bits(h.tol)).max(self.guest_tol) + rounding(&[h.a, h.b]).max(self.floor)
+    }
+    /// The host's level and its cell range there (at most two cells per axis).
+    fn cells(&self, h: &Candidate) -> Result<(u8, [i32; 3], [i32; 3]), JobError> {
+        let pad = self.pad(h);
+        let level = host_level(self.cube, h.a, h.b, pad);
+        let (a, b) = (point(h.a), point(h.b));
+        let lo = cell(
+            self.cube,
+            level,
+            std::array::from_fn(|i| a[i].min(b[i]) - pad),
+        );
+        let hi = cell(
+            self.cube,
+            level,
+            std::array::from_fn(|i| a[i].max(b[i]) + pad),
+        );
+        if level > 0 && (0..3).any(|i| hi[i] - lo[i] > 1) {
+            return Err(state("an overlap host meets more than two cells per axis"));
+        }
+        Ok((level, lo, hi))
+    }
+}
+
+/// Hosts of one cell held in memory; a denser cell is spilled and split (below).
+pub(crate) const CELL_HOSTS: usize = 1 << 12;
+/// Octant splits of a spilled dense cell before its chunked scan.
+const SPLIT_DEPTH: u32 = 4;
+/// Sequences open at once while a dense cell is split: a host and a guest stream per level
+/// being read, and the pair being written.
+const SPLIT_STREAMS: u64 = 2 * (SPLIT_DEPTH as u64 + 1) + 2;
+
+/// The declared scratch allowance of the overlap join (probe sort and dense-cell spills):
+/// 256 bytes per source triangle, at least 64 MiB. A run past it is `resource_limit`.
+fn overlap_allowance(triangles: u64) -> u64 {
+    triangles
+        .saturating_mul(OVERLAP_BYTES_PER_TRIANGLE)
+        .max(OVERLAP_FLOOR_BYTES)
+}
+
+/// The grid join of open points (guests) against open segments of other leaves (hosts):
+/// streamed in sorted cells, each cell's hosts in memory up to [`CELL_HOSTS`]; a denser
+/// cell is spilled, split into octants to a bounded depth and finished by a chunked scan,
+/// so no input is refused for its density and memory stays bounded.
 #[allow(clippy::too_many_arguments)]
 fn overlaps<'s>(
     scratch: &'s Scratch,
     sorter: SortConfig,
-    cube: Cube,
+    join: Join,
+    triangles: u64,
     hosts: &Sequence<Candidate>,
     guests: &Sequence<Candidate>,
-    host_levels: u32,
     rows: &mut ExternalSorter<'s, InterfaceRow>,
     stats: &mut IncidenceStats,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(), JobError> {
-    if host_levels == 0 || cube.side <= 0. {
+    if hosts.is_empty() || guests.is_empty() || join.cube.side <= 0. {
         return Ok(());
     }
+    // Exact probe count and host levels before anything is written.
+    let mut host_levels = 0u32;
+    let mut probes_count = 0u64;
+    for host in hosts.reader()? {
+        let (level, lo, hi) = join.cells(&host?)?;
+        host_levels |= 1 << level;
+        probes_count += (0..3).map(|i| (hi[i] - lo[i] + 1) as u64).product::<u64>();
+    }
     let levels = u64::from(host_levels.count_ones());
-    let probes_bound = hosts
-        .len()
-        .saturating_mul(27)
-        .saturating_add(guests.len().saturating_mul(levels));
-    let need = config::sort_spill::<Probe>(probes_bound, sorter)
+    probes_count += guests.len() * levels;
+    let sort = config::sort_spill::<Probe>(probes_count, sorter)
         .map(|s| s.finish_peak.saturating_add(s.stream_slack))
         .ok_or_else(|| state("overlap join arithmetic overflow"))?;
+    let allowance = overlap_allowance(triangles);
+    if sort > allowance {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!(
+                "the overlap join needs {sort} bytes of scratch for {probes_count} probes, past \
+                 its declared {allowance}"
+            ),
+        ));
+    }
     crate::spill::preflight(
         scratch.path(),
-        need,
+        allowance,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
     let mut probes = ExternalSorter::<Probe>::new(scratch, sorter)?;
     for host in hosts.reader()? {
         let h = host?;
-        let tol = f64::from(f32::from_bits(h.tol)) + rounding(&[h.a, h.b]);
-        let level = host_level(cube, h.a, h.b, tol);
-        let (a, b) = (point(h.a), point(h.b));
-        let lo = cell(cube, level, std::array::from_fn(|i| a[i].min(b[i]) - tol));
-        let hi = cell(cube, level, std::array::from_fn(|i| a[i].max(b[i]) + tol));
-        if level > 0 && (0..3).any(|i| hi[i] - lo[i] > 1) {
-            return Err(state("an overlap host meets more than two cells per axis"));
-        }
+        let (level, lo, hi) = join.cells(&h)?;
         for x in lo[0]..=hi[0] {
             for y in lo[1]..=hi[1] {
                 for z in lo[2]..=hi[2] {
@@ -629,7 +713,7 @@ fn overlaps<'s>(
         for level in (0..=MAX_LEVEL).filter(|l| host_levels & (1 << l) != 0) {
             probes.push(Probe {
                 level,
-                cell: cell(cube, level, point(g.a)),
+                cell: cell(join.cube, level, point(g.a)),
                 guest: true,
                 leaf: g.leaf,
                 a: g.a,
@@ -639,9 +723,67 @@ fn overlaps<'s>(
             stats.probes += 1;
         }
     }
-    let mut cell_hosts: Vec<Probe> = Vec::new();
+    let mut dense = Dense {
+        scratch,
+        sorter,
+        join,
+        budget: allowance - sort,
+        live: 0,
+        check,
+    };
+    let mut emit = |h: &Probe, g: &Probe, stats: &mut IncidenceStats| -> Result<(), JobError> {
+        if h.leaf == g.leaf {
+            return Ok(());
+        }
+        let tol = f64::from(f32::from_bits(h.tol).max(f32::from_bits(g.tol)))
+            + rounding(&[h.a, h.b, g.a]);
+        if !on_segment(h.a, h.b, g.a, tol) {
+            return Ok(());
+        }
+        stats.overlaps += 1;
+        let (lo, hi) = (h.leaf.min(g.leaf), h.leaf.max(g.leaf));
+        for (leaf, a, b) in [
+            (h.leaf, h.a, h.b),
+            (h.leaf, h.a, h.a),
+            (h.leaf, h.b, h.b),
+            (g.leaf, g.a, g.a),
+        ] {
+            rows.push(InterfaceRow { leaf, a, b, lo, hi })?;
+            stats.rows += 1;
+        }
+        Ok(())
+    };
+    let mut cell_hosts: Vec<Probe> = Vec::with_capacity(CELL_HOSTS);
+    // A dense cell's hosts and guests, spilled once its hosts pass `CELL_HOSTS`.
+    let mut spilled: Option<(SequenceWriter<Probe>, SequenceWriter<Probe>)> = None;
     let mut current: Option<(u8, [i32; 3])> = None;
     let mut seen = 0u64;
+    let finish_dense =
+        |spilled: &mut Option<(SequenceWriter<Probe>, SequenceWriter<Probe>)>,
+         current: Option<(u8, [i32; 3])>,
+         dense: &mut Dense<'_, 's>,
+         emit: &mut dyn FnMut(&Probe, &Probe, &mut IncidenceStats) -> Result<(), JobError>,
+         stats: &mut IncidenceStats|
+         -> Result<(), JobError> {
+            let Some((h, g)) = spilled.take() else {
+                return Ok(());
+            };
+            let (level, c) = current.ok_or_else(|| state("a dense overlap cell without a key"))?;
+            let (h, g) = (h.finish()?, g.finish()?);
+            stats.dense_cells += 1;
+            let size = join.cube.side / f64::from(1u32 << level);
+            let lo: [f64; 3] =
+                std::array::from_fn(|i| join.cube.origin[i] + f64::from(c[i]) * size);
+            let region = Region {
+                lo,
+                hi: std::array::from_fn(|i| lo[i] + size),
+                cut_lo: [false; 3],
+                cut_hi: [false; 3],
+            };
+            dense.join_spilled(&h, &g, region, 0, emit, stats)?;
+            dense.live -= dense.bytes(&h) + dense.bytes(&g);
+            Ok(())
+        };
     for probe in probes.finish()? {
         let p = probe?;
         seen += 1;
@@ -649,40 +791,357 @@ fn overlaps<'s>(
             check()?;
         }
         if current != Some((p.level, p.cell)) {
+            finish_dense(&mut spilled, current, &mut dense, &mut emit, stats)?;
             cell_hosts.clear();
             current = Some((p.level, p.cell));
         }
-        if !p.guest {
-            if cell_hosts.len() == MAX_CELL_HOSTS {
-                return Err(JobError::new(
-                    JobErrorKind::Unsupported,
-                    format!(
-                        "more than {MAX_CELL_HOSTS} open border segments of one scale meet in \
-                         one grid cell; their overlaps cannot be bounded"
-                    ),
-                ));
+        match (&mut spilled, p.guest) {
+            (Some((h, _)), false) => dense.push(h, &p)?,
+            (Some((_, g)), true) => dense.push(g, &p)?,
+            (None, false) if cell_hosts.len() == CELL_HOSTS => {
+                let mut h =
+                    SequenceWriter::<Probe>::new(scratch, "hlod-dense-hosts", sorter.buffer_bytes)?;
+                let g = SequenceWriter::<Probe>::new(
+                    scratch,
+                    "hlod-dense-guests",
+                    sorter.buffer_bytes,
+                )?;
+                for q in cell_hosts.drain(..) {
+                    dense.push(&mut h, &q)?;
+                }
+                dense.push(&mut h, &p)?;
+                spilled = Some((h, g));
             }
-            cell_hosts.push(p);
-            continue;
-        }
-        for h in cell_hosts.iter().filter(|h| h.leaf != p.leaf) {
-            let tol = f64::from(f32::from_bits(h.tol).max(f32::from_bits(p.tol)))
-                + rounding(&[h.a, h.b, p.a]);
-            if !on_segment(h.a, h.b, p.a, tol) {
-                continue;
-            }
-            stats.overlaps += 1;
-            let (lo, hi) = (h.leaf.min(p.leaf), h.leaf.max(p.leaf));
-            for (leaf, a, b) in [
-                (h.leaf, h.a, h.b),
-                (h.leaf, h.a, h.a),
-                (h.leaf, h.b, h.b),
-                (p.leaf, p.a, p.a),
-            ] {
-                rows.push(InterfaceRow { leaf, a, b, lo, hi })?;
-                stats.rows += 1;
+            (None, false) => cell_hosts.push(p),
+            (None, true) => {
+                for h in &cell_hosts {
+                    emit(h, &p, stats)?;
+                }
             }
         }
     }
+    finish_dense(&mut spilled, current, &mut dense, &mut emit, stats)?;
     Ok(())
+}
+
+/// A half-open split region of a dense cell: faces never cut extend without bound, so every
+/// guest the cell holds falls in exactly one octant whatever its rounding.
+#[derive(Clone, Copy)]
+struct Region {
+    lo: [f64; 3],
+    hi: [f64; 3],
+    cut_lo: [bool; 3],
+    cut_hi: [bool; 3],
+}
+
+impl Region {
+    fn octant(&self, o: usize) -> Self {
+        let mut r = *self;
+        for i in 0..3 {
+            let mid = (self.lo[i] + self.hi[i]) / 2.;
+            if (o >> i) & 1 == 0 {
+                r.hi[i] = mid;
+                r.cut_hi[i] = true;
+            } else {
+                r.lo[i] = mid;
+                r.cut_lo[i] = true;
+            }
+        }
+        r
+    }
+    fn holds(&self, p: [f64; 3]) -> bool {
+        (0..3).all(|i| {
+            (!self.cut_lo[i] || p[i] >= self.lo[i]) && (!self.cut_hi[i] || p[i] < self.hi[i])
+        })
+    }
+    /// Whether segment `ab` meets the region grown by `pad` (slab clipping).
+    fn meets(&self, a: [f64; 3], b: [f64; 3], pad: f64) -> bool {
+        let (mut t0, mut t1) = (0f64, 1f64);
+        for i in 0..3 {
+            let lo = if self.cut_lo[i] {
+                self.lo[i] - pad
+            } else {
+                f64::NEG_INFINITY
+            };
+            let hi = if self.cut_hi[i] {
+                self.hi[i] + pad
+            } else {
+                f64::INFINITY
+            };
+            let d = b[i] - a[i];
+            if d == 0. {
+                if a[i] < lo || a[i] > hi {
+                    return false;
+                }
+                continue;
+            }
+            let (u, v) = ((lo - a[i]) / d, (hi - a[i]) / d);
+            t0 = t0.max(u.min(v));
+            t1 = t1.min(u.max(v));
+            if t0 > t1 {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// Spills of dense cells, within what the allowance leaves after the probe sort.
+struct Dense<'c, 's> {
+    scratch: &'s Scratch,
+    sorter: SortConfig,
+    join: Join,
+    budget: u64,
+    live: u64,
+    check: &'c (dyn Fn() -> Result<(), JobError> + Sync),
+}
+
+impl<'s> Dense<'_, 's> {
+    fn bytes(&self, s: &Sequence<Probe>) -> u64 {
+        s.len() * Probe::SIZE as u64
+    }
+    fn push(&mut self, w: &mut SequenceWriter<Probe>, p: &Probe) -> Result<(), JobError> {
+        self.live += Probe::SIZE as u64;
+        if self.live > self.budget {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "dense overlap cells need more than the {} bytes of scratch the join's \
+                     allowance leaves",
+                    self.budget
+                ),
+            ));
+        }
+        w.push(p)?;
+        Ok(())
+    }
+    fn writer(&self, stem: &str) -> Result<SequenceWriter<Probe>, JobError> {
+        Ok(SequenceWriter::<Probe>::new(
+            self.scratch,
+            stem,
+            self.sorter.buffer_bytes,
+        )?)
+    }
+
+    /// Join a spilled dense cell: in memory once its hosts fit, else split into octants
+    /// (each written, joined and released in turn) to `SPLIT_DEPTH`, then a chunked scan.
+    #[allow(clippy::too_many_arguments)]
+    fn join_spilled(
+        &mut self,
+        hosts: &Sequence<Probe>,
+        guests: &Sequence<Probe>,
+        region: Region,
+        depth: u32,
+        emit: &mut dyn FnMut(&Probe, &Probe, &mut IncidenceStats) -> Result<(), JobError>,
+        stats: &mut IncidenceStats,
+    ) -> Result<(), JobError> {
+        if hosts.is_empty() || guests.is_empty() {
+            return Ok(());
+        }
+        if hosts.len() as usize > CELL_HOSTS && depth < SPLIT_DEPTH {
+            for o in 0..8 {
+                (self.check)()?;
+                let octant = region.octant(o);
+                let mut h = self.writer("hlod-dense-hosts")?;
+                for q in hosts.reader()? {
+                    let q = q?;
+                    let pad = self.join.pad(&Candidate {
+                        leaf: q.leaf,
+                        a: q.a,
+                        b: q.b,
+                        tol: q.tol,
+                    }) * (1. + 1e-9);
+                    if octant.meets(point(q.a), point(q.b), pad) {
+                        self.push(&mut h, &q)?;
+                    }
+                }
+                let mut g = self.writer("hlod-dense-guests")?;
+                for q in guests.reader()? {
+                    let q = q?;
+                    if octant.holds(point(q.a)) {
+                        self.push(&mut g, &q)?;
+                    }
+                }
+                let (h, g) = (h.finish()?, g.finish()?);
+                stats.dense_splits += 1;
+                self.join_spilled(&h, &g, octant, depth + 1, emit, stats)?;
+                self.live -= self.bytes(&h) + self.bytes(&g);
+            }
+            return Ok(());
+        }
+        // In memory, or a chunked scan of the hosts against every guest.
+        let mut chunk: Vec<Probe> = Vec::with_capacity(CELL_HOSTS);
+        let mut reader = hosts.reader()?;
+        loop {
+            chunk.clear();
+            for q in reader.by_ref().take(CELL_HOSTS) {
+                chunk.push(q?);
+            }
+            if chunk.is_empty() {
+                return Ok(());
+            }
+            stats.dense_chunks += 1;
+            for (k, g) in guests.reader()?.enumerate() {
+                if k.is_multiple_of(1 << 12) {
+                    (self.check)()?;
+                }
+                let g = g?;
+                for h in &chunk {
+                    emit(h, &g, stats)?;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SORT: SortConfig = SortConfig {
+        run_bytes: 1 << 16,
+        fan_in: 4,
+        buffer_bytes: 1 << 12,
+        jobs: 1,
+    };
+
+    fn k(p: [f64; 3]) -> Key {
+        key(p.map(|v| v as f32))
+    }
+
+    /// Run the streamed join on `hosts` and `guests` (leaf, a, b, tolerance) in `cube`; the
+    /// overlap rows and stats.
+    fn join(
+        cube: Cube,
+        hosts: &[(u32, Key, Key, f32)],
+        guests: &[(u32, Key, f32)],
+    ) -> (Vec<InterfaceRow>, IncidenceStats) {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+        let mut h = SequenceWriter::<Candidate>::new(&scratch, "h", 1 << 12).unwrap();
+        for &(leaf, a, b, tol) in hosts {
+            h.push(&Candidate {
+                leaf,
+                a,
+                b,
+                tol: tol.to_bits(),
+            })
+            .unwrap();
+        }
+        let mut g = SequenceWriter::<Candidate>::new(&scratch, "g", 1 << 12).unwrap();
+        let mut guest_tol = 0f32;
+        for &(leaf, a, tol) in guests {
+            guest_tol = guest_tol.max(tol);
+            g.push(&Candidate {
+                leaf,
+                a,
+                b: a,
+                tol: tol.to_bits(),
+            })
+            .unwrap();
+        }
+        let (h, g) = (h.finish().unwrap(), g.finish().unwrap());
+        let mut rows = ExternalSorter::<InterfaceRow>::new(&scratch, SORT).unwrap();
+        let mut stats = IncidenceStats::default();
+        let magnitude = (0..3)
+            .map(|i| cube.origin[i].abs().max((cube.origin[i] + cube.side).abs()))
+            .fold(0., f64::max);
+        let joined = Join {
+            cube,
+            guest_tol: f64::from(guest_tol),
+            floor: magnitude * f64::from(f32::EPSILON) * 8.,
+        };
+        overlaps(
+            &scratch,
+            SORT,
+            joined,
+            1,
+            &h,
+            &g,
+            &mut rows,
+            &mut stats,
+            &|| Ok(()),
+        )
+        .unwrap();
+        let rows = rows.finish().unwrap().map(Result::unwrap).collect();
+        (rows, stats)
+    }
+
+    /// The round-2 probe: the host is indexed by its own small tolerance, but the pair
+    /// predicate accepts the guest's larger one. Index padding covers any guest's.
+    #[test]
+    fn a_guest_with_a_larger_tolerance_meets_its_host() {
+        let unit = Cube {
+            origin: [0.; 3],
+            side: 1.,
+        };
+        let x = 0.5 - 2f64.powi(-12);
+        let host = (
+            0,
+            k([x, 0.125, 0.125]),
+            k([x, 0.125, 0.375]),
+            2f32.powi(-13),
+        );
+        let guest = (1, k([0.5, 0.125, 0.25]), 2f32.powi(-10));
+        let (rows, stats) = join(unit, &[host], &[guest]);
+        assert_eq!(stats.overlaps, 1, "{stats:?}");
+        assert!(rows
+            .iter()
+            .any(|r| r.leaf == 1 && r.a == guest.1 && r.b == guest.1));
+        assert!(rows
+            .iter()
+            .any(|r| r.leaf == 0 && (r.a, r.b) == (host.1, host.2)));
+    }
+
+    /// A cell far denser than `CELL_HOSTS` is spilled, split and scanned in chunks, and finds
+    /// exactly the brute-force matches.
+    #[test]
+    fn dense_cells_are_joined_exactly_in_bounded_memory() {
+        let cube = Cube {
+            origin: [0.; 3],
+            side: 16.,
+        };
+        // Parallel long hosts in a slab (one scale, a few cells), guests on every 7th.
+        let n = 3 * CELL_HOSTS;
+        let mut hosts = Vec::new();
+        let mut guests = Vec::new();
+        for i in 0..n {
+            let (x, y) = (
+                1. + (i % 64) as f64 * 0.03125,
+                1. + (i / 64) as f64 * 0.0625,
+            );
+            hosts.push((i as u32, k([x, y, 1.]), k([x, y, 7.]), 1e-4));
+            if i % 7 == 0 {
+                guests.push((n as u32 + i as u32, k([x, y, 1. + (i % 5) as f64]), 1e-4));
+            }
+        }
+        // And a guest off every host.
+        guests.push((u32::MAX, k([0.5, 0.5, 0.5]), 1e-4));
+        let (_, stats) = join(cube, &hosts, &guests);
+        let brute = guests
+            .iter()
+            .map(|g| {
+                hosts
+                    .iter()
+                    .filter(|h| {
+                        h.0 != g.0 && on_segment(h.1, h.2, g.1, 1e-4 + rounding(&[h.1, h.2, g.1]))
+                    })
+                    .count() as u64
+            })
+            .sum::<u64>();
+        assert!(
+            stats.dense_cells >= 1 && stats.dense_splits >= 8,
+            "{stats:?}"
+        );
+        assert_eq!(stats.overlaps, brute, "{stats:?}");
+        assert!(brute > 0);
+    }
+
+    /// A group of one item per leaf is charged in the stage's resident bound.
+    #[test]
+    fn item_groups_are_charged_per_leaf() {
+        let base = memory_need(SORT, 256, 0);
+        let more = memory_need(SORT, 256, 1 << 20);
+        assert!(more - base >= (1 << 20) * std::mem::size_of::<Item>() as u64);
+    }
 }
