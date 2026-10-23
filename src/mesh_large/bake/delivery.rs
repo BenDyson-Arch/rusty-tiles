@@ -159,31 +159,33 @@ pub(super) fn encode(
         let level0_sampled = matches!(page.sampler["minFilter"].as_u64(), Some(9728 | 9729));
         let cell = std::cell::RefCell::new(&mut *check);
         let poll = || (cell.borrow_mut())();
-        delivery::encode_authored(
-            &chain,
-            page.slot,
-            profile,
-            codec_memory,
-            context,
-            delivery::Ladder {
-                level0_sampled,
-                check: &poll,
-            },
-            |decoded: &[crate::mesh_large::leaves::mips::Level]| {
-                poll()?;
-                if decoded.len() != page.levels.len() {
-                    return Err(invalid("proxy missing decoded mip"));
-                }
-                // The mandatory retained H8 floors already cover every meaningful
-                // channel and normal length/angle on every emitted level. Preserve
-                // their receipts; no caller regenerates mips or exempts 1x1.
-                let slices: Vec<&[u8]> = decoded.iter().map(|l| l.rgba.as_slice()).collect();
-                let normal = mips::normal_floor(page, &slices, work_limit, &mut || poll())?;
-                Ok(
-                    serde_json::json!({"proxyDecodedCompleteChain":decoded.len(),"terminal1x1":decoded.last().map(|l|[l.width,l.height]),"sourceSamplerPreserved":page.sampler,"normalRendererFrames":normal}),
-                )
-            },
-        )?
+        delivery::proto::as_proxy(|| {
+            delivery::encode_authored(
+                &chain,
+                page.slot,
+                profile,
+                codec_memory,
+                context,
+                delivery::Ladder {
+                    level0_sampled,
+                    check: &poll,
+                },
+                |decoded: &[crate::mesh_large::leaves::mips::Level]| {
+                    poll()?;
+                    if decoded.len() != page.levels.len() {
+                        return Err(invalid("proxy missing decoded mip"));
+                    }
+                    // The mandatory retained H8 floors already cover every meaningful
+                    // channel and normal length/angle on every emitted level. Preserve
+                    // their receipts; no caller regenerates mips or exempts 1x1.
+                    let slices: Vec<&[u8]> = decoded.iter().map(|l| l.rgba.as_slice()).collect();
+                    let normal = mips::normal_floor(page, &slices, work_limit, &mut || poll())?;
+                    Ok(
+                        serde_json::json!({"proxyDecodedCompleteChain":decoded.len(),"terminal1x1":decoded.last().map(|l|[l.width,l.height]),"sourceSamplerPreserved":page.sampler,"normalRendererFrames":normal}),
+                    )
+                },
+            )
+        })?
     };
     if output.bytes.len() as u64 > memory {
         return Err(resource("proxy encoded page output lease"));

@@ -262,6 +262,9 @@ pub struct TilerDiagnostics {
     pub phase_seconds: PhaseSeconds,
     /// Proxy bake totals: tiles, per-step worker seconds, appearance fallbacks.
     pub proxy_bake: ProxyBakeDiagnostics,
+    /// PROTOTYPE (not for merge): ETC1S colour pages and their floor misses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proto_colour: Option<serde_json::Value>,
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -482,6 +485,7 @@ pub fn mesh_to_tileset(
             peak_held_records: delivered.peak_held_records,
             phase_seconds: phases.seconds(),
             proxy_bake: phases.bake(),
+            proto_colour: super::leaves::delivery::proto::report(),
         };
         Ok::<_, JobError>((report, diagnostics))
     })();

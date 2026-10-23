@@ -209,7 +209,7 @@ pub(crate) fn encode_ktx2_mips_floor_checked(
     let encoded =
         crate::stage_timing::encode(base, chain, || encode_mips_unverified(mips, mode, params))?;
     match crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
-        verify_levels(&encoded, mips, mode, params, true)
+        verify_levels(&encoded, mips, mode, params, true, None)
     }) {
         Ok((_, decoded)) => Ok(Ok((encoded, decoded))),
         Err(VerifyFailure::Floor(miss)) => Ok(Err(miss)),
@@ -436,6 +436,45 @@ fn encode_mips_unverified(
     Ok(encoded)
 }
 
+/// PROTOTYPE: with a soft sink a floor miss is recorded and verification
+/// continues (decoding every level); without one it fails as before.
+fn soft_or_fail(
+    soft: &mut Option<&mut Vec<FloorMiss>>,
+    failure: VerifyFailure,
+) -> Result<(), VerifyFailure> {
+    match (soft, failure) {
+        (Some(sink), VerifyFailure::Floor(miss)) => {
+            sink.push(miss);
+            Ok(())
+        }
+        (_, failure) => Err(failure),
+    }
+}
+
+/// PROTOTYPE (not for merge): [`encode_ktx2_mips_floor_checked`] that never
+/// fails on a decoded-level floor. Structural verification stays hard; floor
+/// misses are returned beside the encoded file and every decoded level.
+pub(crate) fn encode_ktx2_mips_soft(
+    mips: &[MipLevel<'_>],
+    mode: Mode,
+    params: Params,
+) -> Result<(EncodedLevels, Vec<FloorMiss>), JobError> {
+    check_mips(mips, mode, params)?;
+    let base = u64::from(mips[0].width) * u64::from(mips[0].height);
+    let chain = mips
+        .iter()
+        .map(|m| u64::from(m.width) * u64::from(m.height))
+        .sum();
+    let encoded =
+        crate::stage_timing::encode(base, chain, || encode_mips_unverified(mips, mode, params))?;
+    let mut misses = Vec::new();
+    let (_, decoded) = crate::stage_timing::time(crate::stage_timing::Stage::CodecVerify, || {
+        verify_levels(&encoded, mips, mode, params, true, Some(&mut misses))
+    })
+    .map_err(VerifyFailure::into_error)?;
+    Ok(((encoded, decoded), misses))
+}
+
 fn floor_miss(level: u32, message: String) -> VerifyFailure {
     VerifyFailure::Floor(FloorMiss {
         level,
@@ -639,7 +678,7 @@ pub(crate) fn verify_ktx2_mips(
     mode: Mode,
     params: Params,
 ) -> Result<Verified, JobError> {
-    verify_levels(ktx2, mips, mode, params, false)
+    verify_levels(ktx2, mips, mode, params, false, None)
         .map(|(verified, _)| verified)
         .map_err(VerifyFailure::into_error)
 }
@@ -650,6 +689,7 @@ fn verify_levels(
     mode: Mode,
     params: Params,
     keep: bool,
+    mut soft: Option<&mut Vec<FloorMiss>>,
 ) -> Result<(Verified, Vec<Vec<u8>>), VerifyFailure> {
     check_mips(mips, mode, params)?;
     let mut kept = Vec::new();
@@ -764,14 +804,17 @@ fn verify_levels(
             let allowed =
                 floor.ratio * level_block_mean + floor.slack_per_byte * input.len() as u64;
             if level_sse > allowed {
-                return Err(floor_miss(
-                    level,
-                    format!(
-                        "decoded mip {level} error {level_sse} exceeds the floor {allowed} \
+                soft_or_fail(
+                    &mut soft,
+                    floor_miss(
+                        level,
+                        format!(
+                            "decoded mip {level} error {level_sse} exceeds the floor {allowed} \
                      ({} x block-mean error {level_block_mean} + {} per byte)",
-                        floor.ratio, floor.slack_per_byte
+                            floor.ratio, floor.slack_per_byte
+                        ),
                     ),
-                ));
+                )?;
             }
             let texels = u64::from(w) * u64::from(h);
             let stats = detail(input, &decoded, w, h);
@@ -779,18 +822,21 @@ fn verify_levels(
                 && stats.input_variance_at_least(detail_floor.min_variance)
                 && !stats.correlation_at_least(detail_floor.numerator, detail_floor.denominator)
             {
-                return Err(floor_miss(
-                    level,
-                    format!(
-                        "decoded mip {level} detail does not follow the input: covariance {}, \
+                soft_or_fail(
+                    &mut soft,
+                    floor_miss(
+                        level,
+                        format!(
+                            "decoded mip {level} detail does not follow the input: covariance {}, \
                      input {}, decoded {} (correlation floor {}/{})",
-                        stats.covariance,
-                        stats.input,
-                        stats.decoded,
-                        detail_floor.numerator,
-                        detail_floor.denominator
+                            stats.covariance,
+                            stats.input,
+                            stats.decoded,
+                            detail_floor.numerator,
+                            detail_floor.denominator
+                        ),
                     ),
-                ));
+                )?;
             }
         }
         if keep {

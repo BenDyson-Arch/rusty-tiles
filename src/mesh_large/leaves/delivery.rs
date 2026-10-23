@@ -450,15 +450,24 @@ pub(in crate::mesh_large) fn codec_settings(
         Profile::Balanced => 1,
         _ => 2,
     };
+    let etc1s_colour = proto::colour_quality().filter(|_| class(slot) == Class::Colour);
     let mode = if scalar {
         codec::Mode::Etc1s { quality: 90 }
+    } else if let Some(quality) = etc1s_colour {
+        codec::Mode::Etc1s { quality }
     } else {
         codec::Mode::Uastc { zstd: true }
     };
     (
         mode,
         codec::Params {
-            effort: if scalar { 0 } else { effort },
+            effort: if scalar {
+                0
+            } else if etc1s_colour.is_some() {
+                proto::ETC1S_EFFORT
+            } else {
+                effort
+            },
             transfer: if class(slot) == Class::Colour {
                 codec::Transfer::Srgb
             } else {
@@ -934,9 +943,20 @@ fn lossy_step(
     }
     let (mode, params) = step_settings(slot, profile, step)?;
     let effort = params.effort;
+    // PROTOTYPE: ETC1S colour pages record every miss and never escalate.
+    let mut soft = (step == Step::Profile
+        && matches!(mode, codec::Mode::Etc1s { .. })
+        && class(slot) == Class::Colour)
+        .then(|| proto::Page::new(slot));
     // The codec's verification runs in full at every step; a decoded-level
     // floor miss is a ladder miss like a gate miss, never accepted.
-    let (bytes, mut decoded_levels) =
+    let (bytes, mut decoded_levels) = if let Some(page) = soft.as_mut() {
+        let (encoded, misses) = codec::encode_ktx2_mips_soft(&levels, mode, params)?;
+        for miss in misses {
+            page.codec_miss(miss.level as usize, miss.error.message());
+        }
+        encoded
+    } else {
         match codec::encode_ktx2_mips_floor_checked(&levels, mode, params)? {
             Ok(encoded) => encoded,
             Err(miss) => {
@@ -947,7 +967,8 @@ fn lossy_step(
                     gate: miss.error.message().to_owned(),
                 }))
             }
-        };
+        }
+    };
     let mut receipts = Vec::new();
     receipts
         .try_reserve_exact(chain.levels.len() * 3 + 1)
@@ -972,6 +993,16 @@ fn lossy_step(
             return Err(error(JobErrorKind::InvalidState, "decoded level shape"));
         }
         tamper(step, index, &mut decoded);
+        if let Some(page) = soft.as_mut() {
+            page.level(
+                &prepared.expected[index],
+                &decoded,
+                &level.support,
+                level.width,
+                profile,
+                index,
+            );
+        }
         match timing::time(Stage::FidelityCheck, || {
             check_level(
                 &prepared.expected[index],
@@ -984,7 +1015,13 @@ fn lossy_step(
             )
         }) {
             Ok(receipt) => receipts.push(receipt),
-            Err(e) => return missed(e, step, Some(index)).map(Err),
+            Err(e) => {
+                let miss = missed(e, step, Some(index))?;
+                match soft.as_mut() {
+                    Some(page) => page.gate_miss("channel", &miss),
+                    None => return Ok(Err(miss)),
+                }
+            }
         }
         if mask.is_some() {
             receipts.push(prepared.guard_receipts[index].clone());
@@ -998,7 +1035,13 @@ fn lossy_step(
             profile,
         )? {
             Some(Ok(receipt)) => receipts.push(receipt),
-            Some(Err(e)) => return missed(e, step, Some(index)).map(Err),
+            Some(Err(e)) => {
+                let miss = missed(e, step, Some(index))?;
+                match soft.as_mut() {
+                    Some(page) => page.gate_miss("mask", &miss),
+                    None => return Ok(Err(miss)),
+                }
+            }
             None => {}
         }
         decoded_chain.push(mips::Level {
@@ -1010,10 +1053,22 @@ fn lossy_step(
     let sampler_receipt =
         match timing::time(Stage::SamplerCheckDecoded, || validate(&decoded_chain)) {
             Ok(receipt) => receipt,
-            Err(e) => return missed(e, step, None).map(Err),
+            Err(e) => {
+                let miss = missed(e, step, None)?;
+                match soft.as_mut() {
+                    Some(page) => {
+                        page.gate_miss("sampler", &miss);
+                        Value::Null
+                    }
+                    None => return Ok(Err(miss)),
+                }
+            }
         };
     if !sampler_receipt.is_null() {
         receipts.push(sampler_receipt);
+    }
+    if let Some(page) = soft.take() {
+        receipts.push(page.finish(bytes.len() as u64, chain));
     }
     receipts.push(json!({"charged_bytes":charge,"native_workspace_provisional":true,"scalar_rrr":scalar,"effort":effort,"step":step.name(),"caller_levels":chain.levels.len()}));
     Ok(Ok(Delivery {
@@ -1178,6 +1233,284 @@ pub(in crate::mesh_large) fn encode_id_chain(
     }
     receipts.push(json!({"profile":"id","encoding":"png","levels_exact":true,"charged_bytes":charge,"caller_levels":chain.levels.len()}));
     Ok(IdDelivery { levels, receipts })
+}
+
+/// PROTOTYPE (not for merge): ETC1S colour pages.
+///
+/// `RUSTY_TILES_PROTO_COLOUR=etc1s:<1..=100>` encodes base colour and
+/// emissive pages (leaf and proxy) as ETC1S at that quality (basisu maps it
+/// to the 0..=255 ETC1S quality level as round(q * 2.55)). Their profile
+/// step never escalates: every channel-floor, MASK, sampler and codec-floor
+/// miss is recorded here and reported in `diagnostics.proto_colour`.
+pub(in crate::mesh_large) mod proto {
+    use super::{channel_gate, channel_stats, GateMiss, Profile, TextureSlot};
+    use serde_json::{json, Value};
+    use std::cell::Cell;
+    use std::sync::{Mutex, OnceLock};
+
+    /// basisu ETC1S compression level 2 (its CLI default) is effort 3.
+    pub(in crate::mesh_large) const ETC1S_EFFORT: u8 = 3;
+
+    pub(in crate::mesh_large) fn colour_quality() -> Option<u8> {
+        static SETTING: OnceLock<Option<u8>> = OnceLock::new();
+        *SETTING.get_or_init(|| {
+            let raw = std::env::var("RUSTY_TILES_PROTO_COLOUR").ok()?;
+            let quality = raw
+                .strip_prefix("etc1s:")
+                .and_then(|q| q.parse::<u8>().ok())
+                .filter(|q| (1..=100).contains(q))
+                .unwrap_or_else(|| {
+                    panic!("RUSTY_TILES_PROTO_COLOUR must be etc1s:<1..=100>, got {raw:?}")
+                });
+            eprintln!("PROTOTYPE: ETC1S colour pages at quality {quality}, no escalation");
+            Some(quality)
+        })
+    }
+
+    thread_local! {
+        static PROXY: Cell<bool> = const { Cell::new(false) };
+    }
+    /// Runs `f` with this thread's encodes attributed to proxy pages.
+    pub(in crate::mesh_large) fn as_proxy<T>(f: impl FnOnce() -> T) -> T {
+        PROXY.with(|p| p.set(true));
+        let out = f();
+        PROXY.with(|p| p.set(false));
+        out
+    }
+
+    /// Worst decoded error of one channel.
+    #[derive(Clone, Copy, Debug)]
+    struct Worst {
+        psnr: f64,
+        p999: u8,
+        block_rmse: f64,
+        max: u8,
+    }
+    impl Default for Worst {
+        fn default() -> Self {
+            Self {
+                psnr: f64::INFINITY,
+                p999: 0,
+                block_rmse: 0.,
+                max: 0,
+            }
+        }
+    }
+    impl Worst {
+        fn merge(&mut self, o: &Worst) {
+            self.psnr = self.psnr.min(o.psnr);
+            self.p999 = self.p999.max(o.p999);
+            self.block_rmse = self.block_rmse.max(o.block_rmse);
+            self.max = self.max.max(o.max);
+        }
+        fn json(&self) -> Value {
+            json!({"psnr":self.psnr.is_finite().then_some(self.psnr),"p999":self.p999,"blockRmse":self.block_rmse,"max":self.max})
+        }
+    }
+
+    #[derive(Default)]
+    struct Side {
+        pages: u64,
+        bytes: u64,
+        texels: u64,
+        missed_pages: u64,
+        /// Pages that missed the channel floors on level 0.
+        missed_level0_pages: u64,
+        /// Misses by kind: channel floors (by criterion), MASK, sampler, codec.
+        kinds: std::collections::BTreeMap<String, u64>,
+        /// Worst error per channel over every page.
+        all: [Worst; 4],
+        /// Worst error per channel over levels that missed a channel floor.
+        missed: [Worst; 4],
+        /// Worst level-0 error per channel.
+        level0: [Worst; 4],
+        examples: Vec<String>,
+    }
+    impl Side {
+        fn json(&self) -> Value {
+            let ch = |w: &[Worst; 4]| -> Value {
+                json!({"r":w[0].json(),"g":w[1].json(),"b":w[2].json(),"a":w[3].json()})
+            };
+            json!({
+                "pages":self.pages,"bytes":self.bytes,"texels":self.texels,
+                "bytesPerTexel":if self.texels>0 {self.bytes as f64/self.texels as f64} else {0.},
+                "pagesMissingFloors":self.missed_pages,
+                "pagesMissingLevel0ChannelFloors":self.missed_level0_pages,
+                "missKinds":self.kinds,
+                "worstAll":ch(&self.all),
+                "worstMissedLevels":ch(&self.missed),
+                "worstLevel0":ch(&self.level0),
+                "examples":self.examples,
+            })
+        }
+    }
+    #[derive(Default)]
+    struct Totals {
+        leaf: Side,
+        proxy: Side,
+    }
+    static TOTALS: Mutex<Option<Totals>> = Mutex::new(None);
+
+    /// One ETC1S colour page in flight.
+    pub(in crate::mesh_large) struct Page {
+        slot: TextureSlot,
+        missed: bool,
+        level0_channel: bool,
+        kinds: Vec<String>,
+        all: [Worst; 4],
+        missed_worst: [Worst; 4],
+        level0: [Worst; 4],
+        first: Option<String>,
+    }
+    impl Page {
+        pub(in crate::mesh_large) fn new(slot: TextureSlot) -> Self {
+            Self {
+                slot,
+                missed: false,
+                level0_channel: false,
+                kinds: Vec::new(),
+                all: Default::default(),
+                missed_worst: Default::default(),
+                level0: Default::default(),
+                first: None,
+            }
+        }
+        fn note(&mut self, kind: String, text: &str) {
+            self.missed = true;
+            if self.first.is_none() {
+                self.first = Some(format!("{:?} {kind}: {text}", self.slot));
+            }
+            self.kinds.push(kind);
+        }
+        pub(in crate::mesh_large) fn codec_miss(&mut self, mip: usize, text: &str) {
+            let _ = mip;
+            self.note("codec_verify".into(), text);
+        }
+        pub(in crate::mesh_large) fn gate_miss(&mut self, kind: &str, miss: &GateMiss) {
+            if kind == "channel" {
+                // Criteria are tallied in `level`; record only the first text.
+                if self.first.is_none() {
+                    self.first = Some(format!("{:?} channel: {}", self.slot, miss.gate));
+                }
+                self.missed = true;
+                return;
+            }
+            self.note(kind.into(), &miss.gate);
+        }
+        /// Measures every channel of one decoded level against its floors.
+        pub(in crate::mesh_large) fn level(
+            &mut self,
+            expected: &[u8],
+            decoded: &[u8],
+            support: &[u32],
+            width: u32,
+            profile: Profile,
+            mip: usize,
+        ) {
+            if width == 0 || expected.len() != decoded.len() || expected.len() != support.len() * 4
+            {
+                return;
+            }
+            for channel in 0..4 {
+                let stats = channel_stats(expected, decoded, support, width as usize, channel);
+                if stats.texels == 0 {
+                    continue;
+                }
+                let gate = channel_gate(self.slot, profile, channel, stats.texels);
+                let w = Worst {
+                    psnr: stats.psnr,
+                    p999: stats.p999,
+                    block_rmse: stats.block_rmse,
+                    max: stats.max,
+                };
+                self.all[channel].merge(&w);
+                if mip == 0 {
+                    self.level0[channel].merge(&w);
+                }
+                if !gate.accepts(&stats) {
+                    self.missed = true;
+                    if mip == 0 {
+                        self.level0_channel = true;
+                    }
+                    self.missed_worst[channel].merge(&w);
+                    let level = if mip == 0 { "mip0" } else { "mip>0" };
+                    if stats.psnr < gate.psnr {
+                        self.kinds.push(format!("channel_psnr_{level}"));
+                    }
+                    if gate.p999.is_some_and(|cap| stats.p999 > cap) {
+                        self.kinds.push(format!("channel_p999_{level}"));
+                    }
+                    if gate.block_rmse.is_some_and(|cap| stats.block_rmse > cap) {
+                        self.kinds.push(format!("channel_block_rmse_{level}"));
+                    }
+                    if gate.max.is_some_and(|cap| stats.max > cap) {
+                        self.kinds.push(format!("channel_max_{level}"));
+                    }
+                }
+            }
+        }
+        /// Folds the page into the run totals and returns its receipt.
+        pub(in crate::mesh_large) fn finish(
+            self,
+            bytes: u64,
+            chain: &super::sparse_mips::Chain,
+        ) -> Value {
+            let texels: u64 = chain
+                .levels
+                .first()
+                .map(|l| u64::from(l.width) * u64::from(l.height))
+                .unwrap_or(0);
+            let proxy = PROXY.with(Cell::get);
+            let mut kinds = self.kinds.clone();
+            kinds.sort();
+            kinds.dedup();
+            {
+                let mut guard = TOTALS.lock().unwrap_or_else(|e| e.into_inner());
+                let totals = guard.get_or_insert_with(Totals::default);
+                let side = if proxy {
+                    &mut totals.proxy
+                } else {
+                    &mut totals.leaf
+                };
+                side.pages += 1;
+                side.bytes += bytes;
+                side.texels += texels;
+                for c in 0..4 {
+                    side.all[c].merge(&self.all[c]);
+                    side.level0[c].merge(&self.level0[c]);
+                    side.missed[c].merge(&self.missed_worst[c]);
+                }
+                if self.missed {
+                    side.missed_pages += 1;
+                    if self.level0_channel {
+                        side.missed_level0_pages += 1;
+                    }
+                    for k in &kinds {
+                        *side.kinds.entry(k.clone()).or_default() += 1;
+                    }
+                    if side.examples.len() < 8 {
+                        if let Some(first) = &self.first {
+                            side.examples.push(first.clone());
+                        }
+                    }
+                }
+            }
+            json!({"prototypeEtc1sColour":colour_quality(),"proxy":proxy,"missedFloors":self.missed,"missKinds":kinds})
+        }
+    }
+
+    /// Run totals, or `None` when the prototype switch is off.
+    pub(in crate::mesh_large) fn report() -> Option<Value> {
+        let quality = colour_quality()?;
+        let guard = TOTALS.lock().unwrap_or_else(|e| e.into_inner());
+        let empty = Totals::default();
+        let totals = guard.as_ref().unwrap_or(&empty);
+        Some(json!({
+            "mode":"etc1s","quality":quality,"etc1sQualityLevel":(f64::from(quality)*2.55).round(),
+            "effort":ETC1S_EFFORT,"escalation":"disabled for ETC1S colour pages",
+            "leaf":totals.leaf.json(),"proxy":totals.proxy.json(),
+        }))
+    }
 }
 
 #[cfg(test)]
