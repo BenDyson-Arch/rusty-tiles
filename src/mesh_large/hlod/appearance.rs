@@ -237,8 +237,8 @@ struct Pending {
     face_ids: Vec<usize>,
     layout: charts::Layout,
     slots: Vec<TextureSlot>,
-    /// Per covered texel: (page texel, group face, barycentrics); query `i` is texel `i`.
-    texels: Vec<(u32, u32, [f64; 3])>,
+    /// Per covered texel: (page texel, group face, barycentrics).
+    texels: Vec<(u32, u32, [f32; 3])>,
     /// Per group face corner: coarse tangent (normal maps only).
     tangents: Option<Vec<[[f32; 4]; 3]>>,
 }
@@ -314,22 +314,17 @@ pub(crate) fn build(
                 charts::layout(tile.decoded, &corners, target.max(floor), services.max_edge)?;
             let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
             let mut texels = Vec::new();
-            let mut points = Vec::new();
             let mut covered = Vec::new();
-            for (gf, f) in corners.iter().enumerate() {
+            for gf in 0..corners.len() {
                 charts::raster(&layout.pixels[gf], layout.size, &mut covered);
-                let p = f.map(|v| tile.decoded[v as usize]);
                 for &(texel, w) in &covered {
                     if std::mem::replace(&mut owner[texel as usize], true) {
                         continue;
                     }
-                    texels.push((texel, gf as u32, w));
-                    points.push(std::array::from_fn(|a| {
-                        (f64::from(p[0][a]) * w[0] + f64::from(p[1][a]) * w[1] + f64::from(p[2][a]) * w[2])
-                            as f32
-                    }));
+                    texels.push((texel, gf as u32, w.map(|v| v as f32)));
                 }
             }
+            drop(owner);
             let normal_map = slots.contains(&TextureSlot::Normal);
             let tangents = match (&normals, normal_map) {
                 (Some(n), true) => Some(
@@ -351,7 +346,6 @@ pub(crate) fn build(
                 ),
                 _ => None,
             };
-            queries.push(Queries::new(class, points, 1. / layout.scale, normal_map));
             pending.push(Pending {
                 group: index,
                 face_ids: faces.clone(),
@@ -376,15 +370,19 @@ pub(crate) fn build(
     let mut queries = queries.into_iter();
     let mut vertex_groups = vertex_groups.into_iter().peekable();
     let mut pending = pending.into_iter().peekable();
-    let mut sample_seconds = 0.;
     let mut encode_seconds = 0.;
     for (index, group) in groups.iter_mut().enumerate() {
         if pending.peek().is_some_and(|p| p.group == index) {
             let p = pending.next().unwrap();
-            let q = queries.next().ok_or_else(|| state("coarse query order"))?;
-            let started = clock();
-            let pages = bake_pages(services, &p, &q, normals.as_deref(), tile)?;
-            sample_seconds += clock() - started;
+            let pages = bake_pages(
+                services,
+                query,
+                &p,
+                group.class,
+                normals.as_deref(),
+                tile,
+                (&mut timing, &mut facts),
+            )?;
             let started = clock();
             let mut delivered = Vec::with_capacity(pages.len());
             for page in &pages {
@@ -453,7 +451,6 @@ pub(crate) fn build(
             }
         }
     }
-    timing.sample = sample_seconds;
     timing.encode = encode_seconds;
     Ok(Appearance {
         groups,
@@ -463,10 +460,14 @@ pub(crate) fn build(
     })
 }
 
+/// Faces per class whose centroids estimate the source texel density (evenly strided).
+const DENSITY_FACES: usize = 2048;
+
 /// Per textured class: the spacing at which a page carries as many texels as the source
-/// images do over the same coarse surface, `sqrt(area / Σ area · density)`, from one
-/// source query per coarse face centroid (density: squared source texels per metre of
-/// the hit triangle's first bound slot). Requesting finer spacing adds no information.
+/// images do over the same coarse surface, `sqrt(area / Σ area · density)`, from source
+/// queries at up to [`DENSITY_FACES`] evenly strided coarse face centroids (density:
+/// squared source texels per metre of the hit triangle's first bound slot). Requesting
+/// finer spacing adds no information.
 fn source_spacing(
     services: &Services<'_>,
     query: &mut super::source_index::SourceQuery<'_>,
@@ -485,9 +486,10 @@ fn source_spacing(
         if !textured {
             continue;
         }
-        let mut points = Vec::with_capacity(faces.len());
-        let mut area = Vec::with_capacity(faces.len());
-        for &f in faces {
+        let stride = faces.len().div_ceil(DENSITY_FACES);
+        let mut points = Vec::with_capacity(DENSITY_FACES);
+        let mut area = Vec::with_capacity(DENSITY_FACES);
+        for &f in faces.iter().step_by(stride) {
             let p = tile.triangles[f].map(|v| tile.decoded[v as usize].map(f64::from));
             points.push(std::array::from_fn(|a| ((p[0][a] + p[1][a] + p[2][a]) / 3.) as f32));
             let e1: [f64; 3] = std::array::from_fn(|a| p[1][a] - p[0][a]);
@@ -543,13 +545,17 @@ pub(crate) fn flat(captured: &FullCaptured, class: u32) -> Value {
 
 type Binding = Option<(usize, crate::mesh_large::leaves::crops::SourceSampler, usize)>;
 
-/// Sample every slot page of one textured group from its resolved hits.
+/// Bake every slot page of one textured group: per chunk of covered texels, resolve the
+/// texel points against the source (bounded state), then sample each slot's source images
+/// grouped by image at the texel's source level of detail.
 fn bake_pages(
     services: &Services<'_>,
+    query: &mut super::source_index::SourceQuery<'_>,
     p: &Pending,
-    q: &Queries,
+    class: u32,
     normals: Option<&[[f32; 3]]>,
     tile: &TileView<'_>,
+    (timing, facts): (&mut Timing, &mut TileAppearance),
 ) -> Result<Vec<CoarsePage>, JobError> {
     let captured = services.captured;
     let check = services.check;
@@ -560,96 +566,118 @@ fn bake_pages(
         support[*t as usize] = 1;
     }
     let spacing = 1. / p.layout.scale;
+    let normal_map = p.slots.contains(&TextureSlot::Normal);
+    let mut pages: Vec<Vec<u8>> = p.slots.iter().map(|_| vec![0u8; texels * 4]).collect();
     let mut bindings: HashMap<(u32, u8), Binding> = HashMap::new();
-    let mut pages = Vec::with_capacity(p.slots.len());
-    for &slot in &p.slots {
+    // (image, chunk query) requests, grouped by image.
+    let mut requests: Vec<(usize, u32)> = Vec::new();
+    let mut lods: Vec<f64> = Vec::new();
+    for chunk in p.texels.chunks(bake::CHUNK) {
         check()?;
-        let mut rgba = vec![0u8; texels * 4];
-        // (image, query) requests, grouped by image.
-        let mut requests: Vec<(usize, u32)> = Vec::with_capacity(p.texels.len());
-        for (i, hit) in q.hits.iter().enumerate() {
-            let b = *match bindings.entry((hit.material, slot_order(slot))) {
-                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-                std::collections::hash_map::Entry::Vacant(e) => {
-                    e.insert(bake::binding(captured, hit.material, slot)?)
+        let started = clock();
+        let points = chunk
+            .iter()
+            .map(|&(_, gf, w)| {
+                let f = tile.triangles[p.layout_face(gf)].map(|v| tile.decoded[v as usize]);
+                std::array::from_fn(|a| {
+                    (f64::from(f[0][a]) * f64::from(w[0])
+                        + f64::from(f[1][a]) * f64::from(w[1])
+                        + f64::from(f[2][a]) * f64::from(w[2])) as f32
+                })
+            })
+            .collect();
+        let mut chunk_queries = [Queries::new(class, points, spacing, normal_map)];
+        let (searches, reads) = bake::resolve(query, &mut chunk_queries, check)?;
+        facts.searches += searches;
+        facts.donor_reads += reads;
+        let [q] = chunk_queries;
+        timing.query += clock() - started;
+        let started = clock();
+        for (&slot, rgba) in p.slots.iter().zip(pages.iter_mut()) {
+            requests.clear();
+            for (i, hit) in q.hits.iter().enumerate() {
+                let b = *match bindings.entry((hit.material, slot_order(slot))) {
+                    std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(bake::binding(captured, hit.material, slot)?)
+                    }
+                };
+                match b {
+                    Some((image, _, _)) => requests.push((image, i as u32)),
+                    None => {
+                        // A class member always binds the slot; defensively neutral.
+                        write(rgba, chunk[i].0, slot, [1., 1., 1., 1.], hit, None);
+                    }
                 }
-            };
-            match b {
-                Some((image, _, _)) => requests.push((image, i as u32)),
-                None => {
-                    // A class member always binds the slot; defensively neutral.
-                    write(&mut rgba, p.texels[i].0, slot, [1., 1., 1., 1.], hit, None);
+            }
+            requests.sort_unstable();
+            let mut start = 0;
+            while start < requests.len() {
+                let image = requests[start].0;
+                let mut end = start;
+                while end < requests.len() && requests[end].0 == image {
+                    end += 1;
                 }
+                let size = {
+                    let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                    (f64::from(info.width) * f64::from(info.height)).sqrt()
+                };
+                // Source level of detail per texel: its footprint in source texels.
+                lods.clear();
+                lods.extend(requests[start..end].iter().map(|&(_, i)| {
+                    let hit = &q.hits[i as usize];
+                    let (_, _, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
+                    let rho = spacing * f64::from(hit.gradient[set]) * size;
+                    if rho > 1. {
+                        rho.log2()
+                    } else {
+                        0.
+                    }
+                }));
+                let need = lods.iter().copied().fold(f64::INFINITY, f64::min).floor().max(0.) as u32;
+                let chain = services
+                    .cache
+                    .get(captured, image, source_class(slot), need, check)?;
+                for (&(_, i), &lod) in requests[start..end].iter().zip(&lods) {
+                    let i = i as usize;
+                    let hit = &q.hits[i];
+                    let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
+                    let value = bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod);
+                    let frame = (slot == TextureSlot::Normal).then(|| {
+                        let (_, gf, w) = chunk[i];
+                        let face = tile.triangles[p.layout_face(gf)];
+                        let n = normals.map(|n| face.map(|v| n[v as usize])).unwrap_or([[0., 1., 0.]; 3]);
+                        let t = p.tangents.as_ref().map(|t| t[gf as usize]).unwrap_or([[1., 0., 0., 1.]; 3]);
+                        let lerp = |c: [[f32; 3]; 3]| -> [f64; 3] {
+                            std::array::from_fn(|a| {
+                                (0..3).map(|k| f64::from(c[k][a]) * f64::from(w[k])).sum()
+                            })
+                        };
+                        (
+                            lerp(n),
+                            lerp(t.map(|t| [t[0], t[1], t[2]])),
+                            q.frames[i],
+                            source_scale(captured, hit.material),
+                        )
+                    });
+                    write(rgba, chunk[i].0, slot, value, hit, frame);
+                }
+                start = end;
             }
         }
-        requests.sort_unstable();
-        let mut lods: Vec<f64> = Vec::new();
-        let mut start = 0;
-        while start < requests.len() {
-            let image = requests[start].0;
-            let mut end = start;
-            while end < requests.len() && requests[end].0 == image {
-                end += 1;
-            }
-            let size = {
-                let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
-                (f64::from(info.width) * f64::from(info.height)).sqrt()
-            };
-            // Source level of detail per texel: the page texel's footprint in source texels.
-            lods.clear();
-            lods.extend(requests[start..end].iter().map(|&(_, i)| {
-                let hit = &q.hits[i as usize];
-                let (_, _, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                let rho = spacing * f64::from(hit.gradient[set]) * size;
-                if rho > 1. {
-                    rho.log2()
-                } else {
-                    0.
-                }
-            }));
-            let need = lods.iter().copied().fold(f64::INFINITY, f64::min).floor().max(0.) as u32;
-            let chain = services
-                .cache
-                .get(captured, image, source_class(slot), need, check)?;
-            for (k, (&(_, i), &lod)) in requests[start..end].iter().zip(&lods).enumerate() {
-                if k % 65536 == 0 {
-                    check()?;
-                }
-                let i = i as usize;
-                let hit = &q.hits[i];
-                let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                let value = bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod);
-                let frame = (slot == TextureSlot::Normal).then(|| {
-                    let (texel, gf, w) = p.texels[i];
-                    let _ = texel;
-                    let face = tile.triangles[p.layout_face(gf)];
-                    let n = normals.map(|n| face.map(|v| n[v as usize])).unwrap_or([[0., 1., 0.]; 3]);
-                    let t = p.tangents.as_ref().map(|t| t[gf as usize]).unwrap_or([[1., 0., 0., 1.]; 3]);
-                    let lerp = |c: [[f32; 3]; 3]| -> [f64; 3] {
-                        std::array::from_fn(|a| {
-                            f64::from(c[0][a]) * w[0] + f64::from(c[1][a]) * w[1] + f64::from(c[2][a]) * w[2]
-                        })
-                    };
-                    let source = q.frames[i];
-                    (
-                        lerp(n),
-                        lerp(t.map(|t| [t[0], t[1], t[2]])),
-                        source,
-                        source_scale(captured, hit.material),
-                    )
-                });
-                write(&mut rgba, p.texels[i].0, slot, value, hit, frame);
-            }
-            start = end;
-        }
-        pages.push(CoarsePage {
+        timing.sample += clock() - started;
+    }
+    Ok(p
+        .slots
+        .iter()
+        .zip(pages)
+        .map(|(&slot, rgba)| CoarsePage {
             slot,
             size: p.layout.size,
             rgba,
             support: support.clone(),
-        });
-    }
-    Ok(pages)
+        })
+        .collect())
 }
 
 impl Pending {

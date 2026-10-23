@@ -73,9 +73,9 @@ pub(crate) struct Frame {
 pub(crate) struct Queries {
     pub class: u32,
     pub points: Vec<[f32; 3]>,
-    /// The previous point's donor is kept, without a full nearest search, when this
-    /// point's closest point on it is interior and at most this far (metres): one
-    /// texel of the page. Zero always searches.
+    /// A recent donor is kept, without a full nearest search, when this point's closest
+    /// point on it is at most this far (metres; half as far on its boundary): one texel
+    /// of the page. Zero always searches.
     pub accept: f64,
     /// Consecutive points likely share a nearest triangle (one coarse face's texels).
     pub hits: Vec<Hit>,
@@ -161,9 +161,10 @@ pub(crate) const RESOLVE_BYTES: u64 = (CHUNK as u64)
 
 /// Resolve every query point of the tile against the captured source surface of its
 /// descendant range through S2's bounded [`SourceQuery`] (nearest point, distance then
-/// source-rank ties). The cheap bake keeps one of the last few witnesses while the point
-/// projects inside it within [`Queries::accept`] (no facing or donor search); every
-/// other point runs the exact nearest search. Order is fixed per tile, so the result is
+/// source-rank ties). The cheap bake keeps one of the last few witnesses while the point's
+/// closest point on it is within [`Queries::accept`] (interior) or half of it (on its
+/// boundary), with no facing or donor search; every other point runs the exact nearest
+/// search. Order is fixed per tile, so the result is
 /// deterministic. Returns (exact searches, donor records read).
 pub(crate) fn resolve(
     query: &mut SourceQuery<'_>,
@@ -187,10 +188,16 @@ pub(crate) fn resolve(
             witnesses.clear();
             for point in &q.points[start..end] {
                 let p = point.map(f64::from);
+                // Interior closest points within one texel, boundary ones within half.
                 let kept = recent.iter().enumerate().find_map(|(k, (_, positions))| {
                     let w = closest(p, *positions);
                     let d2 = distance2(p, bary(*positions, w));
-                    (w.iter().all(|v| *v > 1e-6) && d2 <= accept2).then_some((k, w, d2))
+                    let limit = if w.iter().all(|v| *v > 1e-6) {
+                        accept2
+                    } else {
+                        0.25 * accept2
+                    };
+                    (d2 <= limit).then_some((k, w, d2))
                 });
                 let (w, d2) = match kept {
                     Some((k, w, d2)) => {

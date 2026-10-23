@@ -158,9 +158,11 @@ struct AppearancePlan {
     cache_total: u64,
 }
 
-/// Charged bytes per coarse query texel: its point, texel record and resolved hit
-/// (with a source frame when a normal map is baked).
-const QUERY_BYTES_PER_TEXEL: u64 = 160;
+/// Charged bytes per page texel of the bake: its covered-texel record and raster owner
+/// flag. Points, hits, frames and sample requests are per chunk ([`CHUNK_BYTES`]).
+const QUERY_BYTES_PER_TEXEL: u64 = 24;
+/// One bake chunk's points, hits, source frames, requests and levels of detail.
+const CHUNK_BYTES: u64 = bake::CHUNK as u64 * 160;
 
 fn appearance_plan(
     captured: &FullCaptured,
@@ -210,6 +212,7 @@ fn appearance_plan(
         .saturating_add(largest_chain);
     let texture = texels
         .saturating_mul(QUERY_BYTES_PER_TEXEL)
+        .saturating_add(CHUNK_BYTES)
         .saturating_add(page)
         .saturating_add(decode);
     let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
