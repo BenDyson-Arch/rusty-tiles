@@ -207,7 +207,7 @@ python3 -I $G/generate.py texture --triangles 1000000 --texture-size 1024 --out 
 python3 -I $G/gen_archive.py implicit --out archives/implicit-2p22
 python3 -I $G/gen_archive.py large --out archives/large-4p5g
 python3 -I $G/run_case.py --case gate-a --budget gate-a --binary BIN --input ~/.cache/rusty-tiles-scale/inputs/mesh-526m \
-  --command '{binary} --json TILER ... -i {input} -o {output} ...' --cesium
+  --command '{binary} --json mesh -i {input} -o {output} --jobs {jobs} --scratch-dir {scratch}' --cesium
 python3 -I $G/run_case.py --case gate-d-implicit --budget gate-d-implicit --binary BIN \
   --input ~/.cache/rusty-tiles-scale/archives/implicit-2p22
 ```

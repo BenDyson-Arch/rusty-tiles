@@ -5,7 +5,6 @@
 //! list can also be exported for `scripts/compare_outputs.sh`.
 #![allow(dead_code)]
 
-use rusty_tiles::glb_write::{write_glb, TilePrimitive};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -37,7 +36,6 @@ pub struct Recipe {
     pub vector: bool,
 }
 
-const GEO: [&str; 4] = ["--cartographicPositionDegrees", "133.0", "-12.0", "10"];
 const MODEL_ANCHOR: [&str; 4] = ["--anchor", "133.0", "-12.0", "10"];
 
 fn recipe(
@@ -51,14 +49,7 @@ fn recipe(
         name,
         command,
         output,
-        args: {
-            let mut args = args.concat();
-            // Only the legacy mesh producer still has an explicit mode.
-            if command == "mesh-to-3tz" {
-                args.push("--explicit");
-            }
-            args
-        },
+        args: args.concat(),
         native,
         vector: command == "vector",
     }
@@ -66,7 +57,6 @@ fn recipe(
 
 /// Small, fixed recipes: at least one per converter subcommand.
 pub fn recipes() -> Vec<Recipe> {
-    let mesh = ["-i", "{in}/mesh.glb", "--maxTriangles", "200"];
     let vector = [
         "-i",
         "{in}/vector.geojson",
@@ -78,18 +68,16 @@ pub fn recipes() -> Vec<Recipe> {
     ];
     let cloud = ["-i", "{in}/cloud.las", "--maxPoints", "500"];
     vec![
+        // Lossless keeps the digests independent of the KTX2 encoder's CPU path.
         recipe(
-            "mesh-webp",
-            "mesh-to-3tz",
-            "mesh-webp.3tz",
-            &[&mesh, &GEO, &["--textureFormat", "webp"]],
-            false,
-        ),
-        recipe(
-            "mesh-lossless-nomeshopt",
-            "mesh-to-3tz",
-            "mesh-lossless.3tz",
-            &[&mesh, &GEO, &["--textureFormat", "lossless", "--noMeshopt"]],
+            "mesh",
+            "mesh",
+            "mesh.3tz",
+            &[
+                &["-i", "{in}/mesh.glb"],
+                &MODEL_ANCHOR,
+                &["--profile", "lossless", "--jobs", "1"],
+            ],
             false,
         ),
         recipe(
@@ -291,14 +279,192 @@ pub fn textured_grid_glb(n: usize) -> Vec<u8> {
         }
     }
     let normals = vec![[0.0, 0.0, 1.0]; positions.len()];
-    write_glb(&[TilePrimitive {
+    write_glb(&Primitive {
         positions,
         normals,
         uvs,
         indices,
-        jpeg: Some(png),
-    }])
-    .unwrap()
+        png: Some(png),
+    })
+}
+
+/// One indexed triangle primitive for [`write_glb`].
+#[derive(Clone, Debug, Default)]
+pub struct Primitive {
+    pub positions: Vec<[f32; 3]>,
+    /// Empty, or one per position.
+    pub normals: Vec<[f32; 3]>,
+    /// Written only with a texture, one per position.
+    pub uvs: Vec<[f32; 2]>,
+    pub indices: Vec<u32>,
+    /// Base colour texture bytes (PNG).
+    pub png: Option<Vec<u8>>,
+}
+
+/// A one-node, one-primitive GLB 2.0 with a double-sided opaque material.
+/// Views, accessors and JSON member order reproduce the retired legacy mesh
+/// writer byte for byte, so the committed digests of recipes that pack these
+/// inputs (`glb-to-3tz`, `createTilesetJson`, `convert`) do not depend on it.
+pub fn write_glb(primitive: &Primitive) -> Vec<u8> {
+    fn align(bytes: &mut Vec<u8>) {
+        bytes.resize(bytes.len().next_multiple_of(4), 0);
+    }
+    fn number(value: f32) -> String {
+        serde_json::to_string(&f64::from(value)).unwrap()
+    }
+    let Primitive {
+        positions,
+        normals,
+        uvs,
+        indices,
+        png,
+    } = primitive;
+    assert!(normals.is_empty() || normals.len() == positions.len());
+    let textured = png.is_some() && uvs.len() == positions.len();
+    let count = positions.len();
+    let mut bin = Vec::new();
+    // (byte offset, byte length, target) per view, in accessor order.
+    let mut views: Vec<(usize, usize, Option<u32>)> = Vec::new();
+    let mut push = |bin: &mut Vec<u8>, data: &[u8], target: Option<u32>| {
+        align(bin);
+        views.push((bin.len(), data.len(), target));
+        bin.extend_from_slice(data);
+    };
+    let floats = |values: &mut dyn Iterator<Item = f32>| -> Vec<u8> {
+        values.flat_map(f32::to_le_bytes).collect()
+    };
+    push(
+        &mut bin,
+        &floats(&mut positions.iter().flatten().copied()),
+        Some(34962),
+    );
+    if !normals.is_empty() {
+        push(
+            &mut bin,
+            &floats(&mut normals.iter().flatten().copied()),
+            Some(34962),
+        );
+    }
+    if textured {
+        push(
+            &mut bin,
+            &floats(&mut uvs.iter().flatten().copied()),
+            Some(34962),
+        );
+    }
+    let short = count <= 65535 && indices.iter().all(|&i| i <= 65535);
+    let index_bytes: Vec<u8> = if short {
+        indices
+            .iter()
+            .flat_map(|&i| (i as u16).to_le_bytes())
+            .collect()
+    } else {
+        indices.iter().flat_map(|&i| i.to_le_bytes()).collect()
+    };
+    push(&mut bin, &index_bytes, Some(34963));
+    if let Some(png) = png {
+        push(&mut bin, png, None);
+    }
+    align(&mut bin);
+
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for position in positions {
+        for axis in 0..3 {
+            min[axis] = min[axis].min(position[axis]);
+            max[axis] = max[axis].max(position[axis]);
+        }
+    }
+    let vector = |v: [f32; 3]| v.map(number).join(",");
+    let mut accessors = vec![format!(
+        r#"{{"bufferView":0,"count":{count},"componentType":5126,"type":"VEC3","min":[{}],"max":[{}]}}"#,
+        vector(min),
+        vector(max)
+    )];
+    let mut attributes = vec![r#""POSITION":0"#.to_string()];
+    if !normals.is_empty() {
+        attributes.push(format!(r#""NORMAL":{}"#, accessors.len()));
+        accessors.push(format!(
+            r#"{{"bufferView":{},"count":{count},"componentType":5126,"type":"VEC3"}}"#,
+            accessors.len()
+        ));
+    }
+    if textured {
+        attributes.push(format!(r#""TEXCOORD_0":{}"#, accessors.len()));
+        accessors.push(format!(
+            r#"{{"bufferView":{},"count":{count},"componentType":5126,"type":"VEC2"}}"#,
+            accessors.len()
+        ));
+    }
+    let index_accessor = accessors.len();
+    accessors.push(format!(
+        r#"{{"bufferView":{index_accessor},"count":{},"componentType":{},"type":"SCALAR"}}"#,
+        indices.len(),
+        if short { 5123 } else { 5125 }
+    ));
+    let views = views
+        .iter()
+        .map(|(offset, length, target)| match target {
+            Some(target) => format!(
+                r#"{{"buffer":0,"byteLength":{length},"byteOffset":{offset},"target":{target}}}"#
+            ),
+            None => format!(r#"{{"buffer":0,"byteLength":{length},"byteOffset":{offset}}}"#),
+        })
+        .collect::<Vec<_>>();
+    let (image, colour, sampler) = if png.is_some() {
+        (
+            format!(
+                r#""images":[{{"bufferView":{},"mimeType":"image/png"}}],"#,
+                views.len() - 1
+            ),
+            r#""baseColorFactor":[1.0,1.0,1.0,1.0],"baseColorTexture":{"index":0,"texCoord":0}"#,
+            r#""samplers":[{"magFilter":9729,"minFilter":9987,"wrapS":33071,"wrapT":33071}],"#,
+        )
+    } else {
+        (
+            String::new(),
+            r#""baseColorFactor":[0.22,0.2,0.18,1.0]"#,
+            "",
+        )
+    };
+    let textures = if png.is_some() {
+        r#","textures":[{"sampler":0,"source":0}]"#
+    } else {
+        ""
+    };
+    let mut json = format!(
+        concat!(
+            r#"{{"accessors":[{}],"asset":{{"generator":"rusty-tiles","version":"2.0"}},"#,
+            r#""buffers":[{{"byteLength":{}}}],"bufferViews":[{}],"scene":0,{}"#,
+            r#""materials":[{{"alphaMode":"OPAQUE","doubleSided":true,"pbrMetallicRoughness":{{{},"#,
+            r#""metallicFactor":0.0,"roughnessFactor":1.0}},"emissiveFactor":[0.0,0.0,0.0]}}],"#,
+            r#""meshes":[{{"primitives":[{{"attributes":{{{}}},"indices":{},"material":0}}]}}],"#,
+            r#""nodes":[{{"mesh":0}}],{}"scenes":[{{"nodes":[0]}}]{}}}"#
+        ),
+        accessors.join(","),
+        bin.len(),
+        views.join(","),
+        image,
+        colour,
+        attributes.join(","),
+        index_accessor,
+        sampler,
+        textures
+    )
+    .into_bytes();
+    json.resize(json.len().next_multiple_of(4), b' ');
+    let total = 12 + 8 + json.len() + 8 + bin.len();
+    let mut glb = Vec::with_capacity(total);
+    glb.extend_from_slice(b"glTF");
+    glb.extend_from_slice(&2u32.to_le_bytes());
+    glb.extend_from_slice(&(total as u32).to_le_bytes());
+    glb.extend_from_slice(&(json.len() as u32).to_le_bytes());
+    glb.extend_from_slice(b"JSON");
+    glb.extend_from_slice(&json);
+    glb.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+    glb.extend_from_slice(b"BIN\0");
+    glb.extend_from_slice(&bin);
+    glb
 }
 
 /// LAS 1.4 point format 8 in UTM 33N metres (no CRS record: recipes pass it).

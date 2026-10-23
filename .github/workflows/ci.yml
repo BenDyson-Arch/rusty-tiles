@@ -1,17 +1,26 @@
 name: CI
 
+# Two tiers (see "CI tiers" in CONTRIBUTING.md). Pull requests run the fast Linux tier:
+# Change scope, Rust, Python and native geospatial for the newest GDAL. Pushes to main and
+# develop, nightly runs (dispatched by nightly.yml) and manual runs also run every other job.
 on:
   push:
     branches: [main, develop]
   pull_request:
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: Report this run to the "Full CI matrix failing on develop" tracking issue
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# Dispatched runs have their own group so a push cannot cancel the nightly run (or the reverse).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   changes:
@@ -222,7 +231,7 @@ jobs:
     name: Python wheel (CPython ${{ matrix.python }})
     needs: changes
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     strategy:
@@ -264,7 +273,7 @@ jobs:
     name: Portable CLI (${{ matrix.target }})
     needs: changes
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
@@ -307,6 +316,8 @@ jobs:
 
   encoder-link:
     name: KTX2 encoder link (${{ matrix.target }})
+    # Full tier only; see "CI tiers" in CONTRIBUTING.md.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -364,7 +375,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gdal: ['3.12', '3.13']
+        # Pull requests run the newest GDAL only; the full tier runs both.
+        gdal: ${{ fromJSON(github.event_name == 'pull_request' && '["3.13"]' || '["3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -468,7 +480,11 @@ jobs:
       - name: Install pinned terrain consumer
         run: |
           npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 three@0.180.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
-          target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/terrain-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/terrain-browser/node_modules/.bin/playwright install chromium
       - name: Independently verify validator positive geometry controls
         run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
       - name: Validate independent core PBR sources and emitted leaves with Khronos
@@ -622,7 +638,7 @@ jobs:
     name: Python-free runtime
     needs: changes
     # Skipped jobs satisfy required checks; a failed classifier runs everything.
-    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -682,7 +698,11 @@ jobs:
       - name: Install pinned browser acceptance runtime
         run: |
           npm install --prefix target/release-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
-          target/release-browser/node_modules/.bin/playwright install --with-deps chromium
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/release-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/release-browser/node_modules/.bin/playwright install chromium
           echo "NODE_PATH=$PWD/target/release-browser/node_modules" >> "$GITHUB_ENV"
           echo "CESIUM_DIR=$PWD/target/release-browser/node_modules/cesium/Build/Cesium" >> "$GITHUB_ENV"
           acceptance_chromium=$(node -e "console.log(require('./target/release-browser/node_modules/playwright').chromium.executablePath())")
@@ -702,3 +722,104 @@ jobs:
           name: release-acceptance
           path: target/release-acceptance
           if-no-files-found: warn
+
+  # Installed wheels on five platforms and the official Blender check. It is a reusable
+  # workflow so release.yml can run the same jobs, and so one CI run covers the whole matrix.
+  wheel-acceptance:
+    name: Wheel acceptance
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true' }}
+    uses: ./.github/workflows/wheel-acceptance.yml
+    with:
+      # The separate distribution Blender check runs for nightly and manual runs only.
+      test-blender: ${{ github.event_name != 'push' }}
+
+  # One verdict for the full tier. release.yml requires this job (and Rust) to have succeeded
+  # in a push, nightly or manual run for the tagged commit, so a pull-request run, which skips
+  # most of the matrix, can never satisfy the release gate.
+  full-matrix:
+    name: Full matrix
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    needs:
+      - changes
+      - docs
+      - rust
+      - python-wheel
+      - portable
+      - encoder-link
+      - native-geospatial
+      - python
+      - python-free-runtime
+      - wheel-acceptance
+      - release-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to have passed or been skipped on purpose
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          printf '%s\n' "$NEEDS" | jq -r 'to_entries[] | "\(.key)\t\(.value.result)"'
+          if printf '%s\n' "$NEEDS" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "::error::at least one full-tier job did not pass"
+            exit 1
+          fi
+          # Docs-only changes skip the matrix by design; anything else must have run it.
+          if [ "$DOCS_ONLY" != true ]; then
+            printf '%s\n' "$NEEDS" | jq -e '.rust.result == "success" and .python.result == "success" and .portable.result == "success" and .["native-geospatial"].result == "success" and .["wheel-acceptance"].result == "success"' >/dev/null \
+              || { echo "::error::a required full-tier job was skipped"; exit 1; }
+          fi
+
+  # Keeps one open issue while the full tier fails on develop (pushes and nightly runs) and
+  # closes it on the next fully green run. Only this job can write issues.
+  tracking-issue:
+    name: Full CI tracking issue
+    needs: [full-matrix, rust]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/develop' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.sha }}
+          VERDICT: ${{ needs.full-matrix.result }}
+          RUST: ${{ needs.rust.result }}
+        run: |
+          set -eu
+          title='Full CI matrix failing on develop'
+          number=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$title\")] | sort_by(.number) | .[0].number // empty")
+          case "$VERDICT" in
+            failure)
+              failed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs" \
+                --jq '.jobs[] | select(.conclusion == "failure" and .name != "Full matrix") | "- " + .name' | sort -u)
+              body=$(printf 'Run: %s\nEvent: %s\nCommit: %s\n\nFailed jobs:\n\n%s\n' "$RUN_URL" "$RUN_EVENT" "$RUN_SHA" "$failed")
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --body "$body"
+              else
+                gh issue create --title "$title" --body "$body"
+              fi
+              ;;
+            success)
+              # A docs-only run skips the matrix, so only a run that built and tested the code closes it.
+              if [ -n "$number" ] && [ "$RUST" = success ]; then
+                gh issue close "$number" --comment "The full matrix passed in $RUN_URL ($RUN_SHA)."
+              fi
+              ;;
+            *)
+              echo "Run was cancelled or skipped; leaving the tracking issue as it is."
+              ;;
+          esac
