@@ -468,7 +468,11 @@ jobs:
       - name: Install pinned terrain consumer
         run: |
           npm install --prefix target/terrain-browser --no-save --package-lock=false cesium@1.146.0 three@0.180.0 playwright@1.63.0 gltf-validator@2.0.0-dev.3.10
-          target/terrain-browser/node_modules/.bin/playwright install --with-deps chromium
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/terrain-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/terrain-browser/node_modules/.bin/playwright install chromium
       - name: Independently verify validator positive geometry controls
         run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
       - name: Validate independent core PBR sources and emitted leaves with Khronos
@@ -682,7 +686,11 @@ jobs:
       - name: Install pinned browser acceptance runtime
         run: |
           npm install --prefix target/release-browser --no-save --package-lock=false cesium@1.146.0 playwright@1.63.0
-          target/release-browser/node_modules/.bin/playwright install --with-deps chromium
+          # The runner image already carries Chromium's libraries; apt only adds fonts and minor
+          # upgrades, and the Azure Ubuntu mirror has stalled for minutes per package. Bound it.
+          timeout 180 target/release-browser/node_modules/.bin/playwright install-deps chromium \
+            || echo "::warning::playwright install-deps did not finish; using the runner image's libraries"
+          target/release-browser/node_modules/.bin/playwright install chromium
           echo "NODE_PATH=$PWD/target/release-browser/node_modules" >> "$GITHUB_ENV"
           echo "CESIUM_DIR=$PWD/target/release-browser/node_modules/cesium/Build/Cesium" >> "$GITHUB_ENV"
           acceptance_chromium=$(node -e "console.log(require('./target/release-browser/node_modules/playwright').chromium.executablePath())")
