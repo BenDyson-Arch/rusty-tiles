@@ -114,7 +114,8 @@ pub(crate) struct TileAppearance {
     pub escalated_pages: u32,
 }
 
-/// Wall seconds of one tile's appearance work (a worker owns the tile: about its CPU).
+/// Thread CPU seconds of one tile's appearance work (wall seconds where the platform
+/// has no thread clock). Page encoding runs on the tile's worker thread.
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Timing {
@@ -130,6 +131,12 @@ pub(crate) struct Appearance {
     pub normals: Option<Vec<[f32; 3]>>,
     pub facts: TileAppearance,
     pub timing: Timing,
+}
+
+fn clock() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    super::error::thread_cpu()
+        .unwrap_or_else(|| START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64())
 }
 
 /// The tile as S1 publishes it.
@@ -261,7 +268,7 @@ pub(crate) fn build(
     let mut queries: Vec<Queries> = Vec::new();
     // Untextured vertex-colour groups: (group, unique vertices in query order).
     let mut vertex_groups: Vec<(usize, Vec<u32>)> = Vec::new();
-    let started = std::time::Instant::now();
+    let started = clock();
     for (class, faces) in by_class {
         check()?;
         let material = captured.materials.get(class as usize);
@@ -339,10 +346,10 @@ pub(crate) fn build(
             vertex_groups.push((index, vertices));
         }
     }
-    timing.charts = started.elapsed().as_secs_f64();
-    let started = std::time::Instant::now();
+    timing.charts = clock() - started;
+    let started = clock();
     facts.donor_reads = bake::resolve(query, &mut queries, check)?;
-    timing.query = started.elapsed().as_secs_f64();
+    timing.query = clock() - started;
     let mut queries = queries.into_iter();
     let mut vertex_groups = vertex_groups.into_iter().peekable();
     let mut pending = pending.into_iter().peekable();
@@ -352,17 +359,17 @@ pub(crate) fn build(
         if pending.peek().is_some_and(|p| p.group == index) {
             let p = pending.next().unwrap();
             let q = queries.next().ok_or_else(|| state("coarse query order"))?;
-            let started = std::time::Instant::now();
+            let started = clock();
             let pages = bake_pages(services, &p, &q, normals.as_deref(), tile)?;
-            sample_seconds += started.elapsed().as_secs_f64();
-            let started = std::time::Instant::now();
+            sample_seconds += clock() - started;
+            let started = clock();
             let mut delivered = Vec::with_capacity(pages.len());
             for page in &pages {
                 let d = deliver(services, page)?;
                 facts.escalated_pages += u32::from(d.escalated);
                 delivered.push(d);
             }
-            encode_seconds += started.elapsed().as_secs_f64();
+            encode_seconds += clock() - started;
             let texels = u64::from(p.layout.size[0]) * u64::from(p.layout.size[1]);
             facts.textured_groups += 1;
             facts.pages += pages.len() as u32;

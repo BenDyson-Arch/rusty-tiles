@@ -895,7 +895,6 @@ pub(crate) fn produce(
         // The HLOD stage charges and decodes its own source images: release every
         // decoded leaf source before it starts (D8).
         let stats = cache.stats();
-        drop(services);
         drop(cache);
         let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
             super::super::hlod::produce(
