@@ -11,6 +11,7 @@ import platform
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -428,6 +429,94 @@ class WheelAPI(unittest.TestCase):
         self.assertAlmostEqual(tileset["root"]["transform"][12], 6378137 + 130, delta=0.001)
         self.assertEqual(source.read_bytes(), before)
         self.assertFalse(Path(str(source) + "-wal").exists())
+
+    @unittest.skipUnless(os.environ.get("RUSTY_TILES_BIN"), "CLI required for paired vector acceptance")
+    def test_vector_cli_python_published_geometry_metadata_height_and_defaults(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        from vector_fidelity_oracle import check_source, decode, ecef
+        source = self.root / "paired.geojson"
+        source.write_text(json.dumps(dict(type="FeatureCollection", features=[
+            dict(type="Feature", id=7, properties=dict(name="height", integer=2**60+3,
+                 missing=None, tags=[1, None, "x"]),
+                 geometry=dict(type="Point", coordinates=[9.001, 1.002, 17]))])))
+        # The GeoPackage fixture from the adjacent test is authored independently
+        # with sqlite/WKB, and keeps an explicit horizontal-CRS height offset.
+        gpkg = self.root / "paired.gpkg"
+        with closing(sqlite3.connect(gpkg)) as db, db:
+            db.executescript("""
+                PRAGMA application_id=1196444487;
+                CREATE TABLE gpkg_spatial_ref_sys(srs_name TEXT,srs_id INTEGER PRIMARY KEY,
+                  organization TEXT,organization_coordsys_id INTEGER,definition TEXT,description TEXT);
+                INSERT INTO gpkg_spatial_ref_sys VALUES('WGS 84',4326,'EPSG',4326,
+                  'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]','');
+                CREATE TABLE gpkg_contents(table_name TEXT PRIMARY KEY,data_type TEXT,
+                  identifier TEXT,description TEXT,last_change TEXT,min_x REAL,min_y REAL,
+                  max_x REAL,max_y REAL,srs_id INTEGER);
+                INSERT INTO gpkg_contents(table_name,data_type,identifier,srs_id)
+                  VALUES('survey','features','survey',4326);
+                CREATE TABLE gpkg_geometry_columns(table_name TEXT,column_name TEXT,
+                  geometry_type_name TEXT,srs_id INTEGER,z INTEGER,m INTEGER);
+                INSERT INTO gpkg_geometry_columns VALUES('survey','geom','GEOMETRY',4326,1,0);
+                CREATE TABLE survey(fid INTEGER PRIMARY KEY,geom BLOB,name TEXT);
+            """)
+            db.execute("INSERT INTO survey VALUES(7,?,'height')",
+                       (b"GP\x00\x01" + struct.pack("<iBI3d", 4326, 1, 1001, 0, 0, 123),))
+        for path, layer, properties, position in [
+            (source, "paired", dict(name="height", integer=2**60+3, missing=None, tags='[1,null,"x"]'), ecef(9.001,1.002,24)),
+            (gpkg, "survey", dict(name="height"), ecef(0,0,130))]:
+            with self.subTest(source=path.suffix):
+                options = dict(source_crs="EPSG:4326", height_offset=7, list_fields="json",
+                               quantize=True, meshopt=True, jobs=2, reproducible=True)
+                output = self.root / (path.suffix[1:]+"-python.3tz")
+                result = rusty_tiles.vector_to_3tz(path, output, **options)
+                cli = self.root / (path.suffix[1:]+"-cli.3tz")
+                run = subprocess.run([os.environ["RUSTY_TILES_BIN"], "vector", "-i", str(path),
+                    "-o", str(cli), "--sourceCrs", "EPSG:4326", "--heightOffset", "7",
+                    "--listFields", "json", "--quantize", "--meshopt", "--jobs", "2", "--reproducible"],
+                    capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+                expected = {"7": dict(mode=0, properties=dict(properties, _source_id="7", _source_layer=layer), parts=[(position,)])}
+                for archive in (output, cli):
+                    actual, report = decode(archive)
+                    check_source(actual, expected, report["oraclePositionToleranceMetres"])
+                cli_report = decode(cli)[1]
+                for key in ("budgets", "metadata", "lodLevels", "lodToleranceMetres", "features", "skipInvalidEnabled", "repairEnabled"):
+                    self.assertEqual(result.report[key], cli_report[key])
+                self.assertEqual(result.report["layers"][0]["heightOffset"], 7)
+                self.assertEqual(result.report["layers"][0]["heightMode"], cli_report["layers"][0]["heightMode"])
+                if path.suffix == ".geojson":
+                    doc = json.loads(path.read_text())
+                    doc['features'].append(dict(type='Feature',id=8,properties=dict(name='invalid'),
+                        geometry=dict(type='LineString',coordinates=[[9,1,17]])))
+                    path.write_text(json.dumps(doc))
+                else:
+                    with closing(sqlite3.connect(path)) as db, db:
+                        db.execute("INSERT INTO survey VALUES(8,?,'invalid')",
+                            (b"GP\x00\x01"+struct.pack("<iBII3d",4326,1,1002,1,0,0,123),))
+                strict_api = self.root / (path.suffix[1:]+"-strict-api.3tz")
+                with self.assertRaises(rusty_tiles.DataError):
+                    rusty_tiles.vector_to_3tz(path,strict_api,**options)
+                self.assertFalse(strict_api.exists())
+                strict_cli = self.root / (path.suffix[1:]+"-strict-cli.3tz")
+                command = [os.environ["RUSTY_TILES_BIN"], "--json", "vector", "-i", str(path),
+                    "-o", str(strict_cli), "--sourceCrs", "EPSG:4326", "--heightOffset", "7",
+                    "--listFields", "json", "--quantize", "--meshopt", "--jobs", "2", "--reproducible"]
+                refused = subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(refused.returncode,3,refused.stdout+refused.stderr)
+                self.assertEqual(json.loads(refused.stdout)['error']['kind'],'invalid_input')
+                self.assertFalse(strict_cli.exists())
+                skipped_api = self.root / (path.suffix[1:]+"-skip-api.3tz")
+                skipped = rusty_tiles.vector_to_3tz(path,skipped_api,skip_invalid=True,**options)
+                command.append('--skipInvalid')
+                accepted = subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(accepted.returncode,0,accepted.stdout+accepted.stderr)
+                for archive in (skipped_api,strict_cli):
+                    survivors, skip_report = decode(archive)
+                    check_source(survivors,expected,skip_report['oraclePositionToleranceMetres'])
+                    self.assertEqual(skip_report['features'],1)
+                    self.assertEqual(skip_report['skippedFeatures'],1)
+                self.assertTrue(skipped.report['skipInvalidEnabled'])
+
 
     def test_vector_unsupported_crs_and_height_refusals(self):
         source = self.root / "points.geojson"
