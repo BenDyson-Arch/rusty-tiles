@@ -126,20 +126,22 @@ impl Preview {
             let loopback = is_loopback(local);
             let url = format!("http://{local}/");
             if !loopback {
-                eprintln!(
+                let _ = writeln!(
+                    io::stderr().lock(),
                     "warning: preview listens on non-loopback {local}; any host that can reach it can read the selected files"
                 );
             }
             if json_output {
                 let config: Value = serde_json::from_slice(&self.config)?;
-                println!(
+                let _ = writeln!(
+                    io::stdout().lock(),
                     "{}",
                     json!({"ok":true,"url":url,"layers":config,"loopback":loopback})
                 );
             } else {
-                println!("Preview: {url}");
+                let _ = writeln!(io::stdout().lock(), "Preview: {url}");
             }
-            std::io::stdout().flush()?;
+            let _ = io::stdout().flush();
             let preview = Arc::new(self);
             loop {
                 let stream = match listener.accept().await {

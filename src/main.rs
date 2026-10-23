@@ -1,7 +1,32 @@
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
+
+// Rust ignores SIGPIPE, so `println!`/`eprintln!` panic (exit 101) when the
+// reader of stdout or stderr has gone away. The conversion's status must not
+// depend on either pipe: stderr write errors are ignored, and a broken stdout
+// is ignored too (any other stdout error is reported on stderr).
+macro_rules! errln {
+    ($($arg:tt)*) => {{
+        let _ = std::io::Write::write_fmt(
+            &mut std::io::stderr().lock(),
+            format_args!("{}\n", format_args!($($arg)*)),
+        );
+    }};
+}
+macro_rules! outln {
+    ($($arg:tt)*) => {{
+        if let Err(error) = std::io::Write::write_fmt(
+            &mut std::io::stdout().lock(),
+            format_args!("{}\n", format_args!($($arg)*)),
+        ) {
+            if error.kind() != std::io::ErrorKind::BrokenPipe {
+                errln!("error: writing to stdout: {error}");
+            }
+        }
+    }};
+}
 
 mod interrupt;
 
@@ -585,7 +610,7 @@ fn main() -> ExitCode {
         Err(error) => {
             let code = error.exit_code();
             if code != 0 && std::env::args().any(|arg| arg == "--json") {
-                println!(
+                outln!(
                     "{}",
                     json!({"ok":false,"error":{"code":"usage","message":error.to_string()},"exitCode":code})
                 );
@@ -605,7 +630,7 @@ fn main() -> ExitCode {
     // NDJSON progress mode keeps stderr machine-readable.
     let progress = |done: u64| {
         if events {
-            eprintln!(
+            errln!(
                 "{}",
                 json!({"event":"progress","phase":"conversion","done":done,"total":1})
             );
@@ -614,7 +639,7 @@ fn main() -> ExitCode {
     progress(0);
     match run(cli) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {
-            println!("{report}");
+            outln!("{report}");
             let code = report["exitCode"]
                 .as_u64()
                 .and_then(|c| u8::try_from(c).ok());
@@ -625,7 +650,7 @@ fn main() -> ExitCode {
             let summary = match outcome {
                 Outcome::Report(report) => {
                     if json {
-                        println!("{report}");
+                        outln!("{report}");
                     }
                     None
                 }
@@ -636,9 +661,12 @@ fn main() -> ExitCode {
                             .write_json(&mut out)
                             .and_then(|()| std::io::Write::write_all(&mut out, b"\n"))
                             .and_then(|()| std::io::Write::flush(&mut out));
+                        // A closed stdout reader does not change the validation result.
                         if let Err(error) = written {
-                            eprintln!("error: writing the validation report: {error}");
-                            return ExitCode::from(1);
+                            if error.kind() != io::ErrorKind::BrokenPipe {
+                                errln!("error: writing the validation report: {error}");
+                                return ExitCode::from(1);
+                            }
                         }
                     }
                     None
@@ -674,10 +702,10 @@ fn main() -> ExitCode {
             };
             if let Some((summary, output)) = summary {
                 if json {
-                    println!("{summary}");
+                    outln!("{summary}");
                 } else if !events {
                     for line in human_summary(name, &output, &summary) {
-                        eprintln!("{line}");
+                        errln!("{line}");
                     }
                 }
             }
@@ -693,12 +721,12 @@ fn main() -> ExitCode {
             }
             if json {
                 let failure = error_summary(&error, category, code);
-                println!("{failure}");
+                outln!("{failure}");
             } else {
-                eprintln!("{error}");
+                errln!("{error}");
             }
             if events {
-                eprintln!(
+                errln!(
                     "{}",
                     json!({"event":"failed","phase":"conversion","code":category})
                 );
@@ -748,8 +776,9 @@ impl Observer for CliRunObserver {
             }
             RunEvent::Note { message } => json!({"event":"log","message":message}),
         };
-        writeln!(io::stderr().lock(), "{value}")
-            .map_err(|error| JobError::new(JobErrorKind::ObserverFailure, error.to_string()))
+        // A closed or broken stderr must not fail the conversion.
+        errln!("{value}");
+        Ok(())
     }
 }
 
@@ -762,8 +791,7 @@ impl Observer for VectorCliObserver {
             return CliRunObserver.observe(event);
         }
         if let RunEvent::Warning { message, .. } = event {
-            writeln!(io::stderr().lock(), "warning: {message}")
-                .map_err(|error| JobError::new(JobErrorKind::ObserverFailure, error.to_string()))?;
+            errln!("warning: {message}");
         }
         Ok(())
     }
@@ -1126,14 +1154,14 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             let report =
                 rusty_tiles::validate::inspect_with(request, &interrupt::run_control(observer))?;
             if !json {
-                println!(
+                outln!(
                     "Inspected {}: {} tiles, {} content references",
                     input.display(),
                     report.tiles,
                     report.content_references
                 );
                 if !report.not_inspected.is_empty() {
-                    println!("Not inspected: {}", report.not_inspected.join(", "));
+                    outln!("Not inspected: {}", report.not_inspected.join(", "));
                 }
             }
             Outcome::Validation(Box::new(report))
@@ -1166,7 +1194,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 }
                 return Ok(Outcome::Report(value));
             }
-            println!("{report}");
+            outln!("{report}");
             return match failure {
                 None => Ok(Outcome::Done),
                 Some((kind, message)) => Err(Error::Job(rusty_tiles::JobFailure {
@@ -1197,7 +1225,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
                 rusty_tiles::VectorCompressionRequest::new(input),
                 &interrupt::run_control(None),
             )?;
-            println!("{}", result.report_json());
+            outln!("{}", result.report_json());
             Outcome::Done
         }
         Command::CreateTilesetJson(a) => {
