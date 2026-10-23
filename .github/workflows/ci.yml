@@ -97,6 +97,11 @@ jobs:
           rustup component add rustfmt
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Check Rust third-party licence files and allow-list
+        # Seconds: cargo tree and metadata only, nothing is compiled.
+        run: |
+          python3 -I scripts/test_third_party_licenses.py
+          python3 scripts/third_party_licenses.py check
       - name: Check foundation lifecycle model and independent monitor
         run: |
           python3 bench/architecture_audit/foundation/model.py --results "${{ runner.temp }}/foundation-model.json"
@@ -112,7 +117,7 @@ jobs:
       - name: Check the crate package size and third-party notices
         run: |
           cargo package --locked --no-verify
-          python3 scripts/third_party_notices.py check --max-bytes 10000000 target/package/rusty-tiles-*.crate
+          python3 scripts/third_party_notices.py check --rust-licenses all --max-bytes 10000000 target/package/rusty-tiles-*.crate
       - name: Test default build
         shell: bash
         run: |

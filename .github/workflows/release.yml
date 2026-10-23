@@ -126,16 +126,17 @@ jobs:
           "$binary" mesh -i tests/fixtures/f1b/basecolor-jpeg.glb -o smoke/mesh-ktx2.3tz --anchor 153.02 -27.47 0
           "$binary" validate smoke/mesh-ktx2.3tz
           cp "$binary" LICENSE stage/
+          cp licenses/THIRD_PARTY_LICENSES-cli.md stage/THIRD_PARTY_LICENSES.md
           python=python3
           if [[ "$RELEASE_TARGET" == *windows* ]]; then python=python; fi
           "$python" scripts/third_party_notices.py stage stage
           asset="rusty-tiles-$RELEASE_VERSION-$RELEASE_TARGET"
           if [[ "$RELEASE_TARGET" == *windows* ]]; then
-            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE third_party)
+            (cd stage && 7z a -tzip "../dist/$asset.zip" "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party)
           else
-            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE third_party
+            tar -czf "dist/$asset.tgz" -C stage "rusty-tiles$suffix" LICENSE THIRD_PARTY_LICENSES.md third_party
           fi
-          "$python" scripts/third_party_notices.py check dist/"$asset".*
+          "$python" scripts/third_party_notices.py check --rust-licenses cli dist/"$asset".*
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: binary-${{ matrix.target }}

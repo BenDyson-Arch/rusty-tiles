@@ -11,11 +11,12 @@ for interpreter in python python3; do
 done
 command -v rusty-tiles >/dev/null 2>&1
 notices=/usr/share/doc/rusty-tiles
-for notice in LICENSE third_party/basis_universal/LICENSE third_party/basis_universal/NOTICE \
+for notice in LICENSE THIRD_PARTY_LICENSES.md third_party/system/gdal/LICENSE.TXT third_party/system/proj/COPYING third_party/basis_universal/LICENSE third_party/basis_universal/NOTICE \
     third_party/basis_universal/LICENSES/Apache-2.0.txt third_party/basis_universal/LICENSES/BSD-3-clause.txt \
     third_party/basis_universal/LICENSES/MIT.txt third_party/basis_universal/zstd/LICENSE; do
     [ -s "$notices/$notice" ] || { printf 'packaged runtime lacks %s\n' "$notices/$notice" >&2; exit 1; }
 done
+grep -q '^## System libraries linked in the container image' "$notices/THIRD_PARTY_LICENSES.md"
 [ -s "$fixtures/vector.geojson" ]
 [ -s "$fixtures/d1-rgb.tif" ]
 [ -s "$fixtures/example.glb" ]
