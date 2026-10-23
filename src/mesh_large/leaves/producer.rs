@@ -914,6 +914,7 @@ pub(crate) fn produce(
             cache_peak_resident_bytes: stats.peak_resident_bytes,
             cache_hits: stats.hits,
             cache_misses: stats.misses,
+            lod_prepass_scratch_peak_bytes: lod.prepass_scratch_peak_bytes,
         },
     })
 }
@@ -934,6 +935,9 @@ pub struct LeafStageDiagnostics {
     pub cache_peak_resident_bytes: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    /// Measured scratch peak of H17's pre-pass, retained capture files included (0 when
+    /// the tree has no internal tile and the pre-pass does not run).
+    pub lod_prepass_scratch_peak_bytes: u64,
 }
 pub(crate) struct LeafStageOutput {
     pub report: LeafOutputReport,

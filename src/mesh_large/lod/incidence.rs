@@ -18,9 +18,14 @@
 //! depth-`d` tiles is one plus the number of adjacent pairs whose common prefix is shorter
 //! than `d`. The result is joined back to rank order with H8's exact shallowest incident
 //! leaf depth `l(v)` as the slim [`LodSource`] sequence every later stage reads.
+//!
+//! Welded vertices are named by capture's vertex ordinal (their index in the position-sorted
+//! weld table, [`CornerVertices`]), a bijection with the welded position bits, so grouping
+//! and every neighbour comparison are unchanged while the sort record stays 30 bytes.
 use super::super::{
     attributes::FullTriangle,
-    full::CornerDepth,
+    config::HEIGHT_CAP,
+    full::{CornerDepth, CornerVertices, RANK_LIMIT},
     records::{NodeKind, NodeRecord},
 };
 use crate::{
@@ -29,6 +34,13 @@ use crate::{
 };
 
 pub(crate) const NEVER: u8 = u8::MAX;
+/// Deepest leaf address an [`Incidence`] stores: a tree is at most `HEIGHT_CAP` levels high,
+/// so a leaf has at most `HEIGHT_CAP - 1` digits.
+const MAX_ADDRESS_DIGITS: u8 = (HEIGHT_CAP - 1) as u8;
+/// Unused low bits of an [`Address`] holding at most [`MAX_ADDRESS_DIGITS`] digits.
+const ADDRESS_SHIFT: u32 = 128 - 3 * MAX_ADDRESS_DIGITS as u32;
+// The packed address word (digits, length, corner, degenerate flag) fits its 13 bytes.
+const _: () = assert!(3 * MAX_ADDRESS_DIGITS as u32 + 8 <= 104 && MAX_ADDRESS_DIGITS < 32);
 /// Corners buffered per welded vertex before it is treated as an overflow.
 const GROUP_CAP: usize = 4096;
 
@@ -69,57 +81,105 @@ impl Address {
     }
 }
 
+/// One corner seen from its welded vertex: the sort record of the pre-pass.
+///
+/// Encoded in 30 bytes (it was 63 with welded positions and a 17-byte address):
+///
+/// | bytes | field |
+/// |---|---|
+/// | 0..4 | `vertex`, the welded vertex ordinal (the group key) |
+/// | 4..12 | `others`, the next and previous corners' vertex ordinals |
+/// | 12..17 | `rank`, 40 bits |
+/// | 17..30 | `address.digits >> ADDRESS_SHIFT` (93 bits) `<< 8`, then `address.len` (5 bits) `<< 3`, `corner` (2 bits) `<< 1` and `degenerate` |
+///
+/// [`Incidence::new`] refuses values outside these ranges; encoding never truncates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Incidence {
-    key: [u32; 3],
+    vertex: u32,
     rank: u64,
     corner: u8,
     address: Address,
-    others: [[u32; 3]; 2],
+    others: [u32; 2],
     degenerate: bool,
 }
 
+impl Incidence {
+    fn new(
+        vertex: u32,
+        rank: u64,
+        corner: u8,
+        address: Address,
+        others: [u32; 2],
+        degenerate: bool,
+    ) -> Result<Self, JobError> {
+        if rank >= RANK_LIMIT {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!("LOD pre-pass: triangle rank {rank} exceeds the 40-bit incidence rank"),
+            ));
+        }
+        if address.len > MAX_ADDRESS_DIGITS || address.digits << (3 * u32::from(address.len)) != 0 {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "LOD pre-pass: a {}-digit leaf address exceeds the {MAX_ADDRESS_DIGITS}-digit incidence address",
+                    address.len
+                ),
+            ));
+        }
+        if corner > 2 {
+            return Err(state("LOD pre-pass: corner index out of range"));
+        }
+        Ok(Self {
+            vertex,
+            rank,
+            corner,
+            address,
+            others,
+            degenerate,
+        })
+    }
+}
+
 impl Record for Incidence {
-    const SIZE: usize = 63;
+    const SIZE: usize = 30;
     fn encode(&self, out: &mut [u8]) {
-        let mut w = 0;
-        let mut put = |bytes: &[u8]| {
-            out[w..w + bytes.len()].copy_from_slice(bytes);
-            w += bytes.len();
-        };
-        for v in self.key {
-            put(&v.to_le_bytes());
-        }
-        put(&self.rank.to_le_bytes());
-        put(&[self.corner]);
-        put(&self.address.digits.to_le_bytes());
-        put(&[self.address.len]);
-        for o in self.others {
-            for v in o {
-                put(&v.to_le_bytes());
-            }
-        }
-        put(&[u8::from(self.degenerate)]);
+        debug_assert!(self.rank < RANK_LIMIT && self.corner < 3);
+        debug_assert!(self.address.len <= MAX_ADDRESS_DIGITS);
+        out[..4].copy_from_slice(&self.vertex.to_le_bytes());
+        out[4..8].copy_from_slice(&self.others[0].to_le_bytes());
+        out[8..12].copy_from_slice(&self.others[1].to_le_bytes());
+        out[12..17].copy_from_slice(&self.rank.to_le_bytes()[..5]);
+        let word = (self.address.digits >> ADDRESS_SHIFT) << 8
+            | u128::from(self.address.len) << 3
+            | u128::from(self.corner) << 1
+            | u128::from(self.degenerate);
+        out[17..30].copy_from_slice(&word.to_le_bytes()[..13]);
     }
     fn decode(bytes: &[u8]) -> Self {
         let u32_at = |i: usize| u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
+        let mut rank = [0u8; 8];
+        rank[..5].copy_from_slice(&bytes[12..17]);
+        let mut word = [0u8; 16];
+        word[..13].copy_from_slice(&bytes[17..30]);
+        let word = u128::from_le_bytes(word);
         Self {
-            key: [u32_at(0), u32_at(4), u32_at(8)],
-            rank: u64::from_le_bytes(bytes[12..20].try_into().unwrap()),
-            corner: bytes[20],
+            vertex: u32_at(0),
+            rank: u64::from_le_bytes(rank),
+            corner: ((word >> 1) & 3) as u8,
             address: Address {
-                digits: u128::from_le_bytes(bytes[21..37].try_into().unwrap()),
-                len: bytes[37],
+                digits: (word >> 8) << ADDRESS_SHIFT,
+                len: ((word >> 3) & 31) as u8,
             },
-            others: [
-                [u32_at(38), u32_at(42), u32_at(46)],
-                [u32_at(50), u32_at(54), u32_at(58)],
-            ],
-            degenerate: bytes[62] != 0,
+            others: [u32_at(4), u32_at(8)],
+            degenerate: word & 1 != 0,
         }
     }
 }
 
+/// A corner's facts, back in rank order. Encoded in 8 bytes: the 40-bit rank, the corner
+/// with the special flag (`corner | special << 2`), `c2` and `c3`. Its ranks come from
+/// [`Incidence`] records, so they are within the same 40-bit bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CornerInfo {
     rank: u64,
@@ -130,21 +190,23 @@ pub(crate) struct CornerInfo {
 }
 
 impl Record for CornerInfo {
-    const SIZE: usize = 12;
+    const SIZE: usize = 8;
     fn encode(&self, out: &mut [u8]) {
-        out[..8].copy_from_slice(&self.rank.to_le_bytes());
-        out[8] = self.corner;
-        out[9] = self.c2;
-        out[10] = self.c3;
-        out[11] = u8::from(self.special);
+        debug_assert!(self.rank < RANK_LIMIT && self.corner < 3);
+        out[..5].copy_from_slice(&self.rank.to_le_bytes()[..5]);
+        out[5] = self.corner | u8::from(self.special) << 2;
+        out[6] = self.c2;
+        out[7] = self.c3;
     }
     fn decode(bytes: &[u8]) -> Self {
+        let mut rank = [0u8; 8];
+        rank[..5].copy_from_slice(&bytes[..5]);
         Self {
-            rank: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
-            corner: bytes[8],
-            c2: bytes[9],
-            c3: bytes[10],
-            special: bytes[11] != 0,
+            rank: u64::from_le_bytes(rank),
+            corner: bytes[5] & 3,
+            c2: bytes[6],
+            c3: bytes[7],
+            special: bytes[5] & 4 != 0,
         }
     }
 }
@@ -280,11 +342,11 @@ pub(crate) fn scratch_need(triangles: u64) -> Option<u64> {
 }
 
 /// Facts of one welded vertex from its (bounded) group of incidences.
-fn reduce(key: [u32; 3], group: &[Incidence]) -> (u8, u8, bool) {
+fn reduce(key: u32, group: &[Incidence]) -> (u8, u8, bool) {
     let mut special = group.iter().any(|g| g.degenerate);
     // Each neighbour with the direction of the edge to it: `others` is (next, previous) in
     // the triangle's winding, so the edge runs out to the next and in from the previous.
-    let mut others: Vec<([u32; 3], bool)> = Vec::with_capacity(group.len() * 2);
+    let mut others: Vec<(u32, bool)> = Vec::with_capacity(group.len() * 2);
     for g in group {
         for (o, out) in g.others.into_iter().zip([true, false]) {
             if o == key {
@@ -314,7 +376,7 @@ fn reduce(key: [u32; 3], group: &[Incidence]) -> (u8, u8, bool) {
     // group is split into rank-ordered runs, and both sides share a key), and then two
     // frontier tiles hold the same face as source; the seam audit's shared-face rule
     // excepts faces whose vertices are all special.
-    let mut faces: Vec<[[u32; 3]; 2]> = group
+    let mut faces: Vec<[u32; 2]> = group
         .iter()
         .map(|g| {
             let [a, b] = g.others;
@@ -336,16 +398,19 @@ fn reduce(key: [u32; 3], group: &[Incidence]) -> (u8, u8, bool) {
 }
 
 /// Build the slim source: every source triangle in rank order with its corners' facts.
+/// Consumes the corner vertex ordinals: their file is removed once the incidences are pushed.
 pub(crate) fn build(
     scratch: &Scratch,
     sort: SortConfig,
     nodes: &Sequence<NodeRecord>,
     triangles: &Sequence<FullTriangle>,
     depths: &Sequence<CornerDepth>,
+    vertices: Sequence<CornerVertices>,
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<Sequence<LodSource>, JobError> {
     let mut incidences = ExternalSorter::<Incidence>::new(scratch, sort)?;
     {
+        let mut vertex_rows = vertices.reader()?;
         let mut leaves = nodes
             .reader()?
             .filter(|n| n.as_ref().map_or(true, |node| node.kind == NodeKind::Leaf));
@@ -369,24 +434,32 @@ pub(crate) fn build(
                 return Err(state("LOD pre-pass: leaf ranges skip a triangle"));
             }
             let address = Address::of(&leaf);
-            let keys = triangle.triangle.positions.map(weld);
+            let keys = vertex_rows
+                .next()
+                .transpose()?
+                .ok_or_else(|| state("LOD pre-pass: corner vertices end early"))?
+                .vertices;
             for corner in 0..3 {
-                incidences.push(Incidence {
-                    key: keys[corner],
+                incidences.push(Incidence::new(
+                    keys[corner],
                     rank,
-                    corner: corner as u8,
+                    corner as u8,
                     address,
-                    others: [keys[(corner + 1) % 3], keys[(corner + 2) % 3]],
-                    degenerate: triangle.triangle.degenerate,
-                })?;
+                    [keys[(corner + 1) % 3], keys[(corner + 2) % 3]],
+                    triangle.triangle.degenerate,
+                )?)?;
             }
         }
+        if vertex_rows.next().is_some() {
+            return Err(state("LOD pre-pass: corner vertices outlive the triangles"));
+        }
     }
+    drop(vertices);
     let mut infos = ExternalSorter::<CornerInfo>::new(scratch, sort)?;
     {
         let mut group: Vec<Incidence> = Vec::new();
         let mut overflow = false;
-        let mut current: Option<[u32; 3]> = None;
+        let mut current: Option<u32> = None;
         let flush = |group: &mut Vec<Incidence>,
                      overflow: bool,
                      infos: &mut ExternalSorter<CornerInfo>|
@@ -397,7 +470,7 @@ pub(crate) fn build(
             let (c2, c3, special) = if overflow {
                 (0, 0, true)
             } else {
-                reduce(first.key, group)
+                reduce(first.vertex, group)
             };
             for g in group.drain(..) {
                 infos.push(CornerInfo {
@@ -415,10 +488,10 @@ pub(crate) fn build(
             if index.is_multiple_of(1 << 16) {
                 check()?;
             }
-            if current != Some(incidence.key) {
+            if current != Some(incidence.vertex) {
                 flush(&mut group, overflow, &mut infos)?;
                 overflow = false;
-                current = Some(incidence.key);
+                current = Some(incidence.vertex);
             }
             group.push(incidence);
             if group.len() > GROUP_CAP {
@@ -490,9 +563,9 @@ mod tests {
         }
         a
     }
-    fn inc(key: [u32; 3], others: [[u32; 3]; 2], digits: &[u8], rank: u64) -> Incidence {
+    fn inc(vertex: u32, others: [u32; 2], digits: &[u8], rank: u64) -> Incidence {
         Incidence {
-            key,
+            vertex,
             rank,
             corner: 0,
             address: address(digits),
@@ -509,9 +582,9 @@ mod tests {
         assert_eq!(address(&[0]).common(address(&[1])), 0);
         // A vertex shared by leaves 1.2.3, 1.2.4 and 1.5: two tiles from depth 2, three
         // from depth 3.
-        let k = [1, 2, 3];
-        let ring = |a: [u32; 3], b: [u32; 3]| [a, b];
-        let (a, b, c, d) = ([1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0]);
+        let k = 9;
+        let ring = |a: u32, b: u32| [a, b];
+        let (a, b, c, d) = (1, 2, 3, 4);
         let group = [
             inc(k, ring(a, b), &[1, 2, 3], 0),
             inc(k, ring(b, c), &[1, 2, 4], 1),
@@ -535,9 +608,9 @@ mod tests {
     /// two sides may lie in different leaves, and then two tiles hold the same source face.
     #[test]
     fn winding_flips_are_special() {
-        let k = [1, 2, 3];
-        let ring = |a: [u32; 3], b: [u32; 3]| [a, b];
-        let (a, b, c, d) = ([1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0]);
+        let k = 9;
+        let ring = |a: u32, b: u32| [a, b];
+        let (a, b, c, d) = (1, 2, 3, 4);
         let consistent = [
             inc(k, ring(a, b), &[1, 2], 0),
             inc(k, ring(b, c), &[1, 2], 1),
@@ -598,16 +671,95 @@ mod tests {
             (back.triangle, back.mesh, back.degenerate),
             (s.triangle, s.mesh, true)
         );
-        let i = Incidence {
-            key: [1, 2, 3],
-            rank: 99,
-            corner: 2,
-            address: address(&[1, 2, 3, 4, 5, 6, 7]),
-            others: [[4, 5, 6], [7, 8, 9]],
-            degenerate: true,
+    }
+
+    fn round_trip<T: Record + std::fmt::Debug>(record: T) {
+        let mut bytes = vec![0u8; T::SIZE];
+        record.encode(&mut bytes);
+        assert_eq!(T::decode(&bytes), record);
+    }
+
+    /// The 30-byte incidence and 8-byte corner facts keep every field at its packed limits:
+    /// the largest vertex ordinals and rank, the deepest all-sevens address (31 digits) and
+    /// the empty one, every corner and both flags.
+    #[test]
+    fn slim_records_round_trip_at_their_limits() {
+        let deepest = address(&[7; MAX_ADDRESS_DIGITS as usize]);
+        assert_eq!(deepest.len, 31);
+        let addresses = [
+            deepest,
+            address(&[]),
+            address(&[1]),
+            address(&[0; MAX_ADDRESS_DIGITS as usize]),
+            address(&[
+                5, 0, 7, 1, 2, 3, 4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
+            ]),
+        ];
+        for address in addresses {
+            for rank in [0, 1, 99, u64::from(u32::MAX) + 1, RANK_LIMIT - 1] {
+                for corner in 0..3 {
+                    for degenerate in [false, true] {
+                        for (vertex, others) in [(0, [0, 0]), (u32::MAX, [u32::MAX, 1 << 31])] {
+                            let i =
+                                Incidence::new(vertex, rank, corner, address, others, degenerate)
+                                    .unwrap();
+                            round_trip(i);
+                        }
+                        for (c2, c3) in [(0, 0), (31, NEVER), (NEVER, NEVER), (1, 2)] {
+                            round_trip(CornerInfo {
+                                rank,
+                                corner,
+                                c2,
+                                c3,
+                                special: degenerate,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Values beyond the packed ranges are refused with a typed error, never truncated.
+    #[test]
+    fn incidence_refuses_values_beyond_its_packed_range() {
+        let ok = address(&[3; 4]);
+        let refused = |r: Result<Incidence, JobError>| r.unwrap_err().kind();
+        assert_eq!(
+            refused(Incidence::new(1, RANK_LIMIT, 0, ok, [2, 3], false)),
+            JobErrorKind::Unsupported
+        );
+        assert_eq!(
+            refused(Incidence::new(1, u64::MAX, 0, ok, [2, 3], false)),
+            JobErrorKind::Unsupported
+        );
+        let too_deep = address(&[7; MAX_ADDRESS_DIGITS as usize + 1]);
+        assert_eq!(
+            refused(Incidence::new(1, 0, 0, too_deep, [2, 3], false)),
+            JobErrorKind::Unsupported
+        );
+        // Digits past the stated length are not an address this record can carry.
+        let stray = Address {
+            digits: 1 << 40,
+            len: 2,
         };
-        let mut bytes = [0u8; Incidence::SIZE];
-        i.encode(&mut bytes);
-        assert_eq!(Incidence::decode(&bytes), i);
+        assert_eq!(
+            refused(Incidence::new(1, 0, 0, stray, [2, 3], false)),
+            JobErrorKind::Unsupported
+        );
+        assert_eq!(
+            refused(Incidence::new(1, 0, 3, ok, [2, 3], false)),
+            JobErrorKind::InvalidState
+        );
+    }
+
+    #[test]
+    fn vertex_ordinals_refuse_past_32_bits() {
+        use super::super::super::full::vertex_ordinal;
+        assert_eq!(vertex_ordinal(u64::from(u32::MAX)).unwrap(), u32::MAX);
+        assert_eq!(
+            vertex_ordinal(u64::from(u32::MAX) + 1).unwrap_err().kind(),
+            JobErrorKind::Unsupported
+        );
     }
 }
