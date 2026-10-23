@@ -6,7 +6,8 @@ use std::sync::Arc;
 // Rust ignores SIGPIPE, so `println!`/`eprintln!` panic (exit 101) when the
 // reader of stdout or stderr has gone away. The conversion's status must not
 // depend on either pipe: stderr write errors are ignored, and a broken stdout
-// is ignored too (any other stdout error is reported on stderr).
+// is ignored too. Any other stdout error (ENOSPC, EIO, ...) is reported on
+// stderr and turns a successful run into the I/O failure status in `main`.
 macro_rules! errln {
     ($($arg:tt)*) => {{
         let _ = std::io::Write::write_fmt(
@@ -21,11 +22,18 @@ macro_rules! outln {
             &mut std::io::stdout().lock(),
             format_args!("{}\n", format_args!($($arg)*)),
         ) {
-            if error.kind() != std::io::ErrorKind::BrokenPipe {
-                errln!("error: writing to stdout: {error}");
-            }
+            stdout_error(&error);
         }
     }};
+}
+
+static STDOUT_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn stdout_error(error: &io::Error) {
+    if error.kind() != io::ErrorKind::BrokenPipe {
+        errln!("error: writing to stdout: {error}");
+        STDOUT_FAILED.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 mod interrupt;
@@ -605,6 +613,20 @@ enum Outcome {
 }
 
 fn main() -> ExitCode {
+    let code = run_cli();
+    // The line-buffered stdout may still hold a result when the process ends.
+    if let Err(error) = io::Write::flush(&mut io::stdout().lock()) {
+        stdout_error(&error);
+    }
+    // The conversion's own failure status wins; a lost result on a stdout that
+    // is not a closed pipe must not look like success.
+    if code == ExitCode::SUCCESS && STDOUT_FAILED.load(std::sync::atomic::Ordering::SeqCst) {
+        return ExitCode::from(1);
+    }
+    code
+}
+
+fn run_cli() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {

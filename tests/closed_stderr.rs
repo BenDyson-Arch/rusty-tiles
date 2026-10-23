@@ -79,8 +79,79 @@ fn failure_exit_code_is_not_replaced_by_a_broken_stderr() {
         .stderr(broken_pipe())
         .output()
         .unwrap();
-    assert_ne!(output.status.code(), Some(101), "{output:?}");
-    assert_ne!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["ok"], false, "{result}");
+    assert_eq!(result["exitCode"], 1, "{result}");
+}
+
+/// A pipe whose read end is already dropped, as stdout.
+#[test]
+fn broken_stdout_keeps_the_conversion_status() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("in.las");
+    point_cloud(&input);
+    let output = support::rusty_tiles()
+        .args(["--json", "point-cloud", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(work.path().join("out.3tz"))
+        .args(["--sourceCrs", "local"])
+        .stdout(broken_pipe())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(work.path().join("out.3tz").is_file());
+
+    let missing = support::rusty_tiles()
+        .args(["--json", "point-cloud", "-i"])
+        .arg(work.path().join("missing.las"))
+        .arg("-o")
+        .arg(work.path().join("other.3tz"))
+        .args(["--sourceCrs", "local"])
+        .stdout(broken_pipe())
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1), "{missing:?}");
+}
+
+/// ENOSPC on stdout loses the result, which must not exit 0.
+#[cfg(target_os = "linux")]
+#[test]
+fn full_stdout_is_a_failure() {
+    let Ok(full) = std::fs::OpenOptions::new().write(true).open("/dev/full") else {
+        eprintln!("skipped: /dev/full is not available");
+        return;
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("in.las");
+    point_cloud(&input);
+    let output = support::rusty_tiles()
+        .args(["--json", "point-cloud", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(work.path().join("out.3tz"))
+        .args(["--sourceCrs", "local"])
+        .stdout(Stdio::from(full))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("writing to stdout"),
+        "{output:?}"
+    );
+
+    // The doctor report is printed straight to stdout.
+    let doctor = support::rusty_tiles()
+        .args(["--json", "doctor", "--command", "point-cloud"])
+        .stdout(Stdio::from(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
+        ))
+        .output()
+        .unwrap();
+    assert_eq!(doctor.status.code(), Some(1), "{doctor:?}");
 }
