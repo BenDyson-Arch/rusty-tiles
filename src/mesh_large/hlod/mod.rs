@@ -19,6 +19,8 @@ mod encode;
 mod geometry;
 pub(crate) mod interfaces;
 pub(crate) mod store;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use encode::Mutation;
 
