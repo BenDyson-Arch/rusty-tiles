@@ -1,7 +1,7 @@
 //! Byte-identity guard: run fixed recipes through the built binary twice.
 //!
 //! Every recipe must produce identical bytes on both runs. Recipes that do
-//! not touch GDAL/PROJ (mesh-to-3tz, glb-to-3tz, createTilesetJson, convert)
+//! not touch GDAL/PROJ (mesh, glb-to-3tz, createTilesetJson, convert)
 //! are also compared with the per-entry sha256 digests committed in
 //! `tests/fixtures/output_digests.json` on the platform recorded there. Codec
 //! output (and hence archive offsets) can differ across CPU architectures.

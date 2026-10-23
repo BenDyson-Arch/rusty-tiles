@@ -1,0 +1,27 @@
+name: Nightly full CI
+
+# GitHub runs scheduled workflows from the default branch (main), but the full matrix must
+# test develop. This workflow only dispatches ci.yml on develop; the run it starts reports to
+# the "Full CI matrix failing on develop" issue. It fires once this file has reached main.
+on:
+  schedule:
+    - cron: '0 17 * * *' # 03:00 Australia/Brisbane (UTC+10, no daylight saving)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch full CI on develop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Start the full tier
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run ci.yml --ref develop -f nightly=true

@@ -179,7 +179,8 @@ gate (owner decision 2026-10-21): the 0.4.0 tag ships without `mesh-to-3tz` and
 --source-crs` (#218, owner decision 2026-10-14); automatic CRS detection does not
 migrate. Local metres and rigid placement intent migrate to the new owner, whose
 public names are `mesh` and `mesh_to_tileset`; budget/profile signatures remain
-that owner's contract decision.
+that owner's contract decision. The [retirement ledger](legacy-mesh-retirement.md)
+records the current callers, the exact deletion scope and the open gate conditions.
 
 For each removal, enumerate retained Rust/adapter callers, migrate admitted
 uses or record the deliberate lost domain, prove the replacement, record the

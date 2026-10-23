@@ -290,18 +290,11 @@ let result = mesh_to_tileset(TilerRequest::new("model.glb", "model.3tz"), &RunCo
 println!("wrote {}", result.output.display());
 ```
 
-The other converters, and the deprecated `mesh-to-3tz` converter shown here, have a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
-
-```rust
-use rusty_tiles::{tile::mesh_to_3tz_reported, MeshTo3tzOptions, Reporter};
-
-let result = mesh_to_3tz_reported("model.glb".as_ref(), "model.3tz".as_ref(), &MeshTo3tzOptions::default(), &Reporter::silent())?;
-println!("wrote {} (archive: {})", result.output.display(), result.archive);
-```
+The other Rust converters follow the same request, `RunControl` and typed-result pattern: `vector_to_archive`, `point_cloud_to_archive`, `raster_to_pyramid` and `model_to_archive`. The deprecated `tile::mesh_to_3tz_reported`, the last `Reporter`/`ConversionResult` converter, is removed with the legacy mesh commands before 0.4.0; see the [retirement ledger](docs/architecture/legacy-mesh-retirement.md).
 
 The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
 
-`ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The deprecated `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
+Observe a run with a `RunControl` and an `Observer`; the deprecated `Reporter`, `EventSink` and `ConversionResult` types serve only the legacy mesh converter.
 
 ## Where to go next
 

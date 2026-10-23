@@ -734,17 +734,11 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort_unstable();
         assert_eq!(names, sorted);
-        let picked = report(
-            &[Command::Preview, Command::MeshTo3tz, Command::Preview],
-            None,
-        );
-        assert_eq!(
-            picked.selected_commands,
-            [Command::Preview, Command::MeshTo3tz]
-        );
+        let picked = report(&[Command::Preview, Command::Mesh, Command::Preview], None);
+        assert_eq!(picked.selected_commands, [Command::Preview, Command::Mesh]);
         assert_eq!(
             picked.commands.keys().copied().collect::<Vec<_>>(),
-            ["mesh-to-3tz", "preview"]
+            ["mesh", "preview"]
         );
     }
 

@@ -10,7 +10,7 @@
 #               and the full report obeys the status/exit contract: each
 #               not-ready command has the refusal its own run returns, and the
 #               first in name order sets error.code and the exit status
-#   3. convert  mesh-to-3tz -i tests/fixtures/example.gltf (README example)
+#   3. convert  mesh -i tests/fixtures/example.glb (README example)
 #   4. validate validate --json on the archive
 #   5. preview  preview --json starts on a free loopback port, serves
 #               config.json and the extracted tileset manifest (curl), refuses
@@ -190,10 +190,10 @@ if [[ $REQUIRE_BROWSER == 1 ]]; then
 fi
 
 # 2. doctor
-env PATH="" "$BIN" doctor --command mesh-to-3tz --command validate --command preview --json \
+env PATH="" "$BIN" doctor --command mesh --command validate --command preview --json \
   >"$WORK/doctor.json" 2>"$WORK/doctor.err" \
   || fail "doctor for README commands (exit $?)" "$WORK/doctor.json"
-doctor_contract "$WORK/doctor.json" 0 mesh-to-3tz validate preview >>"$WORK/doctor.err" 2>&1 \
+doctor_contract "$WORK/doctor.json" 0 mesh validate preview >>"$WORK/doctor.err" 2>&1 \
   || fail "README commands are not all ready" "$WORK/doctor.err"
 env PATH="" "$BIN" doctor --json >"$WORK/doctor-all.json" 2>>"$WORK/doctor.err"
 doctor_contract "$WORK/doctor-all.json" $? >>"$WORK/doctor.err" 2>&1 \
@@ -203,8 +203,8 @@ pass doctor
 # 3. convert (README example)
 ARCHIVE=$WORK/output/example.3tz
 mkdir -p "$WORK/output"
-env PATH="" "$BIN" mesh-to-3tz -i "$REPO/tests/fixtures/example.gltf" -o "$ARCHIVE" \
-  --cartographic-position-degrees 153.02 -27.47 0 >"$WORK/convert.log" 2>&1 || fail "convert" "$WORK/convert.log"
+env PATH="" "$BIN" mesh -i "$REPO/tests/fixtures/example.glb" -o "$ARCHIVE" \
+  --anchor 153.02 -27.47 0 >"$WORK/convert.log" 2>&1 || fail "convert" "$WORK/convert.log"
 grep -q "^next: rusty-tiles validate " "$WORK/convert.log" || fail "convert summary has no next: line" "$WORK/convert.log"
 pass convert
 

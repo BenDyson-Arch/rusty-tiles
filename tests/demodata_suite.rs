@@ -135,14 +135,13 @@ fn mesh_audit_rejects_changed_winding_even_when_archive_validation_passes() {
     let write = |indices| {
         fs::write(
             &input,
-            rusty_tiles::glb_write::write_glb(&[rusty_tiles::glb_write::TilePrimitive {
+            support::write_glb(&support::Primitive {
                 positions: vec![[0., 0., 0.], [10., 0., 0.], [0., 10., 0.]],
                 normals: vec![[0., 0., 1.]; 3],
                 uvs: vec![[0., 0.]; 3],
                 indices,
-                jpeg: None,
-            }])
-            .unwrap(),
+                png: None,
+            }),
         )
         .unwrap();
     };
