@@ -128,69 +128,6 @@ pub(crate) fn plan(
         interior_height: interior[1],
     })
 }
-/// Dedicated mipmapped binding page. Both physical edges carry at least one
-/// complete source-axis period of padding, and the page origin is aligned to
-/// the next-POT source axis. For POT sources this fixes every mip's grid phase.
-/// NPOT source/page correspondence still requires the finite sampler gate.
-pub(crate) fn plan_mip_aligned(
-    uvs: &[[f32; 2]],
-    image_width: u32,
-    image_height: u32,
-    max_edge: u32,
-) -> Result<Crop, JobError> {
-    if uvs.is_empty() || image_width == 0 || image_height == 0 || max_edge < 4 {
-        return Err(invalid("empty mip crop or invalid dimensions"));
-    }
-    let mut lo = [f64::INFINITY; 2];
-    let mut hi = [f64::NEG_INFINITY; 2];
-    for uv in uvs {
-        for axis in 0..2 {
-            let v = f64::from(uv[axis]);
-            if !v.is_finite() {
-                return Err(invalid("nonfinite mip crop UV"));
-            }
-            if v.abs() > 1e6 {
-                return Err(unsupported());
-            }
-            lo[axis] = lo[axis].min(v);
-            hi[axis] = hi[axis].max(v);
-        }
-    }
-    let mut origin = [0i64; 2];
-    let mut extent = [0u32; 2];
-    for (axis, size) in [image_width, image_height].into_iter().enumerate() {
-        let alignment = size.checked_next_power_of_two().ok_or_else(resource)?;
-        let margin = i64::from(size);
-        let first = (lo[axis] * f64::from(size)).floor() as i64;
-        let last = (hi[axis] * f64::from(size)).ceil() as i64;
-        let padded_first = first.checked_sub(margin).ok_or_else(resource)?;
-        origin[axis] = padded_first
-            .div_euclid(i64::from(alignment))
-            .checked_mul(i64::from(alignment))
-            .ok_or_else(resource)?;
-        let padded_end = last.checked_add(margin).ok_or_else(resource)?;
-        let span = padded_end
-            .checked_sub(origin[axis])
-            .ok_or_else(resource)?
-            .max(4);
-        extent[axis] = u32::try_from(span)
-            .map_err(|_| unsupported())?
-            .checked_next_power_of_two()
-            .ok_or_else(resource)?;
-        if extent[axis] > max_edge {
-            return Err(unsupported());
-        }
-    }
-    Ok(Crop {
-        origin,
-        width: extent[0],
-        height: extent[1],
-        gutter: 0,
-        interior_width: extent[0],
-        interior_height: extent[1],
-    })
-}
-
 /// One translation-only island crop placed at `offset` inside its binding block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Island {
@@ -926,39 +863,5 @@ mod tests {
         assert!(plan(&spread, 4096, 4096, 1024, 2).is_err());
         let block = plan_islands(&spread, 4096, 4096, 1024, 2, 4).unwrap();
         assert!(block.width <= 1024 && block.height <= 1024);
-    }
-    #[test]
-    fn mip_aligned_page_both_edge_period_margins_and_physical_limits() {
-        for (width, height) in [(4, 1), (3, 5), (8, 4)] {
-            let uvs = [[-0.25, 0.0], [1.0, 1.0]];
-            let crop = plan_mip_aligned(&uvs, width, height, 64).unwrap();
-            assert_eq!(crop.gutter, 0);
-            assert_eq!(crop.width, crop.interior_width);
-            assert_eq!(crop.height, crop.interior_height);
-            for (axis, size) in [width, height].into_iter().enumerate() {
-                assert_eq!(
-                    crop.origin[axis].rem_euclid(i64::from(size.next_power_of_two())),
-                    0
-                );
-                let physical_end =
-                    crop.origin[axis] + i64::from(if axis == 0 { crop.width } else { crop.height });
-                let lo = f64::from(uvs[0][axis]) * f64::from(size);
-                let hi = f64::from(uvs[1][axis]) * f64::from(size);
-                assert!(lo - crop.origin[axis] as f64 >= f64::from(size));
-                assert!(physical_end as f64 - hi >= f64::from(size));
-            }
-        }
-        assert_eq!(
-            plan_mip_aligned(&[[0.0, 0.0], [1.0, 1.0]], 4096, 4096, 4096)
-                .unwrap_err()
-                .kind(),
-            JobErrorKind::Unsupported
-        );
-        assert_eq!(
-            plan_mip_aligned(&[[f32::NAN, 0.0]], 4, 4, 64)
-                .unwrap_err()
-                .kind(),
-            JobErrorKind::InvalidRequest
-        );
     }
 }

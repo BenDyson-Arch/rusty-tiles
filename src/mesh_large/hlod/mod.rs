@@ -26,6 +26,8 @@ pub(crate) mod interfaces;
 pub(crate) mod source_index;
 pub(crate) mod store;
 #[cfg(test)]
+mod appearance_tests;
+#[cfg(test)]
 mod tests;
 
 pub(crate) use encode::Mutation;

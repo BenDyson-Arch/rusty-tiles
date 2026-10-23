@@ -206,10 +206,8 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
             }
             chart_of[f] = id;
             for c in &projected {
-                for a in 0..2 {
-                    chart.lo[a] = chart.lo[a].min(c[a]);
-                    chart.hi[a] = chart.hi[a].max(c[a]);
-                }
+                chart.lo = std::array::from_fn(|a| chart.lo[a].min(c[a]));
+                chart.hi = std::array::from_fn(|a| chart.hi[a].max(c[a]));
             }
             chart.faces.push(f);
             chart.points.push(projected);
@@ -336,12 +334,11 @@ pub(crate) fn layout(
     let mut pixels = vec![[[0.; 2]; 3]; faces.len()];
     for c in &charts {
         for (k, &f) in c.faces.iter().enumerate() {
-            for corner in 0..3 {
-                let q = c.points[k][corner];
-                pixels[f][corner] = std::array::from_fn(|a| {
+            pixels[f] = c.points[k].map(|q| {
+                std::array::from_fn(|a| {
                     f64::from(c.origin[a]) + f64::from(GUTTER) + 0.5 + (q[a] - c.lo[a]) * scale
-                });
-            }
+                })
+            });
         }
     }
     Ok(Layout {

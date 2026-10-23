@@ -348,8 +348,7 @@ pub(crate) fn build(
     let mut pending = pending.into_iter().peekable();
     let mut sample_seconds = 0.;
     let mut encode_seconds = 0.;
-    for index in 0..groups.len() {
-        let group = &mut groups[index];
+    for (index, group) in groups.iter_mut().enumerate() {
         if pending.peek().is_some_and(|p| p.group == index) {
             let p = pending.next().unwrap();
             let q = queries.next().ok_or_else(|| state("coarse query order"))?;

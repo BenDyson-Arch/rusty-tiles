@@ -255,7 +255,11 @@ impl ChannelGate {
 /// the maximum of a few hundred samples, and mips this small are sampled only
 /// at extreme minification. Small colour levels of packed island pages mix
 /// neighbouring islands inside codec blocks; they keep the block corruption
-/// guard and a PSNR floor 4 dB lower, without a percentile cap.
+/// guard and a PSNR floor 4 dB lower, without a percentile cap. Small data
+/// levels (metallic-roughness, occlusion) of packed pages mix islands the same
+/// way: they keep their per-texel maximum caps, which bound every texel's
+/// error, with the small colour PSNR floor (fresh coarse charts and cropped
+/// mipmapped leaf islands, S3).
 pub(in crate::mesh_large) const SMALL_LEVEL_TEXELS: u64 = 1024;
 /// Colour channels: PSNR bounds mean quality, the 99.9th percentile bounds
 /// the error tail without being decided by one outlier texel, and the worst
@@ -290,6 +294,8 @@ pub(in crate::mesh_large) fn channel_gate(
             },
         );
     }
+    let small = texels < SMALL_LEVEL_TEXELS;
+    let small_floor = if quality { 23. } else { 20. };
     match class(slot) {
         Class::Colour => {
             // Worst levels of >=1024 texels on the real mesh: fast and balanced
@@ -297,7 +303,6 @@ pub(in crate::mesh_large) fn channel_gate(
             // quality (pack level 1, smaller leaves) PSNR 30.3 dB, p99.9 45,
             // block RMSE 26.6. Floors keep about 3 dB and 13 levels of margin.
             let psnr = if quality { 27. } else { 24. };
-            let small = texels < SMALL_LEVEL_TEXELS;
             ChannelGate {
                 psnr: if small { psnr - 4. } else { psnr },
                 p999: (!small).then_some(if quality { 64 } else { 80 }),
@@ -306,8 +311,14 @@ pub(in crate::mesh_large) fn channel_gate(
             }
         }
         Class::Normal => legacy(30., 112),
-        Class::Data if slot == TextureSlot::Occlusion => legacy(30., if quality { 8 } else { 80 }),
-        Class::Data => legacy(30., 32),
+        Class::Data => {
+            let max = match slot {
+                TextureSlot::Occlusion if quality => 8,
+                TextureSlot::Occlusion => 80,
+                _ => 32,
+            };
+            legacy(if small { small_floor } else { 30. }, max)
+        }
         // Defensive: IDs admit no error at all.
         Class::Id => ChannelGate {
             psnr: f64::INFINITY,
@@ -1718,7 +1729,7 @@ mod tests {
         }
     }
     #[test]
-    fn small_level_relaxation_is_colour_only_and_keeps_the_block_guard() {
+    fn small_level_relaxation_is_colour_and_data_only_and_keeps_the_guards() {
         // 16x16 = 256 supported texels: a small level.
         let expected = [100u8, 120, 140, 255].repeat(256);
         let mut offset = expected.clone();
@@ -1767,6 +1778,26 @@ mod tests {
             4
         )
         .is_err());
+        // Small data levels: the PSNR floor relaxes, the per-texel maximum does not.
+        let small_data = |delta: u8, texels: usize, width: u32| {
+            let expected = [100u8, 120, 140, 255].repeat(texels);
+            let mut v = expected.clone();
+            for px in v.as_chunks_mut::<4>().0 {
+                px[1] += delta;
+            }
+            check_level(
+                &expected,
+                &v,
+                &vec![1; texels],
+                width,
+                TextureSlot::MetallicRoughness,
+                Profile::Balanced,
+                4,
+            )
+        };
+        assert!(small_data(17, 256, 16).is_ok());
+        assert!(small_data(17, 1024, 32).is_err(), "full-size data floor");
+        assert!(small_data(33, 256, 16).is_err(), "data maximum cap");
         // Garbage on a small colour level is still refused.
         let garbage: Vec<u8> = expected
             .iter()

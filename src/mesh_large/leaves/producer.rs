@@ -892,6 +892,11 @@ pub(crate) fn produce(
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     if let Coarse::Hlod { plan, settings } = coarse {
+        // The HLOD stage charges and decodes its own source images: release every
+        // decoded leaf source before it starts (D8).
+        let stats = cache.stats();
+        drop(services);
+        drop(cache);
         let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
             super::super::hlod::produce(
                 super::super::hlod::HlodInput {
@@ -913,12 +918,11 @@ pub(crate) fn produce(
             &path.join("manifest.json"),
             &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
         )?;
-        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()});
+        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":stats});
         write_file(
             &path.join("resources.json"),
             &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
         )?;
-        let stats = cache.stats();
         return Ok(LeafStageOutput {
             report,
             diagnostics: LeafStageDiagnostics {
