@@ -43,8 +43,10 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    index in the position-sorted weld table, joined to rank order with the
    corner depths), so the sort record is 30 bytes per corner: ordinal, the two
    neighbour ordinals, a 40-bit rank and the packed leaf address (at most 31
-   digits), corner and degenerate flag. Inputs past those ranges (2^32 welded
-   vertices, 2^40 triangles) are refused, never truncated.
+   digits), corner and degenerate flag. Inputs past those ranges (more than 2^40
+   triangles, or more than 2^32 welded vertices) are refused, never truncated:
+   capture checks the triangle count before reading geometry and the welded
+   vertex count right after the weld.
 2. **Children from published bytes.** Leaf GLBs are decoded (meshopt, client
    f32 order) and each triangle is matched to its source by provenance; every
    decoded corner must equal its frozen lattice point. Proxy GLBs are decoded and

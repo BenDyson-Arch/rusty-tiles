@@ -568,6 +568,11 @@ pub(crate) fn capture_admitted(
         config.member_ceiling,
     )
     .map_err(super::failure)?;
+    // Fail fast: the instanced triangle count is known before any geometry is read.
+    let limits = RecordLimits::of(config);
+    limits
+        .check_triangles(source.document.triangle_count() as u64)
+        .map_err(super::failure)?;
     let (mut scan, source_bounds) =
         capture::scan_with_source_bounds(&source, config.sort.buffer_bytes, check)
             .map_err(super::failure)?;
@@ -814,6 +819,10 @@ pub(crate) fn capture_admitted(
             check,
         )?;
         peaks.tree = end_stage(&scratch, stages.tree, "cell tree")?;
+        // The welded vertex count exists only once the tree's weld has run; the scan bounds it
+        // by 3n alone, which would refuse valid inputs from 1.43G triangles. Refuse here,
+        // before the corner join's 3n-record sort.
+        limits.check_vertices(tree.stats.welded_vertices)?;
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
         verify_rank_alignment(&triangles, &tree.triangles, check)?;
         begin_stage(&scratch, &need, stages.corner_depths)?;
@@ -1008,15 +1017,59 @@ impl Record for RankCorner {
 /// Exclusive bound of a triangle rank in the packed corner records ([`RankDepth`] and H17's
 /// incidence records): 40 bits, about 1.1 trillion triangles.
 pub(crate) const RANK_LIMIT: u64 = 1 << 40;
+/// Most distinct welded positions a 32-bit vertex ordinal ([`CornerVertices`]) names.
+pub(crate) const VERTEX_LIMIT: u64 = 1 << 32;
+/// The ranges of capture's packed corner records: at most `triangles` triangles (40-bit
+/// ranks) and at most `vertices` distinct welded positions (32-bit ordinals). Capture checks
+/// them as soon as each count is known, and the corner join checks them again; a run past
+/// either is refused with a typed error, never truncated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RecordLimits {
+    pub triangles: u64,
+    pub vertices: u64,
+}
+impl RecordLimits {
+    pub(crate) const PACKED: Self = Self {
+        triangles: RANK_LIMIT,
+        vertices: VERTEX_LIMIT,
+    };
+    /// The packed limits; tests lower them to drive the refusals through capture.
+    fn of(config: &TreeConfig) -> Self {
+        #[cfg(test)]
+        if let Some(limits) = config.test_record_limits {
+            return limits;
+        }
+        let _ = config;
+        Self::PACKED
+    }
+    pub(crate) fn check_triangles(self, triangles: u64) -> Result<(), JobError> {
+        if triangles > self.triangles {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "{triangles} triangles exceed the {} the packed corner records' rank holds",
+                    self.triangles
+                ),
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) fn check_vertices(self, vertices: u64) -> Result<(), JobError> {
+        if vertices > self.vertices {
+            return Err(JobError::new(
+                JobErrorKind::Unsupported,
+                format!(
+                    "{vertices} distinct welded vertices exceed the {} the LOD pre-pass's vertex ordinal holds",
+                    self.vertices
+                ),
+            ));
+        }
+        Ok(())
+    }
+}
 /// A typed refusal, never a truncation, for a run with more triangles than [`RANK_LIMIT`].
 pub(crate) fn check_rank_limit(triangles: u64) -> Result<(), JobError> {
-    if triangles > RANK_LIMIT {
-        return Err(JobError::new(
-            JobErrorKind::Unsupported,
-            format!("{triangles} triangles exceed the 40-bit rank of the packed corner records"),
-        ));
-    }
-    Ok(())
+    RecordLimits::PACKED.check_triangles(triangles)
 }
 /// A corner's depth and welded vertex ordinal, sorted back to rank order. Encoded in 10
 /// bytes: the 40-bit rank, `corner | depth << 2` (a depth is below the tree height, at most
@@ -1104,7 +1157,10 @@ fn join_corner_depths(
     jobs: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(Sequence<CornerDepth>, Sequence<CornerVertices>), JobError> {
-    check_rank_limit(tree.triangles.len())?;
+    // Defence: capture refused both counts as soon as it knew them.
+    let limits = RecordLimits::of(config);
+    limits.check_triangles(tree.triangles.len())?;
+    limits.check_vertices(tree.weld_depths.len())?;
     if tree.stats.height > config::HEIGHT_CAP {
         return Err(invariant("tree height exceeds the packed corner depth"));
     }
@@ -1618,6 +1674,143 @@ pub(super) mod tests {
             check_rank_limit(RANK_LIMIT + 1).unwrap_err().kind(),
             JobErrorKind::Unsupported
         );
+    }
+    /// Capture refuses runs past the packed-record limits as soon as each count is known:
+    /// the triangle count before any scratch exists, the welded vertex count straight after
+    /// the tree's weld. Exactly at both limits the run is accepted and its outputs unchanged.
+    /// The limits are lowered through the test seam; the packed limits share the same path.
+    #[test]
+    fn capture_refuses_past_record_limits_up_front() {
+        let dir = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("scratch");
+        fs::create_dir(&parent).unwrap();
+        let input = shuffled_grid(&dir.path().join("source"), 6, 0x11_e7e5);
+        let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
+        config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+        config.scratch_dir = Some(parent.clone());
+        let depths = |captured: &FullCaptured| -> Vec<CornerDepth> {
+            captured
+                .corner_depths
+                .reader()
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        let free = capture(&input, &config, &mut || Ok(())).unwrap();
+        let (triangles, vertices) = (free.scan.triangles, free.tree.stats.welded_vertices);
+        let expected = depths(&free);
+        free.close().unwrap();
+        assert!(vertices > 3 && vertices < 3 * triangles);
+
+        config.test_record_limits = Some(RecordLimits {
+            triangles,
+            vertices,
+        });
+        let exact = capture(&input, &config, &mut || Ok(())).unwrap();
+        assert_eq!(depths(&exact), expected);
+        exact.close().unwrap();
+
+        // One triangle over: refused before the scan, so no scratch is ever created.
+        config.test_record_limits = Some(RecordLimits {
+            triangles: triangles - 1,
+            vertices,
+        });
+        let scratch_seen = std::cell::Cell::new(false);
+        let failed = match capture(&input, &config, &mut || {
+            scratch_seen.set(scratch_seen.get() || fs::read_dir(&parent).unwrap().count() > 0);
+            Ok(())
+        }) {
+            Ok(_) => panic!("capture past the triangle limit was accepted"),
+            Err(failed) => failed,
+        };
+        assert_eq!(failed.error.kind(), JobErrorKind::Unsupported);
+        assert!(failed.error.to_string().contains("triangles exceed"));
+        assert!(
+            !scratch_seen.get(),
+            "triangle refusal came after scratch creation"
+        );
+
+        // One welded vertex over: refused after the weld, before the corner join.
+        config.test_record_limits = Some(RecordLimits {
+            triangles,
+            vertices: vertices - 1,
+        });
+        let failed = match capture(&input, &config, &mut || Ok(())) {
+            Ok(_) => panic!("capture past the welded vertex limit was accepted"),
+            Err(failed) => failed,
+        };
+        assert_eq!(failed.error.kind(), JobErrorKind::Unsupported);
+        assert!(failed.error.to_string().contains("welded vertices exceed"));
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
+    }
+    /// The corner join keeps its own refusal of both limits as defence, on a tree built
+    /// directly: one past either limit is refused, exactly at both is joined.
+    #[test]
+    fn corner_join_refuses_past_record_limits() {
+        let scratch = Scratch::create(None, 0).unwrap();
+        let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(2);
+        config.sort.buffer_bytes = 64;
+        let p = |x: f32, y: f32| [x, y, 0.];
+        let triangles = [
+            [p(0., 0.), p(1., 0.), p(0., 1.)],
+            [p(1., 0.), p(1., 1.), p(0., 1.)],
+            [p(1., 0.), p(2., 0.), p(1., 1.)],
+            [p(2., 0.), p(2., 1.), p(1., 1.)],
+        ];
+        let tree = || {
+            let mut sorter = ExternalSorter::new(&scratch, config.sorter(1)).unwrap();
+            for (i, positions) in triangles.iter().enumerate() {
+                sorter
+                    .push(TriangleRecord {
+                        key: (i as u64) << 60,
+                        source: super::super::records::Provenance {
+                            triangle: i as u64,
+                            ..Default::default()
+                        },
+                        vertices: [0, 1, 2],
+                        positions: *positions,
+                        bytes: 56,
+                        degenerate: false,
+                    })
+                    .unwrap();
+            }
+            tree::build(
+                &scratch,
+                sorter.finish().unwrap(),
+                &config,
+                1,
+                None,
+                &mut || Ok(()),
+            )
+            .unwrap()
+        };
+        let built = tree();
+        assert_eq!((built.triangles.len(), built.weld_depths.len()), (4, 6));
+        drop(built);
+        let join = |config: &TreeConfig| {
+            let built = tree();
+            join_corner_depths(&scratch, &built, config, 1, &mut || Ok(())).map(|_| ())
+        };
+        let mut limited = config.clone();
+        for (limits, refusal) in [
+            ((3, 6), Some("triangles exceed")),
+            ((4, 5), Some("welded vertices exceed")),
+            ((4, 6), None),
+        ] {
+            limited.test_record_limits = Some(RecordLimits {
+                triangles: limits.0,
+                vertices: limits.1,
+            });
+            match (join(&limited), refusal) {
+                (Ok(()), None) => {}
+                (Err(error), Some(message)) => {
+                    assert_eq!(error.kind(), JobErrorKind::Unsupported);
+                    assert!(error.to_string().contains(message), "{error}");
+                }
+                (result, _) => panic!("{limits:?}: unexpected {result:?}"),
+            }
+        }
+        assert_eq!(scratch.live_bytes(), 0);
     }
     /// Every capture stage's measured peak stays within its declared bound across sorter
     /// regimes: one run, intermediate merges with slack, and inventory compaction. A
