@@ -16,12 +16,27 @@ def sample(xyz,rng):
     ids=rng.choice(len(area),200000,p=area/area.sum());r=rng.random((200000,2));u=np.sqrt(r[:,0]);w=np.column_stack([1-u,u*(1-r[:,1]),u*r[:,1]])
     return (xyz[ids]*w[:,:,None]).sum(1)
 def stats(d):return dict(samples=len(d),mean=float(d.mean()),p95=float(np.quantile(d,.95)),p99=float(np.quantile(d,.99)),max=float(d.max()))
+def select_cut(rows, depth):
+    # First content at/below the requested cell depth, carrying terminal leaves.
+    # Sparse unary cells have no content: refinement must descend to the next tile.
+    candidates=sorted((r for r in rows if r['depth']>=depth or r['leaf']),
+                      key=lambda r:(r['depth'],r['first']))
+    cut=[]
+    for row in candidates:
+        if not any(r['first']<=row['first'] and row['end']<=r['end'] for r in cut):
+            cut.append(row)
+    return sorted(cut,key=lambda r:r['first'])
+# Sensitive independent controls: unary holes descend; shallow leaves carry forward.
+probe=[dict(first=0,end=8,depth=0,leaf=False),dict(first=0,end=4,depth=1,leaf=False),
+       dict(first=0,end=2,depth=4,leaf=True),dict(first=2,end=4,depth=4,leaf=True),
+       dict(first=4,end=8,depth=1,leaf=True)]
+assert [r['depth'] for r in select_cut(probe,0)]==[0]
+assert [r['depth'] for r in select_cut(probe,2)]==[4,4,1]
 assert all(0 < r["triangles"] <= 8192 for r in rows[1:])
 source=finish(mesh(rows[0]));assert np.isfinite(source[0]).all()
 source_sha256=hashlib.sha256(source[0].tobytes()).hexdigest();result=[];rng=np.random.default_rng(20261025)
 for depth in [0,2,4,6]:
-    cut=[r for r in rows[1:] if (r['leaf'] and r['depth']<=depth) or (not r['leaf'] and r['depth']==depth)]
-    cut.sort(key=lambda r:r['first']);assert cut[0]['first']==0
+    cut=select_cut(rows[1:],depth);assert cut[0]['first']==0
     assert all(a['end']==b['first'] for a,b in zip(cut,cut[1:]));assert cut[-1]['end']==len(source[0])
     proxy=finish(np.concatenate([mesh(r) for r in cut]));directions={};combined=[]
     for label,a,b in [('source_to_proxy',source,proxy),('proxy_to_source',proxy,source)]:

@@ -12,7 +12,7 @@ cache and git history; they do not describe this producer.
   local metre frame as the final decoded proxy. Child G and leaf encoding errors
   are floors, rather than recursively accumulated source estimates.
 - Each direction requires `max(2048, ceil(200000 * tile_source_count /
-  depth_source_count))` area samples. Each occupied parent depth therefore has
+  depth_source_count))` area samples. Each occupied encoded depth therefore has
   at least 200,000 samples per direction. Scheduling is independent of jobs,
   cache eviction, sort spill and the admitted memory budget. Empty/unsupported
   depths, including depth >=32, return a typed resource refusal before indexing.
@@ -37,17 +37,17 @@ cache and git history; they do not describe this producer.
   ~1% independent exceedance (2.8369 versus 2.8106 m) motivates 5% inflation.
   This is a heuristic sampling margin, **not** a covering radius, confidence
   interval or Hausdorff certificate. Narrow unsampled extrema may still exceed G.
-- An immediate child's measured summary may be reused only when its descendant
-  source range and complete published GLB SHA-256 match and its actual sample
-  count meets the parent's schedule. The summary retains its actual original seed
-  and `reusedFromDepth`; copied counts still meet that depth's required density.
-  Recompute the parent/leaf floor. No reuse occurs merely because bounds or
-  simplifier estimates agree. This avoids remeasuring identical unary chains.
+- S1 collapses single-coarse-child chains before building: only the deepest
+  encoded tile is measured; it is published at the top cell of the chain. There is
+  no duplicate measurement cache. `encodedDepth` keys the seed, schedule and depth
+  G summaries, while `depth` keys publication. Sampling totals omit pass-through
+  cells, preserving 200,000 samples at every occupied encoded depth. Content-less
+  cells below the publication retain that tile's G through delivery.
 - Cached-area endpoint roundoff is corrected only within 1,024 machine epsilons
   of the total area; a larger incomplete schedule returns a typed refusal. This
   numerical selection guard adds no geometric-error margin.
 - Incomplete/nonfinite sampling is a typed refusal. Delivery requires v2 policy
-  and summaries for HLOD manifests and validates counts, occupied depth totals,
+  and summaries for HLOD manifests and validates counts, occupied encoded-depth totals and encoded-tile seed,
   distributions, margin, q and parent ordering. Historical H17 rows remain readable
   until S6 removes that producer. No simplifier estimate is a fallback.
 
@@ -95,8 +95,7 @@ certificate is part of this nearest-surface API.
 The HLOD plan charges 8 MiB query workspace and 4 MiB measurement workspace per
 worker, plus 2 MiB fixed construction workspace. Histograms, bounded patch
 connectivity, source/proxy buffers, coarse BVH, unique edge/vertex controls and
-centroid checks fit these allowances. Fixed held-tile slack includes its cached
-summary/hash. Query checks use a running total of retained fine-block capacities,
+centroid checks fit these allowances. Held tiles use S1’s exact vector-capacity accounting; no summary cache remains. Query checks use a running total of retained fine-block capacities,
 actual vector capacities and conservative hash capacities plus replacement slack;
 a change that exceeds the allowance refuses instead of allocating silently.
 Disk allowance is `160 * source_triangles + 1 MiB`, including larger compact
@@ -109,7 +108,7 @@ its flat disc base. A triangular hole in a proxy ring has its maximum strictly
 inside one source triangle; only area samples discover it. A closed tetrahedron
 checks the actual source control path and unique proxy edges/vertices. Additional
 controls cover tiny distant components, degenerates, extreme 1e8:1 slivers,
-unsupported scheduling depth, copied sample facts and child floors. Resident and
+unsupported scheduling depth, collapsed-chain scheduling, encoded tile identity and child floors. Resident and
 forced-paged nearest queries compare with exhaustive arithmetic through clipped
 block ranges and preserve original donor rows. Cancellation checks occur within
 256-sample batches, including zero-area surfaces. Compensated means remain finite.
@@ -120,8 +119,7 @@ oracle hashes. Independent seed 20261025 uses 200,000 samples/direction at cuts
 maximum G; they do not independently certify every tile's own source range.
 Full-model, appearance and integrated speed gates remain S8/S3 obligations.
 CPU diagnostics use process CPU for index construction and summed worker CPU for
-representatives and each directed pass. Reused summaries incur no directed query
-CPU. CPU counters stay outside deterministic publication metadata.
+representatives and each directed pass. Collapsed cells incur no measurement CPU. CPU counters stay outside deterministic publication metadata.
 
 All local builds/tests/bakes run under a user systemd scope with `MemoryMax=10G`
 and `MemorySwapMax=0`, at idle priority. HLOD crop bakes additionally use the

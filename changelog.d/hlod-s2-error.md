@@ -10,3 +10,5 @@
   areas/materials, and restrict source controls to patch boundaries, components
   and slivers. Verify measured positions against decoded GLB bits and refuse
   unsupported sampling depths.
+
+Integrates S1 chain collapse: measure, seed and aggregate by encoded depth, omit collapsed cells from density scheduling, and remove the redundant reuse cache. Preserve open-border decode and exact held-memory accounting.

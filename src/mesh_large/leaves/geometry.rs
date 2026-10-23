@@ -329,9 +329,9 @@ impl LatticePlan {
         Ok(out)
     }
 
-    /// Encode one coarse tile's indexed vertices. Locked (outer interface) vertices decode
-    /// to exactly their [`canonical`](Self::canonical) value at every depth; the others may
-    /// snap to the tile's own lattice `step[min(depth, ell)]`. One quantized node TRS when
+    /// Encode one coarse tile's indexed vertices. Fixed vertices (outer interface and open
+    /// border) decode to exactly their [`canonical`](Self::canonical) value at every depth;
+    /// interior vertices may snap to the tile's own lattice `step[min(depth, ell)]`. One quantized node TRS when
     /// the tile's span fits the u16 alignment window at the finest step any locked vertex
     /// needs; otherwise float storage of every canonical value.
     pub(crate) fn encode_coarse(

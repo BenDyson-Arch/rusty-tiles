@@ -43,6 +43,18 @@ pub(crate) const LIMITS: Limits = Limits {
     levels: 12,
 };
 
+/// Declared resident bound of the planner's held records: the open stack of at most 32
+/// tiles, each holding at most 8 closed child fragments within `LIMITS.records`, plus the
+/// root fragment's exception (`1 + 8 · 585`); one record is a `Node` with its boxed row and
+/// an allowance for the strings and child slot it owns.
+pub(crate) fn held_bytes_bound() -> u64 {
+    let records = 32 * 8 * LIMITS.records + 1 + 8 * 585;
+    let per = std::mem::size_of::<Node>()
+        + std::mem::size_of::<LeafRow>().max(std::mem::size_of::<ProxyRow>())
+        + 128;
+    records * per as u64
+}
+
 /// Below this height a non-leaf tile is (inside) an implicit root (P-IMPL `S`).
 pub(crate) const SKELETON_HEIGHT: u32 = 4;
 
@@ -276,6 +288,10 @@ pub(crate) struct Builder<'s, S: Sink> {
     held: u64,
     pub shape: Shape,
     finished_root: bool,
+    /// Proxy rows may skip internal tiles (HLOD pass-through cells publish no content).
+    sparse: bool,
+    /// The next proxy row, read but not yet matched (sparse rows only).
+    lookahead: Option<(ProxyRow, Aabb)>,
 }
 
 fn child_axes(axes: [u32; 3], slot: u8) -> [u32; 3] {
@@ -302,7 +318,15 @@ impl<'s, S: Sink> Builder<'s, S> {
             held: 0,
             shape: Shape::default(),
             finished_root: false,
+            sparse: false,
+            lookahead: None,
         }
+    }
+
+    /// Let proxy rows skip internal tiles, which then publish no content.
+    pub(crate) fn with_sparse_proxies(mut self, sparse: bool) -> Self {
+        self.sparse = sparse;
+        self
     }
 
     pub(crate) fn sink(&mut self) -> &mut S {
@@ -431,43 +455,73 @@ impl<'s, S: Sink> Builder<'s, S> {
             .reduce(Aabb::union)
             .unwrap();
         let children_error = frame.children.iter().map(|c| c.error).fold(0., f64::max);
-        let proxy = match self.proxies.as_mut() {
-            None => None,
-            Some(rows) => {
-                let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
-                let (row, bounds) = rows.next().transpose()?.ok_or_else(|| {
-                    bad(format!(
-                        "proxies.jsonl ends before internal tile f{}-d{}",
-                        frame.first, frame.depth
-                    ))
-                })?;
-                if (row.first, row.end, row.depth) != (frame.first, self.next_rank, frame.depth) {
+        // An HLOD cell without content sits below its single-child chain's coarse tile.
+        let mut chain_error = None;
+        let proxy = if let Some(rows) = self.proxies.as_mut() {
+            let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
+            let next = match self.lookahead.take() {
+                Some(row) => Some(row),
+                None => rows.next().transpose()?,
+            };
+            let key = (frame.first, self.next_rank, frame.depth);
+            match next {
+                Some((row, bounds)) if (row.first, row.end, row.depth) == key => {
+                    if row.geometric_error < children_error {
+                        return Err(bad(format!(
+                            "proxy {} has a geometric error below its children's",
+                            row.uri
+                        )));
+                    }
+                    // The proxy's snapped vertices may leave the children's boxes.
+                    extent = extent.union(bounds);
+                    self.shape.proxies += 1;
+                    Some(Box::new(row))
+                }
+                // Sparse coarse rows (HLOD): a cell of a single-child chain publishes no
+                // content below the chain's coarse tile, which is the next row (same rank
+                // range, shallower). It takes that tile's error, so refinement through it is
+                // monotone and happens exactly where the coarse tile's own cell would refine.
+                Some((row, bounds))
+                    if self.sparse
+                        && (row.first, row.end) == (frame.first, self.next_rank)
+                        && row.depth < frame.depth =>
+                {
+                    chain_error = Some(row.geometric_error);
+                    self.lookahead = Some((row, bounds));
+                    None
+                }
+                Some((row, _)) => {
                     return Err(bad(format!(
                         "proxies.jsonl row {} is not internal tile f{}-d{} (postorder)",
                         row.uri, frame.first, frame.depth
-                    )));
+                    )))
                 }
-                if row.geometric_error < children_error {
+                None => {
                     return Err(bad(format!(
-                        "proxy {} has a geometric error below its children's",
-                        row.uri
-                    )));
+                        "proxies.jsonl ends before internal tile f{}-d{}",
+                        frame.first, frame.depth
+                    )))
                 }
-                // The proxy's snapped vertices may leave the children's boxes.
-                extent = extent.union(bounds);
-                self.shape.proxies += 1;
-                Some(Box::new(row))
             }
+        } else {
+            None
         };
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
-        // A content-bearing HLOD tile publishes S2's G verbatim. This node (and
-        // the external-link clone below) is also the single source of the implicit
-        // metadata error. The diagonal policy applies only to empty traversal nodes.
-        let error = match &proxy {
-            Some(row) => row.geometric_error,
-            None => children_error.max(EMPTY_PARENT_SCALE * diagonal),
+        let error = match (&proxy, chain_error) {
+            (Some(row), _) => row.geometric_error,
+            (None, Some(error)) if error >= children_error => error,
+            (None, Some(_)) => {
+                return Err(JobError::new(
+                    JobErrorKind::InvalidInput,
+                    format!(
+                        "coarse tile above f{}-d{} has a geometric error below its children's",
+                        frame.first, frame.depth
+                    ),
+                ))
+            }
+            (None, None) => children_error.max(EMPTY_PARENT_SCALE * diagonal),
         };
         if !error.is_finite() {
             return Err(state("an empty parent's geometric error is not finite"));
@@ -616,7 +670,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             ));
         }
         if let Some(rows) = self.proxies.as_mut() {
-            if rows.next().transpose()?.is_some() {
+            if self.lookahead.is_some() || rows.next().transpose()?.is_some() {
                 return Err(JobError::new(
                     JobErrorKind::InvalidInput,
                     "proxies.jsonl has rows beyond the internal tiles",

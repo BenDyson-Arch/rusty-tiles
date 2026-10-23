@@ -4,7 +4,7 @@
 use super::{
     plan::{tile_box, Builder, Limits, Linked, Node, Sink, LIMITS},
     publish_with,
-    source::{glb_bounds, Aabb, Digits, LeafRow},
+    source::{glb_bounds, payload_bounds, Aabb, Digits, LeafRow, MAX_GLB_JSON},
     *,
 };
 use crate::validate::{inspect, ValidationRequest};
@@ -1401,6 +1401,12 @@ fn glb_bounds_are_outward_and_z_up() {
     };
     let (path, bytes) = write(doc(node));
     let b = glb_bounds(&path, &row(bytes)).unwrap();
+    // A JSON chunk above the caller's cap is refused before it is read.
+    let refused = payload_bounds(&path, "leaf", bytes, 64).unwrap_err();
+    assert!(
+        refused.to_string().contains("exceeds 64 bytes"),
+        "{refused}"
+    );
     // Exact y-up bounds: x in [0.1, 0.1 + 0.3·65535], y in [-5 + 0.007, -5 + 0.009],
     // z in [1e7 + 2, 1e7 + 6]; z-up is (x, -z, y).
     let exact_lo_x = 0.1f64;
@@ -1441,6 +1447,7 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
             report_called = true;
             Ok(b"{}".to_vec())
         },
+        MAX_GLB_JSON,
     );
     let error = match refused {
         Err(error) => error,
@@ -1459,6 +1466,7 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
             assert_eq!(facts.members, 4); // content + tileset + conversion + archive index
             Ok(b"{}".to_vec())
         },
+        MAX_GLB_JSON,
     )
     .unwrap();
     assert_eq!(admitted.facts().members, 4);

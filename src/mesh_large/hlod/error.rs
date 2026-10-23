@@ -22,19 +22,54 @@ pub(crate) const MIN_DEPTH: u64 = 200_000;
 pub(crate) const WORK_BYTES: u64 = 4 << 20;
 const BINS: usize = 16384;
 
-/// Fixed-size per-depth scheduling, including synthetic depths. Each occupied depth
-/// receives >=200k samples per direction; rounding and the per-tile floor only add.
+/// Fixed-size scheduling by encoded depth, excluding collapsed single-coarse-child
+/// cells. Each occupied encoded depth receives >=200k samples per direction.
 pub(crate) struct SamplingPlan {
     totals: [u64; 32],
 }
 impl SamplingPlan {
     pub(crate) fn new(captured: &FullCaptured) -> Result<Self, JobError> {
+        Self::from_nodes(captured.tree.nodes.reader()?.map(|n| n.map_err(Into::into)))
+    }
+    fn from_nodes(
+        nodes: impl IntoIterator<Item = Result<crate::mesh_large::records::NodeRecord, JobError>>,
+    ) -> Result<Self, JobError> {
+        struct Frame {
+            node: crate::mesh_large::records::NodeRecord,
+            children: u32,
+            only_internal: bool,
+        }
         let mut plan = Self { totals: [0; 32] };
-        for n in captured.tree.nodes.reader()? {
-            let n = n?;
-            if n.kind == NodeKind::Internal {
-                plan.add(n.depth(), n.end - n.first)?;
+        let mut stack: Vec<Frame> = Vec::with_capacity(32);
+        let mut close = |f: Frame| -> Result<(), JobError> {
+            // Exactly matches walk::close: a single coarse child stands for this cell.
+            if f.children != 1 || !f.only_internal {
+                plan.add(f.node.depth(), f.node.end - f.node.first)?;
             }
+            Ok(())
+        };
+        for n in nodes {
+            let n = n?;
+            if n.depth() >= 32 {
+                return Err(resource("sampling depth outside 0..32"));
+            }
+            while stack.last().is_some_and(|f| f.node.end <= n.first) {
+                close(stack.pop().unwrap())?;
+            }
+            if let Some(parent) = stack.last_mut() {
+                parent.children += 1;
+                parent.only_internal = n.kind == NodeKind::Internal;
+            }
+            if n.kind == NodeKind::Internal {
+                stack.push(Frame {
+                    node: n,
+                    children: 0,
+                    only_internal: false,
+                });
+            }
+        }
+        while let Some(frame) = stack.pop() {
+            close(frame)?;
         }
         Ok(plan)
     }
@@ -161,9 +196,6 @@ impl Direction {
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
     pub version: u32,
-    /// Original measured depth when an identical child publication is reused.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reused_from_depth: Option<u32>,
     pub seed: u64,
     pub area_samples_per_direction: u64,
     pub source_to_proxy: Direction,
@@ -263,7 +295,7 @@ impl Rng {
         ((z ^ (z >> 31)) >> 11) as f64 * (1. / ((1u64 << 53) as f64))
     }
 }
-fn seed(key: TileKey) -> u64 {
+pub(crate) fn seed(key: TileKey) -> u64 {
     0x5332_2026_1024_0001
         ^ key.first.wrapping_mul(0x9e3779b97f4a7c15)
         ^ key.end.rotate_left(23)
@@ -496,7 +528,6 @@ fn publish(
         },
         Summary {
             version: 2,
-            reused_from_depth: None,
             seed,
             area_samples_per_direction: count,
             source_to_proxy,
@@ -506,22 +537,6 @@ fn publish(
             q: source_to_proxy.p99().max(proxy_to_source.p99()),
         },
     ))
-}
-
-pub(crate) fn reuse(
-    s: Summary,
-    depth: u32,
-    children: f64,
-) -> Result<(TileError, Summary), JobError> {
-    let (g, mut copied) = publish(
-        children,
-        s.area_samples_per_direction,
-        s.seed,
-        s.source_to_proxy,
-        s.proxy_to_source,
-    )?;
-    copied.reused_from_depth = Some(s.reused_from_depth.unwrap_or(depth));
-    Ok((g, copied))
 }
 
 impl Summary {
@@ -776,6 +791,55 @@ mod tests {
         assert!(plan.add(32, 1).is_err());
     }
     #[test]
+    fn schedule_uses_only_encoded_tiles_after_chain_collapse() {
+        use crate::mesh_large::records::{Bounds, NodeRecord};
+        let node = |depth, first, end, kind| {
+            Ok(NodeRecord {
+                cell_depth: depth,
+                cell: 0,
+                path_len: 0,
+                path: 0,
+                last_octant: 0,
+                kind,
+                children: 0,
+                first,
+                end,
+                bytes: 0,
+                bounds: Bounds {
+                    min: [0.; 3],
+                    max: [1.; 3],
+                },
+            })
+        };
+        // Branch A has an internal chain at depths 1..3; branch B at depth 1
+        // directly owns a leaf. Only branch A's depth-3 tile is actually encoded.
+        let plan = SamplingPlan::from_nodes([
+            node(0, 0, 100, NodeKind::Internal),
+            node(1, 0, 80, NodeKind::Internal),
+            node(2, 0, 80, NodeKind::Internal),
+            node(3, 0, 80, NodeKind::Internal),
+            node(4, 0, 80, NodeKind::Leaf),
+            node(1, 80, 100, NodeKind::Internal),
+            node(2, 80, 100, NodeKind::Leaf),
+        ])
+        .unwrap();
+        assert_eq!(&plan.totals[..5], &[100, 20, 0, 80, 0]);
+        for (depth, first, end) in [(0, 0, 100), (1, 80, 100), (3, 0, 80)] {
+            assert_eq!(
+                plan.count(TileKey {
+                    depth,
+                    first,
+                    end,
+                    leaf_begin: 0,
+                    leaf_end: 1
+                })
+                .unwrap(),
+                MIN_DEPTH
+            );
+        }
+        assert!(SamplingPlan::from_nodes([node(32, 0, 1, NodeKind::Internal)]).is_err());
+    }
+    #[test]
     fn incomplete_area_schedule_is_a_typed_refusal() {
         let t = Triangle::new([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], 0);
         let error = directed(
@@ -800,22 +864,6 @@ mod tests {
             &|| Ok(()),
         )
         .unwrap();
-    }
-    #[test]
-    fn reused_measurement_keeps_actual_seed_counts_and_child_floor() {
-        let (_, original) = pair(&quad(|_, _| 0.), &quad(|_, _| 0.5), 77);
-        let (g, s) = reuse(original, 3, 9.).unwrap();
-        assert_eq!(g.geometric_error, 9.);
-        assert_eq!(s.seed, original.seed);
-        assert_eq!(
-            s.area_samples_per_direction,
-            original.area_samples_per_direction
-        );
-        assert_eq!(s.source_to_proxy, original.source_to_proxy);
-        assert_eq!(s.reused_from_depth, Some(3));
-        let (_, s) = reuse(s, 2, 0.).unwrap();
-        assert_eq!(s.reused_from_depth, Some(3));
-        s.validate(1., 0.).unwrap();
     }
     #[test]
     fn cancellation_is_checked_inside_large_and_zero_area_strata() {

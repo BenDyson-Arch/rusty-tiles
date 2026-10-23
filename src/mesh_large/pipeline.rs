@@ -320,6 +320,9 @@ pub struct MemoryDiagnostics {
     pub leaf_minimum_bytes: u64,
     pub leaf_bound_bytes: u64,
     pub hlod: HlodMemoryPlan,
+    /// Archive preparation and writing: captured metadata, runtime reserve, memory-backed
+    /// scratch and H16's declared resident bound.
+    pub archive_minimum_bytes: u64,
 }
 #[derive(Debug)]
 pub struct TilerResult {
@@ -490,11 +493,37 @@ pub fn mesh_to_tileset(
                     .base_memory_bytes
                     .saturating_add(c.jobs.per_job_memory_bytes)
                     .saturating_add(c.jobs.memory_backed_scratch_bytes);
+                let tmpfs = if captured.scratch.memory_backed() {
+                    c.scratch.need_bytes
+                } else {
+                    0
+                };
+                let archive_minimum = c
+                    .memory
+                    .owned_metadata_bytes
+                    .saturating_add(c.memory.geometry.document_bytes)
+                    .saturating_add(256 << 20)
+                    .saturating_add(tmpfs)
+                    .saturating_add(delivery::resident_bound(
+                        delivery::source::TILER_MAX_GLB_JSON,
+                    ));
+                let available = budget.ceiling(super::config::available_memory());
+                if available < archive_minimum {
+                    return Err(JobError::new(
+                        JobErrorKind::ResourceLimit,
+                        format!(
+                            "archive preparation needs at least {archive_minimum} bytes but the \
+                             memory budget allows {available}"
+                        ),
+                    ));
+                }
                 let memory = MemoryDiagnostics {
                     budget: *budget,
                     minimum_bytes: capture_minimum
                         .max(plan.minimum_bytes())
-                        .max(hlod.minimum_bytes),
+                        .max(hlod.minimum_bytes)
+                        .max(archive_minimum),
+                    archive_minimum_bytes: archive_minimum,
                     capture_minimum_bytes: capture_minimum,
                     capture_bound_bytes: c.memory.bound_bytes,
                     leaf_minimum_bytes: plan.minimum_bytes(),
@@ -553,6 +582,11 @@ pub fn mesh_to_tileset(
             |facts| {
                 serde_json::to_vec(&TilerReport::new(&captured.report, &leaf.report, facts))
                     .map_err(|e| JobError::new(JobErrorKind::InvalidState, e.to_string()))
+            },
+            // A budgeted run charged archive preparation for its own small members.
+            match config.memory_budget {
+                Some(_) => delivery::source::TILER_MAX_GLB_JSON,
+                None => delivery::source::MAX_GLB_JSON,
             },
         )?;
         let report = TilerReport::new(&captured.report, &leaf.report, &prepared.facts());

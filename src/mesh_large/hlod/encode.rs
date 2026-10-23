@@ -57,6 +57,31 @@ pub(crate) fn flat_materials(materials: &[crate::gltf_source::source::Material])
         .collect()
 }
 
+/// Per vertex: whether it lies on an open-border edge (held by other than two faces) of
+/// the nondegenerate triangles.
+pub(crate) fn open_border(triangles: &[[u32; 3]], vertices: usize) -> Vec<bool> {
+    let mut edges: Vec<(u32, u32)> = triangles
+        .iter()
+        .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+        .flat_map(|t| (0..3).map(move |k| (t[k].min(t[(k + 1) % 3]), t[k].max(t[(k + 1) % 3]))))
+        .collect();
+    edges.sort_unstable();
+    let mut border = vec![false; vertices];
+    let mut i = 0;
+    while i < edges.len() {
+        let mut j = i + 1;
+        while j < edges.len() && edges[j] == edges[i] {
+            j += 1;
+        }
+        if j - i != 2 {
+            border[edges[i].0 as usize] = true;
+            border[edges[i].1 as usize] = true;
+        }
+        i = j;
+    }
+    border
+}
+
 /// Area-weighted smooth normal per vertex over decoded positions.
 fn normals(decoded: &[[f32; 3]], faces: &[[u32; 3]]) -> Vec<[f32; 3]> {
     let mut sum = vec![[0f64; 3]; decoded.len()];
@@ -356,7 +381,7 @@ pub(crate) fn encode(
 
 /// D1's pre-publication check on the encoded bytes, decoded as a client does: the triangle
 /// count, every required segment and interface vertex at its exact leaf-canonical decode,
-/// and every triangle's representative row.
+/// every decoded open-border vertex at a leaf-canonical position, and every triangle's representative row.
 pub(crate) fn check(
     tile: &TileGeometry,
     locked: &[bool],
@@ -376,6 +401,8 @@ pub(crate) fn check(
     let bits = |p: [f32; 3]| p.map(f32::to_bits);
     let mut edges = HashSet::with_capacity(decoded.faces.len() * 3);
     let mut points = HashSet::with_capacity(decoded.faces.len() * 3);
+    let mut counted: std::collections::HashMap<([u32; 3], [u32; 3]), u32> =
+        std::collections::HashMap::with_capacity(decoded.faces.len() * 3);
     let mut seen = vec![false; tile.triangles.len()];
     for (face, &triangle) in decoded.faces.iter().zip(&encoded.face_order) {
         let mapped = seen
@@ -404,11 +431,28 @@ pub(crate) fn check(
             }
             published[vertex as usize] = face.p[k];
         }
+        let corners = face.p.map(bits);
+        let degenerate =
+            corners[0] == corners[1] || corners[1] == corners[2] || corners[0] == corners[2];
         for k in 0..3 {
-            let (a, b) = (bits(face.p[k]), bits(face.p[(k + 1) % 3]));
-            edges.insert(if a <= b { (a, b) } else { (b, a) });
+            let (a, b) = (corners[k], corners[(k + 1) % 3]);
+            let e = if a <= b { (a, b) } else { (b, a) };
+            edges.insert(e);
             points.insert(a);
+            if !degenerate {
+                *counted.entry(e).or_default() += 1;
+            }
         }
+    }
+    let canonical: HashSet<[u32; 3]> = tile.positions.iter().map(|p| bits(*p)).collect();
+    if counted
+        .iter()
+        .any(|((a, b), n)| *n != 2 && !(canonical.contains(a) && canonical.contains(b)))
+    {
+        return Err(invalid(format!(
+            "{}: a decoded open-border vertex left its leaf-canonical position",
+            what()
+        )));
     }
     let locked_points: HashSet<[u32; 3]> = tile
         .positions

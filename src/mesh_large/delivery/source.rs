@@ -13,7 +13,11 @@ use std::{
 };
 
 /// The largest leaf JSON chunk read for bounds (H8's are a few KiB).
-const MAX_GLB_JSON: u64 = 64 << 20;
+pub(crate) const MAX_GLB_JSON: u64 = 64 << 20;
+/// The GLB JSON cap of a budgeted tiler run's own members (D8): its leaves and coarse tiles
+/// carry a few KiB, so archive preparation can charge one parsed document (see
+/// `delivery::resident_bound`).
+pub(crate) const TILER_MAX_GLB_JSON: u64 = 1 << 20;
 
 pub(super) fn input(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message.into())
@@ -203,6 +207,7 @@ pub(crate) struct ProxyRow {
     pub geometric_error: f64,
     pub primitives: u32,
     pub sample_count: Option<u64>,
+    pub encoded_depth: u32,
 }
 
 #[derive(Deserialize)]
@@ -215,6 +220,8 @@ struct ProxyWire {
     first: u64,
     end: u64,
     depth: u32,
+    #[serde(default)]
+    encoded_depth: Option<u32>,
     geometric_error: f64,
     primitives: u32,
     #[serde(default)]
@@ -232,20 +239,29 @@ impl ProxyRow {
         if w.schema_version != 1 {
             return Err(bad("unsupported schemaVersion"));
         }
+        let encoded_depth = match w.encoded_depth {
+            Some(d) if d >= w.depth && d <= 30 => d,
+            None if !hlod => w.depth,
+            _ => return Err(bad("missing or invalid encodedDepth")),
+        };
         match (w.error_policy.as_deref(), w.measurement.as_ref()) {
             (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
+                let key = crate::mesh_large::hlod::store::TileKey {
+                    first: w.first,
+                    end: w.end,
+                    depth: encoded_depth,
+                    leaf_begin: 0,
+                    leaf_end: 0,
+                };
+                if summary.seed != crate::mesh_large::hlod::error::seed(key) {
+                    return Err(bad("measurement seed differs from encoded tile"));
+                }
                 let children = w
                     .children_error
                     .ok_or_else(|| bad("S2 row has no childrenError"))?;
                 summary
                     .validate(w.geometric_error, children)
                     .map_err(|e| bad(&e.to_string()))?;
-                if w.depth == 0
-                    && summary.area_samples_per_direction
-                        < crate::mesh_large::hlod::error::MIN_DEPTH
-                {
-                    return Err(bad("incomplete root sampling"));
-                }
             }
             (None, None) if !hlod => {} // Historical H17 rows, removed with that producer in S6.
             _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
@@ -272,6 +288,7 @@ impl ProxyRow {
             depth: w.depth,
             geometric_error: w.geometric_error,
             primitives: w.primitives,
+            encoded_depth,
             sample_count: w.measurement.as_ref().map(|s| s.area_samples_per_direction),
         })
     }
@@ -350,11 +367,17 @@ fn numbers<const N: usize>(value: Option<&Value>, default: f64) -> Option<[f64; 
 /// evaluated with outward rounding, then taken from glTF y-up to the tile frame's z-up as
 /// `(x, y, z) -> (x, -z, y)`, the conversion C2 applies exactly once.
 pub(crate) fn glb_bounds(path: &Path, row: &LeafRow) -> Result<Aabb, JobError> {
-    payload_bounds(path, &row.uri, row.bytes)
+    payload_bounds(path, &row.uri, row.bytes, MAX_GLB_JSON)
 }
 
-/// [`glb_bounds`] for any H8/H17 payload of `bytes` bytes.
-pub(crate) fn payload_bounds(path: &Path, uri: &str, bytes: u64) -> Result<Aabb, JobError> {
+/// [`glb_bounds`] for any H8/H17 payload of `bytes` bytes whose JSON chunk is at most
+/// `max_json` bytes.
+pub(crate) fn payload_bounds(
+    path: &Path,
+    uri: &str,
+    bytes: u64,
+    max_json: u64,
+) -> Result<Aabb, JobError> {
     let bad = |why: &str| input(format!("payload {uri}: {why}"));
     let io = |e| JobError::io("read leaf GLB", path, e);
     let mut file = File::open(path).map_err(io)?;
@@ -372,8 +395,8 @@ pub(crate) fn payload_bounds(path: &Path, uri: &str, bytes: u64) -> Result<Aabb,
     if &header[16..20] != b"JSON" || json_length + 20 > length {
         return Err(bad("first GLB chunk is not JSON"));
     }
-    if json_length > MAX_GLB_JSON {
-        return Err(bad("GLB JSON chunk exceeds 64 MiB"));
+    if json_length > max_json {
+        return Err(bad(&format!("GLB JSON chunk exceeds {max_json} bytes")));
     }
     let mut text = vec![0u8; json_length as usize];
     file.read_exact(&mut text).map_err(io)?;
@@ -469,7 +492,11 @@ pub(crate) struct LeafDirectory {
     pub totals: LeafTotals,
     /// H17 coarse tiles are present (`proxyManifest`).
     pub proxies: bool,
-    hlod: bool,
+    /// The coarse rows may skip internal tiles: an HLOD stage (`hlod` in the manifest),
+    /// whose single-child pass-through cells publish no content.
+    pub sparse_proxies: bool,
+    /// Largest GLB JSON chunk read for bounds.
+    max_glb_json: u64,
 }
 
 impl LeafDirectory {
@@ -509,8 +536,15 @@ impl LeafDirectory {
             root: root.to_owned(),
             totals,
             proxies,
-            hlod: manifest.get("hlod").is_some(),
+            sparse_proxies: proxies && manifest.get("hlod").is_some(),
+            max_glb_json: MAX_GLB_JSON,
         })
+    }
+
+    /// Read bounds from GLB JSON chunks of at most `max` bytes (refusing larger ones).
+    pub(crate) fn with_max_glb_json(mut self, max: u64) -> Self {
+        self.max_glb_json = max;
+        self
     }
 
     pub(crate) fn path(&self, row: &LeafRow) -> PathBuf {
@@ -555,15 +589,20 @@ impl LeafDirectory {
             row += 1;
             Some(
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
-                    .and_then(|line| ProxyRow::parse(&line, row, self.hlod))
+                    .and_then(|line| ProxyRow::parse(&line, row, self.sparse_proxies))
                     .and_then(|proxy| {
                         if let Some(n) = proxy.sample_count {
-                            samples[proxy.depth as usize] = samples[proxy.depth as usize]
+                            samples[proxy.encoded_depth as usize] = samples
+                                [proxy.encoded_depth as usize]
                                 .checked_add(n)
                                 .ok_or_else(|| input("HLOD sample count overflow"))?;
                         }
-                        let bounds =
-                            payload_bounds(&self.member(&proxy.uri), &proxy.uri, proxy.bytes)?;
+                        let bounds = payload_bounds(
+                            &self.member(&proxy.uri),
+                            &proxy.uri,
+                            proxy.bytes,
+                            self.max_glb_json,
+                        )?;
                         Ok((proxy, bounds))
                     }),
             )
@@ -585,7 +624,12 @@ impl LeafDirectory {
                 line.map_err(|e| JobError::io("read leaf rows", &path, e))
                     .and_then(|line| LeafRow::parse(&line, row))
                     .and_then(|leaf| {
-                        let bounds = glb_bounds(&self.path(&leaf), &leaf)?;
+                        let bounds = payload_bounds(
+                            &self.path(&leaf),
+                            &leaf.uri,
+                            leaf.bytes,
+                            self.max_glb_json,
+                        )?;
                         Ok((leaf, bounds))
                     }),
             )

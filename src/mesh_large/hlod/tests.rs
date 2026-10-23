@@ -127,16 +127,31 @@ fn sheet() -> Vec<Mesh> {
     ]
 }
 
-/// T-junctions: the right half is twice as fine, so along x = 50 every other right vertex
-/// lies on a left edge without being one of its vertices.
+/// The T-junction line: off every coarse tile lattice (50 + 2^-9), so a border vertex
+/// snapped to a coarse lattice would leave it.
+const T_LINE: f32 = 50. + 1. / 512.;
+
+/// T-junctions: the right half is twice as fine, so along x = `T_LINE` every other right
+/// vertex lies on a left edge without being one of its vertices.
 fn t_junction() -> Vec<Mesh> {
+    // Curved across the line but straight along it, so the T-junctions are exact.
+    let ridge = |x: f32, _: f32| {
+        let u = (x - 50.) / 30.;
+        4. / (1. + u * u) + 0.01 * x
+    };
     vec![
-        grid((20, 40), (0., 50.), (0., 100.), &bump, [0.6, 0.5, 0.4, 1.]),
+        grid(
+            (20, 40),
+            (0., T_LINE),
+            (0., 100.),
+            &ridge,
+            [0.6, 0.5, 0.4, 1.],
+        ),
         grid(
             (40, 80),
-            (50., 100.),
+            (T_LINE, 100.),
             (0., 100.),
-            &bump,
+            &ridge,
             [0.3, 0.6, 0.3, 1.],
         ),
     ]
@@ -474,6 +489,136 @@ struct Census {
     max_coarse_triangles: usize,
     invalid_features: usize,
     packed_leaves: usize,
+    /// Open-border points of one leaf strictly inside an open-border segment of another.
+    overlaps: usize,
+    missing_overlap_items: usize,
+    /// Decoded open-border vertices of coarse tiles at no decoded vertex of their leaves.
+    moved_border_vertices: usize,
+    max_border_move_m: f64,
+    /// Perpendicular displacement: (tile, interface point) pairs measured, where the point is
+    /// shared with or lies on a leaf outside the tile.
+    perpendicular_checked: usize,
+    /// Pairs whose point lies farther from the tile's decoded edges than from its own inside
+    /// leaf's (or beyond `PERPENDICULAR_RADIUS`).
+    perpendicular_displaced: usize,
+    /// Largest such excess, metres (`PERPENDICULAR_RADIUS` when nothing was within reach).
+    max_perpendicular_excess_m: f64,
+    /// Pairs of tiles on one root-to-leaf path with identical decoded content.
+    duplicate_chain_tiles: usize,
+}
+
+/// Search radius of the perpendicular census, metres: a point farther than this from every
+/// decoded edge of a tile counts as displaced by (at least) this much.
+const PERPENDICULAR_RADIUS: f64 = 0.05;
+
+/// Segments indexed for point queries within a radius, in bounded memory whatever their
+/// length mix: each segment sits in the grid level whose power-of-two cell covers it and its
+/// padding (at most two cells per axis, so at most eight entries), and a point meets every
+/// segment within reach in its own cell of each level.
+struct SegmentIndex {
+    segments: Vec<([f64; 3], [f64; 3])>,
+    levels: BTreeMap<i32, HashMap<[i64; 3], Vec<usize>>>,
+}
+
+impl SegmentIndex {
+    /// `radius` is the query reach; every segment is also padded by a millionth of its
+    /// extent, so points collinear within rounding are met.
+    fn new(segments: Vec<([f64; 3], [f64; 3])>, radius: f64) -> Self {
+        let mut levels: BTreeMap<i32, HashMap<[i64; 3], Vec<usize>>> = BTreeMap::new();
+        for (k, (a, b)) in segments.iter().enumerate() {
+            let span = (0..3).map(|i| (b[i] - a[i]).abs()).fold(0., f64::max);
+            let pad = radius + 1e-6 * span;
+            let extent = (span + 2. * pad).max(f64::MIN_POSITIVE);
+            let level = extent.log2().ceil() as i32;
+            let size = 2f64.powi(level);
+            let lo: [i64; 3] =
+                std::array::from_fn(|i| ((a[i].min(b[i]) - pad) / size).floor() as i64);
+            let hi: [i64; 3] =
+                std::array::from_fn(|i| ((a[i].max(b[i]) + pad) / size).floor() as i64);
+            assert!(
+                (0..3).all(|i| hi[i] - lo[i] <= 1),
+                "segment index cell bound"
+            );
+            let grid = levels.entry(level).or_default();
+            for x in lo[0]..=hi[0] {
+                for y in lo[1]..=hi[1] {
+                    for z in lo[2]..=hi[2] {
+                        grid.entry([x, y, z]).or_default().push(k);
+                    }
+                }
+            }
+        }
+        Self { segments, levels }
+    }
+
+    /// Every segment whose padded cell holds `p` (a superset of those within reach).
+    fn near(&self, p: [f64; 3]) -> impl Iterator<Item = usize> + '_ {
+        self.levels.iter().flat_map(move |(level, grid)| {
+            let size = 2f64.powi(*level);
+            let cell = p.map(|v| (v / size).floor() as i64);
+            grid.get(&cell).into_iter().flatten().copied()
+        })
+    }
+
+    /// Grid entries held: at most eight per segment.
+    fn entries(&self) -> usize {
+        self.levels
+            .values()
+            .flat_map(|g| g.values())
+            .map(Vec::len)
+            .sum()
+    }
+}
+
+/// Decoded edges of one tile, for point-to-edge distance within a radius.
+struct EdgeIndex {
+    index: SegmentIndex,
+    radius: f64,
+}
+
+impl EdgeIndex {
+    fn new(faces: &[[Point; 3]], radius: f64) -> Self {
+        let f = |p: Point| p.map(|b| f64::from(f32::from_bits(b)));
+        let mut unique: Vec<(Point, Point)> = faces
+            .iter()
+            .filter(|t| !degenerate(t))
+            .flat_map(|t| (0..3).map(move |k| seg(t[k], t[(k + 1) % 3])))
+            .collect();
+        unique.sort_unstable();
+        unique.dedup();
+        let segments = unique.iter().map(|(a, b)| (f(*a), f(*b))).collect();
+        Self {
+            index: SegmentIndex::new(segments, radius),
+            radius,
+        }
+    }
+
+    /// Distance from `p` to the nearest edge, if one is within the radius.
+    fn distance(&self, p: [f64; 3]) -> Option<f64> {
+        let best = self
+            .index
+            .near(p)
+            .map(|k| {
+                let (a, b) = self.index.segments[k];
+                point_segment(p, a, b)
+            })
+            .fold(f64::INFINITY, f64::min);
+        (best <= self.radius).then_some(best)
+    }
+}
+
+fn point_segment(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
+    let d: [f64; 3] = std::array::from_fn(|i| b[i] - a[i]);
+    let l2: f64 = d.iter().map(|v| v * v).sum();
+    let t = if l2 > 0. {
+        ((0..3).map(|i| (p[i] - a[i]) * d[i]).sum::<f64>() / l2).clamp(0., 1.)
+    } else {
+        0.
+    };
+    (0..3)
+        .map(|i| (p[i] - a[i] - t * d[i]).powi(2))
+        .sum::<f64>()
+        .sqrt()
 }
 
 fn rows(path: &Path) -> Vec<Value> {
@@ -603,6 +748,153 @@ fn census(dir: &Path) -> Census {
             }
         }
     }
+    // Overlaps (T-junctions, collinear partial overlaps): an open-border point of leaf Y
+    // strictly inside an open-border segment of leaf X. A tile holding X but not Y keeps
+    // the segment; one holding Y but not X keeps the point.
+    let open = |faces: &[[Point; 3]]| -> Vec<(Point, Point)> {
+        let mut count: HashMap<(Point, Point), usize> = HashMap::new();
+        for f in faces.iter().filter(|f| !degenerate(f)) {
+            for k in 0..3 {
+                *count.entry(seg(f[k], f[(k + 1) % 3])).or_default() += 1;
+            }
+        }
+        count
+            .into_iter()
+            .filter(|(_, n)| *n != 2)
+            .map(|(e, _)| e)
+            .collect()
+    };
+    let f = |p: Point| p.map(|b| f64::from(f32::from_bits(b)));
+    let mut open_segments: Vec<(usize, Point, Point)> = Vec::new();
+    let mut open_points: Vec<(usize, Point)> = Vec::new();
+    for (i, leaf) in leaves.iter().enumerate() {
+        let edges = open(&leaf.faces);
+        let mut points: Vec<Point> = edges.iter().flat_map(|(a, b)| [*a, *b]).collect();
+        points.sort_unstable();
+        points.dedup();
+        open_points.extend(points.into_iter().map(|p| (i, p)));
+        open_segments.extend(edges.into_iter().map(|(a, b)| (i, a, b)));
+    }
+    let lengths: Vec<f64> = open_segments
+        .iter()
+        .map(|(_, a, b)| {
+            let (a, b) = (f(*a), f(*b));
+            (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>().sqrt()
+        })
+        .collect();
+    let grid = SegmentIndex::new(
+        open_segments
+            .iter()
+            .map(|(_, a, b)| (f(*a), f(*b)))
+            .collect(),
+        0.,
+    );
+    let mut overlap_items: Vec<(usize, usize, Point, Point)> = Vec::new();
+    // (host leaf, guest leaf, guest point, its perpendicular distance from the host segment)
+    let mut overlap_points: Vec<(usize, usize, [f64; 3], f64)> = Vec::new();
+    for (y, p) in &open_points {
+        let q = f(*p);
+        for k in grid.near(q) {
+            let (x, a, b) = open_segments[k];
+            if x == *y || *p == a || *p == b {
+                continue;
+            }
+            let (pa, pb) = (f(a), f(b));
+            let d: [f64; 3] = std::array::from_fn(|i| pb[i] - pa[i]);
+            let l2: f64 = d.iter().map(|v| v * v).sum();
+            let t = (0..3).map(|i| (q[i] - pa[i]) * d[i]).sum::<f64>() / l2;
+            let perp2: f64 = (0..3).map(|i| (q[i] - pa[i] - t * d[i]).powi(2)).sum();
+            if t > 0. && t < 1. && perp2 <= (1e-7 * lengths[k]).powi(2) {
+                c.overlaps += 1;
+                overlap_items.push((x, *y, a, b));
+                overlap_items.push((*y, x, *p, *p));
+                overlap_points.push((x, *y, q, perp2.sqrt()));
+            }
+        }
+    }
+    for t in tiles.iter() {
+        let inside = |l: usize| (t.begin..t.end).contains(&l);
+        let mut edges = HashSet::new();
+        let mut points = HashSet::new();
+        for face in &t.faces {
+            for k in 0..3 {
+                edges.insert(seg(face[k], face[(k + 1) % 3]));
+                points.insert(face[k]);
+            }
+        }
+        for (own, other, a, b) in &overlap_items {
+            if inside(*own) && !inside(*other) {
+                let kept = if a == b {
+                    points.contains(a)
+                } else {
+                    edges.contains(&(*a, *b))
+                };
+                c.missing_overlap_items += usize::from(!kept);
+            }
+        }
+        if !t.leaf {
+            // No decoded open-border vertex of a coarse tile may leave the decoded vertices
+            // of its own leaves: that is a perpendicular (or any) border displacement.
+            let leaf_points: HashSet<Point> = leaves[t.begin..t.end]
+                .iter()
+                .flat_map(|l| l.faces.iter().flatten().copied())
+                .collect();
+            let mut moved: Vec<Point> = open(&t.faces)
+                .into_iter()
+                .flat_map(|(a, b)| [a, b])
+                .filter(|p| !leaf_points.contains(p))
+                .collect();
+            moved.sort_unstable();
+            moved.dedup();
+            for p in &moved {
+                let q = f(*p);
+                let nearest = leaf_points
+                    .iter()
+                    .map(|l| {
+                        let l = f(*l);
+                        (0..3).map(|i| (l[i] - q[i]).powi(2)).sum::<f64>().sqrt()
+                    })
+                    .fold(f64::INFINITY, f64::min);
+                c.max_border_move_m = c.max_border_move_m.max(nearest);
+            }
+            c.moved_border_vertices += moved.len();
+        }
+    }
+    // Perpendicular displacement, the crack itself: every interface point between a tile's
+    // leaves and the rest (a decoded point shared across the interval, or a T-junction point
+    // on either side) must lie on the tile's decoded edges no farther than it lies from its
+    // own inside leaf's, at leaf resolution (zero for shared and own points; the leaves'
+    // own T-junction offset for a neighbour's point on a host segment). So any two disjoint
+    // tiles meet wherever their leaves do, measured across the border, not along it.
+    for t in tiles.iter() {
+        let inside = |l: usize| (t.begin..t.end).contains(&l);
+        let mut queries: Vec<([f64; 3], f64)> = point_leaves
+            .iter()
+            .filter(|(_, l)| l.iter().any(|x| inside(*x)) && l.iter().any(|x| !inside(*x)))
+            .map(|(p, _)| (f(*p), 0.))
+            .collect();
+        for (host, guest, q, perp) in &overlap_points {
+            match (inside(*host), inside(*guest)) {
+                (true, false) => queries.push((*q, *perp)),
+                (false, true) => queries.push((*q, 0.)),
+                _ => {}
+            }
+        }
+        if queries.is_empty() {
+            continue;
+        }
+        let index = EdgeIndex::new(&t.faces, PERPENDICULAR_RADIUS);
+        for (q, baseline) in queries {
+            c.perpendicular_checked += 1;
+            let excess = index
+                .distance(q)
+                .map_or(PERPENDICULAR_RADIUS, |d| (d - baseline).max(0.));
+            if excess > 1e-9 {
+                c.perpendicular_displaced += 1;
+                c.max_perpendicular_excess_m = c.max_perpendicular_excess_m.max(excess);
+            }
+        }
+    }
     // Every tile containing each leaf (its ancestors and itself).
     let mut chains: Vec<Vec<usize>> = vec![Vec::new(); leaves.len()];
     for (i, t) in tiles.iter().enumerate() {
@@ -610,6 +902,27 @@ fn census(dir: &Path) -> Census {
             chain.push(i);
         }
     }
+    // No two tiles on one root-to-leaf path carry the same content (a pass-through chain
+    // publishes its single child once): compared as decoded triangle sets.
+    let contents: Vec<Vec<[Point; 3]>> = tiles
+        .iter()
+        .map(|t| {
+            let mut faces = t.faces.clone();
+            faces.sort_unstable();
+            faces
+        })
+        .collect();
+    let mut duplicates = BTreeSet::new();
+    for chain in &chains {
+        for (i, &x) in chain.iter().enumerate() {
+            for &y in &chain[i + 1..] {
+                if contents[x] == contents[y] {
+                    duplicates.insert((x.min(y), x.max(y)));
+                }
+            }
+        }
+    }
+    c.duplicate_chain_tiles = duplicates.len();
     let mut adjacent: BTreeSet<(usize, usize)> = BTreeSet::new();
     for l in edge_leaves.values().chain(point_leaves.values()) {
         let l: Vec<usize> = l.iter().copied().collect();
@@ -749,6 +1062,11 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     assert_eq!(census.missing_segments, 0, "{name}: {census:?}");
     assert_eq!(census.missing_vertices, 0, "{name}: {census:?}");
     assert_eq!(census.invalid_features, 0, "{name}: {census:?}");
+    assert_eq!(census.missing_overlap_items, 0, "{name}: {census:?}");
+    assert_eq!(census.moved_border_vertices, 0, "{name}: {census:?}");
+    assert!(census.perpendicular_checked > 0, "{name}: {census:?}");
+    assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
+    assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
     assert!(
         census.mixed_pairs > 0 && census.same_depth_pairs > 0,
@@ -854,17 +1172,26 @@ fn sheet_is_crack_free_at_every_depth_mix_with_exact_leaves() {
 /// exactly the decoded line extent its own leaves cover (no gap opens along the line).
 #[test]
 fn t_junctions_keep_their_shared_vertices_and_segments() {
-    accept("t-junction", &t_junction(), Run::default());
+    let census = accept("t-junction", &t_junction(), Run::default());
+    assert!(census.overlaps > 0, "{census:?}");
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &t_junction());
     let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
     let tiles = load(&dir);
-    let line = 50f32.to_bits();
+    let line = T_LINE.to_bits();
+    let displaced = std::cell::Cell::new(0f32);
     let coverage = |faces: &[[Point; 3]]| -> Vec<(u32, u32)> {
         let mut spans: Vec<(f32, f32)> = Vec::new();
         for f in faces.iter().filter(|f| !degenerate(f)) {
             for k in 0..3 {
                 let (a, b) = (f[k], f[(k + 1) % 3]);
+                // Perpendicular displacement: any edge within 5 mm of the line counts, and
+                // must lie exactly on it.
+                let (xa, xb) = (f32::from_bits(a[0]), f32::from_bits(b[0]));
+                if (xa - T_LINE).abs() < 0.005 && (xb - T_LINE).abs() < 0.005 {
+                    let worst = (xa - T_LINE).abs().max((xb - T_LINE).abs());
+                    displaced.set(displaced.get().max(worst));
+                }
                 if a[0] == line && b[0] == line {
                     let (za, zb) = (f32::from_bits(a[2]), f32::from_bits(b[2]));
                     spans.push((za.min(zb), za.max(zb)));
@@ -893,9 +1220,9 @@ fn t_junctions_keep_their_shared_vertices_and_segments() {
                 (f32::from_bits(f[0][0]) + f32::from_bits(f[1][0]) + f32::from_bits(f[2][0])) / 3.
             })
             .collect();
-        if xs.iter().all(|x| *x < 50.) {
+        if xs.iter().all(|x| *x < T_LINE) {
             Some(false)
-        } else if xs.iter().all(|x| *x > 50.) {
+        } else if xs.iter().all(|x| *x > T_LINE) {
             Some(true)
         } else {
             None
@@ -922,6 +1249,347 @@ fn t_junctions_keep_their_shared_vertices_and_segments() {
         checked >= 4,
         "{checked} one-sided coarse tiles touch the T-junction line"
     );
+    assert_eq!(
+        displaced.get(),
+        0.,
+        "a decoded edge near the T-junction line left it"
+    );
+}
+
+/// The reviewer's encoder probe: steps 2^-7, 2^-8, 2^-9; a depth-1 coarse tile whose border
+/// runs along x = 50 + 2^-9 with locked endpoints and an unmatched midpoint. Snapped to the
+/// depth-1 lattice the midpoint would decode at x = 50 (a 2^-9 m gap); on the open border
+/// it must keep its leaf-canonical decode, and the pre-publication check verifies that.
+#[test]
+fn border_midpoint_keeps_its_canonical_decode_regression() {
+    use super::{encode, interfaces::InterfaceRow, store::*};
+    let bounds = Bounds {
+        min: [-100.; 3],
+        max: [100.; 3],
+    };
+    let lattice = LatticePlan::new(Profile::Balanced, bounds, &[255., 127., 63.]).unwrap();
+    assert_eq!(lattice.steps(), &[0.0078125, 0.00390625, 0.001953125]);
+    let x = T_LINE;
+    let (a, b, m, c) = ([x, 0., 0.], [x, 0., 10.], [x, 0., 5.], [55., 0., 5.]);
+    // Without the border rule the coarse lattice moves the midpoint off the line.
+    let snapped = lattice
+        .encode_coarse(&[a, b, m, c], &[2; 4], &[true, true, false, false], 1)
+        .unwrap();
+    assert_eq!(snapped.decoded[2][0], 50., "probe must be sensitive");
+    let key = super::interfaces::key;
+    let row = |p: [f32; 3]| InterfaceRow {
+        leaf: 0,
+        a: key(p),
+        b: key(p),
+        lo: 0,
+        hi: 1,
+    };
+    let tile = TileGeometry {
+        key: TileKey {
+            first: 0,
+            end: 2,
+            depth: 1,
+            leaf_begin: 0,
+            leaf_end: 1,
+        },
+        ells: vec![2; 4],
+        positions: vec![a, b, m, c],
+        triangles: vec![[0, 2, 3], [2, 1, 3]],
+        representative: vec![0, 0],
+        primitives: vec![SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: 0,
+            expanded_ordinal: 0,
+            material: u32::MAX,
+        }],
+        interface: vec![row(a), row(b)],
+        geometric_error: 0.,
+        lease: None,
+    };
+    let locked = [true, true, false, false];
+    let encoded = encode::encode(
+        &tile,
+        &locked,
+        lattice
+            .encode_coarse(
+                &tile.positions,
+                &tile.ells,
+                &encode::open_border(&tile.triangles, tile.positions.len()),
+                tile.key.depth,
+            )
+            .unwrap(),
+        &[],
+        &crate::mesh_large::batching::MaterialClasses::EMPTY,
+        Mutation::None,
+    )
+    .unwrap();
+    encode::check(&tile, &locked, &encoded).unwrap();
+    let decoded = decode(&encoded.glb);
+    let mut seen = 0;
+    for face in &decoded.faces {
+        for p in face {
+            if p[2] == 5. && p[0] != 55. {
+                assert_eq!(p[0], x, "border midpoint decoded off the line");
+                seen += 1;
+            }
+        }
+    }
+    assert_eq!(seen, 2);
+}
+
+/// A small sheet in one corner of a large frame: every cell above it holds one occupied
+/// child, a pass-through chain. Each such cell publishes no content (the child stands for
+/// it), so no two tiles on a root-to-leaf path are the same, the census stays crack-free,
+/// and the public archive delivers the sparse coarse rows as content-less tiles.
+#[test]
+fn single_child_chains_publish_their_content_once() {
+    let source = vec![
+        grid(
+            (24, 24),
+            (0., 3.),
+            (0., 3.),
+            &|x, z| 0.05 * (x * z).sin(),
+            [0.6, 0.5, 0.4, 1.],
+        ),
+        Mesh {
+            positions: vec![[4000., 0., 4000.], [4001., 0., 4000.], [4000., 0., 4001.]],
+            indices: vec![0, 2, 1],
+            color: [0.5, 0.5, 0.5, 1.],
+        },
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let census = census(&dir);
+    assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let passed = manifest["hlod"]["passThrough"].as_u64().unwrap();
+    assert!(passed >= 3, "{}", manifest["hlod"]);
+    assert!(census.coarse >= 1, "{census:?}");
+    let proxies = rows(&dir.join("proxies.jsonl"));
+    assert!(proxies.iter().any(|r| r["encodedDepth"] != r["depth"]));
+    let mut samples = [0u64; 32];
+    for row in &proxies {
+        let depth = row["encodedDepth"].as_u64().unwrap() as usize;
+        let measurement = &row["measurement"];
+        samples[depth] += measurement["areaSamplesPerDirection"].as_u64().unwrap();
+        let key = super::store::TileKey {
+            first: row["first"].as_u64().unwrap(),
+            end: row["end"].as_u64().unwrap(),
+            depth: depth as u32,
+            leaf_begin: 0,
+            leaf_end: 0,
+        };
+        assert_eq!(
+            measurement["seed"].as_u64().unwrap(),
+            super::error::seed(key)
+        );
+    }
+    for (depth, n) in samples.iter().enumerate().filter(|(_, n)| **n > 0) {
+        assert!(*n >= super::error::MIN_DEPTH);
+        let summary = &manifest["hlod"]["errorMeasurement"]["byDepth"][depth];
+        assert_eq!(summary["sourceAreaSamples"].as_u64(), Some(*n));
+    }
+    let result = public(&input, &work.path().join("chain.3tz"), None, 2).unwrap();
+    assert!(result.diagnostics.hlod.unwrap().tiles >= 1);
+}
+
+/// The adversarial interface inputs (sub-lattice micro geometry meeting long frame edges, a
+/// duplicated triangle soup with every point and segment shared) run within a small
+/// declared budget: the walk's leases stay within its ledger, and the overlap join stays
+/// within its declared probes.
+#[test]
+fn adversarial_interfaces_stay_within_a_small_budget() {
+    let mut soup = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.7, 0.7, 0.7, 1.],
+    };
+    for i in 0..40u32 {
+        for j in 0..40u32 {
+            let (x, z) = (i as f32 * 1.5, j as f32 * 1.5);
+            let base = soup.positions.len() as u32;
+            soup.positions
+                .extend([[x, 0., z], [x + 1., 0., z], [x, 0., z + 1.]]);
+            soup.indices.extend([base, base + 1, base + 2]);
+        }
+    }
+    let cases = [
+        ("cluster", cluster(), 512),
+        ("soup", vec![soup.clone(), soup], 256),
+    ];
+    for (name, source, leaf_triangles) in cases {
+        let work = tempfile::tempdir().unwrap();
+        let input = write_gltf(&work.path().join("src"), &source);
+        let dir = stage(
+            &input,
+            &work.path().join("hlod"),
+            &Run {
+                leaf_triangles,
+                cap: super::TRIANGLE_CAP,
+                budget: Some(1 << 30),
+                ..Run::default()
+            },
+        )
+        .unwrap_or_else(|f| panic!("{name}: {}", f.error));
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let d = &resources["hlod"]["diagnostics"];
+        let (peak, ledger) = (
+            d["lease_peak_bytes"].as_u64().unwrap(),
+            d["ledger_bytes"].as_u64().unwrap(),
+        );
+        assert!(peak <= ledger, "{name}: {d}");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let inc = &manifest["hlod"]["incidence"];
+        let probes = inc["probes"].as_u64().unwrap();
+        let bound =
+            27 * inc["openSegments"].as_u64().unwrap() + 31 * inc["openPoints"].as_u64().unwrap();
+        assert!(probes <= bound, "{name}: {inc}");
+        let census = census(&dir);
+        assert_eq!(
+            census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+            0,
+            "{name}: {census:?}"
+        );
+    }
+}
+
+/// The census's segment index holds at most eight entries per segment whatever the length
+/// mix (a uniform grid sized to short segments explodes on long ones).
+#[test]
+fn segment_index_is_bounded_for_mixed_lengths() {
+    let mut segments = Vec::new();
+    for i in 0..2000 {
+        let x = i as f64 * 5e-7;
+        segments.push(([x, 0., 0.], [x + 5e-7, 0., 0.]));
+    }
+    segments.push(([-500., -1., -500.], [500., 2., 500.]));
+    let n = segments.len();
+    let index = SegmentIndex::new(segments, 0.);
+    assert!(index.entries() <= 8 * n, "{}", index.entries());
+    assert!(index.near([1e-4, 0., 0.]).count() >= 1);
+}
+
+/// The adversarial held tile: 8,192 disconnected triangles whose every point and segment
+/// is shared (a duplicate in another leaf), each with its own source primitive. Its actual
+/// footprint at exact capacity stays within the proven bound the walk admits.
+#[test]
+fn adversarial_held_tile_fits_its_admitted_charge() {
+    use super::{interfaces::InterfaceRow, store::*};
+    let n = 8192usize;
+    let mut tile = TileGeometry {
+        key: TileKey {
+            first: 0,
+            end: n as u64,
+            depth: 3,
+            leaf_begin: 0,
+            leaf_end: 1,
+        },
+        ells: Vec::with_capacity(3 * n),
+        positions: Vec::with_capacity(3 * n),
+        triangles: Vec::with_capacity(n),
+        representative: Vec::with_capacity(n),
+        primitives: Vec::with_capacity(n),
+        interface: Vec::with_capacity(6 * n),
+        geometric_error: 0.,
+        lease: None,
+    };
+    for t in 0..n {
+        let base = tile.positions.len() as u32;
+        let corners = [0f32, 1., 2.].map(|k| [t as f32, k, 0.]);
+        tile.positions.extend(corners);
+        tile.ells.extend([3; 3]);
+        tile.triangles.push([base, base + 1, base + 2]);
+        tile.representative.push(t as u32);
+        tile.primitives.push(SourcePrimitive {
+            node: 0,
+            mesh: 0,
+            primitive: t as u32,
+            expanded_ordinal: t as u64,
+            material: 0,
+        });
+        let k = corners.map(super::interfaces::key);
+        for i in 0..3 {
+            let (p, q) = (k[i], k[(i + 1) % 3]);
+            for (a, b) in [(p, p), (p.min(q), p.max(q))] {
+                tile.interface.push(InterfaceRow {
+                    leaf: 0,
+                    a,
+                    b,
+                    lo: 0,
+                    hi: 1,
+                });
+            }
+        }
+    }
+    let bytes = tile.bytes();
+    assert!(bytes >= 2_220_032, "{bytes}");
+    assert!(
+        bytes <= TileGeometry::charge(n as u64),
+        "{bytes} > {}",
+        TileGeometry::charge(n as u64)
+    );
+    tile.check_charge().unwrap();
+}
+
+/// A duplicated triangle soup: every point and segment shared across leaves, the worst
+/// case for held interface rows, runs within its admitted charges and stays crack-free.
+#[test]
+fn duplicated_soup_is_admitted_and_crack_free() {
+    let mut soup = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.7, 0.7, 0.7, 1.],
+    };
+    for i in 0..60u32 {
+        for j in 0..60u32 {
+            let (x, z) = (i as f32 * 1.5, j as f32 * 1.5);
+            let base = soup.positions.len() as u32;
+            let y = bump(x, z);
+            soup.positions
+                .extend([[x, y, z], [x + 1., y, z], [x, y, z + 1.]]);
+            soup.indices.extend([base, base + 1, base + 2]);
+        }
+    }
+    let source = [soup.clone(), soup];
+    // Every coarse tile is the union of its children here (cap above the input), so the
+    // held charges of the leaves (every point and segment held twice) are what is exercised.
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(
+        &input,
+        &work.path().join("union"),
+        &Run {
+            cap: 8192,
+            ..Run::default()
+        },
+    )
+    .unwrap();
+    let census = census(&dir);
+    assert!(census.coarse >= 3, "{census:?}");
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.moved_border_vertices,
+        0,
+        "{census:?}"
+    );
+    // Plain simplification cannot reduce disconnected single-triangle components (no
+    // pruning, D3): below the cap that topology is refused, never published over the cap.
+    let failure = stage(&input, &work.path().join("capped"), &Run::default()).unwrap_err();
+    assert_eq!(
+        failure.error.kind(),
+        JobErrorKind::Unsupported,
+        "{}",
+        failure.error
+    );
 }
 
 #[test]
@@ -940,8 +1608,11 @@ fn packed_leaves_and_synthetic_depths_are_crack_free() {
     let census = accept(
         "cluster",
         &cluster(),
+        // Its sub-lattice micro geometry decodes onto many exactly collinear lattice
+        // points, all kept by the overlap rule: it runs at the production cap.
         Run {
             leaf_triangles: 512,
+            cap: super::TRIANGLE_CAP,
             ..Run::default()
         },
     );
@@ -1007,7 +1678,9 @@ fn moved_or_dropped_segments_fail() {
     .unwrap();
     let census = census(&dir);
     assert!(
-        census.missing_segments > 0 && census.missing_vertices > 0,
+        census.missing_segments > 0
+            && census.missing_vertices > 0
+            && census.perpendicular_displaced > 0,
         "{census:?}"
     );
     let failure = stage(
@@ -1268,6 +1941,12 @@ fn evidence_census() {
         "missingSegments": census.missing_segments, "missingPoints": census.missing_vertices,
         "mixedPairs": census.mixed_pairs, "sameDepthPairs": census.same_depth_pairs,
         "maxCoarseTriangles": census.max_coarse_triangles, "invalidFeatures": census.invalid_features,
+        "overlaps": census.overlaps, "missingOverlapItems": census.missing_overlap_items,
+        "movedBorderVertices": census.moved_border_vertices, "maxBorderMoveM": census.max_border_move_m,
+        "perpendicularChecked": census.perpendicular_checked,
+        "perpendicularDisplaced": census.perpendicular_displaced,
+        "maxPerpendicularExcessM": census.max_perpendicular_excess_m,
+        "duplicateChainTiles": census.duplicate_chain_tiles,
         "hlod": manifest["hlod"], "resources": resources["hlod"], "members": members,
     });
     fs::write(
@@ -1276,7 +1955,15 @@ fn evidence_census() {
     )
     .unwrap();
     eprintln!("{census:?}");
-    assert_eq!(census.missing_segments + census.missing_vertices, 0);
+    assert_eq!(
+        census.missing_segments
+            + census.missing_vertices
+            + census.missing_overlap_items
+            + census.moved_border_vertices
+            + census.perpendicular_displaced
+            + census.duplicate_chain_tiles,
+        0
+    );
     assert!(census.max_coarse_triangles <= super::TRIANGLE_CAP);
 }
 
@@ -1383,7 +2070,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     )
     .unwrap();
     let original = rows(&dir.join("proxies.jsonl"));
-    for mutation in 0..6 {
+    for mutation in 0..9 {
         let mut damaged = original.clone();
         let row = damaged.last_mut().unwrap();
         match mutation {
@@ -1395,10 +2082,15 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
                 row.as_object_mut().unwrap().remove("errorPolicy");
                 row.as_object_mut().unwrap().remove("measurement");
             }
+            6 => {
+                row.as_object_mut().unwrap().remove("encodedDepth");
+            }
+            7 => row["encodedDepth"] = json!(31),
+            8 => row["encodedDepth"] = json!(row["encodedDepth"].as_u64().unwrap() + 1),
             _ => {
                 for row in damaged
                     .iter_mut()
-                    .filter(|r| r["depth"].as_u64().unwrap() > 0)
+                    .filter(|r| r["encodedDepth"].as_u64().unwrap() > 0)
                 {
                     let m = &mut row["measurement"];
                     m["areaSamplesPerDirection"] = json!(2048);

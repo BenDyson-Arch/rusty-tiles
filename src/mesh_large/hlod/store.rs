@@ -70,30 +70,75 @@ pub(crate) struct TileGeometry {
     pub geometric_error: f64,
     /// Admission of this resident record against the stage ledger.
     pub lease: Option<Lease>,
-    pub measurement: Option<CachedMeasurement>,
 }
 
-/// Fixed-size held evidence for exact publication/source-range reuse.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct CachedMeasurement {
-    pub sha256: [u8; 32],
-    pub summary: super::error::Summary,
-}
-
-/// Resident bytes charged per triangle of a held tile: vertices (≤ 3 per triangle at 21
-/// bytes), triangles, representatives, primitive rows (≤ 1 per triangle at 32 bytes) and
-/// interface rows (≤ 6 per triangle at 20 bytes), with allocation slack.
-pub(crate) const HELD_BYTES_PER_TRIANGLE: u64 = 256;
+/// Proven resident bound per triangle of a held tile (capacities equal lengths after
+/// `shrink_to_fit`): at most three vertices per triangle (`u8` depth and `[f32; 3]`
+/// position each), the triangle (`[u32; 3]`), its representative (`u32`), at most one
+/// `SourcePrimitive` row per triangle, and at most one merged interface row per distinct
+/// point and segment it holds (three each per triangle). Rows are merged per item, and a
+/// required item is a point or segment of the tile's own triangles.
+pub(crate) const HELD_BYTES_PER_TRIANGLE: u64 = 3 * (1 + 12)
+    + 12
+    + 4
+    + std::mem::size_of::<SourcePrimitive>() as u64
+    + 6 * std::mem::size_of::<InterfaceRow>() as u64;
+/// Fixed part of a held tile: the record and its vector headers.
+const HELD_FIXED_BYTES: u64 = std::mem::size_of::<TileGeometry>() as u64;
 
 impl TileGeometry {
-    /// The admitted charge for a held tile of `triangles` triangles.
+    /// The proven bound on a held tile of `triangles` triangles.
     pub(crate) fn charge(triangles: u64) -> u64 {
         triangles
-            .max(1)
             .saturating_mul(HELD_BYTES_PER_TRIANGLE)
-            .saturating_add(1024)
+            .saturating_add(HELD_FIXED_BYTES)
+    }
+
+    /// The tile's actual footprint: every vector's capacity times its element size.
+    pub(crate) fn bytes(&self) -> u64 {
+        fn heap<T>(v: &Vec<T>) -> u64 {
+            (v.capacity() * std::mem::size_of::<T>()) as u64
+        }
+        HELD_FIXED_BYTES
+            + heap(&self.ells)
+            + heap(&self.positions)
+            + heap(&self.triangles)
+            + heap(&self.representative)
+            + heap(&self.primitives)
+            + heap(&self.interface)
+    }
+
+    /// Refuse a footprint above the admitted bound (the bound is a claim, not a hope).
+    pub(crate) fn check_charge(&self) -> Result<u64, crate::JobError> {
+        let bytes = self.bytes();
+        let bound = Self::charge(self.triangles.len() as u64);
+        if bytes > bound {
+            return Err(crate::JobError::new(
+                crate::JobErrorKind::InvalidState,
+                format!(
+                    "held tile f{}-d{} occupies {bytes} bytes, above its admitted {bound}",
+                    self.key.first, self.key.depth
+                ),
+            ));
+        }
+        Ok(bytes)
     }
 }
+
+/// Admission per source triangle of reading one leaf (`read_leaf`, which sizes every vector
+/// for its worst case up front so none regrows). Its phases, per triangle:
+/// - weld: the vertex and triangle vectors (51 bytes), the representative rows and the weld
+///   index (`3n` entries of 16 bytes and a control byte in at most `48n/7` buckets, < 117);
+/// - representatives: rows, their sorted copy and the indices (index released);
+/// - rows: the held layout with the interface reserved at six items (the held bound);
+/// - open edges: the held bound plus the point map (≤ 3 entries of 20 bytes and a control
+///   byte in ≤ 48/7 buckets each, < 144) and the edge list (3 × 24 bytes);
+/// - shrinking the interface: the held bound plus its old reservation (216 bytes).
+///
+/// The open-edge phase is the peak: the held bound plus 216 bytes.
+pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 = HELD_BYTES_PER_TRIANGLE + 216;
+/// Fixed part of reading one leaf: the record and small-table minimums of its hash maps.
+pub(crate) const LEAF_READ_FIXED_BYTES: u64 = HELD_FIXED_BYTES + 4096;
 
 /// The handoff of one coarse tile to the error (S2) and appearance (S3) stages: its final
 /// decoded geometry (positions exactly as published; S3 charts must leave them fixed),
@@ -139,7 +184,10 @@ pub(crate) struct HlodRow {
     pub bytes: u64,
     pub first: u64,
     pub end: u64,
+    /// The published cell: its own, or the top of the single-child chain above it.
     pub depth: u32,
+    /// The cell it was built and encoded for (its lattice depth).
+    pub encoded_depth: u32,
     pub leaf_begin: u32,
     pub leaf_end: u32,
     pub geometric_error: f64,

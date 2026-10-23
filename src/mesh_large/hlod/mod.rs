@@ -82,7 +82,7 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// Charged workspace per merged input triangle of one parent job: merged and compacted
 /// index/vertex copies, meshopt's internal tables, edge sets, representatives and the
 /// encode/decode check.
-const JOB_BYTES_PER_TRIANGLE: u64 = 640;
+const JOB_BYTES_PER_TRIANGLE: u64 = 1280;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
@@ -143,7 +143,15 @@ pub(crate) fn plan(
     let leaf_cap = config.leaf_triangles();
     let held = TileGeometry::charge(leaf_cap.max(cap as u64));
     let height = u64::from(captured.tree.stats.height);
-    let window = held.saturating_mul(8).saturating_mul(height + 1);
+    // Held children of the open path, plus the read transient of the one leaf being read
+    // (its lease shrinks to the held footprint once read).
+    let read = leaf_cap
+        .saturating_mul(store::LEAF_READ_BYTES_PER_TRIANGLE)
+        .saturating_add(store::LEAF_READ_FIXED_BYTES);
+    let window = held
+        .saturating_mul(8)
+        .saturating_mul(height + 1)
+        .saturating_add(read.saturating_sub(held));
     let merged = leaf_cap.max(cap as u64).saturating_mul(8);
     let job = merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
@@ -234,6 +242,9 @@ pub(crate) struct HlodReport {
     pub quantized_tiles: u64,
     pub float_tiles: u64,
     pub bytes: u64,
+    /// Internal cells with a single child that fits the cap: the parent would be that
+    /// child again, so the cell publishes no content and the child stands for it.
+    pub pass_through: u64,
     pub max_error_by_depth: Vec<f64>,
     pub incidence: IncidenceStats,
     pub error_measurement: error::ErrorReport,
@@ -277,6 +288,51 @@ struct Closed {
     seq: u64,
     key: TileKey,
     children: Vec<u64>,
+    /// The cell's only child is a leaf (which cannot stand for it): the parent is reduced
+    /// to half its input, so it is a genuinely coarser level, not a copy of the leaf.
+    single_leaf: bool,
+}
+
+/// What an unconsumed child of the walk is.
+#[derive(Clone, Copy)]
+enum Child {
+    /// A leaf (it always publishes at its own cell).
+    Leaf,
+    /// A coarse tile and its row's sequence number.
+    Coarse(u64),
+}
+
+/// A coarse row's published depth: its own cell's, or the top of the pass-through chain
+/// above it (final once its parent cell has a second child or the walk ends).
+#[derive(Clone, Copy)]
+struct Publish {
+    depth: u32,
+    done: bool,
+}
+
+/// Push the completed child `id` into `frame`. A cell that has begun a second child is no
+/// pass-through, so its coarse children's published depths are final (known as soon as the
+/// second child starts, so no row waits on a sibling's subtree).
+fn adopt(
+    frame: &mut Frame,
+    id: u64,
+    kinds: &HashMap<u64, Child>,
+    publish: &mut HashMap<u64, Publish>,
+) {
+    frame.children.push(id);
+    settle(frame, kinds, publish);
+}
+
+fn settle(frame: &Frame, kinds: &HashMap<u64, Child>, publish: &mut HashMap<u64, Publish>) {
+    if frame.started >= 2 {
+        for c in &frame.children {
+            if let Some(Child::Coarse(seq)) = kinds.get(c) {
+                if let Some(p) = publish.get_mut(seq) {
+                    p.done = true;
+                }
+            }
+        }
+    }
 }
 
 struct Frame {
@@ -284,6 +340,8 @@ struct Frame {
     node: NodeRecord,
     leaf_begin: u32,
     children: Vec<u64>,
+    /// Direct children begun (in preorder), complete or not.
+    started: usize,
 }
 
 type Done = Result<(TileGeometry, HlodRow), JobError>;
@@ -331,6 +389,7 @@ pub(crate) fn produce(
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
+        super::records::Cube::around(&captured.scan.bounds),
         check,
     )?;
     report.incidence = stats;
@@ -429,6 +488,8 @@ fn read_leaf(
         rows,
     } = streams;
     let count = usize::try_from(node.triangles()).map_err(|_| resource("leaf count overflow"))?;
+    // Every vector is sized for its proven worst case up front, so nothing regrows; see
+    // `store::LEAF_READ_BYTES_PER_TRIANGLE` for the resulting peak.
     let mut tile = TileGeometry {
         key: TileKey {
             first: node.first,
@@ -437,72 +498,91 @@ fn read_leaf(
             leaf_begin: leaf,
             leaf_end: leaf + 1,
         },
-        ells: Vec::new(),
-        positions: Vec::new(),
+        ells: Vec::with_capacity(3 * count),
+        positions: Vec::with_capacity(3 * count),
         triangles: Vec::with_capacity(count),
-        representative: Vec::with_capacity(count),
+        representative: Vec::new(),
         primitives: Vec::new(),
         interface: Vec::new(),
         geometric_error: error,
         lease: None,
-        measurement: None,
     };
-    let mut index: HashMap<interfaces::Key, u32> = HashMap::with_capacity(count * 2);
     let mut reps = Vec::with_capacity(count);
-    for i in 0..count {
-        if i.is_multiple_of(4096) {
-            check()?;
-        }
-        let t = triangles
-            .next()
-            .transpose()?
-            .ok_or_else(|| state("truncated leaf triangles"))?;
-        let ell = depths
-            .next()
-            .transpose()?
-            .ok_or_else(|| state("truncated leaf corner depths"))?
-            .depths;
-        // Welded by canonical decoded position. Corners that coincide carry no surface;
-        // such triangles are kept only for a parent whose descendants have no surface.
-        let mut corners = [[0f32; 3]; 3];
-        for k in 0..3 {
-            corners[k] = captured
-                .lattice
-                .canonical(t.triangle.positions[k], ell[k])?;
-        }
-        let mut local = [0u32; 3];
-        for k in 0..3 {
-            let next = tile.positions.len() as u32;
-            let id = *index.entry(interfaces::key(corners[k])).or_insert(next);
-            if id == next {
-                tile.ells.push(ell[k]);
-                tile.positions.push(corners[k]);
-            } else {
-                let e = &mut tile.ells[id as usize];
-                *e = (*e).max(ell[k]);
+    {
+        let mut index: HashMap<interfaces::Key, u32> = HashMap::with_capacity(3 * count);
+        for i in 0..count {
+            if i.is_multiple_of(4096) {
+                check()?;
             }
-            local[k] = id;
+            let t = triangles
+                .next()
+                .transpose()?
+                .ok_or_else(|| state("truncated leaf triangles"))?;
+            let ell = depths
+                .next()
+                .transpose()?
+                .ok_or_else(|| state("truncated leaf corner depths"))?
+                .depths;
+            // Welded by canonical decoded position. Corners that coincide carry no surface;
+            // such triangles are kept only for a parent whose descendants have no surface.
+            let mut corners = [[0f32; 3]; 3];
+            for k in 0..3 {
+                corners[k] = captured
+                    .lattice
+                    .canonical(t.triangle.positions[k], ell[k])?;
+            }
+            let mut local = [0u32; 3];
+            for k in 0..3 {
+                let next = tile.positions.len() as u32;
+                let id = *index.entry(interfaces::key(corners[k])).or_insert(next);
+                if id == next {
+                    tile.ells.push(ell[k]);
+                    tile.positions.push(corners[k]);
+                } else {
+                    let e = &mut tile.ells[id as usize];
+                    *e = (*e).max(ell[k]);
+                }
+                local[k] = id;
+            }
+            tile.triangles.push(local);
+            let s = t.triangle.source;
+            reps.push(SourcePrimitive {
+                node: s.node,
+                mesh: s.mesh,
+                primitive: s.primitive,
+                expanded_ordinal: t.expanded_ordinal,
+                material: t.material,
+            });
         }
-        tile.triangles.push(local);
-        let s = t.triangle.source;
-        reps.push(SourcePrimitive {
-            node: s.node,
-            mesh: s.mesh,
-            primitive: s.primitive,
-            expanded_ordinal: t.expanded_ordinal,
-            material: t.material,
-        });
     }
+    tile.ells.shrink_to_fit();
+    tile.positions.shrink_to_fit();
     let mut table = reps.clone();
     table.sort_unstable();
     table.dedup();
+    table.shrink_to_fit();
     tile.representative = reps
         .iter()
         .map(|r| table.binary_search(r).unwrap() as u32)
         .collect();
+    drop(reps);
     tile.primitives = table;
+    // Rows arrive sorted by (leaf, item, interval): merge each item as it streams. Every
+    // item is a point or segment of the leaf's own surface (at most six per triangle).
+    let items = 6 * count;
+    tile.interface.reserve_exact(items);
     while let Some(row) = rows.next_if(|r| matches!(r, Ok(r) if r.leaf == leaf)) {
-        tile.interface.push(row?);
+        let row = row?;
+        if let Some(last) = tile.interface.last_mut().filter(|l| l.item() == row.item()) {
+            last.lo = last.lo.min(row.lo);
+            last.hi = last.hi.max(row.hi);
+        } else if tile.interface.len() == items {
+            return Err(state(
+                "more interface items than the leaf has points and segments",
+            ));
+        } else {
+            tile.interface.push(row);
+        }
     }
     if let Some(Err(_)) = rows.peek() {
         return Err(rows.next().unwrap().unwrap_err().into());
@@ -512,7 +592,85 @@ fn read_leaf(
             return Err(state("interface rows out of leaf order"));
         }
     }
+    keep_open_edges(&mut tile, leaf, items)?;
+    shrink(&mut tile);
     Ok(tile)
+}
+
+/// An open edge of the leaf between two kept points is kept too (a T-junction side's
+/// subdivided border, a hole chord ending on interfaces): conservative, never a crack. Such
+/// an edge is outer only where both its endpoints are, so it takes the narrower interval
+/// (an existing row for the same segment widens to the union). The rows stay merged and
+/// sorted by item within the `items` reserved.
+fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(), JobError> {
+    let vertices = tile.interface.iter().filter(|r| r.is_vertex()).count();
+    if vertices == 0 {
+        return Ok(());
+    }
+    let mut points: HashMap<interfaces::Key, (u32, u32)> = HashMap::with_capacity(vertices);
+    points.extend(
+        tile.interface
+            .iter()
+            .filter(|r| r.is_vertex())
+            .map(|r| (r.a, (r.lo, r.hi))),
+    );
+    let key = |v: u32| interfaces::key(tile.positions[v as usize]);
+    let mut edges: Vec<(interfaces::Key, interfaces::Key)> =
+        Vec::with_capacity(3 * tile.triangles.len());
+    for t in tile
+        .triangles
+        .iter()
+        .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+    {
+        for k in 0..3 {
+            let (a, b) = (key(t[k]), key(t[(k + 1) % 3]));
+            edges.push((a.min(b), a.max(b)));
+        }
+    }
+    edges.sort_unstable();
+    let merged = tile.interface.len();
+    let mut i = 0;
+    while i < edges.len() {
+        let mut j = i + 1;
+        while j < edges.len() && edges[j] == edges[i] {
+            j += 1;
+        }
+        let (a, b) = edges[i];
+        let faces = j - i;
+        i = j;
+        let (Some(pa), Some(pb)) = (points.get(&a), points.get(&b)) else {
+            continue;
+        };
+        if faces == 2 {
+            continue;
+        }
+        let (lo, hi) = (pa.0.max(pb.0), pa.1.min(pb.1));
+        match tile.interface[..merged].binary_search_by_key(&(a, b), InterfaceRow::item) {
+            Ok(at) => {
+                let row = &mut tile.interface[at];
+                row.lo = row.lo.min(lo);
+                row.hi = row.hi.max(hi);
+            }
+            Err(_) if tile.interface.len() == items => {
+                return Err(state(
+                    "more interface items than the leaf has points and segments",
+                ));
+            }
+            Err(_) => tile.interface.push(InterfaceRow { leaf, a, b, lo, hi }),
+        }
+    }
+    tile.interface.sort_unstable_by_key(InterfaceRow::item);
+    Ok(())
+}
+
+/// Release spare capacity so the held charge is the tile's true footprint.
+fn shrink(tile: &mut TileGeometry) {
+    tile.ells.shrink_to_fit();
+    tile.positions.shrink_to_fit();
+    tile.triangles.shrink_to_fit();
+    tile.representative.shrink_to_fit();
+    tile.primitives.shrink_to_fit();
+    tile.interface.shrink_to_fit();
 }
 
 /// One parent: geometry, encoding, the pre-publication check, error and its member.
@@ -528,11 +686,18 @@ fn build_tile(
     let captured = input.captured;
     let settings = input.settings;
     let stage = input.stage;
-    let reusable = children
-        .iter()
-        .find(|c| c.key.first == closed.key.first && c.key.end == closed.key.end)
-        .and_then(|c| c.measurement.map(|m| (c.key.depth, m)));
-    let mut built = geometry::build_parent(closed.key, &children, settings.cap)?;
+    let mut built = if closed.single_leaf {
+        let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
+        match geometry::build_parent(closed.key, &children, half) {
+            // Its interface cannot be halved: the copy within the cap.
+            Err(e) if e.kind() == JobErrorKind::Unsupported => {
+                geometry::build_parent(closed.key, &children, settings.cap)?
+            }
+            built => built?,
+        }
+    } else {
+        geometry::build_parent(closed.key, &children, settings.cap)?
+    };
     drop(children);
     if settings.mutation == Mutation::DropSegment {
         let tile = &mut built.geometry;
@@ -550,10 +715,19 @@ fn build_tile(
     let mut query = source.query(captured, built.geometry.key)?;
     // Identity is chosen on the final decoded centroid, in the descendant SOURCE range.
     // Charting/encoding must preserve these positions and source rows in S3.
+    // Keep S1's open-border vertices at their leaf-canonical decode. Prepare once:
+    // both representatives and measurement consume this same final publication.
+    let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
+    let fixed: Vec<bool> = built
+        .locked
+        .iter()
+        .zip(&border)
+        .map(|(l, b)| *l || *b)
+        .collect();
     let positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
         &built.geometry.ells,
-        &built.locked,
+        &fixed,
         built.geometry.key.depth,
     )?;
     let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
@@ -599,32 +773,25 @@ fn build_tile(
     let sha256: [u8; 32] = Sha256::digest(&encoded.glb).into();
     let count = sampling.count(tile.key)?;
     let cpu_start = error::thread_cpu();
-    let (error, measurement, mut error_cpu) = if let Some((depth, cached)) = reusable
-        .filter(|(_, c)| c.sha256 == sha256 && c.summary.area_samples_per_direction >= count)
-    {
-        let (g, summary) = error::reuse(cached.summary, depth, built.children_error)?;
-        (g, summary, error::CpuReport::default())
-    } else {
-        error::measure(
-            &CoarseTile {
-                key: tile.key,
-                decoded: &published,
-                triangles: &tile.triangles,
-                locked: &built.locked,
-                representative: &tile.representative,
-                primitives: &tile.primitives,
-                bounds: encoded.bounds,
-                children_error: built.children_error,
-                simplifier_error: built.simplifier_error,
-                encode_displacement: encoded.displacement,
-                stopping: built.stopping,
-            },
-            &mut query,
-            count,
-            &centroid_checks,
-            check,
-        )?
-    };
+    let (error, measurement, mut error_cpu) = error::measure(
+        &CoarseTile {
+            key: tile.key,
+            decoded: &published,
+            triangles: &tile.triangles,
+            locked: &built.locked,
+            representative: &tile.representative,
+            primitives: &tile.primitives,
+            bounds: encoded.bounds,
+            children_error: built.children_error,
+            simplifier_error: built.simplifier_error,
+            encode_displacement: encoded.displacement,
+            stopping: built.stopping,
+        },
+        &mut query,
+        count,
+        &centroid_checks,
+        check,
+    )?;
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
@@ -643,14 +810,12 @@ fn build_tile(
     let row = HlodRow {
         schema_version: 1,
         uri,
-        sha256: Sha256::digest(&encoded.glb)
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect(),
+        sha256: sha256.iter().map(|b| format!("{b:02x}")).collect(),
         bytes: encoded.glb.len() as u64,
         first: tile.key.first,
         end: tile.key.end,
         depth: tile.key.depth,
+        encoded_depth: tile.key.depth,
         leaf_begin: tile.key.leaf_begin,
         leaf_end: tile.key.leaf_end,
         geometric_error: error.geometric_error,
@@ -675,10 +840,7 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
-    geometry.measurement = Some(store::CachedMeasurement {
-        sha256,
-        summary: measurement,
-    });
+    shrink(&mut geometry);
     Ok((geometry, row))
 }
 
@@ -704,7 +866,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
         report.float_tiles += 1;
     }
     report.bytes += row.bytes;
-    let depth = row.depth as usize;
+    let depth = row.encoded_depth as usize;
     if report.error_measurement.by_depth.len() <= depth {
         report
             .error_measurement
@@ -712,7 +874,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
             .resize_with(depth + 1, Default::default);
     }
     report.error_measurement.by_depth[depth].add(row.measurement, row.geometric_error);
-    if depth == 0 {
+    if row.depth == 0 {
         report.error_measurement.root = Some(row.measurement);
     }
     if report.max_error_by_depth.len() <= depth {
@@ -732,6 +894,7 @@ fn walk(
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
     let captured = input.captured;
+    let stage = input.stage;
     let plan = input.plan;
     let settings = input.settings;
     let materials = encode::flat_materials(&captured.materials);
@@ -764,6 +927,7 @@ fn walk(
     };
     let total = captured.tree.stats.internal;
     input.phases.progress(Phase::HlodGeometry, 0, Some(total))?;
+    let mut passed = 0u64;
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
         let (sender, receiver) = mpsc::channel::<(u64, u64, Done)>();
         let mut stack: Vec<Frame> = Vec::new();
@@ -805,9 +969,11 @@ fn walk(
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         let mut lease = job_lease;
-                        lease.shrink(
-                            TileGeometry::charge(built.0.triangles.len() as u64).min(out_bytes),
-                        );
+                        let held = built.0.check_charge()?;
+                        if held > out_bytes {
+                            return Err(state("a coarse tile exceeds its admitted output"));
+                        }
+                        lease.shrink(held);
                         built.0.lease = Some(lease);
                         Ok(built)
                     }))
@@ -817,11 +983,10 @@ fn walk(
             }
             Ok(())
         };
-        let mut receive = |pending: &mut Vec<Closed>,
-                           ready: &mut HashMap<u64, TileGeometry>,
-                           inflight: &mut usize,
-                           finished_rows: &mut BTreeMap<u64, HlodRow>,
-                           written: &mut u64|
+        let receive = |pending: &mut Vec<Closed>,
+                       ready: &mut HashMap<u64, TileGeometry>,
+                       inflight: &mut usize,
+                       finished_rows: &mut BTreeMap<u64, HlodRow>|
          -> Result<(), JobError> {
             if *inflight == 0 {
                 return Err(resource(
@@ -835,7 +1000,34 @@ fn walk(
             let (geometry, row) = done?;
             ready.insert(id, geometry);
             finished_rows.insert(seq, row);
-            while let Some(row) = finished_rows.remove(written) {
+            spawn(pending, ready, inflight)
+        };
+        // Write finished rows in postorder once their published depth is final.
+        let mut flush = |finished_rows: &mut BTreeMap<u64, HlodRow>,
+                         publish: &mut HashMap<u64, Publish>,
+                         written: &mut u64|
+         -> Result<(), JobError> {
+            while publish.get(written).is_some_and(|p| p.done)
+                && finished_rows.contains_key(written)
+            {
+                let mut row = finished_rows.remove(written).unwrap();
+                let depth = publish.remove(written).unwrap().depth;
+                if depth != row.depth {
+                    // Published at the top of its single-child chain: the member is named
+                    // for that cell.
+                    let key = TileKey {
+                        first: row.first,
+                        end: row.end,
+                        depth,
+                        leaf_begin: row.leaf_begin,
+                        leaf_end: row.leaf_end,
+                    };
+                    let (from, to) = (stage.join(&row.uri), stage.join(key.uri()));
+                    fs::rename(&from, &to)
+                        .map_err(|e| JobError::io("rename coarse tile", &from, e))?;
+                    row.uri = key.uri();
+                    row.depth = depth;
+                }
                 tally(report, &row);
                 serde_json::to_writer(&mut writer, &row).map_err(|e| state(e.to_string()))?;
                 writer
@@ -846,16 +1038,48 @@ fn walk(
                     .phases
                     .progress(Phase::HlodGeometry, *written, Some(total))?;
             }
-            spawn(pending, ready, inflight)
+            Ok(())
         };
+        let mut kinds: HashMap<u64, Child> = HashMap::new();
+        let mut publish: HashMap<u64, Publish> = HashMap::new();
+        let passed = &mut passed;
         let close = |stack: &mut Vec<Frame>,
                      pending: &mut Vec<Closed>,
                      leaf: u32,
-                     next_seq: &mut u64|
+                     next_seq: &mut u64,
+                     kinds: &mut HashMap<u64, Child>,
+                     publish: &mut HashMap<u64, Publish>,
+                     passed: &mut u64|
          -> Result<(), JobError> {
             let frame = stack.pop().ok_or_else(|| state("no open frame"))?;
             if frame.children.is_empty() {
                 return Err(state("an internal tile closed without children"));
+            }
+            // Pass-through: a single coarse child is the whole cell, and its parent would be
+            // the same tile (input within the cap is kept as is). The child is published at
+            // the top of the chain instead, and the cells below it there publish no content.
+            // Same rank range and leaf interval, so the same outer interface.
+            if let ([only], 1) = (&frame.children[..], frame.started) {
+                let only = *only;
+                if let Some(Child::Coarse(seq)) = kinds.get(&only).copied() {
+                    let p = publish
+                        .get_mut(&seq)
+                        .ok_or_else(|| state("a coarse child without its row"))?;
+                    p.depth = frame.node.depth();
+                    match stack.last_mut() {
+                        Some(parent) => adopt(parent, only, kinds, publish),
+                        None => p.done = true,
+                    }
+                    *passed += 1;
+                    return Ok(());
+                }
+            }
+            let single_leaf = matches!(
+                frame.children[..],
+                [only] if matches!(kinds.get(&only), Some(Child::Leaf))
+            );
+            for c in &frame.children {
+                kinds.remove(c);
             }
             let closed = Closed {
                 id: frame.id,
@@ -868,10 +1092,19 @@ fn walk(
                     leaf_end: leaf,
                 },
                 children: frame.children,
+                single_leaf,
             };
             *next_seq += 1;
+            kinds.insert(closed.id, Child::Coarse(closed.seq));
+            publish.insert(
+                closed.seq,
+                Publish {
+                    depth: closed.key.depth,
+                    done: stack.is_empty(),
+                },
+            );
             if let Some(parent) = stack.last_mut() {
-                parent.children.push(closed.id);
+                adopt(parent, closed.id, kinds, publish);
             }
             pending.push(closed);
             Ok(())
@@ -881,41 +1114,55 @@ fn walk(
                 let node = node?;
                 check()?;
                 while stack.last().is_some_and(|f| f.node.end <= node.first) {
-                    close(&mut stack, &mut pending, leaf, &mut next_seq)?;
+                    close(
+                        &mut stack,
+                        &mut pending,
+                        leaf,
+                        &mut next_seq,
+                        &mut kinds,
+                        &mut publish,
+                        passed,
+                    )?;
+                    flush(&mut finished_rows, &mut publish, &mut written)?;
                     spawn(&mut pending, &mut ready, &mut inflight)?;
                 }
                 let id = next_id;
                 next_id += 1;
+                if let Some(parent) = stack.last_mut() {
+                    parent.started += 1;
+                    settle(parent, &kinds, &mut publish);
+                }
                 if node.kind == NodeKind::Internal {
                     stack.push(Frame {
                         id,
                         node,
                         leaf_begin: leaf,
                         children: Vec::new(),
+                        started: 0,
                     });
                     continue;
                 }
-                let charge = TileGeometry::charge(node.triangles());
-                let lease = loop {
+                let charge = node
+                    .triangles()
+                    .saturating_mul(store::LEAF_READ_BYTES_PER_TRIANGLE)
+                    .saturating_add(store::LEAF_READ_FIXED_BYTES);
+                let mut lease = loop {
                     // Read-ahead keeps one job's admission free for the parents it feeds.
                     if let Some(lease) = ledger.try_lease(charge, job_bytes) {
                         break lease;
                     }
-                    receive(
-                        &mut pending,
-                        &mut ready,
-                        &mut inflight,
-                        &mut finished_rows,
-                        &mut written,
-                    )?;
+                    receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                    flush(&mut finished_rows, &mut publish, &mut written)?;
                 };
                 let error = leaf_errors.next(node.first)?;
                 let mut tile = read_leaf(&node, leaf, captured, &mut streams, error, check)?;
+                lease.shrink(tile.check_charge()?);
                 tile.lease = Some(lease);
                 leaf += 1;
                 match stack.last_mut() {
                     Some(parent) => {
-                        parent.children.push(id);
+                        kinds.insert(id, Child::Leaf);
+                        adopt(parent, id, &kinds, &mut publish);
                         ready.insert(id, tile);
                     }
                     None => {
@@ -926,19 +1173,23 @@ fn walk(
                 }
             }
             while !stack.is_empty() {
-                close(&mut stack, &mut pending, leaf, &mut next_seq)?;
+                close(
+                    &mut stack,
+                    &mut pending,
+                    leaf,
+                    &mut next_seq,
+                    &mut kinds,
+                    &mut publish,
+                    passed,
+                )?;
             }
             spawn(&mut pending, &mut ready, &mut inflight)?;
             while !pending.is_empty() || inflight > 0 {
-                receive(
-                    &mut pending,
-                    &mut ready,
-                    &mut inflight,
-                    &mut finished_rows,
-                    &mut written,
-                )?;
+                receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                flush(&mut finished_rows, &mut publish, &mut written)?;
             }
-            if written != total || streams.rows.next().is_some() {
+            flush(&mut finished_rows, &mut publish, &mut written)?;
+            if written + *passed != total || !publish.is_empty() || streams.rows.next().is_some() {
                 return Err(state("coarse tiles or interface rows differ from the tree"));
             }
             Ok(())
@@ -955,6 +1206,13 @@ fn walk(
         run
     });
     outcome?;
+    report.pass_through = passed;
+    if passed > 0 {
+        // Pass-through cells complete with their child.
+        input
+            .phases
+            .progress(Phase::HlodGeometry, total, Some(total))?;
+    }
     if streams.triangles.next().transpose()?.is_some() || leaf_errors.lines.next().is_some() {
         return Err(state("HLOD walk did not consume every leaf"));
     }
