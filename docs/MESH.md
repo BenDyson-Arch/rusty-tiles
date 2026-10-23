@@ -181,6 +181,17 @@ triangles do not coarsen it), or a profile fraction of its geometric error if
 that is coarser (`balanced`: one sixteenth; `fast` twice that; `quality` and
 `lossless` half).
 
+That density sets how finely a chart samples, but on photogrammetry the atlas
+sets most of a proxy's texels: proxy faces are often smaller than one square
+texel, and every chart keeps a gutter of two texels (four for `lossless`) on
+each side. So charts grow over edge and corner neighbours across all source
+primitives and materials of one material class (each face still samples its own
+source), within a normal cone of about 26°. A face under one square texel may
+join a chart at up to 72° from the chart's normal without raising the chart's
+density. Charts are shelf-packed tallest first. Each material class uses the
+power-of-two page width whose pages need the fewest texels; when several widths
+need the same number, it uses the one with the squarest pages.
+
 Appearance rules:
 
 - **Sub-texel slivers have no texture.** A face whose exact page footprint is

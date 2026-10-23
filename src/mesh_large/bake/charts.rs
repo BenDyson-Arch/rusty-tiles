@@ -1,4 +1,10 @@
-//! Deterministic same-primitive, fixed-seed-cone charts and translation packing.
+//! Deterministic same-material-class, fixed-seed-cone charts and translation packing.
+//!
+//! Coarse proxies are dense, noisy meshes whose faces are often under a square texel
+//! at the planned density, and every chart pays a fixed gutter in texels. Charts
+//! therefore grow across source primitives and materials of one material class (the
+//! class shares its pages; every face still samples its own source), and shelves are
+//! packed tallest first on the power-of-two page width that wastes the fewest texels.
 use super::{
     invalid,
     math::{self, V3},
@@ -10,7 +16,7 @@ use crate::{
     mesh_large::{batching::MaterialClasses, config::Profile},
     JobError,
 };
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 type P2 = [f64; 2];
 pub(super) struct Chart {
     pub faces: Vec<usize>,
@@ -48,8 +54,25 @@ pub(super) struct Layout {
 }
 /// Least cosine between a chart face's normal and its seed's. A chart rasterises at
 /// `1 / (texel * sigma)` so every face meets the density, so this bounds the texel
-/// area overhead of a whole chart at `1 / CHART_CONE_COS^2` (about 1.23).
+/// area overhead of a whole chart at `1 / CHART_CONE_COS^2` (about 1.23). Noisy proxy
+/// surfaces still form large charts through their sub-texel faces, which join under
+/// [`SUBTEXEL_CHART_COS`] without raising this overhead.
 const CHART_CONE_COS: f64 = 0.9;
+/// Least cosine at which a face under one square planned texel joins a chart. Such a
+/// face covers at most a texel or two at any orientation, so it neither meets nor
+/// misses the density in a way a viewer can see: it joins without lowering the
+/// chart's normal agreement, and only needs to face the chart plane so its decoded
+/// UVs keep their orientation.
+const SUBTEXEL_CHART_COS: f64 = 0.3;
+/// Faces meeting at one welded vertex are chart neighbours when at most this many
+/// faces meet there (edge neighbours always are).
+const VERTEX_NEIGHBOURS: usize = 16;
+/// Chart-plane cells, in planned texels, of the index that finds a candidate's
+/// possibly overlapping chart members.
+const OVERLAP_CELL_TEXELS: f64 = 4.;
+/// A member whose box spans more index cells than this is tested against every
+/// candidate instead of being indexed.
+const OVERLAP_CELL_SPAN: i64 = 64;
 fn project(p: V3, x: V3, y: V3) -> P2 {
     [math::dot(p, x), math::dot(p, y)]
 }
@@ -148,6 +171,33 @@ fn overlap(a: [P2; 3], b: [P2; 3], slack: f64) -> bool {
     }
     true
 }
+/// Each packed chart's page (within its class) and origin, and every page's used extent.
+type Shelves = (Vec<(usize, [u32; 2])>, Vec<[u32; 2]>);
+/// Shelf-packs `run` (chart indices, tallest first) on pages at most `cap` wide and
+/// `max_edge` tall; every page extent is at least 4 x 4.
+fn shelves(run: &[usize], sizes: &[[u32; 2]], cap: u32, max_edge: u32) -> Shelves {
+    let mut placed = Vec::with_capacity(run.len());
+    let mut extents = vec![[4u32; 2]];
+    let (mut x, mut y, mut row) = (0u32, 0u32, 0u32);
+    for &i in run {
+        let [w, h] = sizes[i];
+        if x + w > cap {
+            x = 0;
+            y += row;
+            row = 0;
+        }
+        if y + h > max_edge {
+            extents.push([4; 2]);
+            (x, y, row) = (0, 0, 0);
+        }
+        let page = extents.len() - 1;
+        placed.push((page, [x, y]));
+        extents[page] = [extents[page][0].max(x + w), extents[page][1].max(y + h)];
+        x += w;
+        row = row.max(h);
+    }
+    (placed, extents)
+}
 pub(super) fn build(
     f: &FrozenNode,
     raster_faces: &[bool],
@@ -180,7 +230,10 @@ pub(super) fn build(
             if b < a {
                 std::mem::swap(&mut a, &mut b);
             }
-            edges.entry((face.source, a, b)).or_default().push(i);
+            edges
+                .entry((classes.of(face.material), a, b))
+                .or_default()
+                .push(i);
         }
     }
     let mut adjacent = vec![Vec::new(); n];
@@ -190,10 +243,36 @@ pub(super) fn build(
             adjacent[faces[1]].push(faces[0]);
         }
     }
-    for a in &mut adjacent {
-        a.sort_unstable();
-    }
     drop(edges);
+    // Then faces sharing only a welded vertex: noisy proxies leave many faces whose
+    // edge neighbours all fail the cone. Edge neighbours stay first.
+    let mut vertices: BTreeMap<(u32, [u32; 3]), Vec<usize>> = BTreeMap::new();
+    for (i, face) in f.faces.iter().enumerate() {
+        check()?;
+        for w in face.welds {
+            vertices
+                .entry((classes.of(face.material), w))
+                .or_default()
+                .push(i);
+        }
+    }
+    let mut corner = vec![Vec::new(); n];
+    for faces in vertices.values() {
+        if faces.len() <= VERTEX_NEIGHBOURS {
+            for &a in faces {
+                corner[a].extend(faces.iter().copied().filter(|&b| b != a));
+            }
+        }
+    }
+    drop(vertices);
+    for (a, mut c) in adjacent.iter_mut().zip(corner) {
+        a.sort_unstable();
+        a.dedup();
+        c.sort_unstable();
+        c.dedup();
+        c.retain(|b| a.binary_search(b).is_err());
+        a.extend(c);
+    }
     // Chart metres per page texel are at most `texel` (sigma <= 1, boosts >= 1), and
     // storage moves a UV by at most one 16-bit step of the largest admitted page.
     let slack = f64::from(limits.max_page_edge) / 65535. * texel;
@@ -203,7 +282,7 @@ pub(super) fn build(
         2
     };
     // Largest chart interior, in texels, that packs on one page (the ceil adds one).
-    let max_interior = f64::from(limits.max_page_edge.saturating_sub(2 * gutter + 3));
+    let max_interior = f64::from(limits.max_page_edge.saturating_sub(2 * gutter + 1));
     let mut assigned = vec![false; n];
     let mut charts = Vec::new();
     let mut work = 0u64;
@@ -255,6 +334,36 @@ pub(super) fn build(
         let seed_projected = p.map(|p| project(p, x, y));
         let [mut lo, mut hi] = bounds(seed_projected);
         let mut members = vec![(seed_projected, [lo, hi])];
+        // Members by chart-plane cell (boxes widened by what storage can move them);
+        // the few spanning many cells are tested against every candidate.
+        let cell = OVERLAP_CELL_TEXELS * texel;
+        let cells = |[lo, hi]: [P2; 2]| {
+            let c = |v: f64| (v / cell).floor() as i64;
+            let lo = [c(lo[0] - 2. * slack), c(lo[1] - 2. * slack)];
+            let hi = [c(hi[0] + 2. * slack), c(hi[1] + 2. * slack)];
+            let wide = (hi[0] - lo[0] + 1).saturating_mul(hi[1] - lo[1] + 1) > OVERLAP_CELL_SPAN;
+            (lo, hi, wide)
+        };
+        let mut index: HashMap<[i64; 2], Vec<usize>> = HashMap::new();
+        let mut wide_members = Vec::new();
+        let insert = |m: usize,
+                      b: [P2; 2],
+                      index: &mut HashMap<[i64; 2], Vec<usize>>,
+                      wide_members: &mut Vec<usize>| {
+            let (lo, hi, wide) = cells(b);
+            if wide {
+                wide_members.push(m);
+                return;
+            }
+            for cy in lo[1]..=hi[1] {
+                for cx in lo[0]..=hi[0] {
+                    index.entry([cx, cy]).or_default().push(m);
+                }
+            }
+        };
+        insert(0, [lo, hi], &mut index, &mut wide_members);
+        let mut stamp = vec![0u64];
+        let mut tests = 0u64;
         let mut queue = VecDeque::from([seed]);
         while let Some(current) = queue.pop_front() {
             for &candidate in &adjacent[current] {
@@ -263,7 +372,7 @@ pub(super) fn build(
                     continue;
                 }
                 let c = &f.faces[candidate];
-                if c.source != face.source || c.material != face.material {
+                if classes.of(c.material) != classes.of(face.material) {
                     continue;
                 }
                 let cp = c.positions.map(|p| p.map(f64::from));
@@ -271,14 +380,25 @@ pub(super) fn build(
                     continue;
                 };
                 let sigma = math::dot(normal, cn);
-                if sigma < CHART_CONE_COS {
+                let subtexel = math::triangle_area(cp) < texel * texel;
+                if sigma
+                    < if subtexel {
+                        SUBTEXEL_CHART_COS
+                    } else {
+                        CHART_CONE_COS
+                    }
+                {
                     continue;
                 }
                 let projected = cp.map(|p| project(p, x, y));
                 let [clo, chi] = bounds(projected);
                 // The chart must still fit one page after every repack boost (at most
                 // 2^3) at its lowest normal agreement; a larger region starts new charts.
-                let grown_sigma = chart.sigma.min(sigma);
+                let grown_sigma = if subtexel {
+                    chart.sigma
+                } else {
+                    chart.sigma.min(sigma)
+                };
                 let fits = (0..2).all(|a| {
                     (hi[a].max(chi[a]) - lo[a].min(clo[a])) * 8. / (texel * grown_sigma)
                         <= max_interior
@@ -287,7 +407,27 @@ pub(super) fn build(
                     continue;
                 }
                 let mut intersects = false;
-                for &(other, [olo, ohi]) in &members {
+                // Every member sharing a cell with the candidate's widened box, once.
+                let (clo_cell, chi_cell, candidate_wide) = cells([clo, chi]);
+                let mut near: Vec<usize> = wide_members.clone();
+                if candidate_wide {
+                    near = (0..members.len()).collect();
+                } else {
+                    for cy in clo_cell[1]..=chi_cell[1] {
+                        for cx in clo_cell[0]..=chi_cell[0] {
+                            if let Some(ms) = index.get(&[cx, cy]) {
+                                near.extend(ms.iter().copied());
+                            }
+                        }
+                    }
+                }
+                tests += 1;
+                for m in near {
+                    if stamp[m] == tests {
+                        continue;
+                    }
+                    stamp[m] = tests;
+                    let (other, [olo, ohi]) = members[m];
                     work = work
                         .checked_add(1)
                         .ok_or_else(|| resource("chart overlap work"))?;
@@ -310,6 +450,8 @@ pub(super) fn build(
                 assigned[candidate] = true;
                 chart.sigma = grown_sigma;
                 chart.faces.push(candidate);
+                insert(members.len(), [clo, chi], &mut index, &mut wide_members);
+                stamp.push(0);
                 members.push((projected, [clo, chi]));
                 for a in 0..2 {
                     lo[a] = lo[a].min(clo[a]);
@@ -332,18 +474,9 @@ pub(super) fn build(
     }
     let mut boosts = vec![1.; charts.len()];
     for attempt in 0..4 {
-        let mut pages: Vec<Page> = Vec::new();
-        // Stable chart order within each material class (H28: one page set per class,
-        // not per source material); shelf state resets only at page boundaries.
-        let mut order: Vec<usize> = (0..charts.len()).collect();
-        order.sort_by_key(|&i| {
-            let m = charts[i].material;
-            (classes.of(m), m, charts[i].faces[0])
-        });
-        let mut shelf = (0u32, 0u32, 0u32);
-        let mut current = None;
-        for i in order {
-            let c = &mut charts[i];
+        // Every chart keeps `gutter` texels on each side, so neighbouring charts are
+        // twice the gutter apart: base-level and first-mip taps stay in their chart.
+        for (i, c) in charts.iter_mut().enumerate() {
             c.pixels_per_metre = boosts[i] / (texel * c.sigma);
             for a in 0..2 {
                 let interior = ((c.hi[a] - c.lo[a]) * c.pixels_per_metre).ceil().max(1.);
@@ -351,47 +484,69 @@ pub(super) fn build(
                     return Err(resource("proxy chart physical dimension"));
                 }
                 c.size[a] = (interior as u32)
-                    .checked_add(2 * gutter + 2)
+                    .checked_add(2 * gutter)
                     .ok_or_else(|| resource("proxy chart padding dimension"))?;
             }
             if c.size.iter().any(|s| *s > limits.max_page_edge) {
                 return Err(resource("proxy chart exceeds admitted page edge"));
             }
-            let class = classes.of(c.material);
-            if current.is_none_or(|p: usize| pages[p].material != class) {
-                current = Some(pages.len());
-                pages.push(Page {
-                    material: class,
-                    size: [4; 2],
-                    charts: Vec::new(),
-                });
-                shelf = (0, 0, 0);
-            }
-            if shelf.0 + c.size[0] > limits.max_page_edge {
-                shelf.0 = 0;
-                shelf.1 += shelf.2;
-                shelf.2 = 0;
-            }
-            if shelf.1 + c.size[1] > limits.max_page_edge {
-                current = Some(pages.len());
-                pages.push(Page {
-                    material: class,
-                    size: [4; 2],
-                    charts: Vec::new(),
-                });
-                shelf = (0, 0, 0);
-            }
-            let page = current.unwrap();
-            c.page = page;
-            c.origin = [shelf.0, shelf.1];
-            pages[page].charts.push(i);
-            pages[page].size[0] = pages[page].size[0].max(shelf.0 + c.size[0]);
-            pages[page].size[1] = pages[page].size[1].max(shelf.1 + c.size[1]);
-            shelf.0 += c.size[0];
-            shelf.2 = shelf.2.max(c.size[1]);
         }
-        for p in &mut pages {
-            p.size = p.size.map(u32::next_power_of_two);
+        // One page set per material class (H28), tallest charts first so shelves stay
+        // full; ties keep a stable chart order.
+        let mut order: Vec<usize> = (0..charts.len()).collect();
+        order.sort_by_key(|&i| {
+            let c = &charts[i];
+            (
+                classes.of(c.material),
+                std::cmp::Reverse(c.size[1]),
+                std::cmp::Reverse(c.size[0]),
+                c.faces[0],
+            )
+        });
+        let sizes: Vec<[u32; 2]> = charts.iter().map(|c| c.size).collect();
+        let chart_class: Vec<u32> = charts.iter().map(|c| classes.of(c.material)).collect();
+        let mut pages: Vec<Page> = Vec::new();
+        for run in order.chunk_by(|&a, &b| chart_class[a] == chart_class[b]) {
+            check()?;
+            let class = chart_class[run[0]];
+            // Each class takes the power-of-two shelf width whose pages hold the fewest
+            // texels once rounded to powers of two; ties keep fewer pages, then the
+            // squarer pages (the shorter longest edge), then the narrower width.
+            let widest = run.iter().map(|&i| sizes[i][0]).max().unwrap_or(4);
+            let mut best: Option<([u64; 3], Shelves)> = None;
+            let mut cap = widest.next_power_of_two().max(4);
+            while cap <= limits.max_page_edge {
+                let (placed, extents) = shelves(run, &sizes, cap, limits.max_page_edge);
+                let texels = extents
+                    .iter()
+                    .map(|e| {
+                        u64::from(e[0].next_power_of_two()) * u64::from(e[1].next_power_of_two())
+                    })
+                    .sum::<u64>();
+                let edge = extents
+                    .iter()
+                    .flat_map(|e| e.map(u32::next_power_of_two))
+                    .max()
+                    .unwrap_or(4);
+                let key = [texels, extents.len() as u64, u64::from(edge)];
+                if best.as_ref().is_none_or(|b| key < b.0) {
+                    best = Some((key, (placed, extents)));
+                }
+                cap *= 2;
+            }
+            let (_, (placed, extents)) =
+                best.ok_or_else(|| resource("proxy chart exceeds admitted page edge"))?;
+            let first = pages.len();
+            pages.extend(extents.iter().map(|e| Page {
+                material: class,
+                size: e.map(u32::next_power_of_two),
+                charts: Vec::new(),
+            }));
+            for (&i, (page, origin)) in run.iter().zip(placed) {
+                charts[i].page = first + page;
+                charts[i].origin = origin;
+                pages[first + page].charts.push(i);
+            }
         }
         let mut uv = vec![[[0.; 2]; 3]; n];
         let mut failed = Vec::new();
@@ -404,8 +559,8 @@ pub(super) fn build(
                 for (j, point) in p.into_iter().enumerate() {
                     let q = project(point, c.x, c.y);
                     for a in 0..2 {
-                        let px = f64::from(c.origin[a] + gutter + 1)
-                            + (q[a] - c.lo[a]) * c.pixels_per_metre;
+                        let px =
+                            f64::from(c.origin[a] + gutter) + (q[a] - c.lo[a]) * c.pixels_per_metre;
                         texels[j][a] = px;
                         let v = px / f64::from(size[a]);
                         uv[i][j][a] = if limits.profile == Profile::Lossless {
@@ -627,6 +782,107 @@ mod tests {
         }
     }
 
+    fn test_limits() -> BakeLimits {
+        BakeLimits {
+            profile: Profile::Balanced,
+            memory_bytes: 64 << 20,
+            member_bytes: 16 << 20,
+            source_cache_bytes: 16 << 20,
+            shared_image_bytes: 0,
+            child_texel_bytes: 256 << 20,
+            query_work: 1_000_000,
+            max_page_edge: 2048,
+            max_density_drops: 4,
+            id_textures: false,
+        }
+    }
+
+    #[test]
+    fn charts_span_source_primitives_of_one_material_class() {
+        let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+        f.faces = grid_faces(4);
+        for (i, face) in f.faces.iter_mut().enumerate() {
+            face.source.primitive = (i % 3) as u32;
+        }
+        let n = f.faces.len();
+        let layout = build(
+            &f,
+            &vec![true; n],
+            test_limits(),
+            0.125,
+            &MaterialClasses::EMPTY,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(
+            layout.charts.len(),
+            1,
+            "welded coplanar faces of three primitives"
+        );
+        assert_single_coverage(&f, &layout);
+    }
+
+    #[test]
+    fn subtexel_faces_join_beyond_the_cone_without_lowering_sigma() {
+        // A 1 m face on z = 0 and, across its hypotenuse, a face folded 60 degrees up
+        // (cosine 0.5, outside the chart cone) whose width `d` sets its area.
+        let folded = |d: f32| {
+            let s = d / std::f32::consts::SQRT_2 * 0.5;
+            let q = [0.5 + s, 0.5 + s, d * 0.75f32.sqrt()];
+            vec![
+                face(0, 0, [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]),
+                face(1, 0, [[0., 1., 0.], [1., 0., 0.], q]),
+            ]
+        };
+        for (d, charts) in [(0.02, 1), (1., 2)] {
+            let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+            f.faces = folded(d);
+            // At 0.125 m texels one square texel is 0.015625 m2: the narrow fold is
+            // 0.0141 m2, the wide one 0.707 m2.
+            let layout = build(
+                &f,
+                &[true, true],
+                test_limits(),
+                0.125,
+                &MaterialClasses::EMPTY,
+                &mut || Ok(()),
+            )
+            .unwrap();
+            assert_eq!(layout.charts.len(), charts, "fold width {d}");
+            assert!(layout.charts.iter().all(|c| c.sigma == 1.));
+            assert_eq!(layout.raster_faces, [true, true]);
+            assert_single_coverage(&f, &layout);
+        }
+    }
+
+    #[test]
+    fn shelves_fill_the_squarest_power_of_two_page_of_least_area() {
+        // 64 separate 1 m faces at 8 texels per metre: 64 charts of 8 + 2 x 2 = 12
+        // texels a side. 128 x 128 holds them (10 a row, 7 rows); 1024 x 16 and
+        // 16 x 1024 hold as many texels but are not square.
+        let mut f = crate::mesh_large::bake::controls::immutable_fixture();
+        f.faces = (0..64)
+            .map(|i| {
+                let x = 3. * i as f32;
+                face(i, 0, [[x, 0., 0.], [x + 1., 0., 0.], [x, 1., 0.]])
+            })
+            .collect();
+        let layout = build(
+            &f,
+            &[true; 64],
+            test_limits(),
+            0.125,
+            &MaterialClasses::EMPTY,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(layout.charts.len(), 64);
+        assert!(layout.charts.iter().all(|c| c.size == [12, 12]));
+        assert_eq!(layout.pages.len(), 1);
+        assert_eq!(layout.pages[0].size, [128, 128]);
+        assert_single_coverage(&f, &layout);
+    }
+
     #[test]
     fn regions_wider_than_a_page_split_into_charts_that_pack() {
         let limits = BakeLimits {
@@ -641,7 +897,7 @@ mod tests {
             max_density_drops: 4,
             id_textures: false,
         };
-        // 40 m of grid at 8 texels per metre is 320 texels, over the 2041 / 8 = 255
+        // 40 m of grid at 8 texels per metre is 320 texels, over the 2043 / 8 = 255
         // texel chart extent that still fits a page after every repack boost.
         let mut f = crate::mesh_large::bake::controls::immutable_fixture();
         f.faces = grid_faces(40);
@@ -665,7 +921,7 @@ mod tests {
             assert!(c
                 .size
                 .iter()
-                .all(|s| *s <= limits.max_page_edge / 8 + 2 * 2 + 3));
+                .all(|s| *s <= limits.max_page_edge / 8 + 2 * 2 + 1));
         }
         assert_single_coverage(&f, &layout);
     }
