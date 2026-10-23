@@ -1218,9 +1218,17 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             use rusty_tiles::point_cloud::{
                 PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest,
             };
+            let invalid = |message: &'static str| {
+                Error::Job(rusty_tiles::JobFailure {
+                    error: JobError::new(JobErrorKind::InvalidRequest, message),
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                })
+            };
             let coordinates = if a.source_crs == "local" {
                 if a.height_offset.is_some() {
-                    return Err(Error::msg(
+                    return Err(invalid(
                         "heightOffset applies only to geospatial CRS; local XYZ is in metres",
                     ));
                 }
@@ -1228,7 +1236,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             } else {
                 PointCloudCoordinates::Horizontal {
                     source: if a.source_crs == "header" { PointCloudCrs::Header } else { PointCloudCrs::Definition(a.source_crs) },
-                    height_offset_metres: a.height_offset.ok_or_else(|| Error::msg("geospatial input requires explicit --heightOffset to ellipsoidal metres"))?,
+                    height_offset_metres: a.height_offset.ok_or_else(|| invalid("geospatial input requires explicit --heightOffset to ellipsoidal metres"))?,
                 }
             };
             let options = PointCloudOptions {
