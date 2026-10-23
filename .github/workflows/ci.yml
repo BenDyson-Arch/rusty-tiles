@@ -501,6 +501,13 @@ jobs:
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_vector_*.py'
           RUSTY_TILES_BIN="$PWD/target/debug/rusty-tiles" python -m unittest discover -s tests -p 'test_native_vector.py'
           python -B tests/p1_laz_adapter.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-laz-portable.json"
+      - name: Pair point CLI and installed Python results
+        shell: bash -el {0}
+        run: |
+          python -m pip install maturin==1.15.0
+          maturin build --locked --profile dev --out "${{ runner.temp }}/point-wheel"
+          python -m pip install --no-deps "${{ runner.temp }}"/point-wheel/*.whl
+          python -B tests/p1_point_frontends.py --binary "$PWD/target/debug/rusty-tiles" --json-output "${{ runner.temp }}/point-frontends.json"
 
   python-free-runtime:
     name: Python-free runtime

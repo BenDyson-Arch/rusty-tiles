@@ -1,5 +1,8 @@
 # P1 independent point acceptance
 
+Current 0.4 finite-bar coverage, forest migration and resource receipt:
+[minimal point acceptance](bar_040.md). The measurements below are historical.
+
 > **Bulk evidence moved out of the tree (2026-10-12).** 1 of 14 files remain:
 > this README plus what CI or tests read. The full directory last existed at
 > `e29cd19d2f236dc688e91a80a45170d4a573e20b`

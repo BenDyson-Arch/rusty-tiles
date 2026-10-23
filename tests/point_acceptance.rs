@@ -104,6 +104,7 @@ fn observer_failure_before_commit_preserves_previous_output_and_removes_scratch(
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source.las");
         fixture(&source);
+        let source_before = fs::read(&source).unwrap();
         let output = work.path().join("output.3tz");
         fs::write(&output, b"previous archive").unwrap();
         let observer = Arc::new(FaultAt {
@@ -124,9 +125,34 @@ fn observer_failure_before_commit_preserves_previous_output_and_removes_scratch(
         assert_eq!(failure.error.kind(), JobErrorKind::ObserverFailure);
         assert!(failure.error.message().contains(phase));
         assert_eq!(fs::read(&output).unwrap(), b"previous archive");
+        assert_eq!(fs::read(&source).unwrap(), source_before);
         assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
         assert!(failure.retained_paths.is_empty());
     }
+}
+
+#[test]
+fn pre_cancel_preserves_source_and_old_output_without_observation() {
+    let work = tempfile::tempdir().unwrap();
+    let source = work.path().join("source.las");
+    fixture(&source);
+    let source_before = fs::read(&source).unwrap();
+    let output = work.path().join("output.3tz");
+    fs::write(&output, b"previous archive").unwrap();
+    let observer = Arc::new(Calls(AtomicUsize::new(0)));
+    let run = RunControl::new(Some(observer.clone()));
+    assert!(run.cancellation_handle().cancel());
+    let failure = point_cloud_to_archive(
+        request(&source, &output).with_policy(OutputPolicy::Replace),
+        &run,
+    )
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), JobErrorKind::Cancelled);
+    assert_eq!(observer.0.load(Ordering::SeqCst), 0);
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+    assert_eq!(fs::read(&output).unwrap(), b"previous archive");
+    assert!(failure.retained_paths.is_empty());
+    assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
 }
 struct CancelAtReady(Mutex<Option<rusty_tiles::CancellationHandle>>);
 impl Observer for CancelAtReady {
@@ -148,6 +174,7 @@ fn cancellation_at_commit_boundary_preserves_old_output() {
     let work = tempfile::tempdir().unwrap();
     let source = work.path().join("source.las");
     fixture(&source);
+    let source_before = fs::read(&source).unwrap();
     let output = work.path().join("output.3tz");
     fs::write(&output, b"previous").unwrap();
     let observer = Arc::new(CancelAtReady(Mutex::new(None)));
@@ -159,6 +186,7 @@ fn cancellation_at_commit_boundary_preserves_old_output() {
     )
     .unwrap_err();
     assert_eq!(failure.error.kind(), JobErrorKind::Cancelled);
+    assert_eq!(fs::read(&source).unwrap(), source_before);
     assert_eq!(fs::read(output).unwrap(), b"previous");
     assert_eq!(fs::read_dir(work.path()).unwrap().count(), 2);
 }
