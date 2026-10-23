@@ -4,7 +4,7 @@
 //!
 //! The first signal cancels the registered run and the process then exits through the
 //! normal error path with the conventional `128 + signal` status. A second signal, or
-//! any signal while no run is registered, exits at once.
+//! any signal while no run is registered, terminates the process by that signal at once.
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 
@@ -39,7 +39,7 @@ fn on_signal(signal: i32) {
         .is_err()
     {
         // The second signal forces the exit; cleanup is abandoned.
-        std::process::exit(128 + signal);
+        die_by(signal);
     }
     let registered = RUN.lock().unwrap_or_else(|e| e.into_inner()).clone();
     match registered {
@@ -48,9 +48,18 @@ fn on_signal(signal: i32) {
         }
         // Past the point where cancellation is possible, the run publishes its result.
         Some(_) => eprintln!("publishing; signal again to force exit"),
-        // Nothing to unwind yet, or a command with no cancellation point.
-        None => std::process::exit(128 + signal),
+        // Nothing to unwind yet, or a command with no cancellation point (such as
+        // `preview`): terminate by the signal itself, as without a handler.
+        None => die_by(signal),
     }
+}
+
+/// Terminate by `signal` with its default disposition, so a parent sees the process
+/// killed by the signal rather than an ordinary exit status.
+#[cfg(all(unix, feature = "cli"))]
+fn die_by(signal: i32) -> ! {
+    let _ = signal_hook::low_level::emulate_default_handler(signal);
+    std::process::exit(128 + signal)
 }
 
 /// The signal that interrupted this process, if any.
