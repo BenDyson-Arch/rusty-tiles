@@ -687,6 +687,21 @@ impl SourceQuery<'_> {
         self.last = winning;
         Ok(best)
     }
+    /// Positions of the last nearest search's witness (the hit's triangle).
+    pub(crate) fn witness_positions(&self) -> Option<[V3; 3]> {
+        self.last.map(Triangle::positions)
+    }
+    /// Full records `first..first + count` into caller-owned (and caller-charged)
+    /// buffers, with one positioned read.
+    pub(crate) fn triangles(
+        &self,
+        first: u64,
+        count: usize,
+        encoded: &mut Vec<u8>,
+        out: &mut Vec<FullTriangle>,
+    ) -> Result<(), JobError> {
+        Ok(self.full.read(first, count, encoded, out)?)
+    }
     pub(crate) fn triangle(&mut self, hit: Hit) -> Result<FullTriangle, JobError> {
         self.full
             .read(hit.rank, 1, &mut self.encoded, &mut self.full_buf)?;

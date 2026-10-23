@@ -240,6 +240,7 @@ pub(crate) fn plan(
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(source_index::QUERY_BYTES + error::WORK_BYTES)
+        .saturating_add(bake::RESOLVE_BYTES)
         .saturating_add(TileGeometry::charge(cap as u64));
     let appearance = appearance_plan(captured, config.profile, cap)?;
     let job = geometry_job
@@ -359,7 +360,7 @@ pub(crate) struct HlodReport {
 /// (`max(G/16, 1e-5 m)`) and cap hits.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DepthAppearance {
+pub struct DepthAppearance {
     pub depth: u32,
     pub tiles: u64,
     pub textured_tiles: u64,
@@ -368,6 +369,9 @@ pub(crate) struct DepthAppearance {
     pub layout_texels: u64,
     pub page_texels: u64,
     pub covered_texels: u64,
+    /// Exact nearest searches of the bake (the rest kept a recent donor).
+    pub searches: u64,
+    pub donor_reads: u64,
     pub capped_tiles: u64,
     /// Tiles whose page density the source's own texel spacing set (not `G/16`).
     pub source_limited_tiles: u64,
@@ -400,6 +404,8 @@ pub struct HlodDiagnostics {
     /// Summed worker seconds of coarse charts, source queries, sampling and page encoding.
     pub appearance_seconds: appearance::Timing,
     pub image_cache: bake::CacheStats,
+    /// The manifest's per-depth appearance summary, repeated for the run report.
+    pub appearance_by_depth: Vec<DepthAppearance>,
 }
 
 pub(crate) struct HlodInput<'a> {
@@ -517,6 +523,7 @@ pub(crate) fn produce(
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
     diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
+    diagnostics.appearance_by_depth = report.appearance_by_depth.clone();
     diagnostics.lease_peak_bytes = lease_peak;
     diagnostics.cpu_seconds = resources::process_cpu_seconds()
         .zip(cpu_started)
@@ -868,6 +875,8 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     d.layout_texels += a.layout_texels;
     d.page_texels += a.page_texels;
     d.covered_texels += a.covered_texels;
+    d.searches += a.searches;
+    d.donor_reads += a.donor_reads;
     d.escalated_pages += u64::from(a.escalated_pages);
     if first {
         d.requested_spacing_min = a.requested_spacing;

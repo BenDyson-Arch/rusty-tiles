@@ -583,6 +583,7 @@ fn bake_pages(
             }
         }
         requests.sort_unstable();
+        let mut lods: Vec<f64> = Vec::new();
         let mut start = 0;
         while start < requests.len() {
             let image = requests[start].0;
@@ -590,22 +591,33 @@ fn bake_pages(
             while end < requests.len() && requests[end].0 == image {
                 end += 1;
             }
+            let size = {
+                let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                (f64::from(info.width) * f64::from(info.height)).sqrt()
+            };
+            // Source level of detail per texel: the page texel's footprint in source texels.
+            lods.clear();
+            lods.extend(requests[start..end].iter().map(|&(_, i)| {
+                let hit = &q.hits[i as usize];
+                let (_, _, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
+                let rho = spacing * f64::from(hit.gradient[set]) * size;
+                if rho > 1. {
+                    rho.log2()
+                } else {
+                    0.
+                }
+            }));
+            let need = lods.iter().copied().fold(f64::INFINITY, f64::min).floor().max(0.) as u32;
             let chain = services
                 .cache
-                .get(captured, image, source_class(slot), check)?;
-            let size = {
-                let l = &chain.levels[0];
-                (f64::from(l.width) * f64::from(l.height)).sqrt()
-            };
-            for (k, &(_, i)) in requests[start..end].iter().enumerate() {
+                .get(captured, image, source_class(slot), need, check)?;
+            for (k, (&(_, i), &lod)) in requests[start..end].iter().zip(&lods).enumerate() {
                 if k % 65536 == 0 {
                     check()?;
                 }
                 let i = i as usize;
                 let hit = &q.hits[i];
                 let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
-                let rho = spacing * f64::from(hit.gradient[set]) * size;
-                let lod = if rho > 1. { rho.log2() } else { 0. };
                 let value = bake::sample(&chain, source_class(slot), sampler, hit.uv[set], lod);
                 let frame = (slot == TextureSlot::Normal).then(|| {
                     let (texel, gf, w) = p.texels[i];

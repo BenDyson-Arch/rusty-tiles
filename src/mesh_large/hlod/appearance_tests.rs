@@ -790,7 +790,7 @@ fn evidence_appearance() {
         };
         let tex = match super::bake::binding(&captured, t.material, crate::gltf_source::source::TextureSlot::BaseColor).unwrap() {
             Some((image, sampler, set)) => {
-                let chain = cache.get(&captured, image, crate::mesh_large::leaves::mips::Class::Colour, &check).unwrap();
+                let chain = cache.get(&captured, image, crate::mesh_large::leaves::mips::Class::Colour, 0, &check).unwrap();
                 let uv: [f32; 2] = std::array::from_fn(|a| {
                     (0..3).map(|k| f64::from(t.corners[k].texcoords[set][a]) * w[k]).sum::<f64>() as f32
                 });

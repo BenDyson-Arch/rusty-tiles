@@ -119,13 +119,49 @@ fn gradient(t: &FullTriangle, set: usize) -> f32 {
     }
 }
 
-/// Donor records kept per tile: raster order revisits a source triangle on the next
-/// texel row, so recent donors are read from disk once.
-const DONOR_CACHE: usize = 4096;
+/// Query points resolved per chunk: nearest searches first, then the chunk's donors are
+/// read in rank order (merged runs), then hits are filled. Bounds the donor set.
+pub(crate) const CHUNK: usize = 1 << 16;
+/// Ranks closer than this share one positioned read of at most `RUN_SPAN` records.
+const RUN_GAP: u64 = 32;
+const RUN_SPAN: u64 = 512;
+/// Recent donors tried, most recent first, before an exact search.
+const RECENT: usize = 4;
+
+/// What every texel a donor serves needs, derived once per donor.
+struct Donor {
+    material: u32,
+    flags: u8,
+    texcoords: [[[f32; 2]; 3]; 2],
+    colors: [[f32; 4]; 3],
+    normals: [[f32; 3]; 3],
+    tangents: [[f32; 4]; 3],
+    gradient: [f32; 2],
+}
+impl Donor {
+    fn new(t: &FullTriangle) -> Self {
+        Self {
+            material: t.material,
+            flags: t.flags,
+            texcoords: [0, 1].map(|s| t.corners.map(|c| c.texcoords[s])),
+            colors: t.corners.map(|c| c.color),
+            normals: t.corners.map(|c| c.normal),
+            tangents: t.corners.map(|c| c.tangent),
+            gradient: [gradient(t, 0), gradient(t, 1)],
+        }
+    }
+}
+
+/// Bytes [`resolve`] holds besides its queries: one chunk's witnesses and donors.
+pub(crate) const RESOLVE_BYTES: u64 = (CHUNK as u64)
+    * (std::mem::size_of::<(u64, [f32; 3], f32)>() + 8 + std::mem::size_of::<(u64, Donor)>())
+        as u64
+    + RUN_SPAN * 2 * std::mem::size_of::<FullTriangle>() as u64
+    + (1 << 20);
 
 /// Resolve every query point of the tile against the captured source surface of its
 /// descendant range through S2's bounded [`SourceQuery`] (nearest point, distance then
-/// source-rank ties). The cheap bake keeps the previous point's donor while the point
+/// source-rank ties). The cheap bake keeps one of the last few witnesses while the point
 /// projects inside it within [`Queries::accept`] (no facing or donor search); every
 /// other point runs the exact nearest search. Order is fixed per tile, so the result is
 /// deterministic. Returns (exact searches, donor records read).
@@ -135,79 +171,111 @@ pub(crate) fn resolve(
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<(u64, u64), JobError> {
     use super::source_index::{bary, closest, distance2};
-    let mut donors: HashMap<u64, FullTriangle> = HashMap::new();
-    let mut fifo = std::collections::VecDeque::new();
-    let mut donor: Option<(u64, FullTriangle, [[f64; 3]; 3])> = None;
+    // Most recent first: (rank, positions).
+    let mut recent: Vec<(u64, [[f64; 3]; 3])> = Vec::with_capacity(RECENT + 1);
     let (mut searches, mut reads) = (0u64, 0u64);
+    let mut witnesses: Vec<(u64, [f32; 3], f32)> = Vec::with_capacity(CHUNK);
+    let mut ranks: Vec<u64> = Vec::with_capacity(CHUNK);
+    let mut donors: Vec<(u64, Donor)> = Vec::with_capacity(CHUNK);
+    let (mut encoded, mut run) = (Vec::new(), Vec::new());
     for q in queries.iter_mut() {
         let accept2 = q.accept * q.accept;
-        for i in 0..q.points.len() {
-            if i % 4096 == 0 {
-                check()?;
-            }
-            let p = q.points[i].map(f64::from);
-            let kept = donor.as_ref().and_then(|(rank, _, positions)| {
-                let w = closest(p, *positions);
-                let d2 = distance2(p, bary(*positions, w));
-                (w.iter().all(|v| *v > 1e-6) && d2 <= accept2).then_some((*rank, w, d2))
-            });
-            let (rank, bary_w, d2) = match kept {
-                Some(k) => k,
-                None => {
-                    searches += 1;
-                    let hit = query.nearest(p)?;
-                    if donor.as_ref().is_none_or(|d| d.0 != hit.rank) {
-                        let t = match donors.get(&hit.rank) {
-                            Some(t) => *t,
-                            None => {
-                                let t = query.triangle(hit)?;
-                                reads += 1;
-                                if donors.len() == DONOR_CACHE {
-                                    if let Some(old) = fifo.pop_front() {
-                                        donors.remove(&old);
-                                    }
-                                }
-                                fifo.push_back(hit.rank);
-                                donors.insert(hit.rank, t);
-                                t
-                            }
-                        };
-                        donor = Some((hit.rank, t, t.triangle.positions.map(|v| v.map(f64::from))));
+        let mut start = 0;
+        while start < q.points.len() {
+            check()?;
+            let end = (start + CHUNK).min(q.points.len());
+            witnesses.clear();
+            for point in &q.points[start..end] {
+                let p = point.map(f64::from);
+                let kept = recent.iter().enumerate().find_map(|(k, (_, positions))| {
+                    let w = closest(p, *positions);
+                    let d2 = distance2(p, bary(*positions, w));
+                    (w.iter().all(|v| *v > 1e-6) && d2 <= accept2).then_some((k, w, d2))
+                });
+                let (w, d2) = match kept {
+                    Some((k, w, d2)) => {
+                        recent[..=k].rotate_right(1);
+                        (w, d2)
                     }
-                    (hit.rank, hit.bary, hit.distance2)
-                }
-            };
-            let t = &donor.as_ref().ok_or_else(|| state("coarse bake donor"))?.1;
-            let w = bary_w.map(|v| v as f32);
-            let lerp2 = |v: [[f32; 2]; 3]| -> [f32; 2] {
-                std::array::from_fn(|a| v[0][a] * w[0] + v[1][a] * w[1] + v[2][a] * w[2])
-            };
-            let color = if t.flags & COLOR != 0 {
-                std::array::from_fn(|a| (0..3).map(|k| t.corners[k].color[a] * w[k]).sum::<f32>())
-            } else {
-                [1.; 4]
-            };
-            q.hits[i] = Hit {
-                d2: d2 as f32,
-                rank,
-                material: t.material,
-                flags: t.flags,
-                uv: [0, 1].map(|s| lerp2(t.corners.map(|c| c.texcoords[s]))),
-                gradient: [gradient(t, 0), gradient(t, 1)],
-                color,
-            };
-            if q.want_frames {
-                q.frames[i] = Frame {
-                    normal: std::array::from_fn(|a| (0..3).map(|k| t.corners[k].normal[a] * w[k]).sum()),
-                    tangent: {
-                        let mut v: [f32; 4] = std::array::from_fn(|a| {
-                            (0..3).map(|k| t.corners[k].tangent[a] * w[k]).sum()
-                        });
-                        v[3] = if t.corners[0].tangent[3] < 0. { -1. } else { 1. };
-                        v
-                    },
+                    None => {
+                        searches += 1;
+                        let hit = query.nearest(p)?;
+                        match recent.iter().position(|r| r.0 == hit.rank) {
+                            Some(k) => recent[..=k].rotate_right(1),
+                            None => {
+                                let positions = query
+                                    .witness_positions()
+                                    .ok_or_else(|| state("coarse bake witness"))?;
+                                recent.insert(0, (hit.rank, positions));
+                                recent.truncate(RECENT);
+                            }
+                        }
+                        (hit.bary, hit.distance2)
+                    }
                 };
+                witnesses.push((recent[0].0, w.map(|v| v as f32), d2 as f32));
             }
+            // The chunk's donors, read in rank order as merged runs.
+            ranks.clear();
+            ranks.extend(witnesses.iter().map(|w| w.0));
+            ranks.sort_unstable();
+            ranks.dedup();
+            donors.clear();
+            let mut i = 0;
+            while i < ranks.len() {
+                let first = ranks[i];
+                let mut j = i + 1;
+                while j < ranks.len()
+                    && ranks[j] - ranks[j - 1] <= RUN_GAP
+                    && ranks[j] - first < RUN_SPAN
+                {
+                    j += 1;
+                }
+                let last = ranks[j - 1];
+                query.triangles(first, (last - first + 1) as usize, &mut encoded, &mut run)?;
+                reads += 1;
+                for &rank in &ranks[i..j] {
+                    donors.push((rank, Donor::new(&run[(rank - first) as usize])));
+                }
+                i = j;
+            }
+            for (k, (rank, w, d2)) in witnesses.iter().enumerate() {
+                let i = start + k;
+                let at = donors
+                    .binary_search_by_key(rank, |d| d.0)
+                    .map_err(|_| state("coarse bake donor"))?;
+                let t = &donors[at].1;
+                let lerp2 = |v: [[f32; 2]; 3]| -> [f32; 2] {
+                    std::array::from_fn(|a| v[0][a] * w[0] + v[1][a] * w[1] + v[2][a] * w[2])
+                };
+                let color = if t.flags & COLOR != 0 {
+                    std::array::from_fn(|a| (0..3).map(|c| t.colors[c][a] * w[c]).sum::<f32>())
+                } else {
+                    [1.; 4]
+                };
+                q.hits[i] = Hit {
+                    d2: *d2,
+                    rank: *rank,
+                    material: t.material,
+                    flags: t.flags,
+                    uv: [lerp2(t.texcoords[0]), lerp2(t.texcoords[1])],
+                    gradient: t.gradient,
+                    color,
+                };
+                if q.want_frames {
+                    q.frames[i] = Frame {
+                        normal: std::array::from_fn(|a| (0..3).map(|c| t.normals[c][a] * w[c]).sum()),
+                        tangent: {
+                            let mut v: [f32; 4] = std::array::from_fn(|a| {
+                                (0..3).map(|c| t.tangents[c][a] * w[c]).sum()
+                            });
+                            v[3] = if t.tangents[0][3] < 0. { -1. } else { 1. };
+                            v
+                        },
+                    };
+                }
+            }
+            start = end;
         }
     }
     Ok((searches, reads))
@@ -216,7 +284,10 @@ pub(crate) fn resolve(
 // ----------------------------------------------------------------------------------------
 // Decoded source chains and sampling.
 
+/// A decoded source image's chain from level `base` down to 1x1 (RGBA8, colour
+/// classes sRGB-encoded): `levels[0]` is source level `base`.
 pub(crate) struct Chain {
+    pub base: u32,
     pub levels: Vec<mips::Level>,
     pub bytes: u64,
 }
@@ -224,6 +295,7 @@ pub(crate) struct Chain {
 type Cell = Arc<OnceLock<Result<Arc<Chain>, JobError>>>;
 struct Entry {
     cell: Cell,
+    base: u32,
     last_use: u64,
     bytes: u64,
 }
@@ -235,11 +307,15 @@ struct CacheState {
     peak: u64,
     hits: u64,
     misses: u64,
+    load_seconds: f64,
 }
 
-/// Decoded colour-correct mip chains keyed by (image, class), shared by the stage's
-/// workers; least recently used entries beyond `budget` bytes are evicted (holders keep
-/// an evicted chain alive only while they sample it). Never changes output.
+/// Decoded chains keyed by (image, class), shared by the stage's workers. A request
+/// names the finest level it samples; a cached chain starting at that level or finer
+/// serves it, otherwise the chain is rebuilt from the requested level (coarse tiles
+/// keep only small levels resident). Least recently used entries beyond `budget` bytes
+/// are evicted (holders keep an evicted chain alive only while they sample it). Never
+/// changes output: every chain level is the same function of the source image.
 pub(crate) struct ImageCache {
     budget: u64,
     state: Mutex<CacheState>,
@@ -252,6 +328,8 @@ pub struct CacheStats {
     pub peak_resident_bytes: u64,
     pub hits: u64,
     pub misses: u64,
+    /// Thread CPU seconds of image reconstruction, decode and chain builds.
+    pub load_cpu_seconds: f64,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -277,50 +355,73 @@ impl ImageCache {
             peak_resident_bytes: s.peak,
             hits: s.hits,
             misses: s.misses,
+            load_cpu_seconds: s.load_seconds,
         }
     }
+    /// The chain of `image` as `class`, holding at least levels `need..`.
     pub(crate) fn get(
         &self,
         captured: &FullCaptured,
         image: usize,
         class: mips::Class,
+        need: u32,
         check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Arc<Chain>, JobError> {
         let key = (image, class_rank(class));
-        let cell = {
+        let (cell, base) = {
             let mut s = lock(&self.state);
             s.clock += 1;
             let clock = s.clock;
-            let hit = s.entries.contains_key(&key);
-            let entry = s.entries.entry(key).or_insert_with(|| Entry {
-                cell: Arc::new(OnceLock::new()),
-                last_use: clock,
-                bytes: 0,
-            });
-            entry.last_use = clock;
-            let cell = entry.cell.clone();
-            if hit {
-                s.hits += 1;
-            } else {
-                s.misses += 1;
+            let cached = s.entries.get(&key).filter(|e| e.base <= need).map(|e| e.cell.clone());
+            match cached {
+                Some(cell) => {
+                    s.hits += 1;
+                    let e = s.entries.get_mut(&key).expect("cached entry");
+                    e.last_use = clock;
+                    (cell, e.base)
+                }
+                None => {
+                    s.misses += 1;
+                    let cell: Cell = Arc::new(OnceLock::new());
+                    let old = s.entries.insert(
+                        key,
+                        Entry {
+                            cell: cell.clone(),
+                            base: need,
+                            last_use: clock,
+                            bytes: 0,
+                        },
+                    );
+                    s.resident -= old.map_or(0, |e| e.bytes);
+                    (cell, need)
+                }
             }
-            cell
         };
-        let result = cell.get_or_init(|| load(captured, image, class, check).map(Arc::new)).clone();
+        let mut seconds = 0.;
+        let result = cell
+            .get_or_init(|| {
+                let started = super::error::thread_cpu();
+                let chain = load(captured, image, class, base, check).map(Arc::new);
+                seconds = super::error::thread_cpu().zip(started).map_or(0., |(b, a)| b - a);
+                chain
+            })
+            .clone();
         let mut s = lock(&self.state);
+        s.load_seconds += seconds;
+        let current = s.entries.get(&key).is_some_and(|e| Arc::ptr_eq(&e.cell, &cell));
         match &result {
             Err(_) => {
-                if s.entries.get(&key).is_some_and(|e| Arc::ptr_eq(&e.cell, &cell)) {
+                if current {
                     let removed = s.entries.remove(&key).map_or(0, |e| e.bytes);
                     s.resident -= removed;
                 }
             }
             Ok(chain) => {
-                let bytes = chain.bytes;
-                if let Some(e) = s.entries.get_mut(&key) {
-                    if e.bytes == 0 && Arc::ptr_eq(&e.cell, &cell) {
-                        e.bytes = bytes;
-                        s.resident += bytes;
+                if current {
+                    let e = s.entries.get_mut(&key).expect("current entry");
+                    if e.bytes == 0 {
+                        e.bytes = chain.bytes;
+                        s.resident += chain.bytes;
                     }
                 }
                 s.peak = s.peak.max(s.resident);
@@ -352,10 +453,54 @@ fn class_rank(c: mips::Class) -> u8 {
     }
 }
 
+/// The next level of a chain: each texel is the mean of its (up to) 2x2 parents,
+/// in linear light for colour RGB, raw otherwise (alpha always raw).
+fn halve(src: &mips::Level, class: mips::Class) -> mips::Level {
+    let (sw, sh) = (src.width as usize, src.height as usize);
+    let (w, h) = ((sw / 2).max(1), (sh / 2).max(1));
+    let lut = linear_lut();
+    let mut rgba = vec![0u8; w * h * 4];
+    for y in 0..h {
+        let rows = [(2 * y).min(sh - 1), (2 * y + 1).min(sh - 1)];
+        for x in 0..w {
+            let cols = [(2 * x).min(sw - 1), (2 * x + 1).min(sw - 1)];
+            let mut sum = [0f64; 4];
+            for r in rows {
+                for c in cols {
+                    let i = (r * sw + c) * 4;
+                    for (k, v) in sum.iter_mut().enumerate() {
+                        let b = src.rgba[i + k];
+                        *v += if class == mips::Class::Colour && k < 3 {
+                            lut[b as usize]
+                        } else {
+                            f64::from(b) / 255.
+                        };
+                    }
+                }
+            }
+            let o = (y * w + x) * 4;
+            for (k, v) in sum.iter().enumerate() {
+                let mean = v * 0.25;
+                rgba[o + k] = if class == mips::Class::Colour && k < 3 {
+                    srgb_byte(mean)
+                } else {
+                    (mean.clamp(0., 1.) * 255.).round() as u8
+                };
+            }
+        }
+    }
+    mips::Level {
+        width: w as u32,
+        height: h as u32,
+        rgba,
+    }
+}
+
 fn load(
     captured: &FullCaptured,
     image: usize,
     class: mips::Class,
+    base: u32,
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<Chain, JobError> {
     let snapshot = captured
@@ -370,18 +515,31 @@ fn load(
         &mut || check(),
     )?;
     drop(encoded);
-    let limit = chain_bytes(info.width, info.height).saturating_mul(4);
-    let chain = mips::build(
-        info.width,
-        info.height,
+    let mut level = mips::Level {
+        width: info.width,
+        height: info.height,
         rgba,
-        class,
-        None,
-        usize::try_from(limit).map_err(|_| resource("coarse bake chain size"))?,
-    )?;
+    };
+    let mut index = 0;
+    while index < base && (level.width > 1 || level.height > 1) {
+        level = halve(&level, class);
+        index += 1;
+    }
+    check()?;
+    let mut levels = vec![level];
+    loop {
+        let last = levels.last().expect("chain level");
+        if last.width == 1 && last.height == 1 {
+            break;
+        }
+        let next = halve(last, class);
+        levels.push(next);
+    }
+    let bytes = levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>() + 4096;
     Ok(Chain {
-        levels: chain.levels,
-        bytes: chain_bytes(info.width, info.height),
+        base: index,
+        levels,
+        bytes,
     })
 }
 
@@ -437,7 +595,7 @@ pub(crate) fn srgb(v: f64) -> f64 {
     }
 }
 
-/// Trilinear sample of a decoded chain at `uv` and level `lod`, in LINEAR value space for
+/// Trilinear sample of a decoded chain at `uv` and source level `lod`, in LINEAR value space for
 /// colour classes (RGB) and raw [0, 1] for data/normal. The source sampler's wrap modes
 /// and magnification filter apply; minification always uses the colour-correct chain
 /// (the coarse texel represents an area, not a point).
@@ -450,11 +608,15 @@ pub(crate) fn sample(
 ) -> [f64; 4] {
     let levels = &chain.levels;
     let top = (levels.len() - 1) as f64;
-    let l = if lod.is_finite() { lod.clamp(0., top) } else { 0. };
+    let l = if lod.is_finite() {
+        (lod - f64::from(chain.base)).clamp(0., top)
+    } else {
+        0.
+    };
     let a = l.floor() as usize;
     let b = (a + 1).min(levels.len() - 1);
     let f = l - a as f64;
-    let nearest = l <= 0. && matches!(sampler.mag_filter, 9728);
+    let nearest = chain.base == 0 && l <= 0. && matches!(sampler.mag_filter, 9728);
     let fetch = |level: &mips::Level| -> [f64; 4] {
         let x = f64::from(uv[0]) * f64::from(level.width) - 0.5;
         let y = f64::from(uv[1]) * f64::from(level.height) - 0.5;
@@ -533,9 +695,15 @@ mod tests {
     fn trilinear_sampling_wraps_and_minifies_in_linear_light() {
         // A 2x2 black/white checker: level 1 is the linear-light mean, not sRGB 0.5.
         let rgba = [0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255].to_vec();
-        let built = mips::build(2, 2, rgba, mips::Class::Colour, None, 1 << 20).unwrap();
+        let base = mips::Level {
+            width: 2,
+            height: 2,
+            rgba,
+        };
+        let next = halve(&base, mips::Class::Colour);
         let chain = Chain {
-            levels: built.levels,
+            base: 0,
+            levels: vec![base, next],
             bytes: 0,
         };
         let s = crops::SourceSampler {
