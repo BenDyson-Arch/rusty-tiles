@@ -1,4 +1,4 @@
-//! D2 sampled source error, policy v1. This is deliberately not certification.
+//! D2 sampled source error, policy v2. This is deliberately not certification.
 //! G=max(child G, 1.05 M). The 5% sampling margin exceeds the prototype's
 //! ~1% independent maximum exceedance; it is not a covering-radius bound.
 //! Source controls cover bounded patch boundaries, one vertex per patch component

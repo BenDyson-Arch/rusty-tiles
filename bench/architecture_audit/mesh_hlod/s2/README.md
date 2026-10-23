@@ -3,7 +3,10 @@
 Measured production commit: `30c07bf70b0f52996cdccbc949f035f46d70d83a`, based on S1
 `88036137d2b7676dffeb2ef20ffa2b32af5b4dcf`. Contract:
 [`hlod-s2-error.md`](../../../../docs/architecture/hlod-s2-error.md).
-The later receipt commit changes documentation/hash receipts only. Production,
+The receipt commits add documentation/hash receipts; the final review correction
+changes only a stale Rust module documentation label from v1 to v2. The exact
+comment-only diff is retained as `post-review-comment.diff`; the executed binary
+and production source remain pinned to the measured commit above. Production,
 input, binary and oracle identities are pinned separately.
 
 Bulk evidence root:
@@ -140,7 +143,11 @@ The oracle supports these identity/translation/scale explicit crops; general
 scene/forest validation belongs to S5. Cut comparisons use each cut's maximum G,
 not every tile's own G/range. No source-distance certificate is claimed.
 
-Final independent review and scratch cleanup are recorded in the bulk receipt.
+Final independent review of `07a97818` found no correctness issues and matched
+312 production paths, 39 execution artifacts and three oracle helpers. Its sole
+P3 policy-label comment nit was corrected, with no executable changes. Details
+are in `review-r4.json`. The pinned compile/clippy scope peaked at 2,458,099,712
+bytes. Scratch cleanup is recorded separately in the bulk receipt.
 Revised S1 integration remains conditional on publication of that branch revision;
 the tested base is explicit above. S3 can use the source query/donor API, original
 attributes/material/provenance, representative IDs and versioned G/q summaries,
