@@ -6,7 +6,7 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh source-CRS conversion (legacy and `mesh --source-crs`) can need native support for CRS outside the verified grid-free tier; the new `mesh` command, its grid-free source CRS and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
+The **standard CLI** is the default Cargo build and the binary supplied by release downloads. It supports meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage, packaging, validation and preview without system geospatial libraries. **Native-geospatial** is a separate build from the native container or Cargo with `--features native-geospatial`; it adds raster/terrain, OGR-only inputs and eligible native CRS operations. Mesh source-CRS conversion (`mesh --source-crs`) can need native support for CRS outside the verified grid-free tier; the new `mesh` command, its grid-free source CRS and rigid model placement work in the standard build. See [installation](INSTALL.md#choose-a-build).
 
 Both builds expose the command help, including commands whose native capability is unavailable. Check `rusty-tiles doctor --command COMMAND` before using a converter. Adding GDAL to a standard installation does not enable the feature. The Python wheel exposes only the [standard Python API](../bindings/python/README.md), not this CLI.
 
@@ -14,13 +14,12 @@ Both builds expose the command help, including commands whose native capability 
 
 Options have a camelCase spelling, such as `--sourceCrs`. Each multi-word option also accepts a kebab-case alias, such as `--source-crs`. Both spellings behave the same. The examples in these docs use the kebab-case alias.
 
-Three subcommands also have an alias.
+Two subcommands also have an alias.
 
 | Command | Alias |
 | --- | --- |
 | `createTilesetJson` | `create-tileset-json` |
 | `glb-to-3tz` | `glbTo3tz` |
-| `mesh-to-3tz` | `meshTo3tz` |
 
 Archive/directory converters share these file options. `createTilesetJson`
 takes `--input` and `--force` and derives a fixed sibling output; it has no
@@ -41,7 +40,7 @@ Two global options work before or after the subcommand.
 
 See [machine output](#machine-output) for both formats.
 
-`mesh`, `mesh-to-3tz`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling. `point-cloud` and `vector` write only this layout: their `--explicit` flag was removed in 0.4.0 and is now an unknown argument. The legacy `mesh-to-3tz` keeps `--explicit`, which selects the earlier explicit hierarchy, partitioning and payloads. To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
+`mesh`, `point-cloud` and `vector` produce 3D Tiles 1.1 implicit tiling and write only this layout. The `--explicit` flag of `point-cloud` and `vector` was removed in 0.4.0 and is now an unknown argument; the legacy `mesh-to-3tz`, `meshTo3tz` and `mesh-local-to-3tz` commands were removed in 0.4.0 and are unknown subcommands (exit 2). To move an existing explicit point-cloud or vector archive to implicit tiling, re-run its converter from the original source; there is no archive-to-archive rewrite command. `validate` still reads explicit archives, including those written before 0.4.0. Packaging preserves the selected bytes; its inventory and publication rules are documented under `convert`.
 
 The shared layout is a bounded implicit forest. Producer naming/partition details vary; the following member naming describes vector and point-cloud output. A tile with at least four levels of descendants stays an explicit tile, as do its leaf children; each other child, with one to three levels of descendants, becomes an implicit root with exactly one binary subtree, `subtrees/r{n}-{level}-{x}-{y}[-{z}].subtree`, which records every tile's actual bounding box and geometric error and has no child subtrees. When the whole hierarchy has fewer than four levels of descendants, the root itself is the only implicit root. Implicit content is published under `implicit-content/r{n}-{level}-{x}-{y}[-{z}]-{slot}.{suffix}`; no implicit content template names a JSON tileset. A large explicit skeleton is split into explicit external tileset documents, `tileset-d{m}.json`, each of at most 16,384 JSON values and 2 MiB, referenced by explicit link tiles. Hierarchies with more than 32 levels are refused. Archives keep each payload once: explicit tiles publish their payloads in place, and implicit tiles publish copies whose glTF scene root carries the tile's translation.
 
@@ -80,36 +79,6 @@ per-vertex map (positions, normals and tangents) is applied at capture and whose
 ENU frame becomes the root transform. There is no CRS inference, geoid
 conversion, leaf/proxy tuning, explicit/full-detail mode or texture-format flag. Profiles do not freeze numerical settings and
 `lossless` is not a source-GLB byte-preservation promise.
-
-### mesh-to-3tz
-
-Deprecated; retained until the full new tiler is accepted. Use `mesh` for the
-new local-metre pipeline. Its old options do not apply to `mesh`.
-
-Splits a textured GLB or glTF into spatial 3D Tiles with mesh level of detail. Small inputs are wrapped without splitting.
-
-| Option | Alias | Default | Meaning |
-| --- | --- | --- | --- |
-| `--textureFormat` | `--texture-format` | `jpeg` | `jpeg`, `webp`, `uastc` or `lossless`, which is exact PNG |
-| `--explicit` | | off | Keep the earlier explicit hierarchy and median partition |
-| `--basisu` | | `basisu` | Basis Universal encoder executable, needed for `uastc` |
-| `--maxTriangles` | `--max-triangles` | `20000` | Stop splitting a node at this many triangles |
-| `--maxBytes` | `--max-bytes` | `204800` | Source files at or below this size are wrapped, not split |
-| `--tileSize` | `--tile-size` | `2048` | Leaf atlas edge in pixels. Parent atlases are capped at 1024. |
-| `--maxTexelDensity` | `--max-texel-density` | `0` | Must be 0, so leaf texels keep source resolution |
-| `--nodeFeatures` | `--node-features` | off | Pick and style individual source nodes by `name` and `node_index`; also authors small inputs as tiles |
-| `--noMeshopt` | `--no-meshopt` | off | Disable lossless meshopt compression |
-| `--sourceCrs` | `--source-crs` | `auto` | Legacy `auto`, `geographic`, `epsg:3857`, or a general 2D horizontal EPSG/WKT/PROJ definition |
-| `--sourceAxes` | `--source-axes` | none | Required for general CRS: `xyz` is E/N/height; `y-up` is E/height/−N, after glTF node transforms |
-| `--heightOffset` | `--height-offset` | none | General CRS only: metres added to source height plus A to obtain ellipsoidal height; required, including explicit zero |
-| `--sourceOffset E N [A]` | `--source-offset` | none | E/N in declared horizontal CRS units, A metres; added in double precision. Legacy adapters use EPSG:3857 metre shifts. |
-| `--sourceOffsetFile` | `--source-offset-file` | none | Read E/N and optional A from labelled lines; existing `offset.txt` files remain supported |
-| `--cartographicPositionDegrees lon lat [height]` | `--cartographic-position-degrees` | none | Place a local model on the globe |
-| `--rotationDegrees heading pitch roll` | `--rotation-degrees` | none | Orient a placed model |
-
-Mesh placement rules are in [Coordinates and height](../README.md#coordinates-and-height).
-
-General CRS placement uses the shared [conservative CRS resolver](FORMATS.md#point-clouds). Supply both axes and a height decision, for example `--source-crs EPSG:32632 --source-axes xyz --source-offset 500000 0 100 --height-offset 0` for a model whose transformed POSITION values are local easting/northing/height offsets. Horizontal feet never rescale source height or A. The CRS bake rewrites positions into a local metre ENU frame and transforms authored normals by the projection's inverse transpose, preserving triangle membership/winding, UVs and feature identity before the usual atlas/LOD pipeline. Source files remain unchanged; output positions/normals are float32. Manual cartographic placement or rotation cannot be combined with the general path. Existing commands without axes/height retain their original placement semantics and representative textured output digests. Retiling materials without an authored PBR object now preserves its omission instead of inserting invalid JSON null.
 
 ### point-cloud
 
@@ -382,95 +351,7 @@ Programs should test the exit code or `error.code`, not the message text.
 | 4 | `environment` | Missing native capability, PROJ database or strict CRS operation |
 | 5 | `output_conflict` | The output exists and `--force` was not given |
 
-Mesh, vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The legacy categories in the table still apply to converters that have not migrated.
-
-## mesh-local-to-3tz
-
-Deprecated; retained until the full new tiler is accepted. Use [mesh](#mesh) for
-the new public operation; the legacy leaf/proxy options below do not apply to it.
-
-F1c1 explicit placement is a development implementation candidate pending
-independent review and final consumer/platform acceptance. The bounded source
-profile remains [F1b3](architecture/f1b3-contract.md).
-
-`mesh-local-to-3tz -i local.glb -o local.3tz --leaf-triangles 1000` converts the
-bounded static GLB/glTF profile, explicitly interpreted as local
-metres with Y up. `--leaf-triangles` is required and positive; it limits each
-leaf's triangle count, not archive bytes, memory or geometric error. `--force`
-uses completed-file replacement. This operation emits an explicit hierarchy
-with full-detail leaf geometry and source-faithful PNG/JPEG core PBR
-textures. Each used image is delivered once in the archive; UV0/UV1 bindings,
-authored tangent frames, linear vertex colors, material factors, alpha masking
-and sampler settings are preserved. Source CRS is explicit local metres/Y-up.
-
-| Placement option | Meaning |
-| --- | --- |
-| `--anchor LON LAT HEIGHT` | WGS84 longitude/latitude degrees and explicit ellipsoidal height metres. Omission keeps local output. |
-| `--orientation-xyzw X Y Z W` | Right-handed active ENU quaternion, scalar W last; requires anchor. Omission means identity. |
-| `--scene-offset X Y Z` | Post-node glTF Y-up metre translation before orientation; requires anchor. Omission means zero. |
-
-```sh
-rusty-tiles mesh-local-to-3tz -i local.glb -o placed.3tz --leaf-triangles 1000 \
-  --anchor 153.02 -27.47 25 --orientation-xyzw 0 0 0 1 --scene-offset 10 2 -5
-```
-
-The cartographic ENU basis uses declared latitude/longitude at the anchor;
-supplied longitude fixes the meridian at a pole. Quaternion norm must differ
-from one by at most 1e-12 and is normalized once. Longitude/latitude are bounded
-to [-180,180]/[-90,90]. Invalid/nonfinite parameters fail before source I/O;
-the [finite forward-magnitude limit](architecture/f1c1-contract.md#precision-and-limits)
-is Unsupported before source I/O. Placement uses one f64 root transform; leaves
-retain local Y-up geometry and every companion/resource association. Offset is
-not a projected E/N/A shift, source CRS conversion or geoid correction. The F1c2 candidate emits primitive identity and exact triangle provenance through standard labeled feature sets; see the [identity/picking contract](architecture/f1c2-contract.md).
-
-Relative local buffers and images are captured before callbacks. Network, data,
-absolute and escaping resource URIs and dependency symlinks are refused.
-Normal maps require authored normals and tangents. Tangent-bearing instances
-require a uniform absolute scale with an orthogonal accumulated transform,
-including reflections; arbitrary nonuniform tangent baking is refused.
-Unsupported source semantics, including alpha blending, animation, extensions
-and extras, fail consistently before output staging. See the [finite source,
-numerical and admission contract](architecture/f1b3-contract.md). This command
-is separate from the broader `mesh-to-3tz`; rejecting a local-profile source
-does not silently route it through that operation.
-
-`--json` returns `meshReport` with the same snake_case fields published in
-`conversion.json`, plus `cleanupDiagnostics`. Schema 7/profile
-`f1d2-adaptive-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`, output
-`coordinates` (`local-gltf` or `wgs84-ecef`), tagged `placement` with normalized
-parameters, and the exact emitted `root_transform`. It counts the root document
-as `source_bytes`; `external_files` and `external_bytes` count unique captured
-dependencies, including unused ones. The output is its resolved
-absolute installation path. `--progress json` uses fallible precommit domain
-events; required observer/finalization failures preserve the previous destination.
-Full-detail mode uses an extent-derived omission/selection root error. Leaves
-retain all accepted triangles. An explicit root proxy is available with paired
-`--root-proxy-triangles N --max-proxy-error-metres E` arguments. N must be positive;
-E must be finite and positive. The first proxy profile accepts opaque, untextured,
-positions-only geometry. It requires actual reduction, preserves authored
-components and material factors, and certifies a complete surface-distance bound
-before staging. Complete dyadic proof patches tighten the bound without changing
-the emitted geometry. The emitted root error is E after the bound is proved at
-most E; `meshReport.approximation.certificate` records `error_metres`, performed
-`patch_face_tests`, `accepted_patches` and `max_depth`. The fixed proof profile
-allows depth 24 and 16,777,216 global patch/target-face evaluations. Exhausting
-these limits means the requested bound could not be certified, even when the
-true distance is zero.
-Coarse picks expose `proxy_region` membership arrays; fine leaves retain exact
-`source_triangle` picking. Unsupported profile, target, error or work requests
-fail before staging. The [F1d2 contract](architecture/f1d2-certificate-contract.md)
-records proof limits, including a potentially loose certificate and no general
-appearance guarantee. The
-[bounded evidence](../bench/architecture_audit/mesh_approximation_f1d2/README.md)
-records independent decoding, public consumer queries and separate review.
-
-Known limitation: each leaf has one `source_triangle` property table with a row
-per leaf triangle. CesiumJS 1.146 cannot build the GPU texture of a property
-table wider than the WebGL maximum texture size (8192 on the pinned target), so with `--leaf-triangles` above 8192 it warns
-`Cannot create a texture for the property table "undefined"` and metadata
-styling through the GPU fails on those leaves; the table itself stays
-complete. Keep `--leaf-triangles` at or below 8192 when styling by
-metadata. This writer is retired with the new mesh tiler rather than changed.
+Mesh, vector, point-cloud and raster conversion use the foundation error categories: `invalid_request` and `unsupported` exit 2, `invalid_input` exits 3, `output_conflict` exits 5, and `io`, `resource_limit`, `cancelled`, `observer_failure` or `invalid_state` exit 1. A build without native raster support refuses `raster` as `unsupported`. Their JSON errors include `kind`, secondary diagnostics and retained paths. For example, vector `--lod-levels 40` names the permitted range and exits 2. Unsupported CRS capability is `unsupported`; malformed source records are `invalid_input`. The categories in the table apply to the other commands.
 
 ## Machine output
 
@@ -533,7 +414,6 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | `terrain` | `terrain`, counting tiles |
 | `convert` | `encoding`, `ready_to_publish`; these package events finish before installation |
 | `mesh` | Named capture/leaf/hierarchy/archive work; required events finish before installation; see the mesh guide |
-| `mesh-local-to-3tz` | `mesh_approximation` when requested, `mesh_leaves`, `mesh_archive`, `ready_to_publish`; domain events finish before installation |
 
 Events report work units, not time remaining.
 
@@ -541,10 +421,8 @@ Events report work units, not time remaining.
 
 | Variable | Used by | Effect |
 | --- | --- | --- |
-| `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The deprecated `RUSTY_TILES_PYTHON_TRACEBACK=1` still works when this is unset. |
-| `RAYON_NUM_THREADS` | legacy mesh | Limit legacy Rayon workers. The new `mesh` owns its workers through `--jobs`; terrain encoding is sequential. |
+| `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings. The former alias `RUSTY_TILES_PYTHON_TRACEBACK` was removed in 0.4.0 and is ignored. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
-| `RUSTY_TILES_DISABLE_NATIVE_JPEG=1` | build | Force the portable Rust JPEG encoder even when `native-jpeg` is enabled; default builds already use portable JPEG |
 
 Contributor test variables are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
 

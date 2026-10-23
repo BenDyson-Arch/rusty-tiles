@@ -70,8 +70,6 @@ The SQLite override is required so Rust, GDAL and PROJ share one system SQLite. 
 
 Both builds use the executable name `rusty-tiles`. Installing either build at the same Cargo install root replaces the other; use separate `--root` directories if you need both. Use `doctor` to identify capabilities, not the filename. GeoJSON and GeoPackage vector conversion uses the GDAL/GEOS backend throughout the native build, so changing builds can change triangulation and requires a fresh vector reuse baseline.
 
-`native-jpeg` is a separate optional codec feature. Both geospatial builds use portable JPEG unless that feature is selected; it does not enable raster, terrain or CRS operations. See [contributor build instructions](../CONTRIBUTING.md#build).
-
 ## Python and Blender
 
 Python wheels contain **only the standard conversion APIs**. They support meshes, local/grid-free LAS/LAZ, GeoJSON/GeoPackage vectors, tileset packaging and archive validation. They do not expose raster, terrain, OGR-only inputs, native CRS fallback, `doctor` or `preview`. Installing GDAL or its Python bindings does not change the wheel. For native conversion, use the native CLI/container or the Rust library with `native-geospatial` enabled.
@@ -86,10 +84,10 @@ To use the current development code, run these commands from the source checkout
 
 ```sh
 python -m pip install 'maturin==1.15.0'
-RUSTY_TILES_DISABLE_NATIVE_JPEG=1 python -m maturin build --release --locked --out target/wheels
+python -m maturin build --release --locked --out target/wheels
 ```
 
-Install the resulting platform-matching wheel with that Python's `python -m pip install /path/to/the.whl`. In PowerShell, set `$env:RUSTY_TILES_DISABLE_NATIVE_JPEG = "1"` before the maturin command. Leave `LIBSQLITE3_SYS_USE_PKG_CONFIG` unset. See the [Python API guide](../bindings/python/README.md) for available functions and installation testing inside Blender's actual Python runtime.
+Install the resulting platform-matching wheel with that Python's `python -m pip install /path/to/the.whl`. Leave `LIBSQLITE3_SYS_USE_PKG_CONFIG` unset. See the [Python API guide](../bindings/python/README.md) for available functions and installation testing inside Blender's actual Python runtime.
 
 Release wheels target Linux glibc 2.28+ on x86_64 and ARM64, macOS 15+ on Intel and Apple Silicon, and Windows x64. They use the CPython stable ABI for 3.10 and newer. Candidate wheels have passed official Blender 4.5.14 LTS acceptance on Linux x64, Windows x64 and both macOS architectures; Linux ARM64 has no official Blender 4.5 bundle. Publication and installation from PyPI remain separate checks in [#77](https://github.com/BenDyson-Arch/rusty-tiles/issues/77).
 

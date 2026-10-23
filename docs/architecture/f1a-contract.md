@@ -1,5 +1,7 @@
 # F1a local static mesh contract
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 Historical first mesh milestone. The [F1b1 contract](f1b-contract.md) now extends
 the same operation with embedded base-color textures and replaces its report
 profile. F1b1 explicitly lists the additions; the geometry/lifecycle rules here

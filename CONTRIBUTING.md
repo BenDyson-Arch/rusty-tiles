@@ -44,21 +44,19 @@ table below describes the current implementation.
 | Module | Responsibility |
 | --- | --- |
 | `main.rs`, `lib.rs` | CLI parsing, summaries, `--json` results and exit codes; public library exports |
-| `report.rs` | `Reporter`, `Event`, `EventSink` and `ConversionResult` |
-| `output.rs` | The conversion `Job`: preflight, private work directory, no-clobber publication |
+| `runtime.rs`, `runtime/` | `RunControl`, observers, typed job errors and F0 publication |
+| `output.rs` | The `conversion.json` report writer |
 | `error.rs` | `Error` and its stable exit-code categories |
 | `pack.rs` | Stored ZIP/ZIP64 with the 3TZ index, and `convert` |
 | `validate.rs` | Read-only `.3tz` validation |
-| `tileset.rs` | `createTilesetJson` and `glb-to-3tz` |
+| `mesh_archive.rs`, `mesh_archive/` | `createTilesetJson`, `glb-to-3tz` and the rigid placement they share with `mesh` |
+| `mesh_large/` | The `mesh` tiler |
+| `gltf_source/` | glTF document, resource and source admission |
 | `tileset_node.rs` | Shared 3D Tiles node pieces for tilers |
 | `implicit.rs`, `implicit/tileset.rs` | Quadtree/octree availability, semantic metadata, converter emission and bounded expansion |
-| `tile.rs` | Mesh spatial leaves and replacement LODs |
-| `mesh.rs`, `hlod.rs`, `grid.rs` | Indexed mesh model, parent proxies built from children, and nearest-triangle grid |
-| `texture.rs`, `jpeg.rs`, `gpu_texture.rs` | Texture baking, JPEG delivery and UASTC encoding |
-| `glb.rs`, `glb_write.rs` | Shared GLB framing and meshopt view rewriting, and single-mesh GLB authoring |
-| `lossless.rs` | Tile serialization with meshopt as a byte codec |
-| `bbox.rs` | Bounding boxes from glTF positions |
-| `georef.rs`, `mesh_crs.rs` | Mesh placement, legacy adapters and general axes/CRS/height baking |
+| `glb.rs` | Shared GLB framing and meshopt view rewriting |
+| `bbox.rs` | Oriented bounding boxes and the covariance eigenvectors vector fitting uses |
+| `georef.rs`, `crs_jacobian.rs` | WGS84/ENU frames, source axes and offsets, and the per-vertex CRS Jacobians of mesh source-CRS capture |
 | `vec3.rs` | Small `[f64; 3]` helpers |
 | `point_cloud.rs`, `point_cloud/` | LAS/LAZ reading and disk-backed tiling |
 | `point_sampling.rs` | Voxel grid shared by point clouds and vector aggregation |
@@ -75,17 +73,16 @@ Native GDAL handles are created inside each worker. Spatial references and trans
 
 ## Build
 
-The user docs call the default Cargo build the **standard package**. Release CLI downloads and Python wheels use that build; the native container enables **`native-geospatial`**. This is a compile-time distinction: a standard artifact cannot discover an installed GDAL and gain native converters at runtime. `native-jpeg` is an independent codec option, not a geospatial build selector. See the [installation comparison](docs/INSTALL.md#choose-a-build).
+The user docs call the default Cargo build the **standard package**. Release CLI downloads and Python wheels use that build; the native container enables **`native-geospatial`**. This is a compile-time distinction: a standard artifact cannot discover an installed GDAL and gain native converters at runtime. See the [installation comparison](docs/INSTALL.md#choose-a-build).
 
-Use current stable Rust with rustfmt and a C++ compiler. The default build uses portable JPEG. Native features need `pkg-config` and their system libraries.
+Use current stable Rust with rustfmt and a C++ compiler. The native feature needs `pkg-config` and its system libraries.
 
 | Build | Command | Extra system packages |
 | --- | --- | --- |
 | Default | `cargo build --locked` | None |
 | Native geospatial | `cargo build --locked --features native-geospatial` | GDAL 3.12+, PROJ 9.2+, GEOS 3.10+, their headers and `pkg-config` files, SQLite dev files, libclang |
-| Native JPEG | `cargo build --locked --features native-jpeg` | libjpeg-turbo headers/libraries and `pkg-config` |
 
-`RUSTY_TILES_DISABLE_NATIVE_JPEG=1` overrides `native-jpeg` for portable packaging. Python wheels never enable native features.
+Python wheels never enable native features.
 
 Native builds require `LIBSQLITE3_SYS_USE_PKG_CONFIG=1` in the Cargo environment
 to share system SQLite with GDAL/PROJ. For example:
@@ -104,24 +101,20 @@ SDK through `PKG_CONFIG_PATH`. MSVC native builds also need `VCPKGRS_DYNAMIC=1`.
 ```sh
 cargo fmt --all --check
 cargo test --locked
-cargo test --locked --features native-jpeg
 LIBSQLITE3_SYS_USE_PKG_CONFIG=1 cargo test --locked --features native-geospatial
-RUSTY_TILES_DISABLE_NATIVE_JPEG=1 cargo test --locked --lib jpeg::tests
 ```
 
 The default suite runs real local LAS/LAZ conversions. The native suite adds CLI acceptance for doctor, preview, point cloud, raster, terrain and vector. Native CRS tests use independent references and synthetic local grids, with no Python or downloads. `cargo clippy --locked --all-targets --features native-geospatial -- -D warnings` is a CI gate in the native GDAL matrix.
 
-`tests/mesh_crs.rs` decodes full-detail leaf positions, indices and normals after complete world transforms, against frozen independent PROJ references. It checks metre/foot horizontal units, f64 shifts, both explicit and implicit geometry, both source axes and refusal publication. Unit tests in `mesh_crs.rs` compare authored normals with analytic Mercator derivatives and native azimuthal origins, preserving coincident hard-edge normals and source metadata. Existing mesh and digest tests retain the legacy adapter/default byte contracts.
-
 CI and release builds cache Cargo dependencies by job, Rust toolchain and lockfile, with separate platform and GDAL keys. The Python-free job exports all Docker build layers to the GitHub Actions `python-free-acceptance` cache, including the pinned PROJ/GDAL SDK and Rust build outputs. Its acceptance stage always runs the full installed suite through `no-cache-filters: acceptance`; only the packaged runtime image is loaded into Docker. Runtime builds read that export without overwriting it; the release workflow uses the same cache scope. The Dockerfile's Cargo cache mounts remain local to a builder and are not exported by the GitHub cache backend, so source changes can still require Rust dependency compilation on a fresh runner. A cold SDK build remains slow; measure later runs after the cache has been populated.
 
-`tests/implicit_subtree.rs` checks binary subtree availability independently of the writer. `implicit_metadata.rs` checks available-tile metadata rank and malformed binary input. `native_implicit.rs` checks complete implicit mesh/vector archives, boundary roots, corruption and reuse after edits. The point-cloud suite audits every LAS/LAZ leaf record and its placement across subtree boundaries. The mesh fidelity suite expands implicit tilesets before auditing leaf membership.
+`tests/implicit_subtree.rs` checks binary subtree availability independently of the writer. `implicit_metadata.rs` checks available-tile metadata rank and malformed binary input. `native_implicit.rs` checks a committed mixed explicit/implicit forest witness (`tests/fixtures/implicit_forest_witness.3tz`, written by the removed `mesh-to-3tz`) and fragmented vector archives, boundary roots, corruption and reuse after edits. The point-cloud suite audits every LAS/LAZ leaf record and its placement across subtree boundaries.
 
 To retain invented linked quadtree/octree archives, run `RUSTY_TILES_IMPLICIT_FIXTURES=target/implicit-fixtures cargo test --locked --test implicit_subtree linked_subtrees`. Each scheme has single-content and multiple-content cases with two subtrees. Check Cesium's availability reader with `node tests/fixtures/implicit_subtree.cjs target/implicit-fixtures target/preview-runtime/node_modules/cesium`.
 
 Upstream validator 0.6.1 validates native single-content cloud, mesh and vector fixtures with zero errors. Draft vector declarations produce a warning. Its pinned `3d-tiles-tools` 0.5.0 [traverser](https://github.com/CesiumGS/3d-tiles-tools/blob/v0.5.0/src/tilesets/traversal/ImplicitTraversedTile.ts) reads only `root.content.uri`, so stock traversal fails on multiple implicit content templates. For complete multiple-content checks, use `node tests/fixtures/implicit_validator.cjs target/validator/node_modules/3d-tiles-validator PATH/tileset.json --fix-multiple-content-traversal`. This explicitly patches only template selection in that pinned traverser; schema, subtree, metadata and content validators remain unchanged. It reports the workaround and fails on validation errors. Deep mesh and fragmented vector fixtures pass with zero errors under this workaround.
 
-`tests/shared_metadata.rs` checks the public metadata API and node identities through instancing, mesh compression and LODs. `native_point_cloud.rs` checks property attributes against every LAS/LAZ tile's source table. The committed output digests cover unchanged defaults and vector payloads.
+`tests/shared_metadata.rs` checks the public metadata API. `native_point_cloud.rs` checks property attributes against every LAS/LAZ tile's source table. The committed output digests cover unchanged defaults and vector payloads.
 
 For the optional issue #79 browser acceptance, install CesiumJS 1.146.0 and Playwright once, then export the invented fixtures and serve them:
 
@@ -148,7 +141,7 @@ empty executable `PATH`:
 ```sh
 python3 -m pip install 'maturin==1.15.0'
 cargo clippy --locked -p rusty-tiles-python -- -D warnings
-RUSTY_TILES_DISABLE_NATIVE_JPEG=1 maturin build --release --locked --out target/wheels
+maturin build --release --locked --out target/wheels
 python3 scripts/test_python_wheel.py target/wheels/*.whl
 ```
 
@@ -261,7 +254,7 @@ Core tests use invented fixtures only. Private data and credentials are never bu
 
 | Path | Role |
 | --- | --- |
-| `tests/fixtures/example.glb`, `tests/fixtures/vector.geojson` | The README mesh and vector examples (`example.glb` packs `example.gltf`, which the legacy release smoke test still uses) |
+| `tests/fixtures/example.glb`, `tests/fixtures/vector.geojson` | The README mesh and vector examples (`example.glb` packs `example.gltf`, which the Python API tests use) |
 | `tests/fixtures/vector_oracle/` | The original Python vector modules, kept unchanged for comparison |
 | `tests/fixtures/terrain_oracle.py` | The original Python terrain converter, compared at every grid size |
 | `tests/fixtures/*.cjs` | Browser probes, described below |
@@ -344,7 +337,7 @@ scripts/compare_outputs.sh develop
 
 The comparison script builds each revision in its own release target directory. It runs 11 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
 
-The `mesh` recipe runs the tiler with the lossless profile, so its digests do not depend on the KTX2 encoder's CPU path; the deprecated `mesh-to-3tz` has no recipe. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
+The `mesh` recipe runs the tiler with the lossless profile, so its digests do not depend on the KTX2 encoder's CPU path. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
 
 ## Release checklist
 
