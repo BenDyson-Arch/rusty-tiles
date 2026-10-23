@@ -1026,7 +1026,10 @@ impl<'s> Dense<'_, 's> {
                 (self.check)()?;
                 let octant = region.octant(o);
                 let mut h = self.writer("hlod-dense-hosts")?;
-                for q in hosts.reader()? {
+                for (i, q) in hosts.reader()?.enumerate() {
+                    if i.is_multiple_of(256) {
+                        (self.check)()?;
+                    }
                     let q = q?;
                     let pad = self.join.pad(&Candidate {
                         leaf: q.leaf,
@@ -1039,7 +1042,10 @@ impl<'s> Dense<'_, 's> {
                     }
                 }
                 let mut g = self.writer("hlod-dense-guests")?;
-                for q in guests.reader()? {
+                for (i, q) in guests.reader()?.enumerate() {
+                    if i.is_multiple_of(256) {
+                        (self.check)()?;
+                    }
                     let q = q?;
                     if octant.holds(point(q.a)) {
                         self.push(&mut g, &q)?;
@@ -1218,6 +1224,86 @@ mod tests {
         );
         assert_eq!(stats.overlaps, brute, "{stats:?}");
         assert!(brute > 0);
+    }
+
+    #[test]
+    fn dense_partition_cancels_even_when_every_candidate_is_pruned() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // Entry plus ceil((CELL_HOSTS + 1) / 256) host checks precede the
+        // guest scan. Interrupt each scan before its first partition completes.
+        let host_checks = (CELL_HOSTS + 1).div_ceil(256);
+        for stop in [3, 1 + host_checks + 2] {
+            let dir = tempfile::tempdir().unwrap();
+            let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+            let mut h = SequenceWriter::<Probe>::new(&scratch, "hosts", 4096).unwrap();
+            let mut g = SequenceWriter::<Probe>::new(&scratch, "guests", 4096).unwrap();
+            for _ in 0..=CELL_HOSTS {
+                let p = Probe {
+                    level: 0,
+                    cell: [0; 3],
+                    guest: false,
+                    leaf: 0,
+                    a: k([10., 10., 10.]),
+                    b: k([11., 10., 10.]),
+                    tol: 0f32.to_bits(),
+                };
+                h.push(&p).unwrap();
+                g.push(&p).unwrap();
+            }
+            let (h, g) = (h.finish().unwrap(), g.finish().unwrap());
+            let charge = JoinCharge {
+                limit: 64 << 20,
+                candidates: 0,
+                probe_sort: 0,
+                sorter: SORT,
+                rows: Cell::new(0),
+                live: Cell::new((h.len() + g.len()) * Probe::SIZE as u64),
+            };
+            let initial_live = charge.live.get();
+            let calls = AtomicUsize::new(0);
+            let check = || {
+                if calls.fetch_add(1, Ordering::Relaxed) + 1 == stop {
+                    Err(JobError::new(JobErrorKind::Cancelled, "partition control"))
+                } else {
+                    Ok(())
+                }
+            };
+            let mut dense = Dense {
+                scratch: &scratch,
+                sorter: SORT,
+                join: Join {
+                    cube: Cube {
+                        origin: [0.; 3],
+                        side: 1.,
+                    },
+                    guest_tol: 0.,
+                    floor: 0.,
+                },
+                budget: 64 << 20,
+                charge: &charge,
+                check: &check,
+            };
+            let mut stats = IncidenceStats::default();
+            let error = dense
+                .join_spilled(
+                    &h,
+                    &g,
+                    Region {
+                        lo: [0.; 3],
+                        hi: [1.; 3],
+                        cut_lo: [true; 3],
+                        cut_hi: [true; 3],
+                    },
+                    0,
+                    &mut |_, _, _| panic!("all candidates must be pruned"),
+                    &mut stats,
+                )
+                .unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::Cancelled);
+            assert_eq!(stats.dense_splits, 0, "scan completed before cancellation");
+            assert_eq!(charge.live.get(), initial_live);
+        }
     }
 
     /// A group of one item per leaf is charged in the stage's resident bound.
