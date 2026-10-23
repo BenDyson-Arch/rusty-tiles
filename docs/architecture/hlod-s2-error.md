@@ -103,20 +103,16 @@ records/area nodes, added to S1's incidence envelope. Memory-backed scratch is
 charged through the same S1 budget. Source index files have capture ownership
 and disappear on success, refusal and cancellation.
 
-Revised-S1 incidence is admitted before S2: exact groups have a fixed, charged
-65,536-leaf capacity and refuse before growth. The overlap allowance remains
-256 extra bytes/source triangle. All live candidate bytes and full probe/row
-sort-and-stream spill are checked prospectively against the admitted interface
-stage envelope. Exact-item space is reusable after its stream has been consumed;
-no record is pushed before the prospective total fits. The final row-stream
-envelope includes the overlap allowance too. Mixed-step candidate
-selection pads both host and guest boxes using their own decode and local
-rounding tolerances. Guest boxes clip to actual host bounds at each level so
-far coarse points do not enumerate a micro-cluster’s grid. Broad-phase padding
-doubles those radii to cover the predicate’s independent axial and perpendicular
-offsets (total displacement at most sqrt(2) times its tolerance). Each pair is evaluated in
-one shared cell. Probe growth and output bursts refuse before exceeding the
-allowance, including on memory-backed scratch.
+Revised-S1 incidence is admitted before S2. Exact groups hold at most one item
+per leaf; the stage charges three times that count for vector capacity and
+reallocation. Hosts use the largest guest tolerance and the cube rounding floor;
+double padding covers the predicate’s independent axial and perpendicular
+extensions. Dense cells spill and split before bounded chunked scans, without a
+density refusal. Their allowance is 256 bytes/source triangle with a 64 MiB floor.
+A shared prospective charge additionally covers retained candidate bytes, full
+probe and row-sort spill generations, and actual live dense spills. Every output
+burst and dense write must fit the declared interface-stage envelope first.
+The final stream envelope includes candidates and the overlap allowance too.
 
 Known analytic maxima cover tilted/offset planes and a polygonal cone against
 its flat disc base. A triangular hole in a proxy ring has its maximum strictly

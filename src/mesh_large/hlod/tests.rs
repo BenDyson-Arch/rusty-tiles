@@ -1463,6 +1463,96 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
     }
 }
 
+/// The round-2 dense fixture: 2,100 long slivers packed in one block plus a connected
+/// grid (9,300 triangles, two leaves). Their long open edges crowd one join cell past its
+/// resident host count; the join spills and splits that cell instead of refusing.
+#[test]
+fn dense_sliver_borders_are_joined_not_refused() {
+    let mut slivers = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.4, 0.4, 1.],
+    };
+    for i in 0..2100u32 {
+        let (x, y) = (2. + (i % 50) as f32 * 0.2, 1. + (i / 50) as f32 * 0.2);
+        let base = slivers.positions.len() as u32;
+        slivers
+            .positions
+            .extend([[x, y, 2.], [x + 0.05, y, 2.], [x + 0.02, y, 12.]]);
+        slivers.indices.extend([base, base + 1, base + 2]);
+    }
+    let source = vec![
+        grid((60, 60), (20., 80.), (0., 60.), &bump, [0.4, 0.6, 0.4, 1.]),
+        slivers,
+    ];
+    let run = Run {
+        leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+        cap: super::TRIANGLE_CAP,
+        ..Run::default()
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir =
+        stage(&input, &work.path().join("hlod"), &run).unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let incidence = &manifest["hlod"]["incidence"];
+    assert!(
+        incidence["denseCells"].as_u64().unwrap() >= 1,
+        "{incidence}"
+    );
+    let census = census(&dir);
+    assert!(census.leaves >= 2, "{census:?}");
+    assert_eq!(
+        census.missing_segments
+            + census.missing_vertices
+            + census.missing_overlap_items
+            + census.perpendicular_displaced
+            + census.duplicate_chain_tiles,
+        0,
+        "{census:?}"
+    );
+}
+
+/// Many leaves share one point (a fan of thin triangles about a common apex): its item
+/// group holds one item per leaf, within the stage's charged bound, and stays crack-free.
+#[test]
+fn a_point_shared_by_every_leaf_is_charged_and_crack_free() {
+    let mut fan = Mesh {
+        positions: vec![[50., 1., 50.]],
+        indices: vec![],
+        color: [0.6, 0.6, 0.6, 1.],
+    };
+    let n = 1200u32;
+    for i in 0..=n {
+        let a = std::f32::consts::TAU * i as f32 / n as f32;
+        fan.positions
+            .push([50. + 40. * a.cos(), 0., 50. + 40. * a.sin()]);
+    }
+    for i in 0..n {
+        fan.indices.extend([0, i + 2, i + 1]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[fan]);
+    let dir = stage(
+        &input,
+        &work.path().join("hlod"),
+        &Run {
+            leaf_triangles: 8,
+            budget: Some(1 << 30),
+            ..Run::default()
+        },
+    )
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let census = census(&dir);
+    assert!(census.leaves >= 100, "{census:?}");
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+}
+
 /// The census's segment index holds at most eight entries per segment whatever the length
 /// mix (a uniform grid sized to short segments explodes on long ones).
 #[test]
