@@ -63,7 +63,7 @@ Both inputs publish the same G and sampled maxima (metres):
 Independent decoded cut results are identical for tex3/crop3 (metres, pooled
 400,000 samples/cut; raw receipts also retain each direction):
 
-| cut | triangles | mean | p95 | p99 | max | maximum published G | exceedance |
+| cut | triangles | mean | p95 | p99 | max | maximum published G | max > cut max G |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 0 | 8182 | 0.019074406 | 0.050062537 | 0.071019990 | 1.332443906 | 1.429247317 | False |
 | 2 | 8182 | 0.019126394 | 0.050171281 | 0.071090215 | 1.340423161 | 1.429247317 | False |
@@ -81,8 +81,9 @@ allocated) beneath the declared 6 GiB campaign bound; this is a sampled
 observation, separately from the producer's exact scratch admission counters.
 All 219 decoded members are at most 8,192 triangles. Both archives have zero
 leaf-byte differences and monotone errors. Independent root mean/p95/max meet
-the stated crop quality thresholds, with no sampled G exceedance in the four
-audited cuts. Sampling does not rule out other extrema.
+the stated crop quality thresholds, with no sampled cut maximum exceeding that cut's maximum published G in the four
+audited cuts. This does not independently check each tile against its own G and
+descendant range. Sampling does not rule out other extrema.
 
 The independent audits used CPUs 4,5 at idle priority, with two numerical
 workers: crop3 14.503 CPU-s / 20.401 wall s; tex3 14.216 CPU-s / 18.304 wall s.
@@ -157,7 +158,11 @@ metadata bypassing validation, incomplete non-root depth totals, and unbounded
 sample-loop cancellation latency. All were corrected with sensitive controls.
 A fresh second source review found no actionable correctness issue in the
 optimized resident/disk queries and cache charges. The final source/evidence
-review is recorded in the bulk receipt. Reviews are static inspection, separate
+review of `68c831ee` found no actionable findings and matched all 312 production
+files, three oracle helpers and 28 pinned artifacts to their recorded identities
+(`review-r3.json`). It explicitly limits exceedance results to each cut's maximum
+G and retains revised-S1 integration and the S2 performance miss as open gates.
+Reviews are static inspection, separate
 from the executions above.
 
 This intermediate preserves S1 geometry and leaf encoding, changes coarse
