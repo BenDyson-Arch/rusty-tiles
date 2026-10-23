@@ -7,10 +7,10 @@ The tiler CLI is not final, so the command is a template. Placeholders:
   {binary} {input} {input_dir} {output} {output_dir} {scratch} {work} {jobs} {cpus}
 {input} is the manifest's truth.input_file when --input is a generator directory.
 
-  python3 -I bench/scale_gates/run_case.py --case mesh-local-1e5 --budget mesh-local \\
-      --binary target/release/rusty-tiles --input ~/.cache/rusty-tiles-scale/inputs/mesh-1e5 \\
+  python3 -I bench/scale_gates/run_case.py --case gate-a --budget gate-a \\
+      --binary target/release/rusty-tiles --input ~/.cache/rusty-tiles-scale/inputs/mesh-526m \\
       --output-name out.3tz \\
-      --command '{binary} --json mesh-local-to-3tz -i {input} -o {output} --leaf-triangles 20000'
+      --command '{binary} --json mesh -i {input} -o {output} --jobs {jobs} --scratch-dir {scratch}'
 
   # validate-only gate on a synthetic archive (no producer):
   python3 -I bench/scale_gates/run_case.py --case implicit-2p22 --budget d-implicit \\

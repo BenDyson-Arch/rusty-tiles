@@ -445,7 +445,8 @@ impl MeshResult {
     }
 }
 
-/// Convert bounded core-PBR local metre/Y-up glTF with optional rigid WGS84 placement.
+/// Deprecated, removed before 0.4.0; use `mesh_to_tileset`. Convert bounded core-PBR
+/// local metre/Y-up glTF with optional rigid WGS84 placement.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None, force=false, anchor=None, orientation_xyzw=None, scene_offset=None, callback=None))]
 #[allow(clippy::too_many_arguments)]
@@ -689,7 +690,8 @@ fn placement(
     ))
 }
 
-/// Tile a mesh using the portable Rust texture encoders.
+/// Deprecated, removed before 0.4.0; use `mesh_to_tileset`. Tile a mesh using the
+/// portable Rust texture encoders.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, cartographic=None, rotation=None, force=false,
     max_triangles=20_000, max_bytes=204_800, tile_size=2048, texture_format="lossless",

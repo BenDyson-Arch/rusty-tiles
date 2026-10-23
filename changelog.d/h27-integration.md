@@ -2,7 +2,7 @@
 
 - Large-mesh tiler (`rusty-tiles mesh`, `mesh_to_tileset`): coarse (proxy) tiles are
   now textured. After each proxy's certified geometry is fixed, the tiler bakes its
-  PBR and categorical ID pages from the captured source images, keeps its exact
+  PBR pages from the captured source images, keeps its exact
   POSITION words, face order, source/material identity and feature IDs, reads the
   complete GLB back, and rebakes at a lower texel density when it would exceed the
   per-tile byte budget. A proxy starts at its children's texel density (their

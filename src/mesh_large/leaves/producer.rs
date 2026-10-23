@@ -1665,6 +1665,135 @@ mod tests {
         }
     }
 
+    /// Several dedicated mip-sampled pages that miss the codec's verification floor at
+    /// the profile setting: the escalation reasons, diagnostics and published bytes
+    /// are the same for one worker and for many (#234).
+    #[test]
+    fn codec_verification_escalation_reasons_are_identical_across_jobs() {
+        const QUADS: usize = 8;
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let mut bytes = Vec::<u8>::new();
+        let (mut views, mut accessors, mut primitives, mut materials) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut images, mut textures) = (Vec::new(), Vec::new());
+        for quad in 0..QUADS {
+            let x0 = 5.0 * quad as f32;
+            let positions: [f32; 18] = [
+                x0,
+                0.,
+                0.,
+                x0 + 4.,
+                0.,
+                0.,
+                x0,
+                4.,
+                0.,
+                x0 + 4.,
+                0.,
+                0.,
+                x0 + 4.,
+                4.,
+                0.,
+                x0,
+                4.,
+                0.,
+            ];
+            let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+            for (data, ty, count, min_max) in [
+                (
+                    &positions[..],
+                    "VEC3",
+                    6,
+                    Some(([x0, 0., 0.], [x0 + 4., 4., 0.])),
+                ),
+                (&uvs[..], "VEC2", 6, None),
+            ] {
+                views
+                    .push(json!({"buffer":0,"byteOffset":bytes.len(),"byteLength":data.len() * 4}));
+                bytes.extend(data.iter().flat_map(|v| v.to_le_bytes()));
+                let mut accessor = json!({"bufferView":views.len() - 1,"componentType":5126,
+                    "count":count,"type":ty});
+                if let Some((min, max)) = min_max {
+                    accessor["min"] = json!(min);
+                    accessor["max"] = json!(max);
+                }
+                accessors.push(accessor);
+            }
+            image::RgbaImage::from_fn(64, 64, |x, y| {
+                let v = |k: u32| ((x * 7 + y * 13 + k * 31 + quad as u32 * 17) % 97 + 80) as u8;
+                image::Rgba([v(0), v(1), v(2), 255])
+            })
+            .save(source.join(format!("sharp{quad}.png")))
+            .unwrap();
+            images.push(json!({"uri":format!("sharp{quad}.png")}));
+            textures.push(json!({"source":quad,"sampler":0}));
+            materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":quad}}}));
+            primitives.push(
+                json!({"attributes":{"POSITION":2 * quad,"TEXCOORD_0":2 * quad + 1},
+                "material":quad}),
+            );
+        }
+        fs::write(source.join("quads.bin"), &bytes).unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":primitives}],
+            "buffers":[{"uri":"quads.bin","byteLength":bytes.len()}],
+            "bufferViews":views,"accessors":accessors,"images":images,"textures":textures,
+            "samplers":[{"minFilter":9987,"magFilter":9729}],"materials":materials});
+        let input = source.join("quads.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let mut previous = None;
+        for jobs in [1, 4] {
+            let output = work.path().join(format!("out{jobs}"));
+            let result = mesh_to_leaf_payloads(
+                LeafOutputRequest::new(&input, &output, LeafProfile::Balanced)
+                    .with_jobs(NonZeroUsize::new(jobs).unwrap()),
+                &RunControl::default(),
+            )
+            .unwrap();
+            let report = &result.report;
+            let total = report.escalated_pages.uastc_level2
+                + report.escalated_pages.uastc_level3
+                + report.lossless_fallback_pages;
+            println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
+            assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+            assert_eq!(
+                report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
+                total
+            );
+            let by_reason = |reason: &str| {
+                report
+                    .escalation_diagnostics
+                    .iter()
+                    .filter(|d| d.misses[0].reason == reason)
+                    .count() as u64
+            };
+            assert_eq!(
+                report.escalation_diagnostics.len() as u64 + report.escalation_diagnostics_omitted,
+                total
+            );
+            assert_eq!(
+                by_reason("codec_verify"),
+                report.escalation_reasons.codec_verify
+            );
+            assert_eq!(by_reason("gate"), report.escalation_reasons.gate);
+            let files = output_files(&output);
+            let reasons = serde_json::to_value(report.escalation_reasons).unwrap();
+            let report = serde_json::to_value(report).unwrap();
+            if let Some((prior_files, prior_reasons, prior_report)) = &previous {
+                assert_eq!(
+                    prior_reasons, &reasons,
+                    "jobs {jobs} changed escalation_reasons"
+                );
+                assert_eq!(prior_files, &files, "jobs {jobs} changed published bytes");
+                assert_eq!(prior_report, &report, "jobs {jobs} changed the report");
+            } else {
+                previous = Some((files, reasons, report));
+            }
+        }
+    }
+
     /// Pages the codec's own verification refuses at the profile setting
     /// escalate and are counted apart from gate misses.
     #[test]

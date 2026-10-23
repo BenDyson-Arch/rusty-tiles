@@ -134,7 +134,7 @@ sha256 of each input, and a mismatch stops the run.
 | --- | --- | --- |
 | `vector.geojson` | 3,600 polygons (720 with holes), 400 lines with 100 vertices each, 6,000 points near Rome | `vector` (`--jobs 2`; `vector-explicit` retired with H6) |
 | `points.las` | LAS 1.2 PDRF 3, 200,000 points, UTM 56S | `point-cloud` (`point-cloud-explicit` retired with H6) |
-| `mesh.glb` | Textured Y-up height field: 96,800 triangles and a 512² PNG | `mesh-local` (`--leaf-triangles 20000`), `glb-wrap`, `mesh`, `mesh-explicit` |
+| `mesh.glb` | Textured Y-up height field: 96,800 triangles and a 512² PNG | `glb-wrap`, `mesh` (the `mesh` tiler, `--anchor`; before 2026-10-23 this case ran the deprecated `mesh-to-3tz`, and `mesh-local`/`mesh-explicit` ran the legacy writers) |
 | `tests/fixtures/t1-multipatch-plane.tif` | Repository T1 DEM fixture, 33×17 | `terrain-fixture` (`--cells-per-leaf 16`) |
 | `dem.tif` | Float32 DEM, 1025², EPSG:4326 | `terrain` (defaults) |
 | `rgba.tif` | RGBA 3000², EPSG:3857 at zoom-14 resolution, transparent central 1000² square, half-alpha band | `raster` (z10–16, `--jobs 2`; about 3,200 tiles) |

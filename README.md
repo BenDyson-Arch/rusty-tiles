@@ -290,18 +290,11 @@ let result = mesh_to_tileset(TilerRequest::new("model.glb", "model.3tz"), &RunCo
 println!("wrote {}", result.output.display());
 ```
 
-The other converters, and the deprecated `mesh-to-3tz` converter shown here, have a `*_reported` function. It takes a `Reporter` for events and returns a `ConversionResult`.
-
-```rust
-use rusty_tiles::{tile::mesh_to_3tz_reported, MeshTo3tzOptions, Reporter};
-
-let result = mesh_to_3tz_reported("model.glb".as_ref(), "model.3tz".as_ref(), &MeshTo3tzOptions::default(), &Reporter::silent())?;
-println!("wrote {} (archive: {})", result.output.display(), result.archive);
-```
+The other Rust converters follow the same request, `RunControl` and typed-result pattern: `vector_to_archive`, `point_cloud_to_archive`, `raster_to_pyramid` and `model_to_archive`. The deprecated `tile::mesh_to_3tz_reported`, the last `Reporter`/`ConversionResult` converter, is removed with the legacy mesh commands before 0.4.0; see the [retirement ledger](docs/architecture/legacy-mesh-retirement.md).
 
 The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
 
-`ConversionResult` carries `output`, `archive` and the published `conversion.json` as `report`. `Reporter` can be silent, human text on stderr, NDJSON on stderr, or a custom `EventSink`. The deprecated `MeshTo3tzOptions::default()` writes lossless PNG textures, while the CLI defaults to JPEG.
+Observe a run with a `RunControl` and an `Observer`; the deprecated `Reporter`, `EventSink` and `ConversionResult` types serve only the legacy mesh converter.
 
 ## Where to go next
 
@@ -317,4 +310,4 @@ The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_me
 
 ## Licence
 
-The Cargo licence expression is `MIT AND Apache-2.0 AND BSD-3-Clause`. The project's own code is [MIT](LICENSE). The Apache-2.0 and BSD-3-Clause terms cover the vendored [Basis Universal](vendor/README.md) texture encoder (Apache-2.0) and the Zstandard code it bundles (BSD-3-Clause), which the in-process KTX2 encoder compiles in; their licence texts are in `vendor/basis_universal/`. Basis Universal also bundles a few MIT and BSD-3-Clause headers, noted in `vendor/README.md`.
+The Cargo licence expression is `MIT AND Apache-2.0 AND BSD-3-Clause`. The project's own code is [MIT](LICENSE). The Apache-2.0 and BSD-3-Clause terms cover the vendored [Basis Universal](vendor/README.md) texture encoder (Apache-2.0) and the Zstandard code it bundles (BSD-3-Clause), which the in-process KTX2 encoder compiles in; their licence texts are in `vendor/basis_universal/`. Basis Universal also bundles a few MIT and BSD-3-Clause headers, noted in `vendor/README.md`. Rust crates that Cargo resolves keep their own licences, mostly MIT and Apache-2.0. Their notices are not yet bundled in release artefacts; see the scope note in `vendor/README.md`.

@@ -1,8 +1,10 @@
-//! General mesh axes and horizontal CRS placement. Source projection, datum and
-//! offline-grid eligibility remain the shared resolver's responsibility.
+//! Deprecated legacy `mesh-to-3tz` general mesh axes and horizontal CRS bake.
+//! The shared Jacobian helpers live in [`crate::crs_jacobian`]; this module
+//! retires whole with the legacy mesh commands.
 use crate::{
     crs::Transform,
-    georef::{ecef_to_cartographic, Cartographic, EnuFrame, SourceAxes},
+    crs_jacobian::{derivatives, horizontal_step, inverse_transpose, probe_step, samples, to_y_up},
+    georef::{ecef_to_cartographic, Cartographic, EnuFrame},
     mesh::Scene,
     tile::MeshTo3tzOptions,
     Error,
@@ -117,164 +119,6 @@ pub(crate) fn bake(
     Ok(origin)
 }
 
-/// Central-difference step along one post-node source axis: 0.1 m vertically,
-/// one horizontal unit (1e-5 degree when geographic) otherwise.
-pub(crate) fn probe_step(axes: SourceAxes, axis: usize, horizontal_step: f64) -> f64 {
-    if (axes == SourceAxes::Xyz && axis == 2) || (axes == SourceAxes::YUp && axis == 1) {
-        0.1
-    } else {
-        horizontal_step
-    }
-}
-
-/// Horizontal probe step in source units for a resolved operation; `None`
-/// when its units cannot be determined. Also returns the geographic degrees
-/// factor used by [`samples`] for longitude wrapping and pole handling.
-pub(crate) fn horizontal_step(operation: &Transform) -> Option<(f64, Option<f64>)> {
-    let (geographic, factor) = operation.polygon_units()?;
-    Some(if geographic {
-        (1e-5 / factor, Some(factor))
-    } else {
-        (1.0 / factor, None)
-    })
-}
-
-/// One vertex's Jacobian columns d(local Y-up ENU)/d(post-node source axis),
-/// with the same probes, domain-edge one-sided rule and frame as the legacy bake.
-/// `base` is the vertex's validated ECEF position. A resolver promotion is the
-/// caller's to detect; this function never mutates the vertex.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn vertex_jacobian(
-    operation: &mut Transform,
-    position: [f64; 3],
-    base: [f64; 3],
-    axes: SourceAxes,
-    offset: crate::georef::SourceOffset,
-    horizontal_step: f64,
-    degrees_per_unit: Option<f64>,
-    frame: &EnuFrame,
-) -> Result<[[f64; 3]; 3], Error> {
-    let mut probes = Vec::with_capacity(6);
-    let mut deltas = Vec::with_capacity(3);
-    for axis in 0..3 {
-        let step = probe_step(axes, axis, horizontal_step);
-        let (pair, span) = samples(position, axes, offset, axis, step, degrees_per_unit)?;
-        probes.extend(pair);
-        deltas.push(span);
-    }
-    let mut columns = derivatives(operation, &probes, &deltas, &[base], &[0], frame)?;
-    Ok(columns.remove(0))
-}
-
-fn derivatives(
-    operation: &mut Transform,
-    probes: &[[f64; 3]],
-    deltas: &[[f64; 2]],
-    positions: &[[f64; 3]],
-    normal_indices: &[usize],
-    frame: &EnuFrame,
-) -> Result<Vec<[[f64; 3]; 3]>, Error> {
-    let output = match operation.transform(probes) {
-        Ok(points) => Some(points),
-        // Actual vertices already passed the same strict operation. Only a
-        // coordinate-domain failure may use a valid one-sided sample.
-        Err(Error::Data(_)) => None,
-        Err(error) => return Err(error),
-    };
-    let mut result = Vec::with_capacity(normal_indices.len());
-    let mut cursor = 0;
-    for &index in normal_indices {
-        let mut columns = [[0.; 3]; 3];
-        for column in &mut columns {
-            let span = deltas[cursor / 2];
-            let (a, b, denominator) = if let Some(points) = &output {
-                (points[cursor], points[cursor + 1], span[1] - span[0])
-            } else {
-                one_sided(
-                    operation,
-                    &probes[cursor..cursor + 2],
-                    span,
-                    positions[index],
-                )?
-            };
-            let a = to_y_up(frame.to_enu(a));
-            let b = to_y_up(frame.to_enu(b));
-            *column = std::array::from_fn(|i| (b[i] - a[i]) / denominator);
-            cursor += 2;
-        }
-        result.push(columns);
-    }
-    Ok(result)
-}
-
-fn samples(
-    position: [f64; 3],
-    axes: SourceAxes,
-    offset: crate::georef::SourceOffset,
-    axis: usize,
-    step: f64,
-    degrees_per_unit: Option<f64>,
-) -> Result<([[f64; 3]; 2], [f64; 2]), Error> {
-    let base = axes.coordinates(position, offset);
-    let mut deltas = [-step, step];
-    let mut pair = deltas.map(|delta| {
-        let mut sample = position;
-        sample[axis] += delta;
-        axes.coordinates(sample, offset)
-    });
-    if let Some(factor) = degrees_per_unit {
-        if ((base[1] * factor).abs() - 90.).abs() < 1e-12 {
-            return Err(Error::Data(
-                "mesh CRS normal Jacobian is singular at a geographic pole".into(),
-            ));
-        }
-        for (sample, delta) in pair.iter_mut().zip(&mut deltas) {
-            // Longitude is periodic in ECEF; retain the original derivative
-            // span rather than differentiating the wrapped coordinate jump.
-            let longitude_limit = 180. / factor;
-            if sample[0] > longitude_limit {
-                sample[0] -= 2. * longitude_limit;
-            } else if sample[0] < -longitude_limit {
-                sample[0] += 2. * longitude_limit;
-            }
-            if (sample[1] * factor).abs() > 90. {
-                // Latitude is not periodic. Replace only the artificial point
-                // with the validated base, yielding an inward one-sided slope.
-                *sample = base;
-                *delta = 0.;
-            }
-        }
-    }
-    Ok((pair, deltas))
-}
-
-fn one_sided(
-    operation: &mut Transform,
-    probes: &[[f64; 3]],
-    span: [f64; 2],
-    base: [f64; 3],
-) -> Result<([f64; 3], [f64; 3], f64), Error> {
-    // Resource, datum-operation and unavailable-grid errors must still fail.
-    let a = match operation.transform(&probes[..1]) {
-        Err(error) if !matches!(error, Error::Data(_)) => return Err(error),
-        result => result,
-    };
-    let b = match operation.transform(&probes[1..]) {
-        Err(error) if !matches!(error, Error::Data(_)) => return Err(error),
-        result => result,
-    };
-    match (a, b) {
-        (Ok(a), Ok(b)) => Ok((a[0], b[0], span[1] - span[0])),
-        (Ok(a), Err(Error::Data(_))) if span[0] != 0. => Ok((a[0], base, -span[0])),
-        (Err(Error::Data(_)), Ok(b)) if span[1] != 0. => Ok((base, b[0], span[1])),
-        (Err(error), _) | (_, Err(error)) => Err(error),
-    }
-}
-
-pub(crate) fn to_y_up([east, north, up]: [f64; 3]) -> [f64; 3] {
-    [east, up, -north]
-}
-
 fn normal(columns: [[f64; 3]; 3], normal: [f32; 3]) -> Result<[f32; 3], Error> {
     let transformed = inverse_transpose(columns, normal.map(f64::from))?;
     let length = transformed.iter().map(|v| v * v).sum::<f64>().sqrt();
@@ -286,39 +130,10 @@ fn normal(columns: [[f64; 3]; 3], normal: [f32; 3]) -> Result<[f32; 3], Error> {
     Ok(transformed.map(|v| (v / length) as f32))
 }
 
-/// `det(J)·J^-T·n` scaled by the determinant's sign, for Jacobian columns `J`.
-/// The result is unnormalized; a singular or nonfinite Jacobian is refused.
-pub(crate) fn inverse_transpose(
-    columns: [[f64; 3]; 3],
-    normal: [f64; 3],
-) -> Result<[f64; 3], Error> {
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let cofactors = [
-        cross(columns[1], columns[2]),
-        cross(columns[2], columns[0]),
-        cross(columns[0], columns[1]),
-    ];
-    let determinant = (0..3).map(|i| columns[0][i] * cofactors[0][i]).sum::<f64>();
-    if !determinant.is_finite() || determinant == 0. {
-        return Err(Error::Data(
-            "mesh CRS normal Jacobian is singular/nonfinite".into(),
-        ));
-    }
-    Ok(std::array::from_fn(|i| {
-        (0..3).map(|j| cofactors[j][i] * normal[j]).sum::<f64>() * determinant.signum()
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::georef::SourceOffset;
+    use crate::georef::{SourceAxes, SourceOffset};
     use crate::mesh::{Triangle, Vertex};
 
     fn scene() -> Scene {
