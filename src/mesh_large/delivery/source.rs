@@ -202,6 +202,7 @@ pub(crate) struct ProxyRow {
     pub depth: u32,
     pub geometric_error: f64,
     pub primitives: u32,
+    pub sample_count: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -216,14 +217,38 @@ struct ProxyWire {
     depth: u32,
     geometric_error: f64,
     primitives: u32,
+    #[serde(default)]
+    error_policy: Option<String>,
+    #[serde(default)]
+    measurement: Option<crate::mesh_large::hlod::error::Summary>,
+    #[serde(default)]
+    children_error: Option<f64>,
 }
 
 impl ProxyRow {
-    pub(crate) fn parse(line: &str, row: u64) -> Result<Self, JobError> {
+    pub(crate) fn parse(line: &str, row: u64, hlod: bool) -> Result<Self, JobError> {
         let bad = |why: &str| input(format!("proxies.jsonl row {row}: {why}"));
         let w: ProxyWire = serde_json::from_str(line).map_err(|e| bad(&e.to_string()))?;
         if w.schema_version != 1 {
             return Err(bad("unsupported schemaVersion"));
+        }
+        match (w.error_policy.as_deref(), w.measurement.as_ref()) {
+            (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
+                let children = w
+                    .children_error
+                    .ok_or_else(|| bad("S2 row has no childrenError"))?;
+                summary
+                    .validate(w.geometric_error, children)
+                    .map_err(|e| bad(&e.to_string()))?;
+                if w.depth == 0
+                    && summary.area_samples_per_direction
+                        < crate::mesh_large::hlod::error::MIN_DEPTH
+                {
+                    return Err(bad("incomplete root sampling"));
+                }
+            }
+            (None, None) if !hlod => {} // Historical H17 rows, removed with that producer in S6.
+            _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
         }
         let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
         if w.uri != expected {
@@ -247,6 +272,7 @@ impl ProxyRow {
             depth: w.depth,
             geometric_error: w.geometric_error,
             primitives: w.primitives,
+            sample_count: w.measurement.as_ref().map(|s| s.area_samples_per_direction),
         })
     }
 }
@@ -443,6 +469,7 @@ pub(crate) struct LeafDirectory {
     pub totals: LeafTotals,
     /// H17 coarse tiles are present (`proxyManifest`).
     pub proxies: bool,
+    hlod: bool,
 }
 
 impl LeafDirectory {
@@ -482,6 +509,7 @@ impl LeafDirectory {
             root: root.to_owned(),
             totals,
             proxies,
+            hlod: manifest.get("hlod").is_some(),
         })
     }
 
@@ -503,13 +531,37 @@ impl LeafDirectory {
         let file = File::open(&path).map_err(|e| JobError::io("open proxy rows", &path, e))?;
         let mut lines = BufReader::new(file).lines();
         let mut row = 0u64;
+        let mut samples = [0u64; 32];
+        let mut finished = false;
         Ok(Box::new(std::iter::from_fn(move || {
-            let line = lines.next()?;
+            if finished {
+                return None;
+            }
+            let line = match lines.next() {
+                Some(line) => line,
+                None => {
+                    finished = true;
+                    return samples
+                        .iter()
+                        .enumerate()
+                        .find(|(_, n)| **n > 0 && **n < crate::mesh_large::hlod::error::MIN_DEPTH)
+                        .map(|(depth, n)| {
+                            Err(input(format!(
+                                "incomplete HLOD depth {depth} sampling: {n}/200000 per direction"
+                            )))
+                        });
+                }
+            };
             row += 1;
             Some(
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
-                    .and_then(|line| ProxyRow::parse(&line, row))
+                    .and_then(|line| ProxyRow::parse(&line, row, self.hlod))
                     .and_then(|proxy| {
+                        if let Some(n) = proxy.sample_count {
+                            samples[proxy.depth as usize] = samples[proxy.depth as usize]
+                                .checked_add(n)
+                                .ok_or_else(|| input("HLOD sample count overflow"))?;
+                        }
                         let bounds =
                             payload_bounds(&self.member(&proxy.uri), &proxy.uri, proxy.bytes)?;
                         Ok((proxy, bounds))

@@ -1258,3 +1258,156 @@ fn evidence_census() {
     assert_eq!(census.missing_segments + census.missing_vertices, 0);
     assert!(census.max_coarse_triangles <= super::TRIANGLE_CAP);
 }
+
+/// Disk/index nearest against exhaustive triangle arithmetic, including clipped ranges
+/// through block boundaries, deterministic source-order ties and original donor rows.
+#[test]
+fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
+    use super::source_index::{bary, closest, distance2, Hit, SourceIndex, Triangle};
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &thin_islands());
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.lod = TilerLod::Hlod;
+    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let index = SourceIndex::build(&captured, &|| Ok(())).unwrap();
+    let source: Vec<_> = captured
+        .triangles
+        .reader()
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let mut random = 0x7159ac23u32;
+    for (first, end) in [
+        (0, source.len()),
+        (17, 300),
+        (250, 520),
+        (source.len() - 13, source.len()),
+    ] {
+        let key = super::store::TileKey {
+            first: first as u64,
+            end: end as u64,
+            depth: 1,
+            leaf_begin: 0,
+            leaf_end: 1,
+        };
+        let mut query = index.query(&captured, key).unwrap();
+        for _ in 0..40 {
+            let mut unit = || {
+                random ^= random << 13;
+                random ^= random >> 17;
+                random ^= random << 5;
+                random as f64 / u32::MAX as f64
+            };
+            let p = [unit() * 110., unit() * 12., unit() * 110.];
+            let actual = query.nearest(p).unwrap();
+            let mut expected = Hit::empty();
+            for (i, t) in source[first..end].iter().enumerate() {
+                let points = Triangle::new(t.triangle.positions, 0).positions();
+                let w = closest(p, points);
+                let d = distance2(p, bary(points, w));
+                let rank = (first + i) as u64;
+                let order = (t.triangle.source, t.expanded_ordinal);
+                if d < expected.distance2
+                    || (d == expected.distance2 && (order, rank) < (expected.order, expected.rank))
+                {
+                    expected = Hit {
+                        rank,
+                        bary: w,
+                        distance2: d,
+                        order,
+                    };
+                }
+            }
+            assert_eq!(actual.rank, expected.rank);
+            assert!((actual.distance2 - expected.distance2).abs() < 1e-10);
+            let t = query.triangle(actual).unwrap();
+            assert_eq!(t, source[actual.rank as usize]);
+            assert!(actual.bary.iter().all(|v| v.is_finite() && *v >= 0.));
+        }
+    }
+    drop(index);
+    captured.close().unwrap();
+}
+
+#[test]
+fn delivery_refuses_understated_and_incomplete_sampled_error() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let dir = stage(
+        &input,
+        &work.path().join("stage"),
+        &Run {
+            leaf_triangles: 1024,
+            cap: 1500,
+            ..Run::default()
+        },
+    )
+    .unwrap();
+    let original = rows(&dir.join("proxies.jsonl"));
+    for mutation in 0..6 {
+        let mut damaged = original.clone();
+        let row = damaged.last_mut().unwrap();
+        match mutation {
+            0 => row["geometricError"] = json!(0.),
+            1 => row["measurement"]["sourceToProxy"]["area"]["samples"] = json!(1),
+            2 => row["measurement"]["q"] = json!(12345.),
+            3 => row["measurement"]["margin"] = json!(0.),
+            4 => {
+                row.as_object_mut().unwrap().remove("errorPolicy");
+                row.as_object_mut().unwrap().remove("measurement");
+            }
+            _ => {
+                for row in damaged
+                    .iter_mut()
+                    .filter(|r| r["depth"].as_u64().unwrap() > 0)
+                {
+                    let m = &mut row["measurement"];
+                    m["areaSamplesPerDirection"] = json!(2048);
+                    m["sourceToProxy"]["area"]["samples"] = json!(2048);
+                    m["proxyToSource"]["area"]["samples"] = json!(2048);
+                    let area = m["sourceToProxy"]["surfaceArea"]
+                        .as_f64()
+                        .unwrap()
+                        .max(m["proxyToSource"]["surfaceArea"].as_f64().unwrap());
+                    let maximum = m["sampledMax"].as_f64().unwrap();
+                    let margin = (maximum * 0.05).max(0.5 * (area / 2048.).sqrt());
+                    m["margin"] = json!(margin);
+                    row["geometricError"] = json!(row["geometricError"]
+                        .as_f64()
+                        .unwrap()
+                        .max(maximum + margin));
+                }
+            }
+        };
+        if mutation == 5 {
+            let mut maximum = 0f64;
+            for row in &mut damaged {
+                maximum = maximum.max(row["geometricError"].as_f64().unwrap());
+                row["geometricError"] = json!(maximum);
+            }
+        }
+        let data = damaged
+            .iter()
+            .map(|r| format!("{}\n", serde_json::to_string(r).unwrap()))
+            .collect::<String>();
+        fs::write(dir.join("proxies.jsonl"), data).unwrap();
+        let output = work.path().join(format!("bad-{mutation}.3tz"));
+        let failure = mesh_leaves_to_3tz(
+            MeshTilesetRequest::new(&dir, &output),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        if mutation == 5 {
+            assert!(
+                failure.error.to_string().contains("incomplete HLOD depth"),
+                "{failure:?}"
+            );
+        }
+        assert!(!output.exists());
+    }
+}

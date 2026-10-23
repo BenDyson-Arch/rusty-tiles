@@ -1,0 +1,662 @@
+//! D2 sampled source error, policy v1. This is deliberately not certification.
+//! G=max(child G, M + max(0.05 M, 0.5 sqrt(A/N))). A is the larger directed
+//! surface area, N the area sample count. Half the characteristic area spacing is
+//! a conservative density allowance motivated by the 1-Lipschitz distance field;
+//! 5% protects against the prototype's ~1% independent max exceedance. Neither
+//! term is a covering-radius bound: unobserved narrow extrema can still exceed G.
+//! All source vertices are controls (component and boundary representatives), with
+//! longest-edge midpoints on slivers/degenerates. Proxy controls include all corners
+//! and all edge midpoints. Area samples are deterministic jittered area strata.
+use super::{
+    resource,
+    source_index::{self, SourceQuery, Surface, Triangle, V3},
+    state,
+    store::{CoarseTile, TileError, TileKey},
+};
+use crate::{
+    mesh_large::{full::FullCaptured, records::NodeKind},
+    JobError,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+pub(crate) const POLICY: &str = "hlod-s2-decoded-source-two-sided-v1";
+pub(crate) const MIN_TILE: u64 = 2048;
+pub(crate) const MIN_DEPTH: u64 = 200_000;
+/// Histograms, vertex controls, stream buffers, coarse BVH, summaries and slack.
+pub(crate) const WORK_BYTES: u64 = 4 << 20;
+const BINS: usize = 16384;
+
+/// Fixed-size per-depth scheduling, including synthetic depths. Each occupied depth
+/// receives >=200k samples per direction; rounding and the per-tile floor only add.
+pub(crate) struct SamplingPlan {
+    totals: [u64; 32],
+}
+impl SamplingPlan {
+    pub(crate) fn new(captured: &FullCaptured) -> Result<Self, JobError> {
+        let mut totals = [0u64; 32];
+        for n in captured.tree.nodes.reader()? {
+            let n = n?;
+            if n.kind == NodeKind::Internal {
+                totals[n.depth() as usize] = totals[n.depth() as usize]
+                    .checked_add(n.end - n.first)
+                    .ok_or_else(|| resource("sampling schedule overflow"))?;
+            }
+        }
+        Ok(Self { totals })
+    }
+    pub(crate) fn count(&self, key: TileKey) -> u64 {
+        ((u128::from(MIN_DEPTH) * u128::from(key.end - key.first))
+            .div_ceil(u128::from(self.totals[key.depth as usize])) as u64)
+            .max(MIN_TILE)
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Distribution {
+    pub samples: u64,
+    pub mean: f64,
+    pub p95: f64,
+    pub p99: f64,
+    pub max: f64,
+}
+struct Stats {
+    bins: Vec<u64>,
+    sum: f64,
+    count: u64,
+    max: f64,
+}
+impl Stats {
+    fn new() -> Self {
+        Self {
+            bins: vec![0; BINS],
+            sum: 0.,
+            count: 0,
+            max: 0.,
+        }
+    }
+    fn add(&mut self, d: f64) -> Result<(), JobError> {
+        if !d.is_finite() || d < 0. {
+            return Err(state("nonfinite sampled distance"));
+        }
+        self.count += 1;
+        self.sum += d;
+        self.max = self.max.max(d);
+        let i = if d == 0. {
+            0
+        } else {
+            ((d.log2() + 256.) * 32.)
+                .ceil()
+                .clamp(1., (BINS - 1) as f64) as usize
+        };
+        self.bins[i] += 1;
+        Ok(())
+    }
+    fn summary(&self) -> Distribution {
+        let quantile = |percent: u64| {
+            let rank = self.count.saturating_mul(percent).div_ceil(100);
+            let mut n = 0;
+            for (i, c) in self.bins.iter().enumerate() {
+                n += c;
+                if n >= rank {
+                    return if i == 0 {
+                        0.
+                    } else {
+                        2f64.powf(i as f64 / 32. - 256.).min(self.max)
+                    };
+                }
+            }
+            self.max
+        };
+        Distribution {
+            samples: self.count,
+            mean: if self.count == 0 {
+                0.
+            } else {
+                self.sum / self.count as f64
+            },
+            p95: quantile(95),
+            p99: quantile(99),
+            max: self.max,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Direction {
+    pub area: Distribution,
+    pub controls: Distribution,
+    pub surface_area: f64,
+}
+impl Direction {
+    fn max(self) -> f64 {
+        self.area.max.max(self.controls.max)
+    }
+    fn p99(self) -> f64 {
+        self.area.p99.max(self.controls.p99)
+    }
+}
+/// S3 uses geometric_error for max(G/16,1e-5) chart spacing and keeps decoded
+/// positions/locked vertices fixed. q is diagnostic only; no D10 calibration is applied.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Summary {
+    pub version: u32,
+    pub seed: u64,
+    pub area_samples_per_direction: u64,
+    pub source_to_proxy: Direction,
+    pub proxy_to_source: Direction,
+    pub sampled_max: f64,
+    pub margin: f64,
+    pub q: f64,
+}
+/// Bounded depth summaries in CLI diagnostics and the deterministic leaf manifest.
+/// Quantiles below are worst tile quantiles, not pooled depth quantiles.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DepthReport {
+    pub tiles: u64,
+    pub geometric_error: f64,
+    pub sampled_max: f64,
+    pub maximum_margin: f64,
+    pub q: f64,
+    pub source_area_samples: u64,
+    pub proxy_area_samples: u64,
+    pub source_controls: u64,
+    pub proxy_controls: u64,
+    pub source_mean: f64,
+    pub proxy_mean: f64,
+    pub source_p95_worst_tile: f64,
+    pub proxy_p95_worst_tile: f64,
+    pub source_p99_worst_tile: f64,
+    pub proxy_p99_worst_tile: f64,
+}
+impl DepthReport {
+    pub(crate) fn add(&mut self, s: Summary, g: f64) {
+        let source = s.source_to_proxy;
+        let proxy = s.proxy_to_source;
+        self.source_mean = (self.source_mean * self.source_area_samples as f64
+            + source.area.mean * source.area.samples as f64)
+            / (self.source_area_samples + source.area.samples) as f64;
+        self.proxy_mean = (self.proxy_mean * self.proxy_area_samples as f64
+            + proxy.area.mean * proxy.area.samples as f64)
+            / (self.proxy_area_samples + proxy.area.samples) as f64;
+        self.tiles += 1;
+        self.geometric_error = self.geometric_error.max(g);
+        self.sampled_max = self.sampled_max.max(s.sampled_max);
+        self.maximum_margin = self.maximum_margin.max(s.margin);
+        self.q = self.q.max(s.q);
+        self.source_area_samples += source.area.samples;
+        self.proxy_area_samples += proxy.area.samples;
+        self.source_controls += source.controls.samples;
+        self.proxy_controls += proxy.controls.samples;
+        self.source_p95_worst_tile = self.source_p95_worst_tile.max(source.area.p95);
+        self.proxy_p95_worst_tile = self.proxy_p95_worst_tile.max(proxy.area.p95);
+        self.source_p99_worst_tile = self.source_p99_worst_tile.max(source.area.p99);
+        self.proxy_p99_worst_tile = self.proxy_p99_worst_tile.max(proxy.area.p99);
+    }
+}
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorReport {
+    pub policy: &'static str,
+    pub seed_rule: &'static str,
+    pub by_depth: Vec<DepthReport>,
+    pub root: Option<Summary>,
+}
+
+struct Rng(u64);
+impl Rng {
+    fn unit(&mut self) -> f64 {
+        self.0 = self.0.wrapping_add(0x9e3779b97f4a7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+        ((z ^ (z >> 31)) >> 11) as f64 * (1. / ((1u64 << 53) as f64))
+    }
+}
+fn seed(key: TileKey) -> u64 {
+    0x5332_2026_1024_0001
+        ^ key.first.wrapping_mul(0x9e3779b97f4a7c15)
+        ^ key.end.rotate_left(23)
+        ^ u64::from(key.depth)
+}
+fn all_key() -> TileKey {
+    TileKey {
+        first: 0,
+        end: u64::MAX,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 0,
+    }
+}
+
+fn directed<I>(
+    triangles: I,
+    total: f64,
+    count: u64,
+    seed: u64,
+    proxy: bool,
+    mut distance: impl FnMut(V3) -> Result<f64, JobError>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Direction, JobError>
+where
+    I: Iterator<Item = Result<Triangle, JobError>>,
+{
+    let (mut samples, mut controls) = (Stats::new(), Stats::new());
+    let mut rng = Rng(seed);
+    let mut vertices = HashSet::with_capacity(1024);
+    let (mut cumulative, mut next, mut i) = (0., rng.unit() / count as f64 * total, 0u64);
+    let mut last = None;
+    for (ordinal, t) in triangles.enumerate() {
+        let t = t?;
+        if ordinal % 256 == 0 {
+            check()?;
+            vertices.clear();
+        }
+        let p = t.positions();
+        last = Some(p);
+        let area = t.area();
+        cumulative += area;
+        while i < count && total > 0. && next < cumulative {
+            if i.is_multiple_of(256) {
+                check()?;
+            }
+            let r = rng.unit().sqrt();
+            let s = rng.unit();
+            let point = source_index::bary(p, [1. - r, r * (1. - s), r * s]);
+            samples.add(distance(point)?)?;
+            i += 1;
+            if i < count {
+                next = (i as f64 + rng.unit()) / count as f64 * total;
+            }
+        }
+        for bits in t.bits {
+            if vertices.insert(bits) {
+                controls.add(distance(bits.map(|x| f64::from(f32::from_bits(x))))?)?;
+            }
+        }
+        let edges = [(0, 1), (1, 2), (2, 0)];
+        let max_edge = edges
+            .iter()
+            .map(|&(a, b)| source_index::distance2(p[a], p[b]))
+            .fold(0., f64::max);
+        for (a, b) in edges {
+            if proxy || (area <= max_edge * 1e-4 && source_index::distance2(p[a], p[b]) == max_edge)
+            {
+                controls.add(distance(std::array::from_fn(|k| {
+                    0.5 * (p[a][k] + p[b][k])
+                }))?)?;
+            }
+        }
+    }
+    let last = last.ok_or_else(|| state("empty directed sample stream"))?;
+    // A zero-area surface is still a set of points/segments. Keep the scheduled count,
+    // use barycentric samples of its last triangle, and retain every corner above.
+    if total == 0. {
+        while i < count {
+            if i.is_multiple_of(256) {
+                check()?;
+            }
+            let r = rng.unit();
+            let s = rng.unit();
+            samples.add(distance(source_index::bary(
+                last,
+                [1. - r, r * (1. - s), r * s],
+            ))?)?;
+            i += 1;
+        }
+    }
+    if i != count {
+        return Err(resource(format!(
+            "incomplete required sampling: {i}/{count}"
+        )));
+    }
+    Ok(Direction {
+        area: samples.summary(),
+        controls: controls.summary(),
+        surface_area: total,
+    })
+}
+
+pub(crate) fn measure(
+    tile: &CoarseTile<'_>,
+    query: &mut SourceQuery<'_>,
+    count: u64,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<(TileError, Summary), JobError> {
+    let seed = seed(tile.key);
+    let proxy_triangles: Vec<_> = tile
+        .triangles
+        .iter()
+        .enumerate()
+        .map(|(i, t)| Triangle::new(t.map(|v| tile.decoded[v as usize]), i as u64))
+        .collect();
+    let proxy_area = proxy_triangles.iter().map(|t| t.area()).sum::<f64>();
+    let proxy = Surface::new(proxy_triangles.clone())?;
+    let captured = query.captured;
+    let key = tile.key;
+    let mut source_area = 0.;
+    for (i, t) in captured
+        .triangles
+        .range(key.first, key.end, 65536)?
+        .enumerate()
+    {
+        if i % 4096 == 0 {
+            check()?;
+        }
+        source_area += Triangle::new(t?.triangle.positions, 0).area();
+    }
+    let source = captured
+        .triangles
+        .range(key.first, key.end, 65536)?
+        .enumerate()
+        .map(|(i, t)| {
+            t.map(|t| Triangle::new(t.triangle.positions, key.first + i as u64))
+                .map_err(Into::into)
+        });
+    let source_to_proxy = directed(
+        source,
+        source_area,
+        count,
+        seed,
+        false,
+        |p| {
+            let mut hit = source_index::Hit::empty();
+            proxy.nearest(p, all_key(), &mut hit);
+            Ok(hit.distance2.sqrt())
+        },
+        check,
+    )?;
+    let proxy_to_source = directed(
+        proxy_triangles.into_iter().map(Ok),
+        proxy_area,
+        count,
+        seed ^ 0xa5a5a5a5a5a5a5a5,
+        true,
+        |p| Ok(query.nearest(p)?.distance2.sqrt()),
+        check,
+    )?;
+    publish(
+        tile.children_error,
+        count,
+        seed,
+        source_to_proxy,
+        proxy_to_source,
+    )
+}
+fn publish(
+    children_error: f64,
+    count: u64,
+    seed: u64,
+    source_to_proxy: Direction,
+    proxy_to_source: Direction,
+) -> Result<(TileError, Summary), JobError> {
+    let sampled_max = source_to_proxy.max().max(proxy_to_source.max());
+    let margin = (sampled_max * 0.05).max(
+        0.5 * (source_to_proxy
+            .surface_area
+            .max(proxy_to_source.surface_area)
+            / count as f64)
+            .sqrt(),
+    );
+    let geometric_error = (sampled_max + margin).max(children_error);
+    if !geometric_error.is_finite() || !children_error.is_finite() || children_error < 0. {
+        return Err(state("nonfinite or negative measured G"));
+    }
+    Ok((
+        TileError {
+            geometric_error,
+            policy: POLICY,
+        },
+        Summary {
+            version: 1,
+            seed,
+            area_samples_per_direction: count,
+            source_to_proxy,
+            proxy_to_source,
+            sampled_max,
+            margin,
+            q: source_to_proxy.p99().max(proxy_to_source.p99()),
+        },
+    ))
+}
+
+impl Summary {
+    /// Validate persisted facts at the delivery boundary, before G is copied into
+    /// explicit/implicit/external metadata. Quantiles are upper logarithmic-bin
+    /// endpoints (<=2^(1/32) relative slack); maxima/means/counts are exact samples.
+    pub(crate) fn validate(&self, g: f64, children: f64) -> Result<(), JobError> {
+        let distribution = |d: Distribution| {
+            d.samples > 0
+                && [d.mean, d.p95, d.p99, d.max]
+                    .iter()
+                    .all(|v| v.is_finite() && *v >= 0.)
+                && d.mean <= d.max + 1e-12 * d.max
+                && d.p95 <= d.p99
+                && d.p99 <= d.max
+        };
+        let direction = |d: Direction| {
+            distribution(d.area)
+                && distribution(d.controls)
+                && d.surface_area.is_finite()
+                && d.surface_area >= 0.
+                && d.area.samples == self.area_samples_per_direction
+        };
+        if self.version != 1
+            || self.area_samples_per_direction < MIN_TILE
+            || !direction(self.source_to_proxy)
+            || !direction(self.proxy_to_source)
+        {
+            return Err(state("invalid S2 sample counts or distributions"));
+        }
+        let (expected, summary) = publish(
+            children,
+            self.area_samples_per_direction,
+            self.seed,
+            self.source_to_proxy,
+            self.proxy_to_source,
+        )?;
+        if !g.is_finite()
+            || g < expected.geometric_error
+            || self.sampled_max != summary.sampled_max
+            || self.margin != summary.margin
+            || self.q != summary.q
+        {
+            return Err(state("understated or inconsistent S2 geometric error"));
+        }
+        Ok(())
+    }
+}
+
+/// Worker-thread CPU (sum across jobs is a stage share, unlike worker wall time).
+pub(crate) fn thread_cpu() -> Option<f64> {
+    #[cfg(unix)]
+    {
+        let mut t = std::mem::MaybeUninit::<libc::timespec>::zeroed();
+        // SAFETY: clock_gettime initializes timespec on success.
+        if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, t.as_mut_ptr()) } != 0 {
+            return None;
+        }
+        // SAFETY: initialized by the successful call above.
+        let t = unsafe { t.assume_init() };
+        Some(t.tv_sec as f64 + t.tv_nsec as f64 * 1e-9)
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn triangles(p: &[[[f32; 3]; 3]]) -> Vec<Triangle> {
+        p.iter()
+            .enumerate()
+            .map(|(i, &p)| Triangle::new(p, i as u64))
+            .collect()
+    }
+    fn pair(a: &[[[f32; 3]; 3]], b: &[[[f32; 3]; 3]], seed: u64) -> (TileError, Summary) {
+        let (a, b) = (triangles(a), triangles(b));
+        let (ba, bb) = (
+            Surface::new(a.clone()).unwrap(),
+            Surface::new(b.clone()).unwrap(),
+        );
+        let direction = |t: Vec<Triangle>, bv: &Surface, seed| {
+            let area = t.iter().map(|t| t.area()).sum();
+            directed(
+                t.into_iter().map(Ok),
+                area,
+                MIN_TILE,
+                seed,
+                true,
+                |p| {
+                    let mut h = source_index::Hit::empty();
+                    bv.nearest(p, all_key(), &mut h);
+                    Ok(h.distance2.sqrt())
+                },
+                &|| Ok(()),
+            )
+            .unwrap()
+        };
+        publish(
+            0.,
+            MIN_TILE,
+            seed,
+            direction(a, &bb, seed),
+            direction(b, &ba, seed + 1),
+        )
+        .unwrap()
+    }
+    fn quad(z: impl Fn(f32, f32) -> f32) -> Vec<[[f32; 3]; 3]> {
+        let p = |x, y| [x, y, z(x, y)];
+        vec![
+            [p(0., 0.), p(1., 0.), p(0., 1.)],
+            [p(1., 0.), p(1., 1.), p(0., 1.)],
+        ]
+    }
+    #[test]
+    fn analytic_tilted_plane_and_offset_are_within_margin() {
+        let source = quad(|_, _| 0.);
+        for (proxy, truth) in [(quad(|x, _| 0.25 * x), 0.25), (quad(|_, _| 0.5), 0.5)] {
+            let (g, s) = pair(&source, &proxy, 71);
+            assert!((s.sampled_max - truth).abs() < 1e-12, "{s:?}");
+            assert!(g.geometric_error >= truth && g.geometric_error <= truth + s.margin + 1e-12);
+            assert_eq!(s.source_to_proxy.area.samples, 2048);
+            assert_eq!(s.proxy_to_source.area.samples, 2048);
+            let (g2, s2) = pair(&source, &proxy, 199);
+            assert_eq!(s2.sampled_max, s.sampled_max);
+            assert!((g2.geometric_error - g.geometric_error).abs() < 1e-12);
+        }
+    }
+    #[test]
+    fn analytic_sphere_cap_against_chord() {
+        // Unit sphere cap at z=.8, r=.6: analytic sagitta 1-.8=.2.
+        // Both triangulations share the xy fan; linear interpolation preserves the
+        // vertical deviation <=.2, attained at the included cap pole.
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        for i in 0..64 {
+            let point = |j| {
+                let angle = j as f64 * std::f64::consts::TAU / 64.;
+                [0.6 * angle.cos() as f32, 0.6 * angle.sin() as f32, 0.8]
+            };
+            let x = point(i);
+            let y = point(i + 1);
+            a.push([[0., 0., 1.], x, y]);
+            b.push([[0., 0., 0.8], x, y]);
+        }
+        let (g, s) = pair(&a, &b, 119);
+        let truth = 1. - f64::from(0.8f32);
+        assert!((s.sampled_max - truth).abs() < 1e-12, "{s:?}");
+        assert!(g.geometric_error >= truth && g.geometric_error <= truth + s.margin + 1e-12);
+    }
+    #[test]
+    fn tiny_component_degenerate_and_boundary_controls_survive_area_sampling() {
+        let mut a = quad(|_, _| 0.);
+        a.push([[4., 0., 10.]; 3]);
+        a.push([[0., 0., 0.], [0., 0., 0.], [1., 0., 0.]]);
+        let b = quad(|_, _| 0.);
+        let (g, s) = pair(&a, &b, 17);
+        let truth = 109f64.sqrt();
+        assert!((s.source_to_proxy.controls.max - truth).abs() < 1e-12);
+        assert!(g.geometric_error >= truth);
+        assert_eq!(s.source_to_proxy.area.samples, MIN_TILE);
+        let (g, s) = pair(&[[[0., 0., 0.]; 3]], &[[[0., 0., 2.]; 3]], 18);
+        assert_eq!(s.sampled_max, 2.);
+        assert_eq!(g.geometric_error, 2.1);
+    }
+    #[test]
+    fn child_and_leaf_floor_and_depth_counts() {
+        let (_, s) = pair(&quad(|_, _| 0.), &quad(|_, _| 0.), 73);
+        let (g, _) = publish(3., MIN_TILE, s.seed, s.source_to_proxy, s.proxy_to_source).unwrap();
+        assert_eq!(g.geometric_error, 3.);
+        assert!(publish(
+            f64::NAN,
+            MIN_TILE,
+            s.seed,
+            s.source_to_proxy,
+            s.proxy_to_source
+        )
+        .is_err());
+        let plan = SamplingPlan { totals: [1000; 32] };
+        let mut sum = 0;
+        for i in 0..333 {
+            sum += plan.count(TileKey {
+                first: i * 3,
+                end: (i + 1) * 3,
+                depth: 23,
+                leaf_begin: 0,
+                leaf_end: 1,
+            });
+        }
+        sum += plan.count(TileKey {
+            first: 999,
+            end: 1000,
+            depth: 23,
+            leaf_begin: 0,
+            leaf_end: 1,
+        });
+        assert!(sum >= MIN_DEPTH);
+    }
+    #[test]
+    fn cancellation_is_checked_inside_large_and_zero_area_strata() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        for t in [
+            Triangle::new([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], 0),
+            Triangle::new([[0., 0., 0.]; 3], 0),
+        ] {
+            let calls = AtomicUsize::new(0);
+            let result = directed(
+                std::iter::once(Ok(t)),
+                t.area(),
+                MIN_DEPTH,
+                1,
+                false,
+                |_| {
+                    calls.fetch_add(1, Ordering::Relaxed);
+                    Ok(0.)
+                },
+                &|| {
+                    if calls.load(Ordering::Relaxed) >= 256 {
+                        Err(state("cancel test"))
+                    } else {
+                        Ok(())
+                    }
+                },
+            );
+            assert!(result.is_err());
+            assert!(calls.load(Ordering::Relaxed) <= 260);
+        }
+    }
+    #[test]
+    fn histogram_quantiles_are_upper_within_one_bin() {
+        let mut s = Stats::new();
+        for i in 0..1000 {
+            s.add(i as f64 / 1000.).unwrap();
+        }
+        let d = s.summary();
+        assert!(d.p95 >= 0.949 && d.p95 <= 0.949 * 2f64.powf(1. / 32.));
+        assert!(d.p99 >= 0.989 && d.p99 <= 0.989 * 2f64.powf(1. / 32.));
+    }
+}
