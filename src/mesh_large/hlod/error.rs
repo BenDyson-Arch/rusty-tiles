@@ -62,6 +62,7 @@ pub struct Distribution {
 struct Stats {
     bins: Vec<u64>,
     sum: f64,
+    correction: f64,
     count: u64,
     max: f64,
 }
@@ -70,6 +71,7 @@ impl Stats {
         Self {
             bins: vec![0; BINS],
             sum: 0.,
+            correction: 0.,
             count: 0,
             max: 0.,
         }
@@ -79,7 +81,10 @@ impl Stats {
             return Err(state("nonfinite sampled distance"));
         }
         self.count += 1;
-        self.sum += d;
+        let y = d - self.correction;
+        let total = self.sum + y;
+        self.correction = (total - self.sum) - y;
+        self.sum = total;
         self.max = self.max.max(d);
         let i = if d == 0. {
             0
@@ -204,6 +209,32 @@ pub struct ErrorReport {
     pub root: Option<Summary>,
 }
 
+/// Diagnostic CPU shares: index uses the process clock before workers start; each
+/// other term sums worker-thread user+system CPU. Unavailable clocks report 0 here
+/// and None in the enclosing total, never worker wall seconds.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct CpuReport {
+    pub index: f64,
+    pub representatives: f64,
+    pub proxy_preparation: f64,
+    pub source_scan: f64,
+    pub source_to_proxy: f64,
+    pub proxy_to_source: f64,
+}
+impl CpuReport {
+    pub(crate) fn add(&mut self, c: Self) {
+        self.index += c.index;
+        self.representatives += c.representatives;
+        self.proxy_preparation += c.proxy_preparation;
+        self.source_scan += c.source_scan;
+        self.source_to_proxy += c.source_to_proxy;
+        self.proxy_to_source += c.proxy_to_source;
+    }
+}
+fn elapsed(start: Option<f64>) -> f64 {
+    thread_cpu().zip(start).map_or(0., |(b, a)| b - a)
+}
+
 struct Rng(u64);
 impl Rng {
     fn unit(&mut self) -> f64 {
@@ -267,7 +298,7 @@ where
             samples.add(distance(point)?)?;
             i += 1;
             if i < count {
-                next = (i as f64 + rng.unit()) / count as f64 * total;
+                next = ((i as f64 + rng.unit()) / count as f64 * total).min(total.next_down());
             }
         }
         for bits in t.bits {
@@ -323,7 +354,9 @@ pub(crate) fn measure(
     query: &mut SourceQuery<'_>,
     count: u64,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<(TileError, Summary), JobError> {
+) -> Result<(TileError, Summary, CpuReport), JobError> {
+    let mut cpu = CpuReport::default();
+    let started = thread_cpu();
     let seed = seed(tile.key);
     let proxy_triangles: Vec<_> = tile
         .triangles
@@ -333,40 +366,30 @@ pub(crate) fn measure(
         .collect();
     let proxy_area = proxy_triangles.iter().map(|t| t.area()).sum::<f64>();
     let proxy = Surface::new(proxy_triangles.clone())?;
-    let captured = query.captured;
-    let key = tile.key;
+    cpu.proxy_preparation = elapsed(started);
+    let started = thread_cpu();
     let mut source_area = 0.;
-    for (i, t) in captured
-        .triangles
-        .range(key.first, key.end, 65536)?
-        .enumerate()
-    {
+    for (i, t) in query.surface()?.enumerate() {
         if i % 4096 == 0 {
             check()?;
         }
-        source_area += Triangle::new(t?.triangle.positions, 0).area();
+        source_area += t?.area();
     }
-    let source = captured
-        .triangles
-        .range(key.first, key.end, 65536)?
-        .enumerate()
-        .map(|(i, t)| {
-            t.map(|t| Triangle::new(t.triangle.positions, key.first + i as u64))
-                .map_err(Into::into)
-        });
+    cpu.source_scan = elapsed(started);
+    let started = thread_cpu();
+    let source = query.surface()?;
+    let mut hint = None;
     let source_to_proxy = directed(
         source,
         source_area,
         count,
         seed,
         false,
-        |p| {
-            let mut hit = source_index::Hit::empty();
-            proxy.nearest(p, all_key(), &mut hit);
-            Ok(hit.distance2.sqrt())
-        },
+        |p| Ok(proxy.nearest_hint(p, all_key(), &mut hint).distance2.sqrt()),
         check,
     )?;
+    cpu.source_to_proxy = elapsed(started);
+    let started = thread_cpu();
     let proxy_to_source = directed(
         proxy_triangles.into_iter().map(Ok),
         proxy_area,
@@ -376,6 +399,7 @@ pub(crate) fn measure(
         |p| Ok(query.nearest(p)?.distance2.sqrt()),
         check,
     )?;
+    cpu.proxy_to_source = elapsed(started);
     publish(
         tile.children_error,
         count,
@@ -383,6 +407,7 @@ pub(crate) fn measure(
         source_to_proxy,
         proxy_to_source,
     )
+    .map(|(g, s)| (g, s, cpu))
 }
 fn publish(
     children_error: f64,
@@ -648,6 +673,17 @@ mod tests {
             assert!(result.is_err());
             assert!(calls.load(Ordering::Relaxed) <= 260);
         }
+    }
+    #[test]
+    fn constant_distance_mean_uses_compensated_accumulation() {
+        let d = 3f64.sqrt();
+        let mut stats = Stats::new();
+        for _ in 0..MIN_DEPTH {
+            stats.add(d).unwrap();
+        }
+        let s = stats.summary();
+        assert!((s.mean - d).abs() <= f64::EPSILON * d);
+        assert_eq!(s.p99, d);
     }
     #[test]
     fn histogram_quantiles_are_upper_within_one_bin() {

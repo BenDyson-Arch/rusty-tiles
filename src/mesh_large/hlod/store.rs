@@ -139,6 +139,8 @@ pub(crate) struct HlodRow {
     pub measurement: super::error::Summary,
     #[serde(skip)]
     pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub error_cpu: super::error::CpuReport,
     pub children_error: f64,
     pub simplifier_error: f64,
     pub encode_displacement: f64,

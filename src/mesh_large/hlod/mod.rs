@@ -239,6 +239,8 @@ pub(crate) struct HlodReport {
     pub error_measurement: error::ErrorReport,
     #[serde(skip)]
     pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub error_cpu: error::CpuReport,
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -251,6 +253,7 @@ pub struct HlodDiagnostics {
     pub incidence_cpu_seconds: Option<f64>,
     /// Source-index construction plus summed worker-thread measurement/identity CPU.
     pub error_cpu_seconds: Option<f64>,
+    pub error_cpu: error::CpuReport,
     pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
@@ -356,6 +359,8 @@ pub(crate) fn produce(
         check,
     );
     diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
+    diagnostics.error_cpu = report.error_cpu;
+    diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let bound = captured.report.scratch.stages.lod_prepass;
     let lease_peak = result?;
@@ -583,7 +588,7 @@ fn build_tile(
         encode::check(tile, &built.locked, &encoded.glb)?;
     }
     let cpu_start = error::thread_cpu();
-    let (error, measurement) = error::measure(
+    let (error, measurement, mut error_cpu) = error::measure(
         &CoarseTile {
             key: tile.key,
             decoded: &encoded.decoded,
@@ -601,6 +606,7 @@ fn build_tile(
         sampling.count(tile.key),
         check,
     )?;
+    error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
         .zip(identity_cpu)
@@ -632,6 +638,7 @@ fn build_tile(
         error_policy: error.policy,
         measurement,
         error_cpu_seconds,
+        error_cpu,
         children_error: built.children_error,
         simplifier_error: built.simplifier_error,
         encode_displacement: encoded.displacement,
@@ -654,6 +661,7 @@ fn build_tile(
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.error_cpu_seconds += row.error_cpu_seconds;
+    report.error_cpu.add(row.error_cpu);
     report.tiles += 1;
     report.triangles += u64::from(row.triangles);
     report.max_triangles = report.max_triangles.max(u64::from(row.triangles));

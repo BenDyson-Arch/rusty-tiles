@@ -1296,6 +1296,14 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
             leaf_end: 1,
         };
         let mut query = index.query(&captured, key).unwrap();
+        let mut paged = index.paged_query(&captured, key).unwrap();
+        let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
+        let mut streamed_sorted = streamed.clone();
+        streamed_sorted.sort_unstable();
+        assert_eq!(
+            streamed_sorted,
+            (first as u64..end as u64).collect::<Vec<_>>()
+        );
         for _ in 0..40 {
             let mut unit = || {
                 random ^= random << 13;
@@ -1315,18 +1323,23 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
                 if d < expected.distance2
                     || (d == expected.distance2 && (order, rank) < (expected.order, expected.rank))
                 {
-                    expected = Hit {
-                        rank,
-                        bary: w,
-                        distance2: d,
-                        order,
-                    };
+                    expected.rank = rank;
+                    expected.bary = w;
+                    expected.distance2 = d;
+                    expected.order = order;
                 }
             }
+            let disk = paged.nearest(p).unwrap();
+            assert_eq!(disk.rank, expected.rank);
+            assert_eq!(disk.distance2, expected.distance2);
             assert_eq!(actual.rank, expected.rank);
             assert!((actual.distance2 - expected.distance2).abs() < 1e-10);
             let t = query.triangle(actual).unwrap();
-            assert_eq!(t, source[actual.rank as usize]);
+            let expected_triangle = source[actual.rank as usize];
+            assert_eq!(t, expected_triangle);
+            assert_eq!(t.corners, expected_triangle.corners);
+            assert_eq!(t.flags, expected_triangle.flags);
+            assert_eq!(t.material, expected_triangle.material);
             assert!(actual.bary.iter().all(|v| v.is_finite() && *v >= 0.));
         }
     }

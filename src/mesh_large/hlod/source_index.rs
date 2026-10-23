@@ -4,7 +4,7 @@
 //! material restrictions. Disk sequences use capture's scratch owner. Each query owns
 //! a fixed cache; no allocation scales with the source or with the tile's source range.
 use super::{
-    state,
+    resource, state,
     store::{SourcePrimitive, TileKey},
 };
 use crate::{
@@ -16,10 +16,11 @@ use crate::{
     spill::{RandomRecords, Record, Sequence, SequenceWriter},
     JobError,
 };
+use std::collections::{HashMap, VecDeque};
 
 pub(crate) const BLOCK: usize = 256;
-const CACHE_BLOCKS: usize = 32;
-const CACHE_NODES: usize = 2048;
+const CACHE_BLOCKS: usize = 96;
+const CACHE_NODES: usize = 16384;
 /// Includes both caches, compact and full-row I/O, build workspace, stacks and slack.
 pub(crate) const QUERY_BYTES: u64 = 8 << 20;
 pub(crate) const BUILD_BYTES: u64 = 2 << 20;
@@ -201,7 +202,7 @@ impl Surface {
                 start: base as u32,
                 count: t.len() as u32,
             });
-            if t.len() > 8 {
+            if t.len() > 4 {
                 let ext = b.extent();
                 let axis = (0..3).max_by(|&a, &b| ext[a].total_cmp(&ext[b])).unwrap();
                 let mid = t.len() / 2;
@@ -221,6 +222,21 @@ impl Surface {
         build(&mut triangles, 0, &mut nodes);
         Ok(Self { triangles, nodes })
     }
+    /// Reuse the previous witness only as an initial upper distance. The exact
+    /// nearest search/tie rule still runs; spatially coherent samples prune earlier.
+    pub(crate) fn nearest_hint(&self, p: V3, key: TileKey, hint: &mut Option<usize>) -> Hit {
+        let mut hit = hint
+            .and_then(|i| {
+                self.triangles
+                    .get(i)
+                    .filter(|t| t.rank >= key.first && t.rank < key.end)
+                    .map(|&t| make_hit(p, t, i))
+            })
+            .unwrap_or_else(Hit::empty);
+        self.nearest(p, key, &mut hit);
+        *hint = Some(hit.index);
+        hit
+    }
     pub(crate) fn nearest(&self, p: V3, key: TileKey, best: &mut Hit) {
         let mut stack = [0usize; 64];
         let mut len = 1;
@@ -231,7 +247,10 @@ impl Surface {
                 continue;
             }
             if n.count > 0 {
-                for t in &self.triangles[n.start as usize..(n.start + n.count) as usize] {
+                for (offset, t) in self.triangles[n.start as usize..(n.start + n.count) as usize]
+                    .iter()
+                    .enumerate()
+                {
                     if t.rank < key.first || t.rank >= key.end {
                         continue;
                     }
@@ -243,6 +262,7 @@ impl Surface {
                     {
                         *best = Hit {
                             rank: t.rank,
+                            index: n.start as usize + offset,
                             order: t.order,
                             bary: weights,
                             distance2: d,
@@ -267,6 +287,7 @@ impl Surface {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Hit {
     pub rank: u64,
+    index: usize,
     pub bary: V3,
     pub order: (Provenance, u64),
     pub distance2: f64,
@@ -275,6 +296,7 @@ impl Hit {
     pub(crate) fn empty() -> Self {
         Self {
             rank: u64::MAX,
+            index: usize::MAX,
             order: (
                 Provenance {
                     node: u32::MAX,
@@ -287,6 +309,17 @@ impl Hit {
             bary: [0.; 3],
             distance2: f64::INFINITY,
         }
+    }
+}
+fn make_hit(p: V3, t: Triangle, index: usize) -> Hit {
+    let positions = t.positions();
+    let weights = closest(p, positions);
+    Hit {
+        rank: t.rank,
+        index,
+        order: t.order,
+        bary: weights,
+        distance2: distance2(p, bary(positions, weights)),
     }
 }
 /// Immutable disk index. Construction streams rank-ordered blocks, holding O(log N)
@@ -382,25 +415,74 @@ impl SourceIndex {
         })
     }
     pub(crate) fn query<'a>(
-        &self,
+        &'a self,
         captured: &'a FullCaptured,
         key: TileKey,
     ) -> Result<SourceQuery<'a>, JobError> {
-        Ok(SourceQuery {
+        self.query_depth(captured, key, 12)
+    }
+    #[cfg(test)]
+    pub(crate) fn paged_query<'a>(
+        &'a self,
+        captured: &'a FullCaptured,
+        key: TileKey,
+    ) -> Result<SourceQuery<'a>, JobError> {
+        self.query_depth(captured, key, 0)
+    }
+    fn query_depth<'a>(
+        &'a self,
+        captured: &'a FullCaptured,
+        key: TileKey,
+        limit: u32,
+    ) -> Result<SourceQuery<'a>, JobError> {
+        if key.first >= key.end || key.end > captured.triangles.len() {
+            return Err(state("source query range outside capture"));
+        }
+        let mut query = SourceQuery {
             captured,
             key,
-            root: self.root,
             nodes: self.nodes.random()?,
             triangles: self.triangles.random()?,
             full: captured.triangles.random()?,
-            node_cache: vec![None; CACHE_NODES],
-            blocks: (0..CACHE_BLOCKS).map(|_| None).collect(),
+            surface: &self.triangles,
+            node_cache: HashMap::with_capacity(CACHE_NODES),
+            node_fifo: VecDeque::with_capacity(CACHE_NODES),
+            blocks: HashMap::with_capacity(CACHE_BLOCKS),
+            block_fifo: VecDeque::with_capacity(CACHE_BLOCKS),
             encoded: Vec::new(),
             node_buf: Vec::new(),
             tri_buf: Vec::new(),
             full_buf: Vec::new(),
-        })
+            region: Vec::new(),
+            region_root: 0,
+            block_limit: CACHE_BLOCKS,
+            last: None,
+        };
+        query.region_root = query.build_region(self.root, 0, limit)?;
+        if query
+            .region
+            .iter()
+            .all(|r| r.children.is_some() || r.node.count > 0)
+        {
+            // Complete resident query hierarchy: drop the paged node cache before
+            // admitting twice as many fine blocks. Still inside QUERY_BYTES.
+            query.node_cache = HashMap::new();
+            query.node_fifo = VecDeque::new();
+            query.block_limit = 240;
+        }
+        query.check_charge()?;
+        Ok(query)
     }
+}
+#[derive(Clone, Copy)]
+struct Region {
+    node: Node,
+    children: Option<[u32; 2]>,
+}
+#[derive(Clone, Copy)]
+enum Visit {
+    Resident(u32),
+    Disk(u64),
 }
 /// S3 calls nearest() for rank/bary/distance, then triangle() only for donors actually
 /// shaded. FullTriangle supplies original UVs, colours, normals, flags and material;
@@ -408,48 +490,153 @@ impl SourceIndex {
 pub(crate) struct SourceQuery<'a> {
     pub(crate) captured: &'a FullCaptured,
     pub(crate) key: TileKey,
-    root: u64,
     nodes: RandomRecords<Node>,
     triangles: RandomRecords<Triangle>,
     full: RandomRecords<FullTriangle>,
-    node_cache: Vec<Option<(u64, Node)>>,
-    blocks: Vec<Option<(u64, Surface)>>,
+    surface: &'a Sequence<Triangle>,
+    node_cache: HashMap<u64, Node>,
+    node_fifo: VecDeque<u64>,
+    blocks: HashMap<u64, Surface>,
+    block_fifo: VecDeque<u64>,
     encoded: Vec<u8>,
     node_buf: Vec<Node>,
     tri_buf: Vec<Triangle>,
     full_buf: Vec<FullTriangle>,
+    region: Vec<Region>,
+    region_root: u32,
+    block_limit: usize,
+    last: Option<Triangle>,
 }
 impl SourceQuery<'_> {
     fn node(&mut self, id: u64) -> Result<Node, JobError> {
-        let slot = id as usize % CACHE_NODES;
-        if let Some((k, n)) = self.node_cache[slot] {
-            if k == id {
-                return Ok(n);
-            }
+        if let Some(n) = self.node_cache.get(&id) {
+            return Ok(*n);
         }
         self.nodes
             .read(id, 1, &mut self.encoded, &mut self.node_buf)?;
         let n = self.node_buf[0];
-        self.node_cache[slot] = Some((id, n));
+        if self.node_cache.len() == CACHE_NODES {
+            self.node_cache.remove(&self.node_fifo.pop_front().unwrap());
+        }
+        self.node_fifo.push_back(id);
+        self.node_cache.insert(id, n);
         Ok(n)
     }
+    /// Captured source positions only, streamed from the compact index. Expand to
+    /// complete disk blocks, then clip by stored source rank: BVH order within a
+    /// block differs from capture order but is deterministic for all jobs/budgets.
+    pub(crate) fn surface(
+        &self,
+    ) -> Result<impl Iterator<Item = Result<Triangle, JobError>> + '_, JobError> {
+        let key = self.key;
+        let first = key.first / BLOCK as u64 * BLOCK as u64;
+        let end = key
+            .end
+            .div_ceil(BLOCK as u64)
+            .saturating_mul(BLOCK as u64)
+            .min(self.surface.len());
+        Ok(self
+            .surface
+            .range(first, end, 65536)?
+            .filter_map(move |t| match t {
+                Ok(t) if t.rank >= key.first && t.rank < key.end => Some(Ok(t)),
+                Ok(_) => None,
+                Err(e) => Some(Err(e.into())),
+            }))
+    }
+    // Trim the global rank BVH once per tile, collapse unary range paths, and keep
+    // at most 8191 query nodes resident. Deeper branches retain disk node IDs.
+    // Small/medium tiles then perform pointer-only traversal, with no cache lookup
+    // or I/O for the upper hierarchy. Large tiles use the same bounded paged path.
+    fn build_region(&mut self, id: u64, depth: u32, limit: u32) -> Result<u32, JobError> {
+        let node = self.node(id)?;
+        let children = if node.count == 0 {
+            let a = self.node(node.left)?;
+            let b = self.node(node.right)?;
+            match (a.intersects(self.key), b.intersects(self.key)) {
+                (true, false) => return self.build_region(node.left, depth, limit),
+                (false, true) => return self.build_region(node.right, depth, limit),
+                (false, false) => return Err(state("empty source query hierarchy")),
+                (true, true) if depth < limit => Some([
+                    self.build_region(node.left, depth + 1, limit)?,
+                    self.build_region(node.right, depth + 1, limit)?,
+                ]),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let at = self.region.len() as u32;
+        self.region.push(Region { node, children });
+        Ok(at)
+    }
+    // Charge actual vector capacities and conservative hash allocation bounds,
+    // plus 128 KiB for handles, allocator headers and an in-flight replacement block.
+    // Refuse rather than letting a cache/backend change exceed the admitted workspace.
+    fn check_charge(&self) -> Result<(), JobError> {
+        use std::mem::size_of;
+        let bytes = self.node_cache.capacity() * 2 * (size_of::<(u64, Node)>() + 1)
+            + self.blocks.capacity() * 2 * (size_of::<(u64, Surface)>() + 1)
+            + (self.node_fifo.capacity() + self.block_fifo.capacity()) * size_of::<u64>()
+            + self.region.capacity() * size_of::<Region>()
+            + self.encoded.capacity()
+            + self.node_buf.capacity() * size_of::<Node>()
+            + self.tri_buf.capacity() * size_of::<Triangle>()
+            + self.full_buf.capacity() * size_of::<FullTriangle>()
+            + self
+                .blocks
+                .values()
+                .map(|s| {
+                    s.triangles.capacity() * size_of::<Triangle>()
+                        + s.nodes.capacity() * size_of::<Node>()
+                })
+                .sum::<usize>()
+            + (128 << 10);
+        if bytes as u64 > QUERY_BYTES {
+            return Err(resource(format!(
+                "source query cache needs {bytes} bytes, admitted {QUERY_BYTES}"
+            )));
+        }
+        Ok(())
+    }
+    fn visit(&mut self, v: Visit) -> Result<(Node, Option<[Visit; 2]>), JobError> {
+        match v {
+            Visit::Resident(i) => {
+                let r = self.region[i as usize];
+                let children = match r.children {
+                    Some([a, b]) => Some([Visit::Resident(a), Visit::Resident(b)]),
+                    None if r.node.count == 0 => {
+                        Some([Visit::Disk(r.node.left), Visit::Disk(r.node.right)])
+                    }
+                    None => None,
+                };
+                Ok((r.node, children))
+            }
+            Visit::Disk(id) => {
+                let n = self.node(id)?;
+                let children =
+                    (n.count == 0).then_some([Visit::Disk(n.left), Visit::Disk(n.right)]);
+                Ok((n, children))
+            }
+        }
+    }
     pub(crate) fn nearest(&mut self, p: V3) -> Result<Hit, JobError> {
-        let mut best = Hit::empty();
-        let mut stack = [0u64; 64];
-        stack[0] = self.root;
+        let mut winning = self
+            .last
+            .filter(|t| t.rank >= self.key.first && t.rank < self.key.end);
+        let mut best = winning
+            .map(|t| make_hit(p, t, usize::MAX))
+            .unwrap_or_else(Hit::empty);
+        let mut stack = [Visit::Resident(self.region_root); 64];
         let mut len = 1;
         while len > 0 {
             len -= 1;
-            let n = self.node(stack[len])?;
+            let (n, children) = self.visit(stack[len])?;
             if !n.intersects(self.key) || n.distance(p) > best.distance2 {
                 continue;
             }
             if n.count > 0 {
-                let slot = (n.first / BLOCK as u64) as usize % CACHE_BLOCKS;
-                if self.blocks[slot]
-                    .as_ref()
-                    .is_none_or(|(first, _)| *first != n.first)
-                {
+                if !self.blocks.contains_key(&n.first) {
                     self.nodes.read(
                         n.left,
                         n.right as usize,
@@ -466,20 +653,28 @@ impl SourceQuery<'_> {
                         nodes: self.node_buf.clone(),
                         triangles: self.tri_buf.clone(),
                     };
-                    self.blocks[slot] = Some((n.first, surface));
+                    if self.blocks.len() == self.block_limit {
+                        self.blocks.remove(&self.block_fifo.pop_front().unwrap());
+                    }
+                    self.block_fifo.push_back(n.first);
+                    self.blocks.insert(n.first, surface);
+                    self.check_charge()?;
                 }
-                self.blocks[slot]
-                    .as_ref()
-                    .unwrap()
-                    .1
-                    .nearest(p, self.key, &mut best);
+                let previous = best.rank;
+                let surface = &self.blocks[&n.first];
+                surface.nearest(p, self.key, &mut best);
+                if best.rank != previous {
+                    winning = Some(surface.triangles[best.index]);
+                }
             } else {
-                let a = self.node(n.left)?;
-                let b = self.node(n.right)?;
+                let [left, right] =
+                    children.ok_or_else(|| state("source branch without children"))?;
+                let (a, _) = self.visit(left)?;
+                let (b, _) = self.visit(right)?;
                 let (near, far) = if a.distance(p) <= b.distance(p) {
-                    (n.left, n.right)
+                    (left, right)
                 } else {
-                    (n.right, n.left)
+                    (right, left)
                 };
                 stack[len] = far;
                 stack[len + 1] = near;
@@ -489,6 +684,7 @@ impl SourceQuery<'_> {
         if !best.distance2.is_finite() {
             return Err(state("source nearest query has no finite witness"));
         }
+        self.last = winning;
         Ok(best)
     }
     pub(crate) fn triangle(&mut self, hit: Hit) -> Result<FullTriangle, JobError> {

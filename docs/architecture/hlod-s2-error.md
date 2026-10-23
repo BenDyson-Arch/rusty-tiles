@@ -46,15 +46,22 @@ It retains H16 bounds/forest planning and strengthens its input validation.
 `SourceIndex::build(captured, check)` writes compact triangle blocks and their
 fine BVHs plus a balanced hierarchy into capture-owned disk sequences. It streams
 256 triangles at a time, with O(log N) construction state. Each admitted job calls
-`SourceIndex::query(captured, TileKey)` and holds a fixed direct-mapped cache of
-2,048 hierarchy nodes and 32 fine blocks. The query clips both hierarchy and
-triangle candidates to the descendant rank range. It returns an unrestricted
+`SourceIndex::query(captured, TileKey)` and holds a bounded hierarchy of
+at most 8,191 tile-local hierarchy nodes. Unary paths outside the tile's rank
+range are removed once. A complete resident hierarchy releases its paged-node
+cache and admits up to 240 fine blocks; a deeper hierarchy instead keeps a
+16,384-entry FIFO node cache and 96 fine blocks. The query clips both hierarchy
+and triangle candidates to the descendant rank range. It returns an unrestricted
 nearest surface witness: source rank, barycentrics and squared distance. Ties use
 source provenance (node/mesh/primitive/triangle), expanded ordinal, then rank.
 
 `SourceQuery::triangle(hit)` reads the original `FullTriangle` only when needed:
 UVs, colours, normals, flags, material and provenance are available to S3 without
-keeping an uncharged source mesh. `primitive(hit)` supplies D4's representative
+keeping an uncharged source mesh. `surface()` streams compact original positions
+in deterministic block-BVH order and clips by stored source rank; S2's source
+samples use this stream instead of repeatedly decoding captured attributes.
+Coherent queries may seed the traversal with the last actual triangle witness
+as an upper distance; the full nearest search and source-order tie rule still run. `primitive(hit)` supplies D4's representative
 row. Coarse IDs are selected at final decoded centroids and duplicated per corner
 by the existing encoder. S3 owns and separately charges its image cache.
 
@@ -71,7 +78,10 @@ The HLOD planner adds 8 MiB query-cache allowance and 4 MiB measurement workspac
 per admitted job, plus 2 MiB construction allowance to the fixed stage charge.
 Histograms, source/proxy stream buffers, the proxy BVH, controls, index I/O and
 centroid identity queries fit inside those charges; none grows with the tile's
-source range. The disk allowance is `128 * source_triangles + 1 MiB`, added to
+source range. The cache checks actual vector capacities and conservative hash
+capacities against the 8 MiB allowance, including replacement/allocation slack,
+and refuses if that charge is exceeded. Fine BVH leaves hold at most four
+triangles. Construction and the unbounded-source fallback remain streamed. The disk allowance is `128 * source_triangles + 1 MiB`, added to
 the existing incidence scratch envelope. It includes compact source records,
 fine and upper BVH nodes; capture scratch removes it on success/refusal/cancel.
 Memory-backed scratch is charged through the same S1 budget resolution.
@@ -81,6 +91,21 @@ plus tiny distant points, collinear/degenerate faces and boundary maxima. Disk
 queries are compared with exhaustive nearest-triangle arithmetic through block
 boundaries. Existing S1 tests exercise job/budget determinism, exact-budget
 admission, one-below refusal, cancellation and decoded interface/leaf identity.
-Sensitive delivery controls alter G, sample counts, q and margin. Crop bakes pin
+Sensitive delivery controls alter G, sample counts, q and margin, remove the S2
+metadata entirely, and lower internally consistent non-root depth totals. The
+manifest discriminator prevents historical-row fallback for HLOD directories;
+terminal iterator errors propagate before publication. Resident and forced-paged
+queries are compared with the same exhaustive reference, including compact-stream
+rank coverage. Extreme 1e8:1 slivers have a separate analytic distance control,
+using cross-product barycentrics to preserve their narrow interior dimension.
+Cancellation is checked inside each 256-sample batch, including zero-area surfaces.
+Compensated accumulation keeps constant-distance sample means stable. Crop bakes pin
 binary/input hashes; source-aware audits and CPU cost are reported separately.
 The full-model quality, speed and memory gates remain S8 obligations.
+
+CPU diagnostics separate source-index construction, representative queries, proxy
+BVH preparation, source-area scans and both directed query passes. The index uses
+a process CPU clock before workers start; tile shares sum worker-thread CPU
+clocks. CPU counters are excluded from deterministic manifests; wall time is never
+substituted for CPU. Final crop receipts and independent source-aware cut results
+are recorded separately from preliminary profiling runs.
