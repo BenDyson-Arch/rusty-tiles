@@ -1017,7 +1017,9 @@ mod fingerprint_tests {
                 std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
             assert_eq!(disk, *source, "{path}");
         }
-        // Deleting the legacy mesh exporter must not change vector reuse identity.
+        // Only the legacy writer is decoupled. The fingerprint hashes whole files, so
+        // deleting legacy-only items from metadata.rs, bbox.rs and georef.rs still
+        // changes reuse identity once (docs/architecture/legacy-mesh-retirement.md).
         for legacy in ["glb_write", "tile.rs", "lossless", "texture.rs", "mesh.rs"] {
             assert!(!listed.iter().any(|path| path.contains(legacy)), "{legacy}");
         }

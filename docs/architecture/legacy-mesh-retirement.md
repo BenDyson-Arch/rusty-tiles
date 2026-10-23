@@ -25,20 +25,26 @@ deleting.
   checks moved with them: they now go through `vertex_jacobian` rather than the
   legacy bake.
 - **Vector reuse fingerprint decoupled.** `src/vector/pipeline/reuse.rs` no
-  longer hashes `glb_write.rs`, so the later deletion does not change vector
-  reuse identity. The list now covers `src/vector.rs`,
+  longer hashes `glb_write.rs`, so deleting that file does not change vector
+  reuse identity. The fingerprint hashes whole files, though, and still
+  covers `metadata.rs`, `bbox.rs` and `georef.rs`, which the deletion PR edits
+  (see its checklist), so that PR invalidates reuse caches a second time. The
+  list now covers `src/vector.rs`,
   `vector/pipeline/outline.rs`, `vec3.rs`, `vector_compression/source.rs`,
   `content_integrity/payload{,/ktx2,/numbers,/records,/scene}.rs`,
   `implicit/tileset/stream.rs` and (native) `geospatial/native.rs`. The first
   three close the 2026-10-21 audit finding. A test keeps the list closed over
   `mod` declarations and `crate::` paths. `bench/benchmark_vector.py` reads the
-  same list. This invalidates every existing vector reuse cache once; the
+  same list. This PR invalidates every existing vector reuse cache once; the
   changelog says so.
 - **Test fixtures decoupled from `glb_write`.** `tests/support::write_glb`
   reproduces the legacy writer's bytes, and the committed `glb-to-3tz`,
   `createTilesetJson` and `convert` digests are unchanged. It is used by
   `tests/support/mod.rs` (`textured_grid_glb`), `tests/implicit_subtree.rs` and
-  `tests/demodata_suite.rs`.
+  `tests/demodata_suite.rs`. The committed digests guard only the textured,
+  16-bit-index path, so `tests/glb_writer_oracle.rs` also writes 32-bit-index
+  and no-normals cases with both writers, asserts identical bytes and pins
+  their sha256.
 - **Producers migrated to `mesh`.** The digest/CLI-contract recipes (one `mesh`
   lossless recipe replaces `mesh-webp` and `mesh-lossless-nomeshopt`), release
   binary smoke, `scripts/release_acceptance.sh` (README route), the
@@ -77,6 +83,17 @@ deleting.
 | Historical reproductions (keep) | `bench/scale_gates/validation_pass.sh` mesh-local cases and the `mesh-local`/`mesh-local-ceiling` budgets; `bench/perf_lane/REPORT.md`; `bench/*_results.json`; `bench/architecture_audit/f1*/resource_probe.py`, `mesh_approximation/placed_proxy_browser.py`; receipts and manifests under `bench/architecture_audit/**` | They record past runs. Leave them as history; do not recast them as acceptance. |
 
 ## Goes in the deletion PR
+
+Disclosure: this PR edits `src/metadata.rs`, `src/bbox.rs` and `src/georef.rs`
+(below), which the vector reuse fingerprint hashes whole. It therefore
+invalidates existing `--reuse-tileset` vector caches a second time (the first
+is the retirement-prep PR). State that in its changelog. Deleting `glb_write.rs`
+alone does not.
+
+Writer oracle: delete the `legacy_write_glb` comparison in
+`tests/glb_writer_oracle.rs` with `glb_write.rs`, but keep its pinned sha256
+assertions, so the `tests/support` writer's 32-bit-index and no-normals bytes
+stay guarded.
 
 Rust modules, whole: `src/tile.rs`, `src/mesh.rs`, `src/mesh_crs.rs`,
 `src/texture.rs`, `src/hlod.rs`, `src/grid.rs`, `src/jpeg.rs`,
