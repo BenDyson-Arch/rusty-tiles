@@ -16,17 +16,18 @@ use crate::{
     spill::{RandomRecords, Record, Sequence, SequenceWriter},
     JobError,
 };
-use std::collections::{HashMap, VecDeque};
+use rustc_hash::FxHashMap as HashMap;
+use std::collections::VecDeque;
 
 pub(crate) const BLOCK: usize = 256;
-const CACHE_BLOCKS: usize = 96;
+const CACHE_BLOCKS: usize = 64;
 const CACHE_NODES: usize = 16384;
 /// Includes both caches, compact and full-row I/O, build workspace, stacks and slack.
 pub(crate) const QUERY_BYTES: u64 = 8 << 20;
 pub(crate) const BUILD_BYTES: u64 = 2 << 20;
 /// Compact triangles plus <= one fine node per two triangles, upper nodes and slack.
 pub(crate) fn scratch_need(n: u64) -> Option<u64> {
-    n.checked_mul(128)?.checked_add(1 << 20)
+    n.checked_mul(160)?.checked_add(1 << 20)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -34,10 +35,18 @@ pub(crate) struct Triangle {
     pub bits: [[u32; 3]; 3],
     pub rank: u64,
     pub order: (Provenance, u64),
+    pub material: u32,
+    pub controls: u32,
+    area_bits: u64,
 }
 impl Triangle {
     pub(crate) fn new(p: [[f32; 3]; 3], rank: u64) -> Self {
+        let q = p.map(|p| p.map(f64::from));
+        let n = cross(sub(q[1], q[0]), sub(q[2], q[0]));
         Self {
+            material: u32::MAX,
+            controls: 0,
+            area_bits: (0.5 * dot(n, n).sqrt()).to_bits(),
             bits: p.map(|p| p.map(f32::to_bits)),
             rank,
             order: (
@@ -53,13 +62,54 @@ impl Triangle {
         self.bits.map(|p| p.map(|x| f64::from(f32::from_bits(x))))
     }
     pub(crate) fn area(self) -> f64 {
-        let p = self.positions();
-        let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
-        0.5 * dot(n, n).sqrt()
+        f64::from_bits(self.area_bits)
     }
 }
+/// Source controls for one bounded patch: its boundary vertices, one vertex per
+/// edge-connected component, and all sliver vertices. Patch boundaries are a
+/// conservative superset of true source boundaries; no global connectivity mesh.
+pub(crate) fn mark_controls(triangles: &mut [Triangle]) {
+    fn root(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let mut parent: Vec<usize> = (0..triangles.len()).collect();
+    let mut edges = HashMap::<([u32; 3], [u32; 3]), (usize, usize, usize)>::default();
+    for (i, t) in triangles.iter_mut().enumerate() {
+        t.controls = 0;
+        let p = t.positions();
+        let max_edge = (0..3)
+            .map(|k| distance2(p[k], p[(k + 1) % 3]))
+            .fold(0., f64::max);
+        if t.area() <= max_edge * 1e-4 {
+            t.controls = 7;
+        }
+        for k in 0..3 {
+            let (a, b) = (t.bits[k], t.bits[(k + 1) % 3]);
+            let entry = edges.entry((a.min(b), a.max(b))).or_insert((i, k, 0));
+            entry.2 += 1;
+            let a = root(&mut parent, i);
+            let b = root(&mut parent, entry.0);
+            parent[a.max(b)] = a.min(b);
+        }
+    }
+    for &(i, k, count) in edges.values() {
+        if count == 1 {
+            triangles[i].controls |= (1 << k) | (1 << ((k + 1) % 3));
+        }
+    }
+    for (i, t) in triangles.iter_mut().enumerate() {
+        if root(&mut parent, i) == i {
+            t.controls |= 1;
+        }
+    }
+}
+
 impl Record for Triangle {
-    const SIZE: usize = 72;
+    const SIZE: usize = 88;
     fn encode(&self, b: &mut [u8]) {
         for (v, o) in self
             .bits
@@ -78,9 +128,15 @@ impl Record for Triangle {
         }
         b[56..64].copy_from_slice(&self.order.0.triangle.to_le_bytes());
         b[64..72].copy_from_slice(&self.order.1.to_le_bytes());
+        b[72..76].copy_from_slice(&self.material.to_le_bytes());
+        b[76..80].copy_from_slice(&self.controls.to_le_bytes());
+        b[80..88].copy_from_slice(&self.area_bits.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
         Self {
+            material: u32::from_le_bytes(b[72..76].try_into().unwrap()),
+            controls: u32::from_le_bytes(b[76..80].try_into().unwrap()),
+            area_bits: u64::from_le_bytes(b[80..88].try_into().unwrap()),
             bits: std::array::from_fn(|i| {
                 std::array::from_fn(|j| {
                     u32::from_le_bytes(b[(i * 3 + j) * 4..(i * 3 + j + 1) * 4].try_into().unwrap())
@@ -109,8 +165,12 @@ struct Node {
     right: u64,
     start: u32,
     count: u32,
+    area_bits: u64,
 }
 impl Node {
+    fn area(&self) -> f64 {
+        f64::from_bits(self.area_bits)
+    }
     fn bounds(&self) -> Bounds {
         Bounds {
             min: self.lo.map(f32::from_bits),
@@ -133,7 +193,7 @@ impl Node {
     }
 }
 impl Record for Node {
-    const SIZE: usize = 64;
+    const SIZE: usize = 72;
     fn encode(&self, b: &mut [u8]) {
         for (v, o) in self
             .lo
@@ -150,7 +210,8 @@ impl Record for Node {
             o.copy_from_slice(&v.to_le_bytes());
         }
         b[56..60].copy_from_slice(&self.start.to_le_bytes());
-        b[60..].copy_from_slice(&self.count.to_le_bytes());
+        b[60..64].copy_from_slice(&self.count.to_le_bytes());
+        b[64..72].copy_from_slice(&self.area_bits.to_le_bytes());
     }
     fn decode(b: &[u8]) -> Self {
         let u32at = |i| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
@@ -164,6 +225,7 @@ impl Record for Node {
             right: u64at(48),
             start: u32at(56),
             count: u32at(60),
+            area_bits: u64at(64),
         }
     }
 }
@@ -201,6 +263,7 @@ impl Surface {
                 right: 0,
                 start: base as u32,
                 count: t.len() as u32,
+                area_bits: t.iter().map(|t| t.area()).sum::<f64>().to_bits(),
             });
             if t.len() > 4 {
                 let ext = b.extent();
@@ -224,6 +287,10 @@ impl Surface {
     }
     /// Reuse the previous witness only as an initial upper distance. The exact
     /// nearest search/tie rule still runs; spatially coherent samples prune earlier.
+    fn charge(&self) -> usize {
+        self.triangles.capacity() * std::mem::size_of::<Triangle>()
+            + self.nodes.capacity() * std::mem::size_of::<Node>()
+    }
     pub(crate) fn nearest_hint(&self, p: V3, key: TileKey, hint: &mut Option<usize>) -> Hit {
         let mut hit = hint
             .and_then(|i| {
@@ -266,6 +333,7 @@ impl Surface {
                             order: t.order,
                             bary: weights,
                             distance2: d,
+                            material: t.material,
                         };
                     }
                 }
@@ -291,6 +359,7 @@ pub(crate) struct Hit {
     pub bary: V3,
     pub order: (Provenance, u64),
     pub distance2: f64,
+    material: u32,
 }
 impl Hit {
     pub(crate) fn empty() -> Self {
@@ -308,6 +377,7 @@ impl Hit {
             ),
             bary: [0.; 3],
             distance2: f64::INFINITY,
+            material: u32::MAX,
         }
     }
 }
@@ -320,6 +390,7 @@ fn make_hit(p: V3, t: Triangle, index: usize) -> Hit {
         order: t.order,
         bary: weights,
         distance2: distance2(p, bary(positions, weights)),
+        material: t.material,
     }
 }
 /// Immutable disk index. Construction streams rank-ordered blocks, holding O(log N)
@@ -358,9 +429,11 @@ impl SourceIndex {
                         .ok_or_else(|| state("truncated source index"))?;
                     let mut triangle = Triangle::new(t.triangle.positions, *rank);
                     triangle.order = (t.triangle.source, t.expanded_ordinal);
+                    triangle.material = t.material;
                     tris.push(triangle);
                     *rank += 1;
                 }
+                mark_controls(&mut tris);
                 let s = Surface::new(tris)?;
                 let offset = nw.len();
                 for n in &s.nodes {
@@ -395,6 +468,7 @@ impl SourceIndex {
                 right: b,
                 start: 0,
                 count: 0,
+                area_bits: (na.area() + nb.area()).to_bits(),
             };
             let id = nw.len();
             nw.push(&n)?;
@@ -445,14 +519,15 @@ impl SourceIndex {
             triangles: self.triangles.random()?,
             full: captured.triangles.random()?,
             surface: &self.triangles,
-            node_cache: HashMap::with_capacity(CACHE_NODES),
+            node_cache: HashMap::with_capacity_and_hasher(CACHE_NODES, Default::default()),
             node_fifo: VecDeque::with_capacity(CACHE_NODES),
-            blocks: HashMap::with_capacity(CACHE_BLOCKS),
+            blocks: HashMap::with_capacity_and_hasher(CACHE_BLOCKS, Default::default()),
             block_fifo: VecDeque::with_capacity(CACHE_BLOCKS),
             encoded: Vec::new(),
             node_buf: Vec::new(),
             tri_buf: Vec::new(),
             full_buf: Vec::new(),
+            block_bytes: 0,
             region: Vec::new(),
             region_root: 0,
             block_limit: CACHE_BLOCKS,
@@ -466,9 +541,9 @@ impl SourceIndex {
         {
             // Complete resident query hierarchy: drop the paged node cache before
             // admitting twice as many fine blocks. Still inside QUERY_BYTES.
-            query.node_cache = HashMap::new();
+            query.node_cache = HashMap::default();
             query.node_fifo = VecDeque::new();
-            query.block_limit = 240;
+            query.block_limit = 192;
         }
         query.check_charge()?;
         Ok(query)
@@ -502,6 +577,7 @@ pub(crate) struct SourceQuery<'a> {
     node_buf: Vec<Node>,
     tri_buf: Vec<Triangle>,
     full_buf: Vec<FullTriangle>,
+    block_bytes: usize,
     region: Vec<Region>,
     region_root: u32,
     block_limit: usize,
@@ -539,7 +615,13 @@ impl SourceQuery<'_> {
             .surface
             .range(first, end, 65536)?
             .filter_map(move |t| match t {
-                Ok(t) if t.rank >= key.first && t.rank < key.end => Some(Ok(t)),
+                Ok(mut t) if t.rank >= key.first && t.rank < key.end => {
+                    let block_first = t.rank / BLOCK as u64 * BLOCK as u64;
+                    if key.first > block_first || key.end < block_first + BLOCK as u64 {
+                        t.controls = 7;
+                    }
+                    Some(Ok(t))
+                }
                 Ok(_) => None,
                 Err(e) => Some(Err(e.into())),
             }))
@@ -583,14 +665,7 @@ impl SourceQuery<'_> {
             + self.node_buf.capacity() * size_of::<Node>()
             + self.tri_buf.capacity() * size_of::<Triangle>()
             + self.full_buf.capacity() * size_of::<FullTriangle>()
-            + self
-                .blocks
-                .values()
-                .map(|s| {
-                    s.triangles.capacity() * size_of::<Triangle>()
-                        + s.nodes.capacity() * size_of::<Node>()
-                })
-                .sum::<usize>()
+            + self.block_bytes
             + (128 << 10);
         if bytes as u64 > QUERY_BYTES {
             return Err(resource(format!(
@@ -627,11 +702,12 @@ impl SourceQuery<'_> {
         let mut best = winning
             .map(|t| make_hit(p, t, usize::MAX))
             .unwrap_or_else(Hit::empty);
-        let mut stack = [Visit::Resident(self.region_root); 64];
+        let root = self.visit(Visit::Resident(self.region_root))?;
+        let mut stack = [root; 64];
         let mut len = 1;
         while len > 0 {
             len -= 1;
-            let (n, children) = self.visit(stack[len])?;
+            let (n, children) = stack[len];
             if !n.intersects(self.key) || n.distance(p) > best.distance2 {
                 continue;
             }
@@ -654,9 +730,14 @@ impl SourceQuery<'_> {
                         triangles: self.tri_buf.clone(),
                     };
                     if self.blocks.len() == self.block_limit {
-                        self.blocks.remove(&self.block_fifo.pop_front().unwrap());
+                        let old = self
+                            .blocks
+                            .remove(&self.block_fifo.pop_front().unwrap())
+                            .unwrap();
+                        self.block_bytes -= old.charge();
                     }
                     self.block_fifo.push_back(n.first);
+                    self.block_bytes += surface.charge();
                     self.blocks.insert(n.first, surface);
                     self.check_charge()?;
                 }
@@ -669,12 +750,12 @@ impl SourceQuery<'_> {
             } else {
                 let [left, right] =
                     children.ok_or_else(|| state("source branch without children"))?;
-                let (a, _) = self.visit(left)?;
-                let (b, _) = self.visit(right)?;
-                let (near, far) = if a.distance(p) <= b.distance(p) {
-                    (left, right)
+                let a = self.visit(left)?;
+                let b = self.visit(right)?;
+                let (near, far) = if a.0.distance(p) <= b.0.distance(p) {
+                    (a, b)
                 } else {
-                    (right, left)
+                    (b, a)
                 };
                 stack[len] = far;
                 stack[len + 1] = near;
@@ -707,15 +788,44 @@ impl SourceQuery<'_> {
             .read(hit.rank, 1, &mut self.encoded, &mut self.full_buf)?;
         Ok(self.full_buf[0])
     }
-    pub(crate) fn primitive(&mut self, hit: Hit) -> Result<SourcePrimitive, JobError> {
-        let t = self.triangle(hit)?;
-        Ok(SourcePrimitive {
-            node: t.triangle.source.node,
-            mesh: t.triangle.source.mesh,
-            primitive: t.triangle.source.primitive,
-            expanded_ordinal: t.expanded_ordinal,
-            material: t.material,
-        })
+    pub(crate) fn primitive(&self, hit: Hit) -> SourcePrimitive {
+        SourcePrimitive {
+            node: hit.order.0.node,
+            mesh: hit.order.0.mesh,
+            primitive: hit.order.0.primitive,
+            expanded_ordinal: hit.order.1,
+            material: hit.material,
+        }
+    }
+    /// Sum complete stored subtrees; only the two clipped boundary blocks scan triangles.
+    pub(crate) fn area(&mut self) -> Result<f64, JobError> {
+        let mut stack = vec![Visit::Resident(self.region_root)];
+        let mut area = 0.;
+        while let Some(v) = stack.pop() {
+            let (node, children) = self.visit(v)?;
+            if !node.intersects(self.key) {
+                continue;
+            }
+            if node.first >= self.key.first && node.end <= self.key.end {
+                area += node.area();
+            } else if let Some(children) = children {
+                stack.extend(children);
+            } else {
+                self.triangles.read(
+                    node.first,
+                    node.count as usize,
+                    &mut self.encoded,
+                    &mut self.tri_buf,
+                )?;
+                area += self
+                    .tri_buf
+                    .iter()
+                    .filter(|t| t.rank >= self.key.first && t.rank < self.key.end)
+                    .map(|t| t.area())
+                    .sum::<f64>();
+            }
+        }
+        Ok(area)
     }
 }
 
@@ -847,6 +957,29 @@ pub(crate) fn distance2(a: V3, b: V3) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn patch_controls_skip_interior_vertices_and_cover_boundaries() {
+        let mut triangles = Vec::new();
+        for y in 0..8 {
+            for x in 0..8 {
+                let p = |dx, dy| [(x + dx) as f32, (y + dy) as f32, 0.];
+                for face in [[p(0, 0), p(1, 0), p(0, 1)], [p(1, 0), p(1, 1), p(0, 1)]] {
+                    triangles.push(Triangle::new(face, triangles.len() as u64));
+                }
+            }
+        }
+        mark_controls(&mut triangles);
+        let mut checks = rustc_hash::FxHashSet::default();
+        for t in triangles {
+            for (corner, p) in t.bits.into_iter().enumerate() {
+                if t.controls & (1 << corner) != 0 {
+                    checks.insert(p);
+                }
+            }
+        }
+        assert_eq!(checks.len(), 32);
+        assert!(!checks.contains(&[4f32.to_bits(), 4f32.to_bits(), 0f32.to_bits()]));
+    }
     #[test]
     fn analytic_extreme_sliver_keeps_its_interior_dimension() {
         let t = [[0., 0., 0.], [1e8, 0., 0.], [1e8, 1., 0.]];

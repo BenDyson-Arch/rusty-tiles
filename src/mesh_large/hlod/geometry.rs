@@ -402,6 +402,7 @@ pub(crate) fn build_parent(
         interface,
         geometric_error: 0.,
         lease: None,
+        measurement: None,
     };
     let mut out_locked = Vec::new();
     for t in &output {

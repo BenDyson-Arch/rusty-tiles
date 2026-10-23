@@ -60,6 +60,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 memmap2 = "0.9"
 meshopt = "0.6"
 rayon = "1.10"
+rustc-hash = "2.1"
 
 tempfile = "3"
 sha2 = "0.10"

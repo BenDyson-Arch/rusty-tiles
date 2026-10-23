@@ -655,6 +655,7 @@ fn read_leaf(
         interface: Vec::new(),
         geometric_error: error,
         lease: None,
+        measurement: None,
     };
     let mut reps = Vec::with_capacity(count);
     {
@@ -835,6 +836,10 @@ fn build_tile(
     let captured = input.captured;
     let settings = input.settings;
     let stage = input.stage;
+    let reusable = children
+        .iter()
+        .find(|c| c.key.first == closed.key.first && c.key.end == closed.key.end)
+        .and_then(|c| c.measurement.map(|m| (c.key.depth, m)));
     let mut built = if closed.single_leaf {
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
         match geometry::build_parent(closed.key, &children, half) {
@@ -864,13 +869,14 @@ fn build_tile(
     let mut query = source.query(captured, built.geometry.key)?;
     // Identity is chosen on the final decoded centroid, in the descendant SOURCE range.
     // Charting/encoding must preserve these positions and source rows in S3.
-    let positions = captured.lattice.encode_coarse(
-        &built.geometry.positions,
-        &built.geometry.ells,
+    let positions = encode::positions(
+        &built.geometry,
         &built.locked,
-        built.geometry.key.depth,
+        &captured.lattice,
+        settings.mutation,
     )?;
     let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
+    let mut centroid_checks = Vec::with_capacity(built.geometry.triangles.len());
     for (i, t) in built.geometry.triangles.iter().enumerate() {
         if i % 256 == 0 {
             check()?;
@@ -882,7 +888,8 @@ fn build_tile(
                 / 3.
         });
         let hit = query.nearest(p)?;
-        representatives.push(query.primitive(hit)?);
+        representatives.push(query.primitive(hit));
+        centroid_checks.push(hit.distance2.sqrt());
     }
     let mut table = representatives.clone();
     table.sort_unstable();
@@ -892,29 +899,41 @@ fn build_tile(
         .map(|p| table.binary_search(p).unwrap() as u32)
         .collect();
     built.geometry.primitives = table;
-    drop(positions);
     let identity_cpu = error::thread_cpu().zip(cpu_start).map(|(b, a)| b - a);
     let tile = &built.geometry;
-    let positions = encode::positions(tile, &built.locked, &captured.lattice, settings.mutation)?;
+    // The error is measured on the published decode before the appearance bake, which
+    // needs G for its texel spacing; charting never moves a position, and the encoded
+    // bytes are checked to decode to exactly these position bits below. A child's
+    // measurement is reused when the decoded geometry and identity are byte-identical.
+    let digest = geometry_digest(tile, &positions.decoded);
+    let count = sampling.count(tile.key)?;
     let cpu_start = error::thread_cpu();
-    let (error, measurement, mut error_cpu) = error::measure(
-        &CoarseTile {
-            key: tile.key,
-            decoded: &positions.decoded,
-            triangles: &tile.triangles,
-            locked: &built.locked,
-            representative: &tile.representative,
-            primitives: &tile.primitives,
-            bounds: positions.bounds,
-            children_error: built.children_error,
-            simplifier_error: built.simplifier_error,
-            encode_displacement: positions.displacement,
-            stopping: built.stopping,
-        },
-        &mut query,
-        sampling.count(tile.key),
-        check,
-    )?;
+    let (error, measurement, mut error_cpu) = if let Some((depth, cached)) = reusable
+        .filter(|(_, c)| c.sha256 == digest && c.summary.area_samples_per_direction >= count)
+    {
+        let (g, summary) = error::reuse(cached.summary, depth, built.children_error)?;
+        (g, summary, error::CpuReport::default())
+    } else {
+        error::measure(
+            &CoarseTile {
+                key: tile.key,
+                decoded: &positions.decoded,
+                triangles: &tile.triangles,
+                locked: &built.locked,
+                representative: &tile.representative,
+                primitives: &tile.primitives,
+                bounds: positions.bounds,
+                children_error: built.children_error,
+                simplifier_error: built.simplifier_error,
+                encode_displacement: positions.displacement,
+                stopping: built.stopping,
+            },
+            &mut query,
+            count,
+            &centroid_checks,
+            check,
+        )?
+    };
     error_cpu.representatives = identity_cpu.unwrap_or(0.);
     let error_cpu_seconds = error::thread_cpu()
         .zip(cpu_start)
@@ -936,10 +955,11 @@ fn build_tile(
             geometric_error: error.geometric_error,
         },
     )?;
-    let encoded = encode::encode(tile, positions, &appearance)?;
+    let encoded = encode::encode(tile, positions, &appearance, settings.mutation)?;
     drop(appearance.groups);
     if settings.mutation != Mutation::MoveVertexUnchecked {
-        encode::check(tile, &built.locked, &encoded.glb)?;
+        // Every decoded corner carries exactly the measured (and charted) position bits.
+        encode::check(tile, &built.locked, &encoded)?;
     }
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
@@ -988,7 +1008,36 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
+    geometry.measurement = Some(store::CachedMeasurement {
+        sha256: digest,
+        summary: measurement,
+    });
     Ok((geometry, row, appearance.timing))
+}
+
+/// SHA-256 of what the error measurement reads: decoded positions, triangles and the
+/// representative identity.
+fn geometry_digest(tile: &TileGeometry, decoded: &[[f32; 3]]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    for p in decoded {
+        for v in p {
+            h.update(v.to_bits().to_le_bytes());
+        }
+    }
+    for t in &tile.triangles {
+        for v in t {
+            h.update(v.to_le_bytes());
+        }
+    }
+    for r in &tile.representative {
+        h.update(r.to_le_bytes());
+    }
+    for p in &tile.primitives {
+        for v in [u64::from(p.node), u64::from(p.mesh), u64::from(p.primitive), p.expanded_ordinal, u64::from(p.material)] {
+            h.update(v.to_le_bytes());
+        }
+    }
+    h.finalize().into()
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
