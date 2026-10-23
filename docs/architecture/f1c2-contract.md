@@ -1,5 +1,7 @@
 # F1c2: source identity, metadata and picking
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 Issue #144, within #121/#125/#126/#113. Baseline is accepted F1c1 develop
 `29b96e501b1426e08cf7d3f01ba93964c6618a57`. This contract defines the producer
 change before implementation. The adjacent typed wrapping/direct-manifest work

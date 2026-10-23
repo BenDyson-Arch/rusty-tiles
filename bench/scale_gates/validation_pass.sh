@@ -1,7 +1,8 @@
 #!/bin/bash
 # Reproduces the harness validation pass recorded in README.md (10^5-10^7 triangles) with the
-# binaries recorded there. Its mesh-local cases run the deprecated `mesh-local-to-3tz`, which is
-# removed before 0.4.0; the production tiler's gates are run with `mesh` (README, "Running the gates").
+# binaries recorded there. Its mesh-local cases run `mesh-local-to-3tz`, which was removed in 0.4.0,
+# so they need a recorded pre-removal binary; the production tiler's gates are run with `mesh`
+# (README, "Running the gates").
 # Usage: validation_pass.sh RELEASE_BIN LIB_TEST_BIN [RUN_PREFIX] [ONLY_CASE_SUBSTRING]
 # CESIUM_ARG=--launch uses a private headless GPU Chromium instead of the CDP browser on :9222.
 # Missing inputs are generated first under ~/.cache/rusty-tiles-scale (RUSTY_TILES_SCALE_ROOT).

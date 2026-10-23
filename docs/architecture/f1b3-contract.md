@@ -1,5 +1,7 @@
 # F1b3: core PBR bindings and authored vertex companions
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 Implementation slice [#140](https://github.com/BenDyson-Arch/rusty-tiles/issues/140) of #121, based on develop `f43eb7889b04699e755425ae49707765f6204a2a` (merged F1b2 #139). The same `MeshRequest::local_gltf`, CLI `mesh-local-to-3tz`, and Python `mesh_local_to_3tz` advance to this profile. There is no compatibility mode or legacy fallback. This slice does not close #121 or authorize a release.
 
 ## Ownership and admission

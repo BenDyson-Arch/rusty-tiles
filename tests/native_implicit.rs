@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use std::io::Read;
 use std::{fs, path::Path};
 
+#[cfg(feature = "native-geospatial")]
 fn success(output: std::process::Output) {
     assert!(
         output.status.success(),
@@ -134,23 +135,26 @@ fn nested_root(tile: &mut Value) -> Option<&mut Value> {
     }
 }
 
+/// A mixed explicit/implicit forest written by the removed legacy `mesh-to-3tz`
+/// (rusty-tiles 5096214c, `--maxTriangles 2 --maxBytes 0 --tileSize 64` over an
+/// untextured 32x1 quad strip, 69 tiles). It is kept as a static validator witness: no
+/// retained producer writes implicit roots below explicit tiles at test size.
+const FOREST_WITNESS: &str = "tests/fixtures/implicit_forest_witness.3tz";
+const FOREST_WITNESS_SHA256: &str =
+    "6cf4271651bd6bbb1903081f6ff12e98ee4370945e02000756c4dbd032faf61b";
+
 #[test]
-fn deep_implicit_mesh_validates_and_corrupt_subtrees_roots_and_templates_are_rejected() {
+fn deep_implicit_forest_validates_and_corrupt_subtrees_roots_and_templates_are_rejected() {
+    use sha2::{Digest, Sha256};
     let work = tempfile::tempdir().unwrap();
-    let input = work.path().join("mesh.glb");
-    fs::write(&input, support::textured_grid_glb(12)).unwrap();
-    let output = work.path().join("mesh.3tz");
-    success(
-        support::rusty_tiles()
-            .args(["mesh-to-3tz", "-i"])
-            .arg(&input)
-            .arg("-o")
-            .arg(&output)
-            .args(["--maxTriangles", "2", "--maxBytes", "0", "--tileSize", "64"])
-            .output()
-            .unwrap(),
+    let output = work.path().join("forest.3tz");
+    let witness = fs::read(support::repo_root().join(FOREST_WITNESS)).unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&witness)),
+        FOREST_WITNESS_SHA256
     );
-    // The mesh is deeper than the skeleton bound: the root is explicit and the
+    fs::write(&output, witness).unwrap();
+    // The forest is deeper than the skeleton bound: the root is explicit and the
     // implicit roots hang below it, each with a single subtree.
     let manifest = document(&output, "tileset.json");
     assert!(manifest["root"].get("implicitTiling").is_none());
@@ -159,7 +163,7 @@ fn deep_implicit_mesh_validates_and_corrupt_subtrees_roots_and_templates_are_rej
     let report =
         rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
             .unwrap();
-    assert!(report.tiles > 100);
+    assert_eq!(report.tiles, 69);
     let mut zip = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
     for case in [
         "header",
@@ -421,51 +425,4 @@ fn fragmented_vector_preserves_content_headers_and_binary_payloads() {
         forest.explicit >= 1 && forest.roots.len() > 1,
         "exercise implicit-root templates below explicit tiles"
     );
-}
-
-#[test]
-fn implicit_mesh_accepts_case_insensitive_extensions() {
-    for extension in ["GLB", "GlB", "gLtF"] {
-        // Keep variants separate on case-insensitive filesystems.
-        let work = tempfile::tempdir().unwrap();
-        let input = work.path().join(format!("mesh.{extension}"));
-        let source = if extension == "gLtF" {
-            fs::read("tests/fixtures/example.gltf").unwrap()
-        } else {
-            support::textured_grid_glb(2)
-        };
-        fs::write(&input, &source).unwrap();
-        let output = work.path().join(format!("{extension}.3tz"));
-        success(
-            support::rusty_tiles()
-                .args(["mesh-to-3tz", "-i"])
-                .arg(&input)
-                .arg("-o")
-                .arg(&output)
-                .args(["--maxTriangles", "10000"])
-                .output()
-                .unwrap(),
-        );
-        rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(&output))
-            .unwrap();
-        let manifest = document(&output, "tileset.json");
-        let suffix = extension.to_ascii_lowercase();
-        // The wrapper is a single one-level implicit root at preorder index 0.
-        let forest = forest(&output, "OCTREE");
-        assert_eq!((forest.explicit, forest.roots.len()), (0, 1));
-        assert_eq!(manifest["root"]["implicitTiling"]["subtreeLevels"], 1);
-        assert_eq!(
-            manifest["root"]["content"]["uri"],
-            format!("implicit-content/r0-{{level}}-{{x}}-{{y}}-{{z}}-0.{suffix}")
-        );
-        let payload = member(&output, &format!("implicit-content/r0-0-0-0-0-0.{suffix}"));
-        if suffix == "glb" {
-            assert_eq!(
-                gltf::Glb::from_slice(&payload).unwrap().bin,
-                gltf::Glb::from_slice(&source).unwrap().bin
-            );
-        } else {
-            assert_eq!(payload, source);
-        }
-    }
 }

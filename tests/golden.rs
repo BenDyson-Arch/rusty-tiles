@@ -1,7 +1,6 @@
 use std::fs;
 use std::process::Command;
 
-use rusty_tiles::bbox::bounding_box_from_gltf_path;
 use rusty_tiles::fixtures::triangle_glb;
 use rusty_tiles::pack::list_zip_names;
 use rusty_tiles::package::{package, PackageRequest};
@@ -16,20 +15,6 @@ fn write_triangle(dir: &std::path::Path) -> std::path::PathBuf {
     let p = dir.join("triangle.glb");
     fs::write(&p, triangle_glb()).unwrap();
     p
-}
-
-#[test]
-fn bbox_from_triangle_glb() {
-    let tmp = tempfile::tempdir().unwrap();
-    let glb = write_triangle(tmp.path());
-    let b = bounding_box_from_gltf_path(&glb).unwrap();
-    // Y-up triangle (0,0,0)-(1,0,0)-(0,1,0) → Z-up (0,0,0)-(1,0,0)-(0,0,1)
-    assert!((b[0] - 0.5).abs() < 1e-5);
-    assert!(b[1].abs() < 1e-5);
-    assert!((b[2] - 0.5).abs() < 1e-5);
-    assert!((b[3] - 0.5).abs() < 1e-5);
-    assert!(b[7].abs() < 1e-5);
-    assert!((b[11] - 0.5).abs() < 1e-5);
 }
 
 #[test]

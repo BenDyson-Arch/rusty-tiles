@@ -50,144 +50,6 @@ fn leaf_contents(zip: &mut zip::ZipArchive<File>) -> Result<Vec<String>> {
     Ok(names)
 }
 
-type Triangle = [[u32; 3]; 3];
-fn triangle(points: [[f32; 3]; 3]) -> Triangle {
-    let key = points.map(|p| p.map(|v| if v == 0. { 0 } else { v.to_bits() }));
-    (0..3)
-        .map(|rotation| {
-            let mut candidate = key;
-            candidate.rotate_left(rotation);
-            candidate
-        })
-        .min()
-        .unwrap()
-}
-fn decompress_mesh(bytes: &[u8]) -> Result<Vec<u8>> {
-    let glb = gltf::Glb::from_slice(bytes)?;
-    let mut doc: Value = serde_json::from_slice(&glb.json)?;
-    if !doc["bufferViews"].as_array().is_some_and(|views| {
-        views
-            .iter()
-            .any(|v| v["extensions"].get("EXT_meshopt_compression").is_some())
-    }) {
-        return Ok(bytes.to_vec());
-    }
-    let raw = glb.bin.ok_or("missing compressed mesh buffer")?;
-    let mut bin = Vec::new();
-    for view in doc["bufferViews"]
-        .as_array_mut()
-        .ok_or("missing buffer views")?
-    {
-        let destination = bin.len();
-        if let Some(ext) = view["extensions"].get("EXT_meshopt_compression") {
-            let start = ext["byteOffset"].as_u64().unwrap_or(0) as usize;
-            let size = ext["byteLength"].as_u64().ok_or("missing meshopt length")? as usize;
-            let count = ext["count"].as_u64().ok_or("missing meshopt count")? as usize;
-            let stride = ext["byteStride"].as_u64().ok_or("missing meshopt stride")? as usize;
-            if ext["filter"].as_str().is_some_and(|f| f != "NONE") {
-                return Err("audit does not support meshopt filters".into());
-            }
-            let input = raw
-                .get(start..start + size)
-                .ok_or("meshopt buffer out of bounds")?;
-            let mut decoded = vec![0u32; (count * stride).div_ceil(4)];
-            // SAFETY: destination is aligned and sized for count*stride bytes;
-            // the decoder receives the bounds-checked compressed input slice.
-            let code = unsafe {
-                match ext["mode"].as_str() {
-                    Some("TRIANGLES") => meshopt::ffi::meshopt_decodeIndexBuffer(
-                        decoded.as_mut_ptr().cast(),
-                        count,
-                        stride,
-                        input.as_ptr(),
-                        input.len(),
-                    ),
-                    Some("ATTRIBUTES") => meshopt::ffi::meshopt_decodeVertexBuffer(
-                        decoded.as_mut_ptr().cast(),
-                        count,
-                        stride,
-                        input.as_ptr(),
-                        input.len(),
-                    ),
-                    _ => return Err("unsupported meshopt mode".into()),
-                }
-            };
-            if code != 0 {
-                return Err("meshopt payload failed to decode".into());
-            }
-            bin.extend_from_slice(&bytemuck::cast_slice(&decoded)[..count * stride]);
-        } else {
-            let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
-            let size = view["byteLength"].as_u64().ok_or("missing view size")? as usize;
-            bin.extend_from_slice(
-                raw.get(start..start + size)
-                    .ok_or("mesh view out of bounds")?,
-            );
-        }
-        view["buffer"] = json!(0);
-        view["byteOffset"] = json!(destination);
-        if let Some(extensions) = view.get_mut("extensions").and_then(Value::as_object_mut) {
-            extensions.remove("EXT_meshopt_compression");
-        }
-    }
-    doc["buffers"] = json!([{"byteLength":bin.len()}]);
-    for field in ["extensionsUsed", "extensionsRequired"] {
-        if let Some(exts) = doc[field].as_array_mut() {
-            exts.retain(|e| e != "EXT_meshopt_compression");
-        }
-    }
-    let mut output = Vec::new();
-    gltf::Glb {
-        header: gltf::binary::Header {
-            magic: *b"glTF",
-            version: 2,
-            length: 0,
-        },
-        json: std::borrow::Cow::Owned(serde_json::to_vec(&doc)?),
-        bin: Some(std::borrow::Cow::Owned(bin)),
-    }
-    .to_writer(&mut output)?;
-    Ok(output)
-}
-fn mesh(input: &Path, output: &Path) -> Result<Value> {
-    let source = rusty_tiles::mesh::load(input)?;
-    let count = source.triangles.len();
-    let mut remaining = HashMap::<Triangle, u32>::new();
-    for tri in &source.triangles {
-        *remaining
-            .entry(triangle(tri.verts.map(|i| source.vertices[i as usize].pos)))
-            .or_default() += 1;
-    }
-    drop(source);
-    let mut zip = zip::ZipArchive::new(File::open(output)?)?;
-    let leaves = leaf_contents(&mut zip)?;
-    let work = tempfile::tempdir()?;
-    let payload = work.path().join("leaf.glb");
-    let mut actual = 0;
-    for name in &leaves {
-        std::fs::write(&payload, decompress_mesh(&member(&mut zip, name)?)?)?;
-        let scene = rusty_tiles::mesh::load(&payload)?;
-        for tri in &scene.triangles {
-            let key = triangle(tri.verts.map(|i| scene.vertices[i as usize].pos));
-            let total = remaining
-                .get_mut(&key)
-                .ok_or_else(|| format!("changed triangle or winding in {name}"))?;
-            if *total == 0 {
-                return Err(format!("duplicated triangle in {name}").into());
-            }
-            *total -= 1;
-            actual += 1;
-        }
-    }
-    if actual != count || remaining.values().any(|&n| n != 0) {
-        return Err("missing source triangles".into());
-    }
-    Ok(
-        json!({"sourceTriangles":count,"leafTriangles":actual,"leafContents":leaves.len(),
-        "fidelity":"Every oriented float32 position triangle exactly once; textures, normals and UVs are covered by the small synthetic fidelity tests, not this corpus audit."}),
-    )
-}
-
 enum Expected {
     Raw(usize, usize),
     Bits(usize, u8, u8),
@@ -587,11 +449,10 @@ fn terrain(output: &Path) -> Result<Value> {
     )
 }
 pub fn check(kind: &str, input: &Path, output: &Path) -> Result<Value> {
-    if matches!(kind, "archive" | "mesh" | "points") {
+    if matches!(kind, "archive" | "points") {
         let validation =
             rusty_tiles::validate::inspect(rusty_tiles::validate::ValidationRequest::new(output))?;
         let mut result = match kind {
-            "mesh" => mesh(input, output)?,
             "points" => points(input, output)?,
             _ => json!({}),
         };

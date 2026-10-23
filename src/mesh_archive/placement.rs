@@ -6,7 +6,8 @@ use serde::Serialize;
 const WGS84_A: f64 = 6_378_137.0;
 const WGS84_F: f64 = 1.0 / 298.257_223_563;
 // Greatest f64 <= 2^26 - WGS84_A - sqrt(3)*LOCAL_COMPONENT_LIMIT.
-// Independent Decimal80 boundary reference lives in tests/f1c1_oracle.py.
+// The independent Decimal80 boundary derivation was the retired F1c1 oracle
+// (bench/architecture_audit/f1c1); the unit tests below pin the boundary.
 const AVAILABLE_PLACEMENT_MAGNITUDE: f64 = 58_998_676.192_431_12;
 const QUATERNION_NORM_TOLERANCE: f64 = 1e-12;
 const IDENTITY: [f64; 16] = [

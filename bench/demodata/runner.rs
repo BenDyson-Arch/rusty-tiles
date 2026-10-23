@@ -88,19 +88,13 @@ impl Manifest {
             }
             if !matches!(
                 case.command.as_str(),
-                "mesh-to-3tz"
-                    | "glb-to-3tz"
-                    | "point-cloud"
-                    | "vector"
-                    | "raster"
-                    | "terrain"
-                    | "convert"
+                "glb-to-3tz" | "point-cloud" | "vector" | "raster" | "terrain" | "convert"
             ) {
                 return Err("unsupported demo command".into());
             }
             if !matches!(
                 case.audit.as_str(),
-                "archive" | "mesh" | "points" | "raster" | "terrain"
+                "archive" | "points" | "raster" | "terrain"
             ) {
                 return Err("unknown audit".into());
             }

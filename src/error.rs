@@ -24,20 +24,8 @@ pub enum Error {
     #[error("{0}")]
     Data(String),
 
-    #[error("parent texture projection has no compatible source surface at {position:?}, normal {normal:?}")]
-    TextureProjection {
-        position: [f32; 3],
-        normal: [f32; 3],
-    },
-
-    #[error("input not found: {0}")]
-    InputNotFound(PathBuf),
-
     #[error("output exists (pass --force): {0}")]
     OutputExists(PathBuf),
-
-    #[error("no glTF/GLB tile content under {0}")]
-    NoContent(PathBuf),
 
     #[error("package missing tileset.json")]
     MissingTilesetJson,
@@ -83,7 +71,7 @@ impl Error {
     }
 }
 
-// Adapt the private codec for remaining legacy operation/tool callers. The
+// Adapt the private codec for its library and tool callers. The
 // codec owns ordinary format errors and never depends on jobs or publication.
 impl From<crate::archive3tz::CodecError> for Error {
     fn from(error: crate::archive3tz::CodecError) -> Self {

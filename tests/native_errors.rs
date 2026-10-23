@@ -17,11 +17,11 @@ fn invalid_topology_is_short_and_diagnostics_env_adds_gdal_warnings() {
         .to_string(),
     )
     .unwrap();
-    // RUSTY_TILES_PYTHON_TRACEBACK is the deprecated name and still works.
+    // RUSTY_TILES_PYTHON_TRACEBACK, the removed deprecated name, is ignored.
     for (debug, variable) in [
         (false, None),
         (true, Some("RUSTY_TILES_NATIVE_DIAGNOSTICS")),
-        (true, Some("RUSTY_TILES_PYTHON_TRACEBACK")),
+        (false, Some("RUSTY_TILES_PYTHON_TRACEBACK")),
     ] {
         let mut command = support::rusty_tiles();
         command

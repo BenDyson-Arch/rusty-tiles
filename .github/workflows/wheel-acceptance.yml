@@ -45,7 +45,6 @@ jobs:
           - os: windows-2022
             target: x86_64-pc-windows-msvc
     env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
       MACOSX_DEPLOYMENT_TARGET: '15.0'
     defaults:
       run:
@@ -64,7 +63,6 @@ jobs:
           rust-toolchain: stable
           target: ${{ matrix.target }}
           manylinux: '2_28'
-          docker-options: -e RUSTY_TILES_DISABLE_NATIVE_JPEG=1
           args: --release --locked --out dist
       - name: Check third-party notices in the wheel
         run: python scripts/third_party_notices.py check dist/*.whl

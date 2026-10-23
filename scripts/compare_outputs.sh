@@ -8,8 +8,8 @@
 # converter subcommand, generated inputs, PATH="", --reproducible where the
 # subcommand has it) with both binaries, and compares the sha256 of every
 # .3tz entry and every file of directory outputs. Only the vector encoder
-# fingerprints (encoder, signature, vectorBuildStateSha256 in tileset.json and
-# vector-build.json) are ignored. Without HEAD_REF the working tree is used.
+# fingerprints (encoder, signature, survey, vectorBuildStateSha256 in
+# tileset.json and vector-build.json) are ignored. Without HEAD_REF the working tree is used.
 #
 # Environment:
 #   FEATURES             cargo features (default native-geospatial; set empty
@@ -84,7 +84,7 @@ path, vector = sys.argv[1], sys.argv[2] == "1"
 def strip(v):
     for obj, key in [(v.get("asset", {}).get("extras", {}), "vectorBuildStateSha256"),
                      (v.get("config", {}), "encoder"),
-                     *((r, "signature") for r in v.get("records", {}).values())]:
+                     *((r, key) for r in v.get("records", {}).values() for key in ("signature", "survey"))]:
         if key in obj:
             obj[key] = "<fingerprint>"
     return v
