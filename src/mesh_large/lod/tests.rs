@@ -903,6 +903,167 @@ fn terrain_lod_is_certified_seamless_accounted_and_deterministic() {
     assert!(archives[0] == archives[1], "archives differ across jobs");
 }
 
+/// An open, flat, hole-free object (a subdivided sheet, with a small flat sign beside it)
+/// has outlines but no holes: nothing may be filled. A back-facing fan over an outline
+/// would duplicate the surface with the opposite winding.
+#[test]
+fn outer_outlines_of_open_flat_components_are_never_filled() {
+    let work = tempfile::tempdir().unwrap();
+    let g = 100usize;
+    let mut sheet = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.6, 0.5, 0.4, 1.],
+    };
+    for i in 0..=g {
+        for j in 0..=g {
+            sheet.positions.push([i as f32 * 2., 0., j as f32 * 2.]);
+        }
+    }
+    for i in 0..g {
+        for j in 0..g {
+            let v = |a: usize, c: usize| (a * (g + 1) + c) as u32;
+            sheet.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+            sheet
+                .indices
+                .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+        }
+    }
+    let sign = Mesh {
+        positions: vec![
+            [300., 0., 0.],
+            [302., 0., 0.],
+            [300., 0., 2.],
+            [302., 0., 2.],
+        ],
+        indices: vec![0, 2, 1, 1, 2, 3],
+        color: [0.9, 0.1, 0.1, 1.],
+    };
+    let source = vec![sheet, sign];
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = leaves(&input, &work.path().join("leaves"), 2, Mutation::None, 1024).unwrap();
+    let audit = audit(&source, &dir);
+    assert!(
+        audit.proxies >= 2,
+        "fixture must produce LOD levels: {audit:?}"
+    );
+    assert_eq!((audit.fills, audit.fill_faces), (0, 0), "{audit:?}");
+    assert_eq!(audit.cracks, 0, "{audit:?}");
+}
+
+/// A closed surface of revolution on a `rings` x `segments` quad grid with `holes` (ring,
+/// segment) quads left out. The two end rings close into poles (a sphere) or flat caps
+/// (a cylinder); the surface is wound outward.
+fn closed_revolution(
+    rings: usize,
+    segments: usize,
+    holes: &BTreeSet<(usize, usize)>,
+    profile: impl Fn(usize) -> (f64, f64),
+) -> Mesh {
+    let mut m = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.6, 0.5, 0.4, 1.],
+    };
+    for i in 0..=rings {
+        let (radius, y) = profile(i);
+        for j in 0..segments {
+            let a = std::f64::consts::TAU * j as f64 / segments as f64;
+            m.positions.push([
+                (radius * a.cos()) as f32,
+                y as f32,
+                (radius * a.sin()) as f32,
+            ]);
+        }
+    }
+    let v = |i: usize, j: usize| (i * segments + j % segments) as u32;
+    for i in 0..rings {
+        for j in 0..segments {
+            if !holes.contains(&(i, j)) {
+                m.indices.extend([v(i, j), v(i, j + 1), v(i + 1, j)]);
+                m.indices
+                    .extend([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+            }
+        }
+    }
+    for (ring, top) in [(0, true), (rings, false)] {
+        let (_, y) = profile(ring);
+        let centre = m.positions.len() as u32;
+        m.positions.push([0., y as f32, 0.]);
+        for j in 0..segments {
+            let (a, b) = (v(ring, j), v(ring, j + 1));
+            m.indices
+                .extend(if top { [centre, b, a] } else { [centre, a, b] });
+        }
+    }
+    // Wind outward whichever way the profile runs.
+    let volume: f64 = m
+        .indices
+        .chunks(3)
+        .map(|t| {
+            let p = |k: usize| m.positions[t[k] as usize].map(f64::from);
+            let (a, b, c) = (p(0), p(1), p(2));
+            a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                + a[2] * (b[0] * c[1] - b[1] * c[0])
+        })
+        .sum();
+    if volume < 0. {
+        m.indices.chunks_mut(3).for_each(|t| t.swap(1, 2));
+    }
+    m
+}
+
+/// The audit of a LOD run over `source`.
+fn audit_of(source: &[Mesh], target: usize) -> Audit {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), source);
+    let dir = leaves(
+        &input,
+        &work.path().join("leaves"),
+        2,
+        Mutation::None,
+        target,
+    )
+    .unwrap();
+    let audit = audit(source, &dir);
+    eprintln!("{audit:?}");
+    assert!(
+        audit.proxies >= 1,
+        "fixture must produce LOD levels: {audit:?}"
+    );
+    assert_eq!(audit.cracks, 0, "{audit:?}");
+    audit
+}
+
+/// True holes on curved closed surfaces are still filled: the outline rule must not reject
+/// a loop whose faces bend around it (a sphere's holes, a cylinder's holes).
+#[test]
+fn holes_on_curved_surfaces_are_still_filled() {
+    let sphere_holes: BTreeSet<(usize, usize)> = (0..2)
+        .flat_map(|i| (0..2).map(move |j| (16 + i, 10 + j)))
+        .chain((0..3).flat_map(|i| (0..3).map(move |j| (28 + i, 60 + j))))
+        .collect();
+    let (rings, segments) = (48, 96);
+    let sphere = closed_revolution(rings, segments, &sphere_holes, |i| {
+        let t = std::f64::consts::PI * i as f64 / rings as f64;
+        (100. * t.sin(), 100. * t.cos())
+    });
+    let audit = audit_of(&[sphere], 512);
+    assert!(audit.fills > 0 && audit.fill_faces > 0, "{audit:?}");
+    assert_eq!((audit.fills, audit.fill_faces), (2, 2), "sphere {audit:?}");
+
+    let cylinder_holes: BTreeSet<(usize, usize)> =
+        [(10, 6), (11, 6), (30, 60), (30, 61)].into_iter().collect();
+    let cylinder = closed_revolution(48, 96, &cylinder_holes, |i| (50., 2. * i as f64));
+    let audit = audit_of(&[cylinder], 512);
+    assert!(audit.fills > 0 && audit.fill_faces > 0, "{audit:?}");
+    assert_eq!(
+        (audit.fills, audit.fill_faces),
+        (2, 6),
+        "cylinder {audit:?}"
+    );
+}
+
 /// Synthetic run depths (> 21) and packed leaves: proxies there decode on the frozen
 /// lattice, seams match on decoded bytes and the certificate holds.
 #[test]
@@ -1112,8 +1273,10 @@ fn no_baker_output_matches_the_pre_handoff_golden() {
 /// then `escalation_reasons` (codec verification escalation); regenerated again by #226,
 /// whose leaf and proxy property tables are meshopt streams (decoded values unchanged);
 /// regenerated by H28, whose `leaves.jsonl` rows gain `primitives`, `texelOwnership` and
-/// `sharedTriangles` and whose manifest leaf report gains `texel_ownership`.
-const NO_BAKER_GOLDEN: &str = "d025cc887c440a35276266dba5ab0c6c38eb995391e6dec36591c686d45b7b70";
+/// `sharedTriangles` and whose manifest leaf report gains `texel_ownership`; regenerated when
+/// outlines of open components stopped being filled as holes: the 3 m island's 3-vertex
+/// outline at depth 1 lost its back-facing fill (11 fills became the 10 true holes).
+const NO_BAKER_GOLDEN: &str = "73063661e68367632d17a3d62c277c34b6d1753b6930df1ec3683d530a255d94";
 
 /// The public `mesh_to_tileset` path carries the certified coarse tiles: the published
 /// archive holds one member per proxy row beside the leaves and validates.

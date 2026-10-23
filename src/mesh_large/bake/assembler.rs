@@ -47,13 +47,16 @@ fn translation_charge(p: &PreparedNode) -> Result<u64, JobError> {
         add(page.bytes.len() as u64)?;
         add(json_charge(&page.sampler) + 2048)?;
     }
-    // Worst case: a separate material closure for each face's remapped binding.
-    let closure = p.source_materials.values().try_fold(0u64, |total, value| {
-        total
-            .checked_add(json_charge(value))
-            .ok_or_else(|| resource("prepared material ownership sum"))
-    })?;
-    add(closure
+    // Worst case: every face is its own group, and each group clones exactly one
+    // material (its class representative), never the whole table. So faces times the
+    // largest single material bounds all clones, however many materials the tile has.
+    let largest = p
+        .source_materials
+        .values()
+        .map(json_charge)
+        .max()
+        .unwrap_or(0);
+    add(largest
         .checked_mul(p.face_indices.len() as u64)
         .ok_or_else(|| resource("prepared adapter materials"))?)?;
     for packet in &p.ids {
@@ -516,6 +519,34 @@ mod tests {
         let packet = prepare(&frozen, &p, &mut || Ok(())).unwrap();
         assert_eq!(packet.node.primitives.len(), 2);
         assert_eq!(packet.node.materials.len(), 2);
+    }
+    /// Each output group clones one material, so a tile with many (even large) source
+    /// materials is charged faces x the largest one, not faces x their sum; and the
+    /// charge still covers every material clone when each face is its own group.
+    #[test]
+    fn translation_charge_scales_with_the_largest_material_not_the_table() {
+        let mut p = prepared();
+        let big = json!({"extras": "x".repeat(100_000)});
+        for id in 100..140u32 {
+            p.source_materials.insert(id, big.clone());
+            p.material_classes.insert(id, id);
+        }
+        // 2 faces x 40 x 100 kB is 8 MB under the sum rule; 2 x 100 kB bounds the clones.
+        p.assembly_memory_bytes = 1 << 20;
+        let frozen = super::super::integration::handoff_fixture();
+        let charged = translation_charge(&p).expect("table size must not multiply by faces");
+        assert!(charged < 1 << 20);
+        prepare(&frozen, &p, &mut || Ok(())).unwrap();
+        // Sound: both faces on the largest material clone it twice.
+        let mut frozen = frozen;
+        frozen.primitives[0].material = 100;
+        frozen.primitives[1].material = 100;
+        p.no_raster_faces = vec![0, 1];
+        p.face_pages = vec![[None; 5]; 2];
+        p.face_attributes[1] = 0;
+        let packet = prepare(&frozen, &p, &mut || Ok(())).unwrap();
+        let cloned: u64 = packet.node.materials.iter().map(json_charge).sum();
+        assert!(translation_charge(&p).unwrap() >= cloned);
     }
     #[test]
     fn translation_refuses_unabsorbed_scale_mislabeled_page_and_unsupported_budget() {

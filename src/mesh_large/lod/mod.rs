@@ -557,6 +557,48 @@ fn decode_vertex(
     Ok(lattice.encode(&[p, p, p], &[ell; 3], depth)?.decoded[0])
 }
 
+/// Whether the fan over border loop `l` faces away from the faces that bound the loop: the
+/// dot product of the fan's summed area vector with the summed area vector of every face
+/// that has a directed edge on the loop is strictly negative. A hole's fan has a positive
+/// dot (it continues the surface) or a near-zero one (near-tangent rims such as pipe ends
+/// and vertical walls; a degenerate sum of exactly 0 is accepted). An open component's
+/// outline gets a back-facing duplicate (negative). Aggregate rule: it can be fooled by
+/// border faces whose area vectors cancel.
+fn fan_faces_away_from_surface(
+    fan: &[[[f32; 3]; 3]],
+    l: &mesh::Loop,
+    faces: &[Face],
+    decoded: &[[[f32; 3]; 3]],
+) -> bool {
+    let area = |t: &[[f32; 3]; 3]| -> [f64; 3] {
+        let d = |a: usize, b: usize| {
+            std::array::from_fn::<f64, 3, _>(|k| f64::from(t[b][k]) - f64::from(t[a][k]))
+        };
+        let (u, v) = (d(0, 1), d(0, 2));
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    };
+    let add = |acc: &mut [f64; 3], a: [f64; 3]| (0..3).for_each(|k| acc[k] += a[k]);
+    let k = l.vertices.len();
+    let directed: BTreeSet<(u32, u32)> = (0..k)
+        .map(|i| (l.vertices[i], l.vertices[(i + 1) % k]))
+        .collect();
+    let (mut fan_area, mut border_area) = ([0f64; 3], [0f64; 3]);
+    fan.iter().for_each(|t| add(&mut fan_area, area(t)));
+    // Cost: this scans every face of the proxy (`faces`) once per candidate loop, so a tile
+    // costs O(loops x target faces). Index the border faces by directed edge if the target
+    // grows.
+    for (f, t) in faces.iter().zip(decoded) {
+        if (0..3).any(|i| directed.contains(&(f.v[i], f.v[(i + 1) % 3]))) {
+            add(&mut border_area, area(t));
+        }
+    }
+    (0..3).map(|i| fan_area[i] * border_area[i]).sum::<f64>() < 0.
+}
+
 fn tri_of(face: &[[f32; 3]; 3]) -> Tri {
     face.map(|p| p.map(f64::from))
 }
@@ -1469,6 +1511,14 @@ fn process(
             }
         });
         if diagonal_exists || degenerate {
+            out.fills_rejected_topology += 1;
+            continue;
+        }
+        // A hole is closed by a fan that continues its surrounding faces. The outline of an
+        // open component (a sheet, a sign, a planar roof) has the same shape as a hole, but
+        // its reversed fan faces away from the faces it borders: a back-to-back duplicate
+        // of the surface, not a closure. Only the control mutations fill such loops.
+        if !any_loop && fan_faces_away_from_surface(&fan_tris, l, &s_order, &unfilled.faces) {
             out.fills_rejected_topology += 1;
             continue;
         }
