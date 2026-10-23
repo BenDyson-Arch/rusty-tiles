@@ -252,7 +252,10 @@ declared stage working set (files retained from earlier stages, H17's pre-pass,
 and each external sort's runs). Sort runs are 8 MiB chunk files removed as soon as
 they are read, so a sorted stream and the output it feeds share space, with at
 most `F` partly read chunks of slack. A 10% margin and per-file rounding are
-added: about 0.6 KB per source triangle at scale. It also reserves output-side space for leaf staging, archive
+added: about 0.5 KB per source triangle at scale with every vertex attribute present.
+Capture stores only the vertex attributes some selected primitive carries, so sources
+with fewer need less: about 0.3 KB with positions and one texture coordinate set.
+It also reserves output-side space for leaf staging, archive
 staging and a replaced destination: three copies of an estimate of 119 bytes per
 triangle (measured before the archive-size reduction, which brought it to about 47; kept as a conservative estimate) plus the encoded image bytes at admission, raised once image dimensions
 are known to 4 bytes per source texel for `lossless` PNG pages or 1 byte per

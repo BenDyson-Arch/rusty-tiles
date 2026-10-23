@@ -2,7 +2,7 @@
 //! bounds and the memory-aware jobs plan. Every figure here is configuration or a count from
 //! the admitted document; none depends on payload bytes.
 use super::records::{CornerPosition, CornerRef, NodeRecord, Span, TriangleRecord};
-use crate::spill::{Record, SortConfig};
+use crate::spill::{Layout, Record, SortConfig};
 use serde::Serialize;
 use std::{num::NonZeroUsize, path::PathBuf};
 
@@ -578,11 +578,22 @@ pub(crate) fn sort_spill_with<T: Record>(
     sorter: SortConfig,
     chunk_bytes: usize,
 ) -> Option<SortSpill> {
-    let bytes = records.checked_mul(T::SIZE as u64)?;
+    sort_spill_in::<T>(records, sorter, chunk_bytes, Layout::FULL)
+}
+
+/// [`sort_spill_with`] for a sorter spilling under a run-level `layout`.
+pub(crate) fn sort_spill_in<T: Record>(
+    records: u64,
+    sorter: SortConfig,
+    chunk_bytes: usize,
+    layout: Layout,
+) -> Option<SortSpill> {
+    let size = T::size_in(layout);
+    let bytes = records.checked_mul(size as u64)?;
     let run_records = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
     let runs = records.div_ceil(run_records);
     let fan_in = sorter.fan_in as u64;
-    let chunk_bytes = ((chunk_bytes / T::SIZE).max(1) as u64).checked_mul(T::SIZE as u64)?;
+    let chunk_bytes = ((chunk_bytes / size).max(1) as u64).checked_mul(size as u64)?;
     let slack = bytes.min(fan_in.checked_mul(chunk_bytes)?);
     let push_peak = if runs >= fan_in.checked_mul(64)? {
         bytes.checked_add(slack)?
