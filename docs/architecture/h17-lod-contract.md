@@ -102,7 +102,9 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    exported to the sidecar for parents' fills.
 8. **Fills.** Simple closed border loops of `S` with no seam vertex, one label,
    at most 64 vertices, fanned from the least key (orientation against the loop's
-   faces, no existing diagonal, no degenerate decoded face) are filled only if
+   faces, no existing diagonal, no degenerate decoded face, and a fan that
+   continues the faces around the loop: the outline of an open component would get a
+   back-facing duplicate, so it is never filled) are filled only if
    `b_A(F) = up(h(F->T_A) + max_c e_A(c)) <= e_open`, the unfilled certificate,
    and only while the proxy stays within `P` faces. The seam-vertex exclusion is
    checked again on every accepted loop (`InvalidState` otherwise).
