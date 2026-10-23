@@ -149,10 +149,41 @@ carry them under `third_party/basis_universal/`, the wheels under `.dist-info/li
 also held under crates.io's 10 MB limit) check them byte for byte; the packaged-runtime test
 checks the image.
 
-Scope: this covers the vendored native code only. It does not cover the Rust crates that Cargo
-resolves (275 in the default build and 288 with all features at 2026-10-23, mostly
-`MIT OR Apache-2.0` or `MIT`). Their licence and NOTICE files are not yet bundled in binaries,
-wheels or the container image, and `third_party_notices.py` does not check them. About 20 of
-those crates publish no licence file in their package, so a bundle needs the licence text from
-their repository or the SPDX text. Closing this needs a generated notice file per target and
-feature set and a decision on how it is produced and wired into each artefact.
+Rust crates have their own notices. `scripts/third_party_licenses.py` generates one file per
+artefact type in `licenses/` from `cargo tree -e no-dev --target all` (the resolved normal and
+build dependencies for that artefact's features, every target platform) and each crate's packaged
+licence and NOTICE files:
+
+| File | Artefact | Crates | Lands in |
+|---|---|---|---|
+| `licenses/THIRD_PARTY_LICENSES-cli.md` | default CLI binary | 259 | release `.tgz`/`.zip` as `THIRD_PARTY_LICENSES.md` (the `cargo-binstall` layout) |
+| `licenses/THIRD_PARTY_LICENSES-native-geospatial.md` | `--features native-geospatial`, the container | 272, plus the GDAL, PROJ, GEOS, SQLite and libtiff libraries | `/usr/share/doc/rusty-tiles/THIRD_PARTY_LICENSES.md`, with the GDAL and PROJ licences under `third_party/system/` |
+| `licenses/THIRD_PARTY_LICENSES-python.md` | Python wheel (`bindings/python`, default features off) | 264 | `.dist-info/licenses/licenses/` (`pyproject.toml` `license-files`) |
+
+The crate also carries all three (`Cargo.toml` `include`). Identical licence texts are written
+once, followed by the crates and copyright lines that use them. Fourteen crates (fifteen with
+`gdal-sys`) publish no licence file (counts at 2026-10-23; `geo`, `geozero`, `meshopt`, `proj4rs`, `rstar` and others);
+they get the SPDX text of their declared licence and a copyright line from `authors`, or from
+the repository when there are none. Code bundled inside a crate is covered too: the
+`meshoptimizer` sources in `meshopt` (MIT, text from the source header) and the Unicode data in
+`regex-syntax` (`LICENSE-UNICODE`).
+
+The script fails on any licence expression the allow-list in the script does not satisfy: MIT,
+Apache-2.0 (also WITH LLVM-exception), BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, Unicode-DFS-2016,
+BSL-1.0, CC0-1.0, Unlicense, MPL-2.0 and MIT-0. An `OR` expression passes if any alternative is
+allowed (the permissive one is honoured), so GPL, AGPL, LGPL and unknown licences fail unless
+the crate offers a permitted alternative. `r-efi` offers LGPL-2.1-or-later as a third choice; the
+file honours its MIT alternative. No crate in any of the three graphs is copyleft-only. The
+files are committed, so downstream users can read them in the repository, and CI's `Rust` job
+runs `python3 scripts/third_party_licenses.py check` (a few seconds, `cargo tree` and metadata
+only, no build): it fails when the files differ from a regeneration or when a licence is not
+allowed. After a change to `Cargo.lock`, features or dependencies, run
+`python3 scripts/third_party_licenses.py generate` and commit the result. Release, wheel
+acceptance and CI's crate check require the matching file in each artefact, byte for byte
+(`third_party_notices.py check --rust-licenses`).
+
+The container's native libraries are not crates. `native-geospatial` links GDAL and PROJ (MIT,
+built from the pinned sources) and Debian's GEOS (LGPL-2.1-or-later, dynamically linked and
+unmodified), SQLite (public domain) and libtiff; the table in its file lists their licences and
+where the texts are in the image. GEOS is the one copyleft component anywhere in the release
+artefacts.

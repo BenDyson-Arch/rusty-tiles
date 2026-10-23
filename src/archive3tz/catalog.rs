@@ -570,7 +570,7 @@ fn truncated_log() -> SpillError {
 /// The sorted rows: a vector, or a scratch sequence with fences and a page cache.
 pub(crate) enum Rows {
     Memory(Vec<Row>),
-    Disk(DiskRows),
+    Disk(Box<DiskRows>),
 }
 
 pub(crate) struct DiskRows {
@@ -655,7 +655,7 @@ impl RowsWriter {
                 let sequence = writer.finish()?;
                 let page_bytes = page.saturating_mul(Row::SIZE as u64);
                 let slots = usize::try_from((cache_bytes / page_bytes).max(1)).unwrap_or(1);
-                Rows::Disk(DiskRows {
+                Rows::Disk(Box::new(DiskRows {
                     random: sequence.random()?,
                     len: sequence.len(),
                     sequence,
@@ -664,7 +664,7 @@ impl RowsWriter {
                     slots: (0..slots).map(|_| None).collect(),
                     encoded: Vec::new(),
                     buffer_bytes,
-                })
+                }))
             }
         })
     }

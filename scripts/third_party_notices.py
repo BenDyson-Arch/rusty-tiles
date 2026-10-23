@@ -7,9 +7,13 @@ NOTICE files must travel with every artefact:
 
   third_party_notices.py stage DIR
       copy the notices to DIR/third_party/<component>/<path>
-  third_party_notices.py check [--max-bytes N] ARTEFACT...
+  third_party_notices.py check [--max-bytes N] [--rust-licenses KIND] ARTEFACT...
       require every notice, byte-identical, in each .tgz/.tar.gz/.crate/.zip/.whl
-      (members named .../<component>/<path>); optionally bound the artefact size
+      (members named .../<component>/<path>); optionally bound the artefact size.
+      --rust-licenses cli|native-geospatial|python additionally requires the generated
+      Rust crate licence file of that kind (licenses/, scripts/third_party_licenses.py) as
+      .../THIRD_PARTY_LICENSES.md or .../THIRD_PARTY_LICENSES-KIND.md; "all" is for the
+      crate, which carries all three under licenses/
 
 Both commands first check that the list below covers every licence-like file in
 the vendored trees, so an upstream update cannot add one unnoticed.
@@ -51,6 +55,22 @@ def notice_files():
     return files
 
 
+RUST_LICENCE_KINDS = ("cli", "native-geospatial", "python")
+
+
+def rust_licence_files(kind):
+    """(display name, accepted member-name suffixes, bytes) for the generated Rust licence files."""
+    kinds = RUST_LICENCE_KINDS if kind == "all" else (kind,)
+    files = []
+    for each in kinds:
+        path = ROOT / "licenses" / f"THIRD_PARTY_LICENSES-{each}.md"
+        suffixes = [f"/THIRD_PARTY_LICENSES-{each}.md"]
+        if kind != "all":
+            suffixes.append("/THIRD_PARTY_LICENSES.md")
+        files.append((path.name, suffixes, path.read_bytes()))
+    return files
+
+
 def members(artefact):
     name = artefact.name
     if name.endswith((".tgz", ".tar.gz", ".crate")):
@@ -67,8 +87,9 @@ def members(artefact):
         sys.exit(f"error: {artefact}: unknown artefact type")
 
 
-def check(artefacts, max_bytes):
+def check(artefacts, max_bytes, rust_licenses=None):
     expected = notice_files()
+    rust = rust_licence_files(rust_licenses) if rust_licenses else []
     failed = False
     for artefact in artefacts:
         artefact = pathlib.Path(artefact)
@@ -86,10 +107,19 @@ def check(artefacts, max_bytes):
                 print(f"error: {artefact.name}: {matches[0]} differs from vendor/{component}/{path}",
                       file=sys.stderr)
                 failed = True
+        for display, suffixes, data in rust:
+            matches = [m for m in contents if any(("/" + m).endswith(suffix) for suffix in suffixes)]
+            if not matches:
+                print(f"error: {artefact.name}: no {display}", file=sys.stderr)
+                failed = True
+            elif not any(contents[m] == data for m in matches):
+                print(f"error: {artefact.name}: {matches[0]} differs from licenses/{display}", file=sys.stderr)
+                failed = True
         if max_bytes is not None and size > max_bytes:
             print(f"error: {artefact.name} is {size:,} bytes, over {max_bytes:,}", file=sys.stderr)
             failed = True
-        print(f"{artefact.name}: {size:,} bytes, {len(expected)} third-party notices checked")
+        print(f"{artefact.name}: {size:,} bytes, {len(expected)} third-party notices"
+              f"{f' and {len(rust)} Rust licence file(s)' if rust else ''} checked")
     return 1 if failed else 0
 
 
@@ -107,11 +137,12 @@ def main():
     commands.add_parser("stage").add_argument("destination")
     checker = commands.add_parser("check")
     checker.add_argument("--max-bytes", type=int)
+    checker.add_argument("--rust-licenses", choices=(*RUST_LICENCE_KINDS, "all"))
     checker.add_argument("artefacts", nargs="+")
     args = parser.parse_args()
     if args.command == "stage":
         return stage(args.destination)
-    return check(args.artefacts, args.max_bytes)
+    return check(args.artefacts, args.max_bytes, args.rust_licenses)
 
 
 if __name__ == "__main__":

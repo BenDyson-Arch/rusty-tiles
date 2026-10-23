@@ -13,7 +13,7 @@ use super::{
     },
     records::TriangleRecord,
     source_crs::{MeshSourceCrsReport, SourceFrame},
-    tree::{self, RetainedTree, TreeOutput},
+    tree::{self, RetainedTree},
 };
 use crate::{
     gltf_source::source::{self, ImageInfo, Material},
@@ -36,10 +36,11 @@ const SORT_THREAD_BYTES: u64 = 8_000_000;
 pub struct ScratchStages {
     /// Corner, positioned-corner and full-triangle sorts of the attribute capture.
     pub capture: u64,
-    /// The sorted full-triangle stream, its retained sequence and the projection sort.
+    /// The sorted full-triangle stream and its retained sequence (the field keeps its name:
+    /// capture no longer writes a separate rank-ordered projection).
     pub projection: u64,
     pub images: u64,
-    /// The projection merge, cell tree and node sort, and the weld-depth pass.
+    /// The cell tree and node sort over the retained sequence, and the weld-depth pass.
     pub tree: u64,
     pub corner_depths: u64,
     pub leaf_plans: u64,
@@ -239,6 +240,7 @@ fn image_preflight(
 }
 fn scratch_need(
     scan: SourceScan,
+    layout: crate::spill::Layout,
     config: &TreeConfig,
     unit: u64,
     image_count: u64,
@@ -253,10 +255,13 @@ fn scratch_need(
     let n = scan.triangles;
     let corners = mul(n, 3)?;
     let corner_refs = config::sort_spill::<CornerRef>(corners, sorter).ok_or_else(overflow)?;
+    // Capture's attribute records spill under the run's attribute layout.
+    let chunk = crate::spill::CHUNK_BYTES;
     let positioned =
-        config::sort_spill::<attributes::FullCorner>(corners, sorter).ok_or_else(overflow)?;
-    let full = config::sort_spill::<FullTriangle>(n, sorter).ok_or_else(overflow)?;
-    let projection = config::sort_spill::<TriangleRecord>(n, sorter).ok_or_else(overflow)?;
+        config::sort_spill_in::<attributes::FullCorner>(corners, sorter, chunk, layout)
+            .ok_or_else(overflow)?;
+    let full =
+        config::sort_spill_in::<FullTriangle>(n, sorter, chunk, layout).ok_or_else(overflow)?;
     let nodes = config::node_bound(n, scan.geometry_bytes, config);
     let node_sort = config::sort_spill::<NodeRecord>(nodes, sorter).ok_or_else(overflow)?;
     let node_bytes = mul(nodes, NodeRecord::SIZE as u64)?;
@@ -281,7 +286,6 @@ fn scratch_need(
             .ok_or_else(overflow)
     };
     let t = full.bytes;
-    let q = projection.bytes;
     let capture = max(&[
         Some(corner_refs.finish_peak),
         corner_refs.flow(positioned.push_peak),
@@ -289,11 +293,10 @@ fn scratch_need(
         positioned.flow(full.push_peak),
         Some(full.finish_peak),
     ])?;
-    // The full-triangle stream feeds its retained sequence and the projection sort.
-    let projection_stage = full
-        .flow(add(t, projection.push_peak)?)
-        .ok_or_else(overflow)?;
-    let images = add(add(t, q)?, image_bytes)?;
+    // The full-triangle stream feeds its retained sequence: in rank order already, it is
+    // the tree's input and the corner join's, with no projected copy.
+    let projection_stage = full.flow(t).ok_or_else(overflow)?;
+    let images = add(t, image_bytes)?;
     let retained = add(t, image_bytes)?;
     let welding = max(&[
         Some(vertex_depths.finish_peak),
@@ -302,19 +305,14 @@ fn scratch_need(
     let tree = add(
         retained,
         max(&[
-            Some(projection.finish_peak),
-            projection
-                .flow(add(q, node_sort.push_peak)?)
-                .and_then(|v| v.checked_add(span_bytes)),
+            node_sort.push_peak.checked_add(span_bytes),
             node_sort
                 .flow(node_bytes)
-                .and_then(|v| v.checked_add(q)?.checked_add(span_bytes)),
-            welding
-                .checked_add(q)
-                .and_then(|v| v.checked_add(node_bytes)?.checked_add(span_bytes)),
+                .and_then(|v| v.checked_add(span_bytes)),
+            welding.checked_add(node_bytes + span_bytes),
         ])?,
     )?;
-    let base = add(add(add(retained, q)?, node_bytes)?, weld_bytes)?;
+    let base = add(add(retained, node_bytes)?, weld_bytes)?;
     let corner_depths = add(
         base,
         max(&[
@@ -324,8 +322,7 @@ fn scratch_need(
             rank_depths.flow(corner_depth_bytes),
         ])?,
     )?;
-    // After the corner join the rank-ordered projection is released (RetainedTree).
-    let kept = add(add(retained, node_bytes)?, weld_bytes)?;
+    let kept = base;
     let leaf_plans = add(add(kept, corner_depth_bytes)?, leaf_plan_bytes)?;
     // H17's pre-pass (lod/incidence.rs): an incidence sort streamed into a corner-info sort,
     // streamed with the retained sequences into the slim LOD source.
@@ -584,6 +581,7 @@ pub(crate) fn capture_admitted(
     };
     let source_crs = frame.placement();
     let (image_count, image_bytes) = image_preflight(&source, check).map_err(super::failure)?;
+    let layout = attributes::attribute_layout(&source);
     let parent = config
         .scratch_dir
         .clone()
@@ -591,6 +589,7 @@ pub(crate) fn capture_admitted(
     let volume = crate::spill::inspect_volume(&parent).map_err(|e| super::failure(e.into()))?;
     let need = scratch_need(
         scan,
+        layout,
         config,
         volume.allocation_unit_bytes,
         image_count,
@@ -675,18 +674,18 @@ pub(crate) fn capture_admitted(
             &mut frame,
             &scratch,
             config.sorter(workers),
+            layout,
             &mut scan,
             check,
         )?;
         peaks.capture = end_stage(&scratch, stages.capture, "attribute capture")?;
         begin_stage(&scratch, &need, stages.projection)?;
-        let mut full_writer = SequenceWriter::<FullTriangle>::new(
+        let mut full_writer = SequenceWriter::<FullTriangle>::with_layout(
             &scratch,
             "full-triangles",
             config.sort.buffer_bytes,
+            layout,
         )?;
-        let mut projection =
-            ExternalSorter::<TriangleRecord>::new(&scratch, config.sorter(workers))?;
         let mut previous: Option<TriangleRecord> = None;
         let mut count = 0_u64;
         for row in full_stream.by_ref() {
@@ -701,7 +700,6 @@ pub(crate) fn capture_admitted(
             }
             previous = Some(row.triangle);
             full_writer.push(&row)?;
-            projection.push(row.triangle)?;
             count = add(count, 1)?;
             if count.is_multiple_of(1024) {
                 check()?;
@@ -810,9 +808,11 @@ pub(crate) fn capture_admitted(
         source.verify_unchanged()?;
         drop(source); // All subsequent operations read owned snapshot records only.
         begin_stage(&scratch, &need, stages.tree)?;
-        let tree = tree::build(
+        // The full-triangle sequence is already in strict rank order (checked as it was
+        // written): the tree is built over it directly, with no projected copy.
+        let tree = tree::build_ranked(
             &scratch,
-            projection.finish()?,
+            &triangles,
             config,
             workers,
             Some(add(stages.tree, need.file_rounding_bytes)?),
@@ -824,14 +824,15 @@ pub(crate) fn capture_admitted(
         // before the corner join's 3n-record sort.
         limits.check_vertices(tree.stats.welded_vertices)?;
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
-        verify_rank_alignment(&triangles, &tree.triangles, check)?;
+        if tree.stats.triangles != triangles.len() {
+            return Err(invariant(
+                "full capture tree rank count differs from sequence",
+            ));
+        }
         begin_stage(&scratch, &need, stages.corner_depths)?;
         let (corner_depths, corner_vertices) =
-            join_corner_depths(&scratch, &tree, config, workers, check)?;
+            join_corner_depths(&scratch, &tree, &triangles, config, workers, check)?;
         peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
-        // The rank-ordered projection's last reader is done; the full-triangle sequence
-        // carries the same records in the same rank order (verified above).
-        let tree = tree.release_triangles();
         let height = usize::try_from(tree.stats.height)
             .map_err(|_| invariant("tree height conversion failed"))?;
         if height == 0 || height > 32 {
@@ -953,40 +954,11 @@ pub(crate) fn capture_admitted(
     }
 }
 
-fn verify_rank_alignment(
-    full: &Sequence<FullTriangle>,
-    projected: &Sequence<TriangleRecord>,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<(), JobError> {
-    if full.len() != projected.len() {
-        return Err(invariant("full/tree rank inventory length mismatch"));
+/// Full capture's retained sequence is the rank order its tree is built over.
+impl tree::RankedTriangles for Sequence<FullTriangle> {
+    fn ranked(&self) -> Result<tree::RankedReader<'_>, JobError> {
+        Ok(Box::new(self.reader()?.map(|row| Ok(row?.triangle))))
     }
-    let mut a = full.reader()?;
-    let mut b = projected.reader()?;
-    let mut left = [0_u8; TriangleRecord::SIZE];
-    let mut right = [0_u8; TriangleRecord::SIZE];
-    for rank in 0..full.len() {
-        if rank.is_multiple_of(1024) {
-            check()?;
-        }
-        let f = a
-            .next()
-            .transpose()?
-            .ok_or_else(|| invariant("missing full rank"))?;
-        let t = b
-            .next()
-            .transpose()?
-            .ok_or_else(|| invariant("missing tree rank"))?;
-        f.triangle.encode(&mut left);
-        t.encode(&mut right);
-        if left != right {
-            return Err(invariant("full/tree rank projected wire mismatch"));
-        }
-    }
-    if a.next().transpose()?.is_some() || b.next().transpose()?.is_some() {
-        return Err(invariant("extra full/tree rank"));
-    }
-    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -1150,23 +1122,27 @@ impl Record for CornerDepth {
         }
     }
 }
+/// Each corner's welded depth and vertex ordinal, in rank order, for the tree built over
+/// `ranked`.
 fn join_corner_depths(
     scratch: &Scratch,
-    tree: &TreeOutput,
+    tree: &RetainedTree,
+    ranked: &dyn tree::RankedTriangles,
     config: &TreeConfig,
     jobs: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(Sequence<CornerDepth>, Sequence<CornerVertices>), JobError> {
     // Defence: capture refused both counts as soon as it knew them.
     let limits = RecordLimits::of(config);
-    limits.check_triangles(tree.triangles.len())?;
+    let triangles = tree.stats.triangles;
+    limits.check_triangles(triangles)?;
     limits.check_vertices(tree.weld_depths.len())?;
     if tree.stats.height > config::HEIGHT_CAP {
         return Err(invariant("tree height exceeds the packed corner depth"));
     }
     let mut corners = ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?;
     let mut rank = 0_u64;
-    for triangle in tree.triangles.reader()? {
+    for triangle in ranked.ranked()? {
         if rank.is_multiple_of(1024) {
             check()?;
         }
@@ -1180,7 +1156,7 @@ fn join_corner_depths(
         }
         rank = add(rank, 1)?;
     }
-    if rank != tree.triangles.len() {
+    if rank != triangles {
         return Err(invariant("corner rank inventory length mismatch"));
     }
     let mut corners = corners.finish()?;
@@ -1215,7 +1191,7 @@ fn join_corner_depths(
         }
     }
     drop(corners);
-    if welds.next().transpose()?.is_some() || corner_count != mul(tree.triangles.len(), 3)? {
+    if welds.next().transpose()?.is_some() || corner_count != mul(triangles, 3)? {
         return Err(invariant("corner/weld coverage mismatch"));
     }
     drop(welds);
@@ -1227,7 +1203,7 @@ fn join_corner_depths(
         "corner-vertices",
         config.sort.buffer_bytes,
     )?;
-    for rank in 0..tree.triangles.len() {
+    for rank in 0..triangles {
         if rank.is_multiple_of(1024) {
             check()?;
         }
@@ -1788,8 +1764,19 @@ pub(super) mod tests {
         assert_eq!((built.triangles.len(), built.weld_depths.len()), (4, 6));
         drop(built);
         let join = |config: &TreeConfig| {
-            let built = tree();
-            join_corner_depths(&scratch, &built, config, 1, &mut || Ok(())).map(|_| ())
+            let tree::TreeOutput {
+                triangles,
+                nodes,
+                weld_depths,
+                stats,
+            } = tree();
+            let retained = RetainedTree {
+                nodes,
+                weld_depths,
+                stats,
+            };
+            join_corner_depths(&scratch, &retained, &triangles, config, 1, &mut || Ok(()))
+                .map(|_| ())
         };
         let mut limited = config.clone();
         for (limits, refusal) in [
@@ -1813,26 +1800,33 @@ pub(super) mod tests {
         assert_eq!(scratch.live_bytes(), 0);
     }
     /// Every capture stage's measured peak stays within its declared bound across sorter
-    /// regimes: one run, intermediate merges with slack, and inventory compaction. A
+    /// regimes: one run, intermediate merges with slack, and inventory compaction; for every
+    /// attribute (the full layout) and for positions only (the narrowest layout). A
     /// violation already fails capture closed; the asserts state the contract.
     #[test]
     fn measured_stage_peaks_stay_within_the_stage_model() {
         let dir = tempfile::tempdir().unwrap();
         let smallest = 2 * size_of::<FullTriangle>();
-        for (count, run_bytes, fan_in) in [
-            (19, 160 << 20, 64),
-            (300, smallest, 2),
-            (300, 4096, 3),
-            (1200, 1 << 16, 4),
+        for (count, run_bytes, fan_in, grid) in [
+            (19, 160 << 20, 64, false),
+            (300, smallest, 2, false),
+            (300, 4096, 3, false),
+            (1200, 1 << 16, 4, false),
+            (19, 160 << 20, 64, true),
+            (300, smallest, 2, true),
+            (1200, 4096, 3, true),
         ] {
-            let source = dir
-                .path()
-                .join(format!("source-{count}-{run_bytes}-{fan_in}"));
-            let parent = dir
-                .path()
-                .join(format!("scratch-{count}-{run_bytes}-{fan_in}"));
+            let case = format!("{count}-{run_bytes}-{fan_in}-{grid}");
+            let source = dir.path().join(format!("source-{case}"));
+            let parent = dir.path().join(format!("scratch-{case}"));
             fs::create_dir(&parent).unwrap();
-            let input = fixture(&source, count);
+            let input = if grid {
+                // About `count` triangles: 2·side² quads plus every 17th repeated.
+                let side = ((count as f64 / 2.).sqrt() as usize).max(2);
+                shuffled_grid(&source, side, count as u64)
+            } else {
+                fixture(&source, count)
+            };
             let mut config = config(&parent);
             config.sort.run_bytes = run_bytes;
             config.sort.fan_in = fan_in;
@@ -1852,10 +1846,7 @@ pub(super) mod tests {
                 ("leaf_plans", measured.leaf_plans, declared.leaf_plans),
             ];
             for (name, peak, bound) in pairs {
-                assert!(
-                    peak <= bound,
-                    "{count}/{run_bytes}/{fan_in} {name}: {peak} > {bound}"
-                );
+                assert!(peak <= bound, "{case} {name}: {peak} > {bound}");
             }
             assert!(measured.projection > 0 && measured.tree > 0);
             assert!(
@@ -1948,14 +1939,14 @@ pub(super) mod tests {
             },
             geometry_bytes: 2000,
         };
-        let need = scratch_need(scan, &cfg, 4096, 2, 8192).unwrap();
-        // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860, projection 930. One
-        // run per sort, so no merge slack: the positioned stream beside the full-triangle sort
-        // bounds capture; the full stream, its sequence and the projection bound projection.
+        let need = scratch_need(scan, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192).unwrap();
+        // 30 corners: CornerRef 750, FullCorner 2910; FullTriangle 2860. One run per sort, so
+        // no merge slack: the positioned stream beside the full-triangle sort bounds capture;
+        // the full stream and its sequence bound projection (no projected copy is written).
         // Chunks free as they are read, so a stream and its consumer's output trade off.
         assert_eq!(need.stages.capture, 2910 + 2910);
-        assert_eq!(need.stages.projection, 2 * 2860 + 930);
-        assert_eq!(need.stages.images, 2860 + 930 + 8192);
+        assert_eq!(need.stages.projection, 2 * 2860);
+        assert_eq!(need.stages.images, 2860 + 8192);
         // One chunk per sort here: a stream holds all of its chunk until read through, so the
         // incidence stream (30 B per corner) and its partly read chunk bound H17.
         assert_eq!(
@@ -1988,7 +1979,7 @@ pub(super) mod tests {
             ..scan
         };
         assert_eq!(
-            scratch_need(overflow, &cfg, 4096, 2, 8192)
+            scratch_need(overflow, crate::spill::Layout::FULL, &cfg, 4096, 2, 8192)
                 .unwrap_err()
                 .kind(),
             JobErrorKind::ResourceLimit

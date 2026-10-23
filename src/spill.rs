@@ -35,13 +35,52 @@ use std::{fmt, io, path::PathBuf};
 ///
 /// `Ord` is the sort order. Records that compare equal keep their input order, so producers that
 /// need byte-identical output under any configuration only need a deterministic input order.
+///
+/// A record may also have narrower run-level encodings ([`Layout`]): fields that a whole run
+/// leaves at their default are omitted from every record of that run's sorts and sequences, and
+/// decode restores them. The containers carry their layout, so readers are unchanged.
 pub(crate) trait Record: Copy + Ord + Send {
-    /// Encoded size in bytes; must be nonzero.
+    /// Encoded size in bytes under [`Layout::FULL`]; must be nonzero.
     const SIZE: usize;
     /// Writes exactly `SIZE` bytes into `out` (`out.len() == SIZE`).
     fn encode(&self, out: &mut [u8]);
     /// Reads a record previously written by [`Record::encode`] (`bytes.len() == SIZE`).
     fn decode(bytes: &[u8]) -> Self;
+    /// Encoded size under `layout`: nonzero, at most `SIZE`, and `SIZE` for [`Layout::FULL`].
+    fn size_in(layout: Layout) -> usize {
+        let _ = layout;
+        Self::SIZE
+    }
+    /// Writes exactly `size_in(layout)` bytes. The caller guarantees every field the layout
+    /// omits holds its default; [`Layout::FULL`] is [`Record::encode`].
+    fn encode_in(&self, layout: Layout, out: &mut [u8]) {
+        let _ = layout;
+        self.encode(out)
+    }
+    /// Reads a record written by [`Record::encode_in`] under the same layout.
+    fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
+        let _ = layout;
+        Self::decode(bytes)
+    }
+}
+
+/// A run-level record encoding: a set of fields present in the run, interpreted by each
+/// [`Record`] type. [`Layout::FULL`] keeps every field and is every record's `SIZE` encoding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Layout(pub u8);
+impl Layout {
+    pub(crate) const FULL: Self = Self(u8::MAX);
+}
+
+/// Encoded size of `T` under `layout`, checked against the [`Record`] contract.
+fn record_size<T: Record>(layout: Layout) -> Result<usize, SpillError> {
+    match T::size_in(layout) {
+        0 => Err(SpillError::InvalidConfig("record size must be nonzero")),
+        size if size > T::SIZE => Err(SpillError::InvalidConfig(
+            "record layout wider than its full encoding",
+        )),
+        size => Ok(size),
+    }
 }
 
 /// Structured cause of a free-space refusal (`JobErrorKind::Io`, decision E28).
