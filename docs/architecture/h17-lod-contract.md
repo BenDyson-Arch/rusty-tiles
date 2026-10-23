@@ -102,15 +102,26 @@ Its error replaces the empty-parent `16·diagonal`. A leaf directory without
    exported to the sidecar for parents' fills.
 8. **Fills.** Simple closed border loops of `S` with no seam vertex, one label,
    at most 64 vertices, fanned from the least key (orientation against the loop's
-   faces, no existing diagonal, no degenerate decoded face, and a fan that
-   continues the faces around the loop: the outline of an open component would get a
-   back-facing duplicate, so it is never filled) are filled only if
+   faces, no existing diagonal, no degenerate decoded face, and the outline rule
+   below) are filled only if
    `b_A(F) = up(h(F->T_A) + max_c e_A(c)) <= e_open`, the unfilled certificate,
    and only while the proxy stays within `P` faces. The seam-vertex exclusion is
    checked again on every accepted loop (`InvalidState` otherwise).
    The final proxy->source term is `max(e^->(S), b_A(F))`; source->proxy is
    unchanged. An accepted fill never raises the error (checked). Rows go to
    `lod_filled` (primitive, loop key, size, bound, reopening children).
+
+   *Outline rule.* The outline of an open component (a sheet, sign or planar roof)
+   looks like a hole, but its fan would be a back-facing duplicate of the surface. For
+   each loop the proxy sums, in f64, the area vectors of the fan triangles and of every
+   face of `S` with a directed edge on the loop (scanned in `s_order`), and rejects
+   the loop (`fills_rejected_topology`) only if the dot product of the two sums is
+   strictly negative. A zero dot (degenerate sums) is accepted. The `CrackAsHole` and
+   `FillAcrossSeams` controls are exempt. Known blind spot: the rule is an aggregate,
+   so border faces whose area vectors cancel can hide a back-facing fan. Near-tangent
+   rims (pipe ends, vertical walls) are decided by a near-zero dot; a lid there is
+   outward-consistent and bounded by the directed-distance check `b_A(F)`. The scan
+   is O(loops x target faces); index border faces by edge if the target grows.
 9. **Frontier audit.** Every border edge of a depth-`d` proxy with both
    endpoints seam vertices, and every such edge of a leaf at depth `<= d`, must
    appear in another frontier tile with bit-identical decoded endpoints, or have

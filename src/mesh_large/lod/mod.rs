@@ -558,9 +558,12 @@ fn decode_vertex(
 }
 
 /// Whether the fan over border loop `l` faces away from the faces that bound the loop: the
-/// sum of the fan's area vectors opposes the sum of the bordering faces' area vectors.
-/// A true hole's fan continues the surface around it (positive or perpendicular); an open
-/// component's outline would get a back-facing duplicate (negative).
+/// dot product of the fan's summed area vector with the summed area vector of every face
+/// that has a directed edge on the loop is strictly negative. A hole's fan has a positive
+/// dot (it continues the surface) or a near-zero one (near-tangent rims such as pipe ends
+/// and vertical walls; a degenerate sum of exactly 0 is accepted). An open component's
+/// outline gets a back-facing duplicate (negative). Aggregate rule: it can be fooled by
+/// border faces whose area vectors cancel.
 fn fan_faces_away_from_surface(
     fan: &[[[f32; 3]; 3]],
     l: &mesh::Loop,
@@ -585,6 +588,9 @@ fn fan_faces_away_from_surface(
         .collect();
     let (mut fan_area, mut border_area) = ([0f64; 3], [0f64; 3]);
     fan.iter().for_each(|t| add(&mut fan_area, area(t)));
+    // Cost: this scans every face of the proxy (`faces`) once per candidate loop, so a tile
+    // costs O(loops x target faces). Index the border faces by directed edge if the target
+    // grows.
     for (f, t) in faces.iter().zip(decoded) {
         if (0..3).any(|i| directed.contains(&(f.v[i], f.v[(i + 1) % 3]))) {
             add(&mut border_area, area(t));
