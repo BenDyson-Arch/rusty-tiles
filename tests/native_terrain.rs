@@ -156,7 +156,10 @@ fn create_new_conflict_and_replace_preserve_until_success() {
         &RunControl::default(),
     )
     .unwrap_err();
-    assert_eq!(failure.error.kind(), rusty_tiles::JobErrorKind::InvalidInput);
+    assert_eq!(
+        failure.error.kind(),
+        rusty_tiles::JobErrorKind::InvalidInput
+    );
     assert_eq!(std::fs::read(output.join("sentinel")).unwrap(), b"old");
     let result = terrain_to_directory(
         request(&input, &output).with_policy(OutputPolicy::Replace),
