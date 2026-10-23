@@ -15,6 +15,7 @@ from PIL import Image
 from scipy.ndimage import distance_transform_edt
 from build import GLB, Meshopt, Writer, ptr
 from evaluate import Surface
+from partition import partition
 
 
 def sample(xyz, count, rng):
@@ -28,34 +29,50 @@ def closest(q, xyz):
     return pcu.closest_points_on_mesh(np.ascontiguousarray(q,np.float64),np.ascontiguousarray(xyz.reshape(-1,3),np.float64),np.arange(xyz.size//3,dtype=np.int32).reshape(-1,3))
 
 
-def main(source, seed, output, meshopt, charts):
-    started=time.process_time();seed=Path(seed);out=Path(output);out.mkdir(parents=True,exist_ok=True)
+def main(source, seed, output, meshopt, charts, placement=None):
+    started=time.process_time();seed=None if seed=='-' else Path(seed);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     (out/'content').mkdir(exist_ok=True);(out/'textures').mkdir(exist_ok=True)
-    assert all(set(n)=={'mesh'} for n in GLB(source).j['nodes']), 'only identity mesh nodes supported'
+    g=GLB(source);j=g.j
+    assert all(set(n)=={'mesh'} for n in j['nodes']), 'only identity mesh nodes supported'
     src=Surface().add(source,True).finish();mo=Meshopt(meshopt);lib=C.CDLL(charts)
     # Decode each source image once; parent raster queries reuse these pixels.
     cache_started=time.process_time()
     src.materials=[(factor,(np.asarray(Image.open(io.BytesIO(image[0])).convert('RGB')),None) if image else None,wrap) for factor,image,wrap in src.materials]
     cache_cpu=time.process_time()-cache_started
     lib.unwrap.argtypes=[C.c_void_p,C.c_void_p,C.c_int,C.c_int,C.c_void_p,C.c_void_p,C.c_void_p]
-    nodes=copy.deepcopy(json.loads((seed/'build.json').read_text())['nodes']);byid={n['id']:n for n in nodes}
+    if seed is None:nodes,owner=partition(g,mo)
+    else:
+        nodes=copy.deepcopy(json.loads((seed/'build.json').read_text())['nodes']);owner=None
+    byid={n['id']:n for n in nodes}
     # Reuse leaf ownership, never seed proxies. Nonmanifold edge incidences
     # are indivisible ownership units: splitting one sheet junction between
     # cells can let vertex-locked tiny components disappear during simplification.
-    lookup={tuple(p[:3]):i for i,p in enumerate(src.provenance)}
     pos,weld=np.unique(src.xyz.reshape(-1,3).astype(np.float32),axis=0,return_inverse=True)
-    triangles=weld.reshape(-1,3).astype(np.uint32);incidence=np.zeros(len(pos),np.uint64)
-    leaves=[n for n in nodes if not n['children']];owner=np.full(len(triangles),-1,np.int32)
-    for n in leaves:
-        surf=Surface().add(seed/n['file']).finish()
-        ids=np.array([lookup[tuple(p[:3])] for p in surf.provenance]);owner[ids]=n['id']
+    triangles=weld.reshape(-1,3).astype(np.uint32);del weld
+    incidence=np.zeros(len(pos),np.uint64)
+    leaves=[n for n in nodes if not n['children']]
+    if owner is None:
+        owner=np.full(len(triangles),-1,np.int32);offsets={};offset=0
+        for mi,mesh in enumerate(j['meshes']):
+            for pi,pr in enumerate(mesh['primitives']):
+                offsets[(mi,pi)]=offset;offset+=j['accessors'][pr['indices']]['count']//3
+        for n in leaves:
+            surf=Surface().add(seed/n['file']).finish();p=surf.provenance
+            ids=p[:,2]+np.array([offsets[tuple(v)] for v in p[:,:2]])
+            assert len(np.unique(ids))==len(ids) and np.all(owner[ids]==-1)
+            owner[ids]=n['id']
+        del surf
     assert np.all(owner>=0)
     original_owner=owner.copy()
     def edge_keys(f):
         e=np.sort(np.stack([f[:,[0,1]],f[:,[1,2]],f[:,[2,0]]],axis=1).reshape(-1,2),axis=1).astype(np.uint64)
         return e[:,0]*np.uint64(len(pos))+e[:,1]
     source_edges,inverse,counts=np.unique(edge_keys(triangles),return_inverse=True,return_counts=True)
-    junctions=[np.unique(np.flatnonzero(inverse==e)//3) for e in np.flatnonzero(counts>2)]
+    selected=np.flatnonzero(counts[inverse]>2)
+    selected=selected[np.argsort(inverse[selected],kind='stable')]
+    starts=np.flatnonzero(np.diff(inverse[selected]))+1
+    junctions=[np.unique(group//3) for group in np.split(selected,starts) if len(group)]
+    del selected,starts
     # Iterate the finite minimum-label union to cover connected junction edges.
     changed=True
     while changed:
@@ -64,9 +81,14 @@ def main(source, seed, output, meshopt, charts):
             target=int(owner[faces].min())
             if np.any(owner[faces]!=target):owner[faces]=target;changed=True
     reassigned=int(np.count_nonzero(owner!=original_owner))
-    face_masks=np.zeros(len(triangles),np.uint64);g=GLB(source);j=g.j
+    face_masks=np.zeros(len(triangles),np.uint64)
     images=[{'uri':f'../textures/leaf-{i}'+('.jpg' if im['mimeType']=='image/jpeg' else '.png')} for i,im in enumerate(j.get('images',[]))]
-    for p in (seed/'textures').glob('leaf-*'):shutil.copyfile(p,out/'textures'/p.name)
+    mids={p['material'] for m in j['meshes'] for p in m['primitives'] if 'material' in p}
+    tids={j['materials'][m]['pbrMetallicRoughness']['baseColorTexture']['index'] for m in mids if 'baseColorTexture' in j['materials'][m].get('pbrMetallicRoughness',{})}
+    used_images={j['textures'][t]['source'] for t in tids}
+    for image_id,(im,ref) in enumerate(zip(j.get('images',[]),images)):
+        if image_id not in used_images:continue
+        (out/'textures'/Path(ref['uri']).name).write_bytes(g.view(im['bufferView']))
     for n in leaves:
         ids=np.flatnonzero(owner==n['id']);assert len(ids)>0
         n['ids']=ids;n['idx']=triangles[ids];n['ge']=0.;n['triangles']=len(ids)
@@ -86,6 +108,8 @@ def main(source, seed, output, meshopt, charts):
             wr.j['meshes'][0]['primitives'].append(pr)
         wr.save(out/n['file']);n['bytes']=(out/n['file']).stat().st_size
     edge_masks=np.zeros(len(source_edges),np.uint64);np.bitwise_or.at(edge_masks,inverse,np.repeat(face_masks,3))
+    del inverse,counts,junctions,face_masks,original_owner,owner,triangles,g,j
+    del src.provenance,src.faces,src.vertices
     for n in reversed(nodes):
         if n['children']:n['ids']=np.concatenate([byid[c]['ids'] for c in n['children']])
     prep_cpu=time.process_time()-started-cache_cpu;coarse_started=time.process_time();rng=np.random.default_rng(93210)
@@ -142,8 +166,18 @@ def main(source, seed, output, meshopt, charts):
             dict(featureCount=len(unique),attribute=0,propertyTable=tab,label='source_primitive')]}})]
         wr.save(out/n['file']);n['bytes']=(out/n['file']).stat().st_size
         stages['write']+=time.process_time()-t
+        for child in n['children']:
+            del byid[child]['idx'],byid[child]['ids']
         print('tile',n['id'],'depth',n['depth'],'triangles',len(idx),'charts',nc,'ge',n['ge'],'cpu',time.process_time()-coarse_started,flush=True)
-    ts=json.loads((seed/'tileset.json').read_text())
+    if seed is not None:ts=json.loads((seed/'tileset.json').read_text())
+    else:
+        assert placement is not None,'direct source mode requires placement tileset'
+        def tile(nid):
+            n=byid[nid];t=dict(refine='REPLACE',content={'uri':n['file']})
+            if n['children']:t['children']=[tile(c) for c in n['children']]
+            return t
+        ts=dict(asset={'version':'1.1'},geometricError=float(np.linalg.norm(nodes[0]['hi']-nodes[0]['lo'])),root=tile(0))
+        ts['root']['transform']=json.loads(Path(placement).read_text())['root']['transform']
     def walk(t):
         n=next(n for n in nodes if n['file']==t['content']['uri']);t['geometricError']=n['ge']
         center=((n['lo']+n['hi'])/2)[[0,2,1]]*[1,-1,1];half=((n['hi']-n['lo'])/2)[[0,2,1]]

@@ -1,4 +1,58 @@
-# Classic HLOD cluster-tree experiment
+# Full-model classic HLOD result
+
+| 10M-triangle result | Classic HLOD | Current #260 baseline |
+|---|---:|---:|
+| Whole CPU / wall | 137 / 124 s | 10,000 / 3,612 s historical |
+| Coarse / whole CPU-s per Mtri | 6.86 / 13.70 | coarse unavailable / 1,000 |
+| Peak RSS | 6.20 GiB | 9.37 GiB historical |
+| Published unpacked output | 510.60 MB | 1,541.63 MB |
+| Root triangles | 15,998 | 7,680 |
+| Root mean geometric error | 0.981 m | 0.333 m |
+| Root PSNR proxy→source / source→proxy | 20.48 / 15.03 dB | 17.00 / 16.59 dB |
+| First view 1600×1000, range 3 | 212.46 MB | 35.01 MB |
+| First view 2560×1600, range 3 | 242.91 MB | 63.37 MB |
+| First view 2560×1600, range .75 | 510.60 MB | 230.81 MB |
+| Mixed / same-depth seams | exact zero: 828 / 402 pairs | not rerun |
+
+**Full-model verdict: do not adopt the fixed-depth configuration unchanged for 0.4.**
+The single approved full build is fast and crack-free, but 32 leaves of roughly
+312k triangles each cause a large refinement jump; the 512² intermediate atlases
+also lose substantial colour quality. Retain the architecture as a direction;
+scale leaf/hierarchy and atlas budgets before another acceptance decision.
+The earlier crop-only recommendation below is qualified by this full-model result.
+
+Output for the owner's viewer:
+`/home/bend/scratch/rusty-tiles-scratch/lod-bakeoff/cluster-dag/hlod-final-m2048/tileset.json`.
+It uses the exact baseline transform at anchor
+`133.0584598837835 -12.33625061681309 100`, local metres Y-up. No viewer was started.
+
+Full evidence and per-level tables:
+`~/.cache/rusty-tiles-evidence/lod-bakeoff-20261024/cluster-dag/README.md`.
+The previous report is preserved there as `README-crops.md`; historical source and
+artifact identities refer to commit 708d8507, not the memory-adjusted current files.
+
+`run_full_once.sh` records the single approved invocation with a launch sentinel,
+20 GiB/no-swap systemd scope, requested measure.py slot 2, idle priority and a
+60 GiB free-disk watchdog. Do not remove the sentinel or rebuild the full input
+without new authorization. `assess_full.sh` evaluates existing artifacts only.
+
+Input staging now generates the same meshlet seed directly, avoids the large
+Python triangle-key lookup, and releases completed children/intermediates. Before
+launch, all 149 tex3 geometry/texture assets matched 708d8507 byte-for-byte and its
+tileset matched semantically. Geometry/texture/error budgets were not retuned.
+The estimated 12–16 GiB fitted the 20 GiB cap; measured peak was 6.20 GiB.
+
+The full independent census recovers original ownership from decoded leaves and
+checks every complete source-shared-edge interface, including 214,466 crossing
+edges. All 9,999,999 leaf triangles are exact and unique; all 31 coarse tiles have
+valid representative primitive references. Ten sampled GLBs validate without
+errors/warnings, with 810 native/WASM bufferViews identical. All 63 tiles pass
+bounds, monotonic GE and exact source-attribute checks. Quality samples 200k points
+per direction at depths 0, 2 and 4; the existing baseline root is measured too.
+Sampled GE is not certified; representative coarse identity is not complete ancestry.
+
+## Historical crop-only prototype
+
 
 | tex3 result | Classic HLOD | Current #260 | v0.3.0 |
 |---|---:|---:|---:|
@@ -94,3 +148,29 @@ execution sources and 419 artifact identities verified. Its nonblocking external
 dependency gap is addressed by the separate simulator, tree helper, JS/WASM,
 Python package and executable snapshot above. This is a local identity snapshot,
 not a hermetic environment or broader production acceptance.
+
+## Approved full-model run: preflight contract
+
+The owner explicitly authorizes one full-model run, overriding the earlier crop-only
+rule for this invocation. Retain the 708d8507 geometry, partition, chart, texture,
+metadata and error policy. Rework only input staging and memory ownership: generate
+the identical meshlet ownership seed directly, replace Python triangle-key lookup
+with primitive offsets, and release completed child geometry and intermediate
+arrays. Verify tex3 published bytes before launching the full build. Use the
+baseline full-model transform unchanged (anchor 133.0584598837835,
+-12.33625061681309, 100; local Y-up metres). Estimate 12–16 GiB peak for 10M
+triangles plus 1.04 GiB decoded images, against a hard 20 GiB/no-swap scope.
+Fail rather than retry the full build on memory, low-disk, chart or boundary
+postcondition failure. A 60 GiB free-disk watchdog protects the host. Keep final
+outputs unpacked; evaluate a bounded sample if the full crack census would exceed
+resource limits. Independent review must inspect final-source and bound evidence.
+
+- Full-model `m2048-execution-source.sha256`: `2b4330562c22bf0faaa7e2d45dbdd03c7c5f790be009af91baa378f8b31380fd`
+
+- Full-model `m2048-artifact-manifest.sha256`: `0c7311073994f639a1c37f371ba71608b86b9e7ed04e62ca220c3e4e998d93fb`
+
+Full-model final-source review accepted bounded research with no blocking findings;
+it supports the negative adoption verdict. The reviewer checked all 25 execution
+and 8 prelaunch source identities plus 161/248 artifact entries; the coordinator
+verified all 248. The documented baseline-size typo is corrected. Review receipt:
+`~/.cache/rusty-tiles-evidence/lod-bakeoff-20261024/cluster-dag/m2048-review-r1.json`.
