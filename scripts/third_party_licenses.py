@@ -394,9 +394,11 @@ in the image.
 | libtiff (`libtiff6`) | Debian trixie | libtiff (permissive, BSD-style) | `/usr/share/doc/libtiff6/copyright` |
 | GNU C++ runtime (`libstdc++6`) | Debian trixie | GPL-3.0-or-later WITH GCC-exception-3.1 | `/usr/share/doc/libstdc++6/copyright` |
 
-GEOS is the only copyleft library. It is the LGPL-2.1-or-later libgeos shared object, linked
-dynamically and unmodified, so it can be replaced by another build of the same library; its
-source is available from Debian (`apt source geos`). The Rust crate list above is separate from
+This table lists the main libraries rusty-tiles links; it is not an exhaustive list of the image's
+Debian packages, each of which keeps its own copyright file under `/usr/share/doc/<package>/`.
+GEOS (LGPL-2.1-or-later) is linked dynamically and unmodified, so it can be replaced by another
+build of the same library; its source is available from Debian (`apt source geos`). The GNU C++
+runtime is covered by the GCC Runtime Library Exception. The Rust crate list above is separate from
 this table and contains no copyleft licence.
 """
 
