@@ -1,5 +1,11 @@
 # Mesh tiling
 
+> **Direction change, 2026-10-24:** the [0.4 HLOD decision](architecture/hlod-040-decision.md)
+> replaces H17/H27 for the forthcoming implementation. This guide below still
+> describes the current code; sampled coarse error, representative coarse IDs,
+> the new bake and memory-budget option are planned, not shipped. The guide will
+> change with implementation; historical ledger follow-ups are superseded.
+
 `rusty-tiles mesh` and Python's `rusty_tiles.mesh_to_tileset` stream one admitted
 static glTF/GLB scene, in local metres or a declared source CRS, into a 3D Tiles
 1.1 implicit forest in one `.3tz`.
