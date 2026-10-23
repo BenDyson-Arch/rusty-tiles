@@ -648,18 +648,11 @@ fn overlaps<'s>(
     }
     let budget = JoinBudget::new(triangles, hosts.len().saturating_add(guests.len()), sorter)?;
     budget.check(0, stats.rows)?;
-    // Pay every pair's floating tolerance in the host box. This streamed maximum
-    // also covers canonical vertices just outside the source cube after quantization.
-    let mut rounding_floor = 0f64;
-    for (i, candidate) in hosts.reader()?.chain(guests.reader()?).enumerate() {
-        if i.is_multiple_of(1024) {
-            check()?;
-        }
-        let c = candidate?;
-        rounding_floor = rounding_floor.max(rounding(&[c.a, c.b]));
-    }
     let mut host_levels = 0u32;
-    let mut minimum_host_tol = [f64::INFINITY; 31];
+    // Clip guest search boxes to actual host bounds at that scale. In particular,
+    // a distant coarse guest must not enumerate a tiny cluster's entire grid.
+    let mut host_lo = [[f64::INFINITY; 3]; 31];
+    let mut host_hi = [[f64::NEG_INFINITY; 3]; 31];
     crate::spill::preflight(
         scratch.path(),
         budget.limit,
@@ -675,13 +668,18 @@ fn overlaps<'s>(
         let snap = f64::from(f32::from_bits(h.tol));
         // on_segment permits both axial and perpendicular offsets <= tolerance.
         // Their combined displacement is <=sqrt(2)*tolerance; 2 is conservative.
-        let tol = 2. * (snap + rounding_floor);
+        let tol = 2. * (snap + rounding(&[h.a, h.b]));
         let level = host_level(cube, h.a, h.b, tol);
         host_levels |= 1 << level;
-        minimum_host_tol[level as usize] = minimum_host_tol[level as usize].min(snap);
         let (a, b) = (point(h.a), point(h.b));
-        let lo = cell(cube, level, std::array::from_fn(|i| a[i].min(b[i]) - tol));
-        let hi = cell(cube, level, std::array::from_fn(|i| a[i].max(b[i]) + tol));
+        let lower = std::array::from_fn(|i| a[i].min(b[i]) - tol);
+        let upper = std::array::from_fn(|i| a[i].max(b[i]) + tol);
+        for axis in 0..3 {
+            host_lo[level as usize][axis] = host_lo[level as usize][axis].min(lower[axis]);
+            host_hi[level as usize][axis] = host_hi[level as usize][axis].max(upper[axis]);
+        }
+        let lo = cell(cube, level, lower);
+        let hi = cell(cube, level, upper);
         if level > 0 && (0..3).any(|i| hi[i] - lo[i] > 1) {
             return Err(state("an overlap host meets more than two cells per axis"));
         }
@@ -712,13 +710,17 @@ fn overlaps<'s>(
         }
         let g = guest?;
         for level in (0..=MAX_LEVEL).filter(|l| host_levels & (1 << l) != 0) {
-            // The predicate accepts max(host_tol, guest_tol). Expanding both boxes
-            // covers that radius, even across a cell boundary at mixed lattice steps.
-            let tol =
-                2. * (f64::from(f32::from_bits(g.tol)) - minimum_host_tol[level as usize]).max(0.);
+            // Paying both local radii covers max(host_tol, guest_tol), including
+            // the predicate's independent axial and perpendicular displacements.
+            let tol = 2. * (f64::from(f32::from_bits(g.tol)) + rounding(&[g.a]));
             let p = point(g.a);
-            let lo = cell(cube, level, p.map(|v| v - tol));
-            let hi = cell(cube, level, p.map(|v| v + tol));
+            let lower = std::array::from_fn(|i| (p[i] - tol).max(host_lo[level as usize][i]));
+            let upper = std::array::from_fn(|i| (p[i] + tol).min(host_hi[level as usize][i]));
+            if (0..3).any(|i| lower[i] > upper[i]) {
+                continue;
+            }
+            let lo = cell(cube, level, lower);
+            let hi = cell(cube, level, upper);
             for x in lo[0]..=hi[0] {
                 for y in lo[1]..=hi[1] {
                     for z in lo[2]..=hi[2] {
@@ -774,9 +776,8 @@ fn overlaps<'s>(
             // Expanded boxes can meet in several cells. Evaluate each pair once,
             // in the lexicographically first cell of their intersection.
             let (a, b) = (point(h.a), point(h.b));
-            let host_tol = 2. * (f64::from(f32::from_bits(h.tol)) + rounding_floor);
-            let guest_tol = 2.
-                * (f64::from(f32::from_bits(p.tol)) - minimum_host_tol[p.level as usize]).max(0.);
+            let host_tol = 2. * (f64::from(f32::from_bits(h.tol)) + rounding(&[h.a, h.b]));
+            let guest_tol = 2. * (f64::from(f32::from_bits(p.tol)) + rounding(&[p.a]));
             let host_lo = cell(
                 cube,
                 p.level,

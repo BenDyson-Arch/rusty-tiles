@@ -110,10 +110,11 @@ sort-and-stream spill are checked prospectively against the admitted interface
 stage envelope. Exact-item space is reusable after its stream has been consumed;
 no record is pushed before the prospective total fits. The final row-stream
 envelope includes the overlap allowance too. Mixed-step candidate
-selection expands guest boxes beyond the minimum host tolerance at each level;
-a streamed global rounding floor is paid in hosts. Broad-phase padding doubles
-those radii to cover the predicate’s independent axial and perpendicular offsets
-(total displacement at most sqrt(2) times its tolerance). Each pair is evaluated in
+selection pads both host and guest boxes using their own decode and local
+rounding tolerances. Guest boxes clip to actual host bounds at each level so
+far coarse points do not enumerate a micro-cluster’s grid. Broad-phase padding
+doubles those radii to cover the predicate’s independent axial and perpendicular
+offsets (total displacement at most sqrt(2) times its tolerance). Each pair is evaluated in
 one shared cell. Probe growth and output bursts refuse before exceeding the
 allowance, including on memory-backed scratch.
 
