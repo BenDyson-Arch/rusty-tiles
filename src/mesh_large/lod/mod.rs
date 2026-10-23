@@ -81,6 +81,8 @@ fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     x ^ (x >> 31)
 }
+/// EXPERIMENT (h17-seams): marks a logged seam key the tile kept (tolerance mode).
+const KEPT_MARK: u64 = 1 << 63;
 /// Seed of the topology-cache binding over a tile's forced seam vertices.
 const FORCED_BINDING: u64 = 0x4831_3746_4f52_4345;
 
@@ -671,9 +673,9 @@ struct Ctx<'a> {
     /// one glTF primitive carries every source primitive of one flat material.
     material_rank: &'a [u32],
     retention: &'a [u8],
-    /// EXPERIMENT (h17-seams): per-depth Douglas-Peucker seam tolerance in metres
-    /// (`RT_EXPERIMENT_SEAM_TOL`); empty = hash retention.
-    seam_tolerance: &'a [f64],
+    /// EXPERIMENT (h17-seams): per-depth Douglas-Peucker seam tolerance in metres (f64 bits;
+    /// NaN or empty = hash retention).
+    seam_tolerance: &'a [std::sync::atomic::AtomicU64],
     target: usize,
     mutation: Mutation,
     ar: Arith,
@@ -1035,6 +1037,9 @@ struct Outcome {
     /// per-primitive+fills, final encode/records/sidecar.
     phases: [f64; 10],
     forced_keys: Vec<Key>,
+    /// EXPERIMENT (h17-seams): tolerance mode only, the seam vertices the tile kept. A keep-set
+    /// change re-runs every tile holding the key, since Douglas-Peucker depends on anchors.
+    kept_keys: Vec<Key>,
     failed_keys: Vec<Key>,
     over_budget: bool,
     handoff_bytes: u64,
@@ -1228,7 +1233,11 @@ fn process(
     // EXPERIMENT (h17-seams): tolerance retention replaces the hash rule. Anchors are the
     // structural keeps (shallower leaf, seam endpoint, special, consensus keep set); every
     // other seam vertex stays only if Douglas-Peucker along its seam chain needs it.
-    let tolerance = ctx.seam_tolerance.get(d as usize).copied();
+    let tolerance = ctx
+        .seam_tolerance
+        .get(d as usize)
+        .map(|a| f64::from_bits(a.load(std::sync::atomic::Ordering::Relaxed)))
+        .filter(|t| !t.is_nan());
     let dp_keep: Option<Vec<bool>> = tolerance.map(|tol| {
         let anchor: Vec<bool> = mesh
             .vertices
@@ -1276,6 +1285,9 @@ fn process(
         }
         if keep {
             locked[i] = true;
+            if dp_keep.is_some() {
+                out.kept_keys.push(v.key);
+            }
         } else {
             forced.push(i as u32);
         }
@@ -2735,15 +2747,25 @@ pub(crate) fn produce(
     if std::env::var_os("RT_EXPERIMENT_KEEP_ALL_SEAMS").is_some() {
         report.retention.iter_mut().for_each(|k| *k = 0);
     }
-    let seam_tolerance: Vec<f64> = match std::env::var("RT_EXPERIMENT_SEAM_TOL")
-        .ok()
-        .and_then(|t| t.parse::<f64>().ok())
-    {
-        Some(t) => (0..height)
+    // RT_EXPERIMENT_SEAM_TOL=t: t x the depth's spacing (max extent x sqrt 3 / sqrt P).
+    // RT_EXPERIMENT_SEAM_TOL_GE=t: t x 2 x the median published error of depth d+1 proxies
+    // (known before depth d starts; 0, i.e. keep all, when depth d+1 has no proxy).
+    let env_t = |name: &str| std::env::var(name).ok().and_then(|t| t.parse::<f64>().ok());
+    let tol_spacing = env_t("RT_EXPERIMENT_SEAM_TOL");
+    let tol_ge = env_t("RT_EXPERIMENT_SEAM_TOL_GE");
+    let seam_tolerance: Vec<f64> = match (tol_spacing, tol_ge) {
+        (Some(t), _) => (0..height)
             .map(|d| t * extents[d] * 3f64.sqrt() / (input.target as f64).sqrt())
             .collect(),
-        None => Vec::new(),
+        (None, Some(_)) => vec![f64::NAN; height],
+        (None, None) => Vec::new(),
     };
+    let tolerance_mode = !seam_tolerance.is_empty();
+    let tolerance_cells: Vec<std::sync::atomic::AtomicU64> = seam_tolerance
+        .iter()
+        .map(|t| std::sync::atomic::AtomicU64::new(t.to_bits()))
+        .collect();
+    let mut depth_errors: Vec<Vec<f64>> = vec![Vec::new(); height + 1];
     if experiment_stats() {
         eprintln!(
             "RTX retention {:?} seam_tolerance {:?} extents {:?}",
@@ -2818,7 +2840,7 @@ pub(crate) fn produce(
         materials: &materials,
         material_rank: &material_rank,
         retention: &report.retention.clone(),
-        seam_tolerance: &seam_tolerance,
+        seam_tolerance: &tolerance_cells,
         target: input.target,
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
@@ -2844,6 +2866,15 @@ pub(crate) fn produce(
     let depths = deepest as u64 + 1;
     for d in (0..=deepest as u32).rev() {
         check()?;
+        if let Some(t) = tol_ge.filter(|_| tol_spacing.is_none()) {
+            let mut e = depth_errors[d as usize + 1].clone();
+            e.sort_by(f64::total_cmp);
+            let tol = if e.is_empty() { 0. } else { t * 2. * e[e.len() / 2] };
+            tolerance_cells[d as usize].store(tol.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            if experiment_stats() {
+                eprintln!("RTX depth {d} seam_tolerance {tol}");
+            }
+        }
         let depths_done = depths - u64::from(d);
         // Wall seconds of this depth's topology pass (round 0), seam audit and consensus
         // re-runs, and finishing pass.
@@ -2920,11 +2951,17 @@ pub(crate) fn produce(
                         e.round = round;
                         seam_log.push(&e)?;
                     }
-                    if round == 0 {
+                    if round == 0 || tolerance_mode {
                         for key in std::mem::take(&mut o.forced_keys) {
                             forced_log.push(&ForcedKey {
                                 key,
                                 first: job.node.first,
+                            })?;
+                        }
+                        for key in std::mem::take(&mut o.kept_keys) {
+                            forced_log.push(&ForcedKey {
+                                key,
+                                first: job.node.first | KEPT_MARK,
                             })?;
                         }
                     }
@@ -3081,7 +3118,10 @@ pub(crate) fn produce(
                 .finish()?;
                 for f in log.reader()? {
                     let f = f?;
-                    if owners.contains(&f.first) && !keep.contains(&f.key) {
+                    if f.first & KEPT_MARK == 0
+                        && owners.contains(&f.first)
+                        && !keep.contains(&f.key)
+                    {
                         contested.insert(f.key);
                     }
                     forced_log.push(&f)?;
@@ -3144,7 +3184,7 @@ pub(crate) fn produce(
             for f in log.reader()? {
                 let f = f?;
                 if contested.contains(&f.key) {
-                    rerun.insert(f.first);
+                    rerun.insert(f.first & !KEPT_MARK);
                 }
                 forced_log.push(&f)?;
             }
@@ -3200,6 +3240,7 @@ pub(crate) fn produce(
             report.direct_exhausted += u64::from(row.flags & FLAG_DIRECT_EXHAUSTED != 0);
             report.direct_skipped += u64::from(row.flags & FLAG_DIRECT_SKIPPED != 0);
             written += o.sidecar_bytes;
+            depth_errors[row.depth as usize].push(row.published);
             rows.push(row)?;
         }
         sidecar_bytes.insert(d, written);
