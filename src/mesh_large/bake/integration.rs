@@ -58,7 +58,7 @@ impl ProxyTextureBaker {
     /// - source cache: the source sampler's peak for the largest image (24 bytes per
     ///   pixel, its encoded bytes and 64 MiB), at most a quarter of the memory, and for
     ///   the workers' shared cache of decoded images, room for every image's sampling
-    ///   chain (4 bytes per pixel, a third more for its mips), at most an eighth;
+    ///   chain (4 bytes per pixel, a third more for its mips), at most a sixteenth;
     /// - query work: a finite runaway guard of 2^40 index visits per tile;
     /// - page edge: the profile's leaf page edge; eight complete-member density drops.
     pub(crate) fn for_stage(
@@ -114,8 +114,8 @@ impl ProxyTextureBaker {
                     / 3
                     + 4096
             })
-            .fold(0u64, u64::saturating_add)
-            .min(memory_bytes / 8);
+            .fold(0u64, u64::saturating_add);
+        let shared_image_bytes = shared_image_budget(shared_image_bytes, memory_bytes);
         let child_texel_bytes = super::CHILD_TEXEL_CACHE;
         if memory_bytes < 64 << 20 {
             return Err(resource(
@@ -871,9 +871,30 @@ pub(super) fn handoff_fixture() -> handoff::FrozenNode {
     }
 }
 
+/// The room the workers' shared cache of decoded images may take beyond their decode
+/// reservations: every image's sampling chain, at most a sixteenth of the memory. It is
+/// split over the running workers and added to each tile's charge, so a larger cap would
+/// make tiles refuse a share they would otherwise fit (an eighth cost every tile 460 MB
+/// at a 3.7 GiB share). Residency only, never results.
+fn shared_image_budget(chain_bytes: u64, memory_bytes: u64) -> u64 {
+    chain_bytes.min(memory_bytes / 16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_image_budget_is_at_most_a_sixteenth_of_memory() {
+        let gib = 1u64 << 30;
+        assert_eq!(shared_image_budget(10 * gib, 16 * gib), gib);
+        assert_eq!(shared_image_budget(gib / 2, 16 * gib), gib / 2);
+        assert_eq!(shared_image_budget(0, 16 * gib), 0);
+        // At a 14.7 GB allowance and four workers the per-tile charge stays below
+        // 230 MB, half of what an eighth cost.
+        let memory = 14_700_000_000u64;
+        assert!(shared_image_budget(u64::MAX, memory) / 4 < 230_000_000);
+    }
 
     fn depth_limits(memory_bytes: u64) -> BakeLimits {
         BakeLimits {
