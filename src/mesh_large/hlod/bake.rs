@@ -73,10 +73,13 @@ pub(crate) struct Frame {
 pub(crate) struct Queries {
     pub class: u32,
     pub points: Vec<[f32; 3]>,
-    /// A recent donor is kept, without a full nearest search, when this point's closest
-    /// point on it is at most this far (metres; half as far on its boundary): one texel
-    /// of the page. Zero always searches.
+    /// Search reach (metres) of each exact query's second-nearest margin, which lets later
+    /// nearby points reuse its donor provably ([`resolve`]); about two texels. Zero always
+    /// searches.
     pub accept: f64,
+    /// Per point: its segment (chart). Donor reuse never crosses a segment change; empty
+    /// means one segment.
+    pub segments: Vec<u32>,
     /// Consecutive points likely share a nearest triangle (one coarse face's texels).
     pub hits: Vec<Hit>,
     pub frames: Vec<Frame>,
@@ -90,6 +93,7 @@ impl Queries {
             class,
             points,
             accept,
+            segments: Vec::new(),
             hits: vec![Hit::NONE; n],
             frames: if want_frames { vec![Frame::default(); n] } else { Vec::new() },
             want_frames,
@@ -125,7 +129,7 @@ pub(crate) const CHUNK: usize = 1 << 16;
 /// Ranks closer than this share one positioned read of at most `RUN_SPAN` records.
 const RUN_GAP: u64 = 32;
 const RUN_SPAN: u64 = 512;
-/// Recent donors tried, most recent first, before an exact search.
+/// Recent anchors tried, most recent first, before an exact search.
 const RECENT: usize = 4;
 
 /// What every texel a donor serves needs, derived once per donor.
@@ -161,44 +165,54 @@ pub(crate) const RESOLVE_BYTES: u64 = (CHUNK as u64)
 
 /// Resolve every query point of the tile against the captured source surface of its
 /// descendant range through S2's bounded [`SourceQuery`] (nearest point, distance then
-/// source-rank ties). The cheap bake keeps one of the last few witnesses while the point's
-/// closest point on it is within [`Queries::accept`] (interior) or half of it (on its
-/// boundary), with no facing or donor search; every other point runs the exact nearest
-/// search. Order is fixed per tile, so the result is
-/// deterministic. Returns (exact searches, donor records read).
+/// source-rank ties). Every exact search also returns a lower bound `m` on the distance
+/// of every OTHER in-range triangle from its point `p0`; because distance is 1-Lipschitz,
+/// a later point `p` of the same segment whose distance to that donor is below
+/// `m - |p - p0|` provably has the donor as its unique nearest triangle, so reusing it
+/// (with the closest point recomputed at `p`) gives exactly the exact search's hit. No
+/// facing, material or donor-distance heuristic. Returns (exact searches, donor reads).
 pub(crate) fn resolve(
     query: &mut SourceQuery<'_>,
     queries: &mut [Queries],
     check: &dyn Fn() -> Result<(), JobError>,
 ) -> Result<(u64, u64), JobError> {
     use super::source_index::{bary, closest, distance2};
-    // Most recent first: (rank, positions).
-    let mut recent: Vec<(u64, [[f64; 3]; 3])> = Vec::with_capacity(RECENT + 1);
+    struct Anchor {
+        rank: u64,
+        positions: [[f64; 3]; 3],
+        point: [f64; 3],
+        margin: f64,
+    }
+    // Most recent first.
+    let mut recent: Vec<Anchor> = Vec::with_capacity(RECENT + 1);
     let (mut searches, mut reads) = (0u64, 0u64);
     let mut witnesses: Vec<(u64, [f32; 3], f32)> = Vec::with_capacity(CHUNK);
     let mut ranks: Vec<u64> = Vec::with_capacity(CHUNK);
     let mut donors: Vec<(u64, Donor)> = Vec::with_capacity(CHUNK);
     let (mut encoded, mut run) = (Vec::new(), Vec::new());
     for q in queries.iter_mut() {
-        let accept2 = q.accept * q.accept;
+        recent.clear();
+        let mut segment = u32::MAX;
         let mut start = 0;
         while start < q.points.len() {
             check()?;
             let end = (start + CHUNK).min(q.points.len());
             witnesses.clear();
-            for point in &q.points[start..end] {
-                let p = point.map(f64::from);
-                // Interior closest points within one texel, boundary ones within half.
-                let kept = recent.iter().enumerate().find_map(|(k, (_, positions))| {
-                    let w = closest(p, *positions);
-                    let d2 = distance2(p, bary(*positions, w));
-                    let limit = if w.iter().all(|v| *v > 1e-6) {
-                        accept2
-                    } else {
-                        0.25 * accept2
-                    };
-                    (d2 <= limit).then_some((k, w, d2))
-                });
+            for i in start..end {
+                if q.segments.get(i).is_some_and(|&s| s != segment) {
+                    segment = q.segments[i];
+                    recent.clear();
+                }
+                let p = q.points[i].map(f64::from);
+                let kept = (q.accept > 0.)
+                    .then(|| {
+                        recent.iter().enumerate().find_map(|(k, a)| {
+                            let w = closest(p, a.positions);
+                            let d = distance2(p, bary(a.positions, w)).sqrt();
+                            (d < a.margin - distance2(p, a.point).sqrt()).then_some((k, w, d * d))
+                        })
+                    })
+                    .flatten();
                 let (w, d2) = match kept {
                     Some((k, w, d2)) => {
                         recent[..=k].rotate_right(1);
@@ -206,21 +220,24 @@ pub(crate) fn resolve(
                     }
                     None => {
                         searches += 1;
-                        let hit = query.nearest(p)?;
-                        match recent.iter().position(|r| r.0 == hit.rank) {
-                            Some(k) => recent[..=k].rotate_right(1),
-                            None => {
-                                let positions = query
-                                    .witness_positions()
-                                    .ok_or_else(|| state("coarse bake witness"))?;
-                                recent.insert(0, (hit.rank, positions));
-                                recent.truncate(RECENT);
-                            }
-                        }
+                        let (hit, margin) = query.nearest_margin(p, q.accept)?;
+                        let positions = query
+                            .witness_positions()
+                            .ok_or_else(|| state("coarse bake witness"))?;
+                        recent.insert(
+                            0,
+                            Anchor {
+                                rank: hit.rank,
+                                positions,
+                                point: p,
+                                margin: margin.distance(hit.distance2),
+                            },
+                        );
+                        recent.truncate(RECENT);
                         (hit.bary, hit.distance2)
                     }
                 };
-                witnesses.push((recent[0].0, w.map(|v| v as f32), d2 as f32));
+                witnesses.push((recent[0].rank, w.map(|v| v as f32), d2 as f32));
             }
             // The chunk's donors, read in rank order as merged runs.
             ranks.clear();

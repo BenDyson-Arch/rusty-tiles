@@ -425,7 +425,7 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
         assert!(ach >= req * (1. - 1e-12), "{a}");
         assert_eq!(a["capped"].as_bool().unwrap(), ach > req * (1. + 1e-9), "{a}");
         let [w, h] = [0, 1].map(|i| a["pageSize"][i].as_u64().unwrap());
-        assert!(w.is_power_of_two() && h.is_power_of_two() && (128..=1024).contains(&w) && (128..=1024).contains(&h));
+        assert!(w % 4 == 0 && h % 4 == 0 && (32..=1024).contains(&w) && (32..=1024).contains(&h), "{w}x{h}");
         assert!(glb.doc["extensionsUsed"].as_array().unwrap().contains(&json!("KHR_texture_basisu")));
         for p in glb.prims() {
             assert_eq!(p.material["pbrMetallicRoughness"]["roughnessFactor"], 0.75);

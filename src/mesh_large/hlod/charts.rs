@@ -1,7 +1,9 @@
 //! Fresh coarse charts (D5): bounded planar chart growth over one material group of a
-//! final decoded coarse tile, interior-overlap rejection, and shelf packing into ONE page
-//! sized to its content: the smallest power-of-two rectangle (128..=1024 per side) that
-//! holds every chart at the requested texel spacing, or the 1024² cap at the finest
+//! final decoded coarse tile, interior-overlap rejection, each chart turned to its
+//! minimum-area bounding rectangle (rotating calipers, long side along u), and shelf
+//! packing into ONE page sized to its content: the least-area block-aligned rectangle
+//! (multiples of four, [`MIN_PAGE`]..=1024 per side; KTX2 needs only whole 4x4 blocks)
+//! that holds every chart at the requested texel spacing, or the 1024² cap at the finest
 //! spacing that fits. Positions are never moved: charts only assign texture coordinates.
 //!
 //! Adapted from the research prototype (`exp/lod-cluster-dag` `charts.cpp`), v0.3.0's
@@ -20,7 +22,9 @@ const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
 pub(crate) const GUTTER: u32 = 2;
-pub(crate) const MIN_PAGE: u32 = 128;
+pub(crate) const MIN_PAGE: u32 = 32;
+/// Page dimensions are whole codec blocks.
+const BLOCK: u32 = 4;
 
 fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -68,6 +72,20 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
+    /// Per page texel: 1 + the chart whose packed rectangle (gutters included) holds it,
+    /// 0 outside every chart. Keeps charts apart in reduced levels and gutter fill.
+    pub(crate) fn labels(&self) -> Vec<u32> {
+        let [w, h] = self.size;
+        let mut labels = vec![0u32; w as usize * h as usize];
+        for (i, c) in self.charts.iter().enumerate() {
+            for y in c.origin[1]..(c.origin[1] + c.size[1]).min(h) {
+                let row = (y * w) as usize;
+                let (a, b) = (c.origin[0] as usize, ((c.origin[0] + c.size[0]).min(w)) as usize);
+                labels[row + a..row + b].fill(i as u32 + 1);
+            }
+        }
+        labels
+    }
     /// Normalized UV of a face corner.
     pub(crate) fn uv(&self, face: usize, corner: usize) -> [f32; 2] {
         let p = self.pixels[face][corner];
@@ -218,15 +236,92 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
                 }
             }
         }
+        orient(&mut chart);
         charts.push(chart);
     }
     (charts, chart_of)
 }
 
-/// Shelf-pack `charts` (sized by [`sizes`]) into width `width`; the packed height, or
-/// `None` when a chart is wider than the page or the height exceeds `max_height`.
-fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> Option<u32> {
-    let (mut x, mut y, mut row) = (0u32, 0u32, 0u32);
+/// Andrew's monotone chain: the convex hull of `points`, counter-clockwise.
+fn hull(points: &mut Vec<P2>) -> Vec<P2> {
+    points.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
+    points.dedup();
+    if points.len() < 3 {
+        return points.clone();
+    }
+    let turn = |o: P2, a: P2, b: P2| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let mut out: Vec<P2> = Vec::with_capacity(points.len() * 2);
+    for pass in 0..2 {
+        let start = out.len();
+        let iter: Box<dyn Iterator<Item = &P2>> = if pass == 0 {
+            Box::new(points.iter())
+        } else {
+            Box::new(points.iter().rev())
+        };
+        for &p in iter {
+            while out.len() >= start + 2 && turn(out[out.len() - 2], out[out.len() - 1], p) <= 0. {
+                out.pop();
+            }
+            out.push(p);
+        }
+        out.pop();
+    }
+    out
+}
+
+/// Turn a chart in its plane to its minimum-area bounding rectangle (rotating calipers
+/// over hull edges), long side along u. A proper rotation of the plane axes, so the
+/// tangent frame keeps its handedness.
+fn orient(chart: &mut Chart) {
+    let mut points: Vec<P2> = chart.points.iter().flatten().copied().collect();
+    let hull = hull(&mut points);
+    if hull.len() < 3 {
+        return;
+    }
+    let mut best = (f64::INFINITY, [1., 0.]);
+    for k in 0..hull.len() {
+        let (a, b) = (hull[k], hull[(k + 1) % hull.len()]);
+        let e = [b[0] - a[0], b[1] - a[1]];
+        let l = (e[0] * e[0] + e[1] * e[1]).sqrt();
+        if l <= 0. || !l.is_finite() {
+            continue;
+        }
+        let d = [e[0] / l, e[1] / l];
+        let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+        for q in &hull {
+            let r = [q[0] * d[0] + q[1] * d[1], -q[0] * d[1] + q[1] * d[0]];
+            for a in 0..2 {
+                lo[a] = lo[a].min(r[a]);
+                hi[a] = hi[a].max(r[a]);
+            }
+        }
+        let area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+        if area < best.0 * (1. - 1e-9) {
+            let d = if hi[1] - lo[1] > hi[0] - lo[0] { [-d[1], d[0]] } else { d };
+            best = (area, d);
+        }
+    }
+    let d = best.1;
+    let rotate = |q: P2| [q[0] * d[0] + q[1] * d[1], -q[0] * d[1] + q[1] * d[0]];
+    let (x, y) = (chart.x, chart.y);
+    chart.x = std::array::from_fn(|a| d[0] * x[a] + d[1] * y[a]);
+    chart.y = std::array::from_fn(|a| -d[1] * x[a] + d[0] * y[a]);
+    chart.lo = [f64::MAX; 2];
+    chart.hi = [f64::MIN; 2];
+    for t in &mut chart.points {
+        for q in t.iter_mut() {
+            *q = rotate(*q);
+            chart.lo = std::array::from_fn(|a| chart.lo[a].min(q[a]));
+            chart.hi = std::array::from_fn(|a| chart.hi[a].max(q[a]));
+        }
+    }
+}
+
+/// Shelf-pack `charts` (sized by [`sizes`]) into width `width`: the (used width, packed
+/// height), or `None` when a chart is wider than the page or the height exceeds
+/// `max_height`.
+fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> Option<(u32, u32)> {
+    let (mut x, mut y, mut row, mut used) = (0u32, 0u32, 0u32, 0u32);
     for &i in order {
         let c = &mut charts[i];
         let (w, h) = (c.size[0], c.size[1]);
@@ -243,9 +338,10 @@ fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> 
         }
         c.origin = [x, y];
         x += w;
+        used = used.max(x);
         row = row.max(h);
     }
-    Some(y + row)
+    Some((used, y + row))
 }
 
 fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
@@ -260,35 +356,43 @@ fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
     Some(())
 }
 
-/// The smallest power-of-two page in `MIN_PAGE..=max_edge` per side holding every chart
-/// at `scale` (least area, then squarer, then wider); packs the charts into it.
+/// The least-area block-aligned page in `MIN_PAGE..=max_edge` per side holding every
+/// chart at `scale` (shelves by descending height at a few widths around the square
+/// root of the chart area; ties to the narrower); packs the charts into it.
 fn fit(charts: &mut [Chart], scale: f64, max_edge: u32) -> Option<[u32; 2]> {
     sizes(charts, scale)?;
     let mut order: Vec<usize> = (0..charts.len()).collect();
     order.sort_by(|&a, &b| charts[b].size[1].cmp(&charts[a].size[1]).then(a.cmp(&b)));
-    let mut edges = vec![];
-    let mut e = MIN_PAGE;
-    while e <= max_edge {
-        edges.push(e);
-        e *= 2;
-    }
-    let mut candidates: Vec<[u32; 2]> = edges
+    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(BLOCK)) * u64::from(BLOCK)) as u32;
+    let area: f64 = charts.iter().map(|c| f64::from(c.size[0]) * f64::from(c.size[1])).sum();
+    let widest = charts.iter().map(|c| c.size[0]).max().unwrap_or(1);
+    let mut widths: Vec<u32> = [1., 1.1, 1.25, 1.4, 1.6, 2., 2.5, 3.2]
         .iter()
-        .flat_map(|&w| edges.iter().map(move |&h| [w, h]))
+        .map(|f| round(area.sqrt() * f))
+        .chain([round(f64::from(widest)), max_edge])
+        .map(|w| w.clamp(MIN_PAGE, max_edge).max(round(f64::from(widest))))
+        .filter(|&w| w <= max_edge)
         .collect();
-    candidates.sort_by_key(|[w, h]| {
-        (
-            u64::from(*w) * u64::from(*h),
-            w.max(h) / w.min(h),
-            std::cmp::Reverse(*w),
-        )
-    });
-    for [w, h] in candidates {
-        if shelf(charts, &order, w, h).is_some() {
-            return Some([w, h]);
+    widths.sort_unstable();
+    widths.dedup();
+    let mut best: Option<(u64, u32, [u32; 2])> = None;
+    for &w in &widths {
+        let Some((used, h)) = shelf(charts, &order, w, max_edge) else {
+            continue;
+        };
+        let page = [round(f64::from(used)).max(MIN_PAGE), round(f64::from(h)).max(MIN_PAGE)];
+        if page[1] > max_edge {
+            continue;
+        }
+        let key = (u64::from(page[0]) * u64::from(page[1]), page[0].max(page[1]));
+        if best.is_none_or(|(a, m, _)| key < (a, m)) {
+            best = Some((key.0, key.1, page));
         }
     }
-    None
+    let page = best?.2;
+    // Re-pack at the chosen width so chart origins match the page.
+    shelf(charts, &order, page[0], page[1])?;
+    Some(page)
 }
 
 /// Chart and pack one group at `spacing` metres per texel (capped at `max_edge` per side).
@@ -418,8 +522,9 @@ mod tests {
         assert_ne!(l.chart_of[0], l.chart_of[2]);
         assert!(!l.capped);
         assert!((l.scale - 10.).abs() < 1e-12);
-        // Content sized: two 101+4 texel charts and a point chart fit 256 x 128.
-        assert_eq!(l.size, [256, 128]);
+        // Content sized, block aligned: two 105-texel charts stacked, the point chart beside.
+        assert_eq!(l.size, [108, 216]);
+        assert!(l.size.iter().all(|e| e % 4 == 0));
         let r = rects(&l);
         for (i, a) in r.iter().enumerate() {
             assert!(a[0] + a[2] <= l.size[0] && a[1] + a[3] <= l.size[1]);
@@ -466,5 +571,27 @@ mod tests {
         let l = layout(&p, &f, 10., 1024).unwrap();
         assert_eq!(l.size, [MIN_PAGE, MIN_PAGE]);
         assert!(!l.capped);
+    }
+
+    /// A diagonal strip (10 m x 10 m bounding box, 1 m wide) is turned to its
+    /// minimum-area rectangle: about 14 m x 1 m of texels, not 10 m x 10 m.
+    #[test]
+    fn charts_turn_to_their_minimum_area_rectangle() {
+        let mut positions = Vec::new();
+        for k in 0..=10u32 {
+            let t = k as f32;
+            positions.extend([[t, 0., t], [t + 0.7, 0., t - 0.7]]);
+        }
+        let faces: Vec<[u32; 3]> = (0..10u32)
+            .flat_map(|k| {
+                let (l, r) = (2 * k, 2 * k + 1);
+                [[l, l + 2, r], [r, l + 2, r + 2]]
+            })
+            .collect();
+        let l = layout(&positions, &faces, 0.1, 1024).unwrap();
+        assert_eq!(l.charts.len(), 1);
+        let area: u64 = l.charts.iter().map(|c| u64::from(c.size[0]) * u64::from(c.size[1])).sum();
+        assert!(area < 160 * 20, "the rotated strip stays thin: {area} texels, unrotated ~111^2");
+        assert!(l.charts.iter().all(|c| c.size[0] >= c.size[1]), "long side along u");
     }
 }

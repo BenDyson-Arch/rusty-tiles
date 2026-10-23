@@ -717,7 +717,11 @@ fn layout(
                 .flat_map(|t| t.corners.iter().map(|c| c.texcoords[b.texcoord]))
                 .collect();
             let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
-            let block = crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?;
+            // Mipmapped lossy bindings: interiors on the alignment grid (D6).
+            let mipmapped = profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
+            let block = crops::plan_islands_aligned(
+                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
+            )?;
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -809,7 +813,11 @@ fn page_charge(
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
     let codec = delivery::workspace_charge([page.width, page.height], profile)?;
-    let assembly = pixels.checked_mul(8).ok_or_else(resource)?;
+    // RGBA and support, plus island labels and their reduced chain on mipmapped pages.
+    let mipmapped = profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
+    let assembly = pixels
+        .checked_mul(if mipmapped { 18 } else { 8 })
+        .ok_or_else(resource)?;
     let mut decode = 0u64;
     for &bi in &page.bindings {
         let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
@@ -983,6 +991,11 @@ fn encode_page(
         let mut support = Vec::new();
         support.try_reserve_exact(pixels).map_err(|_| resource())?;
         support.resize(pixels, 0u32);
+        // Mipmapped lossy pages keep their islands apart in every reduced level.
+        let mipmapped =
+            profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
+        let mut labels = if mipmapped { vec![0u32; pixels] } else { Vec::new() };
+        let mut next_label = 0u32;
         let mut surface = Vec::new();
         let mut mask_context = None;
         for &bi in &page.bindings {
@@ -1011,6 +1024,13 @@ fn encode_page(
                     for y in crop.gutter..crop.gutter + crop.interior_height {
                         let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
                         support[first..first + crop.interior_width as usize].fill(1);
+                    }
+                    if mipmapped {
+                        next_label += 1;
+                        for y in 0..crop.height {
+                            let first = ((oy + y) * page.width + ox) as usize;
+                            labels[first..first + crop.width as usize].fill(next_label);
+                        }
                     }
                 }
                 Ok(())
@@ -1047,10 +1067,11 @@ fn encode_page(
             linear,
             min_linear,
         });
-        let delivered = delivery::encode(
+        let delivered = delivery::encode_islands(
             [page.width, page.height],
             &rgba,
             &support,
+            mipmapped.then_some(labels.as_slice()),
             page.slot,
             profile,
             memory,

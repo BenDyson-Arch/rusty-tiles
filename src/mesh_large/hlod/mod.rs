@@ -390,6 +390,8 @@ pub struct DepthAppearance {
     /// Tiles whose page density the source's own texel spacing set (not `G/16`).
     pub source_limited_tiles: u64,
     pub escalated_pages: u64,
+    /// Pages delivered as exact level-0 PNG without mips.
+    pub unmipped_pages: u64,
     pub requested_spacing_min: f64,
     pub requested_spacing_max: f64,
     pub achieved_spacing_min: f64,
@@ -1101,6 +1103,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     d.searches += a.searches;
     d.donor_reads += a.donor_reads;
     d.escalated_pages += u64::from(a.escalated_pages);
+    d.unmipped_pages += u64::from(a.unmipped_pages);
     if first {
         d.requested_spacing_min = a.requested_spacing;
         d.requested_spacing_max = a.requested_spacing;

@@ -304,6 +304,59 @@ impl Surface {
         *hint = Some(hit.index);
         hit
     }
+    /// [`Surface::nearest`] that also lowers `margin.second2` to the squared distance of
+    /// every other in-range triangle it meets; nodes are pruned only beyond
+    /// `min(second2, (sqrt(best) + reach)^2)`, so afterwards `second2` (capped at that
+    /// reach) is a lower bound on every other triangle's squared distance.
+    pub(crate) fn nearest_margin(&self, p: V3, key: TileKey, best: &mut Hit, margin: &mut Margin) {
+        let mut stack = [0usize; 64];
+        let mut len = 1;
+        while len > 0 {
+            len -= 1;
+            let n = &self.nodes[stack[len]];
+            if !n.intersects(key) || n.distance(p) > margin.bound(best.distance2) {
+                continue;
+            }
+            if n.count > 0 {
+                for (offset, t) in self.triangles[n.start as usize..(n.start + n.count) as usize]
+                    .iter()
+                    .enumerate()
+                {
+                    if t.rank < key.first || t.rank >= key.end || t.rank == best.rank {
+                        continue;
+                    }
+                    let points = t.positions();
+                    let weights = closest(p, points);
+                    let d = distance2(p, bary(points, weights));
+                    if d < best.distance2
+                        || (d == best.distance2 && (t.order, t.rank) < (best.order, best.rank))
+                    {
+                        margin.second2 = margin.second2.min(best.distance2);
+                        *best = Hit {
+                            rank: t.rank,
+                            index: n.start as usize + offset,
+                            order: t.order,
+                            bary: weights,
+                            distance2: d,
+                            material: t.material,
+                        };
+                    } else {
+                        margin.second2 = margin.second2.min(d);
+                    }
+                }
+            } else {
+                let (a, b) = (n.left as usize, n.right as usize);
+                let (near, far) = if self.nodes[a].distance(p) <= self.nodes[b].distance(p) {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                stack[len] = far;
+                stack[len + 1] = near;
+                len += 2;
+            }
+        }
+    }
     pub(crate) fn nearest(&self, p: V3, key: TileKey, best: &mut Hit) {
         let mut stack = [0usize; 64];
         let mut len = 1;
@@ -349,6 +402,25 @@ impl Surface {
                 len += 2;
             }
         }
+    }
+}
+
+/// Second-nearest bookkeeping of [`SourceQuery::nearest_margin`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Margin {
+    /// Least squared distance seen to any in-range triangle other than the winner.
+    pub second2: f64,
+    /// Search reach beyond the winner's distance (metres).
+    pub reach: f64,
+}
+impl Margin {
+    fn bound(&self, best2: f64) -> f64 {
+        let r = if best2.is_finite() { best2.sqrt() + self.reach } else { f64::INFINITY };
+        self.second2.min(r * r)
+    }
+    /// A lower bound on every other in-range triangle's distance (metres).
+    pub(crate) fn distance(&self, best2: f64) -> f64 {
+        self.bound(best2).sqrt()
     }
 }
 
@@ -695,6 +767,83 @@ impl SourceQuery<'_> {
             }
         }
     }
+    /// Make the fine block below leaf node `n` resident (bounded FIFO).
+    fn load_block(&mut self, n: &Node) -> Result<(), JobError> {
+        if self.blocks.contains_key(&n.first) {
+            return Ok(());
+        }
+        self.nodes
+            .read(n.left, n.right as usize, &mut self.encoded, &mut self.node_buf)?;
+        self.triangles
+            .read(n.first, n.count as usize, &mut self.encoded, &mut self.tri_buf)?;
+        let surface = Surface {
+            nodes: self.node_buf.clone(),
+            triangles: self.tri_buf.clone(),
+        };
+        if self.blocks.len() == self.block_limit {
+            let old = self
+                .blocks
+                .remove(&self.block_fifo.pop_front().unwrap())
+                .unwrap();
+            self.block_bytes -= old.charge();
+        }
+        self.block_fifo.push_back(n.first);
+        self.block_bytes += surface.charge();
+        self.blocks.insert(n.first, surface);
+        self.check_charge()
+    }
+    /// [`SourceQuery::nearest`] (the same exact winner and tie rule) plus a lower bound on
+    /// the distance of every other in-range triangle, searched `reach` metres beyond the
+    /// winner: the bake's proof that a donor stays nearest nearby.
+    pub(crate) fn nearest_margin(&mut self, p: V3, reach: f64) -> Result<(Hit, Margin), JobError> {
+        let mut margin = Margin {
+            second2: f64::INFINITY,
+            reach,
+        };
+        let mut winning = self
+            .last
+            .filter(|t| t.rank >= self.key.first && t.rank < self.key.end);
+        let mut best = winning
+            .map(|t| make_hit(p, t, usize::MAX))
+            .unwrap_or_else(Hit::empty);
+        let root = self.visit(Visit::Resident(self.region_root))?;
+        let mut stack = [root; 64];
+        let mut len = 1;
+        while len > 0 {
+            len -= 1;
+            let (n, children) = stack[len];
+            if !n.intersects(self.key) || n.distance(p) > margin.bound(best.distance2) {
+                continue;
+            }
+            if n.count > 0 {
+                self.load_block(&n)?;
+                let previous = best.rank;
+                let surface = &self.blocks[&n.first];
+                surface.nearest_margin(p, self.key, &mut best, &mut margin);
+                if best.rank != previous {
+                    winning = Some(surface.triangles[best.index]);
+                }
+            } else {
+                let [left, right] =
+                    children.ok_or_else(|| state("source branch without children"))?;
+                let a = self.visit(left)?;
+                let b = self.visit(right)?;
+                let (near, far) = if a.0.distance(p) <= b.0.distance(p) {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                stack[len] = far;
+                stack[len + 1] = near;
+                len += 2;
+            }
+        }
+        if !best.distance2.is_finite() {
+            return Err(state("source nearest query has no finite witness"));
+        }
+        self.last = winning;
+        Ok((best, margin))
+    }
     pub(crate) fn nearest(&mut self, p: V3) -> Result<Hit, JobError> {
         let mut winning = self
             .last
@@ -712,35 +861,7 @@ impl SourceQuery<'_> {
                 continue;
             }
             if n.count > 0 {
-                if !self.blocks.contains_key(&n.first) {
-                    self.nodes.read(
-                        n.left,
-                        n.right as usize,
-                        &mut self.encoded,
-                        &mut self.node_buf,
-                    )?;
-                    self.triangles.read(
-                        n.first,
-                        n.count as usize,
-                        &mut self.encoded,
-                        &mut self.tri_buf,
-                    )?;
-                    let surface = Surface {
-                        nodes: self.node_buf.clone(),
-                        triangles: self.tri_buf.clone(),
-                    };
-                    if self.blocks.len() == self.block_limit {
-                        let old = self
-                            .blocks
-                            .remove(&self.block_fifo.pop_front().unwrap())
-                            .unwrap();
-                        self.block_bytes -= old.charge();
-                    }
-                    self.block_fifo.push_back(n.first);
-                    self.block_bytes += surface.charge();
-                    self.blocks.insert(n.first, surface);
-                    self.check_charge()?;
-                }
+                self.load_block(&n)?;
                 let previous = best.rank;
                 let surface = &self.blocks[&n.first];
                 surface.nearest(p, self.key, &mut best);

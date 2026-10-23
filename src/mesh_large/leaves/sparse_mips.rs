@@ -91,9 +91,13 @@ fn reserve<T>(n: usize) -> Result<Vec<T>, JobError> {
     v.try_reserve_exact(n).map_err(|_| resource())?;
     Ok(v)
 }
-fn relax(nearest: &mut [Nearest], to: usize, from: usize) {
+fn relax(nearest: &mut [Nearest], labels: Option<&[u32]>, to: usize, from: usize) {
     let src = nearest[from];
     if src.owner == usize::MAX {
+        return;
+    }
+    // A labelled gutter texel takes only its own island's signal.
+    if labels.is_some_and(|l| l[to] != 0 && l[src.owner] != l[to]) {
         return;
     }
     let candidate = Nearest {
@@ -106,7 +110,12 @@ fn relax(nearest: &mut [Nearest], to: usize, from: usize) {
 }
 /// Exact Manhattan nearest signal texel; ties original row-major identity.
 /// Two-pass taxicab distance transform, not a quadratic search or Euclidean claim.
-fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
+fn fill_gutters(
+    level: &mut Level,
+    class: Class,
+    nearest: &mut Vec<Nearest>,
+    labels: Option<&[u32]>,
+) {
     if class == Class::Id {
         for (p, &s) in level
             .rgba
@@ -130,18 +139,18 @@ fn fill_gutters(level: &mut Level, class: Class, nearest: &mut Vec<Nearest>) {
     }));
     for i in 0..n {
         if i % w > 0 {
-            relax(nearest, i, i - 1);
+            relax(nearest, labels, i, i - 1);
         }
         if i >= w {
-            relax(nearest, i, i - w);
+            relax(nearest, labels, i, i - w);
         }
     }
     for i in (0..n).rev() {
         if i % w + 1 < w {
-            relax(nearest, i, i + 1);
+            relax(nearest, labels, i, i + 1);
         }
         if i + w < n {
-            relax(nearest, i, i + w);
+            relax(nearest, labels, i, i + w);
         }
     }
     for (i, &s) in level.support.iter().enumerate() {
@@ -189,7 +198,7 @@ pub(in crate::mesh_large) fn refill_gutters(
         return Err(resource());
     }
     let mut nearest = reserve(count)?;
-    fill_gutters(level, class, &mut nearest);
+    fill_gutters(level, class, &mut nearest, None);
     let mut owners = reserve(count)?;
     owners.extend((0..count).map(|i| {
         if class == Class::Id {
@@ -213,10 +222,39 @@ pub(in crate::mesh_large) fn build(
     class: Class,
     memory_limit: u64,
 ) -> Result<Chain, JobError> {
-    if width < 4 || height < 4 || !width.is_power_of_two() || !height.is_power_of_two() {
+    if !width.is_power_of_two() || !height.is_power_of_two() {
         return Err(error(
             JobErrorKind::InvalidRequest,
             "sparse mip page requires power-of-two dimensions >=4",
+        ));
+    }
+    build_islands(width, height, rgba, support, None, class, memory_limit)
+}
+
+/// [`build`] for packed island pages: `labels` names each texel's island allocation
+/// (0 outside every allocation). A reduced texel takes only its children of the island
+/// with the most support (ties to the smaller label), so islands never mix at any level
+/// and every level keeps the island separation of its gutters. Dimensions may be any
+/// multiple of four (KTX2 block-aligned; levels halve with floor).
+pub(in crate::mesh_large) fn build_islands(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    support: &[u32],
+    labels: Option<&[u32]>,
+    class: Class,
+    memory_limit: u64,
+) -> Result<Chain, JobError> {
+    if width < 4 || height < 4 || !width.is_multiple_of(4) || !height.is_multiple_of(4) {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "sparse mip page requires block-aligned dimensions >=4",
+        ));
+    }
+    if labels.is_some_and(|l| l.len() as u64 != u64::from(width) * u64::from(height)) {
+        return Err(error(
+            JobErrorKind::InvalidRequest,
+            "sparse mip label/page shape mismatch",
         ));
     }
     let pixels = u64::from(width)
@@ -241,9 +279,10 @@ pub(in crate::mesh_large) fn build(
         dimensions[count] = (w, h);
         count += 1;
         let n = u64::from(w) * u64::from(h);
+        let label_bytes = if labels.is_some() { size_of::<u32>() as u64 } else { 0 };
         charged = charged
             .checked_add(
-                n.checked_mul(4 + size_of::<u32>() as u64)
+                n.checked_mul(4 + size_of::<u32>() as u64 + label_bytes)
                     .ok_or_else(resource)?,
             )
             .ok_or_else(resource)?;
@@ -294,11 +333,14 @@ pub(in crate::mesh_large) fn build(
             }
         }
     }
-    fill_gutters(&mut base, class, &mut nearest);
+    fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
+    let mut src_labels: Option<Vec<u32>> = labels.map(<[u32]>::to_vec);
     for &(dw, dh) in &dimensions[1..count] {
         let src = chain.levels.last().expect("base exists");
         let sw = src.width as usize;
+        // Per destination texel: the island its reduction keeps (labelled pages only).
+        let mut dst_labels = src_labels.as_ref().map(|_| vec![0u32; dw as usize * dh as usize]);
         let n = (dw as usize)
             .checked_mul(dh as usize)
             .ok_or_else(resource)?;
@@ -346,6 +388,37 @@ pub(in crate::mesh_large) fn build(
                     dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&best.0);
                     continue;
                 }
+                let keep = match (&src_labels, &mut dst_labels) {
+                    (Some(l), Some(d)) => {
+                        let mut tally = [(0u32, 0u64, 0u32); 4];
+                        let mut len = 0;
+                        let mut any = 0u32;
+                        for sy in y * 2..(y * 2 + 2).min(src.height as usize) {
+                            for sx in x * 2..(x * 2 + 2).min(sw) {
+                                let j = sy * sw + sx;
+                                let s = src.support[j];
+                                any = any.max(l[j]);
+                                if s == 0 {
+                                    continue;
+                                }
+                                match tally[..len].iter_mut().find(|t| t.0 == l[j]) {
+                                    Some(t) => t.1 += u64::from(s),
+                                    None => {
+                                        tally[len] = (l[j], u64::from(s), 0);
+                                        len += 1;
+                                    }
+                                }
+                            }
+                        }
+                        let best = tally[..len]
+                            .iter()
+                            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+                            .map(|t| t.0);
+                        d[y * dw as usize + x] = best.unwrap_or(any);
+                        best
+                    }
+                    _ => None,
+                };
                 let mut sum = [0.0; 4];
                 let mut weight = 0u32;
                 let mut dominant = [0.0, 0.0, 1.0];
@@ -354,7 +427,7 @@ pub(in crate::mesh_large) fn build(
                     for sx in x * 2..(x * 2 + 2).min(sw) {
                         let i = sy * sw + sx;
                         let s = src.support[i];
-                        if s == 0 {
+                        if s == 0 || keep.is_some_and(|k| src_labels.as_ref().is_some_and(|l| l[i] != k)) {
                             continue;
                         }
                         let p = &src.rgba[i * 4..i * 4 + 4];
@@ -401,8 +474,9 @@ pub(in crate::mesh_large) fn build(
                 dst.rgba[i * 4 + 3] = quant(sum[3] / f64::from(weight));
             }
         }
-        fill_gutters(&mut dst, class, &mut nearest);
+        fill_gutters(&mut dst, class, &mut nearest, dst_labels.as_deref());
         chain.levels.push(dst);
+        src_labels = dst_labels;
     }
     Ok(chain)
 }

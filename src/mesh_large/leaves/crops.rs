@@ -193,6 +193,22 @@ pub(crate) fn plan_islands(
     gutter: u32,
     align: u32,
 ) -> Result<Block, JobError> {
+    plan_islands_aligned(uvs, image_width, image_height, max_edge, gutter, align, false)
+}
+
+/// [`plan_islands`]; with `align_origin` every island's real-source interior also
+/// starts and ends on the `align` grid of the source (and its allocation on the page
+/// grid, when `gutter` is a multiple of `align`), so the first `log2(align)` box-reduced
+/// page levels of a mipmapped binding are exactly the source's own levels.
+pub(crate) fn plan_islands_aligned(
+    uvs: &[[f32; 2]],
+    image_width: u32,
+    image_height: u32,
+    max_edge: u32,
+    gutter: u32,
+    align: u32,
+    align_origin: bool,
+) -> Result<Block, JobError> {
     if uvs.is_empty() || !uvs.len().is_multiple_of(3) || align == 0 || !align.is_power_of_two() {
         return Err(invalid(
             "island crop requires whole triangles and POT alignment",
@@ -289,9 +305,16 @@ pub(crate) fn plan_islands(
     let round = |v: u64| v.div_ceil(u64::from(align)) * u64::from(align);
     // One island over the union of every footprint: plan()'s classic crop,
     // with the allocation rounded to the alignment.
-    let island = |lo: [i64; 2], hi: [i64; 2]| -> Result<Option<Crop>, JobError> {
+    let island = |mut lo: [i64; 2], mut hi: [i64; 2]| -> Result<Option<Crop>, JobError> {
         let mut interior = [0u32; 2];
         let mut extent = [0u32; 2];
+        if align_origin {
+            let (a, g) = (i64::from(align), i64::from(gutter));
+            for axis in 0..2 {
+                lo[axis] = (lo[axis] - g).div_euclid(a) * a + g;
+                hi[axis] = lo[axis] + ((hi[axis] - lo[axis]).max(1) + a - 1) / a * a;
+            }
+        }
         for axis in 0..2 {
             let span = u64::try_from(hi[axis] - lo[axis]).map_err(|_| resource())?;
             let full = round(span + 2 * u64::from(gutter));
@@ -863,5 +886,87 @@ mod tests {
         assert!(plan(&spread, 4096, 4096, 1024, 2).is_err());
         let block = plan_islands(&spread, 4096, 4096, 1024, 2, 4).unwrap();
         assert!(block.width <= 1024 && block.height <= 1024);
+    }
+    /// Review probe (D6): a mipmapped island whose real-source footprint starts at
+    /// texel (15, 15) of a source striped in 2-texel bands. With aligned origins the
+    /// cropped page's level 1 is the source's own level 1 (0 or 255); an unaligned
+    /// crop would average across bands (128).
+    #[test]
+    fn mipmapped_island_origins_keep_source_level_phase() {
+        use super::super::{mips::Class, sparse_mips};
+        let n = 64u32;
+        let source: Vec<u8> = (0..n * n)
+            .flat_map(|i| {
+                let (x, y) = (i % n, i / n);
+                let v = if (x / 2 + y / 2) % 2 == 0 { 0 } else { 255 };
+                [v, v, v, 255]
+            })
+            .collect();
+        let full = sparse_mips::build(n, n, &source, &vec![1; (n * n) as usize], Class::Data, 1 << 24).unwrap();
+        let level1 = &full.levels[1];
+        let texel = |t: f32| (t + 0.5) / n as f32;
+        let uvs = [[texel(16.), texel(16.)], [texel(40.), texel(16.)], [texel(16.), texel(40.)]];
+        let sampler = SourceSampler {
+            wrap_s: 10497,
+            wrap_t: 10497,
+            min_filter: 9987,
+            mag_filter: 9729,
+        };
+        for aligned in [true, false] {
+            let block = plan_islands_aligned(&uvs, n, n, 4096, 8, 8, aligned).unwrap();
+            let crop = &block.islands[0].crop;
+            let start = [crop.origin[0] - 8, crop.origin[1] - 8];
+            if aligned {
+                assert_eq!(crop.origin.map(|o| o.rem_euclid(8)), [0, 0], "{crop:?}");
+                assert_eq!([crop.interior_width % 8, crop.interior_height % 8], [0, 0]);
+            } else {
+                assert_eq!(crop.origin, [15, 15], "the probe's unaligned footprint");
+            }
+            let page = copy_crop(&source, n, n, crop, sampler, 1 << 24).unwrap();
+            let (w, h) = (crop.width, crop.height);
+            let mut support = vec![0u32; (w * h) as usize];
+            for y in 8..8 + crop.interior_height {
+                for x in 8..8 + crop.interior_width {
+                    support[(y * w + x) as usize] = 1;
+                }
+            }
+            let chain = sparse_mips::build_islands(
+                w.next_multiple_of(4),
+                h.next_multiple_of(4),
+                &{
+                    let mut padded = vec![0u8; (w.next_multiple_of(4) * h.next_multiple_of(4) * 4) as usize];
+                    for y in 0..h {
+                        let row = (y * w * 4) as usize;
+                        let dst = (y * w.next_multiple_of(4) * 4) as usize;
+                        padded[dst..dst + (w * 4) as usize].copy_from_slice(&page[row..row + (w * 4) as usize]);
+                    }
+                    padded
+                },
+                &{
+                    let mut padded = vec![0u32; (w.next_multiple_of(4) * h.next_multiple_of(4)) as usize];
+                    for y in 0..h {
+                        let dst = (y * w.next_multiple_of(4)) as usize;
+                        padded[dst..dst + w as usize].copy_from_slice(&support[(y * w) as usize..((y + 1) * w) as usize]);
+                    }
+                    padded
+                },
+                None,
+                Class::Data,
+                1 << 24,
+            )
+            .unwrap();
+            let page1 = &chain.levels[1];
+            // An interior level-1 texel well inside the island.
+            let (px, py) = ((8 + 6) / 2, (8 + 6) / 2);
+            let got = page1.rgba[((py * page1.width + px) * 4) as usize];
+            let (sx, sy) = ((start[0] / 2 + i64::from(px)) as u32, (start[1] / 2 + i64::from(py)) as u32);
+            let want = level1.rgba[((sy * level1.width + sx) * 4) as usize];
+            if aligned {
+                assert_eq!(got, want, "aligned crop level 1 is the source's level 1");
+                assert!(want == 0 || want == 255);
+            } else {
+                assert_eq!(got, 128, "the unaligned probe mixes bands");
+            }
+        }
     }
 }

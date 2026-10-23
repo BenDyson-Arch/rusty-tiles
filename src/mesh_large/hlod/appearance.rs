@@ -26,7 +26,7 @@ use crate::{
         attributes::COLOR,
         config::Profile,
         full::FullCaptured,
-        leaves::{delivery, mips::Class},
+        leaves::{delivery, mask as delivery_mask, mips::Class},
     },
     JobError, JobErrorKind,
 };
@@ -77,6 +77,9 @@ pub(crate) struct DeliveredPage {
     pub bytes: Vec<u8>,
     pub mime: &'static str,
     pub escalated: bool,
+    /// A KTX2 chain whose every level passed its gates (mipmapped sampler); otherwise
+    /// the ladder's exact level-0 PNG, sampled without mips.
+    pub mipmapped: bool,
 }
 
 /// One material group of a tile: one glTF primitive.
@@ -119,6 +122,8 @@ pub(crate) struct TileAppearance {
     /// The source's own texel spacing, not `G/16`, set some page's density.
     pub source_limited: bool,
     pub escalated_pages: u32,
+    /// Pages delivered as exact level-0 PNG without mips (no codec step met every gate).
+    pub unmipped_pages: u32,
 }
 
 /// Thread CPU seconds of one tile's appearance work (wall seconds where the platform
@@ -232,7 +237,6 @@ fn orthogonal(t: [f64; 3], n: [f64; 3]) -> Option<[f64; 3]> {
 
 /// A textured group's layout and texel → query mapping, before the source pass.
 struct Pending {
-    group: usize,
     /// Tile face of each group face.
     face_ids: Vec<usize>,
     layout: charts::Layout,
@@ -243,7 +247,9 @@ struct Pending {
     tangents: Option<Vec<[[f32; 4]; 3]>>,
 }
 
-/// Build the appearance of one coarse tile.
+/// Build the appearance of one coarse tile. Groups are processed one at a time: a
+/// group's layout, texel inventory, pages and query state are released before the next
+/// group starts, so the stage reserves one group's workspace (D8).
 pub(crate) fn build(
     services: &Services<'_>,
     query: &mut super::source_index::SourceQuery<'_>,
@@ -273,185 +279,46 @@ pub(crate) fn build(
     let started = clock();
     let source = source_spacing(services, query, tile, &by_class, target)?;
     timing.query += clock() - started;
-    let mut groups = Vec::new();
-    let mut pending: Vec<Pending> = Vec::new();
-    let mut queries: Vec<Queries> = Vec::new();
-    // Untextured vertex-colour groups: (group, unique vertices in query order).
-    let mut vertex_groups: Vec<(usize, Vec<u32>)> = Vec::new();
-    let started = clock();
+    let mut groups = Vec::with_capacity(by_class.len());
     for (class, faces) in by_class {
         check()?;
-        let material = captured.materials.get(class as usize);
-        let mut slots: Vec<TextureSlot> = material
+        let mut slots: Vec<TextureSlot> = captured
+            .materials
+            .get(class as usize)
             .map(|m| m.bindings().map(|b| b.slot).collect())
             .unwrap_or_default();
         slots.sort_by_key(|s| slot_order(*s));
-        let index = groups.len();
-        groups.push(Group {
+        let mut group = Group {
             class,
-            faces: faces.clone(),
+            faces,
             material: Value::Null,
             uvs: None,
             tangents: None,
             colors: None,
             pages: Vec::new(),
-        });
+        };
         if !slots.is_empty() {
-            let corners: Vec<[u32; 3]> = faces.iter().map(|&f| tile.triangles[f]).collect();
-            // Never finer than the source itself carries there.
             let floor = source.get(&class).copied().unwrap_or(0.);
-            if floor > 0. {
-                facts.source_spacing = if facts.source_spacing > 0. {
-                    facts.source_spacing.min(floor)
-                } else {
-                    floor
-                };
-            }
-            if floor > target {
-                facts.source_limited = true;
-            }
-            let layout =
-                charts::layout(tile.decoded, &corners, target.max(floor), services.max_edge)?;
-            let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
-            let mut texels = Vec::new();
-            let mut covered = Vec::new();
-            for gf in 0..corners.len() {
-                charts::raster(&layout.pixels[gf], layout.size, &mut covered);
-                for &(texel, w) in &covered {
-                    if std::mem::replace(&mut owner[texel as usize], true) {
-                        continue;
-                    }
-                    texels.push((texel, gf as u32, w.map(|v| v as f32)));
-                }
-            }
-            drop(owner);
-            let normal_map = slots.contains(&TextureSlot::Normal);
-            let tangents = match (&normals, normal_map) {
-                (Some(n), true) => Some(
-                    corners
-                        .iter()
-                        .enumerate()
-                        .map(|(gf, f)| {
-                            let x = layout.charts[layout.chart_of[gf] as usize].x;
-                            f.map(|v| {
-                                let nv = n[v as usize].map(f64::from);
-                                let t = orthogonal(x, nv)
-                                    .or_else(|| orthogonal([1., 0., 0.], nv))
-                                    .or_else(|| orthogonal([0., 1., 0.], nv))
-                                    .unwrap_or([1., 0., 0.]);
-                                [t[0] as f32, t[1] as f32, t[2] as f32, 1.]
-                            })
-                        })
-                        .collect(),
-                ),
-                _ => None,
-            };
-            pending.push(Pending {
-                group: index,
-                face_ids: faces.clone(),
-                layout,
-                slots,
-                texels,
-                tangents,
-            });
-        } else if services.colors {
-            let mut vertices: Vec<u32> = faces.iter().flat_map(|&f| tile.triangles[f]).collect();
-            vertices.sort_unstable();
-            vertices.dedup();
-            let points = vertices.iter().map(|&v| tile.decoded[v as usize]).collect();
-            queries.push(Queries::new(class, points, target, false));
-            vertex_groups.push((index, vertices));
-        }
-    }
-    timing.charts = clock() - started;
-    let started = clock();
-    (facts.searches, facts.donor_reads) = bake::resolve(query, &mut queries, check)?;
-    timing.query += clock() - started;
-    let mut queries = queries.into_iter();
-    let mut vertex_groups = vertex_groups.into_iter().peekable();
-    let mut pending = pending.into_iter().peekable();
-    let mut encode_seconds = 0.;
-    for (index, group) in groups.iter_mut().enumerate() {
-        if pending.peek().is_some_and(|p| p.group == index) {
-            let p = pending.next().unwrap();
-            let pages = bake_pages(
+            textured(
                 services,
                 query,
-                &p,
-                group.class,
-                normals.as_deref(),
                 tile,
+                &mut group,
+                slots,
+                (target, floor),
+                normals.as_deref(),
                 (&mut timing, &mut facts),
             )?;
-            let started = clock();
-            let mut delivered = Vec::with_capacity(pages.len());
-            for page in &pages {
-                let d = deliver(services, page)?;
-                facts.escalated_pages += u32::from(d.escalated);
-                delivered.push(d);
-            }
-            encode_seconds += clock() - started;
-            let texels = u64::from(p.layout.size[0]) * u64::from(p.layout.size[1]);
-            facts.textured_groups += 1;
-            facts.pages += pages.len() as u32;
-            facts.layout_texels += texels;
-            facts.page_texels += texels * pages.len() as u64;
-            facts.covered_texels += p.texels.len() as u64;
-            facts.charts += p.layout.charts.len() as u32;
-            facts.achieved_spacing = facts.achieved_spacing.max(1. / p.layout.scale);
-            facts.capped |= p.layout.capped;
-            facts.page_size = [
-                facts.page_size[0].max(p.layout.size[0]),
-                facts.page_size[1].max(p.layout.size[1]),
-            ];
-            let material = captured
-                .materials
-                .get(group.class as usize)
-                .ok_or_else(|| state("coarse class material"))?;
-            let patches: Vec<(TextureSlot, usize, usize)> =
-                p.slots.iter().enumerate().map(|(i, s)| (*s, i, 0)).collect();
-            let mut value = material.remap_slots(&patches)?;
-            if let Some(object) = value.as_object_mut() {
-                object.remove("name");
-                if let Some(normal) = object.get_mut("normalTexture") {
-                    // The source scale is absorbed into the re-expressed page.
-                    if let Some(n) = normal.as_object_mut() {
-                        n.remove("scale");
-                    }
-                }
-            }
-            group.material = value;
-            group.uvs = Some(
-                (0..group.faces.len())
-                    .map(|gf| std::array::from_fn(|k| p.layout.uv(gf, k)))
-                    .collect(),
-            );
-            group.tangents = p.tangents;
-            group.pages = delivered;
         } else {
-            group.material = flat(captured, group.class);
-            if vertex_groups.peek().is_some_and(|(g, _)| *g == index) {
-                let (_, vertices) = vertex_groups.next().unwrap();
-                let q = queries.next().ok_or_else(|| state("coarse query order"))?;
-                let colors: HashMap<u32, [f32; 4]> = vertices
-                    .iter()
-                    .zip(&q.hits)
-                    .map(|(v, h)| (*v, h.color))
-                    .collect();
-                if q.hits.iter().any(|h| h.flags & COLOR != 0) {
-                    facts.vertex_color_groups += 1;
-                    group.colors = Some(
-                        group
-                            .faces
-                            .iter()
-                            .map(|&f| tile.triangles[f].map(|v| colors[&v]))
-                            .collect(),
-                    );
-                }
+            group.material = flat(captured, class);
+            if services.colors {
+                let started = clock();
+                vertex_colours(query, tile, &mut group, target, check, &mut facts)?;
+                timing.query += clock() - started;
             }
         }
+        groups.push(group);
     }
-    timing.encode = encode_seconds;
     Ok(Appearance {
         groups,
         normals,
@@ -460,14 +327,258 @@ pub(crate) fn build(
     })
 }
 
+/// One textured group: fresh charts, the chunked source bake, MASK coverage samples and
+/// the labelled delivery of every slot page.
+#[allow(clippy::too_many_arguments)]
+fn textured(
+    services: &Services<'_>,
+    query: &mut super::source_index::SourceQuery<'_>,
+    tile: &TileView<'_>,
+    group: &mut Group,
+    slots: Vec<TextureSlot>,
+    (target, floor): (f64, f64),
+    normals: Option<&[[f32; 3]]>,
+    (timing, facts): (&mut Timing, &mut TileAppearance),
+) -> Result<(), JobError> {
+    let captured = services.captured;
+    let started = clock();
+    let corners: Vec<[u32; 3]> = group.faces.iter().map(|&f| tile.triangles[f]).collect();
+    // Never finer than the source itself carries there.
+    if floor > 0. {
+        facts.source_spacing = if facts.source_spacing > 0. {
+            facts.source_spacing.min(floor)
+        } else {
+            floor
+        };
+    }
+    if floor > target {
+        facts.source_limited = true;
+    }
+    let layout = charts::layout(tile.decoded, &corners, target.max(floor), services.max_edge)?;
+    let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
+    let mut texels = Vec::new();
+    let mut covered = Vec::new();
+    for gf in 0..corners.len() {
+        charts::raster(&layout.pixels[gf], layout.size, &mut covered);
+        for &(texel, w) in &covered {
+            if std::mem::replace(&mut owner[texel as usize], true) {
+                continue;
+            }
+            texels.push((texel, gf as u32, w.map(|v| v as f32)));
+        }
+    }
+    drop(owner);
+    let tangents = match (normals, slots.contains(&TextureSlot::Normal)) {
+        (Some(n), true) => Some(
+            corners
+                .iter()
+                .enumerate()
+                .map(|(gf, f)| {
+                    let x = layout.charts[layout.chart_of[gf] as usize].x;
+                    f.map(|v| {
+                        let nv = n[v as usize].map(f64::from);
+                        let t = orthogonal(x, nv)
+                            .or_else(|| orthogonal([1., 0., 0.], nv))
+                            .or_else(|| orthogonal([0., 1., 0.], nv))
+                            .unwrap_or([1., 0., 0.]);
+                        [t[0] as f32, t[1] as f32, t[2] as f32, 1.]
+                    })
+                })
+                .collect(),
+        ),
+        _ => None,
+    };
+    let labels = layout.labels();
+    timing.charts += clock() - started;
+    let p = Pending {
+        face_ids: group.faces.clone(),
+        layout,
+        slots,
+        texels,
+        tangents,
+    };
+    let pages = bake_pages(services, query, &p, group.class, normals, tile, (timing, facts))?;
+    let started = clock();
+    let mask = captured
+        .materials
+        .get(group.class as usize)
+        .and_then(|m| m.mask());
+    let mut delivered = Vec::with_capacity(pages.len());
+    for page in &pages {
+        let samples = match mask {
+            Some(m) if page.slot == TextureSlot::BaseColor => mask_samples(&p, page, tile, m),
+            _ => Vec::new(),
+        };
+        let mask = mask
+            .filter(|_| page.slot == TextureSlot::BaseColor)
+            .map(|(factor, cutoff)| delivery::MaskDelivery {
+                samples: &samples,
+                factor,
+                cutoff,
+                linear: true,
+                min_linear: true,
+            });
+        let d = deliver(
+            (services.profile, services.page_memory, services.check),
+            page,
+            &labels,
+            mask,
+        )?;
+        facts.escalated_pages += u32::from(d.escalated);
+        facts.unmipped_pages += u32::from(!d.mipmapped);
+        delivered.push(d);
+    }
+    timing.encode += clock() - started;
+    let texels = u64::from(p.layout.size[0]) * u64::from(p.layout.size[1]);
+    facts.textured_groups += 1;
+    facts.pages += pages.len() as u32;
+    facts.layout_texels += texels;
+    facts.page_texels += texels * pages.len() as u64;
+    facts.covered_texels += p.texels.len() as u64;
+    facts.charts += p.layout.charts.len() as u32;
+    facts.achieved_spacing = facts.achieved_spacing.max(1. / p.layout.scale);
+    facts.capped |= p.layout.capped;
+    facts.page_size = [
+        facts.page_size[0].max(p.layout.size[0]),
+        facts.page_size[1].max(p.layout.size[1]),
+    ];
+    let material = captured
+        .materials
+        .get(group.class as usize)
+        .ok_or_else(|| state("coarse class material"))?;
+    let patches: Vec<(TextureSlot, usize, usize)> =
+        p.slots.iter().enumerate().map(|(i, s)| (*s, i, 0)).collect();
+    let mut value = material.remap_slots(&patches)?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("name");
+        if let Some(normal) = object.get_mut("normalTexture") {
+            // The source scale is absorbed into the re-expressed page.
+            if let Some(n) = normal.as_object_mut() {
+                n.remove("scale");
+            }
+        }
+    }
+    group.material = value;
+    group.uvs = Some(
+        (0..group.faces.len())
+            .map(|gf| std::array::from_fn(|k| p.layout.uv(gf, k)))
+            .collect(),
+    );
+    group.tangents = p.tangents;
+    group.pages = delivered;
+    Ok(())
+}
+
+/// Barycentric MASK coverage sample points per face (a 10-point triangular lattice).
+const MASK_POINTS: [[f64; 3]; 10] = [
+    [1., 0., 0.],
+    [0., 1., 0.],
+    [0., 0., 1.],
+    [2. / 3., 1. / 3., 0.],
+    [1. / 3., 2. / 3., 0.],
+    [0., 2. / 3., 1. / 3.],
+    [0., 1. / 3., 2. / 3.],
+    [1. / 3., 0., 2. / 3.],
+    [2. / 3., 0., 1. / 3.],
+    [1. / 3., 1. / 3., 1. / 3.],
+];
+
+/// MASK coverage targets of a coarse base-colour page: area-weighted surface samples of
+/// every group face, classified by the baked level-0 page itself (the coarse appearance's
+/// source of truth; `COLOR_0` alpha is already baked in) under the class's factor and
+/// cutoff, bilinear over covered texels as the page sampler reads it. The shared
+/// delivery then keeps coverage through every mip level, as for leaves.
+fn mask_samples(
+    p: &Pending,
+    page: &CoarsePage,
+    tile: &TileView<'_>,
+    (factor, cutoff): (f64, f64),
+) -> Vec<delivery_mask::SurfaceSample> {
+    let [w, h] = page.size;
+    let alpha = |x: f64, y: f64| -> Option<f64> {
+        let (fx, fy) = (x - 0.5, y - 0.5);
+        let (x0, y0) = (fx.floor(), fy.floor());
+        let (tx, ty) = (fx - x0, fy - y0);
+        let (mut sum, mut weight) = (0., 0.);
+        for (dx, wx) in [(0., 1. - tx), (1., tx)] {
+            for (dy, wy) in [(0., 1. - ty), (1., ty)] {
+                let (cx, cy) = ((x0 + dx).clamp(0., f64::from(w - 1)), (y0 + dy).clamp(0., f64::from(h - 1)));
+                let i = cy as usize * w as usize + cx as usize;
+                if page.support[i] > 0 && wx * wy > 0. {
+                    sum += wx * wy * f64::from(page.rgba[i * 4 + 3]) / 255.;
+                    weight += wx * wy;
+                }
+            }
+        }
+        (weight > 0.).then(|| sum / weight)
+    };
+    let mut out = Vec::with_capacity(p.face_ids.len() * MASK_POINTS.len());
+    for (gf, &face) in p.face_ids.iter().enumerate() {
+        let q = tile.triangles[face].map(|v| tile.decoded[v as usize].map(f64::from));
+        let e1: [f64; 3] = std::array::from_fn(|a| q[1][a] - q[0][a]);
+        let e2: [f64; 3] = std::array::from_fn(|a| q[2][a] - q[0][a]);
+        let area = 0.5 * dot3(cross3(e1, e2), cross3(e1, e2)).sqrt();
+        if area.is_nan() || area <= 0. {
+            continue;
+        }
+        let px = p.layout.pixels[gf];
+        for b in MASK_POINTS {
+            let x = b[0] * px[0][0] + b[1] * px[1][0] + b[2] * px[2][0];
+            let y = b[0] * px[0][1] + b[1] * px[1][1] + b[2] * px[2][1];
+            let Some(a) = alpha(x, y) else { continue };
+            out.push(delivery_mask::SurfaceSample {
+                uv: [x / f64::from(w), y / f64::from(h)],
+                alpha: 1.,
+                weight: area / MASK_POINTS.len() as f64,
+                source_pass: a * factor >= cutoff,
+            });
+        }
+    }
+    out
+}
+
+/// Per-vertex `COLOR_0` of an untextured group from the nearest source surface (the
+/// small vertex-colour path); kept only when some donor carries `COLOR_0`.
+fn vertex_colours(
+    query: &mut super::source_index::SourceQuery<'_>,
+    tile: &TileView<'_>,
+    group: &mut Group,
+    target: f64,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    facts: &mut TileAppearance,
+) -> Result<(), JobError> {
+    let mut vertices: Vec<u32> = group.faces.iter().flat_map(|&f| tile.triangles[f]).collect();
+    vertices.sort_unstable();
+    vertices.dedup();
+    let points = vertices.iter().map(|&v| tile.decoded[v as usize]).collect();
+    let mut q = [Queries::new(group.class, points, 2. * target, false)];
+    let (searches, reads) = bake::resolve(query, &mut q, check)?;
+    facts.searches += searches;
+    facts.donor_reads += reads;
+    let [q] = q;
+    if q.hits.iter().any(|h| h.flags & COLOR != 0) {
+        let colors: HashMap<u32, [f32; 4]> =
+            vertices.iter().zip(&q.hits).map(|(v, h)| (*v, h.color)).collect();
+        facts.vertex_color_groups += 1;
+        group.colors = Some(
+            group
+                .faces
+                .iter()
+                .map(|&f| tile.triangles[f].map(|v| colors[&v]))
+                .collect(),
+        );
+    }
+    Ok(())
+}
+
 /// Faces per class whose centroids estimate the source texel density (evenly strided).
 const DENSITY_FACES: usize = 2048;
 
 /// Per textured class: the spacing at which a page carries as many texels as the source
 /// images do over the same coarse surface, `sqrt(area / Σ area · density)`, from source
 /// queries at up to [`DENSITY_FACES`] evenly strided coarse face centroids (density:
-/// squared source texels per metre of the hit triangle's first bound slot). Requesting
-/// finer spacing adds no information.
+/// squared source texels per metre of the hit triangle's densest bound slot).
+/// Requesting finer spacing adds no information.
 fn source_spacing(
     services: &Services<'_>,
     query: &mut super::source_index::SourceQuery<'_>,
@@ -514,13 +625,18 @@ fn source_spacing(
                     s
                 })
                 .unwrap_or_default();
-            let Some(&slot) = slots.first() else { continue };
-            if let Some((image, _, set)) = bake::binding(captured, hit.material, slot)? {
-                let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
-                let per_metre = f64::from(hit.gradient[set])
-                    * (f64::from(info.width) * f64::from(info.height)).sqrt();
-                texels += a * per_metre * per_metre;
+            // The densest bound slot: a low-resolution base colour never hides a finer
+            // normal, data or emissive image.
+            let mut density = 0f64;
+            for &slot in &slots {
+                if let Some((image, _, set)) = bake::binding(captured, hit.material, slot)? {
+                    let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                    let per_metre = f64::from(hit.gradient[set])
+                        * (f64::from(info.width) * f64::from(info.height)).sqrt();
+                    density = density.max(per_metre * per_metre);
+                }
             }
+            texels += a * density;
         }
         if texels > 0. && total > 0. && (total / texels).is_finite() {
             out.insert(q.class, (total / texels).sqrt());
@@ -586,7 +702,10 @@ fn bake_pages(
                 })
             })
             .collect();
-        let mut chunk_queries = [Queries::new(class, points, spacing, normal_map)];
+        let mut query_chunk = Queries::new(class, points, 2. * spacing, normal_map);
+        // Donor reuse never crosses a chart.
+        query_chunk.segments = chunk.iter().map(|&(_, gf, _)| p.layout.chart_of[gf as usize]).collect();
+        let mut chunk_queries = [query_chunk];
         let (searches, reads) = bake::resolve(query, &mut chunk_queries, check)?;
         facts.searches += searches;
         facts.donor_reads += reads;
@@ -747,32 +866,42 @@ fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit,
 }
 
 /// Encode one pre-encode page through the shared leaf delivery path (the profile's
-/// codec, sparse colour-correct mips with gutters filled per level, decoded gates).
-pub(crate) fn deliver(services: &Services<'_>, page: &CoarsePage) -> Result<DeliveredPage, JobError> {
-    let check: &dyn Fn() -> Result<(), JobError> = services.check;
-    let delivered = delivery::encode(
+/// codec, sparse colour-correct mips kept apart per chart (`labels`) with gutters filled
+/// per level, MASK coverage for MASK base colour, decoded gates).
+pub(crate) fn deliver(
+    (profile, page_memory, check): (Profile, u64, &dyn Fn() -> Result<(), JobError>),
+    page: &CoarsePage,
+    labels: &[u32],
+    mask: Option<delivery::MaskDelivery<'_>>,
+) -> Result<DeliveredPage, JobError> {
+    let delivered = delivery::encode_islands(
         page.size,
         &page.rgba,
         &page.support,
+        Some(labels),
         page.slot,
-        services.profile,
-        services.page_memory,
-        None,
+        profile,
+        page_memory,
+        mask,
+        // A chain that misses its gates on every codec step (small levels of a page
+        // mixing charts inside codec blocks) is delivered as the exact level-0 PNG and
+        // sampled without mips, rather than refusing the run or loosening a gate.
         delivery::Ladder {
-            level0_sampled: false,
+            level0_sampled: true,
             check,
         },
     )?;
     Ok(DeliveredPage {
         slot: page.slot,
+        mipmapped: delivered.mime == "image/ktx2",
         bytes: delivered.bytes,
         mime: delivered.mime,
         escalated: delivered.escalation.is_some(),
     })
 }
 
-/// Bytes one page encode admits: the page's RGBA and support per slot, the encoder
-/// workspace and output, at `size`.
+/// Bytes one page encode admits: the page's RGBA and support per slot, the chart labels
+/// and their reduced chain, MASK samples, the encoder workspace and output, at `size`.
 pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Result<u64, JobError> {
     let texels = u64::from(size[0]) * u64::from(size[1]);
     let codec = delivery::workspace_charge(size, profile)?;
@@ -780,5 +909,65 @@ pub(crate) fn page_charge(size: [u32; 2], slots: u64, profile: Profile) -> Resul
         .saturating_mul(8)
         .saturating_mul(slots)
         .saturating_add(codec)
-        .saturating_add(texels.saturating_mul(8)))
+        .saturating_add(texels.saturating_mul(8 + 10))
+        .saturating_add(super::TRIANGLE_CAP as u64 * MASK_POINTS.len() as u64 * 40))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Review probe: a MASK base-colour coarse page (cutoff 0.75) whose level-1 alphas
+    /// box-filter to 64 and 191. Unadjusted, 191 < 191.25 drops every texel of level 1
+    /// (coverage 25% -> 0%); the shared coverage-preserving delivery scales alpha so
+    /// level 1 keeps passing texels.
+    #[test]
+    fn coarse_mask_pages_keep_coverage_through_their_mips() {
+        let (w, h) = (8u32, 8u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let a = if x < 4 { if y % 2 == 0 { 0 } else { 128 } } else if y % 2 == 0 { 255 } else { 127 };
+                rgba[i..i + 4].copy_from_slice(&[180, 120, 60, a]);
+            }
+        }
+        let page = CoarsePage {
+            slot: TextureSlot::BaseColor,
+            size: [w, h],
+            rgba,
+            support: vec![1; (w * h) as usize],
+        };
+        let labels = vec![1u32; (w * h) as usize];
+        let (factor, cutoff) = (1., 0.75);
+        let samples: Vec<delivery_mask::SurfaceSample> = (0..w * h)
+            .map(|i| {
+                let (x, y) = (i % w, i / w);
+                delivery_mask::SurfaceSample {
+                    uv: [(f64::from(x) + 0.5) / f64::from(w), (f64::from(y) + 0.5) / f64::from(h)],
+                    alpha: 1.,
+                    weight: 1.,
+                    source_pass: f64::from(page.rgba[(i * 4 + 3) as usize]) / 255. * factor >= cutoff,
+                }
+            })
+            .collect();
+        let check = || Ok(());
+        let level1_passing = |mask: Option<delivery::MaskDelivery<'_>>| {
+            let d = deliver((Profile::Balanced, 1 << 28, &check), &page, &labels, mask).unwrap();
+            let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
+            let level = decoder
+                .transcode(1, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+                .unwrap();
+            level.chunks(4).filter(|p| f64::from(p[3]) / 255. * factor >= cutoff).count()
+        };
+        assert_eq!(level1_passing(None), 0, "control: the unadjusted level 1 loses MASK coverage");
+        let kept = level1_passing(Some(delivery::MaskDelivery {
+            samples: &samples,
+            factor,
+            cutoff,
+            linear: true,
+            min_linear: true,
+        }));
+        assert!(kept > 0, "coverage-preserving delivery keeps level-1 MASK texels");
+    }
 }

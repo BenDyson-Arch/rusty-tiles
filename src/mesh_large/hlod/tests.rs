@@ -2104,3 +2104,62 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
         assert!(!output.exists());
     }
 }
+
+/// Review regression (S3 donor reuse): two parallel sheets 0.01 m apart baked at 0.1 m
+/// spacing. A point exactly on sheet B must never keep sheet A's donor from the previous
+/// point, and every reused donor must equal the exact nearest search's hit.
+#[test]
+fn bake_donor_reuse_is_exact_across_close_parallel_sheets() {
+    use super::bake::{resolve, Queries};
+    use super::source_index::SourceIndex;
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let flat = |_: f32, _: f32| 0.;
+    let lifted = |_: f32, _: f32| 0.01;
+    let sheets = vec![
+        grid((10, 10), (0., 1.), (0., 1.), &flat, [0.9, 0.1, 0.1, 1.]),
+        grid((10, 10), (0., 1.), (0., 1.), &lifted, [0.1, 0.1, 0.9, 1.]),
+    ];
+    let input = write_gltf(&work.path().join("src"), &sheets);
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.lod = TilerLod::Hlod;
+    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let index = SourceIndex::build(&captured, &|| Ok(())).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: captured.scan.triangles,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    // Raster rows alternating between the sheets, 0.1 m apart along each row.
+    let mut points = Vec::new();
+    for row in 0..10 {
+        for col in 0..10 {
+            let (x, z) = (0.05 + 0.1 * col as f32, 0.05 + 0.1 * row as f32);
+            let y = if (row + col) % 2 == 0 { 0. } else { 0.01 };
+            points.push([x, y, z]);
+        }
+    }
+    let run = |reach: f64| {
+        let mut query = index.query(&captured, key).unwrap();
+        let mut q = [Queries::new(0, points.clone(), reach, false)];
+        let (searches, _) = resolve(&mut query, &mut q, &|| Ok(())).unwrap();
+        let [q] = q;
+        (q.hits, searches)
+    };
+    let (exact, all) = run(0.);
+    let (reused, searches) = run(0.2);
+    assert_eq!(all, points.len() as u64);
+    assert!(searches <= all);
+    for (i, (a, b)) in exact.iter().zip(&reused).enumerate() {
+        assert_eq!((a.rank, a.material, a.d2.to_bits()), (b.rank, b.material, b.d2.to_bits()), "point {i}");
+        let on_b = points[i][1] > 0.;
+        assert_eq!(b.material, u32::from(on_b), "point {i} took the other sheet's donor");
+        assert!(b.d2 < 1e-12, "point {i} lies on its donor");
+    }
+}
