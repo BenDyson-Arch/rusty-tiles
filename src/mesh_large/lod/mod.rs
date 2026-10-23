@@ -126,6 +126,156 @@ pub(crate) fn retention(sums: &[(u128, u128)], target: u128) -> Vec<u8> {
     k
 }
 
+/// EXPERIMENT (h17-seams): whether to print per-tile seam statistics.
+fn experiment_stats() -> bool {
+    std::env::var_os("RT_EXPERIMENT_STATS").is_some()
+}
+
+/// EXPERIMENT (h17-seams): distance from `p` to segment `ab`, with the endpoints in vertex
+/// (key) order so both tiles sharing a seam compute bit-identical values.
+fn seg_dist(mesh: &KeyMesh, p: u32, a: u32, b: u32) -> f64 {
+    let (a, b) = if a <= b { (a, b) } else { (b, a) };
+    let [p, a, b] = [p, a, b].map(|v| mesh::position(mesh.vertices[v as usize].key));
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    let len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    let t = if len2 > 0. {
+        ((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2).clamp(0., 1.)
+    } else {
+        0.
+    };
+    let q = [ap[0] - t * ab[0], ap[1] - t * ab[1], ap[2] - t * ab[2]];
+    (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]).sqrt()
+}
+
+/// EXPERIMENT (h17-seams): Douglas-Peucker over one seam chain (endpoints kept): keep the
+/// interior vertex farthest from the current chord (ties by key) while it is above `tol`.
+fn dp_chain(mesh: &KeyMesh, chain: &[u32], tol: f64, keep: &mut [bool]) {
+    let mut stack = vec![(0usize, chain.len() - 1)];
+    while let Some((lo, hi)) = stack.pop() {
+        if hi <= lo + 1 {
+            continue;
+        }
+        let mut best: Option<(f64, u32, usize)> = None;
+        for (i, &v) in chain.iter().enumerate().take(hi).skip(lo + 1) {
+            let dist = seg_dist(mesh, v, chain[lo], chain[hi]);
+            if best.is_none_or(|(bd, bv, _)| dist > bd || (dist == bd && v < bv)) {
+                best = Some((dist, v, i));
+            }
+        }
+        if let Some((dist, v, i)) = best {
+            if dist > tol {
+                keep[v as usize] = true;
+                stack.push((lo, i));
+                stack.push((i, hi));
+            }
+        }
+    }
+}
+
+/// EXPERIMENT (h17-seams): tolerance retention. Seam chains are the tile-border edges
+/// between seam vertices at depth `d`; anchors (structural keeps, and any seam vertex not
+/// inside exactly one chain) stay; Douglas-Peucker with `tol` decides the rest. The chain
+/// and its geometry are the same on both sides of the seam, so both tiles agree.
+fn tolerance_kept(mesh: &KeyMesh, faces: &[Face], d: u32, anchor: &[bool], tol: f64) -> Vec<bool> {
+    let n = mesh.vertices.len();
+    let cut: Vec<bool> = mesh.vertices.iter().map(|v| v.info.cut(d)).collect();
+    let mut list: Vec<(u32, u32)> = faces
+        .iter()
+        .flat_map(|f| {
+            (0..3).map(move |i| {
+                let (a, b) = (f.v[i], f.v[(i + 1) % 3]);
+                (a.min(b), a.max(b))
+            })
+        })
+        .collect();
+    list.sort_unstable();
+    let mut adj: Vec<Vec<u32>> = vec![Vec::new(); n];
+    let mut i = 0;
+    while i < list.len() {
+        let mut j = i + 1;
+        while j < list.len() && list[j] == list[i] {
+            j += 1;
+        }
+        let (a, b) = list[i];
+        if j - i == 1 && cut[a as usize] && cut[b as usize] {
+            adj[a as usize].push(b);
+            adj[b as usize].push(a);
+        }
+        i = j;
+    }
+    let is_anchor: Vec<bool> = (0..n)
+        .map(|v| cut[v] && (anchor[v] || adj[v].len() != 2))
+        .collect();
+    let mut keep = is_anchor.clone();
+    let mut visited = vec![false; n];
+    let next = |prev: u32, cur: u32| -> u32 {
+        let a = &adj[cur as usize];
+        if a[0] == prev {
+            a[1]
+        } else {
+            a[0]
+        }
+    };
+    for a in 0..n {
+        if !is_anchor[a] {
+            continue;
+        }
+        for &first in &adj[a] {
+            if is_anchor[first as usize] || visited[first as usize] {
+                continue;
+            }
+            let mut chain = vec![a as u32];
+            let (mut prev, mut cur) = (a as u32, first);
+            loop {
+                chain.push(cur);
+                if is_anchor[cur as usize] {
+                    break;
+                }
+                visited[cur as usize] = true;
+                let nx = next(prev, cur);
+                prev = cur;
+                cur = nx;
+            }
+            dp_chain(mesh, &chain, tol, &mut keep);
+        }
+    }
+    // Closed chains without an anchor: anchor the least key and the vertex farthest from it.
+    for s in 0..n {
+        if !cut[s] || is_anchor[s] || visited[s] {
+            continue;
+        }
+        let mut ring = vec![s as u32];
+        visited[s] = true;
+        let (mut prev, mut cur) = (s as u32, adj[s][0]);
+        while cur as usize != s {
+            visited[cur as usize] = true;
+            ring.push(cur);
+            let nx = next(prev, cur);
+            prev = cur;
+            cur = nx;
+        }
+        let m = (0..ring.len()).min_by_key(|&i| ring[i]).unwrap();
+        ring.rotate_left(m);
+        let p0 = mesh::position(mesh.vertices[ring[0] as usize].key);
+        let far = (1..ring.len())
+            .max_by(|&x, &y| {
+                let dx = mesh::position(mesh.vertices[ring[x] as usize].key);
+                let dy = mesh::position(mesh.vertices[ring[y] as usize].key);
+                let lx: f64 = (0..3).map(|k| (dx[k] - p0[k]).powi(2)).sum();
+                let ly: f64 = (0..3).map(|k| (dy[k] - p0[k]).powi(2)).sum();
+                lx.total_cmp(&ly).then(ring[y].cmp(&ring[x]))
+            })
+            .unwrap_or(0);
+        keep[ring[0] as usize] = true;
+        keep[ring[far] as usize] = true;
+        ring.push(ring[0]);
+        dp_chain(mesh, &ring[..=far], tol, &mut keep);
+        dp_chain(mesh, &ring[far..], tol, &mut keep);
+    }
+    keep
+}
+
 /// One proxy's published row (fixed size, external-sorted into postorder). Equality
 /// follows the sort order (`Ord`), so `Eq` and `Ord` agree even for NaN fields.
 #[derive(Clone, Copy, Debug)]
@@ -521,6 +671,9 @@ struct Ctx<'a> {
     /// one glTF primitive carries every source primitive of one flat material.
     material_rank: &'a [u32],
     retention: &'a [u8],
+    /// EXPERIMENT (h17-seams): per-depth Douglas-Peucker seam tolerance in metres
+    /// (`RT_EXPERIMENT_SEAM_TOL`); empty = hash retention.
+    seam_tolerance: &'a [f64],
     target: usize,
     mutation: Mutation,
     ar: Arith,
@@ -1072,14 +1225,31 @@ fn process(
 
     // Seam chains, then simplification.
     let k = ctx.retention.get(d as usize).copied().unwrap_or(0);
+    // EXPERIMENT (h17-seams): tolerance retention replaces the hash rule. Anchors are the
+    // structural keeps (shallower leaf, seam endpoint, special, consensus keep set); every
+    // other seam vertex stays only if Douglas-Peucker along its seam chain needs it.
+    let tolerance = ctx.seam_tolerance.get(d as usize).copied();
+    let dp_keep: Option<Vec<bool>> = tolerance.map(|tol| {
+        let anchor: Vec<bool> = mesh
+            .vertices
+            .iter()
+            .map(|v| kept(&v.info, v.key, d, u8::MAX) || keep_extra.contains(&v.key))
+            .collect();
+        tolerance_kept(&mesh, &kept_faces, d, &anchor, tol)
+    });
     let mut locked = vec![false; mesh.vertices.len()];
     let mut forced = Vec::new();
     let mut stalled = Vec::new();
+    let mut cut_count = 0u64;
     for (i, v) in mesh.vertices.iter().enumerate() {
         if !v.info.cut(d) {
             continue;
         }
-        let mut keep = kept(&v.info, v.key, d, k) || keep_extra.contains(&v.key);
+        cut_count += 1;
+        let mut keep = match &dp_keep {
+            Some(dp) => dp[i],
+            None => kept(&v.info, v.key, d, k) || keep_extra.contains(&v.key),
+        };
         // Control: the first tile of each depth removes a third of the seam vertices every
         // other tile keeps, ignoring the keep set (a crack consensus cannot heal).
         if matches!(ctx.mutation, Mutation::InjectCrack | Mutation::CrackAsHole)
@@ -1187,6 +1357,16 @@ fn process(
         }
     };
     out.relaxed = relaxed;
+    if full && experiment_stats() {
+        eprintln!(
+            "RTX tile f{} d{d} children_faces {} cut {cut_count} forced {} kept_cut {} faces {} relaxed {relaxed}",
+            node.first,
+            kept_faces.len(),
+            forced.len(),
+            cut_count - forced.len() as u64,
+            s_faces.len()
+        );
+    }
     out.forced = report.forced;
     out.forced_unchecked = report.forced_unchecked;
     out.over_budget = s_faces.len() > 2 * ctx.target;
@@ -2551,6 +2731,25 @@ pub(crate) fn produce(
         }
     }
     report.retention = retention(&sums, input.target as u128);
+    // EXPERIMENT (h17-seams bake-off, not for merge): seam retention variants.
+    if std::env::var_os("RT_EXPERIMENT_KEEP_ALL_SEAMS").is_some() {
+        report.retention.iter_mut().for_each(|k| *k = 0);
+    }
+    let seam_tolerance: Vec<f64> = match std::env::var("RT_EXPERIMENT_SEAM_TOL")
+        .ok()
+        .and_then(|t| t.parse::<f64>().ok())
+    {
+        Some(t) => (0..height)
+            .map(|d| t * extents[d] * 3f64.sqrt() / (input.target as f64).sqrt())
+            .collect(),
+        None => Vec::new(),
+    };
+    if experiment_stats() {
+        eprintln!(
+            "RTX retention {:?} seam_tolerance {:?} extents {:?}",
+            report.retention, seam_tolerance, extents
+        );
+    }
     let rows_path = input.stage.join("proxies.jsonl");
     if internal == 0 {
         fs::write(&rows_path, b"").map_err(|e| JobError::io("write proxy rows", &rows_path, e))?;
@@ -2619,6 +2818,7 @@ pub(crate) fn produce(
         materials: &materials,
         material_rank: &material_rank,
         retention: &report.retention.clone(),
+        seam_tolerance: &seam_tolerance,
         target: input.target,
         mutation: input.mutation,
         ar: Arith::new(input.mutation),
