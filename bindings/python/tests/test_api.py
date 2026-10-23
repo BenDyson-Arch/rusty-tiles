@@ -298,6 +298,12 @@ class WheelAPI(unittest.TestCase):
             self.assertEqual(result.report["root_transform"], transform)
         self.assertEqual(result.report["coordinates"], "wgs84-ecef")
 
+    def test_r2_imagery_pyramid_is_not_a_python_capability(self):
+        self.assertFalse(hasattr(rusty_tiles, "raster_to_pyramid"))
+        self.assertFalse(hasattr(rusty_tiles, "RasterRequest"))
+        self.assertFalse(hasattr(rusty_tiles, "RasterDisplay"))
+        self.assertTrue(callable(rusty_tiles.raster_tile_to_directory))
+
     def test_d1_native_capability_is_explicit_and_leaves_no_output(self):
         output = self.root / "d1-raster"
         events = []
