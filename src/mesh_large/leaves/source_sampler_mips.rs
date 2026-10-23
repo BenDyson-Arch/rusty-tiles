@@ -432,19 +432,20 @@ pub(super) fn check_samples(
     delivered: &[Level],
     context: &SamplerCheck<'_>,
 ) -> Result<SamplerReceipt, JobError> {
-    check_levels(chain, delivered, context)
+    check_levels(chain, delivered, context, true)
 }
 /// Source sampler gate before codec, borrowing authored levels without a clone.
 pub(super) fn check_authored(
     chain: &Chain,
     context: &SamplerCheck<'_>,
 ) -> Result<SamplerReceipt, JobError> {
-    check_levels(chain, &chain.page.levels, context)
+    check_levels(chain, &chain.page.levels, context, false)
 }
 fn check_levels<L: ImageLevel>(
     chain: &Chain,
     delivered: &[L],
     context: &SamplerCheck<'_>,
+    decoded: bool,
 ) -> Result<SamplerReceipt, JobError> {
     let samples = context.samples;
     let sampler = context.sampler;
@@ -632,16 +633,36 @@ fn check_levels<L: ImageLevel>(
                     },
                 )
             } else if matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive) {
-                (
-                    if quality { 34.0 } else { 22.0 },
-                    if fast {
-                        56.0
-                    } else if quality {
-                        24.0
+                if decoded && matches!(profile, Profile::Fast | Profile::Balanced) {
+                    // At a fractional LOD use the coarser participating level's
+                    // band. Pre-encode correspondence retains its stricter floors.
+                    let sampled = if lod <= 0. || matches!(page_sampler.min_filter, 9728 | 9729) {
+                        0
+                    } else if matches!(page_sampler.min_filter, 9984 | 9985) {
+                        (lod + 0.5).floor() as usize
                     } else {
-                        32.0
-                    },
-                )
+                        lod.ceil() as usize
+                    };
+                    let level = &delivered[sampled.min(delivered.len() - 1)];
+                    (
+                        super::delivery::colour_psnr(
+                            profile,
+                            u64::from(level.width()) * u64::from(level.height()),
+                        ),
+                        if fast { 160. } else { 144. },
+                    )
+                } else {
+                    (
+                        if quality { 34.0 } else { 22.0 },
+                        if fast {
+                            56.0
+                        } else if quality {
+                            24.0
+                        } else {
+                            32.0
+                        },
+                    )
+                }
             } else if slot == TextureSlot::Normal {
                 (30.0, 112.0)
             } else {

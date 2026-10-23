@@ -147,13 +147,78 @@ source that would need native PROJ for only some vertices is refused.
 
 `--profile` accepts `fast`, `balanced` (the default), `quality` or `lossless`.
 These are **provisional policies**: leaf sizing, texture resolution, encoder
-effort and other constants will be calibrated together after coarse geometry
-and baking exist. Do not build scripts around today's numerical constants.
+effort and other constants will be calibrated together as HLOD implementation
+and acceptance progress. Do not build scripts around today's numerical constants.
 Every present PBR slot follows its colour/data class and the chosen policy.
 Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 `lossless` describes the agreed leaf texel policy, not exact source GLB bytes,
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
+
+Colour-class pages (base colour and emissive), in **both leaves and coarse
+proxies**, use the following initial codec. The single policy owner is
+`src/mesh_large/leaves/delivery.rs::codec_settings`; proxy delivery calls it
+through the shared authored-chain encoder. HLOD consumers of that encoder
+inherit the same choice.
+
+| Profile | Colour codec | ETC1S quality / effort |
+| --- | --- | --- |
+| `fast` | KTX2 ETC1S (BasisLZ) | 50 / 3 (lean) |
+| `balanced` (default) | KTX2 ETC1S (BasisLZ) | 90 / 3 (good) |
+| `quality` | KTX2 UASTC + Zstd | unchanged |
+| `lossless` | PNG | unchanged |
+
+Quality uses the wrapper's 1–100 scale; effort 3 maps to ETC1S
+compression level 2. Colour remains sRGB with
+class-correct authored mips. Normal and metallic-roughness remain UASTC;
+occlusion remains scalar ETC1S q90/effort 0 in fast/balanced and UASTC in
+quality. ID pages remain exact PNG in every profile.
+
+Decoded RGB floors are support-weighted and checked on **every mip**, including
+1×1. The middle band is 64–1,023 supported texels; tiny means fewer than 64.
+A page must meet all
+applicable criteria; PSNR is in dB, errors in RGBA8 byte units.
+
+| Colour profile | PSNR ≥1,024 / middle / tiny | Large p99.9 cap | Worst supported 4×4 block RMSE cap |
+| --- | --- | --- | --- |
+| `fast` | 20 / 16 / 12 | 112 | 96 |
+| `balanced` | 20 / 16 / 12 | 80 | 80 |
+| `quality` | 27 / 23 / 23 | 64 | 48 |
+
+The percentile cap is omitted below 1,024 supported texels; the block guard stays
+active. Alpha keeps PSNR/max-error floors of 30/80 (fast), 30/64 (balanced),
+34/32 (quality). Normal RGB keeps 30/112 plus normalized-length mean/max caps
+0.08/0.20, 0.05/0.15, 0.03/0.10 respectively, and angular mean/p99 caps
+3°/12°. Metallic-roughness keeps 30/32 on G/B; occlusion keeps 30/80 on R
+(quality 30/8). MASK decoded coverage keeps the attainable semantic gap plus
+0.02/0.01/0.005. Non-MASK alpha and data source-sampler floors are unchanged.
+Decoded fast/balanced colour source sampling uses the same RGB PSNR bands
+(from the sampled page level's dimensions, coarser for a mip blend), with maximum errors
+160/144 respectively. Quality keeps 34/24. Pre-encode source correspondence
+keeps its original 22/56, 22/32, 34/24 limits; codec error does not authorize
+weaker chart correspondence. These errors are in sRGB byte space after
+linear-light sampling.
+
+The q50/q90 photo, alpha-photo and odd-size fixture bases were authored into
+valid colour-correct mip pages (POT padding has zero support). They measured
+minimum RGB PSNR 20.38/20.72 dB at ≥1,024 texels, 18.64/18.61 dB in the
+middle band and 13.30/13.30 dB in tiny mips. The smooth 64² photo control
+reaches 17.22/17.16 dB in the middle band. Shared palettes and joint-channel
+reconstruction explain the coarse/tiny channel tails, motivating the 20/16/12
+bands. The existing codec byte-domain pyramids were measured separately; they
+do not define the colour-mip filtering contract.
+
+A legal ETC1S decode is not automatically acceptable. The 256² smooth-photo
+stress family still misses the large-level floors (q90 17.46 dB, p99.9 94)
+and escalates. Noise/chroma-noise also miss the RGB floors; they do not set
+acceptance floors. Percentile/block caps retain local damage detection, with
+flat/low-noise and saturated checker controls measured separately. Source max
+caps cover photo tails with margin; alpha/MASK guards remain independent and
+are never relaxed to admit RGB error.
+
+This brings forward D7 by the owner's 2026-10-24 decision. Calibration and
+bounded tex3/crop3 measurements, corruption controls and proof limits are
+recorded in [the ETC1S acceptance record](../bench/architecture_audit/etc1s_default/README.md).
 
 In a lossy profile, a texture page that misses any decoded-image gate at the
 profile's own encoder setting (per-level channel and normal floors, MASK

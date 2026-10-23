@@ -90,6 +90,7 @@ const COUNTERS: [(Counter, &str); 7] = [
 const ENCODE_BUCKETS: usize = 32;
 
 struct Totals {
+    cpu_nanos: [AtomicU64; STAGES.len()],
     nanos: [AtomicU64; STAGES.len()],
     calls: [AtomicU64; STAGES.len()],
     counters: [AtomicU64; COUNTERS.len()],
@@ -103,6 +104,7 @@ fn totals() -> Option<&'static Totals> {
     TOTALS
         .get_or_init(|| {
             std::env::var_os("RUSTY_TILES_STAGE_TIMING").map(|_| Totals {
+                cpu_nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 nanos: std::array::from_fn(|_| AtomicU64::new(0)),
                 calls: std::array::from_fn(|_| AtomicU64::new(0)),
                 counters: std::array::from_fn(|_| AtomicU64::new(0)),
@@ -121,16 +123,41 @@ fn index(stage: Stage) -> usize {
         .expect("every stage is listed")
 }
 
-/// Runs `f`, charging its wall time on this thread to `stage` when enabled.
+// The encoder is single-threaded per call. On Linux, thread CPU excludes idle
+// scheduling delays and other workers, unlike the summed worker wall clock.
+#[cfg(target_os = "linux")]
+fn thread_cpu_nanos() -> u64 {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: time is a writable timespec; the clock has no external state.
+    if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut time) } == 0 {
+        time.tv_sec as u64 * 1_000_000_000 + time.tv_nsec as u64
+    } else {
+        0
+    }
+}
+#[cfg(not(target_os = "linux"))]
+fn thread_cpu_nanos() -> u64 {
+    0
+}
+
+/// Runs `f`, charging worker wall time and (on Linux) thread CPU when enabled.
 pub(crate) fn time<T>(stage: Stage, f: impl FnOnce() -> T) -> T {
     let Some(totals) = totals() else {
         return f();
     };
     let start = Instant::now();
+    let cpu_start = thread_cpu_nanos();
     let out = f();
     let i = index(stage);
     totals.nanos[i].fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
     totals.calls[i].fetch_add(1, Ordering::Relaxed);
+    totals.cpu_nanos[i].fetch_add(
+        thread_cpu_nanos().saturating_sub(cpu_start),
+        Ordering::Relaxed,
+    );
     out
 }
 
@@ -150,6 +177,7 @@ pub(crate) fn encode<T>(base_texels: u64, chain_texels: u64, f: impl FnOnce() ->
         return f();
     };
     let start = Instant::now();
+    let cpu_start = thread_cpu_nanos();
     let out = f();
     let nanos = start.elapsed().as_nanos() as u64;
     let bucket = (64 - base_texels.max(1).leading_zeros() as usize - 1).min(ENCODE_BUCKETS - 1);
@@ -159,6 +187,10 @@ pub(crate) fn encode<T>(base_texels: u64, chain_texels: u64, f: impl FnOnce() ->
     let i = index(Stage::BasisEncode);
     totals.nanos[i].fetch_add(nanos, Ordering::Relaxed);
     totals.calls[i].fetch_add(1, Ordering::Relaxed);
+    totals.cpu_nanos[i].fetch_add(
+        thread_cpu_nanos().saturating_sub(cpu_start),
+        Ordering::Relaxed,
+    );
     out
 }
 
@@ -176,7 +208,7 @@ pub(crate) fn finish(extra: Value) {
         }
         stages.insert(
             (*name).into(),
-            json!({"seconds": totals.nanos[i].load(Ordering::Relaxed) as f64 / 1e9, "calls": calls}),
+            json!({"seconds": totals.nanos[i].load(Ordering::Relaxed) as f64 / 1e9, "calls": calls, "cpu_seconds": cfg!(target_os = "linux").then(|| totals.cpu_nanos[i].load(Ordering::Relaxed) as f64 / 1e9)}),
         );
     }
     let mut counters = Map::new();
