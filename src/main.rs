@@ -87,10 +87,10 @@ enum Command {
     /// Admitted static GLB/glTF → exact-byte .3tz with optional rigid placement
     #[command(name = "glb-to-3tz", visible_alias = "glbTo3tz")]
     GlbTo3tz(ModelArchiveArgs),
-    /// Deprecated: legacy mesh converter; use mesh for local metre/Y-up input
+    /// Deprecated: legacy mesh converter, removed before 0.4.0; use mesh
     #[command(name = "mesh-to-3tz", visible_alias = "meshTo3tz")]
     MeshTo3tz(MeshArgs),
-    /// Deprecated: old bounded local-mesh writer; use mesh for the new tiler
+    /// Deprecated: old bounded local-mesh writer, removed before 0.4.0; use mesh
     #[command(name = "mesh-local-to-3tz")]
     MeshLocalTo3tz(LocalMeshArgs),
     /// GeoJSON/GeoPackage → glTF .3tz; other OGR inputs require native-geospatial
@@ -106,6 +106,18 @@ enum Command {
 }
 
 impl Command {
+    /// The stderr notice for a deprecated legacy mesh command run.
+    fn deprecation(&self) -> Option<String> {
+        matches!(self, Self::MeshTo3tz(_) | Self::MeshLocalTo3tz(_)).then(|| {
+            format!(
+                "{} is deprecated and will be removed before the 0.4.0 release; use \
+                 `rusty-tiles mesh` instead (see \"Migration from older mesh converters\" \
+                 in docs/MESH.md)",
+                self.name()
+            )
+        })
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Self::Mesh(_) => "mesh",
@@ -744,6 +756,15 @@ fn main() -> ExitCode {
     } else {
         Reporter::human_stderr()
     };
+    if let Some(message) = cli.command.deprecation() {
+        if events {
+            let detail =
+                json!({"code":"deprecated","command":name,"replacement":"mesh","message":message});
+            reporter.warn(&message, Some(&detail));
+        } else {
+            eprintln!("warning: {message}");
+        }
+    }
     reporter.progress("conversion", 0, 1);
     match run(cli, &reporter) {
         Ok(Outcome::Report(report)) if report["ok"] == false => {

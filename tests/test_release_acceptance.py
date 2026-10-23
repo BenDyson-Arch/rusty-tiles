@@ -105,7 +105,7 @@ class DoctorContractStep(unittest.TestCase):
     def run_with_stub(self, process_exit):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            readme = doctor_report({"mesh-to-3tz": None, "validate": None, "preview": None})
+            readme = doctor_report({"mesh": None, "validate": None, "preview": None})
             full = doctor_report({"convert": None, "raster": ("unsupported", 2)})
             binary = root / "rusty-tiles"
             # The harness runs the binary with an empty PATH: builtins only.

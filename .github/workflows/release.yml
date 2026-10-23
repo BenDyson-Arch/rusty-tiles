@@ -109,10 +109,7 @@ jobs:
           if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
           binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
           "$binary" --version
-          "$binary" doctor --command mesh-to-3tz
           mkdir -p smoke dist stage
-          "$binary" mesh-to-3tz -i tests/fixtures/example.gltf -o smoke/example.3tz --cartographic-position-degrees 153.02 -27.47 0
-          "$binary" validate smoke/example.3tz
           "$binary" doctor --command mesh
           "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
           "$binary" validate smoke/mesh.3tz
