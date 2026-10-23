@@ -110,7 +110,7 @@ pub(crate) struct TileAppearance {
     pub achieved_spacing: f64,
     pub capped: bool,
     pub page_size: [u32; 2],
-    pub source_triangles_indexed: u64,
+    pub donor_reads: u64,
     pub escalated_pages: u32,
 }
 
@@ -134,8 +134,6 @@ pub(crate) struct Appearance {
 
 /// The tile as S1 publishes it.
 pub(crate) struct TileView<'a> {
-    pub first: u64,
-    pub end: u64,
     pub decoded: &'a [[f32; 3]],
     pub triangles: &'a [[u32; 3]],
     /// Per triangle: the source material of its representative.
@@ -232,7 +230,11 @@ struct Pending {
 }
 
 /// Build the appearance of one coarse tile.
-pub(crate) fn build(services: &Services<'_>, tile: &TileView<'_>) -> Result<Appearance, JobError> {
+pub(crate) fn build(
+    services: &Services<'_>,
+    query: &mut super::source_index::SourceQuery<'_>,
+    tile: &TileView<'_>,
+) -> Result<Appearance, JobError> {
     let captured = services.captured;
     let check = services.check;
     let classes = &captured.material_classes;
@@ -339,14 +341,7 @@ pub(crate) fn build(services: &Services<'_>, tile: &TileView<'_>) -> Result<Appe
     }
     timing.charts = started.elapsed().as_secs_f64();
     let started = std::time::Instant::now();
-    facts.source_triangles_indexed = bake::resolve(
-        captured,
-        tile.first,
-        tile.end,
-        &mut queries,
-        services.colors,
-        check,
-    )?;
+    facts.donor_reads = bake::resolve(query, &mut queries, check)?;
     timing.query = started.elapsed().as_secs_f64();
     let mut queries = queries.into_iter();
     let mut vertex_groups = vertex_groups.into_iter().peekable();

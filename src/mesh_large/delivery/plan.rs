@@ -462,6 +462,9 @@ impl<'s, S: Sink> Builder<'s, S> {
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
+        // A content-bearing HLOD tile publishes S2's G verbatim. This node (and
+        // the external-link clone below) is also the single source of the implicit
+        // metadata error. The diagonal policy applies only to empty traversal nodes.
         let error = match &proxy {
             Some(row) => row.geometric_error,
             None => children_error.max(EMPTY_PARENT_SCALE * diagonal),
@@ -613,7 +616,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             ));
         }
         if let Some(rows) = self.proxies.as_mut() {
-            if rows.next().is_some() {
+            if rows.next().transpose()?.is_some() {
                 return Err(JobError::new(
                     JobErrorKind::InvalidInput,
                     "proxies.jsonl has rows beyond the internal tiles",
