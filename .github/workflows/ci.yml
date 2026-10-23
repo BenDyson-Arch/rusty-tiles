@@ -369,7 +369,7 @@ jobs:
               crs dir_sync doctor raster runtime terrain vec3 vector source_crs
             cargo test --locked --features native-geospatial --bins \
               --test 'native_*' --test 'raster_*' --test 'point_*' --test '*vector*' --test '*terrain*' \
-              --test cli_contract --test demodata_suite --test golden --test machine_results --test mesh_crs
+              --test cli_contract --test demodata_suite --test golden --test machine_results --test h26_mesh_frontends
           else
             cargo test --locked --features native-geospatial
           fi
