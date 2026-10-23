@@ -35,6 +35,16 @@ Both shared branches need a PR, passing `Rust` and `Python` checks, an up-to-dat
 
 `main` also needs one code-owner approval, and stale approvals are dismissed. CODEOWNERS requests `@BenDyson-Arch`. While there is one maintainer, administrators may bypass only this approval, only through a PR, for their own changes. Review this exception when more maintainers join. Maintainers cut releases from verified commits on `main`. Contributions are licensed under MIT.
 
+### CI tiers
+
+Pull requests run a fast Linux tier. The change-scope classifier and docs-only path are unchanged. A code change then runs `Rust` (formatting, clippy, tests and receipts), `Python` and `Native geospatial` for the newest GDAL (3.13). `Rust` and `Python` are the required checks; keep those job names. Expect the `Rust` job, about 25 to 30 minutes, to set the wall time. The tier skips the five-target `Portable CLI` and `KTX2 encoder link` matrices, `Python wheel`, `Wheel acceptance` (installed wheels and Blender), `Python-free runtime`, `Release acceptance` and GDAL 3.12.
+
+The full tier runs every job in [`ci.yml`](.github/workflows/ci.yml) on pushes to `main` and `develop`, on manual runs and nightly. [`nightly.yml`](.github/workflows/nightly.yml) dispatches it on `develop` at 17:00 UTC (03:00 in Brisbane); GitHub reads schedules from the default branch, so nightly runs begin once that file reaches `main`. To run the full tier on a branch, use **Actions > CI > Run workflow**, which also adds `Release acceptance`.
+
+When a push or nightly run on `develop` fails, the `Full CI tracking issue` job opens one issue titled "Full CI matrix failing on develop" with the run URL and failed jobs, and comments on it for later failures. The next green run that tested code closes it. Cancelled runs and docs-only runs change nothing. The job is the only one with `issues: write`.
+
+The release workflow accepts a tag only if a push, nightly or manual `ci.yml` run for that exact commit passed both `Full matrix` and `Rust`; a pull-request run never counts. See the release checklist.
+
 ## Crate layout
 
 The proposed [0.4.0 architecture foundations](docs/architecture/README.md) track the
@@ -157,7 +167,7 @@ smoke-test one `cp310-abi3` wheel per release platform; the stable ABI covers
 CPython 3.10 and newer. See [the Python API guide](bindings/python/README.md).
 
 The separate [Wheel acceptance workflow](.github/workflows/wheel-acceptance.yml)
-runs on relevant PRs into `develop` and is a mandatory release-workflow gate.
+runs in the full CI tier (not on pull requests) and is a mandatory release-workflow gate.
 It tests all five wheels with CPython 3.10 and 3.14, then installs the matching
 candidate wheels inside checksum-pinned official Blender 4.5.14 LTS bundles on
 Linux x86_64, Windows x64, Intel macOS and Apple Silicon macOS. Its uploaded JSON
@@ -333,7 +343,7 @@ cmp output/a.3tz output/b.3tz
 
 Without `--reproducible`, payloads, manifests, build state and reports still match. The performance section changes the ZIP offsets and index, so raw archive hashes differ. Compare members, not the archive. A fresh build and a reuse build are not byte-equal, because their ingestion history and reuse statistics differ. Mesh texture bytes depend on the codec build and are not promised equal.
 
-The fixed recipe test `tests/output_digests.rs` runs every enabled converter twice on every platform. On the baseline platform recorded in `tests/fixtures/output_digests.json` (currently Linux x86_64), it also checks committed SHA-256 digests for the five recipes independent of GDAL and PROJ: two mesh recipes, `glb-to-3tz`, `createTilesetJson` and `convert`. Codec output can differ across CPU architectures, so other platforms check repeatability on their own stack. Native recipes also check repeatability on the current library stack. The digest test takes about 1.3 seconds with native geospatial enabled.
+The fixed recipe test `tests/output_digests.rs` runs every enabled converter twice on every platform. On the baseline platform recorded in `tests/fixtures/output_digests.json` (currently Linux x86_64), it also checks committed SHA-256 digests for the four recipes independent of GDAL and PROJ: `mesh` (lossless profile, one worker), `glb-to-3tz`, `createTilesetJson` and `convert`. Codec output can differ across CPU architectures, so other platforms check repeatability on their own stack. Native recipes also check repeatability on the current library stack. The digest test takes about 1.3 seconds with native geospatial enabled.
 
 Regenerate the baseline digests only after reviewing an intended output change. Regeneration records the current OS and CPU architecture:
 
@@ -342,13 +352,13 @@ UPDATE_OUTPUT_DIGESTS=1 cargo test --locked --test output_digests
 scripts/compare_outputs.sh develop
 ```
 
-The comparison script builds each revision in its own release target directory. It runs 12 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
+The comparison script builds each revision in its own release target directory. It runs 11 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
 
-Only the two deprecated `mesh-to-3tz` recipes pass `--explicit`, the one converter that still has an explicit mode (see `tests/support/mod.rs`); the script omits the flag for baseline binaries that predate it. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. The new `mesh` tiler has no recipe here. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
+The `mesh` recipe runs the tiler with the lossless profile, so its digests do not depend on the KTX2 encoder's CPU path; the deprecated `mesh-to-3tz` has no recipe. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
 
 ## Release checklist
 
-1. CI passes on `develop`. Its jobs are `Rust`, `Native geospatial` for GDAL 3.12 and 3.13, `Python` and `Python-free runtime`. The manual workflow also runs `Release acceptance`.
+1. The full CI tier passes on `develop`, and later on `main` for the commit you tag. Its jobs are `Rust`, `Native geospatial` for GDAL 3.12 and 3.13, `Python`, `Python-free runtime`, the portable, encoder-link and wheel matrices, and the `Full matrix` verdict that the release workflow requires. The manual workflow also runs `Release acceptance`.
 
    ```sh
    scripts/release_acceptance.sh

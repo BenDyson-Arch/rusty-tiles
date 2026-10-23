@@ -61,64 +61,94 @@ const ENCODER_PREFIX: &str = "rusty-tiles-native-vector-v1:";
 #[cfg(not(feature = "native-geospatial"))]
 const ENCODER_PREFIX: &str = "rusty-tiles-portable-vector-v1:";
 
+/// Crate-relative source files and their bytes, compiled in with `include_str!`.
+macro_rules! fingerprint_sources {
+    ($($path:literal),* $(,)?) => {
+        &[$(($path, include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path)))),*]
+    };
+}
+
+/// The vector producer's runtime source and dependency closure, in hash order.
+/// `bench/benchmark_vector.py` reads these paths for its source provenance, and
+/// `fingerprint_tests` checks that the list stays closed over the vector modules
+/// and their crate dependencies. Changing it invalidates every reuse cache.
+const FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
+    "src/vector.rs",
+    "src/vector/pipeline.rs",
+    "src/vector/model.rs",
+    "src/vector/source_fields.rs",
+    "src/vector/pipeline/source.rs",
+    "src/vector/pipeline/acceptance.rs",
+    "src/vector/portable.rs",
+    "src/crs.rs",
+    "src/vector/pipeline/geometry.rs",
+    "src/vector/pipeline/encoding.rs",
+    "src/vector/pipeline/aggregation.rs",
+    "src/vector/pipeline/outline.rs",
+    "src/point_sampling.rs",
+    "src/vector/pipeline/store.rs",
+    "src/vector/pipeline/records.rs",
+    "src/vector/pipeline/reuse.rs",
+    "src/vector_encoding.rs",
+    "src/vector_encoding/limits.rs",
+    "src/vector_encoding/raw.rs",
+    "src/vector_encoding/plan.rs",
+    "src/vector_encoding/rewrite.rs",
+    "src/vector_encoding/framing.rs",
+    "src/content_integrity.rs",
+    "src/content_integrity/json.rs",
+    "src/content_integrity/numbers.rs",
+    "src/content_integrity/meshopt.rs",
+    "src/content_integrity/payload.rs",
+    "src/content_integrity/payload/ktx2.rs",
+    "src/content_integrity/payload/numbers.rs",
+    "src/content_integrity/payload/records.rs",
+    "src/content_integrity/payload/scene.rs",
+    "src/vector_compression.rs",
+    "src/vector_compression/source.rs",
+    "src/metadata.rs",
+    "src/glb.rs",
+    "src/bbox.rs",
+    "src/georef.rs",
+    "src/vec3.rs",
+    "src/implicit.rs",
+    "src/implicit/tileset.rs",
+    "src/implicit/tileset/stream.rs",
+    "src/tileset_node.rs",
+    "Cargo.lock",
+];
+/// Native-geospatial build only, hashed after [`FINGERPRINT_SOURCES`].
+#[cfg_attr(not(any(test, feature = "native-geospatial")), allow(dead_code))]
+const NATIVE_FINGERPRINT_SOURCES: &[(&str, &str)] = fingerprint_sources![
+    "src/vector/pipeline/source_native.rs",
+    "src/vector/pipeline/geometry/native.rs",
+    "src/geospatial.rs",
+    "src/geospatial/native.rs",
+];
+/// Portable build only, hashed after [`FINGERPRINT_SOURCES`].
+#[cfg_attr(any(not(test), feature = "native-geospatial"), allow(dead_code))]
+const PORTABLE_FINGERPRINT_SOURCES: &[(&str, &str)] =
+    fingerprint_sources!["src/vector/pipeline/geometry/portable.rs"];
+const FRAMING_SOURCE: &str = "src/vector_encoding/framing.rs";
+
 fn encoder() -> String {
     encoder_with_framing(include_str!("../../vector_encoding/framing.rs"))
 }
 fn encoder_with_framing(framing_source: &str) -> String {
     // Intrinsic source-chart triangulation changes native content too; the
     // encoder identity is the reviewed source/dependency fingerprint.
-    let mut hasher = Sha256::new();
-    for source in [
-        include_str!("../pipeline.rs"),
-        include_str!("../model.rs"),
-        include_str!("../source_fields.rs"),
-        include_str!("source.rs"),
-        include_str!("acceptance.rs"),
-        include_str!("../portable.rs"),
-        include_str!("../../crs.rs"),
-        include_str!("geometry.rs"),
-        include_str!("encoding.rs"),
-        include_str!("aggregation.rs"),
-        include_str!("../../point_sampling.rs"),
-        include_str!("store.rs"),
-        include_str!("records.rs"),
-        include_str!("reuse.rs"),
-        include_str!("../../vector_encoding.rs"),
-        include_str!("../../vector_encoding/limits.rs"),
-        include_str!("../../vector_encoding/raw.rs"),
-        include_str!("../../vector_encoding/plan.rs"),
-        include_str!("../../vector_encoding/rewrite.rs"),
-        framing_source,
-        include_str!("../../content_integrity.rs"),
-        include_str!("../../content_integrity/json.rs"),
-        include_str!("../../content_integrity/numbers.rs"),
-        include_str!("../../content_integrity/meshopt.rs"),
-        include_str!("../../vector_compression.rs"),
-        include_str!("../../metadata.rs"),
-        include_str!("../../glb_write.rs"),
-        include_str!("../../glb.rs"),
-        include_str!("../../bbox.rs"),
-        include_str!("../../georef.rs"),
-        include_str!("../../implicit.rs"),
-        include_str!("../../implicit/tileset.rs"),
-        include_str!("../../tileset_node.rs"),
-        include_str!("../../../Cargo.lock"),
-    ] {
-        hasher.update(source.as_bytes());
-        hasher.update([0]);
-    }
     #[cfg(feature = "native-geospatial")]
-    for source in [
-        include_str!("source_native.rs"),
-        include_str!("geometry/native.rs"),
-        include_str!("../../geospatial.rs"),
-    ] {
-        hasher.update(source.as_bytes());
-        hasher.update([0]);
-    }
+    let build = NATIVE_FINGERPRINT_SOURCES;
     #[cfg(not(feature = "native-geospatial"))]
-    {
-        hasher.update(include_str!("geometry/portable.rs").as_bytes());
+    let build = PORTABLE_FINGERPRINT_SOURCES;
+    let mut hasher = Sha256::new();
+    for (path, source) in FINGERPRINT_SOURCES.iter().chain(build) {
+        let source = if *path == FRAMING_SOURCE {
+            framing_source
+        } else {
+            source
+        };
+        hasher.update(source.as_bytes());
         hasher.update([0]);
     }
     format!("{ENCODER_PREFIX}{:x}", hasher.finalize())
@@ -818,5 +848,188 @@ mod codec_reuse_tests {
         assert_eq!(counters.fragments, start + 4);
         reuse.remember("", "signature".into(), &mut node).unwrap();
         assert_eq!(reuse.records[""].fragments, 5);
+    }
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    //! The encoder fingerprint must cover the code that shapes vector content.
+    //! These checks keep [`FINGERPRINT_SOURCES`] closed over module files and
+    //! `crate::` paths, so a new dependency cannot silently escape it.
+    use super::*;
+
+    /// Crate modules the vector closure reaches that do not shape published
+    /// payloads or reuse decisions.
+    const EXEMPT: &[(&str, &str)] = &[
+        (
+            "src/archive3tz.rs",
+            "3TZ container; reuse restores payloads by content hash",
+        ),
+        (
+            "src/content_integrity/implicit.rs",
+            "validator implicit walk; no vector caller",
+        ),
+        ("src/error.rs", "error types and messages"),
+        (
+            "src/gltf_source/binding.rs",
+            "URI escaping; vector content names are hex digests",
+        ),
+        ("src/output.rs", "writes the conversion report file"),
+        ("src/output_path.rs", "resolves the requested output path"),
+        ("src/runtime.rs", "run control, events and staging"),
+        ("src/validate.rs", "resource-limit error variant"),
+    ];
+
+    fn all_sources() -> Vec<&'static str> {
+        FINGERPRINT_SOURCES
+            .iter()
+            .chain(NATIVE_FINGERPRINT_SOURCES)
+            .chain(PORTABLE_FINGERPRINT_SOURCES)
+            .map(|(path, _)| *path)
+            .collect()
+    }
+
+    /// Files of the non-test `mod name;` declarations in a module file.
+    fn module_files(path: &str, text: &str) -> Vec<String> {
+        let file = Path::new(path);
+        let directory = file.parent().unwrap().to_str().unwrap();
+        let stem = file.file_stem().unwrap().to_str().unwrap();
+        let mut attributes = Vec::new();
+        let mut files = Vec::new();
+        for line in text.lines().map(str::trim) {
+            if line.starts_with("#[") {
+                attributes.push(line);
+                continue;
+            }
+            if line.is_empty() || line.starts_with("//") {
+                continue;
+            }
+            let declaration = ["pub(crate) ", "pub(super) ", "pub "]
+                .iter()
+                .find_map(|visibility| line.strip_prefix(visibility))
+                .unwrap_or(line);
+            if let Some(name) = declaration
+                .strip_prefix("mod ")
+                .and_then(|rest| rest.strip_suffix(';'))
+            {
+                if !attributes.iter().any(|a| a.contains("cfg(test)")) {
+                    let explicit = attributes.iter().find_map(|a| {
+                        a.strip_prefix("#[path = \"")
+                            .and_then(|rest| rest.strip_suffix("\"]"))
+                    });
+                    files.push(match explicit {
+                        Some(relative) => format!("{directory}/{relative}"),
+                        None => format!("{directory}/{stem}/{name}.rs"),
+                    });
+                }
+            }
+            attributes.clear();
+        }
+        files
+    }
+
+    /// The module files named by `crate::a` and `crate::a::b` paths, including
+    /// grouped `crate::{a, b::c}` imports.
+    fn crate_paths(text: &str) -> Vec<String> {
+        let identifier = |s: &str| -> String {
+            s.chars()
+                .take_while(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_')
+                .collect()
+        };
+        let path = |item: &str| -> Option<String> {
+            let first = identifier(item.trim_start());
+            if first.is_empty() {
+                return None;
+            }
+            let rest = item.trim_start()[first.len()..].strip_prefix("::");
+            let second = rest.map(identifier).filter(|s| !s.is_empty());
+            let root = env!("CARGO_MANIFEST_DIR");
+            second
+                .map(|second| format!("src/{first}/{second}.rs"))
+                .filter(|nested| Path::new(root).join(nested).is_file())
+                .or_else(|| {
+                    let file = format!("src/{first}.rs");
+                    Path::new(root).join(&file).is_file().then_some(file)
+                })
+        };
+        let mut files = Vec::new();
+        for (at, _) in text.match_indices("crate::") {
+            let rest = &text[at + "crate::".len()..];
+            if let Some(group) = rest.strip_prefix('{') {
+                let (mut depth, mut start) = (0usize, 0);
+                for (index, c) in group.char_indices() {
+                    match c {
+                        '{' => depth += 1,
+                        '}' if depth == 0 => {
+                            files.extend(path(&group[start..index]));
+                            break;
+                        }
+                        '}' => depth -= 1,
+                        ',' if depth == 0 => {
+                            files.extend(path(&group[start..index]));
+                            start = index + 1;
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                files.extend(path(rest));
+            }
+        }
+        files
+    }
+
+    #[test]
+    fn fingerprint_is_closed_over_vector_modules_and_crate_dependencies() {
+        let listed = all_sources();
+        let mut escaped = BTreeSet::new();
+        for path in listed.iter().filter(|path| path.ends_with(".rs")) {
+            let text =
+                std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
+            for file in module_files(path, &text)
+                .into_iter()
+                .chain(crate_paths(&text))
+            {
+                if !listed.contains(&file.as_str())
+                    && !EXEMPT.iter().any(|(exempt, _)| *exempt == file)
+                {
+                    escaped.insert(format!("{file} (from {path})"));
+                }
+            }
+        }
+        assert!(
+            escaped.is_empty(),
+            "fingerprint omits vector dependencies: {escaped:#?}"
+        );
+    }
+
+    #[test]
+    fn fingerprint_names_each_source_once_and_never_the_legacy_mesh_writer() {
+        let listed = all_sources();
+        let unique: BTreeSet<_> = listed.iter().collect();
+        assert_eq!(unique.len(), listed.len());
+        for (path, source) in FINGERPRINT_SOURCES
+            .iter()
+            .chain(NATIVE_FINGERPRINT_SOURCES)
+            .chain(PORTABLE_FINGERPRINT_SOURCES)
+        {
+            let disk =
+                std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
+            assert_eq!(disk, *source, "{path}");
+        }
+        // Only the legacy writer is decoupled. The fingerprint hashes whole files, so
+        // deleting legacy-only items from metadata.rs, bbox.rs and georef.rs still
+        // changes reuse identity once (docs/architecture/legacy-mesh-retirement.md).
+        for legacy in ["glb_write", "tile.rs", "lossless", "texture.rs", "mesh.rs"] {
+            assert!(!listed.iter().any(|path| path.contains(legacy)), "{legacy}");
+        }
+        for audited in [
+            "src/vector/pipeline/outline.rs",
+            "src/vec3.rs",
+            "src/vector_compression/source.rs",
+        ] {
+            assert!(listed.contains(&audited), "{audited}");
+        }
+        assert!(listed.contains(&FRAMING_SOURCE));
     }
 }

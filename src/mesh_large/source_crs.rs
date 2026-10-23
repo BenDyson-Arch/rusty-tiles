@@ -2,16 +2,17 @@
 //! position plus the source offset maps exactly, per vertex, through the shared conservative
 //! resolver to WGS84 ECEF and then into one local ENU frame (glTF Y-up) at the source-bounds
 //! centre. Normals use the Jacobian inverse transpose and tangents the Jacobian, then are
-//! re-orthonormalized. Jacobians come from the legacy bake's central differences, evaluated
+//! re-orthonormalized. Jacobians come from `crs_jacobian`'s central differences, evaluated
 //! on an adaptive lattice over the source bounds and interpolated; a cell whose centre check
 //! exceeds the tolerance uses per-vertex Jacobians. Every later stage sees local metres
 //! only; the root transform carries ENU to ECEF.
 use crate::{
     crs::Transform,
+    crs_jacobian,
     georef::{ecef_to_cartographic, EnuFrame, SourceAxes, SourceOffset},
     gltf_source::source::within_local_domain,
     mesh_archive::ResolvedPlacement,
-    mesh_crs, JobError, JobErrorKind, MeshPlacement,
+    JobError, JobErrorKind, MeshPlacement,
 };
 use serde::Serialize;
 use std::{io::Read, mem::Discriminant, path::Path};
@@ -194,7 +195,7 @@ pub(crate) struct Jacobian(pub(crate) Columns);
 impl Jacobian {
     /// Unnormalized inverse-transpose image of a normal.
     pub(crate) fn normal(&self, normal: [f64; 3]) -> Result<[f64; 3]> {
-        mesh_crs::inverse_transpose(self.0, normal).map_err(|_| {
+        crs_jacobian::inverse_transpose(self.0, normal).map_err(|_| {
             JobError::new(
                 JobErrorKind::Unsupported,
                 "source CRS normal Jacobian is singular or nonfinite",
@@ -335,7 +336,7 @@ impl SourceFrame {
         }
         let mut operation = spec.operation()?;
         let kind = std::mem::discriminant(&operation);
-        let (horizontal_step, degrees_per_unit) = mesh_crs::horizontal_step(&operation)
+        let (horizontal_step, degrees_per_unit) = crs_jacobian::horizontal_step(&operation)
             .ok_or_else(|| {
                 JobError::new(
                     JobErrorKind::Unsupported,
@@ -452,7 +453,7 @@ impl CrsFrame {
         world: [f64; 3],
         ecef: [f64; 3],
     ) -> std::result::Result<Columns, crate::Error> {
-        mesh_crs::vertex_jacobian(
+        crs_jacobian::vertex_jacobian(
             &mut self.operation,
             world,
             ecef,
@@ -483,8 +484,8 @@ impl CrsFrame {
         };
         for axis in 0..3 {
             let extent = max[axis] - min[axis];
-            let span =
-                mesh_crs::probe_step(self.axes, axis, self.horizontal_step) * LATTICE_PROBE_STEPS;
+            let span = crs_jacobian::probe_step(self.axes, axis, self.horizontal_step)
+                * LATTICE_PROBE_STEPS;
             lattice.cells[axis] = if extent > 0. {
                 ((extent / span).ceil() as usize).clamp(1, LATTICE_CELLS)
             } else {
@@ -536,7 +537,7 @@ impl CrsFrame {
     fn vertex(&mut self, world: [f64; 3], jacobian: bool) -> Result<([f32; 3], Option<Jacobian>)> {
         let ecef = self.ecef(world).map_err(source_error)?;
         self.check_kind()?;
-        let local = mesh_crs::to_y_up(self.frame.to_enu(ecef));
+        let local = crs_jacobian::to_y_up(self.frame.to_enu(ecef));
         if !local.iter().all(|v| within_local_domain(*v)) {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,

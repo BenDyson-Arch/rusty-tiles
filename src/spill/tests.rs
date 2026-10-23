@@ -1048,30 +1048,52 @@ fn spill_memory_is_flat_in_input_size() {
         };
         (field("base_kib"), field("peak_kib"), field("merge_levels"))
     }
+    // VmHWM is a per-process high-water mark, so one sample carries process-to-process
+    // noise that is not the sorter's: the baseline read before the sort is itself a
+    // high-water mark of start-up transients (spread of about 1.5 MiB over 24 children),
+    // and the allocator's page and arena placement moves the final peak by about 0.6 MiB.
+    // Every sample is therefore a fresh subprocess, and a size is judged by its smallest
+    // of `SAMPLES` peaks and growths. Noise only ever adds, while a sorter that holds
+    // input in memory adds in every sample, so the minimum keeps the sensitivity and
+    // drops the one-off excursions that made a single-sample comparison flaky.
+    const SAMPLES: usize = 3;
+    let best = |records: u64| {
+        let samples: Vec<_> = (0..SAMPLES).map(|_| child(records)).collect();
+        assert!(samples.iter().all(|s| s.2 == samples[0].2), "{samples:?}");
+        (
+            samples.iter().map(|s| s.1).min().unwrap(),
+            samples.iter().map(|s| s.1 - s.0).min().unwrap(),
+            samples[0].2,
+        )
+    };
     let run_records = (memory_config().run_bytes / size_of::<Wide>()) as u64;
     // Both sizes run intermediate merges, so both touch the same code pages and threads:
     // 17 runs (two levels at F = 4) against 136 runs (34 MiB of records, three levels).
-    let small = child(17 * run_records);
-    let large = child(136 * run_records);
-    assert_eq!((small.2, large.2), (2, 3));
-    // Flatness compares each child's growth over its own baseline, so baseline noise
-    // (about ±0.3 MiB between processes) cancels. 2 MiB covers one more merge level's
-    // buffers and allocator granularity; holding the 8x larger input would add over 30 MiB.
+    let (small_peak, _, small_levels) = best(17 * run_records);
+    let (large_peak, large_growth, large_levels) = best(136 * run_records);
+    assert_eq!((small_levels, large_levels), (2, 3));
+    // Flatness compares absolute peaks: both children are the same binary with the same
+    // start-up, so no baseline has to be subtracted. The large run differs structurally
+    // only by one more merge level, which reuses the same (F + 1)·b buffers, so the
+    // allowance is 2 MiB (over three times the measured peak spread above) for the
+    // allocator, plus those buffers once more in case the level holds a second set.
+    // Holding the 8x larger input would add over 30 MiB, about 15 times the allowance.
+    let allowance =
+        2048 + (memory_config().fan_in as u64 + 1) * memory_config().buffer_bytes as u64 / 1024;
     assert!(
-        large.1 - large.0 <= small.1 - small.0 + 2048,
-        "VmHWM grew with input size: small {small:?}, large {large:?}"
+        large_peak <= small_peak + allowance,
+        "VmHWM grew with input size: small peak {small_peak} KiB, large peak {large_peak} KiB, \
+         allowance {allowance} KiB"
     );
-    // The allowance is the sorter's own declared bound, `memory_bound`: 1.5·R + (F + 1)·b
+    // The absolute bound is the sorter's own declared bound, `memory_bound`: 1.5·R + (F + 1)·b
     // (about 0.5 MiB here) plus the stable sort's minimum scratch of 8 MB per sorting thread
-    // (two here), which is what the measured growth (about 8 to 11.6 MiB, varying with
-    // first-touch pages and the allocator) consists of. It is still under half the large
-    // input's 34 MiB of records, so holding the input resident fails it.
-    let allowance = memory_config().memory_bound::<Wide>().div_ceil(1024);
-    assert!(allowance < 17 * 1024, "allowance {allowance} KiB");
+    // (two here), which is what the measured growth (about 12 MiB) consists of. It is still
+    // under half the large input's 34 MiB of records, so holding the input resident fails it.
+    let bound = memory_config().memory_bound::<Wide>().div_ceil(1024);
+    assert!(bound < 17 * 1024, "bound {bound} KiB");
     assert!(
-        large.1 - large.0 <= allowance,
-        "large sort grew VmHWM by {} KiB (allowance {allowance} KiB)",
-        large.1 - large.0
+        large_growth <= bound,
+        "large sort grew VmHWM by {large_growth} KiB (bound {bound} KiB)"
     );
 }
 

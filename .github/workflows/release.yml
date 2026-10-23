@@ -40,19 +40,29 @@ jobs:
             *-*) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
             *) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
           esac
-      - name: Require green CI for the tagged commit
+      - name: Require the full CI matrix for the tagged commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
           set -eu
-          passed=$(gh run list --workflow ci.yml --commit "$RELEASE_SHA" --status success \
-            --json databaseId --jq length)
-          if [ "$passed" -lt 1 ]; then
-            echo "::error::no successful CI run for $RELEASE_SHA; wait for (or re-run) CI on main, then re-run this workflow"
-            exit 1
-          fi
+          # Pull-request runs only cover the fast Linux tier, so they never count. A qualifying
+          # run is a successful push, nightly or manual run of ci.yml on this exact commit in
+          # which both "Full matrix" (every job, including the five-platform and wheel jobs) and
+          # "Rust" succeeded. A docs-only push skips the matrix and does not qualify.
+          runs=$(gh run list --workflow ci.yml --commit "$RELEASE_SHA" --status success --limit 100 \
+            --json databaseId,event --jq '.[] | select(.event != "pull_request") | .databaseId')
+          for run in $runs; do
+            passed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${run}/jobs" \
+              --jq '.jobs[] | select(.conclusion == "success") | .name')
+            if printf '%s\n' "$passed" | grep -Fxq 'Full matrix' && printf '%s\n' "$passed" | grep -Fxq 'Rust'; then
+              echo "Full CI matrix passed for $RELEASE_SHA in run $run"
+              exit 0
+            fi
+          done
+          echo "::error::no successful full-matrix CI run for $RELEASE_SHA; wait for the push run on main to finish (or dispatch ci.yml on this commit), then re-run this workflow"
+          exit 1
       - name: Test the checksum-verifying installer
         run: python3 -m unittest discover -s tests -p test_install.py -v
 
@@ -109,10 +119,7 @@ jobs:
           if [[ "$RELEASE_TARGET" == *windows* ]]; then suffix=.exe; fi
           binary="target/$RELEASE_TARGET/release/rusty-tiles$suffix"
           "$binary" --version
-          "$binary" doctor --command mesh-to-3tz
           mkdir -p smoke dist stage
-          "$binary" mesh-to-3tz -i tests/fixtures/example.gltf -o smoke/example.3tz --cartographic-position-degrees 153.02 -27.47 0
-          "$binary" validate smoke/example.3tz
           "$binary" doctor --command mesh
           "$binary" mesh -i tests/fixtures/example.glb -o smoke/mesh.3tz --anchor 153.02 -27.47 0
           "$binary" validate smoke/mesh.3tz
