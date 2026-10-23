@@ -653,6 +653,9 @@ pub(in crate::mesh_large) struct AtlasResources<'a> {
 }
 pub(super) struct LeafProjection {
     pub pages: u64,
+    /// The largest page workspace lease of this leaf ([`page_charge`]) at its density
+    /// drop or any later byte-budget retry (smaller pages; decode charged as a retry).
+    pub page_bytes: u64,
     pub base_texels: u64,
     pub chain_texels: u64,
     pub geometry_bytes: u64,
@@ -698,7 +701,17 @@ pub(super) fn project(
     let mut receipt_owners = (layout.bindings.len() as u64)
         .checked_mul((64 << 10) + max_levels * (32 << 10))
         .ok_or_else(resource)?;
+    let mut page_bytes = 0u64;
     for page in &layout.pages {
+        // A later byte-budget retry only shrinks pages, but a density drop charges the
+        // larger decode transient: lease as if dropped.
+        page_bytes = page_bytes.max(page_charge(
+            page,
+            &layout.bindings,
+            resources.image_info,
+            profile,
+            drop.max(1),
+        )?);
         let (mut w, mut h) = (u64::from(page.width), u64::from(page.height));
         base = base
             .checked_add(w.checked_mul(h).ok_or_else(resource)?)
@@ -767,6 +780,7 @@ pub(super) fn project(
         .ok_or_else(resource)?;
     Ok(LeafProjection {
         pages: layout.pages.len() as u64,
+        page_bytes,
         base_texels: base,
         chain_texels: chain,
         geometry_bytes: geometry,
@@ -921,7 +935,7 @@ pub(super) struct Services<'a> {
 fn page_charge(
     page: &PagePlan,
     bindings: &[Binding],
-    captured: &FullCaptured,
+    image_info: &[source::ImageInfo],
     profile: Profile,
     drop: u32,
 ) -> Result<u64, JobError> {
@@ -940,10 +954,7 @@ fn page_charge(
     };
     let mut decode = 0u64;
     for &bi in &page.bindings {
-        let info = captured
-            .image_info
-            .get(bindings[bi].image)
-            .ok_or_else(invariant)?;
+        let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
         let texels = u64::from(info.width) * u64::from(info.height);
         // Encoded bytes (<=4/texel), decoder RGB(A) output and RGBA8 copy;
         // a density drop also builds the full-resolution class chain.
@@ -1093,7 +1104,7 @@ fn encode_page(
     let _permit = services.gate.acquire(page_charge(
         page,
         &layout.bindings,
-        captured,
+        &captured.image_info,
         profile,
         drop,
     )?)?;

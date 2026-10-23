@@ -166,6 +166,7 @@ pub(crate) struct HlodRow {
     pub interface_segments: u32,
     pub quantized: bool,
     pub bounds: BoundsRow,
+    pub appearance: super::appearance::TileAppearance,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]

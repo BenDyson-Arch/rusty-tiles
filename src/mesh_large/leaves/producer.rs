@@ -296,16 +296,7 @@ pub(crate) fn stage_plan(
     config: &TreeConfig,
     captured: &full::FullCaptured,
 ) -> Result<StagePlan, JobError> {
-    let profile = config.profile;
     let requested = config.jobs;
-    let edge: u64 = match profile {
-        Profile::Fast => 2048,
-        Profile::Lossless => 8192,
-        _ => 4096,
-    };
-    let pixels = edge
-        .checked_mul(edge)
-        .ok_or_else(|| resource("leaf page memory overflow"))?;
     let largest_source = captured
         .image_info
         .iter()
@@ -319,39 +310,22 @@ pub(crate) fn stage_plan(
             n.checked_add(u64::from(i.width) * u64::from(i.height) * 4)
         })
         .ok_or_else(|| resource("leaf source byte overflow"))?;
-    let texture = if profile == Profile::Lossless {
-        pixels.checked_mul(40)
-    } else {
-        pixels.checked_mul(176)
-    }
-    .ok_or_else(|| resource("leaf texture workspace overflow"))?;
-    // The largest page: codec workspace, assembly, MIP-binding source chain
-    // and the largest source decode transient (density reduction included).
-    // Image-free input builds no page, so it reserves no texture workspace (D8).
-    let page_bytes = if captured.image_info.is_empty() {
-        0
-    } else {
-        texture
-            .checked_add(if profile == Profile::Lossless {
-                0
-            } else {
-                (128u64 << 20)
-                    .checked_add(pixels.checked_mul(6).ok_or_else(|| resource("page"))?)
-                    .ok_or_else(|| resource("page"))?
-            })
-            .and_then(|n| n.checked_add(largest_source.checked_mul(32)?))
-            .and_then(|n| n.checked_add(64 << 20))
-            .ok_or_else(|| resource("leaf workspace overflow"))?
-    };
     let global_bytes = captured
         .report
         .memory
         .owned_metadata_bytes
         .checked_add(captured.report.memory.geometry.document_bytes)
         .ok_or_else(|| resource("leaf global ownership overflow"))?;
+    // The largest page lease any leaf's delivery takes, from the same physical
+    // crop/packing projection final preparation uses (page assembly, codec, sampler
+    // chain and source decode at its actual dimensions), not a profile-wide maximum
+    // page. Image-free input builds no page, so it reserves no texture workspace (D8).
     let mut leaf_owned = 0;
+    let mut page_bytes = 0;
     for plan in captured.leaf_plans.reader()? {
-        leaf_owned = leaf_owned.max(plan?.owned_bytes);
+        let plan = plan?;
+        leaf_owned = leaf_owned.max(plan.owned_bytes);
+        page_bytes = page_bytes.max(plan.page_bytes);
     }
     // An in-flight leaf owns its closure and at most one member of encoded
     // pages plus the GLB being assembled from them.
@@ -365,12 +339,8 @@ pub(crate) fn stage_plan(
     };
     let available = config.available_memory();
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    // Cache every decoded source when it fits half the usable memory;
-    // otherwise half the usable memory, and always at least two images.
-    let cache_for = |usable: Option<u64>| match usable {
-        Some(u) => total_source.min((u / 2).max(largest_source * 8)),
-        None => total_source.min(largest_source * 8 * 4),
-    };
+    // The cache always holds at least two decoded images (or every source).
+    let cache_floor = total_source.min(largest_source.saturating_mul(8));
     // Workers share one page-workspace gate, which must admit the largest
     // page. A running leaf owns its closure and encoded pages; a finished
     // leaf waiting for the ordered writer keeps only its closure and receipts
@@ -389,12 +359,21 @@ pub(crate) fn stage_plan(
             .and_then(|n| n.checked_add(2 * leaf_owned))
             .ok_or_else(|| resource("leaf fixed memory overflow"))
     };
-    // One leaf job fits usable memory `u` when `u >= cache(u) + page + one job's window`,
-    // and `u - cache(u)` never decreases in `u`: the least such `u`, by bisection.
+    // What one leaf job needs besides the cache.
+    let one_job = fixed_for(0)?
+        .checked_add(per_job)
+        .ok_or_else(|| resource("leaf job memory overflow"))?;
+    // Cache every decoded source when it fits half the usable memory, otherwise half the
+    // usable memory, but never so much that one leaf job no longer fits beside it and
+    // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
+    let cache_for = |usable: Option<u64>| match usable {
+        Some(u) => total_source.min(cache_floor.max((u / 2).min(u.saturating_sub(one_job)))),
+        None => total_source.min(cache_floor.saturating_mul(4)),
+    };
+    // One leaf job fits usable memory `u` when `u >= cache floor + page + one job's window`.
     let fits = |u: u64| -> bool {
-        fixed_for(cache_for(Some(u)))
-            .ok()
-            .and_then(|f| f.checked_add(per_job))
+        cache_floor
+            .checked_add(one_job)
             .is_some_and(|need| u >= need)
     };
     let minimum_usable = {

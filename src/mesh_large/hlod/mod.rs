@@ -13,8 +13,11 @@
 //! (D8) and released as each parent completes. Parents are built by up to `jobs` workers;
 //! each is a pure function of its children, so output is identical for any job count or
 //! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery, exactly
-//! where H17 did; coarse tiles are untextured (flat class materials) until S3, and their
-//! error is S1's provisional estimate until S2.
+//! where H17 did. Coarse appearance (S3, [`appearance`]) is fresh content-sized charts
+//! baked from the captured source; the error is S1's provisional estimate until S2.
+pub(crate) mod appearance;
+pub(crate) mod bake;
+mod charts;
 mod encode;
 mod geometry;
 pub(crate) mod interfaces;
@@ -73,6 +76,10 @@ impl FromStr for TilerLod {
     }
 }
 
+/// S3's coarse appearance policy (recorded in the stage manifest).
+pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages at max(G/16, 1e-5 m), \
+     1024 cap, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
+
 /// Hard published triangle cap of every coarse tile (D1).
 pub(crate) const TRIANGLE_CAP: usize = 8192;
 /// Runtime, allocator slack and output-writer reserve of the stage.
@@ -125,10 +132,93 @@ pub struct HlodMemoryPlan {
     pub minimum_bytes: u64,
     /// The walk's lease ledger (`ceiling - fixed`).
     pub ledger_bytes: u64,
-    /// Coarse texture/chart/mip/codec workspace: zero while coarse tiles are untextured.
+    /// Coarse texture/chart/mip/codec workspace of one parent job (zero without images).
     pub texture_workspace_bytes: u64,
+    /// The vertex-colour path's bounded source chunk of one job (zero without COLOR_0).
+    pub color_workspace_bytes: u64,
+    /// Shared decoded source-chain cache (zero without images).
+    pub image_cache_bytes: u64,
+    /// Encoder workspace ceiling of one coarse page.
+    pub page_bytes: u64,
     pub jobs: u64,
     pub jobs_limited_by: &'static str,
+}
+
+/// The appearance part of one parent job and the image cache bounds.
+struct AppearancePlan {
+    texture: u64,
+    color: u64,
+    page: u64,
+    cache_floor: u64,
+    cache_total: u64,
+}
+
+/// Charged bytes per coarse query texel: its point, texel record and resolved hit
+/// (with a source frame when a normal map is baked).
+const QUERY_BYTES_PER_TEXEL: u64 = 160;
+
+fn appearance_plan(
+    captured: &FullCaptured,
+    profile: config::Profile,
+    cap: usize,
+) -> Result<AppearancePlan, JobError> {
+    let layout = captured.triangles.layout().0;
+    let colors = layout & super::attributes::COLOR != 0;
+    let chunk = bake::CHUNK_TRIANGLES.saturating_mul(bake::CHUNK_BYTES_PER_TRIANGLE);
+    // Vertex-colour queries: at most three per coarse triangle.
+    let color = if colors {
+        chunk.saturating_add((cap as u64).saturating_mul(3 * QUERY_BYTES_PER_TEXEL))
+    } else {
+        0
+    };
+    if captured.image_info.is_empty() {
+        return Ok(AppearancePlan {
+            texture: 0,
+            color,
+            page: 0,
+            cache_floor: 0,
+            cache_total: 0,
+        });
+    }
+    let edge = appearance::MAX_PAGE_EDGE;
+    let texels = u64::from(edge) * u64::from(edge);
+    let slots = captured
+        .materials
+        .iter()
+        .map(|m| m.bindings().count() as u64)
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let page = appearance::page_charge([edge, edge], slots, profile)?;
+    let largest = captured
+        .image_info
+        .iter()
+        .map(|i| (u64::from(i.width), u64::from(i.height)))
+        .max_by_key(|(w, h)| w * h)
+        .unwrap_or((0, 0));
+    let largest_chain = bake::chain_bytes(largest.0 as u32, largest.1 as u32);
+    // One image decode transient (encoded bytes, RGBA, chain build copy) and the chain a
+    // worker holds while sampling, besides the shared cache.
+    let decode = (largest.0 * largest.1)
+        .saturating_mul(16)
+        .saturating_add(32 << 20)
+        .saturating_add(largest_chain);
+    let texture = texels
+        .saturating_mul(QUERY_BYTES_PER_TEXEL)
+        .saturating_add(page)
+        .saturating_add(chunk)
+        .saturating_add(decode);
+    let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
+        n.saturating_add(bake::chain_bytes(i.width, i.height))
+    });
+    Ok(AppearancePlan {
+        texture,
+        // The textured path's chunk also serves vertex colours.
+        color: if texture > 0 { 0 } else { color },
+        page,
+        cache_floor: largest_chain.min(cache_total),
+        cache_total,
+    })
 }
 
 /// Plan the stage for `captured` under `budget`; refuses when one job cannot fit.
@@ -143,10 +233,14 @@ pub(crate) fn plan(
     let height = u64::from(captured.tree.stats.height);
     let window = held.saturating_mul(8).saturating_mul(height + 1);
     let merged = leaf_cap.max(cap as u64).saturating_mul(8);
-    let job = merged
+    let geometry_job = merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(JOB_ENCODE_BYTES)
         .saturating_add(TileGeometry::charge(cap as u64));
+    let appearance = appearance_plan(captured, config.profile, cap)?;
+    let job = geometry_job
+        .saturating_add(appearance.texture)
+        .saturating_add(appearance.color);
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap);
     let buffer = config.sort.buffer_bytes as u64;
@@ -161,7 +255,9 @@ pub(crate) fn plan(
         .saturating_add(captured.report.memory.geometry.document_bytes)
         .saturating_add(STAGE_RESERVE)
         .saturating_add(streams);
-    let minimum = fixed.saturating_add(incidence.max(window.saturating_add(job)));
+    let minimum = fixed.saturating_add(
+        incidence.max(window.saturating_add(job).saturating_add(appearance.cache_floor)),
+    );
     let tmpfs = if captured.scratch.memory_backed() {
         captured.report.scratch.need_bytes
     } else {
@@ -184,13 +280,23 @@ pub(crate) fn plan(
         config::Jobs::Auto => cores,
         config::Jobs::Fixed(n) => n.get() as u64,
     };
-    let fit = ((ledger - window) / job.max(1)).max(1);
+    let fit = ((ledger - window - appearance.cache_floor) / job.max(1)).max(1);
     let (jobs, limited_by) = if fit < requested.min(cores) {
         (fit, "memory")
     } else if requested < cores {
         (requested, "request")
     } else {
         (cores, "cores")
+    };
+    // The cache takes what the admitted jobs leave, up to every chain, at least its floor.
+    let image_cache = if appearance.cache_floor == 0 {
+        0
+    } else {
+        appearance.cache_total.min(
+            (ledger - window)
+                .saturating_sub(jobs.saturating_mul(job))
+                .max(appearance.cache_floor),
+        )
     };
     Ok(HlodMemoryPlan {
         budget_bytes: budget.resolved_bytes,
@@ -201,7 +307,10 @@ pub(crate) fn plan(
         job_bytes: job,
         minimum_bytes: minimum.saturating_add(tmpfs),
         ledger_bytes: ledger,
-        texture_workspace_bytes: 0,
+        texture_workspace_bytes: appearance.texture,
+        color_workspace_bytes: appearance.color,
+        image_cache_bytes: image_cache,
+        page_bytes: appearance.page,
         jobs,
         jobs_limited_by: limited_by,
     })
@@ -232,6 +341,31 @@ pub(crate) struct HlodReport {
     pub bytes: u64,
     pub max_error_by_depth: Vec<f64>,
     pub incidence: IncidenceStats,
+    /// Coarse appearance per tile depth (S3).
+    pub appearance_by_depth: Vec<DepthAppearance>,
+}
+
+/// Coarse appearance of one tile depth: page texels, achieved against requested spacing
+/// (`max(G/16, 1e-5 m)`) and cap hits.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DepthAppearance {
+    pub depth: u32,
+    pub tiles: u64,
+    pub textured_tiles: u64,
+    pub vertex_color_tiles: u64,
+    pub pages: u64,
+    pub layout_texels: u64,
+    pub page_texels: u64,
+    pub covered_texels: u64,
+    pub capped_tiles: u64,
+    pub escalated_pages: u64,
+    pub requested_spacing_min: f64,
+    pub requested_spacing_max: f64,
+    pub achieved_spacing_min: f64,
+    pub achieved_spacing_max: f64,
+    /// Mean of achieved / requested spacing over textured tiles (1 when uncapped).
+    pub mean_spacing_ratio: f64,
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -247,6 +381,9 @@ pub struct HlodDiagnostics {
     /// Highest simultaneously leased bytes of the walk's ledger.
     pub lease_peak_bytes: u64,
     pub ledger_bytes: u64,
+    /// Summed worker seconds of coarse charts, source queries, sampling and page encoding.
+    pub appearance_seconds: appearance::Timing,
+    pub image_cache: bake::CacheStats,
 }
 
 pub(crate) struct HlodInput<'a> {
@@ -273,7 +410,7 @@ struct Frame {
     children: Vec<u64>,
 }
 
-type Done = Result<(TileGeometry, HlodRow), JobError>;
+type Done = Result<(TileGeometry, HlodRow, appearance::Timing), JobError>;
 
 /// Build, check and write every coarse tile; writes `proxies/` and `proxies.jsonl`.
 pub(crate) fn produce(
@@ -288,7 +425,7 @@ pub(crate) fn produce(
         schema_version: 1,
         method: "octree-hlod",
         error_policy: store::PROVISIONAL_POLICY,
-        appearance: "untextured: flat material-class factors and smooth normals until S3",
+        appearance: APPEARANCE_POLICY,
         triangle_cap: settings.cap as u64,
         ..Default::default()
     };
@@ -332,7 +469,9 @@ pub(crate) fn produce(
     let result = walk(&input, rows, &rows_path, &mut report, check);
     diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let bound = captured.report.scratch.stages.lod_prepass;
-    let lease_peak = result?;
+    let (lease_peak, timings, cache) = result?;
+    diagnostics.appearance_seconds = timings;
+    diagnostics.image_cache = cache;
     if diagnostics.incidence_scratch_peak_bytes > bound {
         return Err(resource(format!(
             "HLOD scratch {} bytes exceeded its declared stage bound {bound}",
@@ -487,7 +626,7 @@ fn build_tile(
     closed: &Closed,
     children: Vec<TileGeometry>,
     captured: &FullCaptured,
-    materials: &[Value],
+    services: &appearance::Services<'_>,
     stage: &Path,
     settings: Settings,
 ) -> Done {
@@ -506,30 +645,41 @@ fn build_tile(
         }
     }
     let tile = &built.geometry;
-    let encoded = encode::encode(
-        tile,
-        &built.locked,
-        &captured.lattice,
-        materials,
-        &captured.material_classes,
-        settings.mutation,
-    )?;
-    if settings.mutation != Mutation::MoveVertexUnchecked {
-        encode::check(tile, &built.locked, &encoded.glb)?;
-    }
+    let positions = encode::positions(tile, &built.locked, &captured.lattice, settings.mutation)?;
     let error = store::provisional_error(&CoarseTile {
         key: tile.key,
-        decoded: &encoded.decoded,
+        decoded: &positions.decoded,
         triangles: &tile.triangles,
         locked: &built.locked,
         representative: &tile.representative,
         primitives: &tile.primitives,
-        bounds: encoded.bounds,
+        bounds: positions.bounds,
         children_error: built.children_error,
         simplifier_error: built.simplifier_error,
-        encode_displacement: encoded.displacement,
+        encode_displacement: positions.displacement,
         stopping: built.stopping,
     });
+    // S3: fresh charts and a cheap source bake on the final decoded positions.
+    let appearance = appearance::build(
+        services,
+        &appearance::TileView {
+            first: tile.key.first,
+            end: tile.key.end,
+            decoded: &positions.decoded,
+            triangles: &tile.triangles,
+            materials: tile
+                .representative
+                .iter()
+                .map(|r| tile.primitives[*r as usize].material)
+                .collect(),
+            geometric_error: error.geometric_error,
+        },
+    )?;
+    let encoded = encode::encode(tile, positions, &appearance)?;
+    drop(appearance.groups);
+    if settings.mutation != Mutation::MoveVertexUnchecked {
+        encode::check(tile, &built.locked, &encoded.glb)?;
+    }
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
     }
@@ -569,10 +719,11 @@ fn build_tile(
         interface_segments: built.interface_segments,
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
+        appearance: appearance.facts,
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
-    Ok((geometry, row))
+    Ok((geometry, row, appearance.timing))
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
@@ -600,6 +751,44 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
         report.max_error_by_depth.resize(depth + 1, 0.);
     }
     report.max_error_by_depth[depth] = report.max_error_by_depth[depth].max(row.geometric_error);
+    let a = &row.appearance;
+    if report.appearance_by_depth.len() <= depth {
+        let start = report.appearance_by_depth.len();
+        report
+            .appearance_by_depth
+            .extend((start..=depth).map(|d| DepthAppearance {
+                depth: d as u32,
+                ..Default::default()
+            }));
+    }
+    let d = &mut report.appearance_by_depth[depth];
+    let first = d.tiles == 0;
+    d.tiles += 1;
+    d.vertex_color_tiles += u64::from(a.vertex_color_groups > 0);
+    d.pages += u64::from(a.pages);
+    d.layout_texels += a.layout_texels;
+    d.page_texels += a.page_texels;
+    d.covered_texels += a.covered_texels;
+    d.escalated_pages += u64::from(a.escalated_pages);
+    if first {
+        d.requested_spacing_min = a.requested_spacing;
+        d.requested_spacing_max = a.requested_spacing;
+    }
+    d.requested_spacing_min = d.requested_spacing_min.min(a.requested_spacing);
+    d.requested_spacing_max = d.requested_spacing_max.max(a.requested_spacing);
+    if a.textured_groups > 0 {
+        if d.textured_tiles == 0 {
+            d.achieved_spacing_min = a.achieved_spacing;
+            d.achieved_spacing_max = a.achieved_spacing;
+        }
+        let n = d.textured_tiles as f64;
+        d.mean_spacing_ratio =
+            (d.mean_spacing_ratio * n + a.achieved_spacing / a.requested_spacing) / (n + 1.);
+        d.textured_tiles += 1;
+        d.capped_tiles += u64::from(a.capped);
+        d.achieved_spacing_min = d.achieved_spacing_min.min(a.achieved_spacing);
+        d.achieved_spacing_max = d.achieved_spacing_max.max(a.achieved_spacing);
+    }
 }
 
 /// The preorder walk; returns the ledger's lease peak.
@@ -609,12 +798,24 @@ fn walk(
     rows_path: &Path,
     report: &mut HlodReport,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<u64, JobError> {
+) -> Result<(u64, appearance::Timing, bake::CacheStats), JobError> {
     let captured = input.captured;
     let plan = input.plan;
     let settings = input.settings;
-    let materials = encode::flat_materials(&captured.materials);
     let ledger = Ledger::new(plan.ledger_bytes);
+    let mut timings = appearance::Timing::default();
+    let cache = bake::ImageCache::new(plan.image_cache_bytes);
+    let layout = captured.triangles.layout().0;
+    let services = appearance::Services {
+        captured,
+        cache: &cache,
+        profile: input.config.profile,
+        max_edge: appearance::MAX_PAGE_EDGE,
+        page_memory: plan.page_bytes,
+        colors: layout & super::attributes::COLOR != 0,
+        normals: layout & super::attributes::NORMAL != 0,
+        check,
+    };
     let job_bytes = plan.job_bytes;
     let out_bytes = TileGeometry::charge(settings.cap as u64);
     let jobs = usize::try_from(plan.jobs.max(1)).map_err(|_| resource("jobs overflow"))?;
@@ -651,7 +852,7 @@ fn walk(
         let mut finished_rows: BTreeMap<u64, HlodRow> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
         let mut leaf = 0u32;
-        let materials = &materials;
+        let services = &services;
         let stage = input.stage;
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
@@ -680,7 +881,7 @@ fn walk(
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let mut built =
-                            build_tile(&closed, children, captured, materials, stage, settings)?;
+                            build_tile(&closed, children, captured, services, stage, settings)?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         let mut lease = job_lease;
@@ -711,7 +912,11 @@ fn walk(
                 .recv()
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
-            let (geometry, row) = done?;
+            let (geometry, row, timing) = done?;
+            timings.charts += timing.charts;
+            timings.query += timing.query;
+            timings.sample += timing.sample;
+            timings.encode += timing.encode;
             ready.insert(id, geometry);
             finished_rows.insert(seq, row);
             while let Some(row) = finished_rows.remove(written) {
@@ -841,5 +1046,5 @@ fn walk(
         .flush()
         .and_then(|_| writer.get_ref().sync_all())
         .map_err(|e| JobError::io("finish coarse rows", rows_path, e))?;
-    Ok(ledger.peak())
+    Ok((ledger.peak(), timings, cache.stats()))
 }
