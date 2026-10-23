@@ -13,8 +13,7 @@
 //!   The segment's leaf must keep that segment and its endpoints, the point's leaf must
 //!   keep the point; open edges between kept points are kept too (see `HlodRead`).
 //!   Overlaps are found by a streamed multi-level grid join: each open segment is a host in
-//!   the cells of its own level (cell edge ≥ its length), each open point a guest in one
-//!   cell of every level that has hosts.
+//!   the cells of its own level (cell edge ≥ its length), each open point a guest in the bounded cells of its tolerance box at every host level.
 //!
 //! Leaves are contiguous DFS intervals of the frozen tree, so a tile whose leaves are
 //! `[begin, end)` must keep every recorded item whose leaf interval `[lo, hi]` leaves its
@@ -228,6 +227,8 @@ const MAX_LEVEL: u8 = 30;
 /// Declared scratch allowance of the overlap join per source triangle; a run that needs
 /// more is refused (`resource_limit`) before the join is written.
 const OVERLAP_BYTES_PER_TRIANGLE: u64 = 256;
+/// A highly shared exact item is refused before its fixed, charged buffer can grow.
+const MAX_INCIDENT_LEAVES: usize = 1 << 16;
 /// Most hosts one grid cell may hold at once; more is `unsupported`. A host's cell is under
 /// twice its extent, so this many same-scale open segments in one cell is a pathological
 /// heap, and the cap bounds both the cell's memory and each guest's tests.
@@ -247,7 +248,10 @@ pub(crate) fn scratch_need(triangles: u64, sorter: SortConfig) -> Option<u64> {
         .checked_add(item.stream_slack)?
         .checked_add(rows.push_peak)?
         .checked_add(overlap)?;
-    let walk = rows.finish_peak.checked_add(rows.stream_slack)?;
+    let walk = rows
+        .finish_peak
+        .checked_add(rows.stream_slack)?
+        .checked_add(overlap)?;
     Some(item.finish_peak.max(reduce).max(walk))
 }
 
@@ -259,6 +263,7 @@ pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64) -> u64 {
         .max(sorter.memory_bound::<Item>())
         .saturating_add(sorter.memory_bound::<InterfaceRow>())
         .saturating_add(leaf_triangles.saturating_mul(12 * std::mem::size_of::<Item>() as u64))
+        .saturating_add((MAX_INCIDENT_LEAVES * std::mem::size_of::<Item>()) as u64)
         .saturating_add((MAX_CELL_HOSTS as u64).saturating_mul(std::mem::size_of::<Probe>() as u64))
 }
 
@@ -475,13 +480,12 @@ pub(crate) fn build<'s>(
     let mut rows = ExternalSorter::<InterfaceRow>::new(scratch, sorter)?;
     let mut hosts = SequenceWriter::<Candidate>::new(scratch, "hlod-hosts", sorter.buffer_bytes)?;
     let mut guests = SequenceWriter::<Candidate>::new(scratch, "hlod-guests", sorter.buffer_bytes)?;
-    let mut host_levels = 0u32;
-    let mut group: Vec<Item> = Vec::new();
-    let mut flush = |group: &mut Vec<Item>,
-                     rows: &mut ExternalSorter<'s, InterfaceRow>,
-                     hosts: &mut SequenceWriter<Candidate>,
-                     guests: &mut SequenceWriter<Candidate>,
-                     stats: &mut IncidenceStats|
+    let mut group: Vec<Item> = Vec::with_capacity(MAX_INCIDENT_LEAVES);
+    let flush = |group: &mut Vec<Item>,
+                 rows: &mut ExternalSorter<'s, InterfaceRow>,
+                 hosts: &mut SequenceWriter<Candidate>,
+                 guests: &mut SequenceWriter<Candidate>,
+                 stats: &mut IncidenceStats|
      -> Result<(), JobError> {
         let (a, b) = (group[0].a, group[0].b);
         if group.len() > 1 {
@@ -514,8 +518,6 @@ pub(crate) fn build<'s>(
                 guests.push(&candidate)?;
                 stats.open_points += 1;
             } else {
-                let tol = f64::from(f32::from_bits(g.tol)) + rounding(&[a, b]);
-                host_levels |= 1 << host_level(cube, a, b, tol);
                 hosts.push(&candidate)?;
                 stats.open_segments += 1;
             }
@@ -537,7 +539,7 @@ pub(crate) fn build<'s>(
             flush(&mut group, &mut rows, &mut hosts, &mut guests, &mut stats)?;
         }
         // Items are unique per leaf and sorted, so the group's leaves ascend strictly.
-        group.push(item);
+        push_group(&mut group, item)?;
     }
     if !group.is_empty() {
         flush(&mut group, &mut rows, &mut hosts, &mut guests, &mut stats)?;
@@ -550,12 +552,71 @@ pub(crate) fn build<'s>(
         cube,
         &hosts,
         &guests,
-        host_levels,
+        triangles.len(),
         &mut rows,
         &mut stats,
         check,
     )?;
     Ok((rows.finish()?, stats))
+}
+
+fn push_group(group: &mut Vec<Item>, item: Item) -> Result<(), JobError> {
+    if group.len() == MAX_INCIDENT_LEAVES {
+        return Err(JobError::new(
+            JobErrorKind::ResourceLimit,
+            format!("exact interface item exceeds {MAX_INCIDENT_LEAVES} incident leaves"),
+        ));
+    }
+    group.push(item);
+    Ok(())
+}
+
+/// The allowance pays for retained candidates, all probe spill/merge generations,
+/// and row-sort growth above the already admitted six rows per source triangle.
+/// Check the prospective record count BEFORE pushing, including compaction jumps.
+struct JoinBudget {
+    limit: u64,
+    candidates: u64,
+    base_rows: u64,
+    sorter: SortConfig,
+}
+impl JoinBudget {
+    fn new(n: u64, candidates: u64, sorter: SortConfig) -> Result<Self, JobError> {
+        Ok(Self {
+            limit: n.saturating_mul(OVERLAP_BYTES_PER_TRIANGLE),
+            candidates: candidates.saturating_mul(Candidate::SIZE as u64),
+            base_rows: Self::spill::<InterfaceRow>(n.saturating_mul(6), sorter)?,
+            sorter,
+        })
+    }
+    fn spill<T: Record>(n: u64, sorter: SortConfig) -> Result<u64, JobError> {
+        config::sort_spill::<T>(n, sorter)
+            .and_then(|s| s.finish_peak.checked_add(s.stream_slack))
+            .ok_or_else(|| {
+                JobError::new(
+                    JobErrorKind::ResourceLimit,
+                    "overlap spill arithmetic overflow",
+                )
+            })
+    }
+    fn check(&self, probes: u64, rows: u64) -> Result<(), JobError> {
+        let extra_rows =
+            Self::spill::<InterfaceRow>(rows, self.sorter)?.saturating_sub(self.base_rows);
+        let need = self
+            .candidates
+            .saturating_add(Self::spill::<Probe>(probes, self.sorter)?)
+            .saturating_add(extra_rows);
+        if need > self.limit {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "overlap join needs {need} scratch bytes, above its admitted {}",
+                    self.limit
+                ),
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn cell(cube: Cube, level: u8, p: [f64; 3]) -> [i32; 3] {
@@ -574,33 +635,45 @@ fn overlaps<'s>(
     cube: Cube,
     hosts: &Sequence<Candidate>,
     guests: &Sequence<Candidate>,
-    host_levels: u32,
+    triangles: u64,
     rows: &mut ExternalSorter<'s, InterfaceRow>,
     stats: &mut IncidenceStats,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(), JobError> {
-    if host_levels == 0 || cube.side <= 0. {
+    if hosts.is_empty() || cube.side <= 0. {
         return Ok(());
     }
-    let levels = u64::from(host_levels.count_ones());
-    let probes_bound = hosts
-        .len()
-        .saturating_mul(27)
-        .saturating_add(guests.len().saturating_mul(levels));
-    let need = config::sort_spill::<Probe>(probes_bound, sorter)
-        .map(|s| s.finish_peak.saturating_add(s.stream_slack))
-        .ok_or_else(|| state("overlap join arithmetic overflow"))?;
+    let budget = JoinBudget::new(triangles, hosts.len().saturating_add(guests.len()), sorter)?;
+    budget.check(0, stats.rows)?;
+    // Pay every pair's floating tolerance in the host box. This streamed maximum
+    // also covers canonical vertices just outside the source cube after quantization.
+    let mut rounding_floor = 0f64;
+    for (i, candidate) in hosts.reader()?.chain(guests.reader()?).enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
+        let c = candidate?;
+        rounding_floor = rounding_floor.max(rounding(&[c.a, c.b]));
+    }
+    let mut host_levels = 0u32;
+    let mut minimum_host_tol = [f64::INFINITY; 31];
     crate::spill::preflight(
         scratch.path(),
-        need,
+        budget.limit,
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
     let mut probes = ExternalSorter::<Probe>::new(scratch, sorter)?;
-    for host in hosts.reader()? {
+    for (i, host) in hosts.reader()?.enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
         let h = host?;
-        let tol = f64::from(f32::from_bits(h.tol)) + rounding(&[h.a, h.b]);
+        let snap = f64::from(f32::from_bits(h.tol));
+        let tol = snap + rounding_floor;
         let level = host_level(cube, h.a, h.b, tol);
+        host_levels |= 1 << level;
+        minimum_host_tol[level as usize] = minimum_host_tol[level as usize].min(snap);
         let (a, b) = (point(h.a), point(h.b));
         let lo = cell(cube, level, std::array::from_fn(|i| a[i].min(b[i]) - tol));
         let hi = cell(cube, level, std::array::from_fn(|i| a[i].max(b[i]) + tol));
@@ -610,6 +683,10 @@ fn overlaps<'s>(
         for x in lo[0]..=hi[0] {
             for y in lo[1]..=hi[1] {
                 for z in lo[2]..=hi[2] {
+                    if stats.probes.is_multiple_of(1024) {
+                        check()?;
+                    }
+                    budget.check(stats.probes.saturating_add(1), stats.rows)?;
                     probes.push(Probe {
                         level,
                         cell: [x, y, z],
@@ -624,19 +701,38 @@ fn overlaps<'s>(
             }
         }
     }
-    for guest in guests.reader()? {
+    for (i, guest) in guests.reader()?.enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
         let g = guest?;
         for level in (0..=MAX_LEVEL).filter(|l| host_levels & (1 << l) != 0) {
-            probes.push(Probe {
-                level,
-                cell: cell(cube, level, point(g.a)),
-                guest: true,
-                leaf: g.leaf,
-                a: g.a,
-                b: g.b,
-                tol: g.tol,
-            })?;
-            stats.probes += 1;
+            // The predicate accepts max(host_tol, guest_tol). Expanding both boxes
+            // covers that radius, even across a cell boundary at mixed lattice steps.
+            let tol = (f64::from(f32::from_bits(g.tol)) - minimum_host_tol[level as usize]).max(0.);
+            let p = point(g.a);
+            let lo = cell(cube, level, p.map(|v| v - tol));
+            let hi = cell(cube, level, p.map(|v| v + tol));
+            for x in lo[0]..=hi[0] {
+                for y in lo[1]..=hi[1] {
+                    for z in lo[2]..=hi[2] {
+                        if stats.probes.is_multiple_of(1024) {
+                            check()?;
+                        }
+                        budget.check(stats.probes.saturating_add(1), stats.rows)?;
+                        probes.push(Probe {
+                            level,
+                            cell: [x, y, z],
+                            guest: true,
+                            leaf: g.leaf,
+                            a: g.a,
+                            b: g.b,
+                            tol: g.tol,
+                        })?;
+                        stats.probes += 1;
+                    }
+                }
+            }
         }
     }
     let mut cell_hosts: Vec<Probe> = Vec::new();
@@ -665,12 +761,31 @@ fn overlaps<'s>(
             cell_hosts.push(p);
             continue;
         }
-        for h in cell_hosts.iter().filter(|h| h.leaf != p.leaf) {
+        for (i, h) in cell_hosts.iter().filter(|h| h.leaf != p.leaf).enumerate() {
+            if i.is_multiple_of(256) {
+                check()?;
+            }
+            // Expanded boxes can meet in several cells. Evaluate each pair once,
+            // in the lexicographically first cell of their intersection.
+            let (a, b) = (point(h.a), point(h.b));
+            let host_tol = f64::from(f32::from_bits(h.tol)) + rounding_floor;
+            let guest_tol =
+                (f64::from(f32::from_bits(p.tol)) - minimum_host_tol[p.level as usize]).max(0.);
+            let host_lo = cell(
+                cube,
+                p.level,
+                std::array::from_fn(|i| a[i].min(b[i]) - host_tol),
+            );
+            let guest_lo = cell(cube, p.level, point(p.a).map(|v| v - guest_tol));
+            if p.cell != std::array::from_fn(|i| host_lo[i].max(guest_lo[i])) {
+                continue;
+            }
             let tol = f64::from(f32::from_bits(h.tol).max(f32::from_bits(p.tol)))
                 + rounding(&[h.a, h.b, p.a]);
             if !on_segment(h.a, h.b, p.a, tol) {
                 continue;
             }
+            budget.check(stats.probes, stats.rows.saturating_add(4))?;
             stats.overlaps += 1;
             let (lo, hi) = (h.leaf.min(p.leaf), h.leaf.max(p.leaf));
             for (leaf, a, b) in [
@@ -685,4 +800,147 @@ fn overlaps<'s>(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod bounded_join_tests {
+    use super::*;
+
+    fn config() -> SortConfig {
+        SortConfig {
+            run_bytes: 8192,
+            fan_in: 2,
+            buffer_bytes: 64,
+            jobs: 1,
+        }
+    }
+    fn sequence(scratch: &Scratch, stem: &str, rows: &[Candidate]) -> Sequence<Candidate> {
+        let mut out = SequenceWriter::new(scratch, stem, 64).unwrap();
+        for row in rows {
+            out.push(row).unwrap();
+        }
+        out.finish().unwrap()
+    }
+    #[test]
+    fn mixed_step_guest_across_grid_boundary_is_matched_once() {
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(parent.path()), 1 << 20).unwrap();
+        let a = key([0., 0.75, 0.]);
+        let b = key([0.75, 0.75, 0.]);
+        let p = key([0.5, 1., 0.]);
+        assert!(on_segment(a, b, p, 0.5));
+        let hosts = sequence(
+            &scratch,
+            "hosts",
+            &[Candidate {
+                leaf: 0,
+                a,
+                b,
+                tol: (1f32 / 128.).to_bits(),
+            }],
+        );
+        let guests = sequence(
+            &scratch,
+            "guests",
+            &[Candidate {
+                leaf: 1,
+                a: p,
+                b: p,
+                tol: 0.5f32.to_bits(),
+            }],
+        );
+        let mut rows = ExternalSorter::new(&scratch, config()).unwrap();
+        let mut stats = IncidenceStats::default();
+        overlaps(
+            &scratch,
+            config(),
+            Cube {
+                origin: [0.; 3],
+                side: 32768.,
+            },
+            &hosts,
+            &guests,
+            1000,
+            &mut rows,
+            &mut stats,
+            &|| Ok(()),
+        )
+        .unwrap();
+        let rows: Vec<_> = rows.finish().unwrap().map(Result::unwrap).collect();
+        assert_eq!(stats.overlaps, 1);
+        assert_eq!(rows.len(), 4);
+        assert!(rows.iter().any(|r| r.leaf == 1 && r.a == p && r.b == p));
+    }
+    #[test]
+    fn dense_overlap_refuses_before_unpaid_row_spill() {
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(parent.path()), 1 << 20).unwrap();
+        scratch.set_chunk_bytes(256);
+        let a = key([0., 0.75, 0.]);
+        let b = key([0.75, 0.75, 0.]);
+        let p = key([0.5, 0.75, 0.]);
+        let hosts: Vec<_> = (0..40)
+            .map(|leaf| Candidate { leaf, a, b, tol: 0 })
+            .collect();
+        let guests: Vec<_> = (40..80)
+            .map(|leaf| Candidate {
+                leaf,
+                a: p,
+                b: p,
+                tol: 0,
+            })
+            .collect();
+        let hosts = sequence(&scratch, "hosts", &hosts);
+        let guests = sequence(&scratch, "guests", &guests);
+        let mut rows = ExternalSorter::new(&scratch, config()).unwrap();
+        let mut stats = IncidenceStats::default();
+        let error = overlaps(
+            &scratch,
+            config(),
+            Cube {
+                origin: [0.; 3],
+                side: 32768.,
+            },
+            &hosts,
+            &guests,
+            200,
+            &mut rows,
+            &mut stats,
+            &|| Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert!(
+            stats.probes > 0 && stats.rows >= 1200 && stats.rows < 6400,
+            "{stats:?}"
+        );
+        assert!(scratch.peak_bytes() <= scratch_need(200, config()).unwrap());
+    }
+    #[test]
+    fn exact_incident_group_refuses_before_charged_capacity_grows() {
+        let mut group = Vec::with_capacity(MAX_INCIDENT_LEAVES);
+        let item = Item {
+            a: [0; 3],
+            b: [0; 3],
+            leaf: 0,
+            open: false,
+            tol: 0,
+        };
+        for leaf in 0..MAX_INCIDENT_LEAVES {
+            push_group(
+                &mut group,
+                Item {
+                    leaf: leaf as u32,
+                    ..item
+                },
+            )
+            .unwrap();
+        }
+        let capacity = group.capacity();
+        let error = push_group(&mut group, item).unwrap_err();
+        assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+        assert_eq!(group.capacity(), capacity);
+        assert_eq!(group.len(), MAX_INCIDENT_LEAVES);
+        assert!(memory_need(config(), 0) >= (capacity * std::mem::size_of::<Item>()) as u64);
+    }
 }

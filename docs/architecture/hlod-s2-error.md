@@ -103,6 +103,16 @@ records/area nodes, added to S1's incidence envelope. Memory-backed scratch is
 charged through the same S1 budget. Source index files have capture ownership
 and disappear on success, refusal and cancellation.
 
+Revised-S1 incidence is admitted before S2: exact groups have a fixed, charged
+65,536-leaf capacity and refuse before growth. The overlap allowance remains
+256 bytes/source triangle, checked prospectively for retained candidates, full
+probe sort/merge spill and row-sort growth above the admitted exact-row baseline.
+The final row-stream envelope includes that allowance too. Mixed-step candidate
+selection expands guest boxes beyond the minimum host tolerance at each level;
+a streamed global rounding floor is paid in hosts. Each pair is evaluated in
+one shared cell. Probe growth and output bursts refuse before exceeding the
+allowance, including on memory-backed scratch.
+
 Known analytic maxima cover tilted/offset planes and a polygonal cone against
 its flat disc base. A triangular hole in a proxy ring has its maximum strictly
 inside one source triangle; only area samples discover it. A closed tetrahedron
