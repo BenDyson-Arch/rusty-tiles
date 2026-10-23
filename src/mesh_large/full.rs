@@ -123,6 +123,9 @@ pub(crate) struct FullCaptured {
     pub tree: RetainedTree,
     pub triangles: Sequence<FullTriangle>,
     pub corner_depths: Sequence<CornerDepth>,
+    /// Each corner's welded vertex ordinal, in rank order. H17's pre-pass takes and drops it
+    /// (its only reader); until then it is retained with the corner depths.
+    pub corner_vertices: std::sync::Mutex<Option<Sequence<CornerVertices>>>,
     pub leaf_plans: Sequence<LeafPlan>,
     pub images: Vec<ImageSnapshot>,
     pub image_info: Vec<ImageInfo>,
@@ -145,6 +148,7 @@ impl FullCaptured {
             tree,
             triangles,
             corner_depths,
+            corner_vertices,
             leaf_plans,
             images,
             scratch,
@@ -153,6 +157,7 @@ impl FullCaptured {
         drop(tree);
         drop(triangles);
         drop(corner_depths);
+        drop(corner_vertices);
         drop(leaf_plans);
         drop(images);
         scratch.close().map_err(Into::into)
@@ -260,7 +265,8 @@ fn scratch_need(
     let weld_bytes = mul(corners, WeldDepth::SIZE as u64)?;
     let rank_corners = config::sort_spill::<RankCorner>(corners, sorter).ok_or_else(overflow)?;
     let rank_depths = config::sort_spill::<RankDepth>(corners, sorter).ok_or_else(overflow)?;
-    let corner_depth_bytes = mul(n, CornerDepth::SIZE as u64)?;
+    // The corner depths and the corner vertex ordinals are written and retained together.
+    let corner_depth_bytes = mul(n, (CornerDepth::SIZE + CornerVertices::SIZE) as u64)?;
     // Every leaf holds at least one triangle and is a tree node.
     let leaf_plan_bytes = mul(n.min(nodes), LeafPlan::SIZE as u64)?;
     let incidences = config::sort_spill::<super::lod::incidence::Incidence>(corners, sorter)
@@ -811,7 +817,8 @@ pub(crate) fn capture_admitted(
         super::member_gate(tree.stats.nodes, config.member_ceiling)?;
         verify_rank_alignment(&triangles, &tree.triangles, check)?;
         begin_stage(&scratch, &need, stages.corner_depths)?;
-        let corner_depths = join_corner_depths(&scratch, &tree, config, workers, check)?;
+        let (corner_depths, corner_vertices) =
+            join_corner_depths(&scratch, &tree, config, workers, check)?;
         peaks.corner_depths = end_stage(&scratch, stages.corner_depths, "corner depth join")?;
         // The rank-ordered projection's last reader is done; the full-triangle sequence
         // carries the same records in the same rank order (verified above).
@@ -877,6 +884,7 @@ pub(crate) fn capture_admitted(
             tree,
             triangles,
             corner_depths,
+            corner_vertices,
             leaf_plans,
             images,
             image_info,
@@ -893,6 +901,7 @@ pub(crate) fn capture_admitted(
             tree,
             triangles,
             corner_depths,
+            corner_vertices,
             leaf_plans,
             images,
             image_info,
@@ -906,6 +915,7 @@ pub(crate) fn capture_admitted(
             tree,
             triangles,
             corner_depths,
+            corner_vertices: std::sync::Mutex::new(Some(corner_vertices)),
             leaf_plans,
             images,
             image_info,
@@ -995,26 +1005,82 @@ impl Record for RankCorner {
         }
     }
 }
+/// Exclusive bound of a triangle rank in the packed corner records ([`RankDepth`] and H17's
+/// incidence records): 40 bits, about 1.1 trillion triangles.
+pub(crate) const RANK_LIMIT: u64 = 1 << 40;
+/// A typed refusal, never a truncation, for a run with more triangles than [`RANK_LIMIT`].
+pub(crate) fn check_rank_limit(triangles: u64) -> Result<(), JobError> {
+    if triangles > RANK_LIMIT {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!("{triangles} triangles exceed the 40-bit rank of the packed corner records"),
+        ));
+    }
+    Ok(())
+}
+/// A corner's depth and welded vertex ordinal, sorted back to rank order. Encoded in 10
+/// bytes: the 40-bit rank, `corner | depth << 2` (a depth is below the tree height, at most
+/// 32), and the ordinal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct RankDepth {
     rank: u64,
     corner: u8,
     depth: u8,
+    vertex: u32,
 }
 impl Record for RankDepth {
     const SIZE: usize = 10;
     fn encode(&self, out: &mut [u8]) {
-        out[..8].copy_from_slice(&self.rank.to_le_bytes());
-        out[8] = self.corner;
-        out[9] = self.depth;
+        debug_assert!(self.rank < RANK_LIMIT && self.corner < 4 && self.depth < 64);
+        out[..5].copy_from_slice(&self.rank.to_le_bytes()[..5]);
+        out[5] = self.corner | self.depth << 2;
+        out[6..].copy_from_slice(&self.vertex.to_le_bytes());
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        let mut rank = [0u8; 8];
+        rank[..5].copy_from_slice(&bytes[..5]);
+        Self {
+            rank: u64::from_le_bytes(rank),
+            corner: bytes[5] & 3,
+            depth: bytes[5] >> 2,
+            vertex: u32::from_le_bytes(bytes[6..].try_into().unwrap()),
+        }
+    }
+}
+/// A triangle's three welded vertex ordinals: each corner's index in the position-sorted
+/// weld table (`RetainedTree::weld_depths`), so equal ordinals are equal welded positions.
+/// H17's incidence pre-pass keys on them instead of 12-byte positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct CornerVertices {
+    pub vertices: [u32; 3],
+}
+impl Record for CornerVertices {
+    const SIZE: usize = 12;
+    fn encode(&self, out: &mut [u8]) {
+        for (i, v) in self.vertices.iter().enumerate() {
+            out[4 * i..4 * i + 4].copy_from_slice(&v.to_le_bytes());
+        }
     }
     fn decode(bytes: &[u8]) -> Self {
         Self {
-            rank: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
-            corner: bytes[8],
-            depth: bytes[9],
+            vertices: std::array::from_fn(|i| {
+                u32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap())
+            }),
         }
     }
+}
+/// A welded vertex ordinal as stored in [`CornerVertices`]: a typed refusal, never a
+/// truncation, past `u32::MAX + 1` distinct welded positions (at least 1.43G triangles).
+pub(crate) fn vertex_ordinal(ordinal: u64) -> Result<u32, JobError> {
+    u32::try_from(ordinal).map_err(|_| {
+        JobError::new(
+            JobErrorKind::Unsupported,
+            format!(
+                "{} distinct welded vertices exceed the 32-bit vertex ordinal of the LOD pre-pass",
+                ordinal.saturating_add(1)
+            ),
+        )
+    })
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CornerDepth {
@@ -1037,7 +1103,11 @@ fn join_corner_depths(
     config: &TreeConfig,
     jobs: usize,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Sequence<CornerDepth>, JobError> {
+) -> Result<(Sequence<CornerDepth>, Sequence<CornerVertices>), JobError> {
+    check_rank_limit(tree.triangles.len())?;
+    if tree.stats.height > config::HEIGHT_CAP {
+        return Err(invariant("tree height exceeds the packed corner depth"));
+    }
     let mut corners = ExternalSorter::<RankCorner>::new(scratch, config.sorter(jobs))?;
     let mut rank = 0_u64;
     for triangle in tree.triangles.reader()? {
@@ -1060,6 +1130,8 @@ fn join_corner_depths(
     let mut corners = corners.finish()?;
     let mut welds = tree.weld_depths.reader()?;
     let mut weld = welds.next().transpose()?;
+    // Index of `weld` in the weld table: the corner's welded vertex ordinal.
+    let mut ordinal = 0_u64;
     let mut previous_position = None;
     let mut depths = ExternalSorter::<RankDepth>::new(scratch, config.sorter(jobs))?;
     let mut corner_count = 0_u64;
@@ -1067,6 +1139,7 @@ fn join_corner_depths(
         let row = row?;
         if previous_position.is_some_and(|p| p != row.position) {
             weld = welds.next().transpose()?;
+            ordinal = add(ordinal, 1)?;
         }
         let value =
             weld.ok_or_else(|| invariant("corner position missing from complete weld table"))?;
@@ -1078,6 +1151,7 @@ fn join_corner_depths(
             rank: row.rank,
             corner: row.corner,
             depth: value.depth,
+            vertex: vertex_ordinal(ordinal)?,
         })?;
         corner_count = add(corner_count, 1)?;
         if corner_count.is_multiple_of(3072) {
@@ -1092,12 +1166,20 @@ fn join_corner_depths(
     let mut depths = depths.finish()?;
     let mut writer =
         SequenceWriter::<CornerDepth>::new(scratch, "corner-depths", config.sort.buffer_bytes)?;
+    let mut vertex_writer = SequenceWriter::<CornerVertices>::new(
+        scratch,
+        "corner-vertices",
+        config.sort.buffer_bytes,
+    )?;
     for rank in 0..tree.triangles.len() {
         if rank.is_multiple_of(1024) {
             check()?;
         }
         let mut result = [0; 3];
-        for (corner, result_depth) in result.iter_mut().enumerate() {
+        let mut vertices = [0; 3];
+        for (corner, (result_depth, vertex)) in
+            result.iter_mut().zip(vertices.iter_mut()).enumerate()
+        {
             let row = depths
                 .next()
                 .transpose()?
@@ -1106,14 +1188,16 @@ fn join_corner_depths(
                 return Err(invariant("ranked corner depth order mismatch"));
             }
             *result_depth = row.depth;
+            *vertex = row.vertex;
         }
         writer.push(&CornerDepth { depths: result })?;
+        vertex_writer.push(&CornerVertices { vertices })?;
     }
     if depths.next().transpose()?.is_some() {
         return Err(invariant("extra ranked corner depth"));
     }
     drop(depths);
-    Ok(writer.finish()?)
+    Ok((writer.finish()?, vertex_writer.finish()?))
 }
 
 #[cfg(test)]
@@ -1414,12 +1498,18 @@ pub(super) mod tests {
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         input
     }
-    /// Corner depths, tree rank order and weld depths are identical for every worker count
-    /// and run size, from in-memory sorts down to one-record runs merged two at a time, and
-    /// every corner depth is its position's welded minimum.
+    /// Corner depths, corner vertex ordinals, tree rank order and weld depths are identical
+    /// for every worker count and run size, from in-memory sorts down to one-record runs
+    /// merged two at a time; every corner depth is its position's welded minimum and every
+    /// vertex ordinal is its position's index in the weld table.
     #[test]
     fn corner_depth_join_is_identical_across_jobs_and_run_sizes() {
-        type Outputs = (Vec<CornerDepth>, Vec<Vec<u8>>, Vec<([u32; 3], u8)>);
+        type Outputs = (
+            Vec<CornerDepth>,
+            Vec<Vec<u8>>,
+            Vec<([u32; 3], u8)>,
+            Vec<CornerVertices>,
+        );
         let dir = tempfile::tempdir().unwrap();
         let parent = dir.path().join("scratch");
         fs::create_dir(&parent).unwrap();
@@ -1455,16 +1545,34 @@ pub(super) mod tests {
                 .unwrap()
                 .map(|w| w.map(|w| (w.position, w.depth)).unwrap())
                 .collect();
+            let vertices: Vec<_> = output
+                .corner_vertices
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap()
+                .reader()
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            assert_eq!(vertices.len(), depths.len());
             let lookup: std::collections::BTreeMap<_, _> = weld.iter().copied().collect();
-            for (triangle, depths) in output.triangles.reader().unwrap().zip(&depths) {
+            for ((triangle, depths), ordinals) in output
+                .triangles
+                .reader()
+                .unwrap()
+                .zip(&depths)
+                .zip(&vertices)
+            {
                 let triangle = triangle.unwrap().triangle;
                 for corner in 0..3 {
                     let key = triangle.positions[corner].map(f32::to_bits);
                     assert_eq!(depths.depths[corner], lookup[&key]);
+                    assert_eq!(weld[ordinals.vertices[corner] as usize].0, key);
                 }
             }
             output.close().unwrap();
-            (depths, ranks, weld)
+            (depths, ranks, weld, vertices)
         };
         let expected = run(1, 64 << 20, 64);
         assert_eq!(
@@ -1482,6 +1590,34 @@ pub(super) mod tests {
             }
         }
         assert_eq!(fs::read_dir(parent).unwrap().count(), 0);
+    }
+    /// The packed rank-order corner record keeps its limits: the largest rank, every corner,
+    /// depths up to the tree height cap and the largest ordinal; more triangles than the
+    /// 40-bit rank holds are refused before any record is packed.
+    #[test]
+    fn rank_depth_round_trips_at_its_limits() {
+        for rank in [0, 1, u64::from(u32::MAX) + 7, RANK_LIMIT - 1] {
+            for corner in 0..3 {
+                for depth in [0, 1, 20, (config::HEIGHT_CAP - 1) as u8] {
+                    for vertex in [0, 1, u32::MAX] {
+                        let row = RankDepth {
+                            rank,
+                            corner,
+                            depth,
+                            vertex,
+                        };
+                        let mut bytes = [0u8; RankDepth::SIZE];
+                        row.encode(&mut bytes);
+                        assert_eq!(RankDepth::decode(&bytes), row);
+                    }
+                }
+            }
+        }
+        assert!(check_rank_limit(RANK_LIMIT).is_ok());
+        assert_eq!(
+            check_rank_limit(RANK_LIMIT + 1).unwrap_err().kind(),
+            JobErrorKind::Unsupported
+        );
     }
     /// Every capture stage's measured peak stays within its declared bound across sorter
     /// regimes: one run, intermediate merges with slack, and inventory compaction. A
@@ -1628,10 +1764,10 @@ pub(super) mod tests {
         assert_eq!(need.stages.projection, 2 * 2860 + 930);
         assert_eq!(need.stages.images, 2860 + 930 + 8192);
         // One chunk per sort here: a stream holds all of its chunk until read through, so the
-        // incidence stream (63 B per corner) and its partly read chunk bound H17.
+        // incidence stream (30 B per corner) and its partly read chunk bound H17.
         assert_eq!(
             need.stages.lod_prepass,
-            need.stages.leaf_plans + 2 * 30 * 63
+            need.stages.leaf_plans + 2 * 30 * 30
         );
         assert_eq!(need.logical_need_bytes, need.stages.max());
         // Control: the old reserve re-added the whole logical need as extent overhead. Now the

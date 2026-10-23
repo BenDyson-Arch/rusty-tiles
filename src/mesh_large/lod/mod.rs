@@ -2569,12 +2569,20 @@ pub(crate) fn produce(
     // The pre-pass is capture's declared `lod_prepass` stage (full::ScratchStages): measure it
     // and fail closed above its bound, like every capture stage.
     input.scratch.begin_stage();
+    // The pre-pass is the corner vertex ordinals' only reader: it takes and removes them.
+    let vertices = captured
+        .corner_vertices
+        .lock()
+        .map_err(|_| state("corner vertex ordinals lock poisoned"))?
+        .take()
+        .ok_or_else(|| state("corner vertex ordinals already consumed"))?;
     let source = incidence::build(
         input.scratch,
         input.sort,
         &captured.tree.nodes,
         &captured.triangles,
         &captured.corner_depths,
+        vertices,
         check,
     )?;
     report.prepass_scratch_peak_bytes = input.scratch.stage_peak_bytes();
