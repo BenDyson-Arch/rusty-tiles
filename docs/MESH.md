@@ -456,21 +456,25 @@ The new public workflow replaces the preparatory `mesh-leaf-payloads`,
 manifests are internal stage artifacts; there is one public source-mesh
 operation.
 
-`mesh-to-3tz` / `mesh_to_3tz` and `mesh-local-to-3tz` / `mesh_local_to_3tz`
-remain available temporarily while full tiler acceptance is completed. They
-are deprecated and will retire together with their old writers. Existing
-legacy calls continue to select those old products; they are not aliases of
-`mesh`.
+`mesh-to-3tz` (alias `meshTo3tz`) / `mesh_to_3tz` and `mesh-local-to-3tz` /
+`mesh_local_to_3tz` were deprecated during 0.4.0 development and removed
+before the release, together with their writers. The old command names are
+now unknown subcommands (exit 2), and the Python functions no longer exist.
+Their output cannot be reproduced; re-run `mesh` on the source.
 
-Geographic/projected meshes use `--source-crs`; the legacy Web Mercator adapter
-call `--source-crs epsg:3857 --source-offset E N A` becomes
+Geographic/projected meshes used `--source-crs`; the legacy Web Mercator
+adapter call `--source-crs epsg:3857 --source-offset E N A` became
 `--source-crs EPSG:3857 --source-offset E N A` (default `y-up` axes and zero
 height offset), and `--source-offset-file` accepts only the strict
-`E:`/`N:`/`A:` format. Mesh `auto` CRS, the `geographic`/Web Mercator keywords
-and old Euler placement do not migrate to new flags. Vector/point CRS support remains a separate retained capability.
+`E:`/`N:`/`A:` format. Automatic CRS detection (`auto`), the
+`geographic`/Web Mercator keywords and old Euler placement
+(`--cartographic-position-degrees`, `--rotation-degrees`) had no new flags and
+are gone: declare the source CRS, or use `--anchor` and `--orientation-xyzw`. Vector/point CRS support remains a separate retained capability.
 
-Old leaf/proxy triangle and error knobs, atlas sizes and JPEG/WebP/general-PNG
-output selectors have no one-to-one replacements: choose a profile. JPEG source
+Old leaf/proxy triangle and error knobs, atlas sizes, `--explicit`,
+`--node-features` and the JPEG/WebP/UASTC/general-PNG output selectors
+(`--texture-format`, Python `texture_format`) had no one-to-one replacements:
+choose a profile. JPEG source
 decoding remains distinct from retired JPEG output encoding. Both original
 primitive and triangle source identities are always carried for leaf picking;
 leaf-local table row IDs are not global business IDs. The implicit forest can

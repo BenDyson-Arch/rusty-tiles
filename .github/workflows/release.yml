@@ -89,7 +89,6 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
       RELEASE_VERSION: ${{ needs.check.outputs.version }}
       RELEASE_TARGET: ${{ matrix.target }}
     steps:

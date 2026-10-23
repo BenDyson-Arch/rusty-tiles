@@ -22,8 +22,6 @@ pub enum Command {
     Terrain,
     PointCloud,
     Mesh,
-    MeshTo3tz,
-    MeshLocalTo3tz,
     GlbTo3tz,
     CreateTilesetJson,
     Convert,
@@ -32,15 +30,13 @@ pub enum Command {
 }
 
 impl Command {
-    pub const ALL: [Command; 13] = [
+    pub const ALL: [Command; 11] = [
         Self::Vector,
         Self::Raster,
         Self::RasterTileToDirectory,
         Self::Terrain,
         Self::PointCloud,
         Self::Mesh,
-        Self::MeshTo3tz,
-        Self::MeshLocalTo3tz,
         Self::GlbTo3tz,
         Self::CreateTilesetJson,
         Self::Convert,
@@ -57,8 +53,6 @@ impl Command {
             Self::Terrain => "terrain",
             Self::PointCloud => "point-cloud",
             Self::Mesh => "mesh",
-            Self::MeshTo3tz => "mesh-to-3tz",
-            Self::MeshLocalTo3tz => "mesh-local-to-3tz",
             Self::GlbTo3tz => "glb-to-3tz",
             Self::CreateTilesetJson => "createTilesetJson",
             Self::Convert => "convert",
@@ -70,7 +64,6 @@ impl Command {
     /// Accepted CLI aliases of [`Command::name`].
     pub const fn aliases(self) -> &'static [&'static str] {
         match self {
-            Self::MeshTo3tz => &["meshTo3tz"],
             Self::GlbTo3tz => &["glbTo3tz"],
             Self::CreateTilesetJson => &["create-tileset-json"],
             _ => &[],
@@ -366,15 +359,10 @@ impl Resolver<'_> {
                 "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Full-detail leaves sit under certified coarse parent tiles (simplified proxies whose geometric error bounds their distance to the source) with proxy textures baked from the source appearance; proxy appearance is an approximation and carries no certificate. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
                 "note":"Readiness is build capability, not admission of a source, output filesystem, memory plan or viewer. No external encoder or system geospatial library is required."
             }))),
-            Command::MeshLocalTo3tz
-            | Command::GlbTo3tz
+            Command::GlbTo3tz
             | Command::CreateTilesetJson
             | Command::Convert
             | Command::Validate => built_in(Map::new()),
-            Command::MeshTo3tz => built_in(details(json!({
-                "generalCrs": self.placement(),
-                "note": "Local/manual placement and legacy geographic/Web Mercator adapters remain available. General mesh CRS uses the shared horizontal resolver and requires explicit xyz/y-up axes after node transforms and an ellipsoidal metre height offset; E/N shifts use horizontal units, A metres. No compound/geocentric input or manual placement/rotation on the general path."
-            }))),
             Command::Preview => built_in(self.cesium()),
             Command::PointCloud => Readiness {
                 capability: Capability::ready(),
@@ -746,13 +734,11 @@ mod tests {
     fn built_in_commands_are_ready_and_cesium_is_checked_only_when_given() {
         let built_in = [
             Command::Mesh,
-            Command::MeshLocalTo3tz,
             Command::GlbTo3tz,
             Command::CreateTilesetJson,
             Command::Convert,
             Command::Validate,
             Command::Preview,
-            Command::MeshTo3tz,
             Command::PointCloud,
         ];
         let result = report(&built_in, None);

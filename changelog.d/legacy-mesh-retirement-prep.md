@@ -1,7 +1,3 @@
-### Deprecated
-
-- `mesh-to-3tz` and `mesh-local-to-3tz` now print a deprecation warning on stderr on every run, naming `rusty-tiles mesh` as the replacement. Under `--progress json` it is an NDJSON `warning` event with `"code":"deprecated"`. Their `--help` lines and the Python `mesh_to_3tz` / `mesh_local_to_3tz` docstrings say they are removed before the 0.4.0 release. [docs/architecture/legacy-mesh-retirement.md](docs/architecture/legacy-mesh-retirement.md) lists exactly what that removal deletes and the conditions it waits for.
-
 ### Changed
 
 - Vector reuse: existing `--reuse-tileset` caches are invalidated once, so the first reuse run after upgrading rebuilds every tile. The native and portable encoder fingerprints no longer hash the legacy mesh writer (`glb_write.rs`), so deleting that file later does not change reuse identity. Whole-file hashes of `bbox.rs`, `georef.rs` and `metadata.rs` remain, so the later legacy deletion still invalidates reuse caches once more; that change's changelog will say so. They now cover sources they previously omitted: `vector.rs`, `vector/pipeline/outline.rs`, `vec3.rs`, `vector_compression/source.rs`, the `content_integrity` payload checks, `implicit/tileset/stream.rs` and, in native builds, `geospatial/native.rs`. A test keeps the list closed over the vector modules and their crate dependencies.

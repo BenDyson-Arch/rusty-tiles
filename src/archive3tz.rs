@@ -3,10 +3,6 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
 };
 pub const TZ_INDEX_NAME: &str = "@3dtilesIndex1@";
 /// Largest 3TZ member count, index included, that producers write and the
@@ -73,28 +69,6 @@ impl<E> From<zip::result::ZipError> for WriteFailure<E> {
         Self::Codec(CodecError::Zip(error))
     }
 }
-struct Tracked<W> {
-    writer: W,
-    position: Arc<AtomicU64>,
-}
-impl<W: Write> Write for Tracked<W> {
-    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
-        let n = self.writer.write(b)?;
-        self.position.fetch_add(n as u64, Ordering::Relaxed);
-        Ok(n)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()
-    }
-}
-impl<W: Seek> Seek for Tracked<W> {
-    fn seek(&mut self, s: SeekFrom) -> std::io::Result<u64> {
-        let p = self.writer.seek(s)?;
-        self.position.store(p, Ordering::Relaxed);
-        Ok(p)
-    }
-}
-
 // F0 container profile: stored payload, UTF-8 names, no data descriptors,
 // actual 32-bit local sizes/CRC; archive-level ZIP64 offsets/counts as needed.
 // Field layouts follow PKWARE APPNOTE 6.3.9 sections 4.3.7, 4.3.12-16 and 4.5.3.
@@ -384,62 +358,6 @@ pub(crate) fn serialize<E, W: Write + Seek>(
     Ok(())
 }
 
-// Legacy converters are not migrated by F0. This historical writer remains
-// separately unproven, including ZIP64 member sizes and ZipWriter Drop diagnostics.
-/// Write a stored ZIP with `tileset.json` first and the 3TZ index last.
-pub(crate) fn write_archive(
-    files: &[(String, PathBuf)],
-    file: &mut File,
-) -> Result<(), CodecError> {
-    let position = Arc::new(AtomicU64::new(0));
-    let mut zip = zip::ZipWriter::new(Tracked {
-        writer: file,
-        position: position.clone(),
-    });
-    let mut index = Vec::with_capacity(files.len());
-    let mut ordered: Vec<_> = files.iter().collect();
-    ordered.sort_by(|a, b| (a.0 != "tileset.json", &a.0).cmp(&(b.0 != "tileset.json", &b.0)));
-    for (name, path) in ordered {
-        let mut source = File::open(path)?;
-        let size = source.metadata()?.len();
-        let offset = position.load(Ordering::Relaxed);
-        zip.start_file(
-            name,
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored)
-                .last_modified_time(zip::DateTime::default())
-                .unix_permissions(0o644)
-                .large_file(size >= u32::MAX as u64),
-        )?;
-        let copied = std::io::copy(&mut source, &mut zip)?;
-        if copied != size {
-            return Err(CodecError::invalid(format!(
-                "source changed while packing: {}",
-                path.display()
-            )));
-        }
-        index.push((md5::compute(name.as_bytes()).0, offset));
-    }
-    index.sort_by_key(|(h, _)| {
-        (
-            u64::from_le_bytes(h[..8].try_into().unwrap()),
-            u64::from_le_bytes(h[8..].try_into().unwrap()),
-        )
-    });
-    zip.start_file(
-        TZ_INDEX_NAME,
-        zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored)
-            .last_modified_time(zip::DateTime::default())
-            .unix_permissions(0o644),
-    )?;
-    for (hash, offset) in index {
-        zip.write_all(&hash)?;
-        zip.write_all(&offset.to_le_bytes())?;
-    }
-    zip.finish()?.flush()?;
-    Ok(())
-}
 /// List archive member names (for tests / golden compare).
 pub fn list_zip_names(path: &Path) -> Result<Vec<String>, CodecError> {
     let file = File::open(path)?;

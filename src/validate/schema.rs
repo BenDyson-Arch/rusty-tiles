@@ -291,6 +291,33 @@ mod tests {
             .is_ok()
     }
 
+    /// Whether no two items are equal under `cmp::equal`: the built-in's pairwise rule, which
+    /// identifies `0` with `-0.0`.
+    fn pairwise_unique(items: &Value) -> bool {
+        let Value::Array(items) = items else {
+            unreachable!("tests pass arrays")
+        };
+        items.iter().enumerate().all(|(i, a)| {
+            items[i + 1..]
+                .iter()
+                .all(|b| !jsonschema::ext::cmp::equal(a, b))
+        })
+    }
+
+    /// Whether the built-in's answer on `items` depends on its per-process hash seed. Above
+    /// 15 items the built-in hashes `0` and `-0.0` differently but compares them equal, so a
+    /// pair that differs only by signed zero is a duplicate exactly when the two hashes land
+    /// in the same 7-bit tag group of its randomly seeded set (about 1 run in 128 to 256). The
+    /// answer is fixed when the array is short, or when the pairwise check finds no duplicate
+    /// (nothing to collide), or when some pair is a duplicate under the hash input too (the
+    /// hashes agree, so it is always found).
+    fn seed_dependent(items: &Value) -> bool {
+        let Value::Array(a) = items else {
+            unreachable!("tests pass arrays")
+        };
+        a.len() > PAIRWISE_ITEMS && !pairwise_unique(items) && linear(items)
+    }
+
     /// A deterministic family of near-duplicate values, including `0` and `-0.0`.
     fn value(seed: u64, depth: u32) -> Value {
         let pick = seed % 9;
@@ -329,6 +356,13 @@ mod tests {
                         .map(|i| value((seed * 31 + i * 7) % 97, 3))
                         .collect(),
                 );
+                if seed_dependent(&items) {
+                    // Only our deterministic rule is pinned here: signed-zero duplicates
+                    // the built-in's hashed path finds only by seed (see `seed_dependent`).
+                    // The current family has no such input; this keeps it from becoming flaky.
+                    assert!(linear(&items), "seed {seed} len {len}: {items}");
+                    continue;
+                }
                 let expected = builtin(&items);
                 assert_eq!(linear(&items), expected, "seed {seed} len {len}: {items}");
                 checked[usize::from(expected)] += 1;
@@ -343,7 +377,10 @@ mod tests {
         assert!(!builtin(&Value::Array(short.clone())));
         assert!(!linear(&Value::Array(short.clone())));
         short.extend((1..=14).map(|i| json!(i)));
-        assert!(builtin(&Value::Array(short.clone())));
+        // Past 15 items the built-in hashes `0` and `-0.0` apart but compares them equal, so
+        // whether it reports them as duplicates depends on its random hash seed: its answer is
+        // not asserted. Ours is fixed: the hash input distinguishes them, so they are unique.
+        assert!(seed_dependent(&Value::Array(short.clone())));
         assert!(linear(&Value::Array(short)));
     }
 

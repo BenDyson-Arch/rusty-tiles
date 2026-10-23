@@ -1,5 +1,7 @@
 # F1d2: bounded complete-surface proof subdivision
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 Implementation contract for the next #121 slice, following merged #149 at
 `3b5703231bf3991c2e37caef99989214308cc08d`. The fan-out
 [audits and focused probes](../../bench/architecture_audit/mesh_approximation_f1d2/)

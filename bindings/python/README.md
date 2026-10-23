@@ -47,18 +47,14 @@ assert rusty_tiles.validate(result.output)["ok"]
 ```
 
 All inputs and outputs are filesystem paths (`str` or `os.PathLike`).
-Legacy `mesh_to_3tz` returns `ConversionResult` with `output` (a `pathlib.Path`), `archive`
-(a boolean) and `report` (a dictionary or `None`). Existing outputs are
-preserved unless `force=True`; publication uses the Rust library's private
-staging and atomic archive replacement.
-The bounded mesh, point-cloud and vector entry points return their own typed
-results with required reports and cleanup diagnostics, as described below.
+Existing outputs are preserved unless `force=True`; publication uses the Rust
+library's private staging and atomic archive replacement. The mesh,
+point-cloud and vector entry points return their own typed results with
+required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
 | `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
-| `mesh_local_to_3tz(input, output, ...)` (deprecated) | `leaf_triangles` required; `root_proxy_triangles=None`, `max_proxy_error_metres=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `MeshResult` |
-| `mesh_to_3tz(input, output, ...)` (deprecated) | `cartographic=None`, `rotation=None`, `force=False`, `max_triangles=20000`, `max_bytes=204800`, `tile_size=2048`, `texture_format="lossless"`, `source_crs="auto"`, `source_offset=None`, `meshopt=True`, `explicit=False`, `node_features=False`, `source_axes=None`, `height_offset=None`, `callback=None` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
@@ -127,68 +123,21 @@ exceptions. Path binding precedes callbacks, including cwd changes. See the
 [guide's error table and Cesium colour limitation](../../docs/MESH.md#reports-and-errors).
 The standard wheel needs no external encoder or system geospatial dependency.
 
-The old `mesh_to_3tz` and `mesh_local_to_3tz` remain temporarily available until
-full tiler acceptance, with their old semantics and parameters documented
-below. Prepare geographic/projected inputs as local metres before migrating;
-use anchor/quaternion/scene offset for placement. Exact wrapping through
-`glb_to_3tz` and sibling `model_to_manifest` remains a separate retained product.
-
-For legacy `mesh_to_3tz`, `cartographic` is `(longitude_degrees, latitude_degrees, height_metres)`;
-`rotation` is `(heading_degrees, pitch_degrees, roll_degrees)`. Mesh
-`source_crs` retains `auto`, `geographic` and `epsg:3857` adapters. General
-horizontal CRS definitions require `source_axes="xyz"` (easting/northing/height)
-or `"y-up"` (easting/height/negative northing), after glTF node transforms, and
-an explicit `height_offset` in metres to ellipsoidal height. `source_offset`
-is `(easting, northing, height)`: E/N in horizontal CRS units and height in
-metres; the height offset is added after that source shift. The wheel shares
-the [verified grid-free CRS tier](../../docs/FORMATS.md#point-clouds); other
-operations require the native CLI/library. General placement refuses
-compound/vertical/geocentric input and manual cartographic placement/rotation.
-Omitting axes/height preserves legacy adapter behaviour. Mesh textures use
-lossless PNG by default; `jpeg` and `webp` use bundled Rust encoders. UASTC
-is outside this wheel's API because it requires an external encoder.
-For `mesh_to_3tz`, `explicit=True` selects the legacy hierarchy instead of
-implicit tiling. `point_cloud_to_3tz` and `vector_to_3tz` write implicit tiling
-only; their `explicit` keyword was removed in 0.4.0 and now raises `TypeError`.
-`node_features=True` preserves mesh nodes as pickable features with `name` and
-`node_index` properties, including for small models and across parent LODs.
+The legacy `mesh_to_3tz` and `mesh_local_to_3tz` functions, with their
+`MeshResult` and `ConversionResult` classes and the `texture_format`, `explicit`
+and `node_features` keywords, were removed in 0.4.0; see the
+[migration notes](../../docs/MESH.md#migration-from-older-mesh-converters).
+Exact wrapping through `glb_to_3tz` and sibling `model_to_manifest` remains a
+separate product. `point_cloud_to_3tz` and `vector_to_3tz` write implicit
+tiling only; their `explicit` keyword was removed in 0.4.0 and now raises
+`TypeError`.
 `metadata_attributes=True` adds point property attributes named
 `vertex_classification`, `vertex_intensity` and `vertex_return_number`, retaining
 the original LAS property tables for picking and table styling.
 
-### Local static mesh foundation and explicit placement
+### Rigid placement
 
-```python
-result = rusty_tiles.mesh_local_to_3tz(
-    "local.glb", "local.3tz", leaf_triangles=1000,
-)
-assert result.report["coordinates"] == "local-gltf"
-
-placed = rusty_tiles.mesh_local_to_3tz(
-    "local.glb", "placed.3tz", leaf_triangles=1000,
-    anchor=(153.02, -27.47, 25.0),
-    orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
-    scene_offset=(10.0, 2.0, -5.0),
-)
-assert placed.report["coordinates"] == "wgs84-ecef"
-assert placed.report["schema_version"] == 7
-```
-
-`mesh_local_to_3tz(input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None,
-force=False, anchor=None,
-orientation_xyzw=None, scene_offset=None, callback=None)`
-requires a positive explicit per-leaf triangle limit and interprets the input
-as local metre/Y-up geometry. The bounded [core PBR profile](../../docs/architecture/f1b3-contract.md)
-accepts static GLB/glTF, confined local buffers and PNG/JPEG images, all five core
-texture bindings, UV0/UV1, vertex colors and authored normals/tangents. It preserves
-selected image bytes and material bindings across spatial leaves. Normal textures
-require authored normals and tangents; tangent-bearing geometry permits accumulated
-rotation, uniform scale and reflection. Extras, extensions, animation and other
-excluded semantics are refused before staging. Full detail is the default. Source CRS remains explicit and no generated tangent
-basis or atlas is introduced. Source resource limits and
-capture rules follow the [F1b2 contract](../../docs/architecture/f1b2-contract.md).
-
-The [F1c1 placement contract](../../docs/architecture/f1c1-contract.md) defines the independently checked rigid frame and numerical domain. `anchor` is `(longitude_degrees, latitude_degrees,
+`mesh_to_tileset`, `glb_to_3tz` and `model_to_manifest` share the [F1c1 placement contract](../../docs/architecture/f1c1-contract.md), which defines the independently checked rigid frame and numerical domain. `anchor` is `(longitude_degrees, latitude_degrees,
 ellipsoidal_height_metres)` on WGS84. Omission keeps local output. An anchor
 permits `orientation_xyzw`, a near-unit right-handed active ENU quaternion
 (scalar W last), and `scene_offset`, a glTF Y-up metre translation after the
@@ -201,41 +150,8 @@ source I/O. These domain decisions are shared with Rust/CLI.
 
 The frame uses cartographic latitude/longitude at the ellipsoidal anchor,
 including elevated anchors and poles; supplied longitude defines the pole
-meridian. Placement is an f64 rigid root transform. Source GLB coordinates,
-normal/tangent frames, UVs, colors and resource associations stay local. Offset
-does not restore a projected E/N/A shift, infer source CRS, or correct a geoid.
-Schema 7/profile `f1d2-adaptive-root-proxy-gltf-v1` records `source_coordinates="local-gltf"`,
-output `coordinates`, tagged `placement` with normalized parameters, and exact
-`root_transform`, along with existing counters. The [F1c2 candidate](../../docs/architecture/f1c2-contract.md) carries two labeled feature sets: `source_primitive` exposes source node/mesh/primitive indices and optional authored name with an explicit presence flag; `source_triangle` adds the original triangle ordinal. Table row IDs are leaf-local; source keys belong to the unchanged source document, not a persistent business namespace. Imported metadata/extras remain excluded.
-
-For one coarse root, supply both `root_proxy_triangles=N` and
-`max_proxy_error_metres=E`. Positive finite E is the emitted root error budget,
-validated against a separately certified complete surface bound. N bounds the
-achieved proxy count; actual reduction is required. This first profile accepts
-opaque, untextured, positions-only selected geometry. Unsupported requests fail
-before staging with `UnsupportedError`; malformed policy raises
-`InvalidRequestError`. `report["approximation"]` distinguishes `full_detail` and
-`root_proxy`, reports actual bound/counts/work, and names the admitted appearance
-profile. Coarse picking exposes complete `proxy_region` membership arrays while
-unchanged leaves retain exact original triangle identities. See the
-[F1d2 contract](../../docs/architecture/f1d2-certificate-contract.md) for
-complete-surface dyadic proof subdivision, finite proof limits and appearance
-limits. `report["approximation"]["certificate"]` contains `error_metres`,
-`patch_face_tests`, `accepted_patches` and `max_depth`. Depth/work refusal means
-the bound could not be certified within the profile; it does not prove the true
-surface distance exceeds the request. See also the
-[bounded evidence](../../bench/architecture_audit/mesh_approximation_f1d2/README.md).
-
-It returns frozen `MeshResult` with a resolved absolute `output` Path, `report`
-dictionary identical to published `conversion.json`, and `cleanup_diagnostics`.
-The limit bounds triangles per leaf, not process memory or output bytes. This
-entry point is separate from `mesh_to_3tz`; unsupported sources do not fall back.
-Broader legacy CRS/LOD/node-feature APIs remain pending their separate migrations;
-this bounded identity candidate does not authorize their deletion.
-It shares packaging's fallible precommit callback and typed domain-error contract,
-including preservation of the original callback exception when that cause wins.
-Python result materialization and external asynchronous exceptions remain outside
-the core publication guarantee. `force=True` permits completed-file replacement.
+meridian. Placement is an f64 rigid root transform. Offset does not restore a
+projected E/N/A shift, infer source CRS, or correct a geoid.
 
 `glb_to_3tz` now returns frozen `ModelWrapResult` with a required report and cleanup diagnostics, and captures exact admitted source/resource bytes beneath `model/` without new LOD. It accepts the bounded static local metre/Y-up/core PBR profile, explicit rigid placement and fallible callbacks. Animation, skins, morph targets, imported extensions/extras, data URIs and larger models are excluded; the former broader wrapping escape hatch and HPR keywords are retired.
 
@@ -318,7 +234,7 @@ See [vector conversion](../../docs/VECTOR.md) for geometry, filtering, repair
 and reuse limits. Close or checkpoint a GeoPackage with unmerged WAL edits
 before conversion.
 
-Callbacks receive dictionaries using the Rust reporter's event contract:
+Callbacks receive dictionaries using the CLI's NDJSON event contract:
 `{"event": "progress", "phase": ..., "done": ..., "total": ...}`,
 `{"event": "warning", ...}` or `{"event": "log", "message": ...}`.
 `total` can be `None`. Structured warnings preserve their detail fields.
@@ -328,9 +244,7 @@ Without a callback, converters are silent.
 
 Conversions release the GIL. A callback can run on a Rust worker thread;
 Blender callers should queue events for their main thread before changing
-Blender state. The first callback exception is saved, later callbacks are
-skipped, and the original exception is raised after Rust finishes. A callback
-exception does not cancel the legacy mesh converters, so their output may already exist.
+Blender state.
 
 Packaging, bounded mesh, model wrapping/manifest, point-cloud, raster directory and vector conversion use a fallible
 synchronous callback. Every callback for these operations finishes
@@ -363,7 +277,7 @@ Build and test from a source checkout with stable Rust and a C++ compiler:
 
 ```sh
 python -m pip install 'maturin==1.15.0'
-RUSTY_TILES_DISABLE_NATIVE_JPEG=1 maturin build --release --locked --out target/wheels
+maturin build --release --locked --out target/wheels
 python scripts/test_python_wheel.py target/wheels/*.whl
 ```
 

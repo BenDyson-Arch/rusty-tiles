@@ -187,11 +187,12 @@ Recorded decisions for the tiler:
   memory-capped maximum and reports the jobs it actually used; the default is
   auto and memory-aware. Output is `.3tz` only in 0.4. Profiles stay
   provisional. Placement is rigid local metres or a declared source CRS (#218).
-  `mesh-to-3tz` and `mesh-local-to-3tz` retire after full tiler acceptance and
-  before the 0.4.0 tag: their removal is a 0.4.0 gate (owner decision
-  2026-10-21), and old scripts fail loudly with a migration note. The
-  [retirement ledger](legacy-mesh-retirement.md) lists what the deletion
-  removes, what it keeps and the remaining gate conditions.
+  `mesh-to-3tz` and `mesh-local-to-3tz` were removed before the 0.4.0 tag
+  (owner decision 2026-10-21; on 2026-10-23 the owner waived the remaining
+  acceptance gates for the deletion). Old command names are unknown
+  subcommands and the migration notes are in the mesh guide. The
+  [retirement record](legacy-mesh-retirement.md) lists what was removed and
+  what was kept.
 - Leaf size. The 8192-triangle cap per leaf stays. Measured: CesiumJS 1.146
   resolves mesh picks through one property table per model. 32k-triangle leaves
   split into 4 tables picked correctly only 8 of 56 times and could not refine
@@ -260,9 +261,11 @@ amplification budgets; test malformed and multiply traversed resources with
 sensitive controls. Complete applicable platform CI, installed-wheel and
 official-Blender checks on the accepted final sources and artifacts.
 
-Then remove superseded exporters, legacy mesh commands/options, codecs and
-shared helpers only after their final consumers migrate. Update public APIs,
-help, defaults, reuse-identity guidance and migration documentation together.
+The superseded exporters, legacy mesh commands/options, codecs and shared
+helpers were removed on 2026-10-23, ahead of the acceptance work above, by
+owner decision (the staged gates were waived). Public APIs, help, defaults,
+reuse-identity guidance and migration documentation changed together; see the
+[retirement record](legacy-mesh-retirement.md).
 Review the retained public surface explicitly. Closing this milestone requires
 the final acceptance evidence; document consolidation alone does not close
 [#113](https://github.com/BenDyson-Arch/rusty-tiles/issues/113) or authorize a release.

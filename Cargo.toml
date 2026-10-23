@@ -39,7 +39,6 @@ required-features = ["native-geospatial"]
 # bindings depend on the library with default features off.
 default = ["cli"]
 cli = ["dep:signal-hook"]
-native-jpeg = []
 native-geospatial = ["dep:gdal-sys", "dep:pkg-config"]
 # Test-only: `RUSTY_TILES_FORCED_SPILL=1` puts the validator catalog on scratch (parity runs).
 validate-forced-spill = []
@@ -57,13 +56,10 @@ walkdir = "2"
 same-file = "1"
 crc32fast = "1"
 md5 = "0.7"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
-jpeg-decoder = { version = "0.3", default-features = false }
-bytemuck = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 memmap2 = "0.9"
 meshopt = "0.6"
 rayon = "1.10"
-zenwebp = "0.4"
 
 tempfile = "3"
 sha2 = "0.10"
@@ -93,7 +89,7 @@ pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
 basisu = "=0.1.0"
-image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 zip = { version = "2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]

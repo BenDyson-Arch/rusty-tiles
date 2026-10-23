@@ -2372,23 +2372,6 @@
   },
   "cases": [
     {
-      "id": "mesh-milktruck",
-      "category": "mesh",
-      "profile": "smoke",
-      "input": "mesh/CesiumMilkTruck-static.glb",
-      "command": "mesh-to-3tz",
-      "args": [
-        "--maxTriangles",
-        "10000",
-        "--maxBytes",
-        "0",
-        "--tileSize",
-        "512"
-      ],
-      "audit": "mesh",
-      "expect": "success"
-    },
-    {
       "id": "autzen-trim",
       "category": "point-cloud",
       "profile": "smoke",
@@ -2529,92 +2512,6 @@
       "audit": "archive",
       "expect": "success",
       "notes": "Wrap the original glTF, buffer and fifteen PNGs without rewriting them; validate all archive references and compare every model/resource member with its source bytes."
-    },
-    {
-      "id": "flight-helmet-external",
-      "category": "mesh",
-      "profile": "core",
-      "input": "mesh/flight-helmet/FlightHelmet.gltf",
-      "command": "mesh-to-3tz",
-      "args": [],
-      "audit": "archive",
-      "expect": "cannot yet preserve source glTF extensions"
-    },
-    {
-      "id": "mesh-lantern",
-      "category": "mesh",
-      "profile": "core",
-      "input": "mesh/Lantern-static.glb",
-      "command": "mesh-to-3tz",
-      "args": [
-        "--maxTriangles",
-        "10000",
-        "--maxBytes",
-        "0",
-        "--tileSize",
-        "512"
-      ],
-      "audit": "mesh",
-      "expect": "success"
-    },
-    {
-      "id": "mesh-corset",
-      "category": "mesh",
-      "profile": "core",
-      "input": "mesh/Corset-static.glb",
-      "command": "mesh-to-3tz",
-      "args": [
-        "--maxTriangles",
-        "10000",
-        "--maxBytes",
-        "0",
-        "--tileSize",
-        "512"
-      ],
-      "audit": "mesh",
-      "expect": "success"
-    },
-    {
-      "id": "mesh-floreat",
-      "category": "mesh",
-      "profile": "core",
-      "input": "mesh/floreat-dunes/floreat-f2-2022-static.glb",
-      "command": "mesh-to-3tz",
-      "args": [
-        "--maxTriangles",
-        "10000",
-        "--maxBytes",
-        "0",
-        "--tileSize",
-        "512",
-        "--cartographicPositionDegrees",
-        "115.755644",
-        "-31.927922",
-        "5"
-      ],
-      "audit": "mesh",
-      "expect": "success"
-    },
-    {
-      "id": "mesh-delft",
-      "category": "mesh",
-      "profile": "core",
-      "input": "city-model/3dbag-delft/3dbag-9-280-564-lod13-static.glb",
-      "command": "mesh-to-3tz",
-      "args": [
-        "--maxTriangles",
-        "10000",
-        "--maxBytes",
-        "0",
-        "--tileSize",
-        "512",
-        "--cartographicPositionDegrees",
-        "4.352914",
-        "52.015809",
-        "0"
-      ],
-      "audit": "mesh",
-      "expect": "success"
     },
     {
       "id": "roads",
