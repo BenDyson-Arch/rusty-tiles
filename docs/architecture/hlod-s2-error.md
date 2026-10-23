@@ -43,6 +43,9 @@ cache and git history; they do not describe this producer.
   and `reusedFromDepth`; copied counts still meet that depth's required density.
   Recompute the parent/leaf floor. No reuse occurs merely because bounds or
   simplifier estimates agree. This avoids remeasuring identical unary chains.
+- Cached-area endpoint roundoff is corrected only within 1,024 machine epsilons
+  of the total area; a larger incomplete schedule returns a typed refusal. This
+  numerical selection guard adds no geometric-error margin.
 - Incomplete/nonfinite sampling is a typed refusal. Delivery requires v2 policy
   and summaries for HLOD manifests and validates counts, occupied depth totals,
   distributions, margin, q and parent ordering. Historical H17 rows remain readable
