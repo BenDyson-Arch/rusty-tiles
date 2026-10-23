@@ -8,7 +8,9 @@ mod support;
 
 use support::{write_glb, Primitive};
 
-/// An n×n quad grid with a mild, deterministic relief.
+/// An n×n quad grid with a mild relief built from +, - and * only: IEEE basic
+/// operations round identically on every platform, while libm `sin`/`cos` do not,
+/// and the pinned digests must hold on every CI target.
 fn grid(n: usize, normals: bool, uvs: bool) -> Primitive {
     let mut primitive = Primitive::default();
     for j in 0..=n {
@@ -16,7 +18,7 @@ fn grid(n: usize, normals: bool, uvs: bool) -> Primitive {
             let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
             primitive
                 .positions
-                .push([u * 20.0, v * 20.0, (u * 7.0).sin() * (v * 5.0).cos() * 0.5]);
+                .push([u * 20.0, v * 20.0, u * (1.0 - u) * v * (1.0 - v) * 8.0]);
             if uvs {
                 primitive.uvs.push([u, v]);
             }
@@ -70,14 +72,14 @@ fn u32_index_glb_matches_pinned_digest() {
         true,
         false,
         256,
-        "73377ee6c264d9cdd0c5cfd3ddc1fb79989a76c0139f9166b852b0f07a00cc38",
+        "285f75e6a85e752d95ce8c41fa3bd439839f96c505fa34601fc66b56a3a50c6d",
     );
     check(
         "u32 normals textured",
         true,
         true,
         256,
-        "1598a16fab5188797a582fa8cfc33ecaf01186a45e141451d5d69e87405ed9a3",
+        "3303e5626fe4eb1ea4a27211e3dddeab9f2f1d02a8f8a0592160204ab1af33a5",
     );
 }
 
@@ -88,20 +90,20 @@ fn no_normals_glb_matches_pinned_digest() {
         false,
         false,
         8,
-        "2199a0f0fb1c8e9af46358b03134a79d1fc328ed211683a241e2d3d947479659",
+        "2a6369c63488f795248ba126f75df279f7fb96285f9af2a38376b9f7e5322137",
     );
     check(
         "no normals textured",
         false,
         true,
         8,
-        "bd3fa72c5973fda45d5b1393bda2ec80f401c92b5858bc2f8a1b3f733c7e2c0c",
+        "19c5879cd1bc7a16965644c4825943adc2d7a60083abb7def942f17c0c4dc560",
     );
     check(
         "no normals u32",
         false,
         false,
         256,
-        "d5efeab31331a7f2622b66cd2b1a94927a50b0902dabfaff1fff9868f07bfc04",
+        "242275b15259fe104169c55e00c6ddad63d6fd3175feffaa94eaff7df55a9b1c",
     );
 }
