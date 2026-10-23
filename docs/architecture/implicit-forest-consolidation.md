@@ -72,7 +72,7 @@ not per-branch availability as such either.
 | (a) Inline all (fully explicit), today's partition | 92 (22 / 0 / 70) | 6 | 38 documents; JSON 120 → 876 KB |
 | (a) Inline all, one document | 71 (1 / 0 / 70) | 2 | 64.6k value nodes, 868 KB: over the writer's 16,384-node cap and at the validator's 65,536; does not scale |
 | (b) Merge siblings, S = 5 | 107 (4 / 33 / 70) | 4 | Parent content moves behind a subtree |
-| (b) S = 6 | 100 (2 / 28 / 70) | 4 | Dense availability of up to 6 levels; subtree bytes 2.5× |
+| (b) S = 6 | 100 (2 / 28 / 70) | 4 | Dense availability of up to 6 levels; first-view metadata bytes 2.5× |
 | (b) S = 7 | 90 (2 / 18 / 70) | 4 | 7-level subtrees of 75 KB of availability each; 1.0 MB of metadata in the first view |
 | (c) Raise `subtreeLevels` | 102 | 5 | No-op: every root already has one subtree covering all its levels |
 | (d) Pack documents to the budget (480 objects, 4,096 records, 12 levels) | 96 (1 / 25 / 70) | 3 | One 120 KB `tileset.json` (7.6k nodes) |
@@ -89,7 +89,7 @@ removes subtree requests where the document has room.
 **JSON growth against parse cost.** Explicit tiles cost about 25 value nodes and 350–550 bytes
 each. Implicit tiles cost nothing in JSON, plus 104 bytes of metadata rows in their subtree.
 The recommendation grows the 2048 JSON from 120 KB in 7 documents to 164 KB in one, and
-tex3's from 8.8 KB to 68 KB. CesiumJS parses JSON at hundreds of MB/s, and building the
+tex3's from 8.8 KB to 66 KB. CesiumJS parses JSON at hundreds of MB/s, and building the
 tile objects is linear. This is well under one round trip, and the budget caps every
 document at about 12.5k nodes regardless of input size.
 
@@ -102,26 +102,31 @@ For the mesh delivery planner (`src/mesh_large/delivery/plan.rs`) only:
    tiles at `content/f<first>-d<depth>.glb`. So does a whole tree of height below 4. The
    skeleton rule (height ≥ 4) and explicit leaves are unchanged.
 2. **Pack documents to a budget.** When a skeleton tile closes and its fragment exceeds a cap,
-   the planner applies these steps in order:
-   1. turn the largest inline tree anywhere in the fragment into an implicit root (most
-      tiles, then greatest height, then lowest rank), as long as objects or levels are
-      over a cap;
-   2. move the inline skeleton child that contributes most to the violated cap into its
-      own external document (ties go to the lowest slot);
-   3. if a cap is still exceeded, which only records can be, make the tile itself an
+   the planner (`Builder::fit`) takes one step at a time:
+   1. if tile objects are over, it turns the largest explicit shallow tree anywhere in the
+      fragment into an implicit root (most tiles, then greatest height, then lowest rank);
+   2. if levels are over, it takes the child that reaches deepest (lowest slot on ties):
+      a shallow tree is demoted, and a skeleton child is moved into its own external
+      document;
+   3. if objects (with no shallow tree left) or records are over, it moves the inline
+      skeleton child that contributes most (lowest slot on ties) into its own external
+      document;
+   4. if a cap is still exceeded, which only records can be, the tile itself becomes an
       external document, as today.
 
    The caps are per document: 480 tile objects (at most 26 value nodes each, so
    ≤ 12,480 + document overhead < 16,384), 4,096 records and 12 tile levels (deepest member
-   at JSON depth 26 < 32). A closed fragment never exceeds the caps, so the planner's
-   resident bound is the same expression as today, with the new records cap.
+   at JSON depth 26 < 32). A fragment held after a close is within the caps, so the
+   planner's resident bound has the same form as today. The measured `peakHeldRecords` is
+   unchanged: 4,680 and 4,687 for 2^12 and 2^18 leaves.
 3. Implicit roots keep today's form exactly: one subtree, `subtreeLevels == availableLevels
    == height + 1`, constant-0 child availability, and a metadata row per tile.
 
 **Expected first view.** 2048 output: 102 → 87 requests (JSON 7 → 1, subtrees 25 → 16,
-GLBs 70), depth 5 → 3, and 54 of 70 GLBs requestable on round trip 2. tex3 (2026-10-13
-output; final figures from fresh bakes below): 22 → 15 requests, depth 3 → 2, fully
-explicit. Larger outputs keep implicit roots wherever documents are full, so the
+GLBs 70), depth 5 → 3, and 54 of 70 GLBs requestable on round trip 2. tex3 and crop3 (fresh bakes of develop and
+this branch): 22 → 15 requests (subtrees 7 → 0), depth 3 → 2, fully explicit in one 66 KB
+`tileset.json`. The simulator's prediction from develop's output matched the branch
+output exactly. Larger outputs keep implicit roots wherever documents are full, so the
 archive-level gains shrink towards (d)'s, but the documents stay full and the JSON chain
 stays short.
 
