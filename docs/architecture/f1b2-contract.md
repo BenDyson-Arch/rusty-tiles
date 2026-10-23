@@ -1,5 +1,7 @@
 # F1b2: bounded local glTF resource binding
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 This is the next implementation slice of [#121](https://github.com/BenDyson-Arch/rusty-tiles/issues/121), based on develop `641e1b461f3b11621fd528fb05bfba45a6f930d6`. It extends `MeshRequest::local_gltf`, `mesh-local-to-3tz`, and Python `mesh_local_to_3tz`. The [F1b1 geometry, texture, material, partition, bounds and delivery contract](f1b-contract.md) continues to apply, except for the resource admission and report changes specified here. There is no compatibility branch or legacy fallback. This does not close #121 or authorize a release.
 
 ## Ownership

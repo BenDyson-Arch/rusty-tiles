@@ -89,7 +89,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libturbojpeg0-dev
+          sudo apt-get install -y build-essential pkg-config
       - name: Select stable Rust
         run: |
           rustup update stable --no-self-update
@@ -113,7 +113,7 @@ jobs:
         run: |
           cargo package --locked --no-verify
           python3 scripts/third_party_notices.py check --max-bytes 10000000 target/package/rusty-tiles-*.crate
-      - name: Test native build
+      - name: Test default build
         shell: bash
         run: |
           # Library unit tests run in parallel, except two that run serially below: the C1
@@ -122,22 +122,22 @@ jobs:
           # working directory) and doctests stay serial.
           serial_lib=(payload_context_acceptance:: vector_compression::tests::callback_cwd_change_cannot_redirect_relative_source_or_publication)
           skips=(); for name in "${serial_lib[@]}"; do skips+=(--skip "$name"); done
-          cargo test --locked --features native-jpeg --lib -- "${skips[@]}"
-          cargo test --locked --features native-jpeg --lib -- --nocapture --test-threads=1 "${serial_lib[@]}" 2>&1 | tee "${{ runner.temp }}/c1-library.log"
-          cargo test --locked --features native-jpeg --bins --test '*' -- --nocapture --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
-          cargo test --locked --features native-jpeg --doc -- --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --lib -- "${skips[@]}"
+          cargo test --locked --lib -- --nocapture --test-threads=1 "${serial_lib[@]}" 2>&1 | tee "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --bins --test '*' -- --nocapture --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
+          cargo test --locked --doc -- --test-threads=1 2>&1 | tee -a "${{ runner.temp }}/c1-library.log"
           python3 -B tests/payload_context_receipt.py --log "${{ runner.temp }}/c1-library.log" --output "${{ runner.temp }}/c1-payload-contexts.json"
       - name: Check streamed forest memory alone
-        run: cargo test --locked --lib --features native-jpeg -- --ignored --exact --nocapture implicit::tileset::records_tests::streamed_forest_memory_is_bounded_by_one_document
+        run: cargo test --locked --lib -- --ignored --exact --nocapture implicit::tileset::records_tests::streamed_forest_memory_is_bounded_by_one_document
       - name: Independently check streamed mesh capture and tree records
         shell: bash
         run: |
-          cargo test --locked --lib --features native-jpeg --no-run --message-format=json > "${{ runner.temp }}/h1-artifacts.jsonl"
+          cargo test --locked --lib --no-run --message-format=json > "${{ runner.temp }}/h1-artifacts.jsonl"
           binary=$(python3 -c 'import json,sys; records=[json.loads(line) for line in open(sys.argv[1])]; print(next(r["executable"] for r in records if r.get("reason")=="compiler-artifact" and r.get("target",{}).get("name")=="rusty_tiles" and r.get("profile",{}).get("test") and r.get("executable")))' "${{ runner.temp }}/h1-artifacts.jsonl")
           python3 -B tests/h1_tree_oracle.py self-test
-          python3 -B tests/h1_tree_oracle.py run-corpus "$binary" "${{ runner.temp }}/h1-corpus" --label ci-native-jpeg
-          python3 -B tests/h1_tree_oracle.py run-refusals "$binary" "${{ runner.temp }}/h1-refusals" --label ci-native-jpeg
-          python3 -B bench/architecture_audit/mesh_large_h1/physical_scratch_probe.py --binary "$binary" --work "${{ runner.temp }}/h1-physical" --label ci-native-jpeg
+          python3 -B tests/h1_tree_oracle.py run-corpus "$binary" "${{ runner.temp }}/h1-corpus" --label ci-default
+          python3 -B tests/h1_tree_oracle.py run-refusals "$binary" "${{ runner.temp }}/h1-refusals" --label ci-default
+          python3 -B bench/architecture_audit/mesh_large_h1/physical_scratch_probe.py --binary "$binary" --work "${{ runner.temp }}/h1-physical" --label ci-default
       - name: Retain streamed mesh acceptance receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -153,7 +153,7 @@ jobs:
         run: |
           mkdir -p "${{ runner.temp }}/vsa-scratch"
           TMPDIR="${{ runner.temp }}/vsa-scratch" RUSTY_TILES_FORCED_SPILL=1 \
-            cargo test --locked --lib --features native-jpeg -- --test-threads=2 \
+            cargo test --locked --lib -- --test-threads=2 \
             validate:: archive3tz:: c2_oracle_parity i1_oracle_parity
       - name: Independently check validation controls and finite work
         run: |
@@ -172,49 +172,13 @@ jobs:
             ${{ runner.temp }}/c1-*.json
             ${{ runner.temp }}/c1-library.log
           if-no-files-found: error
-      - name: Independently decode local mesh candidates and corruption controls
-        run: python3 -B tests/f1a_oracle.py --binary target/debug/rusty-tiles
-      - name: Independently verify mesh texture fidelity and image closure
-        run: |
-          python3 -B tests/f1b_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-textures.json"
-          python3 -B tests/f1b2_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-local-resources.json"
-          python3 -B tests/f1b3_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1b-core-pbr.json"
-          python3 -B bench/architecture_audit/f1b1/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-resources.json"
-          python3 -B bench/architecture_audit/f1b2/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-local-resource-bounds.json"
-          python3 -B bench/architecture_audit/f1b3/resource_probe.py --binary target/debug/rusty-tiles --output "${{ runner.temp }}/f1b-core-pbr-bounds.json"
-      - name: Independently verify explicit placement and world bounds
-        run: |
-          python3 -B tests/f1c1_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c1-placement.json"
-          python3 -B bench/architecture_audit/f1c1/resource_probe.py --binary target/debug/rusty-tiles --binary-sha256 "$(sha256sum target/debug/rusty-tiles | cut -d ' ' -f 1)" --output "${{ runner.temp }}/f1c1-resources.json"
-      - name: Retain placement evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1c1-placement-evidence
-          path: ${{ runner.temp }}/f1c1-*.json
-          if-no-files-found: error
-      - name: Independently verify source identity and metadata association
-        run: python3 -B tests/f1c2_oracle.py --self-test --binary target/debug/rusty-tiles --large --json-output "${{ runner.temp }}/f1c2-identity.json"
-      - name: Independently certify root proxies and admission controls
-        run: python3 -B tests/f1d2_oracle.py --self-test --binary target/debug/rusty-tiles --artifact-dir "${{ runner.temp }}/f1d2-artifacts" --json-output "${{ runner.temp }}/f1d2-oracle.json"
-      - name: Retain root proxy evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1d2-geometry-evidence
-          path: ${{ runner.temp }}/f1d2-oracle.json
-          if-no-files-found: error
       - name: Independently verify exact model bytes and original-node bounds
         run: python3 -B tests/model_wrapping_oracle.py --binary target/debug/rusty-tiles --json-output "${{ runner.temp }}/f1c2-wrapping.json"
-      - name: Retain source identity evidence
+      - name: Retain model wrapping evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: f1c2-identity-evidence
           path: ${{ runner.temp }}/f1c2-*.json
-          if-no-files-found: error
-      - name: Retain mesh texture evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1b-texture-evidence
-          path: ${{ runner.temp }}/f1b-*.json
           if-no-files-found: error
       - name: Independently verify vector acceptance and archive inventory
         run: python3 -B tests/vector_acceptance_oracle.py --binary target/debug/rusty-tiles --evidence "${{ runner.temp }}/vector-acceptance"
@@ -222,10 +186,6 @@ jobs:
         run: python3 -B tests/p1_point_oracle.py --binary target/debug/rusty-tiles --output-dir "${{ runner.temp }}/point-acceptance" --json-output "${{ runner.temp }}/point-acceptance.json"
       - name: Check source packaging
         run: cargo package --locked --no-verify
-      - name: Test portable JPEG
-        env:
-          RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
-        run: cargo test --locked --lib jpeg::tests
 
   python-wheel:
     name: Python wheel (CPython ${{ matrix.python }})
@@ -238,8 +198,6 @@ jobs:
       fail-fast: false
       matrix:
         python: ['3.10', '3.14']
-    env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -294,7 +252,6 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
       RELEASE_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -338,7 +295,6 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTY_TILES_DISABLE_NATIVE_JPEG: '1'
       RELEASE_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -400,11 +356,23 @@ jobs:
       - name: Test native geospatial build
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
+          EVENT: ${{ github.event_name }}
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          cargo test --locked --features native-geospatial
+          if [ "$EVENT" = pull_request ]; then
+            # PR tier: only what compiles differently with GDAL (the modules gated by
+            # `native-geospatial` and every integration suite with GDAL-specific cases).
+            # The Rust job already runs everything else; the full tier runs it all with GDAL.
+            cargo test --locked --features native-geospatial --lib -- \
+              crs dir_sync doctor raster runtime terrain vec3 vector source_crs
+            cargo test --locked --features native-geospatial --bins \
+              --test 'native_*' --test 'raster_*' --test 'point_*' --test '*vector*' --test '*terrain*' \
+              --test cli_contract --test demodata_suite --test golden --test machine_results --test h26_mesh_frontends
+          else
+            cargo test --locked --features native-geospatial
+          fi
       - name: Independently verify native vector and point acceptance
         shell: bash -el {0}
         run: |
@@ -487,56 +455,6 @@ jobs:
           target/terrain-browser/node_modules/.bin/playwright install chromium
       - name: Independently verify validator positive geometry controls
         run: python3 -B tests/c1_khronos_oracle.py --node-modules target/terrain-browser/node_modules --output "${{ runner.temp }}/c1-official-positive.json"
-      - name: Validate independent core PBR sources and emitted leaves with Khronos
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          python3 -B tests/f1b3_khronos.py --binary target/debug/rusty-tiles \
-            --validator-modules target/terrain-browser/node_modules --source-commit "${{ github.sha }}" \
-            --json-output "${{ runner.temp }}/f1b-core-pbr-khronos.json"
-      - name: Validate source identity leaves and format controls with Khronos
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          python3 -B tests/f1c2_khronos.py --binary target/debug/rusty-tiles \
-            --validator-modules target/terrain-browser/node_modules \
-            --json-output "${{ runner.temp }}/f1c2-khronos.json"
-      - name: Prove native root proxy artifacts and official core format
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          python3 -B tests/f1d2_oracle.py --self-test --binary target/debug/rusty-tiles \
-            --artifact-dir "${{ runner.temp }}/f1d2-artifacts" --json-output "${{ runner.temp }}/f1d2-native.json"
-          python3 -B tests/f1d1_khronos.py --artifact-dir "${{ runner.temp }}/f1d2-artifacts/baseline" \
-            --validator-modules target/terrain-browser/node_modules --json-output "${{ runner.temp }}/f1d1-khronos.json"
-      - name: Prove natural coarse and full-detail traversal and picking
-        shell: bash -el {0}
-        run: |
-          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
-          python3 -B tests/f1d1_viewer.py --source "${{ runner.temp }}/f1d2-artifacts/baseline/viewer/source.glb" \
-            --archive "${{ runner.temp }}/f1d2-artifacts/baseline/viewer/result.3tz" \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1d1-browser.json"
-      - name: Prove placed root proxy traversal with independent WGS84 cameras
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
-          python3 -B bench/architecture_audit/mesh_approximation/placed_proxy_browser.py \
-            --binary target/debug/rusty-tiles --source-commit "$(git rev-parse HEAD)" \
-            --artifact-dir "${{ runner.temp }}/f1d1-placed-artifacts" \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1d1-placed-browser.json"
-      - name: Retain root proxy consumer evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1d1-consumer-evidence
-          path: |
-            ${{ runner.temp }}/f1d1-*.json
-            ${{ runner.temp }}/f1d2-*.json
-          if-no-files-found: error
       - name: Prove terrain rendering, queries, clamping and imagery draping
         shell: bash -el {0}
         run: |
@@ -546,49 +464,6 @@ jobs:
             --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
             --node-modules target/terrain-browser/node_modules \
             --json-output "${{ runner.temp }}/terrain-browser.json"
-      - name: Prove local mesh texture appearance and routing
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
-          python3 -B tests/f1a_viewer.py --binary target/debug/rusty-tiles \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules \
-            --json-output "${{ runner.temp }}/f1b-routing.json"
-          python3 -B tests/f1b_viewer.py --binary target/debug/rusty-tiles \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules \
-            --json-output "${{ runner.temp }}/f1b-appearance.json"
-          python3 -B tests/f1b_viewer.py --binary target/debug/rusty-tiles --external-resources \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules \
-            --json-output "${{ runner.temp }}/f1b-resource-appearance.json"
-          python3 -B tests/f1b3_viewer.py --binary target/debug/rusty-tiles \
-            --three-dir target/terrain-browser/node_modules/three \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1b-core-pbr-appearance.json"
-      - name: Prove emitted Earth placement without viewer corrections
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
-          python3 -B tests/f1c1_viewer.py --binary target/debug/rusty-tiles \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1c1-browser.json"
-      - name: Prove source primitive and triangle picking
-        shell: bash -el {0}
-        run: |
-          export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export CHROMIUM=$(node -e "console.log(require('./target/terrain-browser/node_modules/playwright').chromium.executablePath())")
-          python3 -B tests/f1c2_viewer.py --binary target/debug/rusty-tiles \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1c2-browser.json"
-          python3 -B tests/f1c2_viewer.py --binary target/debug/rusty-tiles --empty-names \
-            --cesium-dir target/terrain-browser/node_modules/cesium/Build/Cesium \
-            --node-modules target/terrain-browser/node_modules --chromium "$CHROMIUM" \
-            --json-output "${{ runner.temp }}/f1c2-empty-names-browser.json"
       - name: Prove unchanged model traversal, resources and placement
         shell: bash -el {0}
         run: |
@@ -597,23 +472,11 @@ jobs:
           python3 -B bench/architecture_audit/f1c2/review_probes/unchanged_model_browser.py \
             --binary target/debug/rusty-tiles --node-modules target/terrain-browser/node_modules \
             --chromium "$CHROMIUM" --output "${{ runner.temp }}/f1c2-wrapping-browser.json"
-      - name: Retain source identity and model consumer evidence
+      - name: Retain model consumer evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: f1c2-browser-evidence
           path: ${{ runner.temp }}/f1c2-*.json
-          if-no-files-found: error
-      - name: Retain placed mesh consumer evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1c1-browser-evidence
-          path: ${{ runner.temp }}/f1c1-browser.json
-          if-no-files-found: error
-      - name: Retain mesh consumer evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: f1b-browser-evidence
-          path: ${{ runner.temp }}/f1b-*.json
           if-no-files-found: error
       - name: Independently verify native LAZ delivery
         shell: bash -el {0}

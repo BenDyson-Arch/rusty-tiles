@@ -1,7 +1,7 @@
 //! Path-based bindings for the portable default build.
 use pyo3::{
     create_exception,
-    exceptions::{PyBaseException, PyException, PyTypeError, PyValueError},
+    exceptions::{PyBaseException, PyException, PyTypeError},
     prelude::*,
     types::{PyBool, PyDict, PyInt, PyList},
 };
@@ -11,16 +11,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tiles_core::{
-    georef::{RotationDegrees, SourceOffset},
     package::{package, PackageRequest},
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
-    report::ndjson,
-    tile::TextureFormat,
     vector::{VectorLodOptions, VectorOptions},
-    Cartographic, Error, Event, EventSink, JobError, JobErrorKind, JobFailure, MeshApproximation,
-    MeshPlacement, MeshRequest, MeshSourceCrs, MeshTo3tzOptions, ModelManifestRequest,
-    ModelWrapRequest, Observer, OutputPolicy, Reporter, RunControl, RunEvent, SourceAxes,
-    TilerJobs, TilerProfile, TilerRequest,
+    Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
+    ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
+    TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -76,7 +72,7 @@ fn error_to_python(error: Error) -> PyErr {
         Error::Job(failure) => Python::attach(|py| job_failure_to_python(py, failure)),
         Error::Environment(_) => EnvironmentError::new_err(message),
         Error::OutputExists(_) => OutputExistsError::new_err(message),
-        Error::Io(_) | Error::InputNotFound(_) => TilesIOError::new_err(message),
+        Error::Io(_) => TilesIOError::new_err(message),
         Error::NotImplemented { .. } => UnsupportedError::new_err(message),
         _ => DataError::new_err(message),
     }
@@ -423,86 +419,6 @@ fn mesh_to_tileset(
     })
 }
 
-/// Published local mesh with its finalized report and cleanup diagnostics.
-#[pyclass(frozen, module = "rusty_tiles")]
-struct MeshResult {
-    #[pyo3(get)]
-    output: PathBuf,
-    report: Value,
-    cleanup_diagnostics: Vec<CleanupDiagnostic>,
-}
-
-#[pymethods]
-impl MeshResult {
-    #[getter]
-    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        json_to_python(py, &self.report)
-    }
-
-    #[getter]
-    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
-        self.cleanup_diagnostics.clone()
-    }
-}
-
-/// Deprecated, removed before 0.4.0; use `mesh_to_tileset`. Convert bounded core-PBR
-/// local metre/Y-up glTF with optional rigid WGS84 placement.
-#[pyfunction]
-#[pyo3(signature = (input, output, *, leaf_triangles, root_proxy_triangles=None, max_proxy_error_metres=None, force=false, anchor=None, orientation_xyzw=None, scene_offset=None, callback=None))]
-#[allow(clippy::too_many_arguments)]
-fn mesh_local_to_3tz(
-    py: Python<'_>,
-    input: PathBuf,
-    output: PathBuf,
-    leaf_triangles: usize,
-    root_proxy_triangles: Option<usize>,
-    max_proxy_error_metres: Option<f64>,
-    force: bool,
-    anchor: Option<(f64, f64, f64)>,
-    orientation_xyzw: Option<(f64, f64, f64, f64)>,
-    scene_offset: Option<(f64, f64, f64)>,
-    callback: Option<Py<PyAny>>,
-) -> PyResult<MeshResult> {
-    let policy = if force {
-        OutputPolicy::Replace
-    } else {
-        OutputPolicy::CreateNew
-    };
-    let placement = rigid_placement(anchor, orientation_xyzw, scene_offset)?;
-    let approximation =
-        match (root_proxy_triangles, max_proxy_error_metres) {
-            (Some(triangle_limit), Some(max_error_metres)) => MeshApproximation::RootProxy {
-                triangle_limit,
-                max_error_metres,
-            },
-            (None, None) => MeshApproximation::FullDetail,
-            _ => return Err(job_failure_to_python(
-                py,
-                JobFailure {
-                    error: JobError::new(
-                        JobErrorKind::InvalidRequest,
-                        "root_proxy_triangles and max_proxy_error_metres must be supplied together",
-                    ),
-                    secondary: vec![],
-                    retained_paths: vec![],
-                    recovery: None,
-                },
-            )),
-        };
-    let request = MeshRequest::local_gltf(input, output, leaf_triangles)
-        .with_policy(policy)
-        .with_placement(placement)
-        .with_approximation(approximation);
-    let result = run_job(py, callback, |run| {
-        tiles_core::mesh_to_archive(request, run)
-    })?;
-    Ok(MeshResult {
-        output: result.output,
-        report: serde_json::json!(result.report),
-        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
-    })
-}
-
 /// Published D1 raster directory; the standard wheel reports Unsupported.
 #[pyclass(frozen, module = "rusty_tiles")]
 struct RasterDirectoryResult {
@@ -582,194 +498,6 @@ fn json_to_python(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
     })
 }
 
-/// Published output and optional conversion report.
-#[pyclass(frozen, module = "rusty_tiles")]
-struct ConversionResult {
-    #[pyo3(get)]
-    output: PathBuf,
-    #[pyo3(get)]
-    archive: bool,
-    report: Option<Value>,
-}
-
-#[pymethods]
-impl ConversionResult {
-    #[getter]
-    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        match &self.report {
-            Some(value) => json_to_python(py, value),
-            None => Ok(py.None()),
-        }
-    }
-}
-
-struct CallbackSink {
-    callback: Py<PyAny>,
-    error: Mutex<Option<PyErr>>,
-}
-
-impl EventSink for CallbackSink {
-    fn event(&self, event: &Event<'_>) {
-        Python::attach(|py| {
-            // Never hold the mutex while calling Python: callbacks may re-enter us.
-            if self.error.lock().unwrap().is_some() {
-                return;
-            }
-            let result = json_to_python(py, &ndjson(event))
-                .and_then(|value| self.callback.call1(py, (value,)));
-            if let Err(error) = result {
-                let mut first = self.error.lock().unwrap();
-                if first.is_none() {
-                    *first = Some(error);
-                }
-            }
-        });
-    }
-}
-
-fn run_conversion(
-    py: Python<'_>,
-    callback: Option<Py<PyAny>>,
-    work: impl FnOnce(&Reporter) -> Result<tiles_core::ConversionResult, Error> + Send,
-) -> PyResult<ConversionResult> {
-    let sink = callback
-        .map(|callback| {
-            if !callback.bind(py).is_callable() {
-                return Err(PyTypeError::new_err("callback must be callable"));
-            }
-            Ok(Arc::new(CallbackSink {
-                callback,
-                error: Mutex::new(None),
-            }))
-        })
-        .transpose()?;
-    let reporter = sink
-        .as_ref()
-        .map_or_else(Reporter::silent, |sink| Reporter::custom(sink.clone()));
-    let result = py.detach(|| work(&reporter));
-    if let Some(sink) = sink {
-        if let Some(error) = sink.error.lock().unwrap().take() {
-            return Err(error);
-        }
-    }
-    py.check_signals()?;
-    let result = result.map_err(error_to_python)?;
-    Ok(ConversionResult {
-        output: result.output,
-        archive: result.archive,
-        report: result.report,
-    })
-}
-
-fn placement(
-    cartographic: Option<[f64; 3]>,
-    rotation: Option<[f64; 3]>,
-) -> PyResult<(Option<Cartographic>, Option<RotationDegrees>)> {
-    if let Some([lon, lat, height]) = cartographic {
-        if !lon.is_finite()
-            || !(-180.0..=180.0).contains(&lon)
-            || !lat.is_finite()
-            || !(-90.0..=90.0).contains(&lat)
-            || !height.is_finite()
-        {
-            return Err(PyValueError::new_err("cartographic must be finite (longitude degrees, latitude degrees, height metres) within longitude/latitude bounds"));
-        }
-    }
-    if rotation.is_some_and(|v| v.iter().any(|n| !n.is_finite())) {
-        return Err(PyValueError::new_err(
-            "rotation must contain finite heading, pitch and roll degrees",
-        ));
-    }
-    Ok((
-        cartographic.map(|[lon, lat, height]| Cartographic::new(lon, lat, height)),
-        rotation.map(|[heading, pitch, roll]| RotationDegrees {
-            heading,
-            pitch,
-            roll,
-        }),
-    ))
-}
-
-/// Deprecated, removed before 0.4.0; use `mesh_to_tileset`. Tile a mesh using the
-/// portable Rust texture encoders.
-#[pyfunction]
-#[pyo3(signature = (input, output, *, cartographic=None, rotation=None, force=false,
-    max_triangles=20_000, max_bytes=204_800, tile_size=2048, texture_format="lossless",
-    source_crs="auto", source_offset=None, meshopt=true, explicit=false, node_features=false,
-    source_axes=None, height_offset=None, callback=None))]
-#[allow(clippy::too_many_arguments)]
-fn mesh_to_3tz(
-    py: Python<'_>,
-    input: PathBuf,
-    output: PathBuf,
-    cartographic: Option<[f64; 3]>,
-    rotation: Option<[f64; 3]>,
-    force: bool,
-    max_triangles: usize,
-    max_bytes: u64,
-    tile_size: u32,
-    texture_format: &str,
-    source_crs: &str,
-    source_offset: Option<[f64; 3]>,
-    meshopt: bool,
-    explicit: bool,
-    node_features: bool,
-    source_axes: Option<&str>,
-    height_offset: Option<f64>,
-    callback: Option<Py<PyAny>>,
-) -> PyResult<ConversionResult> {
-    let (cartographic, rotation) = placement(cartographic, rotation)?;
-    let texture_format = match texture_format {
-        "lossless" => TextureFormat::Lossless,
-        "jpeg" => TextureFormat::Jpeg,
-        "webp" => TextureFormat::Webp,
-        _ => {
-            return Err(PyValueError::new_err(
-                "texture_format must be lossless, jpeg or webp",
-            ))
-        }
-    };
-    let source_axes = source_axes
-        .map(|axes| match axes {
-            "xyz" => Ok(SourceAxes::Xyz),
-            "y-up" => Ok(SourceAxes::YUp),
-            _ => Err(PyValueError::new_err("source_axes must be xyz or y-up")),
-        })
-        .transpose()?;
-    if source_offset.is_some_and(|v| v.iter().any(|n| !n.is_finite())) {
-        return Err(PyValueError::new_err(
-            "source_offset must contain finite offsets (E/N in horizontal units, A in metres)",
-        ));
-    }
-    let mut options = MeshTo3tzOptions {
-        cartographic,
-        rotation,
-        force,
-        max_triangles,
-        max_bytes,
-        tile_size,
-        texture_format,
-        source_axes,
-        height_offset,
-        source_offset: source_offset.map(|[easting, northing, height]| SourceOffset {
-            easting,
-            northing,
-            height,
-        }),
-        meshopt,
-        explicit,
-        node_features,
-        ..MeshTo3tzOptions::default()
-    };
-    options
-        .set_source_crs(source_crs)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    run_conversion(py, callback, |reporter| {
-        tiles_core::tile::mesh_to_3tz_reported(&input, &output, &options, reporter)
-    })
-}
-
-/// Published admitted static model archive with a required report.
 #[pyclass(frozen, module = "rusty_tiles")]
 struct ModelWrapResult {
     #[pyo3(get)]
@@ -1315,13 +1043,11 @@ fn validate(
 #[pymodule]
 fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    module.add_class::<ConversionResult>()?;
     module.add_class::<ValidationPayloads>()?;
     module.add_class::<VectorResult>()?;
     module.add_class::<PointCloudResult>()?;
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
-    module.add_class::<MeshResult>()?;
     module.add_class::<TilerResult>()?;
     module.add_class::<ModelWrapResult>()?;
     module.add_class::<ModelManifestResult>()?;
@@ -1352,8 +1078,6 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "UnsupportedError",
         module.py().get_type::<UnsupportedError>(),
     )?;
-    module.add_function(wrap_pyfunction!(mesh_to_3tz, module)?)?;
-    module.add_function(wrap_pyfunction!(mesh_local_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(mesh_to_tileset, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;

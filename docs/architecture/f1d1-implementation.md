@@ -1,5 +1,7 @@
 # F1d1: certified root proxy over full-detail leaves
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 > Bench evidence paths below under `bench/architecture_audit/` that no longer exist were
 > moved out of the tree at `e29cd19d2f23`; each audit directory README gives the recovery
 > note ([index](../../bench/architecture_audit/README.md)).

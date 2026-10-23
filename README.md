@@ -39,11 +39,11 @@ Python wheels contain the standard conversion APIs; there is no native-geospatia
 | Elevation rasters | `terrain` | Bounded 3D Tiles terrain meshes | Yes |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new level of detail | No |
 
-`mesh` is the one public mesh entry point; see the [mesh guide](docs/MESH.md). The older `mesh-to-3tz` and `mesh-local-to-3tz` commands are deprecated, remain only until the new tiler is fully accepted, and are not aliases of `mesh`. Existing scripts can follow the [migration notes](docs/MESH.md#migration-from-older-mesh-converters).
+`mesh` is the one public mesh entry point; see the [mesh guide](docs/MESH.md). The older `mesh-to-3tz` and `mesh-local-to-3tz` commands were removed in 0.4.0. Existing scripts can follow the [migration notes](docs/MESH.md#migration-from-older-mesh-converters).
 
 Use the [converter guide](docs/CONVERTERS.md) to choose an input path and build. Every option for every command is in the [command reference](docs/CLI.md).
 
-`mesh`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud and vector output was removed in 0.4.0; only the deprecated `mesh-to-3tz` keeps `--explicit`. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
+`mesh`, `point-cloud` and `vector` write 3D Tiles 1.1 implicit tiling. Explicit point-cloud, vector and legacy mesh output was removed in 0.4.0. Vector archives from earlier encoder versions, including explicit ones, need a fresh conversion after the 0.4 geometry fixes.
 
 ## Install
 
@@ -114,8 +114,6 @@ rusty-tiles doctor --command raster --command terrain --command vector
 The SQLite override makes Rust, GDAL and PROJ use the same system library. Leave it unset for standard builds and wheels, which bundle SQLite. Both CLI builds install the same `rusty-tiles` executable name; the native command replaces the standard installation at the same Cargo install root. Matching native libraries must also be present at runtime. CI tests GDAL 3.12 and 3.13. PROJ's database and required datum grids must be installed locally; conversion never downloads them. See [native setup](docs/INSTALL.md#native-geospatial-cli) for details.
 
 `develop` holds the development version. For a stable version, use a source archive from [Releases](https://github.com/BenDyson-Arch/rusty-tiles/releases). To build without installing, use `cargo build --release` and run `target/release/rusty-tiles`.
-
-Both builds use the portable Rust JPEG encoder unless `native-jpeg` is selected separately. That optional codec feature uses system libjpeg-turbo; it does not enable geospatial converters. See [optional build features](CONTRIBUTING.md#build).
 
 If you already have `cargo-binstall`, run `cargo binstall --manifest-path Cargo.toml rusty-tiles` from a source checkout to download the prebuilt binary instead.
 
@@ -197,8 +195,6 @@ A height offset of 0 is correct only when source heights are already ellipsoidal
 
 Outputs are never overwritten by default. Add `--force` to replace an existing output after a successful conversion.
 
-The deprecated `mesh-to-3tz` and `mesh-local-to-3tz` commands are documented in the [command reference](docs/CLI.md#mesh-to-3tz) for existing scripts only; new work should use `mesh`.
-
 To update a vector archive after editing its source, add `--reuse-tileset` with the earlier archive. Unchanged payloads are recovered byte for byte from the earlier archive's published tiles instead of being re-encoded. The earlier archive must come from the same converter build and settings; archives from earlier releases need one fresh conversion first. See [Reuse after edits](docs/VECTOR.md#reuse-after-edits).
 
 ## Preview
@@ -251,14 +247,13 @@ A file's CRS and height reference decide where its content lands. rusty-tiles ne
 | Input | Rule |
 | --- | --- |
 | Mesh | `mesh` takes local source metres/Y-up. Omit `--anchor` for unplaced output, or give `--anchor lon lat ellipsoidal_height`, optional `--orientation-xyzw x y z w` and `--scene-offset x y z`. For a projected or geographic source, declare `--source-crs` (with `--source-axes`, `--source-offset` or `--source-offset-file`, and `--height-offset`) instead; it excludes the anchor options. See [placement](docs/MESH.md#source-and-placement) and [source CRS](docs/MESH.md#source-crs). |
-| Deprecated legacy mesh | `mesh-local-to-3tz` takes the same rigid placement options. `mesh-to-3tz` uses `--cartographic-position-degrees` or a horizontal CRS with explicit axes/height offset. Both are retired with the new tiler's acceptance; see the [migration notes](docs/MESH.md#migration-from-older-mesh-converters) and [mesh placement](docs/FORMATS.md#mesh-placement). |
 | Point cloud | `--source-crs local` means metre XYZ with Z up and no globe placement. Geospatial input needs a 2D horizontal CRS and `--height-offset`. |
 | Vector | The layer's CRS is used unless `--source-crs` overrides it. 3D data with only a horizontal CRS needs `--height-offset`. 2D data sits at ellipsoidal height zero. |
 | Terrain | Heights must be metres. `--height-offset` and `--fill-height` are required. |
 
-A constant height offset is not a geoid transformation. Legacy `mesh-to-3tz`, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
+A constant height offset is not a geoid transformation. Mesh, point-cloud and vector CRS routes use the bounded grid-free/native policies described in their guides. Switching builds does not remove converter-specific source, axis or height limits. Native operations use local PROJ resources only; missing required grids and ballpark operations are refused.
 
-Rigid placement (`mesh`, `glb-to-3tz` and the deprecated `mesh-local-to-3tz`) uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. The [identity contract](docs/architecture/f1c2-contract.md) describes the source node/mesh/primitive and exact triangle provenance carried by source-mesh output. `glb-to-3tz` preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). This does not imply release acceptance.
+Rigid placement (`mesh`, `glb-to-3tz` and `createTilesetJson`) uses the independently checked F1c1 placement contract. Its anchor is WGS84 ellipsoidal height; its quaternion rotates ENU vectors in the cartographic frame, with supplied longitude defining the pole meridian. The scene offset is a post-node glTF Y-up metre translation before orientation. It is not a projected E/N/A shift or vertical datum correction. Placement uses an f64 root transform and keeps local GLB geometry and companions. `glb-to-3tz` preserves admitted static source bytes through [typed F0 publication](docs/architecture/model-wrapping-contract.md). This does not imply release acceptance.
 
 ## Library use
 
@@ -279,7 +274,7 @@ result = rusty_tiles.mesh_to_tileset(
 assert rusty_tiles.validate(result.output)["ok"]
 ```
 
-The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits, and the [mesh guide](docs/MESH.md#python) for `mesh_to_tileset`. The `mesh_to_3tz` and `mesh_local_to_3tz` functions are deprecated.
+The wheels need CPython 3.10+ and contain the **standard conversion APIs**, with no GDAL, CLI subprocess or extra Python packages. They do not provide raster/terrain conversion, OGR-only inputs, native CRS fallback, `doctor` or `preview`. For those native conversion capabilities, use the native CLI/container or Rust library. See the [Python API and source build guide](bindings/python/README.md) for available functions and CRS limits, and the [mesh guide](docs/MESH.md#python) for `mesh_to_tileset`.
 
 The Rust mesh entry point is `mesh_to_tileset`. It takes a `TilerRequest` (with `with_profile`, `with_jobs`, `with_placement` and `with_source_crs` builders) and a `RunControl` for observation and cancellation, and returns a `TilerResult`:
 
@@ -290,11 +285,11 @@ let result = mesh_to_tileset(TilerRequest::new("model.glb", "model.3tz"), &RunCo
 println!("wrote {}", result.output.display());
 ```
 
-The other Rust converters follow the same request, `RunControl` and typed-result pattern: `vector_to_archive`, `point_cloud_to_archive`, `raster_to_pyramid` and `model_to_archive`. The deprecated `tile::mesh_to_3tz_reported`, the last `Reporter`/`ConversionResult` converter, is removed with the legacy mesh commands before 0.4.0; see the [retirement ledger](docs/architecture/legacy-mesh-retirement.md).
+The other Rust converters follow the same request, `RunControl` and typed-result pattern: `vector_to_archive`, `point_cloud_to_archive`, `raster_to_pyramid` and `model_to_archive`.
 
 The public [`metadata` module](src/metadata.rs) provides serde types for `EXT_mesh_features`, `EXT_structural_metadata` and implicit tile semantics. `MetadataGlb` appends aligned buffers, `encode_property_table` preserves scalar/string/boolean values, and `StructuralMetadata::attach_gltf` attaches tables to a `gltf_json::Root`.
 
-Observe a run with a `RunControl` and an `Observer`; the deprecated `Reporter`, `EventSink` and `ConversionResult` types serve only the legacy mesh converter.
+Observe a run with a `RunControl` and an `Observer`.
 
 ## Where to go next
 

@@ -89,6 +89,9 @@ pub(crate) struct TreeConfig {
     /// Test seam: largest spill chunk of the capture scratch.
     #[cfg(test)]
     pub test_chunk_bytes: Option<usize>,
+    /// Test seam: lowered packed-record limits, to drive capture's refusals.
+    #[cfg(test)]
+    pub test_record_limits: Option<super::full::RecordLimits>,
 }
 
 impl TreeConfig {
@@ -128,6 +131,8 @@ impl TreeConfig {
             source_crs: None,
             #[cfg(test)]
             test_chunk_bytes: None,
+            #[cfg(test)]
+            test_record_limits: None,
         }
     }
 

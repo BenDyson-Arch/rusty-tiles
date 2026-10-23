@@ -1,13 +1,11 @@
 //! Byte oracle for `tests/support::write_glb`, the test writer that replaced
-//! the legacy `glb_write` in fixtures. The committed output digests pin only
-//! the textured, 16-bit-index path. This pins the 32-bit-index and no-normals
-//! paths: against the legacy writer while it exists, and by sha256 so the
-//! pinned half survives its deletion (the deletion PR drops the comparison
-//! and keeps the hashes).
+//! the removed legacy `glb_write` in fixtures. The committed output digests pin
+//! only the textured, 16-bit-index path. This pins the 32-bit-index and
+//! no-normals paths by sha256. The digests were checked byte-identical against
+//! the legacy writer before it was deleted.
 
 mod support;
 
-use rusty_tiles::glb_write::{write_glb as legacy_write_glb, TilePrimitive};
 use support::{write_glb, Primitive};
 
 /// An n×n quad grid with a mild relief built from +, - and * only: IEEE basic
@@ -58,29 +56,16 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// Writes one grid with the test writer and the legacy writer, asserts
-/// identical bytes, then asserts the pinned digest.
+/// Writes one grid with the test writer and asserts the pinned digest.
 fn check(name: &str, normals: bool, textured: bool, n: usize, expected: &str) {
     let mut primitive = grid(n, normals, textured);
     primitive.png = textured.then(png);
     let ours = write_glb(&primitive);
-    let legacy = legacy_write_glb(&[TilePrimitive {
-        positions: primitive.positions,
-        normals: primitive.normals,
-        uvs: primitive.uvs,
-        indices: primitive.indices,
-        jpeg: primitive.png,
-    }])
-    .unwrap();
-    assert_eq!(
-        ours, legacy,
-        "{name}: test writer differs from legacy writer"
-    );
     assert_eq!(sha256(&ours), expected, "{name}: pinned digest");
 }
 
 #[test]
-fn u32_index_glb_matches_legacy_writer_and_pinned_digest() {
+fn u32_index_glb_matches_pinned_digest() {
     // 257 x 257 = 66049 vertices: more than 65535, so indices are u32.
     check(
         "u32 normals",
@@ -99,7 +84,7 @@ fn u32_index_glb_matches_legacy_writer_and_pinned_digest() {
 }
 
 #[test]
-fn no_normals_glb_matches_legacy_writer_and_pinned_digest() {
+fn no_normals_glb_matches_pinned_digest() {
     check(
         "no normals",
         false,

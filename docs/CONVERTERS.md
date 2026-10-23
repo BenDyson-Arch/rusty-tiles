@@ -15,7 +15,7 @@ Use this table for the 0.4.0 development build. For a published binary, check th
 | GeoTIFF or other GDAL imagery | `raster` | Native-geospatial; outputs COG and PNG XYZ tiles with TileJSON |
 | Elevation raster | `terrain` | Native-geospatial; bounded 3D Tiles terrain meshes |
 
-The deprecated `mesh-to-3tz` and `mesh-local-to-3tz` commands are not listed above. They remain only until the new tiler is fully accepted and are not aliases of `mesh`; see [Legacy mesh commands](#legacy-mesh-commands-deprecated).
+The legacy `mesh-to-3tz` and `mesh-local-to-3tz` commands (Python `mesh_to_3tz` and `mesh_local_to_3tz`) were removed in 0.4.0. Their options do not carry over to `mesh`; to move a script, follow the [migration notes](MESH.md#migration-from-older-mesh-converters).
 
 The three spatial tilers (`mesh`, `point-cloud`, `vector`) write 3D Tiles 1.1 implicit hierarchies by default. Their `.3tz` archives contain the tileset and content. Vector output uses pinned experimental glTF extensions; consult [viewer compatibility](VECTOR.md#compatibility) before delivery.
 
@@ -43,7 +43,3 @@ Run `doctor --command COMMAND` for build readiness and `COMMAND --help` for opti
 Both CLI builds include validation and preview. A standard CLI can preview existing imagery and terrain outputs even though converting their source rasters requires native-geospatial. A command appearing in `--help` does not prove that its native capability is compiled in; use `doctor` for that check.
 
 The [quick start](../README.md#quick-start) uses invented geometry. [Try each converter](DEMOS.md) adds self-contained point, vector, imagery and terrain examples. The [opt-in demo-data suite](../CONTRIBUTING.md#demo-data-acceptance-and-benchmarks) audits an already provisioned, hash-pinned public corpus; its external preparation tools are not distributed here. Conversion never downloads those assets implicitly.
-
-## Legacy mesh commands (deprecated)
-
-`mesh-to-3tz` and `mesh-local-to-3tz` (Python `mesh_to_3tz` and `mesh_local_to_3tz`) are deprecated in `--help`. They will retire together with their old writers after full tiler acceptance, and their options do not carry over to `mesh`. `mesh-to-3tz` uses `--cartographic-position-degrees` or a general horizontal CRS ([mesh placement](FORMATS.md#mesh-placement), [fidelity limits](FORMATS.md#fidelity-and-input-limits)); `mesh-local-to-3tz` writes full-detail leaves from the local metre/Y-up profile ([source profile](architecture/f1b3-contract.md), [F1c2 identity contract](architecture/f1c2-contract.md)). Their options are listed in the [command reference](CLI.md#mesh-to-3tz); to move a script to `mesh`, follow the [migration notes](MESH.md#migration-from-older-mesh-converters).

@@ -10,6 +10,20 @@ callers, or passing tests. No module is privatized by this document. “Bounded
 accepted” refers only to recorded foundation evidence; it does not certify
 arbitrary input, geometry, codec, native operations or release readiness.
 
+**Legacy mesh retirement, 2026-10-23.** `mesh-to-3tz`/`meshTo3tz`,
+`mesh-local-to-3tz` and the Python `mesh_to_3tz`/`mesh_local_to_3tz` were
+removed with their whole private closure: `tile`, `mesh`, `mesh_crs`, `texture`,
+`hlod`, `grid`, `glb_write`, `report` (`Reporter`, `Event`, `EventSink`,
+`ConversionResult`, `ndjson`), `jpeg`, `gpu_texture`, `lossless`, `tileset`, the
+mesh_archive FullDetail/RootProxy producer (`mesh_to_archive`, `MeshRequest`,
+`MeshApproximation`, `MeshApproximationReport`, `MeshCertificateReport`,
+`MeshReport`, `MeshResult`), `output::Job`, the legacy `georef` CRS adapters and
+`parse_metashape_offset`, the `bbox` glTF reader and AABB helpers,
+`fixtures::geographic_glb` and the `Error::{TextureProjection, InputNotFound,
+NoContent}` variants. Rows and declarations below that name them are historical.
+`MeshPlacement`/`MeshPlacementReport`, W1 (`model_to_archive`,
+`model_to_manifest`), `bbox::{BoundingBox, Obb}` and the `mesh` tiler remain.
+
 The 2026-10-13 H6/H14 decision supersedes H9's older vector-only retirement and
 point-explicit retention statements: **all explicit production hierarchies
 retire**. H6 removes vector AND point-cloud CLI `--explicit`, Python `explicit`
@@ -91,10 +105,9 @@ acceptance in #147. These finite contracts do not admit arbitrary source CRS.
 | Compound/geocentric/vertical CRS, geoid grids or epochs | No new admission; separate capability/data/accuracy evidence required. |
 | Source node features/picking, approximation/atlases/implicit delivery | F1c2 identity/picking and F1d2 approximation have bounded merged proof; old approximation/atlas/archive modes retire with the complete tiler. New tiler picking, LOD, baking and implicit delivery require their own proof. |
 
-Legacy `tile`, `mesh`, `georef`, `mesh_crs` and old Job/report families still have
-advertised consumers. Their deletion requires replacing or explicitly removing
-those actual uses with independent evidence; F1c1's bounded success would not
-authorize a blanket export removal or close #120/#121/#126/#113.
+The legacy `tile`, `mesh`, `mesh_crs` and old Job/report families and the legacy
+`georef` adapters were removed on 2026-10-23 (see the note at the top). The
+legacy-only dispositions in the table above are historical.
 
 ## Public implementation building blocks
 
@@ -165,22 +178,14 @@ Tiny explicit controls and third-party explicit reads remain. Neither removal
 is complete at this source. Claude owns H6, H7 and H11; H14 records
 status and decisions only.
 
-Mesh retirement requires a complete independently accepted production tiler:
-H8 decoded leaf attributes/seams/bounds/provenance and encoder caller;
-certified geometry LOD; proxy PBR baking and decoded-image floors; M1 shared
-serializer with a retained first caller; hierarchy/implicit delivery; typed
-publication, member ceiling and actual refinement/picking/resource/scale gates.
-H1 or leaf GLBs plus a debug manifest cannot replace advertised converters.
-Only then retire mesh-to-3tz and the old mesh-local archive writer, their
-leaf-triangles/root-proxy-triangles/max-proxy-error-metres parameters,
-FullDetail/RootProxy modes and approximation types. This retirement is a 0.4.0
-gate (owner decision 2026-10-21): the 0.4.0 tag ships without `mesh-to-3tz` and
-`mesh-local-to-3tz`. Declared georeferenced mesh input migrates to `mesh
---source-crs` (#218, owner decision 2026-10-14); automatic CRS detection does not
-migrate. Local metres and rigid placement intent migrate to the new owner, whose
-public names are `mesh` and `mesh_to_tileset`; budget/profile signatures remain
-that owner's contract decision. The [retirement ledger](legacy-mesh-retirement.md)
-records the current callers, the exact deletion scope and the open gate conditions.
+Mesh retirement is done. The owner waived the remaining acceptance gates on
+2026-10-23 and the legacy commands, their leaf-triangles/root-proxy-triangles/
+max-proxy-error-metres parameters, FullDetail/RootProxy modes and approximation
+types were deleted; the 0.4.0 tag ships without `mesh-to-3tz` and
+`mesh-local-to-3tz`. Declared georeferenced mesh input uses `mesh --source-crs`
+(#218); automatic CRS detection was not migrated. Local metres and rigid
+placement live on in `mesh`/`mesh_to_tileset` and W1. The
+[retirement record](legacy-mesh-retirement.md) lists what was removed.
 
 For each removal, enumerate retained Rust/adapter callers, migrate admitted
 uses or record the deliberate lost domain, prove the replacement, record the
@@ -207,20 +212,20 @@ be checked before final API narrowing.
 | `src/fixtures.rs` | `triangle_glb`, `geographic_glb` |
 | `src/georef.rs` | `Cartographic`, `new`, `RotationDegrees`, `root_transform`, `geodetic_to_ecef`, `ecef_to_cartographic`, `EnuFrame`, `to_enu`, `normal_to_enu_yup`, `normal_to_enu_yup_offset`, `geog_yup_to_enu_yup`, `mercator_yup_to_enu_yup`, `mercator_yup_offset_to_enu_yup`, `mercator_to_geodetic`, `looks_geographic_yup`, `looks_web_mercator_yup`, `geographic_origin_yup`, `geographic_bbox_wgs84`, `mercator_origin_yup`, `mercator_shift_origin`, `mercator_bbox_wgs84`, `CrsKind`, `SourceCrs`, `SourceAxes`, `parse_cli`, `SourceOffset`, `apply_mercator_offset`, `mercator_origin_yup_offset`, `mercator_bbox_wgs84_offset`, `parse_metashape_offset`, `east_north_up`, `translation` |
 | `src/geospatial.rs` | `Versions`, `versions`, `Crs`, `from_definition`, `coordinate_epoch`, `set_coordinate_epoch`, `has_native_height`, `is_horizontal`, `StrictTransform`, `new`, `transform`, `EcefTransform` |
-| `src/glb_write.rs` | `TilePrimitive`, `write_glb`, `image_mime` |
-| `src/grid.rs` | `Hit`, `TriGrid`, `new`, `tri`, `len`, `is_empty`, `cell_size`, `nearest_by`, `nearest_by_seeded`, `nearest_dist2`, `IdHasher`, `IdMap`, `point_tri_dist2_bary`, `sub`, `add`, `scl`, `dot`, `dist2`, `cross`, `normalize`, `face_normal_area` |
-| `src/hlod.rs` | `Timing`, `add`, `summary`, `parent_triangle_budget`, `parent_atlas_size`, `ParentResult`, `build_parent`, `simplify_primitive`, `two_sided_error` |
+| `src/glb_write.rs` (removed 2026-10-23) | `TilePrimitive`, `write_glb`, `image_mime` |
+| `src/grid.rs` (removed 2026-10-23) | `Hit`, `TriGrid`, `new`, `tri`, `len`, `is_empty`, `cell_size`, `nearest_by`, `nearest_by_seeded`, `nearest_dist2`, `IdHasher`, `IdMap`, `point_tri_dist2_bary`, `sub`, `add`, `scl`, `dot`, `dist2`, `cross`, `normalize`, `face_normal_area` |
+| `src/hlod.rs` (removed 2026-10-23) | `Timing`, `add`, `summary`, `parent_triangle_budget`, `parent_atlas_size`, `ParentResult`, `build_parent`, `simplify_primitive`, `two_sided_error` |
 | `src/implicit.rs` | `SubdivisionScheme`, `as_str`, `Coordinates`, `Subtree`, `TileMetadata`, `new`, `set_tile`, `set_child_subtree`, `set_metadata`, `to_bytes` |
-| `src/mesh.rs` | `Vertex`, `Triangle`, `EncodedImage`, `is_empty`, `len`, `load`, `load_prefix`, `Scene`, `triangle_count`, `under_budget`, `load_with_node_features`, `GeographicBake`, `position_aabb_yup`, `BakeToEnu`, `bake_to_enu`, `bake_geographic`, `centroid`, `triangle_aabb_yup` |
+| `src/mesh.rs` (removed 2026-10-23) | `Vertex`, `Triangle`, `EncodedImage`, `is_empty`, `len`, `load`, `load_prefix`, `Scene`, `triangle_count`, `under_budget`, `load_with_node_features`, `GeographicBake`, `position_aabb_yup`, `BakeToEnu`, `bake_to_enu`, `bake_geographic`, `centroid`, `triangle_aabb_yup` |
 | `src/metadata.rs` | `MESH_FEATURES`, `STRUCTURAL_METADATA`, `TILE_BOUNDING_BOX`, `TILE_GEOMETRIC_ERROR`, `MeshFeatures`, `FeatureId`, `attribute`, `StructuralMetadata`, `attach`, `attach_gltf`, `Schema`, `Class`, `ClassProperty`, `PropertyTable`, `PropertyTableProperty`, `PropertyAttribute`, `PropertyAttributeProperty`, `tile_schema`, `encode_property_table`; MetadataGlb re-exported from private glb |
 | `src/pack.rs` (current #146) | `list_zip_names`, `validate_3tz`; `TZ_INDEX_NAME` re-exported |
 | `src/package.rs` | `PackageMember`, `new`, `name`, `source`, `PackageRequest`, `directory`, `members`, `with_policy`, `PackageReceipt`, `PackageResult`, `package` |
 | `src/point_cloud.rs` | `PointCloudCrs`, `PointCloudCoordinates`, `PointCloudOptions`, `PointCloudRequest`, `new`, `with_policy`, `PointCloudReport`, `PointCloudResult`, `point_cloud_to_archive` |
-| `src/report.rs` | `Event`, `EventSink`, `Reporter`, `silent`, `human_stderr`, `ndjson_stderr`, `custom`, `wants_progress`, `emit`, `progress`, `warn`, `note`, `ndjson`, `ConversionResult` |
+| `src/report.rs` (removed 2026-10-23) | `Event`, `EventSink`, `Reporter`, `silent`, `human_stderr`, `ndjson_stderr`, `custom`, `wants_progress`, `emit`, `progress`, `warn`, `note`, `ndjson`, `ConversionResult` |
 | `src/terrain.rs` | `TerrainOptions`, `new`, `TerrainHeights`, `TerrainRequest`, `with_policy`, `TerrainReport`, `TerrainResult`, `terrain_to_directory` |
-| `src/texture.rs` | `CHART_GUTTER_PX`, `MAX_LEAF_ATLAS`, `image_dimensions`, `decode_rgb_max`, `LeafGroup`, `Blit`, `LeafPlan`, `plan_leaf_atlas`, `plan_leaf_atlas_limit`, `pack_rects`, `pack_rects_wh`, `needed_decode_size`, `blit_chart`, `paste_chart`, `resample_chart`, `finish_leaf_atlas`, `texel_density`, `bake_simplified`, `encode_texture`, `encode_perceptual`, `encode_texture_rgb`, `sampled_child`, `SceneSampler`, `from_prims`, `sample`, `sample_seeded` |
-| `src/tile.rs` | `DEFAULT_MAX_TRIANGLES`, `DEFAULT_MAX_BYTES`, `DEFAULT_TILE_SIZE`, `DEFAULT_MAX_TEXEL_DENSITY`, `MeshTo3tzOptions`, `set_source_crs`, `TextureFormat`, `mesh_to_3tz`, `mesh_to_3tz_reported` |
-| `src/tileset.rs` (historical baseline; now private legacy island) | `LEAF_GEOMETRIC_ERROR`, `TILESET_GEOMETRIC_ERROR`, `CreateTilesetOptions`, `create_tileset_json`, `glb_to_3tz`, `glb_to_3tz_reported` |
+| `src/texture.rs` (removed 2026-10-23) | `CHART_GUTTER_PX`, `MAX_LEAF_ATLAS`, `image_dimensions`, `decode_rgb_max`, `LeafGroup`, `Blit`, `LeafPlan`, `plan_leaf_atlas`, `plan_leaf_atlas_limit`, `pack_rects`, `pack_rects_wh`, `needed_decode_size`, `blit_chart`, `paste_chart`, `resample_chart`, `finish_leaf_atlas`, `texel_density`, `bake_simplified`, `encode_texture`, `encode_perceptual`, `encode_texture_rgb`, `sampled_child`, `SceneSampler`, `from_prims`, `sample`, `sample_seeded` |
+| `src/tile.rs` (removed 2026-10-23) | `DEFAULT_MAX_TRIANGLES`, `DEFAULT_MAX_BYTES`, `DEFAULT_TILE_SIZE`, `DEFAULT_MAX_TEXEL_DENSITY`, `MeshTo3tzOptions`, `set_source_crs`, `TextureFormat`, `mesh_to_3tz`, `mesh_to_3tz_reported` |
+| `src/tileset.rs` (historical baseline; removed 2026-10-23) | `LEAF_GEOMETRIC_ERROR`, `TILESET_GEOMETRIC_ERROR`, `CreateTilesetOptions`, `create_tileset_json`, `glb_to_3tz`, `glb_to_3tz_reported` |
 | `src/vector.rs` | `SPEC_ISSUE`, `SPEC_PR`, `SPEC_BLOG`, `TILESET_EXTENSION`, `GLTF_RESTART`, `GLTF_POLYGON`, `GLTF_FEATURES`, `GLTF_METADATA`, `INPUT_ORDER`, `VectorLodOptions`, `VectorOptions`, `VectorRequest`, `new`, `with_policy`, `VectorResult`, `vector_to_archive` |
 | `src/raster.rs` | `RasterDisplay`, `RasterLimits`, `RasterRequest`, `image`, `gray`, `with_alpha_band`, `with_policy`, `with_limits`, `RasterBandReport`, `RasterBands`, `as_slice`, `RasterSourceReport`, `RasterGridReport`, `RasterReport`, `RasterResult`, `raster_to_pyramid` |
 | `src/vector_encoding.rs` (historical baseline; now private codec) | Legacy `compress_file` removed; no public mutation helper |
@@ -229,7 +234,7 @@ be checked before final API narrowing.
 | `src/preview.rs` | `MANIFESTS`, `Preview`, `new`, `serve` |
 | `src/validate.rs` | `inspect`, `ValidationRequest`, `ValidationFailure`, `ValidationLimits`, `PayloadReport`, `ValidationReport`; types.rs reexports, new/category methods; ValidationLimits includes all five containment fields (span_bits/work_units/bytes_read/decoded_bytes/node_depth) |
 | `src/runtime.rs` | `JobErrorKind`, `JobError`, `new`, `io`, `kind`, `message`, `path`, `JobFailure`, `DirectoryRecovery`, `CleanupDiagnostic`, `OutputPolicy`, `RunEvent`, `Observer`, `RunControl`, `cancellation_handle`, `CancellationHandle`, `cancel` |
-| `src/mesh_archive.rs` | `MeshApproximation`, `MeshCertificateReport`, `MeshApproximationReport`, `MeshRequest`, `local_gltf`, `with_policy`, `with_placement`, `with_approximation`, `MeshReport`, `MeshResult`, `mesh_to_archive`; model and placement values re-exported |
+| `src/mesh_archive.rs` (producer removed 2026-10-23; placement and W1 plumbing remain) | `MeshApproximation`, `MeshCertificateReport`, `MeshApproximationReport`, `MeshRequest`, `local_gltf`, `with_policy`, `with_placement`, `with_approximation`, `MeshReport`, `MeshResult`, `mesh_to_archive`; model and placement values re-exported |
 | `src/mesh_archive/model.rs` (current W1) | `ModelWrapRequest`, `local_gltf`, `with_policy`, `with_placement`, `ModelManifestRequest`, `ModelReport`, `ModelWrapResult`, `ModelManifestResult`, `model_to_archive`, `model_to_manifest` |
 | `src/mesh_archive/placement.rs` | `MeshPlacement`, `from_parameters`, `MeshPlacementReport` |
 | `src/raster_directory.rs` | `RasterDirectoryRequest`, `web_mercator_rgb`, `with_policy`, `RasterDirectoryReport`, `RasterDirectoryResult`, `raster_to_directory` |

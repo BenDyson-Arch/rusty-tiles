@@ -11,99 +11,11 @@ The commands below use placeholder file names. Replace them with your own data.
 ## Meshes
 
 Convert meshes with `rusty-tiles mesh`; the [mesh guide](MESH.md) covers its
-profiles, placement, declared source CRS and limits. The rest of this section
-documents the deprecated `mesh-local-to-3tz` and `mesh-to-3tz` routes for
-existing scripts only. Both are removed before the 0.4.0 release.
-
-The deprecated `mesh-local-to-3tz --leaf-triangles N` interprets source geometry as local
-metres/Y-up and preserves selected PNG/JPEG bytes, all five core PBR texture
-bindings and admitted vertex companions. Its F1c1 rigid placement is a development
-candidate pending independent review and final consumer/platform acceptance:
-give `--anchor LON LAT ELLIPSOIDAL_HEIGHT` and optional ENU
-`--orientation-xyzw X Y Z W` / post-node Y-up metre `--scene-offset X Y Z`.
-The cartographic ENU frame uses declared latitude/longitude, including elevated
-anchors and longitude-defined pole meridians. One f64 root matrix transforms
-local geometry and conservative oriented boxes; no Earth-sized values are baked
-into f32 positions. See the [exact frame/limits](architecture/f1c1-contract.md)
-and [command/report reference](CLI.md#mesh-local-to-3tz). No arbitrary source CRS,
-geoid correction, coarse approximation or picking is admitted by that placement.
-
-The remaining mesh sections describe the broader deprecated `mesh-to-3tz` route.
-The bounded placement candidate does not establish its CRS/approximation correctness.
-
-```sh
-rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg
-```
-
-Large meshes are split into full-detail leaves with simplified, textured parents. An input within both `--max-triangles` and `--max-bytes` is wrapped without splitting.
-
-The default hierarchy uses midpoint octree cells, assigning each triangle by its centroid. The atlas fit test and single oversized triangle escape remain in place. Standard `TILE_BOUNDING_BOX` and `TILE_GEOMETRIC_ERROR` metadata preserve the actual bounds and measured errors. The output uses the bounded implicit forest described in the [command reference](CLI.md#conventions): upper levels stay explicit, and each implicit root covers at most four levels in one subtree whose rows carry every tile's actual bounds, so viewers never cull by a derived regular cell. Coincident centroids are distributed in source order to keep splitting finite; their actual boxes remain authoritative.
-
-`--explicit` keeps the earlier median partition, folded hierarchy and output bytes. It is intended for consumers that walk the explicit `children` array.
-
-### Texture formats
-
-| `--texture-format` | Choose it for |
-| --- | --- |
-| `jpeg`, the CLI default | Fast delivery with high-quality lossy colour. Quality 95 with full chroma resolution. |
-| `webp` | Smaller downloads, with lossless alpha |
-| `lossless` | Exact decoded leaf texels, stored as PNG |
-| `uastc` | GPU-compressed KTX2 textures. Needs a Basis Universal encoder. |
-
-Materials that need transparency use PNG. The library's `MeshTo3tzOptions::default()` uses `lossless`.
-
-For `uastc`, build the pinned encoder first. The helper script downloads and builds it, and needs CMake, curl and tar. Conversion itself never downloads it.
-
-```sh
-./scripts/build-basisu.sh
-rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format uastc --basisu target/tools/basisu
-```
-
-### Advanced options
-
-- `--max-triangles` sets the leaf split threshold. The default is 20,000 triangles.
-- `--tile-size` sets the leaf atlas edge. The default is 2048. A single oversized chart keeps its texels in a larger atlas.
-- `--no-meshopt` turns off lossless meshopt compression. Neither mode quantizes float32 leaf geometry.
-- `--max-texel-density` must stay 0, so leaf texels keep source resolution.
-- `RAYON_NUM_THREADS` limits conversion threads.
-
-Allow scratch disk beside the output for staged geometry and textures.
-
-### Fidelity and input limits
-
-Leaves keep their original triangles and source-resolution texture charts. JPEG and WebP delivery are lossy, and so is parent simplification. Choose `lossless` for exact leaf texels. Coarse levels may keep child surfaces when safe simplification is not possible. Refinement estimates are not a universal visual-error guarantee.
-
-Spatial splitting supports static triangle meshes with optional normals, UVs in `[0,1]` and supported base-colour images. These inputs are rejected:
-
-- Animation, skinning and morph targets.
-- Extra vertex attributes and additional PBR texture channels.
-- Unsupported source extensions.
+profiles, placement, declared source CRS and limits. The legacy `mesh-to-3tz`
+and `mesh-local-to-3tz` routes were removed in 0.4.0; see the
+[migration notes](MESH.md#migration-from-older-mesh-converters).
 
 `glb-to-3tz` preserves exact source and resource bytes within the [bounded static model profile](architecture/model-wrapping-contract.md). Local buffers and PNG/JPEG images must remain inside the model directory; admitted percent escapes and dot segments retain their original URI spellings. Animation, skins, morph targets, imported extensions/extras and embedded data URIs are excluded. The former richer-model wrapping escape hatch is retired. Opaque `convert` packaging does not validate or repair excluded model semantics.
-
-Small local meshes that fit the `mesh-to-3tz` budgets also retain their source bytes. In the default implicit layout, declared resources move alongside the content under `implicit-content/`, preserving nested relative URI bases. A resource name that collides with generated content is refused before publication, including with `--force`.
-
-### Mesh placement
-
-| Option | Use |
-| --- | --- |
-| `--source-crs auto` | The default. Detects the position convention from coordinate values. |
-| `--source-crs geographic` | Positions are longitude, height and negative latitude |
-| `--source-crs epsg:3857` | Positions are easting, height and negative northing |
-| `--source-crs EPSG:32632 --source-axes xyz --height-offset 0` | General horizontal CRS: POSITION is easting, northing, metre height after node transforms |
-| `--source-axes y-up` | General CRS with easting, metre height, negative northing after node transforms |
-| `--source-offset E N [A]` | Restore a source shift: E/N in horizontal CRS units, A metres |
-| `--source-offset-file offset.txt` | Read that shift from `E:`, `N:` and optional `A:` lines |
-| `--cartographic-position-degrees lon lat [height]` | Place a local model on the globe |
-| `--rotation-degrees heading pitch roll` | Orient a placed model |
-
-Choose an explicit `--source-crs` when you know the export's reference. Existing `auto`, `geographic` and `epsg:3857` commands retain their original Y-up adapter behaviour when axes/height options are absent. Auto with an offset remains the EPSG:3857 shifted adapter; it does not infer another projected CRS. Mesh files carry no trusted CRS selection: supply a horizontal EPSG, WKT or PROJ definition for other systems. The general path requires explicit `--source-axes xyz` or `y-up` and `--height-offset`, including zero when heights are already ellipsoidal metres. Axes describe POSITION **after all glTF node transforms**, so inspect the exporter rather than assuming OBJ axes survived a glTF export unchanged.
-
-General placement shares the [point-cloud CRS policy below](#point-clouds): verified grid-free operations work in the default binary/wheel; other definitions need the native build and its locally available best non-ballpark operation. Source E/N offsets use the horizontal CRS's units and A uses metres. Source height remains metres regardless of horizontal units; `height-offset` is added after A. Compound/vertical or geocentric CRS input is refused. For RD New/NAP (`EPSG:7415`), select the horizontal `EPSG:28992` and supply a justified metre offset to ellipsoidal height; the converter does not infer or apply the NAP geoid. GDA2020/MGA (`EPSG:7850`) and GDA94/MGA (`EPSG:28350`) require native CRS resolution and may fail if the best operation needs unavailable grids. No ballpark datum shift is substituted.
-
-The general path projects every loaded vertex into ECEF, chooses a local metre ENU frame, and transforms authored normals by the local projection Jacobian's inverse transpose, preserving hard edges. This CRS bake preserves triangles, winding, UVs and source-node identity before the usual atlas/LOD pipeline. Output positions/normals are float32, so reprojection is not byte identity with source positions. Double-precision offsets avoid first rounding a large shifted coordinate to float32. Precision already lost in source POSITION values or node transforms cannot be recovered. Coordinate/normal working buffers are bounded to batches of 4096 vertices in addition to the existing in-memory mesh. General placement cannot be combined with manual cartographic placement or rotation. Authored normals at an exact geographic pole are refused because the source coordinate basis is singular; valid date-line and near-pole positions remain supported.
-
-Add `--node-features` to `mesh-to-3tz` to pick and style source glTF nodes by `name` and `node_index`. Instances with the same name remain separate features; unnamed nodes use `node_<index>`. The option authors new tile content even for small inputs and keeps node boundaries through parent simplification. It may increase primitive counts and metadata size.
 
 ## Point clouds
 

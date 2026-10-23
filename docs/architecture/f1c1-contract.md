@@ -1,5 +1,7 @@
 # F1c1: explicit mesh placement and world bounds
 
+> **Historical (2026-10-23).** The `mesh-local-to-3tz` producer this document governs, and its F1 oracle drivers, were removed with the legacy mesh commands; see the [retirement record](legacy-mesh-retirement.md). Rigid placement (F1c1) and the source-profile admission rules live on in `mesh`, `glb-to-3tz` and `createTilesetJson`.
+
 Implementation [#142](https://github.com/BenDyson-Arch/rusty-tiles/issues/142), under
 #120/#121/#113. Baseline is merged F1b3 #141 at
 `71cd11dcdb226ce7639912dba85adf0b2f35048b`. This contract precedes implementation.

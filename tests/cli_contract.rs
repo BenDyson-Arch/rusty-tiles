@@ -412,74 +412,33 @@ fn vector_and_point_cloud_reject_retired_explicit_flag() {
     }
 }
 
-/// The deprecated legacy mesh commands say so in `--help` and warn on stderr on
-/// every run, as a human line or an NDJSON warning event. Their removal before
-/// 0.4.0 replaces this with a missing-command check.
+/// The legacy mesh commands were removed for 0.4.0. Their old names, including
+/// the `meshTo3tz` alias, are clap unknown-subcommand usage errors (exit 2) that
+/// write nothing, and `--help` no longer lists them.
 #[test]
-fn legacy_mesh_commands_are_deprecated_in_help_and_warn_on_stderr() {
+fn removed_legacy_mesh_commands_are_unknown_subcommands() {
     let help = Command::new(bin()).arg("--help").output().unwrap();
     let help = String::from_utf8_lossy(&help.stdout);
     let work = tempfile::tempdir().unwrap();
     let input = support::repo_root().join("tests/fixtures/example.glb");
-    for (name, extra) in [
-        ("mesh-to-3tz", &[][..]),
-        ("mesh-local-to-3tz", &["--leaf-triangles", "1000"][..]),
-    ] {
-        let line = help
-            .lines()
-            .find(|line| line.trim_start().starts_with(name))
-            .unwrap_or_else(|| panic!("{name} is not in --help:\n{help}"));
-        assert!(line.contains("Deprecated"), "{line}");
-        let human = Command::new(bin())
+    for name in ["mesh-to-3tz", "meshTo3tz", "mesh-local-to-3tz"] {
+        assert!(!help.contains(name), "{name} is still in --help:\n{help}");
+        let output = work.path().join(format!("{name}.3tz"));
+        let result = Command::new(bin())
             .arg(name)
             .arg("-i")
             .arg(&input)
             .arg("-o")
-            .arg(work.path().join(format!("{name}.3tz")))
-            .args(extra)
+            .arg(&output)
             .env("PATH", "")
             .output()
             .unwrap();
-        let stderr = String::from_utf8_lossy(&human.stderr);
-        assert!(human.status.success(), "{stderr}");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert_eq!(result.status.code(), Some(2), "{name}: {stderr}");
         assert!(
-            stderr.starts_with(&format!(
-                "warning: {name} is deprecated and will be removed before the 0.4.0 release; \
-                 use `rusty-tiles mesh` instead"
-            )),
-            "{stderr}"
+            stderr.contains(&format!("unrecognized subcommand '{name}'")),
+            "{name}: {stderr}"
         );
-        let events = Command::new(bin())
-            .args(["--progress", "json", name, "-i"])
-            .arg(&input)
-            .arg("-o")
-            .arg(work.path().join(format!("{name}-events.3tz")))
-            .args(extra)
-            .env("PATH", "")
-            .output()
-            .unwrap();
-        assert!(events.status.success());
-        let first: Value = serde_json::from_str(
-            String::from_utf8_lossy(&events.stderr)
-                .lines()
-                .next()
-                .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(first["event"], "warning");
-        assert_eq!(first["code"], "deprecated");
-        assert_eq!(first["command"], name);
-        assert_eq!(first["replacement"], "mesh");
+        assert!(!output.exists(), "{name} wrote output");
     }
-    let tiler = Command::new(bin())
-        .arg("mesh")
-        .arg("-i")
-        .arg(&input)
-        .arg("-o")
-        .arg(work.path().join("mesh.3tz"))
-        .env("PATH", "")
-        .output()
-        .unwrap();
-    assert!(tiler.status.success());
-    assert!(!String::from_utf8_lossy(&tiler.stderr).contains("deprecated"));
 }

@@ -3,9 +3,9 @@
 //! entry table, so it needs its own fsync to survive a crash.
 //!
 //! Every publisher goes through these helpers: the single-file runtime
-//! publisher, the legacy 3TZ publisher and the directory publisher (which also
-//! covers the terrain and raster prune of staged directories, because the whole
-//! staged tree is synced before it is installed).
+//! publisher and the directory publisher (which also covers the terrain and
+//! raster prune of staged directories, because the whole staged tree is synced
+//! before it is installed).
 //!
 //! `File::sync_all` is the crate's file sync, so directories use it too. On
 //! macOS std implements it with `F_FULLFSYNC`, the same strength as file syncs.
