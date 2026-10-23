@@ -21,6 +21,11 @@ def stats(x):
     return dict(mean=float(x.mean()),p95=float(np.quantile(x,.95)),p99=float(np.quantile(x,.99)),max=float(x.max())) if len(x) else dict(mean=0.,p95=0.,p99=0.,max=0.)
 
 
+@functools.lru_cache(maxsize=16)
+def cached_rgb(data):
+    return np.asarray(Image.open(io.BytesIO(data) if isinstance(data,bytes) else data).convert('RGB'))
+
+
 class Surface:
     def __init__(self):
         self.xyz=[];self.uv=[];self.color=[];self.mat=[];self.materials=[];self.provenance=[];self.primitive_identity=[]
@@ -106,9 +111,9 @@ class Surface:
             if image is not None:
                 data,extras=image
                 if isinstance(data,np.ndarray):im=data
-                elif isinstance(data,bytes):im=np.asarray(Image.open(io.BytesIO(data)).convert('RGB'))
+                elif isinstance(data,bytes):im=cached_rgb(data)
                 elif extras and data.endswith('.rgba'):im=np.fromfile(data,np.uint8).reshape(extras['height'],extras['width'],4)[:,:,:3]
-                else:im=np.asarray(Image.open(data).convert('RGB'))
+                else:im=cached_rgb(data)
                 h,w=im.shape[:2];tex=uv[mask]*[w,h]-.5;xy=np.floor(tex).astype(int);frac=tex-xy
                 # Honor glTF sampler wrap modes; bilinear level 0, linear-light filtering.
                 def address(x,size,mode):

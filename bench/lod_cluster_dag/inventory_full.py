@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Physical bytes per depth, and the supplied simulator plus image dependencies."""
 import collections
+import io,struct
+from PIL import Image
 import json
 import os
 from pathlib import Path
@@ -11,15 +13,22 @@ from build import GLB
 root=Path(sys.argv[1]);out=Path(sys.argv[2]);out.mkdir(exist_ok=True,parents=True)
 sys.path.insert(0,'/home/bend/.cache/rusty-tiles-evidence/leaf-gaps-20261024')
 from tile_tree import tree
-tt=tree(str(root));levels=collections.defaultdict(lambda:dict(tiles=0,triangles=0,glb_bytes=0,images=set(),ge=[]))
+tt=tree(str(root));levels=collections.defaultdict(lambda:dict(tiles=0,triangles=0,glb_bytes=0,images=set(),ge=[],embedded_texels=0))
 for file,n in tt.items():
     g=GLB(root/file);lv=levels[n['depth']];lv['tiles']+=1;lv['glb_bytes']+=(root/file).stat().st_size;lv['ge'].append(n['ge'])
     for mesh in g.j['meshes']:
         for p in mesh['primitives']:
             lv['triangles']+=g.j['accessors'][p.get('indices',p['attributes']['POSITION'])]['count']//3
-    lv['images'].update((root/file).parent/im['uri'] for im in g.j.get('images',[]) if 'uri' in im)
+    lv['images'].update(((root/file).parent/im['uri']).resolve() for im in g.j.get('images',[]) if 'uri' in im)
+    for im in g.j.get('images',[]):
+        if 'bufferView' not in im:continue
+        data=g.view(im['bufferView'])
+        if data.startswith(b'\xabKTX 20'):w,h=struct.unpack_from('<II',data,20)
+        else:w,h=Image.open(io.BytesIO(data)).size
+        lv['embedded_texels']+=w*h
 for lv in levels.values():
-    lv['image_bytes']=sum(p.stat().st_size for p in lv.pop('images'))
+    images=lv.pop('images');lv['image_bytes']=sum(p.stat().st_size for p in images)
+    lv['texels']=lv.pop('embedded_texels')+sum(Image.open(p).width*Image.open(p).height for p in images)
     lv['total_bytes']=lv['glb_bytes']+lv['image_bytes'];lv['ge_min']=min(lv['ge']);lv['ge_max']=max(lv.pop('ge'))
 views={}
 for name,w,h,r in [('far',1600,1000,3),('wide',2560,1600,3),('near',2560,1600,.75)]:

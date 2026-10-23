@@ -22,7 +22,7 @@ bool overlap(const T&a,const T&b){
  }return true;
 }
 struct Chart{std::vector<int> faces;std::vector<T> points; P lo,hi;int x=0,y=0,w=0,h=0;};
-extern "C" int unwrap(const float*pos,const uint32_t*idx,int nf,int size,float*uv,int32_t*face,float*bc){
+static int unwrap_impl(const float*pos,const uint32_t*idx,int nf,int size,float*uv,int32_t*face,float*bc,double spacing,int*chosen,double*actual){
  std::vector<V> normals(nf);std::vector<double> area(nf);std::vector<std::vector<int>>adj(nf);
  auto vertex=[&](int f,int k){auto i=idx[f*3+k];return V{pos[i*3],pos[i*3+1],pos[i*3+2]};};
  std::unordered_map<uint64_t,std::vector<int>> edges;
@@ -54,8 +54,16 @@ extern "C" int unwrap(const float*pos,const uint32_t*idx,int nf,int size,float*u
   std::stable_sort(co.begin(),co.end(),[&](int a,int b){return charts[a].h>charts[b].h;});int xx=0,yy=0,row=0;
   for(int id:co){auto&c=charts[id];if(c.w>size||c.h>size)return false;if(xx+c.w>size){xx=0;yy+=row;row=0;}if(yy+c.h>size)return false;c.x=xx;c.y=yy;xx+=c.w;row=std::max(row,c.h);}return true;
  };
- if(!pack(0))return -1;double low=0,high=1;while(pack(high)&&high<1e6)high*=2;
- for(int it=0;it<24;it++){double mid=(low+high)/2;if(pack(mid))low=mid;else high=mid;}pack(low);
+ int cap=size;
+ if(spacing>0){size=128;while(size<cap&&!pack(1/spacing))size*=2;}
+ if(!pack(0))return -1;
+ double low=0,high=spacing>0?1/spacing:1;
+ if(spacing>0&&pack(high))low=high;
+ else {
+  if(spacing<=0)while(pack(high)&&high<1e6)high*=2;
+  for(int it=0;it<24;it++){double mid=(low+high)/2;if(pack(mid))low=mid;else high=mid;}
+ }
+ pack(low);if(chosen)*chosen=size;if(actual)*actual=low>0?1/low:1e100;
  std::fill(face,face+size*size,-1);std::fill(bc,bc+size*size*3,0.f);
  for(auto&c:charts)for(size_t a=0;a<c.faces.size();a++){
   int f=c.faces[a];T p;for(int k=0;k<3;k++)for(int z=0;z<2;z++){p[k][z]=(c.points[a][k][z]-c.lo[z])*low+(z?c.y:c.x)+2.5;uv[f*6+k*2+z]=p[k][z]/size;}
@@ -70,3 +78,6 @@ extern "C" int unwrap(const float*pos,const uint32_t*idx,int nf,int size,float*u
  }
  return charts.size();
 }
+
+extern "C" int unwrap(const float*p,const uint32_t*i,int n,int s,float*u,int32_t*f,float*b){return unwrap_impl(p,i,n,s,u,f,b,0,nullptr,nullptr);}
+extern "C" int unwrap_density(const float*p,const uint32_t*i,int n,int cap,float*u,int32_t*f,float*b,double spacing,int*size,double*actual){return unwrap_impl(p,i,n,cap,u,f,b,spacing,size,actual);}
