@@ -233,7 +233,7 @@ RUSTY_TILES_DEMODATA="$PWD/../demodata" \
 
 The glTF extension, voxel, SPZ, CityJSON and unused 3D Tiles fixtures remain a hash-pinned reference inventory for future work. Listing or verifying them is not a passing conversion/conformance claim. [Recorded demo-data results](bench/MOVED_EVIDENCE.md) contain the full acceptance and benchmark evidence; timings describe that machine and recipe only.
 
-Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. That 27-case run predates the additional FlightHelmet wrapping case in the current 28-case manifest. All recorded cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
+Recorded on Linux x86_64, Intel i7-12700KF, 20 available threads, approximately 64 GB RAM, GDAL 3.13.3 and PROJ 9.8.1. That 27-case run predates the additional FlightHelmet wrapping case; the manifest now has 22 cases, after the six legacy `mesh-to-3tz` cases were removed in 0.4.0. All recorded cases passed an audited warmup and three measured repetitions, with identical payload fingerprints per case. Representative conversion medians:
 
 | Recipe | Source size | Wall seconds | Peak RSS MiB |
 | --- | ---: | ---: | ---: |

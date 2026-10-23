@@ -616,6 +616,8 @@ pub fn normalise_vector_json(bytes: &[u8]) -> Vec<u8> {
     {
         for record in records.values_mut() {
             blank(record.get_mut("signature"));
+            // A quantized build's pre-survey signature hashes the encoder too.
+            blank(record.get_mut("survey"));
         }
     }
     serde_json::to_vec(&value).unwrap()

@@ -26,7 +26,7 @@ fn fingerprint_normalisation_keeps_other_metadata() {
     let input = json!({
         "asset":{"extras":{"vectorBuildStateSha256":"volatile", "encoder":"user metadata"}},
         "config":{"encoder":"volatile", "signature":"setting"},
-        "records":{"0":{"signature":"volatile", "encoder":"record metadata"}},
+        "records":{"0":{"signature":"volatile", "survey":"volatile", "encoder":"record metadata"}},
         "properties":{"signature":"feature attribute", "vectorBuildStateSha256":"feature attribute"}
     });
     let output: Value = serde_json::from_slice(&support::normalise_vector_json(
@@ -43,6 +43,7 @@ fn fingerprint_normalisation_keeps_other_metadata() {
     );
     assert_eq!(output["config"]["encoder"], "<fingerprint>");
     assert_eq!(output["records"]["0"]["signature"], "<fingerprint>");
+    assert_eq!(output["records"]["0"]["survey"], "<fingerprint>");
 }
 
 fn committed_path() -> std::path::PathBuf {
