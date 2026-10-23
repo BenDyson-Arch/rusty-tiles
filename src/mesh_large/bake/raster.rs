@@ -304,209 +304,210 @@ pub(super) fn build(
             let mut owner = vec![usize::MAX; count];
             let mut surfaces = Vec::new();
             let mut normal_samples = Vec::new();
-            for &ci in &plan.charts {
-                let chart = &layout.charts[ci];
-                for &fi in &chart.faces {
-                    check()?;
-                    let face = &f.faces[fi];
-                    let points = face.positions.map(|p| p.map(f64::from));
-                    let Some(normal) = math::face_normal(points) else {
-                        continue;
-                    };
-                    let t = layout.uv[fi].map(|p| {
-                        [
-                            f64::from(p[0]) * f64::from(width),
-                            f64::from(p[1]) * f64::from(height),
-                        ]
-                    });
-                    let actual_texel = math::pixel_size(points, t).ok_or_else(|| {
-                        unsupported("decoded proxy UV has no finite pixel footprint")
-                    })?;
-                    maximum_texel = maximum_texel.max(actual_texel);
-                    let lo = std::array::from_fn::<_, 2, _>(|a| {
-                        t.iter()
-                            .map(|p| p[a])
-                            .fold(f64::INFINITY, f64::min)
-                            .floor()
-                            .max(0.) as u32
-                    });
-                    let hi = std::array::from_fn::<_, 2, _>(|a| {
-                        t.iter()
-                            .map(|p| p[a])
-                            .fold(f64::NEG_INFINITY, f64::max)
-                            .ceil()
-                            .max(0.) as u32
-                    });
-                    for y in lo[1]..hi[1].min(height) {
-                        for x in lo[0]..hi[0].min(width) {
-                            check()?;
-                            let (area, centroid) = coverage(t, x, y);
-                            if area <= 0. {
-                                continue;
-                            }
-                            let mut points2 = Vec::with_capacity(16);
-                            for sy in 0..4 {
-                                for sx in 0..4 {
-                                    let p = [
-                                        f64::from(x) + (sx as f64 + 0.5) / 4.,
-                                        f64::from(y) + (sy as f64 + 0.5) / 4.,
-                                    ];
-                                    let b = bary(p, t);
-                                    if b.iter().all(|w| *w >= 0.) {
-                                        points2.push((p, b));
-                                    }
-                                }
-                            }
-                            if points2.is_empty() {
-                                let b = bary(centroid, t);
-                                points2.push((centroid, b));
-                            }
-                            let weight = area / points2.len() as f64;
-                            let i = y as usize * width as usize + x as usize;
-                            for (uv, bary) in points2 {
-                                let bary = bary.map(|w| w.clamp(0., 1.));
-                                let sum = bary.iter().sum::<f64>();
-                                let bary = bary.map(|w| w / sum);
-                                let p = math::bary(points, bary);
-                                let corners = frames[fi];
-                                let frame = Frame::interpolate(
-                                    corners.map(|f| f.normal),
-                                    corners.map(|f| f.tangent),
-                                    corners.map(|f| f.bitangent),
-                                    bary,
-                                )?;
-                                let signal = children
-                                    .signal(
-                                        source,
-                                        ProxySample {
-                                            face,
-                                            position: p,
-                                            geometric_normal: normal,
-                                            frame,
-                                            texel_size: actual_texel,
-                                            geometric_error: f.geometric_error,
-                                            depth: f.node.depth(),
-                                        },
-                                        slot,
-                                        check,
-                                    )?
-                                    .ok_or_else(|| {
-                                        invalid("proxy slot missing from source closure")
-                                    })?;
-                                if signal.direct {
-                                    direct += 1;
-                                } else {
-                                    recursive += 1;
-                                }
-                                if signal.fill_fallback {
-                                    fallback += 1;
-                                }
-                                if signal.facing_fallback {
-                                    facing_fallback += 1;
-                                    facing_faces[fi] = true;
-                                }
-                                displacement = displacement.max(signal.displacement);
-                                drift = drift.max(signal.drift);
-                                witness_distance = witness_distance.max(signal.witness_distance);
-                                support_distance = support_distance.max(signal.support_distance);
-                                if signal.terminal.centre_is_centroid {
-                                    centroid_samples += 1;
-                                }
-                                let rgb = if slot == TextureSlot::Normal {
-                                    frame.transform([
-                                        2. * signal.rgba[0] - 1.,
-                                        2. * signal.rgba[1] - 1.,
-                                        2. * signal.rgba[2] - 1.,
-                                    ])?
-                                } else {
-                                    std::array::from_fn(|a| {
-                                        if matches!(
-                                            slot,
-                                            TextureSlot::BaseColor | TextureSlot::Emissive
-                                        ) {
-                                            linear(signal.rgba[a])
-                                        } else {
-                                            signal.rgba[a]
-                                        }
-                                    })
-                                };
-                                if slot == TextureSlot::Normal {
-                                    normal_samples.push(NormalSample {
-                                        uv: [uv[0] / f64::from(width), uv[1] / f64::from(height)],
-                                        frame,
-                                        chart: ci,
-                                        weight,
-                                    });
-                                }
-                                if weights[i] == 0. {
-                                    samples[i] = signal.terminal;
-                                    samples[i].centre = [0.; 3];
-                                    samples[i].support_min = [f64::INFINITY; 3];
-                                    samples[i].support_max = [f64::NEG_INFINITY; 3];
-                                }
-                                if weights[i] > 0. || signal.terminal.centre_is_centroid {
-                                    samples[i].centre_is_centroid = true;
-                                }
-                                for a in 0..3 {
-                                    sums[i][a] += rgb[a] * weight;
-                                    samples[i].centre[a] += signal.terminal.centre[a] * weight;
-                                    samples[i].support_min[a] = samples[i].support_min[a]
-                                        .min(signal.terminal.support_min[a]);
-                                    samples[i].support_max[a] = samples[i].support_max[a]
-                                        .max(signal.terminal.support_max[a]);
-                                }
-                                sums[i][3] += signal.rgba[3] * weight;
-                                weights[i] += weight;
-                                if weight > dominant[i] {
-                                    dominant[i] = weight;
-                                    dominant_signal[i] = rgb;
-                                    normal_frames[i] = frame;
-                                    owner[i] = fi;
-                                    samples[i].source_rank = signal.terminal.source_rank;
-                                    samples[i].barycentric = signal.terminal.barycentric;
-                                }
-                                if mask {
-                                    let w = source.record(
-                                        signal.terminal.source_rank,
-                                        signal.terminal.barycentric,
-                                    )?;
-                                    let original = source
-                                        .signal(w, TextureSlot::BaseColor, 0., check)?
-                                        .ok_or_else(|| invalid("MASK source base binding"))?
-                                        .0;
-                                    let original_alpha = if w.triangle.flags
-                                        & crate::mesh_large::attributes::COLOR
-                                        == 0
-                                    {
-                                        1.
-                                    } else {
-                                        (0..3)
-                                            .map(|a| {
-                                                f64::from(w.triangle.corners[a].color[3])
-                                                    * w.bary[a]
-                                            })
-                                            .sum()
-                                    };
-                                    let factor = material
-                                        .pointer("/pbrMetallicRoughness/baseColorFactor/3")
-                                        .and_then(serde_json::Value::as_f64)
-                                        .unwrap_or(1.);
-                                    let cutoff = material["alphaCutoff"].as_f64().unwrap_or(0.5);
-                                    let alpha =
-                                        (0..3).map(|a| f64::from(colors[fi][a][3]) * bary[a]).sum();
-                                    surfaces.push(mask::SurfaceSample {
-                                        uv: [uv[0] / f64::from(width), uv[1] / f64::from(height)],
-                                        alpha,
-                                        weight,
-                                        source_pass: original[3] * original_alpha * factor
-                                            >= cutoff,
-                                    });
+            // Faces in source order (material, source primitive, face), not packing
+            // order: charts span a class's sources, and the shared decoded-image cache
+            // keeps its hits only while one source's faces are rasterised together.
+            let mut visit: Vec<(usize, usize)> = plan
+                .charts
+                .iter()
+                .flat_map(|&ci| layout.charts[ci].faces.iter().map(move |&fi| (ci, fi)))
+                .collect();
+            visit.sort_unstable_by_key(|&(_, fi)| (f.faces[fi].material, f.faces[fi].source, fi));
+            for (ci, fi) in visit {
+                check()?;
+                let face = &f.faces[fi];
+                let points = face.positions.map(|p| p.map(f64::from));
+                let Some(normal) = math::face_normal(points) else {
+                    continue;
+                };
+                let t = layout.uv[fi].map(|p| {
+                    [
+                        f64::from(p[0]) * f64::from(width),
+                        f64::from(p[1]) * f64::from(height),
+                    ]
+                });
+                let actual_texel = math::pixel_size(points, t)
+                    .ok_or_else(|| unsupported("decoded proxy UV has no finite pixel footprint"))?;
+                maximum_texel = maximum_texel.max(actual_texel);
+                let lo = std::array::from_fn::<_, 2, _>(|a| {
+                    t.iter()
+                        .map(|p| p[a])
+                        .fold(f64::INFINITY, f64::min)
+                        .floor()
+                        .max(0.) as u32
+                });
+                let hi = std::array::from_fn::<_, 2, _>(|a| {
+                    t.iter()
+                        .map(|p| p[a])
+                        .fold(f64::NEG_INFINITY, f64::max)
+                        .ceil()
+                        .max(0.) as u32
+                });
+                for y in lo[1]..hi[1].min(height) {
+                    for x in lo[0]..hi[0].min(width) {
+                        check()?;
+                        let (area, centroid) = coverage(t, x, y);
+                        if area <= 0. {
+                            continue;
+                        }
+                        let mut points2 = Vec::with_capacity(16);
+                        for sy in 0..4 {
+                            for sx in 0..4 {
+                                let p = [
+                                    f64::from(x) + (sx as f64 + 0.5) / 4.,
+                                    f64::from(y) + (sy as f64 + 0.5) / 4.,
+                                ];
+                                let b = bary(p, t);
+                                if b.iter().all(|w| *w >= 0.) {
+                                    points2.push((p, b));
                                 }
                             }
                         }
+                        if points2.is_empty() {
+                            let b = bary(centroid, t);
+                            points2.push((centroid, b));
+                        }
+                        let weight = area / points2.len() as f64;
+                        let i = y as usize * width as usize + x as usize;
+                        for (uv, bary) in points2 {
+                            let bary = bary.map(|w| w.clamp(0., 1.));
+                            let sum = bary.iter().sum::<f64>();
+                            let bary = bary.map(|w| w / sum);
+                            let p = math::bary(points, bary);
+                            let corners = frames[fi];
+                            let frame = Frame::interpolate(
+                                corners.map(|f| f.normal),
+                                corners.map(|f| f.tangent),
+                                corners.map(|f| f.bitangent),
+                                bary,
+                            )?;
+                            let signal = children
+                                .signal(
+                                    source,
+                                    ProxySample {
+                                        face,
+                                        position: p,
+                                        geometric_normal: normal,
+                                        frame,
+                                        texel_size: actual_texel,
+                                        geometric_error: f.geometric_error,
+                                        depth: f.node.depth(),
+                                    },
+                                    slot,
+                                    check,
+                                )?
+                                .ok_or_else(|| invalid("proxy slot missing from source closure"))?;
+                            if signal.direct {
+                                direct += 1;
+                            } else {
+                                recursive += 1;
+                            }
+                            if signal.fill_fallback {
+                                fallback += 1;
+                            }
+                            if signal.facing_fallback {
+                                facing_fallback += 1;
+                                facing_faces[fi] = true;
+                            }
+                            displacement = displacement.max(signal.displacement);
+                            drift = drift.max(signal.drift);
+                            witness_distance = witness_distance.max(signal.witness_distance);
+                            support_distance = support_distance.max(signal.support_distance);
+                            if signal.terminal.centre_is_centroid {
+                                centroid_samples += 1;
+                            }
+                            let rgb = if slot == TextureSlot::Normal {
+                                frame.transform([
+                                    2. * signal.rgba[0] - 1.,
+                                    2. * signal.rgba[1] - 1.,
+                                    2. * signal.rgba[2] - 1.,
+                                ])?
+                            } else {
+                                std::array::from_fn(|a| {
+                                    if matches!(
+                                        slot,
+                                        TextureSlot::BaseColor | TextureSlot::Emissive
+                                    ) {
+                                        linear(signal.rgba[a])
+                                    } else {
+                                        signal.rgba[a]
+                                    }
+                                })
+                            };
+                            if slot == TextureSlot::Normal {
+                                normal_samples.push(NormalSample {
+                                    uv: [uv[0] / f64::from(width), uv[1] / f64::from(height)],
+                                    frame,
+                                    chart: ci,
+                                    weight,
+                                });
+                            }
+                            if weights[i] == 0. {
+                                samples[i] = signal.terminal;
+                                samples[i].centre = [0.; 3];
+                                samples[i].support_min = [f64::INFINITY; 3];
+                                samples[i].support_max = [f64::NEG_INFINITY; 3];
+                            }
+                            if weights[i] > 0. || signal.terminal.centre_is_centroid {
+                                samples[i].centre_is_centroid = true;
+                            }
+                            for a in 0..3 {
+                                sums[i][a] += rgb[a] * weight;
+                                samples[i].centre[a] += signal.terminal.centre[a] * weight;
+                                samples[i].support_min[a] =
+                                    samples[i].support_min[a].min(signal.terminal.support_min[a]);
+                                samples[i].support_max[a] =
+                                    samples[i].support_max[a].max(signal.terminal.support_max[a]);
+                            }
+                            sums[i][3] += signal.rgba[3] * weight;
+                            weights[i] += weight;
+                            if weight > dominant[i] {
+                                dominant[i] = weight;
+                                dominant_signal[i] = rgb;
+                                normal_frames[i] = frame;
+                                owner[i] = fi;
+                                samples[i].source_rank = signal.terminal.source_rank;
+                                samples[i].barycentric = signal.terminal.barycentric;
+                            }
+                            if mask {
+                                let w = source.record(
+                                    signal.terminal.source_rank,
+                                    signal.terminal.barycentric,
+                                )?;
+                                let original = source
+                                    .signal(w, TextureSlot::BaseColor, 0., check)?
+                                    .ok_or_else(|| invalid("MASK source base binding"))?
+                                    .0;
+                                let original_alpha = if w.triangle.flags
+                                    & crate::mesh_large::attributes::COLOR
+                                    == 0
+                                {
+                                    1.
+                                } else {
+                                    (0..3)
+                                        .map(|a| {
+                                            f64::from(w.triangle.corners[a].color[3]) * w.bary[a]
+                                        })
+                                        .sum()
+                                };
+                                let factor = material
+                                    .pointer("/pbrMetallicRoughness/baseColorFactor/3")
+                                    .and_then(serde_json::Value::as_f64)
+                                    .unwrap_or(1.);
+                                let cutoff = material["alphaCutoff"].as_f64().unwrap_or(0.5);
+                                let alpha =
+                                    (0..3).map(|a| f64::from(colors[fi][a][3]) * bary[a]).sum();
+                                surfaces.push(mask::SurfaceSample {
+                                    uv: [uv[0] / f64::from(width), uv[1] / f64::from(height)],
+                                    alpha,
+                                    weight,
+                                    source_pass: original[3] * original_alpha * factor >= cutoff,
+                                });
+                            }
+                        }
                     }
-                    face_pages[fi][slot_index(slot)] = Some(pages.len());
                 }
+                face_pages[fi][slot_index(slot)] = Some(pages.len());
             }
             let mut rgba = vec![0; count * 4];
             let mut support = vec![0; count];
