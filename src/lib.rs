@@ -8,6 +8,7 @@ mod basisu_ktx2;
 pub mod bbox;
 mod content_integrity;
 mod crs;
+mod crs_jacobian;
 mod dir_sync;
 pub mod error;
 pub mod fixtures;

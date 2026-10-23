@@ -22,8 +22,7 @@ meshes=[{'primitives':[{'attributes':{'POSITION':0},'indices':1,'material':0,'mo
 data=json.dumps(doc,separators=(',',':')).encode();data+=b' '*((-len(data))%4);binary+=b'\0'*((-len(binary))%4)
 mesh=root/'quad.glb';mesh.write_bytes(struct.pack('<4sII',b'glTF',2,28+len(data)+len(binary))+struct.pack('<I4s',len(data),b'JSON')+data+struct.pack('<I4s',len(binary),b'BIN\0')+binary)
 archive=root/'mesh.3tz'
-call(['mesh-to-3tz','-i',str(mesh),'-o',str(archive),'--maxTriangles','1','--maxBytes','0',
-      '--cartographicPositionDegrees','12.1','41.9','200',])
+call(['mesh','-i',str(mesh),'-o',str(archive),'--anchor','12.1','41.9','200'])
 with zipfile.ZipFile(archive) as z:z.extractall(root/'mesh')
 source=root/'imagery.tif';ds=gdal.GetDriverByName('GTiff').Create(str(source),32,32,3,gdal.GDT_Byte)
 srs=osr.SpatialReference();srs.ImportFromEPSG(4326);ds.SetProjection(srs.ExportToWkt());ds.SetGeoTransform([12,.01,0,42,0,-.01])

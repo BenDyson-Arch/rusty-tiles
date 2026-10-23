@@ -333,7 +333,7 @@ cmp output/a.3tz output/b.3tz
 
 Without `--reproducible`, payloads, manifests, build state and reports still match. The performance section changes the ZIP offsets and index, so raw archive hashes differ. Compare members, not the archive. A fresh build and a reuse build are not byte-equal, because their ingestion history and reuse statistics differ. Mesh texture bytes depend on the codec build and are not promised equal.
 
-The fixed recipe test `tests/output_digests.rs` runs every enabled converter twice on every platform. On the baseline platform recorded in `tests/fixtures/output_digests.json` (currently Linux x86_64), it also checks committed SHA-256 digests for the five recipes independent of GDAL and PROJ: two mesh recipes, `glb-to-3tz`, `createTilesetJson` and `convert`. Codec output can differ across CPU architectures, so other platforms check repeatability on their own stack. Native recipes also check repeatability on the current library stack. The digest test takes about 1.3 seconds with native geospatial enabled.
+The fixed recipe test `tests/output_digests.rs` runs every enabled converter twice on every platform. On the baseline platform recorded in `tests/fixtures/output_digests.json` (currently Linux x86_64), it also checks committed SHA-256 digests for the four recipes independent of GDAL and PROJ: `mesh` (lossless profile, one worker), `glb-to-3tz`, `createTilesetJson` and `convert`. Codec output can differ across CPU architectures, so other platforms check repeatability on their own stack. Native recipes also check repeatability on the current library stack. The digest test takes about 1.3 seconds with native geospatial enabled.
 
 Regenerate the baseline digests only after reviewing an intended output change. Regeneration records the current OS and CPU architecture:
 
@@ -342,9 +342,9 @@ UPDATE_OUTPUT_DIGESTS=1 cargo test --locked --test output_digests
 scripts/compare_outputs.sh develop
 ```
 
-The comparison script builds each revision in its own release target directory. It runs 12 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
+The comparison script builds each revision in its own release target directory. It runs 11 recipes with an empty executable `PATH` and compares every archive member and directory file. It normalizes only vector encoder and build-state fingerprints at their known paths. `COMPARE_WORK` chooses the scratch directory. `COMPARE_TARGET_ROOT` chooses the build cache. Pass a second revision to compare two committed revisions; otherwise it compares the base with the current working tree.
 
-Only the two deprecated `mesh-to-3tz` recipes pass `--explicit`, the one converter that still has an explicit mode (see `tests/support/mod.rs`); the script omits the flag for baseline binaries that predate it. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. The new `mesh` tiler has no recipe here. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
+The `mesh` recipe runs the tiler with the lossless profile, so its digests do not depend on the KTX2 encoder's CPU path; the deprecated `mesh-to-3tz` has no recipe. The point-cloud and vector recipes use implicit tiling, their only layout since 0.4.0. Implicit reproducibility, subtree metadata, reuse and fidelity are checked separately.
 
 ## Release checklist
 
