@@ -30,8 +30,8 @@ math from the terrain oracle; neither uses meshoptimizer or product transforms.
   multiset and no cross-feature joins. Metadata includes booleans, strings, Float64 values,
   nullable integers, integers above 2^53 and JSON lists with nulls.
 - A square minus a literal rectangular hole and two disjoint polygon parts:
-  every triangle lies in the accepted regions, triangle interiors do not
-  overlap, and total area equals the accepted area. Convex clipping, area and
+  every triangle has its explicitly expected upward normal, lies in the accepted
+  regions, triangle interiors do not overlap, and signed area equals the accepted area. Convex clipping, area and
   separating axes provide an analytic union check for these finite fixtures.
 - Strict refusal, explicit skip without repair, and opt-in bow-tie repair into
   two independently specified triangles with bijective vertex matching; the
@@ -42,12 +42,19 @@ math from the terrain oracle; neither uses meshoptimizer or product transforms.
   inputs use asymmetric XYZ and explicit +7 m height where applicable. UTM32
   references are frozen pyproj 3.8.0 / PROJ 9.8.1 coordinates of known WGS84
   positions; expected ECEF uses the independent ellipsoid equations. Position
-  tolerance is reported rounding + quantization + 1e-5 m fixture allowance.
+  tolerance is derived independently from the physical POSITION cells and complete
+  node/tile linear map, plus 1e-5 m fixture allowance. Normalized uint16 uses
+  half a 1/65535 cell; raw Float32 uses half its IEEE-754 spacing. The maximum
+  leaf cell radius is capped at 1e-3 m for these finite fixtures. Producer
+  rounding/quantization error reports do not determine this tolerance. Unrecorded
+  coarser shared-grid snapping in Float32 fallback is outside this small witness;
+  existing seam tests retain their separate coverage.
 - Unchanged and edited fresh/reuse world geometry and exact fields/identities.
   Existing `vector_acceptance_oracle.py::run_forest` separately refuses corrupt
   reused published content and proves exact published-byte reuse.
 - Well-framed archive controls omit a full-detail feature, change its source ID,
-  fill its hole, shift placement or shrink an ancestor box. A decoded metadata
+  fill its hole, reverse a triangle, drop a polygon triangle, shift placement or
+  shrink an ancestor box. An inflated-error-report control cannot relax precision. A decoded metadata
   control also proves that integer 1 cannot substitute for boolean true. The named semantic
   checks reject these in both encodings; they do not rely on checksums failing.
 
@@ -58,7 +65,8 @@ resolved budgets/defaults, source identities and +7 m height. Mixed valid/invali
 input also compares strict refusal without publication and explicit skip outcomes
 with exact surviving metadata/identity in both formats. The paired test
 requires `RUSTY_TILES_BIN`; ordinary wheel jobs without a CLI explicitly skip
-that one test. Existing vector API tests retain strict/refusal, unchanged reuse
+that one test. **The paired CLI/Python result is local evidence only; it is
+not executed by current CI wheel jobs.** Existing vector API tests retain strict/refusal, unchanged reuse
 and callback-failure preservation coverage.
 
 ## Resource evidence and execution
@@ -75,7 +83,9 @@ line and scalar/list metadata. It is explicitly synthetic, not relabelled as
 real local data. A separate realistic run uses the existing local
 `tinyowl-demodata/geojson/full_walem.geojson` without source preparation.
 
-Both run through the requested slot-2 `measure.py`, `chrt -i 0 nice -n 19`,
+Both resource runs used a **dev-profile (debug) binary**, built with
+`CARGO_PROFILE_DEV_DEBUG=0` (debug symbols disabled, no release optimization).
+No release-profile resource measurement is claimed. Both run through the requested slot-2 `measure.py`, `chrt -i 0 nice -n 19`,
 with two requested vector jobs and three LOD levels, quantization and meshopt.
 Child stdout goes to a file. The monitor samples total owned run-directory
 bytes (including output), descriptors, threads and process swap at 50 ms;
@@ -129,7 +139,7 @@ realistic smaller corpus are explicitly separate receipts. Neither establishes
 a universal resource bound. See the external README for commands, versions,
 worker/descriptor/cleanup observations, exact artifact hashes and review results.
 
-## Final-source checks
+## Original acceptance checks (8a4f83e9)
 
 Native/default `cargo clippy --all-targets -- -D warnings` pass. Native vector
 units: 163 pass; portable: 156 pass. The process-CWD compression test that is
@@ -143,3 +153,29 @@ strict/skip parity. The official installed-wheel runner previously passed all
 Changelog and tree-budget checks pass. Independent round-2 review resolves its
 three acceptance-test findings; no production defect was established. Final
 receipts/review details are pinned in the external evidence and hash manifest.
+
+## PR #270 independent-review follow-up
+
+Fill expectations now require an explicit normal: upward for the horizontal
+fixtures, with a separate oracle-only +X wall-normal probe. Repaired triangles
+accept cyclic rotations, not reversed permutations. Published raw/packed GLB
+controls reverse one triangle and remove one polygon triangle; the winding and
+coverage-area assertions respectively reject them. Inflating conversion.json's
+quantization error to 1e100 leaves the independent allowance unchanged and still
+rejects a displaced point.
+
+Position tolerance now comes from physical POSITION cells, the complete node /
+tile linear map, and a fixed analytic frame allowance. It does not consume
+producer rounding or quantization error estimates. Coarser unrecorded Float32
+snapping is outside this finite reader's certification; existing seam controls
+remain separate. Both resource receipts are dev-profile measurements, and the
+paired CLI/Python comparison is explicitly local evidence only.
+
+Follow-up verification: 64 Python vector tests per retained backend; all five
+focused oracle tests and all five installed-wheel vector API tests per backend
+passed at the final follow-up source. Independent nonauthor review found no
+remaining defect in the five requested changes. Rust production code, retained
+binary/wheel hashes and the original resource runs are unchanged; Rust suites
+and clippy results above remain the original receipts, without a redundant
+rebuild. Follow-up logs, source hashes and review live under `review-nits/` in
+the external evidence directory and are pinned by the refreshed manifest.

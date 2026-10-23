@@ -6,7 +6,6 @@ this is source fidelity evidence, not a general 3D Tiles validator.
 """
 import collections
 import json
-import itertools
 import math
 import struct
 import zipfile
@@ -149,7 +148,28 @@ def forest(archive):
     return nodes
 
 
-def primitives(data):
+def encoding_error(matrix, accessor, positions):
+    """Half-cell radius in world metres, from physical POSITION storage alone.
+
+    Normalized uint16 has step 1/65535 before the full node/tile linear map.
+    Raw float32 uses its IEEE-754 adjacent-value spacing (including subnormals).
+    Enumerating cell corners also handles rotated or sheared frames. Float32
+    shared-lattice snapping with an unrecorded coarser grid is not certified by
+    this finite reader; source comparisons remain strict at float32 precision.
+    """
+    if accessor.get('normalized'):
+        assert accessor['componentType'] == 5123, 'finite uint16 grid profile'
+        step = [1/65535]*3
+    else:
+        assert accessor['componentType'] == 5126, 'finite raw float32 profile'
+        step = [max(2.0**(-149 if p[i] == 0 else max(-149, math.frexp(abs(p[i]))[1]-24))
+                    for p in positions) for i in range(3)]
+    return max(math.sqrt(sum(sum(matrix[r+4*c]*sign[c]*step[c]/2 for c in range(3))**2
+                             for r in range(3)))
+               for sign in ((x,y,z) for x in (-1,1) for y in (-1,1) for z in (-1,1)))
+
+
+def primitives(data, frame=IDENTITY, errors=None):
     doc, binary = glb_parts(data)
     views = []
     for v in doc['bufferViews']:
@@ -182,7 +202,13 @@ def primitives(data):
             for p in doc['meshes'][node['mesh']]['primitives']:
                 mapping, = p['extensions']['EXT_mesh_features']['featureIds']
                 ids = accessor(p['attributes']['_FEATURE_ID_' + str(mapping['attribute'])])
-                pos = [transform(matrix, v) for v in accessor(p['attributes']['POSITION'])]
+                position_index = p['attributes']['POSITION']
+                raw_positions = accessor(position_index)
+                if errors is not None:
+                    z_up = [1,0,0,0,0,0,1,0,0,-1,0,0,0,0,0,1]
+                    world_matrix = multiply(frame, multiply(z_up, matrix))
+                    errors.append(encoding_error(world_matrix, doc['accessors'][position_index], raw_positions))
+                pos = [transform(matrix, v) for v in raw_positions]
                 # glTF y-up -> 3D Tiles z-up, after the complete glTF node frame.
                 pos = [(x, -z, y) for x, y, z in pos]
                 indices = accessor(p['indices']) if 'indices' in p else list(range(len(pos)))
@@ -217,17 +243,21 @@ def decode(path):
     with zipfile.ZipFile(path) as archive:
         report = json.loads(archive.read('conversion.json'))
         nodes = forest(archive)
-        rounding = max(n['extras'].get('positionRoundingMetres', 0) for n,_ in nodes)
-        assert math.isfinite(rounding) and 0 <= rounding <= 1e-4, 'finite fixture rounding'
-        report['oracleMaximumRoundingMetres'] = rounding
+        errors = []
         for node, ancestors in nodes:
             for uri in node['uris']:
-                for mode, row, positions in primitives(archive.read(uri)):
+                for mode, row, positions in primitives(archive.read(uri), node['frame'], errors if not node['children'] else None):
                     world = [transform(node['frame'], p) for p in positions]
                     for owner in ancestors+[node]:
                         contains_box(owner['box'], [inverse_transform(owner['frame'], p) for p in world])
                     if not node['children']:
                         result[row['_source_id']].append((mode, row, world))
+        error = max(errors, default=0)
+        # This is a fixed acceptance-domain ceiling, not a value supplied by the
+        # converter. A coarse or non-finite grid cannot make displaced data pass.
+        assert math.isfinite(error) and 0 <= error <= 1e-3, 'finite fixture encoding precision'
+        report['oracleMaximumEncodingErrorMetres'] = error
+        report['oraclePositionToleranceMetres'] = error + 1e-5
     return dict(result), report
 
 
@@ -267,6 +297,11 @@ def check_source(actual, expected, tolerance):
             assert row == spec['properties'], 'source metadata/identity'
             assert all(type(value) is type(spec['properties'][name]) for name,value in row.items()), 'source metadata type'
             assert all(math.isfinite(v) for p in points for v in p)
+            if mode == 4:
+                a, b, c = points
+                u, v = [b[i]-a[i] for i in range(3)], [c[i]-a[i] for i in range(3)]
+                normal = (u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0])
+                assert sum(x*y for x,y in zip(normal,spec['normal'])) > 0, 'fill winding/degenerate triangle'
         if mode in (0, 3):
             observed = [points for _, _, points in groups]
             wanted = list(spec['parts'])
@@ -282,7 +317,7 @@ def check_source(actual, expected, tolerance):
             for _, _, triangle in groups:
                 matches = [i for i,target in enumerate(wanted) if any(
                     max(math.dist(a,b) for a,b in zip(triangle,permutation)) <= tolerance
-                    for permutation in itertools.permutations(target))]
+                    for permutation in (target[i:]+target[:i] for i in range(3)))]
                 assert matches, 'repaired triangle vertex bijection'
                 wanted.pop(matches[0])
         else:
@@ -291,7 +326,7 @@ def check_source(actual, expected, tolerance):
             area = 0
             for triangle in triangles:
                 assert max(abs(p[2]-spec['height']) for p in triangle) <= tolerance, 'polygon height'
-                a = abs(cross(*triangle))/2
+                a = cross(*triangle)/2
                 assert a > 0, 'degenerate triangle'
                 inside = sum(clip_area(triangle, r) for r in rectangles)
                 assert abs(inside-a) <= tolerance*max(1, math.sqrt(a))*8, 'hole-fill/outside polygon'

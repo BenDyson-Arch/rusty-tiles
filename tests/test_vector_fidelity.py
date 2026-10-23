@@ -1,6 +1,7 @@
 """Approved finite 0.4 bar: analytic source truth against published forest bytes."""
 import copy
 import json
+import math
 import pathlib
 import struct
 import subprocess
@@ -9,9 +10,9 @@ import unittest
 import zipfile
 
 from cli_bin import BIN, requires_bin
-from vector_fidelity_oracle import check_source, decode, ecef, forest
+from vector_fidelity_oracle import check_source, decode, ecef, encoding_error, forest
 from ext_meshopt_spec import decode_attributes
-from t1_terrain_oracle import glb_parts
+from t1_terrain_oracle import IDENTITY, glb_parts
 
 
 def feature(fid, kind, coordinates):
@@ -47,6 +48,7 @@ def fixture():
             spec['parts'] = [(a,b) for line in coordinates for a,b in zip(line,line[1:])]
         else:
             spec['height'] = 5
+            spec['normal'] = (0,0,1)
             spec['rectangles'] = ([(0,0,10,3),(0,7,10,10),(0,3,3,7),(7,3,10,7)] if f['id'] == 2
                                   else [(20,0,24,4),(30,0,34,4)])
         expected[str(f['id'])] = spec
@@ -74,7 +76,19 @@ def mutate_payload(data, mutation):
         raw = views[column['values']]
         assert raw == b'2'
         raw[:] = b'9'
+    elif mutation in ('winding','dropped-triangle'):
+        indices = doc['accessors'][primitive['indices']]
+        assert primitive['mode'] == 4 and indices['count'] >= 6
+        if mutation == 'dropped-triangle':
+            indices['count'] -= 3
+        else:
+            fmt = {5121:'B',5123:'H',5125:'I'}[indices['componentType']]
+            raw = views[indices['bufferView']]
+            offset = indices.get('byteOffset',0)
+            a,b,c = struct.unpack_from('<'+fmt*3,raw,offset)
+            struct.pack_into('<'+fmt*3,raw,offset,a,c,b)
     else:
+        assert mutation == 'hole'
         polygon = primitive['extensions']['EXT_mesh_polygon']
         loops = doc['accessors'][polygon['loopIndices']]
         indices = doc['accessors'][primitive['indices']]
@@ -95,6 +109,33 @@ def mutate_payload(data, mutation):
     raw = json.dumps(doc,separators=(',',':')).encode()
     raw += b' ' * (-len(raw)%4)
     return b'glTF'+struct.pack('<III',2,28+len(raw)+len(binary),len(raw))+b'JSON'+raw+struct.pack('<I4s',len(binary),b'BIN\0')+binary
+
+
+class OraclePrecisionAndNormalTests(unittest.TestCase):
+    def test_encoding_allowance_uses_physical_cells_and_full_frame(self):
+        uint16 = dict(componentType=5123,normalized=True)
+        self.assertAlmostEqual(encoding_error(IDENTITY,uint16,[(0,0,0)]),math.sqrt(3)/131070)
+        frame = list(IDENTITY)
+        frame[0],frame[5],frame[10] = 2,3,6
+        frame[12:15] = [1e6,-2e6,3e6]
+        self.assertAlmostEqual(encoding_error(frame,uint16,[(0,0,0)]),7/131070)
+        raw = dict(componentType=5126)
+        self.assertAlmostEqual(encoding_error(IDENTITY,raw,[(1,1,1)]),math.sqrt(3)*2**-24)
+        self.assertTrue(math.isclose(encoding_error(IDENTITY,raw,[(0,0,0)]),
+                                    math.sqrt(3)*2**-150,rel_tol=1e-12,abs_tol=0))
+
+    def test_wall_requires_its_own_expected_normal(self):
+        # This checks the oracle's normal convention, not producer extrusion support.
+        triangle = [(0,0,0),(0,1,0),(0,0,1)]
+        expected = {'wall':dict(mode=4,properties={},normal=(1,0,0),triangles=[triangle])}
+        actual = {'wall':[(4,{},triangle)]}
+        check_source(actual,expected,1e-5)
+        with self.assertRaisesRegex(AssertionError,'fill winding'):
+            check_source({'wall':[(4,{},triangle[::-1])]},expected,1e-5)
+        wrong_normal = copy.deepcopy(expected)
+        wrong_normal['wall']['normal'] = (0,0,1)
+        with self.assertRaisesRegex(AssertionError,'fill winding'):
+            check_source(actual,wrong_normal,1e-5)
 
 
 @requires_bin()
@@ -127,7 +168,7 @@ class PublishedVectorFidelityTests(unittest.TestCase):
                 flags = ['--sourceCrs','local','--maxFeatures','1','--lodLevels','3', *encoding]
                 output = self.convert(source, label, flags)
                 actual, report = decode(output)
-                tolerance = report['oracleMaximumRoundingMetres'] + report['encoding']['maximumQuantizationErrorMetres'] + 1e-5
+                tolerance = report['oraclePositionToleranceMetres']
                 check_source(actual, expected, tolerance)
                 wrong_type = copy.deepcopy(actual)
                 wrong_type['1'][0][1]['flag'] = 1
@@ -135,6 +176,21 @@ class PublishedVectorFidelityTests(unittest.TestCase):
                     check_source(wrong_type,expected,tolerance)
                 with zipfile.ZipFile(output) as z:
                     self.assertGreater(len([n for n in z.namelist() if n.endswith('.subtree')]), 1)
+                inflated = self.root/(label+'-inflated-report.3tz')
+                with zipfile.ZipFile(output) as zin, zipfile.ZipFile(inflated,'w') as zout:
+                    for name in zin.namelist():
+                        data = zin.read(name)
+                        if name == 'conversion.json':
+                            doc = json.loads(data)
+                            doc['encoding']['maximumQuantizationErrorMetres'] = 1e100
+                            data = json.dumps(doc).encode()
+                        zout.writestr(name,data)
+                inflated_actual, inflated_report = decode(inflated)
+                self.assertEqual(inflated_report['oraclePositionToleranceMetres'],tolerance)
+                mode,row,_ = inflated_actual['0'][0]
+                inflated_actual['0'][0] = mode,row,[(1000,1000,1000)]
+                with self.assertRaisesRegex(AssertionError,'source coordinate'):
+                    check_source(inflated_actual,expected,inflated_report['oraclePositionToleranceMetres'])
                 reused = self.convert(source, label+'-reuse', [*flags,'--reuseTileset',str(output)])
                 reused_actual, reused_report = decode(reused)
                 self.assertEqual(reused_actual, actual)
@@ -171,7 +227,8 @@ class PublishedVectorFidelityTests(unittest.TestCase):
                 # re-encoded independently so codec corruption cannot mask semantics.
                 with zipfile.ZipFile(output) as z:
                     leaf_members = {u for n,_ in forest(z) if not n['children'] for u in n['uris']}
-                for mutation, message in [('missing','missing/extra'),('id','missing/extra'),('hole','hole-fill')]:
+                for mutation, message in [('missing','missing/extra'),('id','missing/extra'),('hole','hole-fill'),('winding','fill winding'),
+                                          ('dropped-triangle','polygon coverage area')]:
                     mutant = self.root/(label+'-'+mutation+'.3tz')
                     with zipfile.ZipFile(output) as zin, zipfile.ZipFile(mutant, 'w') as zout:
                         changed = False
@@ -204,7 +261,7 @@ class PublishedVectorFidelityTests(unittest.TestCase):
                 out = self.convert(source, crs.replace(':','')+label, flags)
                 actual, report = decode(out)
                 expected = {str(f['id']):dict(mode=0,properties=expected_properties(f),parts=[(p,)]) for f,p in zip(features,world)}
-                check_source(actual, expected, report['oracleMaximumRoundingMetres']+report['encoding']['maximumQuantizationErrorMetres']+1e-5)
+                check_source(actual, expected, report['oraclePositionToleranceMetres'])
                 reuse = self.convert(source, crs.replace(':','')+label+'reuse', [*flags,'--reuseTileset',str(out)])
                 self.assertEqual(decode(reuse)[0], actual)
 
@@ -221,15 +278,20 @@ class PublishedVectorFidelityTests(unittest.TestCase):
         actual, report = decode(out)
         self.assertEqual(set(actual), {'0','2'})
         expected = {
-            '0': dict(mode=4, properties=expected_properties(bow), triangles=[
-                [(0,0,5),(0,2,5),(1,1,5)], [(2,0,5),(2,2,5),(1,1,5)]]),
+            '0': dict(mode=4, properties=expected_properties(bow), normal=(0,0,1), triangles=[
+                [(0,0,5),(1,1,5),(0,2,5)], [(2,0,5),(2,2,5),(1,1,5)]]),
             '2': dict(mode=0, properties=expected_properties(feature(2,'Point',[10,20,30])), parts=[([10,20,30],)])}
-        tolerance = report['oracleMaximumRoundingMetres']+report['encoding']['maximumQuantizationErrorMetres']+1e-5
+        tolerance = report['oraclePositionToleranceMetres']
         check_source(actual,expected,tolerance)
         collapsed = copy.deepcopy(actual)
         collapsed['0'] = [(mode,row,(positions[0],)*3) for mode,row,positions in collapsed['0']]
-        with self.assertRaisesRegex(AssertionError,'vertex bijection'):
+        with self.assertRaisesRegex(AssertionError,'fill winding'):
             check_source(collapsed,expected,tolerance)
+        flipped = copy.deepcopy(actual)
+        mode,row,positions = flipped['0'][0]
+        flipped['0'][0] = mode,row,list(reversed(positions))
+        with self.assertRaisesRegex(AssertionError,'fill winding'):
+            check_source(flipped,expected,tolerance)
         moved = copy.deepcopy(actual)
         mode,row,_ = moved['2'][0]
         moved['2'][0] = mode,row,[(999,999,999)]

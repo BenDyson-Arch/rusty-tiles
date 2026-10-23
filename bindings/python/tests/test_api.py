@@ -472,7 +472,7 @@ class WheelAPI(unittest.TestCase):
                 expected = {"7": dict(mode=0, properties=dict(properties, _source_id="7", _source_layer=layer), parts=[(position,)])}
                 for archive in (output, cli):
                     actual, report = decode(archive)
-                    check_source(actual, expected, report["oracleMaximumRoundingMetres"]+report["encoding"]["maximumQuantizationErrorMetres"]+1e-5)
+                    check_source(actual, expected, report["oraclePositionToleranceMetres"])
                 cli_report = decode(cli)[1]
                 for key in ("budgets", "metadata", "lodLevels", "lodToleranceMetres", "features", "skipInvalidEnabled", "repairEnabled"):
                     self.assertEqual(result.report[key], cli_report[key])
@@ -506,7 +506,7 @@ class WheelAPI(unittest.TestCase):
                 self.assertEqual(accepted.returncode,0,accepted.stdout+accepted.stderr)
                 for archive in (skipped_api,strict_cli):
                     survivors, skip_report = decode(archive)
-                    check_source(survivors,expected,skip_report['oracleMaximumRoundingMetres']+skip_report['encoding']['maximumQuantizationErrorMetres']+1e-5)
+                    check_source(survivors,expected,skip_report['oraclePositionToleranceMetres'])
                     self.assertEqual(skip_report['features'],1)
                     self.assertEqual(skip_report['skippedFeatures'],1)
                 self.assertTrue(skipped.report['skipInvalidEnabled'])
