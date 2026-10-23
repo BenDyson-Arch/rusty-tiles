@@ -969,6 +969,27 @@ fn float_profiles_are_crack_free() {
     );
 }
 
+#[test]
+fn measured_positions_must_match_decoded_glb_bits() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &sheet());
+    let error = stage(
+        &input,
+        &work.path().join("wrong-measurement"),
+        &Run {
+            mutation: Mutation::WrongMeasuredPosition,
+            ..Run::default()
+        },
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("measured positions differ from decoded GLB bits"),
+        "{error}"
+    );
+}
+
 /// Control: a moved interface vertex that bypasses the producer's check is found by the
 /// independent census; a dropped segment is refused before publication.
 #[test]
@@ -1383,17 +1404,11 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
                     m["areaSamplesPerDirection"] = json!(2048);
                     m["sourceToProxy"]["area"]["samples"] = json!(2048);
                     m["proxyToSource"]["area"]["samples"] = json!(2048);
-                    let area = m["sourceToProxy"]["surfaceArea"]
-                        .as_f64()
-                        .unwrap()
-                        .max(m["proxyToSource"]["surfaceArea"].as_f64().unwrap());
                     let maximum = m["sampledMax"].as_f64().unwrap();
-                    let margin = (maximum * 0.05).max(0.5 * (area / 2048.).sqrt());
+                    let margin = maximum * 0.05;
                     m["margin"] = json!(margin);
-                    row["geometricError"] = json!(row["geometricError"]
-                        .as_f64()
-                        .unwrap()
-                        .max(maximum + margin));
+                    row["geometricError"] =
+                        json!(row["geometricError"].as_f64().unwrap().max(maximum * 1.05));
                 }
             }
         };

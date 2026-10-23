@@ -70,6 +70,14 @@ pub(crate) struct TileGeometry {
     pub geometric_error: f64,
     /// Admission of this resident record against the stage ledger.
     pub lease: Option<Lease>,
+    pub measurement: Option<CachedMeasurement>,
+}
+
+/// Fixed-size held evidence for exact publication/source-range reuse.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CachedMeasurement {
+    pub sha256: [u8; 32],
+    pub summary: super::error::Summary,
 }
 
 /// Resident bytes charged per triangle of a held tile: vertices (≤ 3 per triangle at 21

@@ -8,7 +8,7 @@ use crate::{
     glb::{self, MeshoptLayout, MeshoptStream},
     mesh_large::{
         batching::{material_key, MaterialClasses},
-        leaves::geometry::{LatticePlan, PositionStorage},
+        leaves::geometry::{CoarsePositions, PositionStorage},
         records::Bounds,
     },
     JobError, JobErrorKind,
@@ -27,6 +27,8 @@ pub(crate) enum Mutation {
     None,
     /// Drop one face holding a required segment, with the pre-publication check on.
     DropSegment,
+    /// Corrupt the expected measurement position while leaving published bytes intact.
+    WrongMeasuredPosition,
     /// Move one locked vertex by one code/ulp and skip the pre-publication check.
     MoveVertexUnchecked,
 }
@@ -36,6 +38,7 @@ pub(crate) struct Encoded {
     pub bounds: Bounds,
     pub displacement: f64,
     pub decoded: Vec<[f32; 3]>,
+    pub face_order: Vec<usize>,
     pub gltf_primitives: usize,
     pub quantized: bool,
 }
@@ -177,7 +180,7 @@ fn table(wire: &mut Wire, rows: &[SourcePrimitive]) -> (Value, Value) {
 pub(crate) fn encode(
     tile: &TileGeometry,
     locked: &[bool],
-    lattice: &LatticePlan,
+    mut positions: CoarsePositions,
     materials: &[Value],
     classes: &MaterialClasses,
     mutation: Mutation,
@@ -187,8 +190,6 @@ pub(crate) fn encode(
     if rows == 0 || rows > limit || tile.triangles.is_empty() || tile.triangles.len() > limit {
         return Err(invalid("coarse tile rows or triangles outside 1..=8192"));
     }
-    let mut positions =
-        lattice.encode_coarse(&tile.positions, &tile.ells, locked, tile.key.depth)?;
     if mutation == Mutation::MoveVertexUnchecked {
         if let Some(v) = locked.iter().position(|l| *l) {
             match &mut positions.storage {
@@ -229,11 +230,13 @@ pub(crate) fn encode(
             None => keyed.push((key, material, faces)),
         }
     }
+    let mut face_order = Vec::with_capacity(tile.triangles.len());
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
     let mut materials_json = Vec::new();
     for (index, (_, material, mut faces)) in keyed.into_iter().enumerate() {
         faces.sort_unstable();
+        face_order.extend_from_slice(&faces);
         materials_json.push(material);
         let count = faces.len() * 3;
         let corners = || faces.iter().flat_map(|&t| tile.triangles[t]);
@@ -335,21 +338,32 @@ pub(crate) fn encode(
     .map_err(|e| invalid(e.to_string()))?;
     let bytes = glb::encode_glb(&document, &compressed).map_err(|e| invalid(e.to_string()))?;
     let quantized = matches!(positions.storage, PositionStorage::Quantized { .. });
-    Ok(Encoded {
+    let mut result = Encoded {
         glb: bytes,
+        face_order,
         bounds: positions.bounds,
         displacement: positions.displacement,
         decoded: positions.decoded,
         gltf_primitives,
         quantized,
-    })
+    };
+    if mutation == Mutation::WrongMeasuredPosition {
+        let v = tile.triangles[0][0] as usize;
+        result.decoded[v][0] = result.decoded[v][0].next_up();
+    }
+    Ok(result)
 }
 
 /// D1's pre-publication check on the encoded bytes, decoded as a client does: the triangle
 /// count, every required segment and interface vertex at its exact leaf-canonical decode,
 /// and every triangle's representative row.
-pub(crate) fn check(tile: &TileGeometry, locked: &[bool], bytes: &[u8]) -> Result<(), JobError> {
-    let decoded = crate::mesh_large::lod::codec::decode(bytes)?;
+pub(crate) fn check(
+    tile: &TileGeometry,
+    locked: &[bool],
+    encoded: &Encoded,
+) -> Result<Vec<[f32; 3]>, JobError> {
+    let decoded = crate::mesh_large::lod::codec::decode(&encoded.glb)?;
+    let mut published = vec![[0.; 3]; tile.positions.len()];
     let what = || format!("coarse tile f{}-d{}", tile.key.first, tile.key.depth);
     if decoded.faces.len() != tile.triangles.len() {
         return Err(invalid(format!(
@@ -360,7 +374,7 @@ pub(crate) fn check(tile: &TileGeometry, locked: &[bool], bytes: &[u8]) -> Resul
     let bits = |p: [f32; 3]| p.map(f32::to_bits);
     let mut edges = HashSet::with_capacity(decoded.faces.len() * 3);
     let mut points = HashSet::with_capacity(decoded.faces.len() * 3);
-    for face in &decoded.faces {
+    for (face, &triangle) in decoded.faces.iter().zip(&encoded.face_order) {
         let (id, _) = face
             .features
             .first()
@@ -371,6 +385,15 @@ pub(crate) fn check(tile: &TileGeometry, locked: &[bool], bytes: &[u8]) -> Resul
                 "{}: invalid representative feature ID",
                 what()
             )));
+        }
+        if id != tile.representative[triangle] {
+            return Err(invalid("decoded representative differs"));
+        }
+        for (k, &vertex) in tile.triangles[triangle].iter().enumerate() {
+            if bits(face.p[k]) != bits(encoded.decoded[vertex as usize]) {
+                return Err(invalid("measured positions differ from decoded GLB bits"));
+            }
+            published[vertex as usize] = face.p[k];
         }
         for k in 0..3 {
             let (a, b) = (bits(face.p[k]), bits(face.p[(k + 1) % 3]));
@@ -406,5 +429,5 @@ pub(crate) fn check(tile: &TileGeometry, locked: &[bool], bytes: &[u8]) -> Resul
             )));
         }
     }
-    Ok(())
+    Ok(published)
 }
