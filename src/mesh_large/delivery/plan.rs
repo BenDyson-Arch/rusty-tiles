@@ -22,7 +22,8 @@ use crate::{tileset_node::TileBox, JobError, JobErrorKind};
 /// A held fragment is within all three caps. A skeleton tile whose records alone stay over
 /// their cap once no skeleton child is left to move is written as an external document at
 /// once; that document holds at most `1 + 8 · 585` records (eight implicit roots of four
-/// levels) and is still within `objects` and `levels`.
+/// levels) and is still within `objects` and `levels`. The root `tileset.json` never splits,
+/// so it can hold up to 1 + 8 · 585 = 4,681 records, past the 4,096 records cap.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Limits {
     /// Tile objects (explicit tiles, implicit roots, links) of a fragment. A tile object is

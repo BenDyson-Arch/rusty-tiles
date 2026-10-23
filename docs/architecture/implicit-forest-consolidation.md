@@ -119,6 +119,8 @@ For the mesh delivery planner (`src/mesh_large/delivery/plan.rs`) only:
    at JSON depth 26 < 32). A fragment held after a close is within the caps, so the
    planner's resident bound has the same form as today. The measured `peakHeldRecords` is
    unchanged: 4,680 and 4,687 for 2^12 and 2^18 leaves.
+   The root `tileset.json` never splits, so it can hold up to 1 + 8 · 585 = 4,681 records
+   (eight implicit roots of four levels under the root), past the 4,096 records cap.
 3. Implicit roots keep today's form exactly: one subtree, `subtreeLevels == availableLevels
    == height + 1`, constant-0 child availability, and a metadata row per tile.
 

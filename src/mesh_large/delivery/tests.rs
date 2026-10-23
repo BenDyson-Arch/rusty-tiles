@@ -1237,6 +1237,130 @@ fn real_leaves_from_h8_publish_deterministically_and_validate() {
         .any(|c| c == "KTX2 level data and transcoding"));
 }
 
+/// Real H8 leaves (textured: KTX2 leaves and proxies) under the tight partition must come
+/// out with implicit roots; the archive validates with decoded containment, and three
+/// corruptions of an implicit root's content or metadata are each refused by the validator
+/// (an error, not a panic): a tile-availability bit cleared on a tile that has content, a
+/// box in the subtree's `boundingBox` property moved off its parent, and one implicit
+/// content GLB deleted.
+#[test]
+fn real_h8_leaves_under_low_limits_publish_implicit_roots_and_reject_corruption() {
+    use crate::mesh_large::leaves::producer::{LeafOutputRequest, LeafProfile};
+    let work = tempfile::tempdir().unwrap();
+    let textured = super::super::full::tests::fixture(&work.path().join("src"), 8193);
+    let scratch = work.path().join("scratch");
+    std::fs::create_dir(&scratch).unwrap();
+    let leaves = work.path().join("leaves");
+    crate::mesh_large::leaves::producer::mesh_to_leaf_payloads(
+        LeafOutputRequest::new(&textured, &leaves, LeafProfile::Balanced)
+            .with_scratch_dir(&scratch),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let output = work.path().join("low.3tz");
+    let report = run(&leaves, &output, TIGHT, |r| r).unwrap();
+    assert!(report.implicit_roots >= 1, "{report:?}");
+    assert_eq!(report.leaves, 2);
+    assert!(report.max_depth > 21);
+    let archive = members(&output);
+    let forest = walk(&archive);
+    assert!(!forest.implicit.is_empty(), "{report:?}");
+    assert_eq!(forest.implicit.len() as u64, report.implicit_roots);
+    // Real payloads: the KTX2 leaf is among the published GLBs.
+    assert!(archive.iter().any(|(name, bytes)| {
+        let needle = b"KHR_texture_basisu";
+        name.ends_with(".glb") && bytes.windows(needle.len()).any(|w| w == needle)
+    }));
+    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    assert!(checked
+        .checks
+        .iter()
+        .any(|c| c == "decodedContentContainment"));
+
+    let (root_key, levels, _) = &forest.implicit[0];
+    let subtree_name = format!("subtrees/{root_key}-0-0-0-0.subtree");
+    let subtree = &archive[&subtree_name];
+    let json_len = u64::from_le_bytes(subtree[8..16].try_into().unwrap()) as usize;
+    let doc: Value = serde_json::from_slice(&subtree[24..24 + json_len]).unwrap();
+    let bin_start = 24 + json_len;
+    let view = |index: u64| {
+        let v = &doc["bufferViews"][index as usize];
+        let start = bin_start + v["byteOffset"].as_u64().unwrap_or(0) as usize;
+        start..start + v["byteLength"].as_u64().unwrap() as usize
+    };
+    let (available, contents) = subtree_availability(subtree, *levels);
+    // A non-root tile with content, and its bit position in the level-order bitstream.
+    let victim = *contents.iter().find(|t| t[0] == 1).unwrap();
+    assert!(available.contains(&victim));
+    let bit = 1 + (victim[1] | victim[2] << 1 | victim[3] << 2) as usize;
+
+    type Archive = BTreeMap<String, Vec<u8>>;
+    let damage = |case: &str, change: &dyn Fn(&mut Archive)| -> String {
+        let mut edited = archive.clone();
+        edited.remove("@3dtilesIndex1@");
+        change(&mut edited);
+        let directory = work.path().join(case);
+        for (name, bytes) in &edited {
+            let path = directory.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        let damaged = work.path().join(format!("{case}.3tz"));
+        crate::package::package(
+            crate::package::PackageRequest::directory(&directory, &damaged),
+            &RunControl::default(),
+        )
+        .unwrap();
+        inspect(ValidationRequest::new(&damaged))
+            .expect_err(case)
+            .to_string()
+    };
+    let availability = damage("availability", &|edited| {
+        let bytes = edited.get_mut(&subtree_name).unwrap();
+        let at = view(doc["tileAvailability"]["bitstream"].as_u64().unwrap()).start;
+        bytes[at + bit / 8] &= !(1 << (bit % 8));
+        // Keep the declared count equal to the popcount so only the missing parent remains.
+        let text = &mut bytes[24..24 + json_len];
+        assert!(available.len() < 11);
+        let needle = format!(
+            r#""tileAvailability":{{"availableCount":{},"#,
+            available.len()
+        );
+        let found = text
+            .windows(needle.len())
+            .position(|w| w == needle.as_bytes())
+            .unwrap();
+        text[found + needle.len() - 2] = b'0' + (available.len() as u8 - 1);
+    });
+    let boxed = damage("box", &|edited| {
+        let bytes = edited.get_mut(&subtree_name).unwrap();
+        let property = doc["propertyTables"][0]["properties"]["boundingBox"]["values"]
+            .as_u64()
+            .unwrap();
+        // The victim's box centre x (12 f64 per row, rows in availability order).
+        let row = available.iter().position(|t| *t == victim).unwrap();
+        let at = view(property).start + row * 96;
+        let x = f64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
+        bytes[at..at + 8].copy_from_slice(&(x + 1.0e6).to_le_bytes());
+    });
+    let missing = damage("missing", &|edited| {
+        let name = format!(
+            "implicit-content/{root_key}-{}-{}-{}-{}.glb",
+            victim[0], victim[1], victim[2], victim[3]
+        );
+        edited.remove(&name).unwrap();
+    });
+    assert!(
+        availability.contains("tile has an unavailable parent"),
+        "{availability}"
+    );
+    assert!(boxed.contains("child bounds escape parent"), "{boxed}");
+    assert!(
+        missing.contains("missing archive entry: implicit-content/"),
+        "{missing}"
+    );
+}
+
 /// GLB bounds: quantized TRS nodes are bounded outward in exact arithmetic and taken to the
 /// z-up tile frame once; a rotated node is refused.
 #[test]
