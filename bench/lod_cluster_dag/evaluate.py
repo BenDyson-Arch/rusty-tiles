@@ -105,7 +105,8 @@ class Surface:
             mask=mi==m;factor,image,wrap=self.materials[m];v=vc[mask]*factor
             if image is not None:
                 data,extras=image
-                if isinstance(data,bytes):im=np.asarray(Image.open(io.BytesIO(data)).convert('RGB'))
+                if isinstance(data,np.ndarray):im=data
+                elif isinstance(data,bytes):im=np.asarray(Image.open(io.BytesIO(data)).convert('RGB'))
                 elif extras and data.endswith('.rgba'):im=np.fromfile(data,np.uint8).reshape(extras['height'],extras['width'],4)[:,:,:3]
                 else:im=np.asarray(Image.open(data).convert('RGB'))
                 h,w=im.shape[:2];tex=uv[mask]*[w,h]-.5;xy=np.floor(tex).astype(int);frac=tex-xy
@@ -268,8 +269,11 @@ def run(source, root, output, baseline_original=None):
         surface.finish();distances=[];deltas=[];directions={}
         for label,a,b in [('source_to_lod',src,surface),('lod_to_source',surface,src)]:
             q,fi,bc=a.sample(200_000,rng);d,near,nbc=b.closest(q);distances.append(d)
-            delta=np.linalg.norm(lab(a.rgb(fi,bc))-lab(b.rgb(near,nbc)),axis=1);deltas.append(delta)
-            directions[label]=dict(samples=len(q),geometry_m=stats(d),delta_e76=stats(delta))
+            ca=a.rgb(fi,bc);cb=b.rgb(near,nbc)
+            delta=np.linalg.norm(lab(ca)-lab(cb),axis=1);deltas.append(delta)
+            def srgb(c):return np.where(c<=.0031308,c*12.92,1.055*np.maximum(c,0)**(1/2.4)-.055)
+            mse=float(np.mean((srgb(np.clip(ca,0,1))-srgb(np.clip(cb,0,1)))**2))
+            directions[label]=dict(samples=len(q),geometry_m=stats(d),delta_e76=stats(delta),psnr_srgb_db=float(-10*np.log10(max(mse,1e-30))))
         row=dict(depth=depth,tiles=len(chosen),triangles=len(surface.xyz),geometry_m=stats(np.concatenate(distances)),delta_e76=stats(np.concatenate(deltas)),directions=directions)
         rows.append(row);print(json.dumps(row),flush=True)
         (output/'quality.json').write_text(json.dumps(rows,indent=2))

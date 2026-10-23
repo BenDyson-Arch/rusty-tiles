@@ -1,73 +1,96 @@
-# Locked cluster tree experiment
+# Classic HLOD cluster-tree experiment
 
-Research-only prototype for the 2026-10-24 LOD bake-off. Evidence lives at
+| tex3 result | Classic HLOD | Current #260 | v0.3.0 |
+|---|---:|---:|---:|
+| Root triangles | 15,970 | 4,696 | 19,968 |
+| Root proxy→source PSNR | 26.61 dB | 19.53 dB | 29.06 dB |
+| Coarse CPU-s/Mtri | 22.89 | 173.62 historical | not isolated |
+| First view far / near | 1.192 / 6.460 MB | 4.472 / 12.297 MB | 13.924 / 25.982 MB |
+| Decoded mixed-depth max / p99 | 0 / 0 m | 0.377 / 0.025 m diagnostic | 1.07e−14 / 0 m |
+
+**Verdict: adopt this architecture as the 0.4 direction, with production gates open.**
+Crop3 also passes, at 19.18 coarse CPU-s/Mtri and 29.13 dB root colour.
+This is a standalone research prototype, not production tiler integration.
+
+Full tables, caveats and evidence:
 `~/.cache/rusty-tiles-evidence/lod-bakeoff-20261024/cluster-dag/README.md`.
+Prior UV-preserving results are archived there as `README-locked-uv.md` and
+remain reproducible with `build.py`. They stalled at 183,551 root triangles.
+The new implementation is `hlod.py` plus `charts.cpp`.
 
-Preimplementation contract: retain exact source leaf triangles, attribute values,
-winding and per-triangle identity. Partition meshlets into nested spatial groups;
-replace DAG regrouping with a binary ownership tree. Retain meshoptimizer's
-index-only simplifier, lock group outer borders, simplify materials separately,
-and re-meshletize each result inside its owning group. Never update positions.
-Store shared positions as original float32, avoiding independent tile grids.
-Children replace their whole parent's domain; bounding volumes contain full
-triangles and descendant bounds, not just centroid partition cells.
+## Contract and decisions
 
-Supported domain: indexed triangle GLBs with identity mesh nodes, float32
-positions and ordinary vertex attributes, embedded JPEG/PNG or vertex colours.
-Reject unsupported transforms, instancing and sparse accessors. The prototype
-owns an output directory, not production tiler state. Leaf picking uses mesh
-feature IDs and structural metadata; coarse identity remains source primitive.
+Retain exact source triangles, all leaf attributes/winding and per-triangle
+picking metadata. Retain a nested binary ownership tree rather than unrestricted
+DAG regrouping; each parent's source domain is the union of its children.
+Replace per-primitive attribute simplification with one position-welded parent
+mesh. Lock only original vertices incident to source faces outside the parent,
+plus true open geometry borders. Child-interior borders and UV/material/colour
+seams can collapse. Publish original float32 positions through lossless packing.
 
-Independent acceptance: decode output GLBs afresh; compare exact leaf provenance
-and all topological interfaces between disjoint tree nodes, including every
-mixed-depth pairing; sample >=200k surface points in EACH direction per level
-with exact nearest-triangle distances; sample rendered base colours using
-interpolated UVs or vertex colours. Compare current tex3 output and run the
-provided first-view simulator. Sampled errors are evidence, not a certified
-Hausdorff bound. A static 3D Tiles mapping argument is not a browser test.
+Before implementation, the follow-up contract required fresh charts and texture,
+source-relative measured error, explicit failures and independent decoded
+acceptance. Investigation found that locked endpoints alone can lose a tiny
+nonmanifold sheet. Rework leaf ownership so incident triangles on each
+nonmanifold edge stay in one leaf; 16 triangles change ownership on these inputs,
+with all data exact. Assert every outer interface segment survives simplification.
+Do not add interior locks, skirts or boundary collars.
 
-Tradeoff/proof obligations: permanent fine borders may throttle reduction;
-material cuts add locks; spatial binary meshlet ownership may have overlapping
-AABBs but must not duplicate faces. Generic DAG transitions are deliberately
-removed. Shared external source/downscaled images trade bake time for transfer
-bytes; report dependencies separately because the provided simulator counts
-GLBs, not external images. KTX2 conversion and production integration are outside
-this prototype. Source holes/non-manifold edges are not repaired or hidden.
+Fresh planar charts use connected normal-cone growth, interior-overlap rejection
+and shelf packing. Parent texels sample the original source region via a BVH.
+Source images decode once. Parent source-relative error is sampled in both
+directions and made monotonic over children. It is not a certified bound.
+Exact leaves retain triangle provenance and all-corner feature IDs. Proxy feature
+IDs identify the nearest source primitive at each coarse face centroid: valid
+representative identity, not complete ancestry after seam collapse.
 
-Final refinements: explicit locks derived from original welded vertex/leaf
-ownership protect non-manifold junctions as well as manifold borders. Lossless
-EXT_meshopt_compression covers geometry and metadata; leaves remain bit-exact.
-Coarse UVs are transformed affinely into shared, padded source-image crops,
-resized to at most 1024 pixels per dimension (JPEG quality 85). Border aprons
-honor source repeat/clamp/mirror addressing. Source images and UVs on leaves
-remain unchanged. Permissive simplification was probed and rejected after its
-small triangle saving increased colour error. The top-level tileset error is the
-asset's bounding diagonal (omission error); tile errors are the accumulated
-meshoptimizer estimates. Placement copies the baseline's root transform.
+Supported domain: the two supplied static triangle GLBs, identity mesh nodes,
+float32 positions, opaque JPEG/PNG or vertex colour. The implementation rejects
+unsupported node transforms, nonfinite measurements, failed chart packs and
+missing outer segments. Own only an explicit output directory; no production
+state is changed. Exact source leaf ownership seeds are an input, not a source of
+coarse geometry. The reproduction path can build them from the source.
 
-Run `setsid -f bash bench/lod_cluster_dag/reproduce.sh > RUN.log 2>&1` from this
-worktree. The script enforces idle scheduling, one numerical worker, dedicated
-scratch and Cargo target directories, and the 60-GiB free-space floor. It replaces
-only its own generated tex3/crop3 directories. Dependencies are pinned in that
-script. The cached meshoptimizer native source comes from Rust meshopt 0.6.2;
-its local C++ API includes partitionClusters, though this spatial ownership-tree
-variant deliberately does not repartition across tree ancestry. Native and WASM
-decoders are compared byte-for-byte in `decode_agreement.py`.
+Independent acceptance decodes every output, checks full leaf attributes,
+provenance uniqueness, all-corner picking IDs, coarse primitive references,
+bounds, monotonic GE and every source-shared-edge adjacent pair across all depths.
+Geometry/colour evaluation uses 200k area samples per direction per level.
+Native/WASM buffer bytes agree; 126 GLBs validate without errors or warnings.
+The planar control releases child-interior vertices, preserves outer segments
+and rejects a missing-border mutant. Final-source nonauthor review is required.
 
-`evaluate.py` saves individual records for every disjoint tree-node pair sharing
-source edges, including non-manifold incident face pairs. Candidate acceptance
-requires the complete original interface segments to survive in both decoded
-meshes. Its nonzero baseline fallback projects to nearest open boundaries and
-is a conservative diagnostic where unrelated hole boundaries are nearby, not
-an exact reconstruction of a rendered gap. The original proxy seam census
-supplies the separate baseline proxy-to-leaf witness. Colour measurements use
-bilinear level-0 base colour in linear light and CIE76 D65, without lighting or
-mip selection. Neither the standalone GLB validator nor the simulator proves a
-live Cesium rendering; the house rules prohibit a browser run.
+Proof limits: no live Cesium/browser test, no KTX2/mips, no lit-material fidelity
+claim, no full-model scaling result. Adjacency means shared original edges;
+unrelated nearby surfaces are not welded by the oracle. Sampling can miss extrema;
+independent root max 0.390762 m exceeds published GE 0.385378 m. Source-image/BVH
+residency is not bounded for large models. Current baseline uses fewer root
+triangles and a different pipeline; the historical coarse comparison is 7.59×,
+not a demonstrated 10× end-to-end improvement. Current baseline border projection
+outliers include ambiguous source holes; its same-depth outlier is not a proven gap.
 
-Evidence binding (files were never stored in Git; starting checkout commit `8971c9c3`):
+## Reproduce
 
-- `README.md`: SHA-256 `49eaabeca94cb021b19d58c82ca7e855a0607c89e2b48c20e1b76e4e8fe4ca48`
-- `artifact-manifest.sha256`: SHA-256 `74315d1c3386164810f78702cadf10a6c8bb127ae0ff13484ab3e768a0a7bf80`
-- `execution-source.sha256`: SHA-256 `3de128f896edad08ab556b01f8ffe9db059cc6c8e08d17a4e0da043cdbfaf927`
-- `review-r2.json`: SHA-256 `24a243fcd6e931730999fb966ca3d01e7e15cc2699c4085f10365f3a0d8ecbb7`
+Use the pinned local paths/packages in `reproduce.sh` to build the exact seed
+leaves/tools if absent. Then detach `setsid -f bash bench/lod_cluster_dag/reproduce_hlod.sh`.
+It builds the chart helper and runs tex3/crop3 serially at idle priority, with
+single-thread numerical libraries, measured builds, decoded quality/seam checks,
+first-view simulation, format validation, independent decoding and analytic controls.
+No 2048 input, browser or server is used. Scratch and evidence stay under the
+experiment's assigned directories. The final timing repeat's rebind manifests
+prove all published bytes match the earlier evaluated/validated bytes.
+
+The complete external evidence is bound by manifests below; final production
+adoption still needs bounded Rust integration, KTX2/mips, a sampled-error policy,
+coarse identity semantics and broader nonmanifold/thin-sheet/viewer validation.
+
+- `hlod-execution-source.sha256`: `febcf37169b9009cdd44ff2a2191e35055842ad1df426c717d6ddae7732e162e`
+
+- `hlod-artifact-manifest.sha256`: `1a5c38e2c48b2abc6acf3701d1bacf915bbb8b4876bb9c6dfbeb3c925e01fbff`
+
+- External dependency snapshot `hlod-external-dependencies.sha256`: `994ac01d0bf38c80c935cc267759c7681f626af90aad14288476a1e04438f780`
+
+Independent final-source review accepted bounded research submission; all 13
+execution sources and 419 artifact identities verified. Its nonblocking external
+dependency gap is addressed by the separate simulator, tree helper, JS/WASM,
+Python package and executable snapshot above. This is a local identity snapshot,
+not a hermetic environment or broader production acceptance.
