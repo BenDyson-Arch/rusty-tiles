@@ -5,31 +5,41 @@
 //! at every depth on the way down, and a run hierarchy a node at every run length), and a
 //! tile's rank range is the union of its leaves', so the leaf rows alone determine the tree.
 //! A tile closes when the next leaf leaves its subtree. A closed tile's role follows its
-//! height (P-IMPL §4): height ≥ 4 is an explicit skeleton tile; its leaf children are explicit
-//! leaves and its other children (height 1 to 3) implicit roots, each written as one subtree.
-//! A skeleton tile whose inline document fragment grows past [`Limits`] is written as an
-//! external document at once and replaced by its link, so resident state is the open stack
-//! plus fragments below the limits, whatever the input size.
+//! height (P-IMPL §4, S = 4): height ≥ 4 is an explicit skeleton tile and its leaf children
+//! are explicit leaves. Its other children (height 1 to 3) are shallow trees, written as
+//! explicit tiles while their document has room and otherwise as implicit roots (one subtree
+//! each); a whole tree of height below 4 is the same. When a skeleton tile closes over a
+//! [`Limits`] cap its fragment is reduced (`Builder::fit`): the largest shallow trees become
+//! implicit roots, then its largest skeleton children become external documents, then, if
+//! records alone still exceed their cap, the tile itself does. Every fragment held after a
+//! close is within the caps, so resident state is the open stack plus such fragments,
+//! whatever the input size. See `docs/architecture/implicit-forest-consolidation.md`.
 use super::source::{add_down, add_up, Aabb, LeafRow, ProxyRow};
 use crate::{tileset_node::TileBox, JobError, JobErrorKind};
 
-/// The fixed partition. Inline fragments stay below these; the root document and every
-/// external document therefore hold at most `1 + 8 · objects` tile objects and `levels`
-/// tile levels.
+/// The fixed partition: caps on one fragment, and therefore on every document.
+///
+/// A held fragment is within all three caps. A skeleton tile whose records alone stay over
+/// their cap once no skeleton child is left to move is written as an external document at
+/// once; that document holds at most `1 + 8 · 585` records (eight implicit roots of four
+/// levels) and is still within `objects` and `levels`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Limits {
-    /// Tile objects (explicit tiles, implicit roots, links) of an inline fragment.
+    /// Tile objects (explicit tiles, implicit roots, links) of a fragment. A tile object is
+    /// at most 26 JSON value nodes, so 480 objects stay within the writer's 16,384.
     pub objects: u64,
-    /// Records (tiles, including those inside implicit roots) of an inline fragment.
+    /// Records (tiles, including those inside implicit roots) of a fragment: the planner's
+    /// resident state, not a JSON cost.
     pub records: u64,
-    /// Tile levels of a document.
+    /// Tile levels of a fragment. A tile at level k sits at JSON depth 1 + 2k and its
+    /// deepest member 3 below, so 12 levels reach depth 26, within the writer's 32.
     pub levels: u32,
 }
 
 pub(crate) const LIMITS: Limits = Limits {
-    objects: 32,
-    records: 1024,
-    levels: 8,
+    objects: 480,
+    records: 4096,
+    levels: 12,
 };
 
 /// Below this height a non-leaf tile is (inside) an implicit root (P-IMPL `S`).
@@ -77,6 +87,9 @@ pub(crate) struct Node {
     pub extent: Aabb,
     pub error: f64,
     pub height: u32,
+    /// A shallow tree (an internal tile of height below 4 whose parent is a skeleton tile, or
+    /// the root) published as an implicit root rather than as explicit tiles.
+    pub implicit: bool,
     pub leaf: Option<Box<LeafRow>>,
     /// The H17 coarse tile of an internal tile.
     pub proxy: Option<Box<ProxyRow>>,
@@ -92,6 +105,81 @@ pub(crate) struct Node {
 impl Node {
     pub(crate) fn is_skeleton(&self) -> bool {
         self.height >= SKELETON_HEIGHT
+    }
+
+    /// An implicit root: a shallow tree demoted from explicit tiles.
+    pub(crate) fn is_implicit_root(&self) -> bool {
+        self.implicit && self.leaf.is_none() && !self.is_skeleton()
+    }
+
+    /// A skeleton tile whose fragment is still inline (not a link).
+    fn is_inline_skeleton(&self) -> bool {
+        self.is_skeleton() && self.link.is_none()
+    }
+
+    /// Recompute a tile's fragment totals from its children (explicit tiles throughout).
+    fn aggregate(&mut self) {
+        self.objects = 1 + self.children.iter().map(|c| c.objects).sum::<u64>();
+        self.records = 1 + self.children.iter().map(|c| c.records).sum::<u64>();
+        self.levels = 1 + self.children.iter().map(|c| c.levels).max().unwrap_or(0);
+    }
+
+    /// The path (child indices) to the explicit shallow tree of this fragment to demote
+    /// first: most tiles, then greatest height, then lowest rank.
+    fn largest_inline_tree(&self) -> Option<Vec<usize>> {
+        type Best = Option<((u64, u32, std::cmp::Reverse<u64>), Vec<usize>)>;
+        fn visit(node: &Node, path: &mut Vec<usize>, best: &mut Best) {
+            for (i, child) in node.children.iter().enumerate() {
+                path.push(i);
+                if child.is_inline_skeleton() {
+                    visit(child, path, best);
+                } else if child.leaf.is_none() && child.link.is_none() && !child.implicit {
+                    let key = (child.records, child.height, std::cmp::Reverse(child.first));
+                    if best.as_ref().is_none_or(|(k, _)| key > *k) {
+                        *best = Some((key, path.clone()));
+                    }
+                }
+                path.pop();
+            }
+        }
+        let mut best = None;
+        visit(self, &mut Vec::new(), &mut best);
+        best.map(|(_, path)| path)
+    }
+
+    /// Demote the shallow tree at `path` to an implicit root and update the totals above it.
+    fn demote(&mut self, path: &[usize]) {
+        let child = &mut self.children[path[0]];
+        if let [_] = path {
+            child.implicit = true;
+            child.objects = 1;
+            child.levels = 1;
+        } else {
+            child.demote(&path[1..]);
+        }
+        self.aggregate();
+    }
+
+    fn over(&self, limits: &Limits) -> bool {
+        self.objects > limits.objects
+            || self.records > limits.records
+            || self.levels > limits.levels
+    }
+}
+
+/// Add the published roles of one document's fragment to `shape`.
+fn tally(shape: &mut Shape, node: &Node) {
+    if node.link.is_some() {
+        return;
+    }
+    if node.is_implicit_root() {
+        shape.implicit_roots += 1;
+        shape.implicit_tiles += node.records;
+        return;
+    }
+    shape.explicit_tiles += 1;
+    for child in &node.children {
+        tally(shape, child);
     }
 }
 
@@ -117,8 +205,12 @@ pub(crate) fn document_members(node: &Node) -> u64 {
             0
         } else if node.leaf.is_some() {
             1
-        } else if !node.is_skeleton() {
+        } else if node.is_implicit_root() {
+            // Its payloads and its subtree.
             implicit_leaves(node) + 1
+        } else if !node.is_skeleton() {
+            // A shallow tree written as explicit tiles: its payloads only.
+            implicit_leaves(node)
         } else {
             u64::from(node.proxy.is_some()) + node.children.iter().map(walk).sum::<u64>()
         }
@@ -304,6 +396,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             extent,
             error: row.geometry_error,
             height: 0,
+            implicit: false,
             leaf: Some(Box::new(row)),
             proxy: None,
             children: Vec::new(),
@@ -377,28 +470,6 @@ impl<'s, S: Sink> Builder<'s, S> {
         }
         self.shape.tiles += 1;
         let skeleton = height >= SKELETON_HEIGHT;
-        let (objects, records, levels) = if skeleton {
-            for child in &frame.children {
-                if child.leaf.is_none() && !child.is_skeleton() {
-                    self.shape.implicit_roots += 1;
-                    self.shape.implicit_tiles += child.records;
-                } else if child.leaf.is_some() {
-                    self.shape.explicit_tiles += 1;
-                }
-            }
-            self.shape.explicit_tiles += 1;
-            (
-                1 + frame.children.iter().map(|c| c.objects).sum::<u64>(),
-                1 + frame.children.iter().map(|c| c.records).sum::<u64>(),
-                1 + frame.children.iter().map(|c| c.levels).max().unwrap(),
-            )
-        } else {
-            (
-                1,
-                1 + frame.children.iter().map(|c| c.records).sum::<u64>(),
-                1,
-            )
-        };
         let mut node = Node {
             first: frame.first,
             depth: frame.depth,
@@ -408,61 +479,125 @@ impl<'s, S: Sink> Builder<'s, S> {
             extent,
             error,
             height,
+            implicit: false,
             leaf: None,
             proxy,
             children: frame.children,
             link: None,
-            objects,
-            records,
-            levels,
+            objects: 0,
+            records: 0,
+            levels: 0,
         };
+        // Every tile starts explicit: a shallow tree's totals are its own explicit tiles.
+        node.aggregate();
         if frame.depth == 0 {
-            if !skeleton {
-                self.shape.implicit_roots += 1;
-                self.shape.implicit_tiles += node.records;
+            if skeleton {
+                self.fit(&mut node)?;
+            } else if node.objects > self.limits.objects || node.levels > self.limits.levels {
+                node.implicit = true;
             }
+            tally(&mut self.shape, &node);
             self.finished_root = true;
             self.shape.documents += 1;
             return self.sink.root(node);
         }
-        if skeleton
-            && (objects > self.limits.objects
-                || records > self.limits.records
-                || levels >= self.limits.levels)
-        {
-            self.shape.documents += 1;
-            let (first, depth, slot, axes, tile, extent, error, height) = (
-                node.first,
-                node.depth,
-                node.slot,
-                node.axes,
-                node.tile,
-                node.extent,
-                node.error,
-                node.height,
-            );
-            let link = self.sink.external(node)?;
-            node = Node {
-                first,
-                depth,
-                slot,
-                axes,
-                tile,
-                extent,
-                error,
-                height,
-                leaf: None,
-                // The proxy is the external document's root content, not the link's.
-                proxy: None,
-                children: Vec::new(),
-                link: Some(link),
-                objects: 1,
-                records: 0,
-                levels: 1,
-            };
+        if skeleton {
+            self.fit(&mut node)?;
+            if node.over(&self.limits) {
+                node = self.externalize(node)?;
+            }
         }
         self.attach(node);
         Ok(())
+    }
+
+    /// Reduce a closed skeleton tile's fragment towards the caps, one step at a time:
+    ///
+    /// 1. tile objects over: demote the largest explicit shallow tree anywhere in it to an
+    ///    implicit root;
+    /// 2. levels over: the child reaching deepest (lowest slot on ties) is demoted if it is a
+    ///    shallow tree or moved into its own external document if it is a skeleton tile;
+    /// 3. objects (with no shallow tree left) or records over: move the inline skeleton child
+    ///    contributing most (lowest slot on ties) into its own external document.
+    ///
+    /// What is left over (records only, once no skeleton child remains inline) is the
+    /// caller's.
+    fn fit(&mut self, node: &mut Node) -> Result<(), JobError> {
+        let limits = self.limits;
+        while node.over(&limits) {
+            if node.objects > limits.objects {
+                if let Some(path) = node.largest_inline_tree() {
+                    node.demote(&path);
+                    continue;
+                }
+            }
+            let largest = |measure: &dyn Fn(&Node) -> u64, movable: &dyn Fn(&Node) -> bool| {
+                node.children
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| movable(c))
+                    .max_by(|a, b| measure(a.1).cmp(&measure(b.1)).then(b.0.cmp(&a.0)))
+                    .map(|(i, _)| i)
+            };
+            let index = if node.levels > limits.levels {
+                let shallow = |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit;
+                match largest(&|c| u64::from(c.levels), &shallow) {
+                    Some(i) if !node.children[i].is_skeleton() => {
+                        node.demote(&[i]);
+                        continue;
+                    }
+                    found => found,
+                }
+            } else if node.objects > limits.objects {
+                largest(&|c| c.objects, &Node::is_inline_skeleton)
+            } else {
+                largest(&|c| c.records, &Node::is_inline_skeleton)
+            };
+            let Some(index) = index else {
+                break;
+            };
+            let child = node.children.remove(index);
+            let link = self.externalize(child)?;
+            node.children.insert(index, link);
+            node.aggregate();
+        }
+        Ok(())
+    }
+
+    /// Write a skeleton tile's fragment as an external document; returns its link tile.
+    fn externalize(&mut self, node: Node) -> Result<Node, JobError> {
+        tally(&mut self.shape, &node);
+        self.shape.documents += 1;
+        let (first, depth, slot, axes, tile, extent, error, height) = (
+            node.first,
+            node.depth,
+            node.slot,
+            node.axes,
+            node.tile,
+            node.extent,
+            node.error,
+            node.height,
+        );
+        let link = self.sink.external(node)?;
+        Ok(Node {
+            first,
+            depth,
+            slot,
+            axes,
+            tile,
+            extent,
+            error,
+            height,
+            implicit: false,
+            leaf: None,
+            // The proxy is the external document's root content, not the link's.
+            proxy: None,
+            children: Vec::new(),
+            link: Some(link),
+            objects: 1,
+            records: 0,
+            levels: 1,
+        })
     }
 
     /// Close every open tile; the root is written last.

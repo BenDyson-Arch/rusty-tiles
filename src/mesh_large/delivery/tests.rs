@@ -303,6 +303,10 @@ struct Walk {
     explicit: Vec<String>,
     implicit: Vec<(String, u32, Value)>,
     documents: usize,
+    /// Explicit tile objects (not links, not implicit roots).
+    explicit_tiles: usize,
+    /// Per document: (name, tile objects, tile levels).
+    shapes: Vec<(String, usize, usize)>,
 }
 
 fn walk(archive: &BTreeMap<String, Vec<u8>>) -> Walk {
@@ -310,13 +314,18 @@ fn walk(archive: &BTreeMap<String, Vec<u8>>) -> Walk {
         explicit: Vec::new(),
         implicit: Vec::new(),
         documents: 0,
+        explicit_tiles: 0,
+        shapes: Vec::new(),
     };
     let mut pending = vec!["tileset.json".to_owned()];
     while let Some(name) = pending.pop() {
         walk.documents += 1;
         let doc: Value = serde_json::from_slice(&archive[&name]).unwrap();
-        let mut tiles = vec![doc["root"].clone()];
-        while let Some(tile) = tiles.pop() {
+        let (mut objects, mut levels) = (0, 0);
+        let mut tiles = vec![(doc["root"].clone(), 1)];
+        while let Some((tile, level)) = tiles.pop() {
+            objects += 1;
+            levels = levels.max(level);
             if let Some(tiling) = tile.get("implicitTiling") {
                 let uri = tile["content"]["uri"].as_str().unwrap();
                 let key = uri
@@ -339,14 +348,16 @@ fn walk(archive: &BTreeMap<String, Vec<u8>>) -> Walk {
                         "external documents sit at the archive root"
                     );
                     pending.push(uri.to_owned());
-                } else {
-                    walk.explicit.push(uri.to_owned());
+                    continue;
                 }
+                walk.explicit.push(uri.to_owned());
             }
+            walk.explicit_tiles += 1;
             if let Some(children) = tile["children"].as_array() {
-                tiles.extend(children.iter().cloned());
+                tiles.extend(children.iter().map(|c| (c.clone(), level + 1)));
             }
         }
+        walk.shapes.push((name, objects, levels));
     }
     walk
 }
@@ -375,67 +386,67 @@ fn heights(specs: &[Spec]) -> BTreeMap<Vec<u8>, u32> {
     out
 }
 
-/// The published forest of a mixed tree (spatial, packed, synthetic depth 24) is accepted by
-/// the merged validator with decoded containment, and its roles, members, slots and
-/// availability equal what the generator's H1 addresses predict.
-#[test]
-fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
-    let work = tempfile::tempdir().unwrap();
-    let specs = mixed_tree(11);
-    assert!(specs.iter().any(Spec::packed), "the fixture packs leaves");
-    let dir = leaf_dir(work.path(), &specs);
-    let output = work.path().join("out.3tz");
-    let report = run(&dir, &output, TIGHT, |r| r).unwrap();
-    let all = nodes(&specs);
-    let height = heights(&specs);
+/// Middle limits: some shallow trees stay explicit, others are demoted, and a few documents.
+const MID: Limits = Limits {
+    objects: 40,
+    records: 400,
+    levels: 6,
+};
+
+/// Check a published forest against the generator: every implicit root is a shallow tree
+/// (height 1 to 3) whose parent is a skeleton tile (or the root); every leaf outside an
+/// implicit root is an explicit member, listed once; every implicit root's availability is
+/// the generator's; documents are within the caps; the report counts what was written; the
+/// merged validator accepts the archive with decoded containment. Returns the walk.
+fn check_forest(
+    specs: &[Spec],
+    dir: &Path,
+    output: &Path,
+    report: &MeshTilesetReport,
+    limits: Limits,
+) -> Walk {
+    let all = nodes(specs);
+    let height = heights(specs);
+    let by_key: BTreeMap<String, Vec<u8>> =
+        all.iter().map(|d| (key(d, specs), d.clone())).collect();
     assert_eq!(report.leaves, specs.len() as u64);
     assert_eq!(report.tiles, all.len() as u64);
-    assert_eq!(report.max_depth, 24);
-    assert_eq!(report.synthetic_leaves, 70);
-    assert!(
-        report.documents > 3,
-        "tight limits split documents: {report:?}"
-    );
-
-    // Expected roles from heights (P-IMPL S = 4).
-    let parent_height = |d: &Vec<u8>| height[&d[..d.len() - 1].to_vec()];
-    let mut explicit_leaves = BTreeSet::new();
-    let mut implicit_roots = BTreeMap::new();
-    for d in &all {
-        let h = height[d];
-        let skeleton_parent = d.is_empty() || parent_height(d) >= 4;
-        if !skeleton_parent || (d.is_empty() && h >= 4) {
-            continue;
-        }
-        if h == 0 && !d.is_empty() {
-            explicit_leaves.insert(format!("content/{}.glb", key(d, &specs)));
-        } else if h < 4 {
-            implicit_roots.insert(key(d, &specs), d.clone());
-        }
-    }
-    let archive = members(&output);
+    let archive = members(output);
     assert_eq!(archive.len() as u64, report.members);
     let names: Vec<String> = {
-        let zip = zip::ZipArchive::new(File::open(&output).unwrap()).unwrap();
+        let zip = zip::ZipArchive::new(File::open(output).unwrap()).unwrap();
         zip.file_names().map(str::to_owned).collect()
     };
     let walk = walk(&archive);
     assert_eq!(walk.documents as u64, report.documents);
+    assert_eq!(walk.explicit_tiles as u64, report.explicit_tiles);
+    assert_eq!(walk.implicit.len() as u64, report.implicit_roots);
+    assert_eq!(report.explicit_tiles + report.implicit_tiles, report.tiles);
+
+    // Roles: implicit roots are shallow trees under a skeleton tile (or the whole tree).
+    let mut roots = BTreeMap::new();
+    for (k, ..) in &walk.implicit {
+        let d = by_key[k].clone();
+        let h = height[&d];
+        assert!((1..4).contains(&h), "implicit root {k} has height {h}");
+        assert!(d.is_empty() || height[&d[..d.len() - 1]] >= 4, "{k}");
+        roots.insert(k.clone(), d);
+    }
+    let inside = |d: &Vec<u8>| roots.values().any(|r| d.starts_with(r));
+    let explicit_leaves: BTreeSet<String> = specs
+        .iter()
+        .filter(|s| !inside(&s.digits))
+        .map(|s| format!("content/{}.glb", key(&s.digits, specs)))
+        .collect();
     assert_eq!(
         walk.explicit.iter().cloned().collect::<BTreeSet<_>>(),
         explicit_leaves
     );
     assert_eq!(walk.explicit.len(), explicit_leaves.len(), "listed once");
-    assert_eq!(
-        walk.implicit
-            .iter()
-            .map(|(k, ..)| k.clone())
-            .collect::<BTreeSet<_>>(),
-        implicit_roots.keys().cloned().collect::<BTreeSet<_>>()
-    );
+
     let mut implicit_payloads = 0;
     for (k, levels, tile) in &walk.implicit {
-        let root = &implicit_roots[k];
+        let root = &roots[k];
         assert_eq!(*levels, height[root] + 1);
         assert_eq!(tile["implicitTiling"]["availableLevels"], *levels);
         // Expected availability from the H1 addresses below this root.
@@ -460,6 +471,17 @@ fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
         assert_eq!(available, tiles, "tile availability of {k}");
         assert_eq!(content, contents, "content availability of {k}");
     }
+    // Documents are within the caps (objects at least 1 + 8 when only units remain).
+    for (name, objects, levels) in &walk.shapes {
+        assert!(
+            *objects as u64 <= limits.objects.max(9),
+            "{name}: {objects} objects"
+        );
+        assert!(
+            *levels as u32 <= limits.levels.max(2),
+            "{name}: {levels} levels"
+        );
+    }
     // Every member is accounted for, tileset.json is first and the index last.
     assert_eq!(names.first().unwrap(), "tileset.json");
     assert_eq!(names.last().unwrap(), crate::TZ_INDEX_NAME);
@@ -469,10 +491,8 @@ fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
     );
     // The leaves are byte-identical to their H8 payloads.
     for (index, spec) in specs.iter().enumerate() {
-        let d = &spec.digits;
         let bytes = std::fs::read(dir.join(format!("leaves/{index:012}.glb"))).unwrap();
-        let k = key(d, &specs);
-        let explicit = format!("content/{k}.glb");
+        let explicit = format!("content/{}.glb", key(&spec.digits, specs));
         if let Some(found) = archive.get(&explicit) {
             assert_eq!(found, &bytes);
         } else {
@@ -480,7 +500,7 @@ fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
         }
     }
     // The merged validator decodes every payload and accepts containment.
-    let checked = inspect(ValidationRequest::new(&output)).unwrap();
+    let checked = inspect(ValidationRequest::new(output)).unwrap();
     assert!(
         checked
             .checks
@@ -489,7 +509,52 @@ fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
         "{:?}",
         checked.not_inspected
     );
-    assert!(checked.content_references as u64 >= report.leaves);
+    assert!(checked.content_references >= report.leaves);
+    walk
+}
+
+/// The published forest of a mixed tree (spatial, packed, synthetic depth 24) is accepted by
+/// the merged validator with decoded containment, and its roles, members, slots and
+/// availability equal what the generator's H1 addresses predict, under the default, middle
+/// and tight partitions.
+#[test]
+fn mixed_tree_publishes_exact_roles_slots_availability_and_validates() {
+    let work = tempfile::tempdir().unwrap();
+    let specs = mixed_tree(11);
+    assert!(specs.iter().any(Spec::packed), "the fixture packs leaves");
+    let dir = leaf_dir(work.path(), &specs);
+    for (tag, limits) in [("default", LIMITS), ("mid", MID), ("tight", TIGHT)] {
+        let output = work.path().join(format!("{tag}.3tz"));
+        let report = run(&dir, &output, limits, |r| r).unwrap();
+        assert_eq!(report.max_depth, 24);
+        assert_eq!(report.synthetic_leaves, 70);
+        let walk = check_forest(&specs, &dir, &output, &report, limits);
+        match tag {
+            // Everything fits a few documents as explicit tiles.
+            "default" => assert_eq!(walk.implicit.len(), 0, "{report:?}"),
+            "mid" => {
+                // Both forms of shallow tree: implicit roots, and explicit leaves whose parent
+                // is not a skeleton tile.
+                assert!(!walk.implicit.is_empty(), "{report:?}");
+                let height = heights(&specs);
+                let explicit_shallow = walk.explicit.iter().any(|member| {
+                    let spec = specs
+                        .iter()
+                        .find(|s| format!("content/{}.glb", key(&s.digits, &specs)) == *member)
+                        .unwrap();
+                    height[&spec.digits[..spec.digits.len() - 1]] < 4
+                });
+                assert!(explicit_shallow, "{report:?}");
+            }
+            _ => {
+                assert!(
+                    report.documents > 3,
+                    "tight limits split documents: {report:?}"
+                );
+                assert!(!walk.implicit.is_empty(), "{report:?}");
+            }
+        }
+    }
 }
 
 /// Work files this module or the runtime leave next to an output (none after any run).
@@ -744,9 +809,10 @@ fn payload_tampered_at_the_same_length_is_refused_while_staging() {
     assert!(leftovers(&out).is_empty(), "{:?}", leftovers(&out));
 }
 
-/// Root forms: a single leaf, a short tree (one implicit root at tileset.json), and the
-/// rigid placement, which is exactly the shared placement boundary's matrix on the root and
-/// nowhere else. Local output has no transform.
+/// Root forms: a single leaf, a short tree (explicit tiles at tileset.json, or one implicit
+/// root when it exceeds the document caps), and the rigid placement, which is exactly the
+/// shared placement boundary's matrix on the root and nowhere else. Local output has no
+/// transform.
 #[test]
 fn root_forms_and_rigid_placement() {
     let placement = MeshPlacement::Wgs84 {
@@ -781,12 +847,20 @@ fn root_forms_and_rigid_placement() {
             triangles: 3,
         },
     ];
-    for (specs, implicit) in [(single, false), (short, true)] {
+    let small = Limits {
+        objects: 4,
+        ..LIMITS
+    };
+    for (specs, limits, implicit) in [
+        (&single, LIMITS, false),
+        (&short, LIMITS, false),
+        (&short, small, true),
+    ] {
         for placed in [false, true] {
             let work = tempfile::tempdir().unwrap();
-            let dir = leaf_dir(work.path(), &specs);
+            let dir = leaf_dir(work.path(), specs);
             let output = work.path().join("out.3tz");
-            let report = run(&dir, &output, LIMITS, |r| {
+            let report = run(&dir, &output, limits, |r| {
                 if placed {
                     r.with_placement(placement.clone())
                 } else {
@@ -798,6 +872,8 @@ fn root_forms_and_rigid_placement() {
             let top: Value = serde_json::from_slice(&archive["tileset.json"]).unwrap();
             assert_eq!(top["asset"]["version"], "1.1");
             assert_eq!(top["root"].get("implicitTiling").is_some(), implicit);
+            assert_eq!(report.implicit_roots, u64::from(implicit));
+            assert_eq!(archive.keys().any(|k| k.ends_with(".subtree")), implicit);
             assert!(
                 top["geometricError"].as_f64().unwrap()
                     >= top["root"]["geometricError"].as_f64().unwrap()
@@ -828,6 +904,156 @@ fn root_forms_and_rigid_placement() {
                 .any(|c| c == "decodedContentContainment"));
         }
     }
+}
+
+/// An unpacked spatial leaf at `digits`.
+fn leaf(digits: &[u8]) -> Spec {
+    Spec {
+        digits: digits.to_vec(),
+        cell_depth: digits.len() as u8,
+        last_octant: *digits.last().unwrap_or(&0),
+        triangles: 2,
+    }
+}
+
+/// The first `count` leaves of a complete octree of `depth` levels below `prefix`, in
+/// preorder.
+fn complete(prefix: &[u8], depth: u32, count: usize) -> Vec<Spec> {
+    (0..8usize.pow(depth))
+        .take(count)
+        .map(|index| {
+            let mut d = prefix.to_vec();
+            d.extend(
+                (0..depth)
+                    .rev()
+                    .map(|level| ((index >> (3 * level)) & 7) as u8),
+            );
+            leaf(&d)
+        })
+        .collect()
+}
+
+fn publish(
+    specs: &[Spec],
+    limits: Limits,
+) -> (tempfile::TempDir, PathBuf, MeshTilesetReport, Walk) {
+    let work = tempfile::tempdir().unwrap();
+    let dir = leaf_dir(work.path(), specs);
+    let output = work.path().join("out.3tz");
+    let report = run(&dir, &output, limits, |r| r).unwrap();
+    let walk = check_forest(specs, &dir, &output, &report, limits);
+    (work, output, report, walk)
+}
+
+/// A single-level shallow tree (height 1: a tile and its leaves) is written as explicit tiles
+/// with no subtree, both as the whole tree and under a skeleton tile; with a cap below its
+/// size it is one implicit root of two levels.
+#[test]
+fn single_level_shallow_trees_are_explicit_until_over_budget() {
+    let whole = vec![leaf(&[0]), leaf(&[3]), leaf(&[5])];
+    let (_w, _o, report, walk) = publish(&whole, LIMITS);
+    assert_eq!((report.implicit_roots, report.explicit_tiles), (0, 4));
+    assert_eq!((walk.documents, walk.shapes[0].2), (1, 2));
+
+    // Under a skeleton tile: [0] has height 4 through a chain, [1] is a height-1 tree.
+    let mut under = vec![leaf(&[0, 1, 2, 3])];
+    under.push(leaf(&[0, 1, 2, 4, 0]));
+    under.extend([leaf(&[1, 0]), leaf(&[1, 6])]);
+    let (_w, _o, report, _) = publish(&under, LIMITS);
+    assert_eq!(report.implicit_roots, 0, "{report:?}");
+    let tight = Limits {
+        objects: 3,
+        ..LIMITS
+    };
+    let (_w, _o, report, walk) = publish(&under, tight);
+    assert!(report.implicit_roots >= 1, "{report:?}");
+    assert!(walk.implicit.iter().any(|(_, levels, _)| *levels == 2));
+}
+
+/// The deepest shallow tree (height 3, four levels) is written explicitly while it fits the
+/// object cap and as one four-level implicit root from the first tile beyond it.
+#[test]
+fn deepest_shallow_tree_is_explicit_up_to_the_cap_and_implicit_beyond() {
+    let cap = LIMITS.objects as usize;
+    let mut fits = 0;
+    while nodes(&complete(&[], 3, fits + 1)).len() <= cap {
+        fits += 1;
+    }
+    let at = complete(&[], 3, fits);
+    let beyond = complete(&[], 3, fits + 1);
+    assert_eq!(nodes(&at).len(), cap);
+    assert_eq!(nodes(&beyond).len(), cap + 1);
+
+    let (_w, _o, report, walk) = publish(&at, LIMITS);
+    assert_eq!(report.implicit_roots, 0);
+    assert_eq!(report.explicit_tiles as usize, cap);
+    assert_eq!(walk.shapes, vec![("tileset.json".to_owned(), cap, 4)]);
+
+    let (_w, output, report, walk) = publish(&beyond, LIMITS);
+    assert_eq!(report.implicit_roots, 1);
+    assert_eq!(walk.implicit[0].1, 4);
+    let top: Value = serde_json::from_slice(&members(&output)["tileset.json"]).unwrap();
+    assert_eq!(top["root"]["implicitTiling"]["subtreeLevels"], 4);
+
+    // The same trees under a skeleton tile next to a chain of height 4.
+    let mut under = complete(&[0], 3, fits);
+    under.push(leaf(&[7, 0, 0, 0, 0]));
+    let (_w, _o, report, _) = publish(&under, LIMITS);
+    // The tree and the chain together pass the cap: the tree is demoted, the chain stays.
+    assert_eq!(report.implicit_roots, 1, "{report:?}");
+}
+
+/// A skeleton tile's children mix every role: an explicit leaf, an explicit shallow tree, an
+/// implicit root (the largest shallow tree, demoted first) and a link to an external
+/// document; the smaller trees stay explicit.
+#[test]
+fn mixed_explicit_and_implicit_siblings() {
+    let mut specs = vec![leaf(&[0])];
+    specs.extend([leaf(&[1, 0]), leaf(&[1, 2])]); // height 1, 3 tiles
+    specs.extend(complete(&[2], 2, 24)); // height 2, 1 + 3 + 24 = 28 tiles
+    specs.extend(complete(&[3], 1, 5)); // height 1, 6 tiles
+                                        // A chain of height 5 under [4] with its own shallow sibling trees: a skeleton child.
+    specs.extend(complete(&[4, 0, 0, 0], 2, 16));
+    specs.push(leaf(&[4, 1, 0, 0, 0, 0]));
+    // 44 tile objects at first: [2] is demoted for objects; the five levels below the root
+    // through [4] then move [4] into its own document (its shallow trees demoted for levels).
+    let limits = Limits {
+        objects: 30,
+        records: 4096,
+        levels: 3,
+    };
+    let (_w, output, report, walk) = publish(&specs, limits);
+    let archive = members(&output);
+    let top: Value = serde_json::from_slice(&archive["tileset.json"]).unwrap();
+    let children = top["root"]["children"].as_array().unwrap();
+    let role = |c: &Value| {
+        if c.get("implicitTiling").is_some() {
+            "implicit"
+        } else if c["content"]["uri"]
+            .as_str()
+            .is_some_and(|u| u.ends_with(".json"))
+        {
+            "link"
+        } else if c.get("children").is_some() {
+            "explicit tree"
+        } else {
+            "leaf"
+        }
+    };
+    let roles: Vec<&str> = children.iter().map(role).collect();
+    assert_eq!(
+        roles,
+        ["leaf", "explicit tree", "implicit", "explicit tree", "link"]
+    );
+    // The demoted tree is the largest one, [2].
+    assert_eq!(
+        walk.implicit
+            .iter()
+            .filter(|(k, ..)| k == &key(&[2], &specs))
+            .count(),
+        1
+    );
+    assert!(report.documents >= 2, "{report:?}");
 }
 
 /// Planning only (nothing written): a 2^18-leaf tree with a depth-21 chain holds no more

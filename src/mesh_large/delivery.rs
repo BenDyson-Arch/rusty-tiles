@@ -324,9 +324,10 @@ impl WriteSink<'_> {
                 Vec::new(),
             ));
         }
-        if !node.is_skeleton() {
+        if node.is_implicit_root() {
             return self.implicit(node);
         }
+        // Skeleton tiles and the tiles of a shallow tree written explicitly.
         let contents = self.stage_proxy(
             &node,
             &format!("content/f{}-d{}.glb", node.first, node.depth),

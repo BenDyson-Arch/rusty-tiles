@@ -57,12 +57,14 @@ combined Morton key. A tile's key is H1's `(first rank, depth)`.
 
 ## Roles, partition and the serializer API
 
-Roles follow P-IMPL §4 with `S = 4`. A closed tile of height 4 or more is an
-explicit skeleton tile; its leaf children are explicit leaves and its other
-children (height 1 to 3) are implicit roots, each one subtree with
+Roles follow P-IMPL §4 with `S = 4`, as amended by the
+[implicit forest consolidation](implicit-forest-consolidation.md). A closed tile of height 4 or
+more is an explicit skeleton tile; its leaf children are explicit leaves. Its other
+children (height 1 to 3) are *shallow trees*: written as explicit tiles while their
+document has room, otherwise demoted to implicit roots, each one subtree with
 `subtreeLevels == availableLevels == height + 1` and no child subtrees. A whole
-tree of height below 4 is one implicit root at `tileset.json`; a one-leaf tree is
-an explicit root leaf.
+tree of height below 4 is likewise explicit tiles at `tileset.json`, or one implicit root
+when it exceeds the caps; a one-leaf tree is an explicit root leaf.
 
 H16 is the first caller of the streamed API (#198), not of the whole-tree
 `write_forest_records`:
@@ -77,13 +79,20 @@ H16 is the first caller of the streamed API (#198), not of the whole-tree
 - external documents are written children first by `ForestWriter::external` as
   tiles close; `tileset.json` last by `ForestWriter::root`.
 
-Partition (`plan::LIMITS`): a closed skeleton tile whose inline fragment exceeds
-32 tile objects or 1,024 tile records, or reaches 8 tile levels, is written at
-once as the external document `tileset-f<first>-d<depth>.json` and replaced by
-its link. Every document therefore holds at most `1 + 8·32 = 257` tile objects
-(about 30 JSON value nodes each) and 8 tile levels, well within the writer's
-16,384 nodes, 2 MiB and depth 32, which it still enforces. These constants are a
-chosen layout, not an optimum; perf acceptance may retune them.
+Partition (`plan::LIMITS`, amended by the consolidation): caps of 480 tile objects,
+4,096 tile records and 12 tile levels per fragment and so per document. When a skeleton
+tile closes over a cap (`Builder::fit`): while objects are over, the largest explicit
+shallow tree anywhere in its fragment is demoted to an implicit root (most tiles, then
+greatest height, then lowest rank); while levels are over, the child reaching deepest is
+demoted (shallow tree) or moved (skeleton tile); while objects or records are over, the
+inline skeleton child contributing most (lowest slot on ties) is written as the external
+document `tileset-f<first>-d<depth>.json` and replaced by its link. If records alone are
+still over, the tile itself becomes a document, as before. Every document therefore holds
+at most 480 tile objects (at most 26 JSON value nodes each) and 12 tile levels (JSON depth
+26), within the writer's 16,384 nodes, 2 MiB and depth 32, which it still enforces. (Until
+the consolidation, a fragment over 32 objects, 1,024 records or 8 levels became a document at
+once, giving documents of at most `1 + 8·32` objects and the 13–30 KB nested documents of
+the 2048 output.)
 
 External documents sit at the archive root. Content, template and link URIs
 resolve relative to the document that holds them and the writer emits
@@ -173,9 +182,10 @@ Two passes stream the rows through the same builder. The first counts: exact
 members per document, document count, the root error the `tileset.json`
 document needs. Nothing is staged. The second stages and writes one document at
 a time and must reproduce the first pass's shape and member count exactly.
-Resident hierarchy state is the open stack plus inline fragments below the
-partition limits: at most 32 frames of 8 children each below 1,024 records,
-reported as `peakHeldRecords`: 4,680 to 4,687 from 4,096 to 2,097,152 leaves.
+Resident hierarchy state is the open stack plus inline fragments within the
+partition limits: at most 32 frames of 8 children each within the records cap,
+reported as `peakHeldRecords`: 4,680 and 4,687 for 4,096 and 262,144 leaves, the same
+before and after the consolidation (the 2,097,152-leaf figure, 4,687, predates it).
 Measured H16 peak RSS is 24.3, 27.5, 37.2 and 48.4 MiB for synthetic trees of
 4,096, 32,768, 262,144 and 2,097,152 leaves (the last 2.4 M tiles, 522
 documents, 2.1 M members), and 20.8 MiB for the real 10 M-triangle mesh. What
@@ -246,7 +256,12 @@ Tests (`src/mesh_large/delivery/tests.rs` and the M1/H8 additions):
   claiming more than its slot;
 - the streamed archive equals `archive3tz::serialize` byte for byte at 70,000
   members (ZIP64 counts) with the index sorted through spilled runs;
-- root forms (one leaf, one implicit root) and the exact rigid placement;
+- root forms (one leaf, explicit short tree, one implicit root over the caps) and the
+  exact rigid placement;
+- consolidation: single-level shallow trees, the deepest shallow tree at and one tile
+  beyond the object cap, and mixed explicit-leaf, explicit-tree, implicit-root and link
+  siblings; every forest checked against the generator's roles, availability and the
+  per-document caps;
 - planner memory bounded by the partition at 2^18 leaves;
 - 8,192/8,193 table rows at the H8 writer; every real leaf's tables within it;
 - outward z-up GLB bounds and the rotated-node refusal;
