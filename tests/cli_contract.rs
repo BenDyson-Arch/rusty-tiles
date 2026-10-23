@@ -69,6 +69,12 @@ fn every_converter_prints_wrote_reports_and_next_lines() {
             }
             "vector" => assert!(first.ends_with(" (4 features, 3 tiles)"), "{first}"),
             "terrain" => assert!(first.ends_with(" (1 tile)"), "{first}"),
+            "mesh" => assert!(
+                first.ends_with(
+                    " (1 tile, 1152 triangles, 1 leaf, lossless profile, workers: capture 1, leaves 1)"
+                ),
+                "{first}"
+            ),
             "glb-to-3tz" | "createTilesetJson" => {
                 assert!(first.ends_with(" (1152 triangles)"), "{first}")
             }
@@ -404,4 +410,76 @@ fn vector_and_point_cloud_reject_retired_explicit_flag() {
             "{command} help still lists --explicit"
         );
     }
+}
+
+/// The deprecated legacy mesh commands say so in `--help` and warn on stderr on
+/// every run, as a human line or an NDJSON warning event. Their removal before
+/// 0.4.0 replaces this with a missing-command check.
+#[test]
+fn legacy_mesh_commands_are_deprecated_in_help_and_warn_on_stderr() {
+    let help = Command::new(bin()).arg("--help").output().unwrap();
+    let help = String::from_utf8_lossy(&help.stdout);
+    let work = tempfile::tempdir().unwrap();
+    let input = support::repo_root().join("tests/fixtures/example.glb");
+    for (name, extra) in [
+        ("mesh-to-3tz", &[][..]),
+        ("mesh-local-to-3tz", &["--leaf-triangles", "1000"][..]),
+    ] {
+        let line = help
+            .lines()
+            .find(|line| line.trim_start().starts_with(name))
+            .unwrap_or_else(|| panic!("{name} is not in --help:\n{help}"));
+        assert!(line.contains("Deprecated"), "{line}");
+        let human = Command::new(bin())
+            .arg(name)
+            .arg("-i")
+            .arg(&input)
+            .arg("-o")
+            .arg(work.path().join(format!("{name}.3tz")))
+            .args(extra)
+            .env("PATH", "")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&human.stderr);
+        assert!(human.status.success(), "{stderr}");
+        assert!(
+            stderr.starts_with(&format!(
+                "warning: {name} is deprecated and will be removed before the 0.4.0 release; \
+                 use `rusty-tiles mesh` instead"
+            )),
+            "{stderr}"
+        );
+        let events = Command::new(bin())
+            .args(["--progress", "json", name, "-i"])
+            .arg(&input)
+            .arg("-o")
+            .arg(work.path().join(format!("{name}-events.3tz")))
+            .args(extra)
+            .env("PATH", "")
+            .output()
+            .unwrap();
+        assert!(events.status.success());
+        let first: Value = serde_json::from_str(
+            String::from_utf8_lossy(&events.stderr)
+                .lines()
+                .next()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(first["event"], "warning");
+        assert_eq!(first["code"], "deprecated");
+        assert_eq!(first["command"], name);
+        assert_eq!(first["replacement"], "mesh");
+    }
+    let tiler = Command::new(bin())
+        .arg("mesh")
+        .arg("-i")
+        .arg(&input)
+        .arg("-o")
+        .arg(work.path().join("mesh.3tz"))
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(tiler.status.success());
+    assert!(!String::from_utf8_lossy(&tiler.stderr).contains("deprecated"));
 }

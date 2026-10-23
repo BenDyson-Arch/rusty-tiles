@@ -2836,8 +2836,8 @@ fn holds_implicit_root(root: &Value) -> bool {
 /// directory or other file gets an actionable message instead of an OS error.
 fn open_archive(path: &Path) -> Result<File, Error> {
     const HINT: &str = "validate currently checks .3tz archives only; raster and terrain \
-        output directories are not validated yet. Pass a .3tz written by vector, \
-        point-cloud, mesh-to-3tz, glb-to-3tz or convert";
+        output directories are not validated yet. Pass a .3tz written by mesh, \
+        vector, point-cloud, glb-to-3tz or convert";
     if path.is_dir() {
         return Err(invalid(format!(
             "{} is a directory: {HINT}",

@@ -37,7 +37,7 @@ fn selected_native_commands_ignore_missing_geospatial_database() {
             "--command",
             "point-cloud",
             "--command",
-            "mesh-to-3tz",
+            "mesh",
         ],
         Some(root.path()),
     );
@@ -76,7 +76,7 @@ fn all_command_inventory_matches_enabled_capabilities() {
         assert!(["ready", "unavailable", "unsupported"].contains(&status));
         assert_eq!(readiness["ready"], status == "ready");
     }
-    assert_eq!(report["commands"]["mesh-to-3tz"]["ready"], true);
+    assert_eq!(report["commands"]["mesh"]["ready"], true);
     assert_eq!(report["commands"]["point-cloud"]["local"]["ready"], true);
     assert_eq!(report["proj"]["networkEnabled"], false);
     #[cfg(feature = "native-geospatial")]
@@ -238,9 +238,9 @@ fn command_filter_limits_json_and_human_output() {
     let listed: Vec<_> = report["commands"].as_object().unwrap().keys().collect();
     assert_eq!(listed, ["vector"]);
     assert_eq!(report["selectedCommands"], serde_json::json!(["vector"]));
-    let (_, report) = doctor(&["--command", "preview", "--command", "meshTo3tz"], None);
+    let (_, report) = doctor(&["--command", "preview", "--command", "glbTo3tz"], None);
     let listed: Vec<_> = report["commands"].as_object().unwrap().keys().collect();
-    assert_eq!(listed, ["mesh-to-3tz", "preview"]);
+    assert_eq!(listed, ["glb-to-3tz", "preview"]);
     let human = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["doctor", "--command", "point-cloud"])
         .env("PATH", "")
@@ -266,7 +266,7 @@ fn python_modules_and_path_do_not_affect_readiness() {
     )
     .unwrap();
     let pythonpath = [("PYTHONPATH", root.path().as_os_str())];
-    for command in ["mesh-to-3tz", "convert"] {
+    for command in ["mesh", "convert"] {
         let (output, report) = doctor_with(&["--command", command], None, &pythonpath);
         assert!(output.status.success(), "{report}");
         assert_eq!(report["ready"], true);
@@ -286,7 +286,7 @@ fn aliases_and_informational_cesium_check() {
     let (output, report) = doctor(
         &[
             "--command",
-            "meshTo3tz",
+            "glbTo3tz",
             "--command",
             "create-tileset-json",
             "--command",
@@ -300,7 +300,7 @@ fn aliases_and_informational_cesium_check() {
     assert_eq!(report["ready"], true);
     assert_eq!(
         report["selectedCommands"],
-        serde_json::json!(["mesh-to-3tz", "createTilesetJson", "preview"])
+        serde_json::json!(["glb-to-3tz", "createTilesetJson", "preview"])
     );
     assert_eq!(report["commands"]["preview"]["cesium"]["found"], false);
     std::fs::write(root.path().join("Cesium.js"), "// invented runtime").unwrap();

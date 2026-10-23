@@ -1,5 +1,6 @@
 //! Independent byte-level checks of the implicit subtree writer. The decoder
 //! below uses no writer internals or Morton library.
+mod support;
 use rusty_tiles::implicit::{Coordinates, SubdivisionScheme, Subtree};
 use serde_json::Value;
 
@@ -392,7 +393,7 @@ fn linked_subtrees_package_with_spatially_placed_multiple_contents() {
             };
             // glTF is Y-up; the implicit box is Z-up. The small triangle is
             // inside the computed cell at every level, including after a link.
-            let glb = rusty_tiles::glb_write::write_glb(&[rusty_tiles::glb_write::TilePrimitive {
+            let glb = support::write_glb(&support::Primitive {
                 positions: vec![
                     [x - 0.2, z, -y - 0.2],
                     [x + 0.2, z, -y - 0.2],
@@ -401,8 +402,7 @@ fn linked_subtrees_package_with_spatially_placed_multiple_contents() {
                 normals: vec![[0., 1., 0.]; 3],
                 indices: vec![0, 1, 2],
                 ..Default::default()
-            }])
-            .unwrap();
+            });
             for (slot, exists) in slots.into_iter().take(content_count).enumerate() {
                 if exists {
                     std::fs::write(

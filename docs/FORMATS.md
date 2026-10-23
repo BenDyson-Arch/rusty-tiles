@@ -10,8 +10,12 @@ The commands below use placeholder file names. Replace them with your own data.
 
 ## Meshes
 
-For the bounded core PBR source profile and full-detail leaves, use
-`mesh-local-to-3tz --leaf-triangles N`. It interprets source geometry as local
+Convert meshes with `rusty-tiles mesh`; the [mesh guide](MESH.md) covers its
+profiles, placement, declared source CRS and limits. The rest of this section
+documents the deprecated `mesh-local-to-3tz` and `mesh-to-3tz` routes for
+existing scripts only. Both are removed before the 0.4.0 release.
+
+The deprecated `mesh-local-to-3tz --leaf-triangles N` interprets source geometry as local
 metres/Y-up and preserves selected PNG/JPEG bytes, all five core PBR texture
 bindings and admitted vertex companions. Its F1c1 rigid placement is a development
 candidate pending independent review and final consumer/platform acceptance:
@@ -24,9 +28,8 @@ into f32 positions. See the [exact frame/limits](architecture/f1c1-contract.md)
 and [command/report reference](CLI.md#mesh-local-to-3tz). No arbitrary source CRS,
 geoid correction, coarse approximation or picking is admitted by that placement.
 
-The remaining mesh sections describe the broader legacy `mesh-to-3tz` route.
-It remains advertised pending separate support/migration decisions; the bounded
-placement candidate does not establish its CRS/approximation correctness.
+The remaining mesh sections describe the broader deprecated `mesh-to-3tz` route.
+The bounded placement candidate does not establish its CRS/approximation correctness.
 
 ```sh
 rusty-tiles mesh-to-3tz -i model.glb -o output/model.3tz --texture-format jpeg
