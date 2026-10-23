@@ -27,6 +27,10 @@ pub(crate) enum Phase {
     LodFinish,
     /// H27: proxy chart building, texture bake, page encoding and member commits.
     ProxyBake,
+    /// HLOD: the spillable source-incidence pass.
+    HlodIncidence,
+    /// HLOD: the bounded postorder walk (simplification, encoding, checks, writes).
+    HlodGeometry,
     /// H16: hierarchy and `.3tz` archive writing.
     Archive,
 }
@@ -40,6 +44,8 @@ impl Phase {
             Phase::SeamResolution => "seam_resolution",
             Phase::LodFinish => "lod_finish",
             Phase::ProxyBake => "proxy_bake",
+            Phase::HlodIncidence => "hlod_incidence",
+            Phase::HlodGeometry => "hlod_geometry",
             Phase::Archive => "archive",
         }
     }
@@ -55,6 +61,8 @@ pub struct PhaseSeconds {
     pub seam_resolution: f64,
     pub lod_finish: f64,
     pub proxy_bake: f64,
+    pub hlod_incidence: f64,
+    pub hlod_geometry: f64,
     pub archive: f64,
 }
 impl PhaseSeconds {
@@ -67,6 +75,8 @@ impl PhaseSeconds {
             Phase::SeamResolution => &mut self.seam_resolution,
             Phase::LodFinish => &mut self.lod_finish,
             Phase::ProxyBake => &mut self.proxy_bake,
+            Phase::HlodIncidence => &mut self.hlod_incidence,
+            Phase::HlodGeometry => &mut self.hlod_geometry,
             Phase::Archive => &mut self.archive,
         }
     }

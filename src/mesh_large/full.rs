@@ -326,15 +326,22 @@ fn scratch_need(
     let leaf_plans = add(add(kept, corner_depth_bytes)?, leaf_plan_bytes)?;
     // H17's pre-pass (lod/incidence.rs): an incidence sort streamed into a corner-info sort,
     // streamed with the retained sequences into the slim LOD source.
-    let lod_prepass = add(
-        leaf_plans,
-        max(&[
-            Some(incidences.finish_peak),
-            incidences.flow(corner_infos.push_peak),
-            Some(corner_infos.finish_peak),
-            corner_infos.flow(lod_sources),
-        ])?,
-    )?;
+    // HLOD instead runs its own interface incidence pass in this stage (hlod/interfaces.rs).
+    let lod_prepass = match config.lod {
+        super::hlod::TilerLod::H17 => add(
+            leaf_plans,
+            max(&[
+                Some(incidences.finish_peak),
+                incidences.flow(corner_infos.push_peak),
+                Some(corner_infos.finish_peak),
+                corner_infos.flow(lod_sources),
+            ])?,
+        )?,
+        super::hlod::TilerLod::Hlod => add(
+            leaf_plans,
+            super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+        )?,
+    };
     let stages = ScratchStages {
         capture,
         projection: projection_stage,
@@ -607,7 +614,7 @@ pub(crate) fn capture_admitted(
     let jobs = config::plan_jobs(
         config.jobs,
         std::thread::available_parallelism().map_or(1, |n| n.get()),
-        config::available_memory(),
+        config.available_memory(),
         if volume.memory_backed {
             need.need_bytes
         } else {

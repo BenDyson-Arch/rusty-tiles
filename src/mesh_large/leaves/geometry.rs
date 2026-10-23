@@ -294,6 +294,164 @@ impl LatticePlan {
     }
 }
 
+/// HLOD coarse-tile positions: one TRS for the whole tile, decoded per indexed vertex.
+#[derive(Clone, Debug)]
+pub(crate) struct CoarsePositions {
+    pub storage: PositionStorage,
+    pub decoded: Vec<[f32; 3]>,
+    pub bounds: Bounds,
+    /// Largest distance between a vertex's decode and its leaf-canonical decode (zero for
+    /// every locked vertex, and for the whole tile under float storage).
+    pub displacement: f64,
+}
+
+impl LatticePlan {
+    fn float_profile(&self) -> bool {
+        matches!(self.profile, Profile::Quality | Profile::Lossless)
+    }
+
+    /// The leaf-compatible canonical decode of a source position whose welded vertex has
+    /// exact minimum incident leaf depth `ell`: the f32 every leaf holding it publishes
+    /// (`round(p / step[ell]) * step[ell]`, or the source value in float profiles).
+    pub(crate) fn canonical(&self, p: [f32; 3], ell: u8) -> Result<[f32; 3], JobError> {
+        if self.float_profile() {
+            return Ok(p.map(canonical_zero));
+        }
+        let snap = *self
+            .steps
+            .get(usize::from(ell))
+            .ok_or_else(|| request("canonical position depth outside the lattice"))?;
+        let mut out = [0f32; 3];
+        for a in 0..3 {
+            let q = snapped_code(p[a], snap, snap)?;
+            out[a] = canonical_zero((q as f64 * f64::from(snap)) as f32);
+        }
+        Ok(out)
+    }
+
+    /// Encode one coarse tile's indexed vertices. Locked (outer interface) vertices decode
+    /// to exactly their [`canonical`](Self::canonical) value at every depth; the others may
+    /// snap to the tile's own lattice `step[min(depth, ell)]`. One quantized node TRS when
+    /// the tile's span fits the u16 alignment window at the finest step any locked vertex
+    /// needs; otherwise float storage of every canonical value.
+    pub(crate) fn encode_coarse(
+        &self,
+        points: &[[f32; 3]],
+        ells: &[u8],
+        locked: &[bool],
+        depth: u32,
+    ) -> Result<CoarsePositions, JobError> {
+        let d = usize::try_from(depth).map_err(|_| request("position depth overflow"))?;
+        if points.is_empty()
+            || points.len() != ells.len()
+            || points.len() != locked.len()
+            || d >= self.steps.len()
+            || ells.iter().any(|e| usize::from(*e) >= self.steps.len())
+        {
+            return Err(request("coarse vertex/depth correspondence invalid"));
+        }
+        let canonical: Vec<[f32; 3]> = points
+            .iter()
+            .zip(ells)
+            .map(|(p, ell)| self.canonical(*p, *ell))
+            .collect::<Result<_, _>>()?;
+        let float = |canonical: Vec<[f32; 3]>| {
+            let mut bounds = Bounds::EMPTY;
+            for p in &canonical {
+                bounds.include(*p);
+            }
+            CoarsePositions {
+                storage: PositionStorage::Float {
+                    positions: canonical.clone(),
+                },
+                decoded: canonical,
+                bounds,
+                displacement: 0.,
+            }
+        };
+        if self.float_profile() {
+            return Ok(float(canonical));
+        }
+        let mut scale = self.steps[d];
+        for (ell, _) in ells.iter().zip(locked).filter(|(_, l)| **l) {
+            scale = scale.min(self.steps[usize::from(*ell)]);
+        }
+        let mut global = Vec::with_capacity(points.len());
+        for ((p, ell), locked) in points.iter().zip(ells).zip(locked) {
+            let ell = usize::from(*ell);
+            let snap = if *locked {
+                self.steps[ell]
+            } else {
+                self.steps[d.min(ell)]
+            };
+            let mut q = [0_i64; 3];
+            for a in 0..3 {
+                q[a] = snapped_code(p[a], snap, scale)?;
+            }
+            global.push(q);
+        }
+        let qmin: [i64; 3] = std::array::from_fn(|a| global.iter().map(|q| q[a]).min().unwrap());
+        let qmax: [i64; 3] = std::array::from_fn(|a| global.iter().map(|q| q[a]).max().unwrap());
+        if (0..3).any(|a| qmax[a] - qmin[a] > ALIGNMENT) {
+            return Ok(float(canonical));
+        }
+        let offset: [i64; 3] = qmin.map(|q| q.div_euclid(ALIGNMENT) * ALIGNMENT);
+        let translation: [f32; 3] = std::array::from_fn(|a| offset[a] as f32 * scale);
+        if offset
+            .iter()
+            .any(|t| t.abs() > SNAPPED_LIMIT || *t as f32 as i64 != *t)
+            || translation.iter().any(|t| !t.is_finite())
+        {
+            return Ok(float(canonical));
+        }
+        let mut codes = Vec::with_capacity(points.len());
+        let mut decoded = Vec::with_capacity(points.len());
+        let mut bounds = Bounds::EMPTY;
+        let mut displacement = 0f64;
+        for ((q, locked), target) in global.iter().zip(locked).zip(&canonical) {
+            let mut u = [0_u16; 3];
+            let mut p = [0_f32; 3];
+            for a in 0..3 {
+                u[a] = u16::try_from(q[a] - offset[a])
+                    .map_err(|_| state("coarse aligned range exceeds u16"))?;
+                p[a] = canonical_zero(f32::from(u[a]) * scale + translation[a]);
+                let exact = canonical_zero((q[a] as f64 * f64::from(scale)) as f32);
+                let fused = canonical_zero(f32::from(u[a]).mul_add(scale, translation[a]));
+                if !p[a].is_finite()
+                    || p[a].to_bits() != exact.to_bits()
+                    || fused.to_bits() != exact.to_bits()
+                {
+                    return Err(state(
+                        "coarse client-order rounded decode differs from its lattice point",
+                    ));
+                }
+            }
+            if *locked && p.map(f32::to_bits) != target.map(f32::to_bits) {
+                return Err(state("a locked coarse vertex left its canonical decode"));
+            }
+            let squared: f64 = (0..3)
+                .map(|a| (f64::from(p[a]) - f64::from(target[a])).powi(2))
+                .sum();
+            if squared != 0. {
+                displacement = displacement.max(up(squared.sqrt()));
+            }
+            bounds.include(p);
+            codes.push(u);
+            decoded.push(p);
+        }
+        Ok(CoarsePositions {
+            storage: PositionStorage::Quantized {
+                codes,
+                translation,
+                scale,
+            },
+            decoded,
+            bounds,
+            displacement,
+        })
+    }
+}
+
 /// No arbitrary-width arithmetic is needed in this bounded domain: converting a
 /// f32 to f64 is exact; division by normal 2^k changes only its binary exponent.
 /// The quotient is exactly representable in f64 (<=24 significant bits, exponent
