@@ -87,6 +87,57 @@ fn terrain_typed_capability_and_cli_parity() {
         assert_eq!(report, other);
     }
 }
+// Driver registration is process-wide: exercise absence in a fresh process,
+// without changing the registry beneath concurrent native tests.
+#[cfg(feature = "native-geospatial")]
+#[test]
+fn missing_gtiff_is_unsupported_before_open_and_preserves_output() {
+    const CHILD: &str = "RT_TEST_TERRAIN_MISSING_GTIFF";
+    if std::env::var_os(CHILD).is_none() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "missing_gtiff_is_unsupported_before_open_and_preserves_output",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("GDAL_SKIP", "GTiff")
+            .output()
+            .unwrap();
+        assert!(
+            child.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let input = source(root.path());
+    let output = root.path().join("output");
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join("old"), b"previous output").unwrap();
+    let original = std::fs::read(&input).unwrap();
+    for bytes in [&original[..], &b"not a TIFF"[..]] {
+        std::fs::write(&input, bytes).unwrap();
+        let failure = terrain_to_directory(
+            request(&input, &output).with_policy(OutputPolicy::Replace),
+            &RunControl::default(),
+        )
+        .unwrap_err();
+        assert_eq!(failure.error.kind(), rusty_tiles::JobErrorKind::Unsupported);
+        assert_eq!(
+            failure.error.message(),
+            "linked GDAL lacks the GTiff driver"
+        );
+        assert_eq!(std::fs::read(&input).unwrap(), bytes);
+        assert_eq!(
+            std::fs::read(output.join("old")).unwrap(),
+            b"previous output"
+        );
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+}
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn create_new_conflict_and_replace_preserve_until_success() {
@@ -100,11 +151,12 @@ fn create_new_conflict_and_replace_preserve_until_success() {
     assert_eq!(std::fs::read(output.join("sentinel")).unwrap(), b"old");
     let invalid = root.path().join("bad.tif");
     std::fs::write(&invalid, b"not TIFF").unwrap();
-    assert!(terrain_to_directory(
+    let failure = terrain_to_directory(
         request(&invalid, &output).with_policy(OutputPolicy::Replace),
-        &RunControl::default()
+        &RunControl::default(),
     )
-    .is_err());
+    .unwrap_err();
+    assert_eq!(failure.error.kind(), rusty_tiles::JobErrorKind::InvalidInput);
     assert_eq!(std::fs::read(output.join("sentinel")).unwrap(), b"old");
     let result = terrain_to_directory(
         request(&input, &output).with_policy(OutputPolicy::Replace),

@@ -431,10 +431,9 @@ fn vector_command(root: &std::path::Path) -> Vec<std::ffi::OsString> {
 }
 
 /// Each not-ready command reports the category and exit status that the
-/// command's own run returns under the same missing dependency. Terrain and D1
-/// are the recorded exception: their producers report a missing GTiff driver
-/// as invalid_input (see the T1 contract), while doctor refuses it as
-/// unsupported. This test pins both sides so either change is visible.
+/// command's own run returns under the same missing dependency. D1 remains
+/// the recorded exception: its producer reports missing GTiff as invalid_input,
+/// while doctor refuses it as unsupported. Terrain must agree with doctor.
 #[cfg(feature = "native-geospatial")]
 #[test]
 fn native_refusals_report_the_category_and_exit_of_execution() {
@@ -483,9 +482,7 @@ fn native_refusals_report_the_category_and_exit_of_execution() {
                 .1;
             let args: Vec<_> = args.iter().map(|a| a.as_os_str()).collect();
             let (code, result) = execute(&args, env);
-            if env == [("GDAL_SKIP", "GTiff")]
-                && ["raster-tile-to-directory", "terrain"].contains(name)
-            {
+            if env == [("GDAL_SKIP", "GTiff")] && *name == "raster-tile-to-directory" {
                 // Recorded producer divergence: a failed GTiff open is invalid_input.
                 assert_eq!(
                     (output.status.code(), &report["error"]["code"]),
