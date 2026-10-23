@@ -497,7 +497,8 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
+        .with_sparse_proxies(leaves.sparse_proxies);
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -615,7 +616,14 @@ fn prepare(
     conversion_member: bool,
 ) -> Result<PreparedDelivery, JobError> {
     let placement = ResolvedPlacement::resolve(&request.placement)?;
-    prepare_resolved(request, placement, limits, check, conversion_member)
+    prepare_resolved(
+        request,
+        placement,
+        limits,
+        check,
+        conversion_member,
+        source::MAX_GLB_JSON,
+    )
 }
 
 fn prepare_resolved(
@@ -624,9 +632,10 @@ fn prepare_resolved(
     limits: Limits,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     conversion_member: bool,
+    max_glb_json: u64,
 ) -> Result<PreparedDelivery, JobError> {
     let root = root_placement(&placement)?;
-    let leaves = LeafDirectory::open(&request.leaves)?;
+    let leaves = LeafDirectory::open(&request.leaves)?.with_max_glb_json(max_glb_json);
     // Early: every leaf is a member, as are tileset.json and the index.
     ceiling(
         leaves
@@ -651,13 +660,16 @@ fn prepare_resolved(
     })
 }
 
+/// `max_glb_json` caps each member's GLB JSON chunk read for bounds: a budgeted run passes
+/// [`source::TILER_MAX_GLB_JSON`], which its [`resident_bound`] charges.
 pub(crate) fn prepare_tiler(
     request: &MeshTilesetRequest,
     placement: ResolvedPlacement,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     make_report: impl FnOnce(&DeliveryFacts) -> Result<Vec<u8>, JobError>,
+    max_glb_json: u64,
 ) -> Result<PreparedDelivery, JobError> {
-    let mut prepared = prepare_resolved(request, placement, LIMITS, check, true)?;
+    let mut prepared = prepare_resolved(request, placement, LIMITS, check, true, max_glb_json)?;
     prepared.conversion = Some(make_report(&prepared.facts())?);
     Ok(prepared)
 }
@@ -710,7 +722,8 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
+        .with_sparse_proxies(leaves.sparse_proxies);
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;
@@ -777,6 +790,25 @@ pub(crate) fn write_prepared(
         placement: placement.report(),
     };
     Ok((report, archive_bytes))
+}
+
+/// Bytes of parsed `serde_json::Value` per byte of JSON text, a proven ceiling: a `Value`
+/// is 32 bytes and every value takes at least two bytes of text with its separator, arrays
+/// hold at most twice their length in capacity (32 per text byte), a map entry (24-byte key
+/// and a value in a B-tree node at least half full, at most 128 bytes) takes at least five
+/// bytes of text, and string contents are at most the text itself.
+const JSON_VALUE_BYTES_PER_TEXT_BYTE: u64 = 33;
+
+/// Declared resident bound of preparing and writing a tiler archive (D8), which runs after
+/// the leaf and coarse stages have released their workspaces: the planner's held records,
+/// the archive writer, one member's parsed GLB JSON (members are read one at a time, each
+/// JSON chunk at most `max_glb_json` bytes, with its text), and an allowance for one
+/// hierarchy document or subtree, the conversion report and row lines being serialized.
+pub(crate) fn resident_bound(max_glb_json: u64) -> u64 {
+    plan::held_bytes_bound()
+        + archive::resident_bound()
+        + (JSON_VALUE_BYTES_PER_TEXT_BYTE + 1) * max_glb_json
+        + (64 << 20)
 }
 
 /// Publish an H8 leaf directory as a Tiles 1.1 `.3tz` (hidden CLI `mesh-leaves-to-3tz`).

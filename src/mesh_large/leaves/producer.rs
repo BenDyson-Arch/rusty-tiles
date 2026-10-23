@@ -892,10 +892,13 @@ pub(crate) fn produce(
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     if let Coarse::Hlod { plan, settings } = coarse {
-        // The HLOD stage charges and decodes its own source images: release every
-        // decoded leaf source before it starts (D8).
+        // HLOD needs no decoded image or leaf worker: record the cache and page-gate
+        // observations, then release the decoded images and the pool before its own
+        // admission takes effect (the gate and services own no memory).
         let stats = cache.stats();
+        let gate_peak = gate.peak();
         drop(cache);
+        drop(pool);
         let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
             super::super::hlod::produce(
                 super::super::hlod::HlodInput {
@@ -917,7 +920,7 @@ pub(crate) fn produce(
             &path.join("manifest.json"),
             &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
         )?;
-        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":stats});
+        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
         write_file(
             &path.join("resources.json"),
             &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
@@ -935,7 +938,7 @@ pub(crate) fn produce(
                 global_bytes: stage.global_bytes,
                 leaf_bytes: stage.leaf_bytes,
                 window: stage.window,
-                page_gate_peak_bytes: gate.peak(),
+                page_gate_peak_bytes: gate_peak,
                 cache_peak_resident_bytes: stats.peak_resident_bytes,
                 cache_hits: stats.hits,
                 cache_misses: stats.misses,

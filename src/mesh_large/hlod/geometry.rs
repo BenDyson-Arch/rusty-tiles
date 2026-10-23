@@ -258,8 +258,7 @@ pub(crate) fn build_parent(
         .filter(|r| r.outer(tile.leaf_begin, tile.leaf_end))
         .copied()
         .collect();
-    interface.sort_unstable_by_key(InterfaceRow::key);
-    interface.dedup_by_key(|r| r.key());
+    super::interfaces::merge_rows(&mut interface);
     let segments: HashSet<(Key, Key)> = interface
         .iter()
         .filter(|r| !r.is_vertex())
@@ -425,6 +424,12 @@ pub(crate) fn build_parent(
         .map(|r| table.binary_search(r).unwrap() as u32)
         .collect();
     geometry.primitives = table;
+    geometry.interface.shrink_to_fit();
+    geometry.ells.shrink_to_fit();
+    geometry.positions.shrink_to_fit();
+    geometry.triangles.shrink_to_fit();
+    geometry.representative.shrink_to_fit();
+    geometry.primitives.shrink_to_fit();
     Ok(Built {
         locked: out_locked,
         stopping,
