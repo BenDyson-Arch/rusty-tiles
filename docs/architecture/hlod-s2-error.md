@@ -109,7 +109,9 @@ Revised-S1 incidence is admitted before S2: exact groups have a fixed, charged
 probe sort/merge spill and row-sort growth above the admitted exact-row baseline.
 The final row-stream envelope includes that allowance too. Mixed-step candidate
 selection expands guest boxes beyond the minimum host tolerance at each level;
-a streamed global rounding floor is paid in hosts. Each pair is evaluated in
+a streamed global rounding floor is paid in hosts. Broad-phase padding doubles
+those radii to cover the predicate’s independent axial and perpendicular offsets
+(total displacement at most sqrt(2) times its tolerance). Each pair is evaluated in
 one shared cell. Probe growth and output bursts refuse before exceeding the
 allowance, including on memory-backed scratch.
 

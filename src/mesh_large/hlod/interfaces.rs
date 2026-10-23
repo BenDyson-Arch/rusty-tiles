@@ -670,7 +670,9 @@ fn overlaps<'s>(
         }
         let h = host?;
         let snap = f64::from(f32::from_bits(h.tol));
-        let tol = snap + rounding_floor;
+        // on_segment permits both axial and perpendicular offsets <= tolerance.
+        // Their combined displacement is <=sqrt(2)*tolerance; 2 is conservative.
+        let tol = 2. * (snap + rounding_floor);
         let level = host_level(cube, h.a, h.b, tol);
         host_levels |= 1 << level;
         minimum_host_tol[level as usize] = minimum_host_tol[level as usize].min(snap);
@@ -709,7 +711,8 @@ fn overlaps<'s>(
         for level in (0..=MAX_LEVEL).filter(|l| host_levels & (1 << l) != 0) {
             // The predicate accepts max(host_tol, guest_tol). Expanding both boxes
             // covers that radius, even across a cell boundary at mixed lattice steps.
-            let tol = (f64::from(f32::from_bits(g.tol)) - minimum_host_tol[level as usize]).max(0.);
+            let tol =
+                2. * (f64::from(f32::from_bits(g.tol)) - minimum_host_tol[level as usize]).max(0.);
             let p = point(g.a);
             let lo = cell(cube, level, p.map(|v| v - tol));
             let hi = cell(cube, level, p.map(|v| v + tol));
@@ -768,9 +771,9 @@ fn overlaps<'s>(
             // Expanded boxes can meet in several cells. Evaluate each pair once,
             // in the lexicographically first cell of their intersection.
             let (a, b) = (point(h.a), point(h.b));
-            let host_tol = f64::from(f32::from_bits(h.tol)) + rounding_floor;
-            let guest_tol =
-                (f64::from(f32::from_bits(p.tol)) - minimum_host_tol[p.level as usize]).max(0.);
+            let host_tol = 2. * (f64::from(f32::from_bits(h.tol)) + rounding_floor);
+            let guest_tol = 2.
+                * (f64::from(f32::from_bits(p.tol)) - minimum_host_tol[p.level as usize]).max(0.);
             let host_lo = cell(
                 cube,
                 p.level,
@@ -822,54 +825,72 @@ mod bounded_join_tests {
         out.finish().unwrap()
     }
     #[test]
-    fn mixed_step_guest_across_grid_boundary_is_matched_once() {
-        let parent = tempfile::tempdir().unwrap();
-        let scratch = Scratch::create(Some(parent.path()), 1 << 20).unwrap();
-        let a = key([0., 0.75, 0.]);
-        let b = key([0.75, 0.75, 0.]);
-        let p = key([0.5, 1., 0.]);
-        assert!(on_segment(a, b, p, 0.5));
-        let hosts = sequence(
-            &scratch,
-            "hosts",
-            &[Candidate {
-                leaf: 0,
-                a,
-                b,
-                tol: (1f32 / 128.).to_bits(),
-            }],
-        );
-        let guests = sequence(
-            &scratch,
-            "guests",
-            &[Candidate {
-                leaf: 1,
-                a: p,
-                b: p,
-                tol: 0.5f32.to_bits(),
-            }],
-        );
-        let mut rows = ExternalSorter::new(&scratch, config()).unwrap();
-        let mut stats = IncidenceStats::default();
-        overlaps(
-            &scratch,
-            config(),
-            Cube {
-                origin: [0.; 3],
-                side: 32768.,
-            },
-            &hosts,
-            &guests,
-            1000,
-            &mut rows,
-            &mut stats,
-            &|| Ok(()),
-        )
-        .unwrap();
-        let rows: Vec<_> = rows.finish().unwrap().map(Result::unwrap).collect();
-        assert_eq!(stats.overlaps, 1);
-        assert_eq!(rows.len(), 4);
-        assert!(rows.iter().any(|r| r.leaf == 1 && r.a == p && r.b == p));
+    fn mixed_step_and_diagonal_endpoint_guests_are_matched_once() {
+        for (cube, a, b, p, host_tol) in [
+            (
+                Cube {
+                    origin: [0.; 3],
+                    side: 32768.,
+                },
+                [0., 0.75, 0.],
+                [0.75, 0.75, 0.],
+                [0.5, 1., 0.],
+                1f32 / 128.,
+            ),
+            (
+                Cube {
+                    origin: [0.; 3],
+                    side: 16.,
+                },
+                [2.3125, 3., 0.],
+                [3.8125, 4.5, 0.],
+                [4.5, 4.5, 0.],
+                1f32 / 16.,
+            ),
+        ] {
+            let parent = tempfile::tempdir().unwrap();
+            let scratch = Scratch::create(Some(parent.path()), 1 << 20).unwrap();
+            let (a, b, p) = (key(a), key(b), key(p));
+            assert!(on_segment(a, b, p, 0.5));
+            let hosts = sequence(
+                &scratch,
+                "hosts",
+                &[Candidate {
+                    leaf: 0,
+                    a,
+                    b,
+                    tol: host_tol.to_bits(),
+                }],
+            );
+            let guests = sequence(
+                &scratch,
+                "guests",
+                &[Candidate {
+                    leaf: 1,
+                    a: p,
+                    b: p,
+                    tol: 0.5f32.to_bits(),
+                }],
+            );
+            let mut rows = ExternalSorter::new(&scratch, config()).unwrap();
+            let mut stats = IncidenceStats::default();
+            overlaps(
+                &scratch,
+                config(),
+                cube,
+                &hosts,
+                &guests,
+                1000,
+                &mut rows,
+                &mut stats,
+                &|| Ok(()),
+            )
+            .unwrap();
+            let rows: Vec<_> = rows.finish().unwrap().map(Result::unwrap).collect();
+            assert_eq!(stats.overlaps, 1);
+            assert_eq!(rows.len(), 4);
+            assert!(rows.iter().any(|r| r.leaf == 1 && r.a == p && r.b == p));
+        }
     }
     #[test]
     fn dense_overlap_refuses_before_unpaid_row_spill() {
