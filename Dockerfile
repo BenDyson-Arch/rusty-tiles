@@ -24,7 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=geospatial-build /usr/local/ /usr/local/
 RUN ldconfig
-ENV RUSTY_TILES_DISABLE_NATIVE_JPEG=1
 ENV LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 WORKDIR /src
 # Keep fixture, documentation and CI-only edits out of the release build cache.
