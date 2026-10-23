@@ -20,4 +20,3 @@ mod calibration_tests;
 #[cfg(test)]
 mod mip_oracle_tests;
 
-mod source_sampler_mips;

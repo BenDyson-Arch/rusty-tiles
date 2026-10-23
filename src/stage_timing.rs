@@ -21,8 +21,6 @@ pub(crate) enum Stage {
     PageCut,
     DensityMips,
     SparseMips,
-    SamplerChainBuild,
-    SamplerCheckPlanned,
     SamplerCheckDecoded,
     Mask,
     BasisEncode,
@@ -37,7 +35,7 @@ pub(crate) enum Stage {
     Lod,
 }
 
-const STAGES: [(Stage, &str); 21] = [
+const STAGES: [(Stage, &str); 19] = [
     (Stage::SourceReconstruct, "source_reconstruct"),
     (Stage::SourceDecode, "source_decode"),
     (Stage::SourceCacheHit, "source_cache_hit"),
@@ -45,8 +43,6 @@ const STAGES: [(Stage, &str); 21] = [
     (Stage::PageCut, "page_cut"),
     (Stage::DensityMips, "density_mips"),
     (Stage::SparseMips, "sparse_mips"),
-    (Stage::SamplerChainBuild, "sampler_chain_build"),
-    (Stage::SamplerCheckPlanned, "sampler_check_planned"),
     (Stage::SamplerCheckDecoded, "sampler_check_decoded"),
     (Stage::Mask, "mask"),
     (Stage::BasisEncode, "basis_encode"),

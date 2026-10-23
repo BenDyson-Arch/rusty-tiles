@@ -538,6 +538,24 @@ pub(in crate::mesh_large) fn encode(
     mask: Option<MaskDelivery<'_>>,
     ladder: Ladder<'_>,
 ) -> Result<Delivery, JobError> {
+    encode_islands(dimensions, rgba, support, None, slot, profile, memory_limit, mask, ladder)
+}
+
+/// [`encode`] for a packed island page: `labels` (one per texel, 0 outside every
+/// island allocation) keeps islands apart in every reduced level and gutter fill
+/// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
+#[allow(clippy::too_many_arguments)]
+pub(in crate::mesh_large) fn encode_islands(
+    dimensions: [u32; 2],
+    rgba: &[u8],
+    support: &[u32],
+    labels: Option<&[u32]>,
+    slot: TextureSlot,
+    profile: Profile,
+    memory_limit: u64,
+    mask: Option<MaskDelivery<'_>>,
+    ladder: Ladder<'_>,
+) -> Result<Delivery, JobError> {
     let [width, height] = dimensions;
     let base = u64::from(width)
         .checked_mul(u64::from(height))
@@ -552,7 +570,10 @@ pub(in crate::mesh_large) fn encode(
             "delivery RGBA/support shape",
         ));
     }
-    let charge = workspace_charge(dimensions, profile)?;
+    let label_bytes = if labels.is_some() { base.checked_mul(6).ok_or_else(resource)? } else { 0 };
+    let charge = workspace_charge(dimensions, profile)?
+        .checked_add(label_bytes)
+        .ok_or_else(resource)?;
     if charge > memory_limit {
         return Err(resource());
     }
@@ -575,7 +596,7 @@ pub(in crate::mesh_large) fn encode(
         });
     }
     let chain = timing::time(Stage::SparseMips, || {
-        sparse_mips::build(width, height, rgba, support, class(slot), memory_limit)
+        sparse_mips::build_islands(width, height, rgba, support, labels, class(slot), memory_limit)
     })?;
     encode_authored(&chain, slot, profile, memory_limit, mask, ladder, |_| {
         Ok(Value::Null)
@@ -1764,6 +1785,23 @@ mod tests {
             16,
             TextureSlot::Normal,
             Profile::Fast,
+            4
+        )
+        .is_err());
+        // Small data levels keep the full 30 dB floor: a uniform 17-level roughness
+        // error (23.5 dB) is refused at any size.
+        let data = [100u8, 120, 140, 255].repeat(256);
+        let mut wrong = data.clone();
+        for px in wrong.as_chunks_mut::<4>().0 {
+            px[1] += 17;
+        }
+        assert!(check_level(
+            &data,
+            &wrong,
+            &[1; 256],
+            16,
+            TextureSlot::MetallicRoughness,
+            Profile::Balanced,
             4
         )
         .is_err());

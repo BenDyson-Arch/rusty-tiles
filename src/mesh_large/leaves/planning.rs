@@ -24,6 +24,8 @@ pub(in crate::mesh_large) struct LeafPlan {
     pub chain_texels: u64,
     pub geometry_bytes: u64,
     pub owned_bytes: u64,
+    /// The largest page workspace lease the leaf's delivery can take (0 without pages).
+    pub page_bytes: u64,
 }
 impl PartialEq for LeafPlan {
     fn eq(&self, other: &Self) -> bool {
@@ -42,10 +44,10 @@ impl Ord for LeafPlan {
     }
 }
 impl Record for LeafPlan {
-    const SIZE: usize = 64;
+    const SIZE: usize = 72;
     fn encode(&self, out: &mut [u8]) {
         out.fill(0);
-        for (bytes, value) in out[..56].as_chunks_mut::<8>().0.iter_mut().zip([
+        for (bytes, value) in out[..64].as_chunks_mut::<8>().0.iter_mut().zip([
             self.first,
             self.end,
             self.pages,
@@ -53,14 +55,15 @@ impl Record for LeafPlan {
             self.chain_texels,
             self.geometry_bytes,
             self.owned_bytes,
+            self.page_bytes,
         ]) {
             bytes.copy_from_slice(&value.to_le_bytes());
         }
-        out[56] = self.depth;
-        out[57] = self.density_drop;
+        out[64] = self.depth;
+        out[65] = self.density_drop;
     }
     fn decode(bytes: &[u8]) -> Self {
-        let values: [u64; 7] = std::array::from_fn(|i| {
+        let values: [u64; 8] = std::array::from_fn(|i| {
             u64::from_le_bytes(
                 bytes[i * 8..i * 8 + 8]
                     .try_into()
@@ -75,8 +78,9 @@ impl Record for LeafPlan {
             chain_texels: values[4],
             geometry_bytes: values[5],
             owned_bytes: values[6],
-            depth: bytes[56],
-            density_drop: bytes[57],
+            page_bytes: values[7],
+            depth: bytes[64],
+            density_drop: bytes[65],
         }
     }
 }
@@ -167,6 +171,7 @@ pub(in crate::mesh_large) fn preflight(
                         chain_texels: projected.chain_texels,
                         geometry_bytes: projected.geometry_bytes,
                         owned_bytes: projected.owned_bytes,
+                        page_bytes: projected.page_bytes,
                     });
                     break;
                 }
@@ -213,17 +218,19 @@ mod tests {
             chain_texels: 1365,
             geometry_bytes: 999,
             owned_bytes: 10000,
+            page_bytes: 5555,
         };
         let mut bytes = [255; LeafPlan::SIZE];
         original.encode(&mut bytes);
-        assert_eq!(&bytes[58..], &[0; 6]);
+        assert_eq!(&bytes[66..], &[0; 6]);
         let decoded = LeafPlan::decode(&bytes);
         let mut second = [0; LeafPlan::SIZE];
         decoded.encode(&mut second);
         assert_eq!(bytes, second);
         assert_eq!(&bytes[..8], &7u64.to_le_bytes());
-        assert_eq!(bytes[56], 31);
-        assert_eq!(bytes[57], 12);
+        assert_eq!(&bytes[56..64], &5555u64.to_le_bytes());
+        assert_eq!(bytes[64], 31);
+        assert_eq!(bytes[65], 12);
         assert!(
             original
                 < LeafPlan {

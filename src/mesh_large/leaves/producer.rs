@@ -296,16 +296,7 @@ pub(crate) fn stage_plan(
     config: &TreeConfig,
     captured: &full::FullCaptured,
 ) -> Result<StagePlan, JobError> {
-    let profile = config.profile;
     let requested = config.jobs;
-    let edge: u64 = match profile {
-        Profile::Fast => 2048,
-        Profile::Lossless => 8192,
-        _ => 4096,
-    };
-    let pixels = edge
-        .checked_mul(edge)
-        .ok_or_else(|| resource("leaf page memory overflow"))?;
     let largest_source = captured
         .image_info
         .iter()
@@ -319,39 +310,22 @@ pub(crate) fn stage_plan(
             n.checked_add(u64::from(i.width) * u64::from(i.height) * 4)
         })
         .ok_or_else(|| resource("leaf source byte overflow"))?;
-    let texture = if profile == Profile::Lossless {
-        pixels.checked_mul(40)
-    } else {
-        pixels.checked_mul(176)
-    }
-    .ok_or_else(|| resource("leaf texture workspace overflow"))?;
-    // The largest page: codec workspace, assembly, MIP-binding source chain
-    // and the largest source decode transient (density reduction included).
-    // Image-free input builds no page, so it reserves no texture workspace (D8).
-    let page_bytes = if captured.image_info.is_empty() {
-        0
-    } else {
-        texture
-            .checked_add(if profile == Profile::Lossless {
-                0
-            } else {
-                (128u64 << 20)
-                    .checked_add(pixels.checked_mul(6).ok_or_else(|| resource("page"))?)
-                    .ok_or_else(|| resource("page"))?
-            })
-            .and_then(|n| n.checked_add(largest_source.checked_mul(32)?))
-            .and_then(|n| n.checked_add(64 << 20))
-            .ok_or_else(|| resource("leaf workspace overflow"))?
-    };
     let global_bytes = captured
         .report
         .memory
         .owned_metadata_bytes
         .checked_add(captured.report.memory.geometry.document_bytes)
         .ok_or_else(|| resource("leaf global ownership overflow"))?;
+    // The largest page lease any leaf's delivery takes, from the same physical
+    // crop/packing projection final preparation uses (page assembly, codec, sampler
+    // chain and source decode at its actual dimensions), not a profile-wide maximum
+    // page. Image-free input builds no page, so it reserves no texture workspace (D8).
     let mut leaf_owned = 0;
+    let mut page_bytes = 0;
     for plan in captured.leaf_plans.reader()? {
-        leaf_owned = leaf_owned.max(plan?.owned_bytes);
+        let plan = plan?;
+        leaf_owned = leaf_owned.max(plan.owned_bytes);
+        page_bytes = page_bytes.max(plan.page_bytes);
     }
     // An in-flight leaf owns its closure and at most one member of encoded
     // pages plus the GLB being assembled from them.
@@ -365,12 +339,8 @@ pub(crate) fn stage_plan(
     };
     let available = config.available_memory();
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    // Cache every decoded source when it fits half the usable memory;
-    // otherwise half the usable memory, and always at least two images.
-    let cache_for = |usable: Option<u64>| match usable {
-        Some(u) => total_source.min((u / 2).max(largest_source * 8)),
-        None => total_source.min(largest_source * 8 * 4),
-    };
+    // The cache always holds at least two decoded images (or every source).
+    let cache_floor = total_source.min(largest_source.saturating_mul(8));
     // Workers share one page-workspace gate, which must admit the largest
     // page. A running leaf owns its closure and encoded pages; a finished
     // leaf waiting for the ordered writer keeps only its closure and receipts
@@ -389,12 +359,21 @@ pub(crate) fn stage_plan(
             .and_then(|n| n.checked_add(2 * leaf_owned))
             .ok_or_else(|| resource("leaf fixed memory overflow"))
     };
-    // One leaf job fits usable memory `u` when `u >= cache(u) + page + one job's window`,
-    // and `u - cache(u)` never decreases in `u`: the least such `u`, by bisection.
+    // What one leaf job needs besides the cache.
+    let one_job = fixed_for(0)?
+        .checked_add(per_job)
+        .ok_or_else(|| resource("leaf job memory overflow"))?;
+    // Cache every decoded source when it fits half the usable memory, otherwise half the
+    // usable memory, but never so much that one leaf job no longer fits beside it and
+    // never below the floor. Monotone in `u`, and `u - cache(u)` never decreases.
+    let cache_for = |usable: Option<u64>| match usable {
+        Some(u) => total_source.min(cache_floor.max((u / 2).min(u.saturating_sub(one_job)))),
+        None => total_source.min(cache_floor.saturating_mul(4)),
+    };
+    // One leaf job fits usable memory `u` when `u >= cache floor + page + one job's window`.
     let fits = |u: u64| -> bool {
-        fixed_for(cache_for(Some(u)))
-            .ok()
-            .and_then(|f| f.checked_add(per_job))
+        cache_floor
+            .checked_add(one_job)
             .is_some_and(|need| u >= need)
     };
     let minimum_usable = {
@@ -913,6 +892,13 @@ pub(crate) fn produce(
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     if let Coarse::Hlod { plan, settings } = coarse {
+        // HLOD needs no decoded image or leaf worker: record the cache and page-gate
+        // observations, then release the decoded images and the pool before its own
+        // admission takes effect (the gate and services own no memory).
+        let stats = cache.stats();
+        let gate_peak = gate.peak();
+        drop(cache);
+        drop(pool);
         let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
             super::super::hlod::produce(
                 super::super::hlod::HlodInput {
@@ -934,12 +920,11 @@ pub(crate) fn produce(
             &path.join("manifest.json"),
             &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
         )?;
-        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate.peak(),"sourceCache":cache.stats()});
+        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
         write_file(
             &path.join("resources.json"),
             &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
         )?;
-        let stats = cache.stats();
         return Ok(LeafStageOutput {
             report,
             diagnostics: LeafStageDiagnostics {
@@ -953,7 +938,7 @@ pub(crate) fn produce(
                 global_bytes: stage.global_bytes,
                 leaf_bytes: stage.leaf_bytes,
                 window: stage.window,
-                page_gate_peak_bytes: gate.peak(),
+                page_gate_peak_bytes: gate_peak,
                 cache_peak_resident_bytes: stats.peak_resident_bytes,
                 cache_hits: stats.hits,
                 cache_misses: stats.misses,
@@ -1858,11 +1843,11 @@ mod tests {
         }
     }
 
-    /// Several dedicated mip-sampled pages that miss the codec's verification floor at
-    /// the profile setting: the escalation reasons, diagnostics and published bytes
-    /// are the same for one worker and for many (#234).
+    /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a
+    /// decoded floor at the profile setting: the escalation reasons, diagnostics and
+    /// published bytes are the same for one worker and for many (#234).
     #[test]
-    fn codec_verification_escalation_reasons_are_identical_across_jobs() {
+    fn escalation_reasons_are_identical_across_jobs() {
         const QUADS: usize = 8;
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source");
@@ -1893,7 +1878,10 @@ mod tests {
                 4.,
                 0.,
             ];
-            let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+            // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+            // island of periodic noise.
+            let (lo, hi) = (-1.375f32, 2.375f32);
+            let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
             for (data, ty, count, min_max) in [
                 (
                     &positions[..],
@@ -1921,7 +1909,7 @@ mod tests {
             .save(source.join(format!("sharp{quad}.png")))
             .unwrap();
             images.push(json!({"uri":format!("sharp{quad}.png")}));
-            textures.push(json!({"source":quad,"sampler":0}));
+            textures.push(json!({"source":quad,"sampler":quad}));
             materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":quad}}}));
             primitives.push(
                 json!({"attributes":{"POSITION":2 * quad,"TEXCOORD_0":2 * quad + 1},
@@ -1933,7 +1921,8 @@ mod tests {
             "nodes":[{"mesh":0}],"meshes":[{"primitives":primitives}],
             "buffers":[{"uri":"quads.bin","byteLength":bytes.len()}],
             "bufferViews":views,"accessors":accessors,"images":images,"textures":textures,
-            "samplers":[{"minFilter":9987,"magFilter":9729}],"materials":materials});
+            "samplers":(0..QUADS).map(|q| json!({"minFilter":9984 + q % 4,"magFilter":9728 + q / 4 % 2})).collect::<Vec<_>>(),
+            "materials":materials});
         let input = source.join("quads.gltf");
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         let mut previous = None;
@@ -1950,7 +1939,7 @@ mod tests {
                 + report.escalated_pages.uastc_level3
                 + report.lossless_fallback_pages;
             println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
-            assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+            assert!(total > 1, "{report:?}");
             assert_eq!(
                 report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
                 total
@@ -1987,19 +1976,23 @@ mod tests {
         }
     }
 
-    /// Pages the codec's own verification refuses at the profile setting
-    /// escalate and are counted apart from gate misses.
+    /// Pages that miss at the profile setting escalate and are counted by reason
+    /// (the codec's own verification apart from gate misses; the reason mapping
+    /// itself is pinned in `delivery`'s ladder tests).
     #[test]
-    fn codec_verification_misses_are_reported_by_reason() {
+    fn escalation_misses_are_reported_by_reason() {
         let work = tempfile::tempdir().unwrap();
-        // One quad covering the whole 64x64 sharp texture, mip-sampled: a dedicated
-        // page whose authored levels are the texture's own class chain.
+        // One quad repeating a sharp 64x64 texture, mip-sampled: one cropped island
+        // page of periodic noise.
         let source = work.path().join("source");
         fs::create_dir_all(&source).unwrap();
         let positions: [f32; 18] = [
             0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
         ];
-        let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+        // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+        // island of periodic noise.
+        let (lo, hi) = (-1.375f32, 2.375f32);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
         let bytes: Vec<u8> = positions
             .iter()
             .chain(&uvs)
@@ -2038,7 +2031,7 @@ mod tests {
             "codec-verify escalation {:?} {:?} png {}",
             report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
         );
-        assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+        assert!(total > 0, "{report:?}");
         assert_eq!(
             report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
             total
@@ -2049,6 +2042,12 @@ mod tests {
             .filter(|d| d.misses[0].reason == "codec_verify")
             .count() as u64;
         assert_eq!(codec, report.escalation_reasons.codec_verify);
+        let gate = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "gate")
+            .count() as u64;
+        assert_eq!(gate, report.escalation_reasons.gate);
         assert!(report
             .escalation_diagnostics
             .iter()
