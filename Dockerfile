@@ -10,12 +10,14 @@ RUN tar -xzf /tmp/proj.tar.gz -C /tmp \
     && cmake -S /tmp/proj-9.8.1 -B /tmp/proj-build -DCMAKE_BUILD_TYPE=Release \
        -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_TESTING=OFF -DBUILD_APPS=OFF -DENABLE_CURL=OFF \
     && cmake --build /tmp/proj-build -j4 && cmake --install /tmp/proj-build \
+    && install -D -m 0644 /tmp/proj-9.8.1/COPYING /usr/local/share/doc/rusty-tiles-system/proj/COPYING \
     && rm -rf /tmp/proj-build /tmp/proj-9.8.1 /tmp/proj.tar.gz
 ADD --checksum=sha256:68844ae29557b7efae4292c3b4cb3a3b8a79d14b765b89c5a7b17cbae7fa715a \
     https://download.osgeo.org/gdal/3.12.4/gdal-3.12.4.tar.gz /tmp/gdal.tar.gz
 COPY scripts/build-native-gdal.sh /tmp/build-native-gdal.sh
 RUN tar -xzf /tmp/gdal.tar.gz -C /tmp \
     && /tmp/build-native-gdal.sh /tmp/gdal-3.12.4 /tmp/gdal-build \
+    && install -D -m 0644 /tmp/gdal-3.12.4/LICENSE.TXT /usr/local/share/doc/rusty-tiles-system/gdal/LICENSE.TXT \
     && rm -rf /tmp/gdal-build /tmp/gdal-3.12.4 /tmp/gdal.tar.gz
 
 FROM rust:1.98-trixie AS build
@@ -55,6 +57,10 @@ FROM native-runtime AS runtime
 COPY --from=build /out-bin/rusty-tiles /usr/local/bin/rusty-tiles
 # Licence and upstream notices of vendored code (scripts/third_party_notices.py).
 COPY LICENSE /usr/share/doc/rusty-tiles/
+# Rust crates (scripts/third_party_licenses.py) and the GDAL/PROJ licences from the source builds;
+# the Debian libraries keep their copyright files under /usr/share/doc/<package>/.
+COPY licenses/THIRD_PARTY_LICENSES-native-geospatial.md /usr/share/doc/rusty-tiles/THIRD_PARTY_LICENSES.md
+COPY --from=geospatial-build /usr/local/share/doc/rusty-tiles-system/ /usr/share/doc/rusty-tiles/third_party/system/
 COPY vendor/basis_universal/LICENSE vendor/basis_universal/NOTICE /usr/share/doc/rusty-tiles/third_party/basis_universal/
 COPY vendor/basis_universal/LICENSES/ /usr/share/doc/rusty-tiles/third_party/basis_universal/LICENSES/
 COPY vendor/basis_universal/zstd/LICENSE /usr/share/doc/rusty-tiles/third_party/basis_universal/zstd/
