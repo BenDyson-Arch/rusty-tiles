@@ -400,11 +400,23 @@ jobs:
       - name: Test native geospatial build
         env:
           LIBSQLITE3_SYS_USE_PKG_CONFIG: '1'
+          EVENT: ${{ github.event_name }}
         shell: bash -el {0}
         run: |
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          cargo test --locked --features native-geospatial
+          if [ "$EVENT" = pull_request ]; then
+            # PR tier: only what compiles differently with GDAL (the modules gated by
+            # `native-geospatial` and every integration suite with GDAL-specific cases).
+            # The Rust job already runs everything else; the full tier runs it all with GDAL.
+            cargo test --locked --features native-geospatial --lib -- \
+              crs dir_sync doctor raster runtime terrain vec3 vector source_crs
+            cargo test --locked --features native-geospatial --bins \
+              --test 'native_*' --test 'raster_*' --test 'point_*' --test '*vector*' --test '*terrain*' \
+              --test cli_contract --test demodata_suite --test golden --test machine_results --test mesh_crs
+          else
+            cargo test --locked --features native-geospatial
+          fi
       - name: Independently verify native vector and point acceptance
         shell: bash -el {0}
         run: |
