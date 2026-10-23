@@ -415,8 +415,13 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
     for (row, glb) in &tiles {
         let a = &row["appearance"];
         assert_eq!(a["texturedGroups"], 1, "{a}");
-        // Achieved spacing never finer than requested; capped exactly when coarser.
-        let (req, ach) = (a["requestedSpacing"].as_f64().unwrap(), a["achievedSpacing"].as_f64().unwrap());
+        // Achieved spacing never finer than requested (G/16, floored at the source's
+        // own spacing: 100 m over 64 texels here); capped exactly when coarser.
+        let src = a["sourceSpacing"].as_f64().unwrap();
+        assert!((src - 100. / 64.).abs() < 0.05, "{a}");
+        let req = a["requestedSpacing"].as_f64().unwrap().max(src);
+        let ach = a["achievedSpacing"].as_f64().unwrap();
+        assert_eq!(a["sourceLimited"].as_bool().unwrap(), src > a["requestedSpacing"].as_f64().unwrap());
         assert!(ach >= req * (1. - 1e-12), "{a}");
         assert_eq!(a["capped"].as_bool().unwrap(), ach > req * (1. + 1e-9), "{a}");
         let [w, h] = [0, 1].map(|i| a["pageSize"][i].as_u64().unwrap());

@@ -73,6 +73,10 @@ pub(crate) struct Frame {
 pub(crate) struct Queries {
     pub class: u32,
     pub points: Vec<[f32; 3]>,
+    /// The previous point's donor is kept, without a full nearest search, when this
+    /// point's closest point on it is interior and at most this far (metres): one
+    /// texel of the page. Zero always searches.
+    pub accept: f64,
     /// Consecutive points likely share a nearest triangle (one coarse face's texels).
     pub hits: Vec<Hit>,
     pub frames: Vec<Frame>,
@@ -80,11 +84,12 @@ pub(crate) struct Queries {
 }
 
 impl Queries {
-    pub(crate) fn new(class: u32, points: Vec<[f32; 3]>, want_frames: bool) -> Self {
+    pub(crate) fn new(class: u32, points: Vec<[f32; 3]>, accept: f64, want_frames: bool) -> Self {
         let n = points.len();
         Self {
             class,
             points,
+            accept,
             hits: vec![Hit::NONE; n],
             frames: if want_frames { vec![Frame::default(); n] } else { Vec::new() },
             want_frames,
@@ -114,45 +119,77 @@ fn gradient(t: &FullTriangle, set: usize) -> f32 {
     }
 }
 
+/// Donor records kept per tile: raster order revisits a source triangle on the next
+/// texel row, so recent donors are read from disk once.
+const DONOR_CACHE: usize = 4096;
+
 /// Resolve every query point of the tile against the captured source surface of its
 /// descendant range through S2's bounded [`SourceQuery`] (nearest point, distance then
-/// source-rank ties), reading each donor's full record once per run of equal donors.
-/// Returns the number of donor records read.
+/// source-rank ties). The cheap bake keeps the previous point's donor while the point
+/// projects inside it within [`Queries::accept`] (no facing or donor search); every
+/// other point runs the exact nearest search. Order is fixed per tile, so the result is
+/// deterministic. Returns (exact searches, donor records read).
 pub(crate) fn resolve(
     query: &mut SourceQuery<'_>,
     queries: &mut [Queries],
     check: &dyn Fn() -> Result<(), JobError>,
-) -> Result<u64, JobError> {
-    let mut donor: Option<FullTriangle> = None;
-    let mut donor_rank = u64::MAX;
-    let mut reads = 0u64;
+) -> Result<(u64, u64), JobError> {
+    use super::source_index::{bary, closest, distance2};
+    let mut donors: HashMap<u64, FullTriangle> = HashMap::new();
+    let mut fifo = std::collections::VecDeque::new();
+    let mut donor: Option<(u64, FullTriangle, [[f64; 3]; 3])> = None;
+    let (mut searches, mut reads) = (0u64, 0u64);
     for q in queries.iter_mut() {
+        let accept2 = q.accept * q.accept;
         for i in 0..q.points.len() {
             if i % 4096 == 0 {
                 check()?;
             }
             let p = q.points[i].map(f64::from);
-            let hit = query.nearest(p)?;
-            if hit.rank != donor_rank {
-                donor = Some(query.triangle(hit)?);
-                donor_rank = hit.rank;
-                reads += 1;
-            }
-            let t = donor.as_ref().ok_or_else(|| state("coarse bake donor"))?;
-            let w = hit.bary.map(|v| v as f32);
+            let kept = donor.as_ref().and_then(|(rank, _, positions)| {
+                let w = closest(p, *positions);
+                let d2 = distance2(p, bary(*positions, w));
+                (w.iter().all(|v| *v > 1e-6) && d2 <= accept2).then_some((*rank, w, d2))
+            });
+            let (rank, bary_w, d2) = match kept {
+                Some(k) => k,
+                None => {
+                    searches += 1;
+                    let hit = query.nearest(p)?;
+                    if donor.as_ref().is_none_or(|d| d.0 != hit.rank) {
+                        let t = match donors.get(&hit.rank) {
+                            Some(t) => *t,
+                            None => {
+                                let t = query.triangle(hit)?;
+                                reads += 1;
+                                if donors.len() == DONOR_CACHE {
+                                    if let Some(old) = fifo.pop_front() {
+                                        donors.remove(&old);
+                                    }
+                                }
+                                fifo.push_back(hit.rank);
+                                donors.insert(hit.rank, t);
+                                t
+                            }
+                        };
+                        donor = Some((hit.rank, t, t.triangle.positions.map(|v| v.map(f64::from))));
+                    }
+                    (hit.rank, hit.bary, hit.distance2)
+                }
+            };
+            let t = &donor.as_ref().ok_or_else(|| state("coarse bake donor"))?.1;
+            let w = bary_w.map(|v| v as f32);
             let lerp2 = |v: [[f32; 2]; 3]| -> [f32; 2] {
                 std::array::from_fn(|a| v[0][a] * w[0] + v[1][a] * w[1] + v[2][a] * w[2])
             };
             let color = if t.flags & COLOR != 0 {
-                std::array::from_fn(|a| {
-                    (0..3).map(|k| t.corners[k].color[a] * w[k]).sum::<f32>()
-                })
+                std::array::from_fn(|a| (0..3).map(|k| t.corners[k].color[a] * w[k]).sum::<f32>())
             } else {
                 [1.; 4]
             };
             q.hits[i] = Hit {
-                d2: hit.distance2 as f32,
-                rank: hit.rank,
+                d2: d2 as f32,
+                rank,
                 material: t.material,
                 flags: t.flags,
                 uv: [0, 1].map(|s| lerp2(t.corners.map(|c| c.texcoords[s]))),
@@ -173,7 +210,7 @@ pub(crate) fn resolve(
             }
         }
     }
-    Ok(reads)
+    Ok((searches, reads))
 }
 
 // ----------------------------------------------------------------------------------------
@@ -365,6 +402,25 @@ fn wrap(i: i64, n: u32, mode: u32) -> usize {
     }) as usize
 }
 
+/// sRGB byte to linear light.
+fn linear_lut() -> &'static [f64; 256] {
+    static LUT: OnceLock<[f64; 256]> = OnceLock::new();
+    LUT.get_or_init(|| std::array::from_fn(|i| linear(i as f64 / 255.)))
+}
+const ENCODE_STEPS: usize = 1 << 14;
+/// Linear light in [0, 1] to the nearest sRGB byte, through a 16,384-step table
+/// (at most a quarter byte from the exact transfer away from rounding ties).
+pub(crate) fn srgb_byte(v: f64) -> u8 {
+    static LUT: OnceLock<Vec<u8>> = OnceLock::new();
+    let lut = LUT.get_or_init(|| {
+        (0..=ENCODE_STEPS)
+            .map(|i| (srgb(i as f64 / ENCODE_STEPS as f64) * 255.).round() as u8)
+            .collect()
+    });
+    let x = if v.is_finite() { v.clamp(0., 1.) } else { 0. };
+    lut[(x * ENCODE_STEPS as f64).round() as usize]
+}
+
 pub(crate) fn linear(v: f64) -> f64 {
     if v <= 0.04045 {
         v / 12.92
@@ -402,16 +458,17 @@ pub(crate) fn sample(
     let fetch = |level: &mips::Level| -> [f64; 4] {
         let x = f64::from(uv[0]) * f64::from(level.width) - 0.5;
         let y = f64::from(uv[1]) * f64::from(level.height) - 0.5;
+        let lut = linear_lut();
         let get = |x: i64, y: i64| -> [f64; 4] {
             let i = (wrap(y, level.height, sampler.wrap_t) * level.width as usize
                 + wrap(x, level.width, sampler.wrap_s))
                 * 4;
             std::array::from_fn(|c| {
-                let v = f64::from(level.rgba[i + c]) / 255.;
+                let v = level.rgba[i + c];
                 if class == mips::Class::Colour && c < 3 {
-                    linear(v)
+                    lut[v as usize]
                 } else {
-                    v
+                    f64::from(v) / 255.
                 }
             })
         };

@@ -110,7 +110,14 @@ pub(crate) struct TileAppearance {
     pub achieved_spacing: f64,
     pub capped: bool,
     pub page_size: [u32; 2],
+    /// Exact nearest searches (texels whose previous donor was not kept).
+    pub searches: u64,
     pub donor_reads: u64,
+    /// Finest source texel spacing among the textured groups (0 without one): the
+    /// page spacing floor.
+    pub source_spacing: f64,
+    /// The source's own texel spacing, not `G/16`, set some page's density.
+    pub source_limited: bool,
     pub escalated_pages: u32,
 }
 
@@ -263,6 +270,9 @@ pub(crate) fn build(
     });
     let normals = (services.normals || any_normal_map)
         .then(|| smooth_normals(tile.decoded, tile.triangles));
+    let started = clock();
+    let source = source_spacing(services, query, tile, &by_class, target)?;
+    timing.query += clock() - started;
     let mut groups = Vec::new();
     let mut pending: Vec<Pending> = Vec::new();
     let mut queries: Vec<Queries> = Vec::new();
@@ -288,7 +298,20 @@ pub(crate) fn build(
         });
         if !slots.is_empty() {
             let corners: Vec<[u32; 3]> = faces.iter().map(|&f| tile.triangles[f]).collect();
-            let layout = charts::layout(tile.decoded, &corners, target, services.max_edge)?;
+            // Never finer than the source itself carries there.
+            let floor = source.get(&class).copied().unwrap_or(0.);
+            if floor > 0. {
+                facts.source_spacing = if facts.source_spacing > 0. {
+                    facts.source_spacing.min(floor)
+                } else {
+                    floor
+                };
+            }
+            if floor > target {
+                facts.source_limited = true;
+            }
+            let layout =
+                charts::layout(tile.decoded, &corners, target.max(floor), services.max_edge)?;
             let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
             let mut texels = Vec::new();
             let mut points = Vec::new();
@@ -328,7 +351,7 @@ pub(crate) fn build(
                 ),
                 _ => None,
             };
-            queries.push(Queries::new(class, points, normal_map));
+            queries.push(Queries::new(class, points, 1. / layout.scale, normal_map));
             pending.push(Pending {
                 group: index,
                 face_ids: faces.clone(),
@@ -342,14 +365,14 @@ pub(crate) fn build(
             vertices.sort_unstable();
             vertices.dedup();
             let points = vertices.iter().map(|&v| tile.decoded[v as usize]).collect();
-            queries.push(Queries::new(class, points, false));
+            queries.push(Queries::new(class, points, target, false));
             vertex_groups.push((index, vertices));
         }
     }
     timing.charts = clock() - started;
     let started = clock();
-    facts.donor_reads = bake::resolve(query, &mut queries, check)?;
-    timing.query = clock() - started;
+    (facts.searches, facts.donor_reads) = bake::resolve(query, &mut queries, check)?;
+    timing.query += clock() - started;
     let mut queries = queries.into_iter();
     let mut vertex_groups = vertex_groups.into_iter().peekable();
     let mut pending = pending.into_iter().peekable();
@@ -438,6 +461,70 @@ pub(crate) fn build(
         facts,
         timing,
     })
+}
+
+/// Per textured class: the spacing at which a page carries as many texels as the source
+/// images do over the same coarse surface, `sqrt(area / Σ area · density)`, from one
+/// source query per coarse face centroid (density: squared source texels per metre of
+/// the hit triangle's first bound slot). Requesting finer spacing adds no information.
+fn source_spacing(
+    services: &Services<'_>,
+    query: &mut super::source_index::SourceQuery<'_>,
+    tile: &TileView<'_>,
+    by_class: &BTreeMap<u32, Vec<usize>>,
+    target: f64,
+) -> Result<BTreeMap<u32, f64>, JobError> {
+    let captured = services.captured;
+    let mut queries = Vec::new();
+    let mut areas = Vec::new();
+    for (&class, faces) in by_class {
+        let textured = captured
+            .materials
+            .get(class as usize)
+            .is_some_and(|m| m.bindings().next().is_some());
+        if !textured {
+            continue;
+        }
+        let mut points = Vec::with_capacity(faces.len());
+        let mut area = Vec::with_capacity(faces.len());
+        for &f in faces {
+            let p = tile.triangles[f].map(|v| tile.decoded[v as usize].map(f64::from));
+            points.push(std::array::from_fn(|a| ((p[0][a] + p[1][a] + p[2][a]) / 3.) as f32));
+            let e1: [f64; 3] = std::array::from_fn(|a| p[1][a] - p[0][a]);
+            let e2: [f64; 3] = std::array::from_fn(|a| p[2][a] - p[0][a]);
+            area.push(0.5 * dot3(cross3(e1, e2), cross3(e1, e2)).sqrt());
+        }
+        queries.push(Queries::new(class, points, target, false));
+        areas.push(area);
+    }
+    bake::resolve(query, &mut queries, services.check)?;
+    let mut out = BTreeMap::new();
+    for (q, area) in queries.iter().zip(&areas) {
+        let (mut total, mut texels) = (0f64, 0f64);
+        for (hit, a) in q.hits.iter().zip(area) {
+            total += a;
+            let slots = captured
+                .materials
+                .get(hit.material as usize)
+                .map(|m| {
+                    let mut s: Vec<TextureSlot> = m.bindings().map(|b| b.slot).collect();
+                    s.sort_by_key(|s| slot_order(*s));
+                    s
+                })
+                .unwrap_or_default();
+            let Some(&slot) = slots.first() else { continue };
+            if let Some((image, _, set)) = bake::binding(captured, hit.material, slot)? {
+                let info = captured.image_info.get(image).ok_or_else(|| state("image info"))?;
+                let per_metre = f64::from(hit.gradient[set])
+                    * (f64::from(info.width) * f64::from(info.height)).sqrt();
+                texels += a * per_metre * per_metre;
+            }
+        }
+        if texels > 0. && total > 0. && (total / texels).is_finite() {
+            out.insert(q.class, (total / texels).sqrt());
+        }
+    }
+    Ok(out)
 }
 
 /// The class's flat material (S1): literal factors, no textures.
@@ -580,13 +667,18 @@ fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit,
         TextureSlot::BaseColor => {
             let c = hit.color.map(f64::from);
             [
-                q(bake::srgb(v[0] * c[0])),
-                q(bake::srgb(v[1] * c[1])),
-                q(bake::srgb(v[2] * c[2])),
+                bake::srgb_byte(v[0] * c[0]),
+                bake::srgb_byte(v[1] * c[1]),
+                bake::srgb_byte(v[2] * c[2]),
                 q(v[3] * c[3]),
             ]
         }
-        TextureSlot::Emissive => [q(bake::srgb(v[0])), q(bake::srgb(v[1])), q(bake::srgb(v[2])), q(v[3])],
+        TextureSlot::Emissive => [
+            bake::srgb_byte(v[0]),
+            bake::srgb_byte(v[1]),
+            bake::srgb_byte(v[2]),
+            q(v[3]),
+        ],
         TextureSlot::Normal => {
             let (n_c, t_c, source, scale) = frame.expect("normal slot frame");
             let x = (2. * v[0] - 1.) * scale;

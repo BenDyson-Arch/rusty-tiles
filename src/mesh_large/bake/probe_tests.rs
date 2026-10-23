@@ -1149,7 +1149,13 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
                         // accident or weaken the concrete applicable floor.
                         let quality = profile == Profile::Quality;
                         let colour_channel = colour && channel < 3;
-                        let expected_floor = if colour_channel {
+                        // Small colour and data levels share the relaxed floor.
+                        let small_data = channel < 3
+                            && matches!(
+                                page.slot,
+                                TextureSlot::MetallicRoughness | TextureSlot::Occlusion
+                            );
+                        let expected_floor = if colour_channel || small_data {
                             if quality {
                                 23.
                             } else {

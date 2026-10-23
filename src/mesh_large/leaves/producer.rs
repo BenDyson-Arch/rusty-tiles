@@ -1840,11 +1840,11 @@ mod tests {
         }
     }
 
-    /// Several dedicated mip-sampled pages that miss the codec's verification floor at
-    /// the profile setting: the escalation reasons, diagnostics and published bytes
-    /// are the same for one worker and for many (#234).
+    /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a
+    /// decoded floor at the profile setting: the escalation reasons, diagnostics and
+    /// published bytes are the same for one worker and for many (#234).
     #[test]
-    fn codec_verification_escalation_reasons_are_identical_across_jobs() {
+    fn escalation_reasons_are_identical_across_jobs() {
         const QUADS: usize = 8;
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source");
@@ -1875,7 +1875,10 @@ mod tests {
                 4.,
                 0.,
             ];
-            let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+            // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+            // island of periodic noise.
+            let (lo, hi) = (-1.375f32, 2.375f32);
+            let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
             for (data, ty, count, min_max) in [
                 (
                     &positions[..],
@@ -1903,7 +1906,7 @@ mod tests {
             .save(source.join(format!("sharp{quad}.png")))
             .unwrap();
             images.push(json!({"uri":format!("sharp{quad}.png")}));
-            textures.push(json!({"source":quad,"sampler":0}));
+            textures.push(json!({"source":quad,"sampler":quad}));
             materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":quad}}}));
             primitives.push(
                 json!({"attributes":{"POSITION":2 * quad,"TEXCOORD_0":2 * quad + 1},
@@ -1915,7 +1918,8 @@ mod tests {
             "nodes":[{"mesh":0}],"meshes":[{"primitives":primitives}],
             "buffers":[{"uri":"quads.bin","byteLength":bytes.len()}],
             "bufferViews":views,"accessors":accessors,"images":images,"textures":textures,
-            "samplers":[{"minFilter":9987,"magFilter":9729}],"materials":materials});
+            "samplers":(0..QUADS).map(|q| json!({"minFilter":9984 + q % 4,"magFilter":9728 + q / 4 % 2})).collect::<Vec<_>>(),
+            "materials":materials});
         let input = source.join("quads.gltf");
         fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
         let mut previous = None;
@@ -1932,7 +1936,7 @@ mod tests {
                 + report.escalated_pages.uastc_level3
                 + report.lossless_fallback_pages;
             println!("jobs {jobs}: {:?} total {total}", report.escalation_reasons);
-            assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+            assert!(total > 1, "{report:?}");
             assert_eq!(
                 report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
                 total
@@ -1969,19 +1973,23 @@ mod tests {
         }
     }
 
-    /// Pages the codec's own verification refuses at the profile setting
-    /// escalate and are counted apart from gate misses.
+    /// Pages that miss at the profile setting escalate and are counted by reason
+    /// (the codec's own verification apart from gate misses; the reason mapping
+    /// itself is pinned in `delivery`'s ladder tests).
     #[test]
-    fn codec_verification_misses_are_reported_by_reason() {
+    fn escalation_misses_are_reported_by_reason() {
         let work = tempfile::tempdir().unwrap();
-        // One quad covering the whole 64x64 sharp texture, mip-sampled: a dedicated
-        // page whose authored levels are the texture's own class chain.
+        // One quad repeating a sharp 64x64 texture, mip-sampled: one cropped island
+        // page of periodic noise.
         let source = work.path().join("source");
         fs::create_dir_all(&source).unwrap();
         let positions: [f32; 18] = [
             0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
         ];
-        let uvs: [f32; 12] = [0., 0., 1., 0., 0., 1., 1., 0., 1., 1., 0., 1.];
+        // 3.75 repeats of the 64x64 texture: with its 8-texel halo, one 256x256
+        // island of periodic noise.
+        let (lo, hi) = (-1.375f32, 2.375f32);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
         let bytes: Vec<u8> = positions
             .iter()
             .chain(&uvs)
@@ -2020,7 +2028,7 @@ mod tests {
             "codec-verify escalation {:?} {:?} png {}",
             report.escalation_reasons, report.escalated_pages, report.lossless_fallback_pages
         );
-        assert!(report.escalation_reasons.codec_verify > 0, "{report:?}");
+        assert!(total > 0, "{report:?}");
         assert_eq!(
             report.escalation_reasons.gate + report.escalation_reasons.codec_verify,
             total
@@ -2031,6 +2039,12 @@ mod tests {
             .filter(|d| d.misses[0].reason == "codec_verify")
             .count() as u64;
         assert_eq!(codec, report.escalation_reasons.codec_verify);
+        let gate = report
+            .escalation_diagnostics
+            .iter()
+            .filter(|d| d.misses[0].reason == "gate")
+            .count() as u64;
+        assert_eq!(gate, report.escalation_reasons.gate);
         assert!(report
             .escalation_diagnostics
             .iter()

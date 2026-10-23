@@ -83,7 +83,7 @@ impl FromStr for TilerLod {
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
 pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages at max(G/16, 1e-5 m), \
-     1024 cap, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
+     1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
 pub(crate) const TRIANGLE_CAP: usize = 8192;
@@ -369,6 +369,8 @@ pub(crate) struct DepthAppearance {
     pub page_texels: u64,
     pub covered_texels: u64,
     pub capped_tiles: u64,
+    /// Tiles whose page density the source's own texel spacing set (not `G/16`).
+    pub source_limited_tiles: u64,
     pub escalated_pages: u64,
     pub requested_spacing_min: f64,
     pub requested_spacing_max: f64,
@@ -883,6 +885,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
             (d.mean_spacing_ratio * n + a.achieved_spacing / a.requested_spacing) / (n + 1.);
         d.textured_tiles += 1;
         d.capped_tiles += u64::from(a.capped);
+        d.source_limited_tiles += u64::from(a.source_limited);
         d.achieved_spacing_min = d.achieved_spacing_min.min(a.achieved_spacing);
         d.achieved_spacing_max = d.achieved_spacing_max.max(a.achieved_spacing);
     }
