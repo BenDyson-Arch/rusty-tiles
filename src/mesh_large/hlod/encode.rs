@@ -365,7 +365,9 @@ pub(crate) fn check(
     let decoded = crate::mesh_large::lod::codec::decode(&encoded.glb)?;
     let mut published = vec![[0.; 3]; tile.positions.len()];
     let what = || format!("coarse tile f{}-d{}", tile.key.first, tile.key.depth);
-    if decoded.faces.len() != tile.triangles.len() {
+    if decoded.faces.len() != tile.triangles.len()
+        || encoded.face_order.len() != tile.triangles.len()
+    {
         return Err(invalid(format!(
             "{}: decoded triangle count differs",
             what()
@@ -374,7 +376,14 @@ pub(crate) fn check(
     let bits = |p: [f32; 3]| p.map(f32::to_bits);
     let mut edges = HashSet::with_capacity(decoded.faces.len() * 3);
     let mut points = HashSet::with_capacity(decoded.faces.len() * 3);
+    let mut seen = vec![false; tile.triangles.len()];
     for (face, &triangle) in decoded.faces.iter().zip(&encoded.face_order) {
+        let mapped = seen
+            .get_mut(triangle)
+            .ok_or_else(|| invalid("decoded face mapping outside tile"))?;
+        if std::mem::replace(mapped, true) {
+            return Err(invalid("duplicate decoded face mapping"));
+        }
         let (id, _) = face
             .features
             .first()

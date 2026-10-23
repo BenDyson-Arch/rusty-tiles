@@ -316,6 +316,8 @@ where
     let mut triangles = triangles.peekable();
     let (mut cumulative, mut next, mut i) = (0., rng.unit() / count as f64 * total, 0u64);
     let mut last = None;
+    let mut last_positive = None;
+    let mut area_correction = 0.;
     let mut ordinal = 0usize;
     while let Some(t) = triangles.next() {
         let t = t?;
@@ -329,14 +331,35 @@ where
         let p = t.positions();
         last = Some(p);
         let area = t.area();
-        cumulative += area;
-        while i < count && total > 0. && (next < cumulative || triangles.peek().is_none()) {
+        let y = area - area_correction;
+        let added = cumulative + y;
+        area_correction = (added - cumulative) - y;
+        cumulative = added;
+        if area > 0. {
+            last_positive = Some(p);
+        }
+        // Cached subtree sums can differ from stream accumulation by roundoff.
+        // Correct only that bounded endpoint uncertainty. A genuinely incomplete
+        // schedule still refuses; never assign its remainder to the last face.
+        let endpoint = if triangles.peek().is_none()
+            && (total - cumulative).abs() <= 1024. * f64::EPSILON * total
+        {
+            total
+        } else {
+            cumulative
+        };
+        let sample_triangle = if area > 0. {
+            p
+        } else {
+            last_positive.unwrap_or(p)
+        };
+        while i < count && total > 0. && next < endpoint {
             if i.is_multiple_of(256) {
                 check()?;
             }
             let r = rng.unit().sqrt();
             let s = rng.unit();
-            let point = source_index::bary(p, [1. - r, r * (1. - s), r * s]);
+            let point = source_index::bary(sample_triangle, [1. - r, r * (1. - s), r * s]);
             samples.add(distance(point)?)?;
             i += 1;
             if i < count {
@@ -751,6 +774,32 @@ mod tests {
         );
         let mut plan = plan;
         assert!(plan.add(32, 1).is_err());
+    }
+    #[test]
+    fn incomplete_area_schedule_is_a_typed_refusal() {
+        let t = Triangle::new([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], 0);
+        let error = directed(
+            std::iter::once(Ok(t)),
+            t.area() * 2.,
+            MIN_TILE,
+            55,
+            Controls::SOURCE,
+            |_| Ok(0.),
+            &|| Ok(()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.kind(), crate::JobErrorKind::ResourceLimit);
+        directed(
+            std::iter::once(Ok(t)),
+            t.area() * (1. + 2. * f64::EPSILON),
+            MIN_TILE,
+            55,
+            Controls::SOURCE,
+            |_| Ok(0.),
+            &|| Ok(()),
+        )
+        .unwrap();
     }
     #[test]
     fn reused_measurement_keeps_actual_seed_counts_and_child_floor() {
