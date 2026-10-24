@@ -451,6 +451,90 @@ fn coarse_pages_rebake_the_source_ramp_with_content_sized_pages() {
     assert_eq!(pages as usize, tiles.len());
 }
 
+/// Adversarial: 32 strips, each its own textured material class and source image, so
+/// coarse parents carry many material groups and many source images. Groups are baked
+/// one at a time and share the tile's texel budget instead of each taking a full page.
+#[test]
+fn many_material_classes_and_images_per_parent_share_one_tile_budget() {
+    let work = tempfile::tempdir().unwrap();
+    let dir = work.path().join("in");
+    fs::create_dir_all(&dir).unwrap();
+    const STRIPS: usize = 32;
+    let (mut bin, mut views, mut accessors, mut meshes, mut nodes) = (vec![], vec![], vec![], vec![], vec![]);
+    let (mut materials, mut images, mut textures) = (vec![], vec![], vec![]);
+    for k in 0..STRIPS {
+        let (x0, x1) = (100. * k as f32 / STRIPS as f32, 100. * (k + 1) as f32 / STRIPS as f32);
+        let (nx, nz) = (3usize, 60usize);
+        let (mut pos, mut uv) = (vec![], vec![]);
+        for i in 0..=nx {
+            for j in 0..=nz {
+                let x = x0 + (x1 - x0) * i as f32 / nx as f32;
+                let z = 100. * j as f32 / nz as f32;
+                pos.extend([x, height(Surface::Bump, x, z), z]);
+                uv.extend([i as f32 / nx as f32, z / 100.]);
+            }
+        }
+        let n = pos.len() / 3;
+        let mut idx = vec![];
+        for i in 0..nx {
+            for j in 0..nz {
+                let v = |a: usize, c: usize| (a * (nz + 1) + c) as u32;
+                idx.extend([v(i, j), v(i, j + 1), v(i + 1, j), v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+            }
+        }
+        let mut push = |data: Vec<u8>, count: usize, kind: &str, component: u32| {
+            let start = bin.len();
+            bin.extend(data);
+            views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bin.len()-start}));
+            accessors.push(json!({"bufferView":views.len()-1,"componentType":component,"count":count,"type":kind}));
+            accessors.len() - 1
+        };
+        let mut lo = [f32::INFINITY; 3];
+        let mut hi = [f32::NEG_INFINITY; 3];
+        for p in pos.chunks(3) {
+            for a in 0..3 {
+                lo[a] = lo[a].min(p[a]);
+                hi[a] = hi[a].max(p[a]);
+            }
+        }
+        let p = push(pos.iter().flat_map(|v| v.to_le_bytes()).collect(), n, "VEC3", 5126);
+        let t = push(uv.iter().flat_map(|v| v.to_le_bytes()).collect(), n, "VEC2", 5126);
+        let ix = push(idx.iter().flat_map(|v| v.to_le_bytes()).collect(), idx.len(), "SCALAR", 5125);
+        accessors[p]["min"] = json!(lo);
+        accessors[p]["max"] = json!(hi);
+        meshes.push(json!({"primitives":[{"attributes":{"POSITION":p,"TEXCOORD_0":t},"indices":ix,"material":k}]}));
+        nodes.push(json!({"mesh":k}));
+        let shade = (k * 7 % 32) as u8 * 8;
+        image::RgbaImage::from_fn(16, 16, |x, y| image::Rgba([shade, (x * 16) as u8, (y * 16) as u8, 255]))
+            .save(dir.join(format!("strip{k}.png")))
+            .unwrap();
+        images.push(json!({"uri":format!("strip{k}.png")}));
+        textures.push(json!({"source":k,"sampler":0}));
+        materials.push(json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":k},
+            "baseColorFactor":[1.0, 1.0 - k as f64 / 64.0, 1.0, 1.0],"metallicFactor":0.0}}));
+    }
+    fs::write(dir.join("scene.bin"), &bin).unwrap();
+    let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":(0..STRIPS).collect::<Vec<_>>()}],
+        "nodes":nodes,"meshes":meshes,"materials":materials,"images":images,"textures":textures,
+        "samplers":[{"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071}],
+        "buffers":[{"uri":"scene.bin","byteLength":bin.len()}],"bufferViews":views,"accessors":accessors});
+    let input = dir.join("scene.gltf");
+    fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+    let out = stage(&input, &work.path().join("out"));
+    let mut most = 0;
+    for (row, glb) in coarse(&out) {
+        let a = &row["appearance"];
+        let groups = a["texturedGroups"].as_u64().unwrap();
+        most = most.max(groups);
+        assert_eq!(a["pages"].as_u64().unwrap(), groups, "one base colour page per group");
+        let triangles = row["triangles"].as_u64().unwrap();
+        let budget = super::appearance::TILE_TEXELS + 64 * triangles;
+        assert!(a["layoutTexels"].as_u64().unwrap() <= budget, "{a}");
+        assert_eq!(glb.prims().len() as u64, groups);
+    }
+    assert!(most >= 16, "parents carry many material groups ({most})");
+}
+
 type Faces = Vec<([[u64; 3]; 3], u32)>;
 
 /// Decoded positions and feature IDs of every coarse tile, per tile, faces sorted.

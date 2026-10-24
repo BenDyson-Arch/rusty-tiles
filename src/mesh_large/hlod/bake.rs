@@ -313,6 +313,8 @@ struct Entry {
 #[derive(Default)]
 struct CacheState {
     entries: HashMap<(usize, u8), Entry>,
+    /// Resident entries by (last use, key): O(log n) least-recently-used eviction.
+    order: std::collections::BTreeSet<(u64, (usize, u8))>,
     clock: u64,
     resident: u64,
     peak: u64,
@@ -378,7 +380,17 @@ impl ImageCache {
         need: u32,
         check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<Arc<Chain>, JobError> {
-        let key = (image, class_rank(class));
+        self.get_with((image, class_rank(class)), need, &|base| {
+            load(captured, image, class, base, check)
+        })
+    }
+    /// [`ImageCache::get`] with the chain builder supplied (`load(base)`).
+    fn get_with(
+        &self,
+        key: (usize, u8),
+        need: u32,
+        load: &dyn Fn(u32) -> Result<Chain, JobError>,
+    ) -> Result<Arc<Chain>, JobError> {
         let (cell, base) = {
             let mut s = lock(&self.state);
             s.clock += 1;
@@ -388,8 +400,14 @@ impl ImageCache {
                 Some(cell) => {
                     s.hits += 1;
                     let e = s.entries.get_mut(&key).expect("cached entry");
+                    let (old, resident) = (e.last_use, e.bytes > 0);
                     e.last_use = clock;
-                    (cell, e.base)
+                    let base = e.base;
+                    if resident {
+                        s.order.remove(&(old, key));
+                        s.order.insert((clock, key));
+                    }
+                    (cell, base)
                 }
                 None => {
                     s.misses += 1;
@@ -403,7 +421,10 @@ impl ImageCache {
                             bytes: 0,
                         },
                     );
-                    s.resident -= old.map_or(0, |e| e.bytes);
+                    if let Some(old) = old.filter(|e| e.bytes > 0) {
+                        s.resident -= old.bytes;
+                        s.order.remove(&(old.last_use, key));
+                    }
                     (cell, need)
                 }
             }
@@ -412,7 +433,7 @@ impl ImageCache {
         let result = cell
             .get_or_init(|| {
                 let started = super::error::thread_cpu();
-                let chain = load(captured, image, class, base, check).map(Arc::new);
+                let chain = load(base).map(Arc::new);
                 seconds = super::error::thread_cpu().zip(started).map_or(0., |(b, a)| b - a);
                 chain
             })
@@ -423,8 +444,10 @@ impl ImageCache {
         match &result {
             Err(_) => {
                 if current {
-                    let removed = s.entries.remove(&key).map_or(0, |e| e.bytes);
-                    s.resident -= removed;
+                    if let Some(e) = s.entries.remove(&key).filter(|e| e.bytes > 0) {
+                        s.resident -= e.bytes;
+                        s.order.remove(&(e.last_use, key));
+                    }
                 }
             }
             Ok(chain) => {
@@ -432,20 +455,18 @@ impl ImageCache {
                     let e = s.entries.get_mut(&key).expect("current entry");
                     if e.bytes == 0 {
                         e.bytes = chain.bytes;
+                        let last = e.last_use;
                         s.resident += chain.bytes;
+                        s.order.insert((last, key));
                     }
                 }
                 s.peak = s.peak.max(s.resident);
+                // Evict least recently used chains (never the one just served).
                 while s.resident > self.budget {
-                    let Some(oldest) = s
-                        .entries
-                        .iter()
-                        .filter(|(k, e)| **k != key && e.bytes > 0)
-                        .min_by_key(|(k, e)| (e.last_use, **k))
-                        .map(|(k, _)| *k)
-                    else {
+                    let Some(&(last, oldest)) = s.order.iter().find(|(_, k)| *k != key) else {
                         break;
                     };
+                    s.order.remove(&(last, oldest));
                     let removed = s.entries.remove(&oldest).map_or(0, |e| e.bytes);
                     s.resident -= removed;
                 }
@@ -701,6 +722,46 @@ pub(crate) fn binding(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Many source images through a small cache: resident chains stay within the budget
+    /// plus the one being served, eviction is least recently used, and a coarser request
+    /// is served by a cached finer chain.
+    #[test]
+    fn image_cache_stays_bounded_and_evicts_least_recently_used() {
+        let chain = |base: u32| -> Result<Chain, JobError> {
+            Ok(Chain {
+                base,
+                levels: vec![mips::Level {
+                    width: 1,
+                    height: 1,
+                    rgba: vec![0; 4],
+                }],
+                bytes: 100 >> base.min(2),
+            })
+        };
+        let cache = ImageCache::new(300);
+        let loads = std::cell::Cell::new(0);
+        let load = |base: u32| {
+            loads.set(loads.get() + 1);
+            chain(base)
+        };
+        for round in 0..3 {
+            for image in 0..1000 {
+                cache.get_with((image, 0), 0, &load).unwrap();
+                let s = lock(&cache.state);
+                assert!(s.resident <= 300, "round {round} image {image}: {}", s.resident);
+                assert_eq!(s.order.len(), s.entries.values().filter(|e| e.bytes > 0).count());
+            }
+        }
+        assert_eq!(loads.get(), 3000, "a cyclic scan larger than the cache always misses");
+        // The three most recent survive; a coarser request is a hit on the finer chain.
+        cache.get_with((999, 0), 2, &load).unwrap();
+        assert_eq!(loads.get(), 3000);
+        cache.get_with((996, 0), 0, &load).unwrap();
+        assert_eq!(loads.get(), 3001, "the least recently used chain was evicted");
+        // Peak: the budget plus the one chain being served before eviction.
+        assert!(cache.stats().peak_resident_bytes <= 400);
+    }
 
     #[test]
     fn trilinear_sampling_wraps_and_minifies_in_linear_light() {

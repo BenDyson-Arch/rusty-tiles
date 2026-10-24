@@ -210,9 +210,12 @@ fn appearance_plan(
         .saturating_mul(16)
         .saturating_add(32 << 20)
         .saturating_add(largest_chain);
+    // One group's page workspace at a time, plus the tile's delivered pages and the GLB
+    // being assembled from them (each at most TILE_PAGE_BYTES).
     let texture = texels
         .saturating_mul(QUERY_BYTES_PER_TEXEL)
         .saturating_add(CHUNK_BYTES)
+        .saturating_add(2 * appearance::TILE_PAGE_BYTES)
         .saturating_add(page)
         .saturating_add(decode);
     let cache_total = captured.image_info.iter().fold(0u64, |n, i| {
