@@ -618,18 +618,20 @@ pub(in crate::mesh_large) fn encode(
     mask: Option<MaskDelivery<'_>>,
     ladder: Ladder<'_>,
 ) -> Result<Delivery, JobError> {
-    encode_islands(dimensions, rgba, support, None, slot, profile, memory_limit, mask, ladder)
+    encode_islands(dimensions, rgba, support, None, false, slot, profile, memory_limit, mask, ladder)
 }
 
 /// [`encode`] for a packed island page: `labels` (one per texel, 0 outside every
-/// island allocation) keeps islands apart in every reduced level and gutter fill
-/// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
+/// island allocation) fills each gutter from its own island; `base_only` publishes
+/// level 0 alone (an island page sampled without mips, [`sparse_mips::build_islands`]);
+/// dimensions may be any multiple of four.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn encode_islands(
     dimensions: [u32; 2],
     rgba: &[u8],
     support: &[u32],
     labels: Option<&[u32]>,
+    base_only: bool,
     slot: TextureSlot,
     profile: Profile,
     memory_limit: u64,
@@ -676,7 +678,16 @@ pub(in crate::mesh_large) fn encode_islands(
         });
     }
     let chain = timing::time(Stage::SparseMips, || {
-        sparse_mips::build_islands(width, height, rgba, support, labels, class(slot), memory_limit)
+        sparse_mips::build_islands(
+            width,
+            height,
+            rgba,
+            support,
+            labels,
+            base_only,
+            class(slot),
+            memory_limit,
+        )
     })?;
     encode_authored(&chain, slot, profile, memory_limit, mask, ladder, |_| {
         Ok(Value::Null)

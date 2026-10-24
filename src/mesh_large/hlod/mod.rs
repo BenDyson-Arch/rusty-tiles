@@ -82,7 +82,7 @@ impl FromStr for TilerLod {
 }
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
-pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages at max(G/16, 1e-5 m), \
+pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized level-0 pages at max(G/16, 1e-5 m), \
      1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).
@@ -401,8 +401,8 @@ pub struct DepthAppearance {
     /// Tiles whose page density the source's own texel spacing set (not `G/16`).
     pub source_limited_tiles: u64,
     pub escalated_pages: u64,
-    /// Pages delivered as exact level-0 PNG without mips.
-    pub unmipped_pages: u64,
+    /// Pages delivered as the exact level-0 PNG.
+    pub png_pages: u64,
     pub requested_spacing_min: f64,
     pub requested_spacing_max: f64,
     pub achieved_spacing_min: f64,
@@ -1114,7 +1114,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     d.searches += a.searches;
     d.donor_reads += a.donor_reads;
     d.escalated_pages += u64::from(a.escalated_pages);
-    d.unmipped_pages += u64::from(a.unmipped_pages);
+    d.png_pages += u64::from(a.png_pages);
     if first {
         d.requested_spacing_min = a.requested_spacing;
         d.requested_spacing_max = a.requested_spacing;

@@ -228,20 +228,23 @@ pub(in crate::mesh_large) fn build(
             "sparse mip page requires power-of-two dimensions >=4",
         ));
     }
-    build_islands(width, height, rgba, support, None, class, memory_limit)
+    build_islands(width, height, rgba, support, None, false, class, memory_limit)
 }
 
-/// [`build`] for packed island pages: `labels` names each texel's island allocation
-/// (0 outside every allocation). A reduced texel takes only its children of the island
-/// with the most support (ties to the smaller label), so islands never mix at any level
-/// and every level keeps the island separation of its gutters. Dimensions may be any
-/// multiple of four (KTX2 block-aligned; levels halve with floor).
+/// [`build`] for packed island pages. `labels` names each texel's island allocation (0
+/// outside every allocation): a level-0 gutter texel is filled only from its own island.
+/// `base_only` builds level 0 alone: a page holding several islands cannot keep them
+/// apart in a full chain (a texel coarser than an island holds its neighbours too), so
+/// island pages are published unmipped (sampled with LINEAR minification). Dimensions may
+/// be any multiple of four (whole KTX2 blocks).
+#[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn build_islands(
     width: u32,
     height: u32,
     rgba: &[u8],
     support: &[u32],
     labels: Option<&[u32]>,
+    base_only: bool,
     class: Class,
     memory_limit: u64,
 ) -> Result<Chain, JobError> {
@@ -286,7 +289,7 @@ pub(in crate::mesh_large) fn build_islands(
                     .ok_or_else(resource)?,
             )
             .ok_or_else(resource)?;
-        if w == 1 && h == 1 {
+        if (w == 1 && h == 1) || base_only {
             break;
         }
         w = (w / 2).max(1);
@@ -335,12 +338,9 @@ pub(in crate::mesh_large) fn build_islands(
     }
     fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
-    let mut src_labels: Option<Vec<u32>> = labels.map(<[u32]>::to_vec);
     for &(dw, dh) in &dimensions[1..count] {
         let src = chain.levels.last().expect("base exists");
         let sw = src.width as usize;
-        // Per destination texel: the island its reduction keeps (labelled pages only).
-        let mut dst_labels = src_labels.as_ref().map(|_| vec![0u32; dw as usize * dh as usize]);
         let n = (dw as usize)
             .checked_mul(dh as usize)
             .ok_or_else(resource)?;
@@ -388,37 +388,6 @@ pub(in crate::mesh_large) fn build_islands(
                     dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&best.0);
                     continue;
                 }
-                let keep = match (&src_labels, &mut dst_labels) {
-                    (Some(l), Some(d)) => {
-                        let mut tally = [(0u32, 0u64, 0u32); 4];
-                        let mut len = 0;
-                        let mut any = 0u32;
-                        for sy in y * 2..(y * 2 + 2).min(src.height as usize) {
-                            for sx in x * 2..(x * 2 + 2).min(sw) {
-                                let j = sy * sw + sx;
-                                let s = src.support[j];
-                                any = any.max(l[j]);
-                                if s == 0 {
-                                    continue;
-                                }
-                                match tally[..len].iter_mut().find(|t| t.0 == l[j]) {
-                                    Some(t) => t.1 += u64::from(s),
-                                    None => {
-                                        tally[len] = (l[j], u64::from(s), 0);
-                                        len += 1;
-                                    }
-                                }
-                            }
-                        }
-                        let best = tally[..len]
-                            .iter()
-                            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
-                            .map(|t| t.0);
-                        d[y * dw as usize + x] = best.unwrap_or(any);
-                        best
-                    }
-                    _ => None,
-                };
                 let mut sum = [0.0; 4];
                 let mut weight = 0u32;
                 let mut dominant = [0.0, 0.0, 1.0];
@@ -427,7 +396,7 @@ pub(in crate::mesh_large) fn build_islands(
                     for sx in x * 2..(x * 2 + 2).min(sw) {
                         let i = sy * sw + sx;
                         let s = src.support[i];
-                        if s == 0 || keep.is_some_and(|k| src_labels.as_ref().is_some_and(|l| l[i] != k)) {
+                        if s == 0 {
                             continue;
                         }
                         let p = &src.rgba[i * 4..i * 4 + 4];
@@ -474,9 +443,8 @@ pub(in crate::mesh_large) fn build_islands(
                 dst.rgba[i * 4 + 3] = quant(sum[3] / f64::from(weight));
             }
         }
-        fill_gutters(&mut dst, class, &mut nearest, dst_labels.as_deref());
+        fill_gutters(&mut dst, class, &mut nearest, None);
         chain.levels.push(dst);
-        src_labels = dst_labels;
     }
     Ok(chain)
 }

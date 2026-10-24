@@ -1453,13 +1453,71 @@ mod tests {
             let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
             let document: serde_json::Value =
                 serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+            // Unspecified source minification is mipmapped: lossless keeps it (PNG with
+            // viewer mips); lossy cropped island pages publish level 0 with LINEAR.
+            let want = if profile == LeafProfile::Lossless { 9987 } else { 9729 };
             for sampler in document["samplers"].as_array().unwrap() {
-                assert_eq!(
-                    sampler["minFilter"], 9987,
-                    "unspecified source minification uses authored mips"
-                );
+                assert_eq!(sampler["minFilter"], want, "{name}");
             }
         }
+    }
+
+    /// Review round 2, probe 1: a mipmapped source striped in 16-texel bands, cropped
+    /// from texel 16. A cropped island page cannot carry source-exact levels beyond its
+    /// alignment, so it publishes level 0 alone (KTX2 levelCount 1) with LINEAR
+    /// minification, and that level is the source's own bands (no 128 blend).
+    #[test]
+    fn cropped_mipmapped_leaf_pages_publish_only_exact_level_zero() {
+        let work = tempfile::tempdir().unwrap();
+        let source = work.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let positions: [f32; 18] = [
+            0., 0., 0., 4., 0., 0., 0., 4., 0., 4., 0., 0., 4., 4., 0., 0., 4., 0.,
+        ];
+        let (lo, hi) = (16.5f32 / 128., 47.5 / 128.);
+        let uvs: [f32; 12] = [lo, lo, hi, lo, lo, hi, hi, lo, hi, hi, lo, hi];
+        let bytes: Vec<u8> = positions.iter().chain(&uvs).flat_map(|v| v.to_le_bytes()).collect();
+        fs::write(source.join("quad.bin"), &bytes).unwrap();
+        image::RgbaImage::from_fn(128, 128, |x, _| {
+            let v = if (x / 16) % 2 == 0 { 0 } else { 255 };
+            image::Rgba([v, v, v, 255])
+        })
+        .save(source.join("bands.png"))
+        .unwrap();
+        let doc = json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],
+            "buffers":[{"uri":"quad.bin","byteLength":bytes.len()}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":48}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3","min":[0,0,0],"max":[4,4,0]},
+                         {"bufferView":1,"componentType":5126,"count":6,"type":"VEC2"}],
+            "images":[{"uri":"bands.png"}],"textures":[{"source":0,"sampler":0}],
+            "samplers":[{"minFilter":9987,"magFilter":9729}],
+            "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}]});
+        let input = source.join("quad.gltf");
+        fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let output = work.path().join("out");
+        mesh_to_leaf_payloads(
+            LeafOutputRequest::new(&input, &output, LeafProfile::Quality)
+                .with_jobs(NonZeroUsize::new(1).unwrap()),
+            &RunControl::default(),
+        )
+        .unwrap();
+        let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
+        let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
+        assert_eq!(document["samplers"][0]["minFilter"], 9729);
+        let bin = &leaf[20 + json_len + 8..];
+        let view = &document["bufferViews"][document["images"][0]["bufferView"].as_u64().unwrap() as usize];
+        let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let ktx2 = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
+        assert_eq!(u32::from_le_bytes(ktx2[40..44].try_into().unwrap()), 1, "KTX2 levelCount");
+        let decoder = basisu::Transcoder::new(ktx2).unwrap();
+        assert_eq!(decoder.level_count(), 1);
+        let level = decoder
+            .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
+            .unwrap();
+        let blended = level.chunks(4).filter(|p| (48..208).contains(&p[0])).count();
+        assert!(blended * 50 < level.len() / 4, "{blended} blended texels of {}", level.len() / 4);
     }
     #[test]
     fn synthetic_depth_payloads_are_identical_across_jobs_and_paths() {
@@ -1819,7 +1877,9 @@ mod tests {
     /// the refusal names the leaf, page, slot, source image and material, and
     /// each step's missed level.
     #[test]
-    fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
+    fn escalated_page_diagnostics_name_leaf_page_slot_sources_and_level() {
+        // A hard mipmapped page: cropped island pages are level 0 only, so it recovers on
+        // the ladder (it can no longer be unrecoverable) and its diagnostic names it.
         let work = tempfile::tempdir().unwrap();
         let input = textured_fixture(
             &work.path().join("source"),
@@ -1828,23 +1888,18 @@ mod tests {
             Texture::Hard(1),
             256,
         );
-        let failure = mesh_to_leaf_payloads(
+        let result = mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )
-        .unwrap_err();
-        let message = failure.error.to_string();
-        assert_eq!(failure.error.kind(), JobErrorKind::Unsupported, "{message}");
-        for text in [
-            "leaf 000000000000 (first 0, depth ",
-            "page 0 baseColorTexture (source image 0 material 0)",
-            "profile mip",
-            "uastc_level3 mip",
-            "no lossless PNG step",
-        ] {
-            assert!(message.contains(text), "{text}: {message}");
-        }
+        .unwrap();
+        let d = &result.report.escalation_diagnostics[0];
+        assert_eq!(d.leaf, "leaves/000000000000.glb");
+        assert_eq!((d.page, d.slot), (0, "baseColorTexture"));
+        assert_eq!((d.sources[0].image, d.sources[0].material), (0, 0));
+        assert_eq!(d.misses[0].step, "profile");
+        assert_eq!(d.misses[0].mip, Some(0), "level 0 is the only published level");
     }
 
     /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a

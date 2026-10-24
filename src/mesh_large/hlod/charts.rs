@@ -127,39 +127,30 @@ fn overlap(a: &[P2; 3], b: &[P2; 3]) -> bool {
     true
 }
 
-/// Grow charts over `faces` (corner indices into `positions`): seeds by descending area
-/// (then face order), breadth-first over shared edges within the normal cone, rejecting a
-/// face whose projection overlaps the chart's interior. Zero-area faces get a point chart.
-pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, Vec<u32>) {
-    let p = |v: u32| positions[v as usize].map(f64::from);
+/// Face adjacency over manifold (welded, exactly two distinct faces) edges in CSR form:
+/// at most two directed pairs per edge, so at most `6 F` pairs and O(F log F) time.
+/// Charts never grow across a non-manifold edge (a fan of F faces on one edge stays
+/// linear instead of creating every face pair).
+fn adjacency(faces: &[[u32; 3]]) -> (Vec<u32>, Vec<(u32, u32)>) {
     let n = faces.len();
-    let mut normals = Vec::with_capacity(n);
-    let mut areas = Vec::with_capacity(n);
     let mut edges: Vec<(u32, u32, u32)> = Vec::with_capacity(n * 3);
     for (i, f) in faces.iter().enumerate() {
-        let c = cross(sub(p(f[1]), p(f[0])), sub(p(f[2]), p(f[0])));
-        areas.push(dot(c, c).sqrt());
-        normals.push(unit(c));
         for k in 0..3 {
             let (a, b) = (f[k], f[(k + 1) % 3]);
             edges.push((a.min(b), a.max(b), i as u32));
         }
     }
     edges.sort_unstable();
-    // Adjacency over shared (welded) edges, in CSR form.
-    let mut pairs: Vec<(u32, u32)> = Vec::new();
+    let mut pairs: Vec<(u32, u32)> = Vec::with_capacity(edges.len());
     let mut s = 0;
     while s < edges.len() {
         let mut e = s + 1;
         while e < edges.len() && edges[e].0 == edges[s].0 && edges[e].1 == edges[s].1 {
             e += 1;
         }
-        for a in s..e {
-            for b in s..e {
-                if edges[a].2 != edges[b].2 {
-                    pairs.push((edges[a].2, edges[b].2));
-                }
-            }
+        if e - s == 2 && edges[s].2 != edges[s + 1].2 {
+            pairs.push((edges[s].2, edges[s + 1].2));
+            pairs.push((edges[s + 1].2, edges[s].2));
         }
         s = e;
     }
@@ -172,6 +163,23 @@ pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, V
     for i in 0..n {
         start[i + 1] += start[i];
     }
+    (start, pairs)
+}
+
+/// Grow charts over `faces` (corner indices into `positions`): seeds by descending area
+/// (then face order), breadth-first over shared edges within the normal cone, rejecting a
+/// face whose projection overlaps the chart's interior. Zero-area faces get a point chart.
+pub(crate) fn grow(positions: &[[f32; 3]], faces: &[[u32; 3]]) -> (Vec<Chart>, Vec<u32>) {
+    let p = |v: u32| positions[v as usize].map(f64::from);
+    let n = faces.len();
+    let mut normals = Vec::with_capacity(n);
+    let mut areas = Vec::with_capacity(n);
+    for f in faces {
+        let c = cross(sub(p(f[1]), p(f[0])), sub(p(f[2]), p(f[0])));
+        areas.push(dot(c, c).sqrt());
+        normals.push(unit(c));
+    }
+    let (start, pairs) = adjacency(faces);
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| areas[b].total_cmp(&areas[a]).then(a.cmp(&b)));
     let mut chart_of = vec![u32::MAX; n];
@@ -790,5 +798,28 @@ mod tests {
         for (i, c) in charts.iter().enumerate() {
             assert!(c.faces.iter().all(|&f| chart_of[f] as usize == i));
         }
+    }
+
+    /// Review adversarial (round 2): a fan of 8,192 faces on one non-manifold edge.
+    /// Adjacency stays linear (no face pairs across the edge), charting and packing
+    /// finish quickly, and every face keeps a chart.
+    #[test]
+    fn non_manifold_fans_stay_linear() {
+        let n = 8192u32;
+        let mut positions = vec![[0f32, 0., 0.], [1., 0., 0.]];
+        let faces: Vec<[u32; 3]> = (0..n)
+            .map(|k| {
+                let a = std::f32::consts::TAU * k as f32 / n as f32;
+                positions.push([0.5, a.cos(), a.sin()]);
+                [0, 1, 2 + k]
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let (_, pairs) = adjacency(&faces);
+        assert!(pairs.len() <= 6 * faces.len(), "adjacency memory is O(F): {}", pairs.len());
+        let l = layout(&positions, &faces, 0.05, 1024, 1 << 20).unwrap();
+        assert!(started.elapsed().as_secs_f64() < 20., "{:?}", started.elapsed());
+        assert_eq!(l.chart_of.len(), faces.len());
+        assert!(l.charts.iter().all(|c| c.faces.len() == 1), "no growth across the fan's edge");
     }
 }

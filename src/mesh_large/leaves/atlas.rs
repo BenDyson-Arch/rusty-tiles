@@ -60,6 +60,15 @@ struct Binding {
     output_uv: usize,
     image: usize,
     sampler: SourceSampler,
+    /// A lossy binding whose source sampler is mipmapped. Its islands share a page with
+    /// others, and no complete mip chain can keep several islands apart (a texel coarser
+    /// than an island holds its neighbours) or phase-exact with the source at bounded
+    /// padding, while the consumer needs complete chains for mipmapped sampling. So the
+    /// page is published at level 0 with LINEAR minification (alignment 1, no padding
+    /// beyond the codec block) and `sampler` carries that filter.
+    capped: bool,
+    /// The source sampler's own minification filter (receipts).
+    source_min_filter: u32,
     block: Block,
     source_size: [u32; 2],
     offset: [u32; 2],
@@ -69,6 +78,8 @@ struct PagePlan {
     bindings: Vec<usize>,
     slot: TextureSlot,
     sampler: SourceSampler,
+    /// Level 0 only (pages of capped bindings).
+    base_only: bool,
     width: u32,
     height: u32,
 }
@@ -157,6 +168,7 @@ fn pack_islands(
         bindings: ids.to_vec(),
         slot: first.slot,
         sampler: first.sampler,
+        base_only: first.capped,
         width,
         height,
     };
@@ -183,7 +195,7 @@ fn pack(
     max_edge: u32,
     mask_classes: &[Option<u32>],
 ) -> Result<Vec<PagePlan>, JobError> {
-    let mut buckets = BTreeMap::<(u8, u32, u32, Option<u32>), Vec<usize>>::new();
+    let mut buckets = BTreeMap::<(u8, u32, u32, Option<u32>, bool), Vec<usize>>::new();
     for (i, b) in bindings.iter().enumerate() {
         let mask = if b.slot == TextureSlot::BaseColor {
             mask_classes[b.primitive]
@@ -191,7 +203,7 @@ fn pack(
             None
         };
         buckets
-            .entry((role(b.slot), b.sampler.min_filter, b.sampler.mag_filter, mask))
+            .entry((role(b.slot), b.sampler.min_filter, b.sampler.mag_filter, mask, b.capped))
             .or_default()
             .push(i);
     }
@@ -232,6 +244,7 @@ fn pack(
             bindings: Vec::new(),
             slot: first.slot,
             sampler: first.sampler,
+            base_only: first.capped,
             width: 0,
             height: 0,
         };
@@ -251,6 +264,7 @@ fn pack(
                     bindings: Vec::new(),
                     slot: b.slot,
                     sampler: b.sampler,
+                    base_only: b.capped,
                     width: 0,
                     height: 0,
                 };
@@ -276,12 +290,11 @@ fn pack(
 }
 
 /// Gutter and allocation alignment of island crops. Lossy pages align islands
-/// to the 4x4 codec block so no block mixes two islands. Mipmapped bindings
-/// (authored KTX2 chains, or PNG with viewer-generated mips) carry eight texels
-/// of real source context around every island, aligned to eight texels, so the
-/// first three levels of an island are phase-aligned with the source's and never
-/// read a neighbouring island; coarser levels are support-weighted page
-/// reductions, never a whole-source dependency (D6).
+/// to the 4x4 codec block so no block mixes two islands. PNG pages filtered with
+/// viewer-generated mips carry eight texels of real source context around every
+/// island, aligned to eight texels, so the first three box-filtered levels of an
+/// island never read a neighbouring island (viewer mips are outside the guarantee).
+/// Cropped lossy pages of mipmapped bindings publish level 0 only ([`Binding::capped`]).
 /// ID pages (lossless PNG, NEAREST, no runtime mips) keep a two-texel
 /// no-feature gutter and align islands to eight texels, so the first three
 /// authored mode levels used by coarse proxies never merge two islands.
@@ -290,7 +303,7 @@ fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32,
         return (2, 8);
     }
     match profile {
-        _ if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
+        Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
         Profile::Lossless => (2, 1),
         _ => (2, 4),
     }
@@ -716,12 +729,19 @@ fn layout(
                 .iter()
                 .flat_map(|t| t.corners.iter().map(|c| c.texcoords[b.texcoord]))
                 .collect();
+            // Cropped lossy mipmapped bindings publish level 0 with LINEAR minification.
+            let source_min_filter = sampler.min_filter;
+            let capped = profile != Profile::Lossless && matches!(source_min_filter, 9984..=9987);
+            let sampler = if capped {
+                SourceSampler {
+                    min_filter: 9729,
+                    ..sampler
+                }
+            } else {
+                sampler
+            };
             let (gutter, align) = crop_padding(class(b.slot), profile, sampler);
-            // Mipmapped lossy bindings: interiors on the alignment grid (D6).
-            let mipmapped = profile != Profile::Lossless && matches!(sampler.min_filter, 9984..=9987);
-            let block = crops::plan_islands_aligned(
-                &uvs, size[0], size[1], max_edge, gutter, align, mipmapped,
-            )?;
+            let block = crops::plan_islands(&uvs, size[0], size[1], max_edge, gutter, align)?;
             p.uvs.push(uvs);
             bindings.push(Binding {
                 primitive: pi,
@@ -730,6 +750,8 @@ fn layout(
                 output_uv,
                 image,
                 sampler,
+                capped,
+                source_min_filter,
                 block,
                 source_size: size,
                 offset: [0; 2],
@@ -813,11 +835,7 @@ fn page_charge(
         .checked_mul(u64::from(page.height))
         .ok_or_else(resource)?;
     let codec = delivery::workspace_charge([page.width, page.height], profile)?;
-    // RGBA and support, plus island labels and their reduced chain on mipmapped pages.
-    let mipmapped = profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
-    let assembly = pixels
-        .checked_mul(if mipmapped { 18 } else { 8 })
-        .ok_or_else(resource)?;
+    let assembly = pixels.checked_mul(8).ok_or_else(resource)?;
     let mut decode = 0u64;
     for &bi in &page.bindings {
         let info = image_info.get(bindings[bi].image).ok_or_else(invariant)?;
@@ -991,11 +1009,6 @@ fn encode_page(
         let mut support = Vec::new();
         support.try_reserve_exact(pixels).map_err(|_| resource())?;
         support.resize(pixels, 0u32);
-        // Mipmapped lossy pages keep their islands apart in every reduced level.
-        let mipmapped =
-            profile != Profile::Lossless && matches!(page.sampler.min_filter, 9984..=9987);
-        let mut labels = if mipmapped { vec![0u32; pixels] } else { Vec::new() };
-        let mut next_label = 0u32;
         let mut surface = Vec::new();
         let mut mask_context = None;
         for &bi in &page.bindings {
@@ -1025,13 +1038,6 @@ fn encode_page(
                         let first = ((oy + y) * page.width + ox + crop.gutter) as usize;
                         support[first..first + crop.interior_width as usize].fill(1);
                     }
-                    if mipmapped {
-                        next_label += 1;
-                        for y in 0..crop.height {
-                            let first = ((oy + y) * page.width + ox) as usize;
-                            labels[first..first + crop.width as usize].fill(next_label);
-                        }
-                    }
                 }
                 Ok(())
             })?;
@@ -1057,7 +1063,11 @@ fn encode_page(
                 )?);
                 mask_context = Some((factor, cutoff, b.sampler.mag_filter == 9729));
             }
-            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"islandInteriorTexels":b.block.interior_texels(),"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.sampler.min_filter,"magFilter":b.sampler.mag_filter}}));
+            receipts.push(json!({"page":page_id,"primitive":b.primitive,"slot":role(b.slot),"sourceImage":b.image,"sourceUV":b.source_uv,"outputUV":b.output_uv,"densityDrop":drop,"islands":island_receipts(b),"islandGutter":b.block.islands[0].crop.gutter,"islandInteriorTexels":b.block.interior_texels(),"pageOffset":b.offset,"sourceSampler":{"wrapS":b.sampler.wrap_s,"wrapT":b.sampler.wrap_t,"minFilter":b.source_min_filter,"magFilter":b.sampler.mag_filter}}));
+            if b.capped {
+                receipts.last_mut().ok_or_else(invariant)?["mipChain"] =
+                    json!("level 0, LINEAR minification (cropped island page)");
+            }
         }
         let min_linear = matches!(page.sampler.min_filter, 9729 | 9985 | 9987);
         let mask = mask_context.map(|(factor, cutoff, linear)| MaskDelivery {
@@ -1071,7 +1081,8 @@ fn encode_page(
             [page.width, page.height],
             &rgba,
             &support,
-            mipmapped.then_some(labels.as_slice()),
+            None,
+            page.base_only,
             page.slot,
             profile,
             memory,
