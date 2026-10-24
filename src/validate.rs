@@ -11,6 +11,7 @@ use crate::content_integrity::{
 mod catalog_controls;
 mod containment;
 mod facts;
+mod identity;
 mod limits;
 #[cfg(test)]
 mod limits_controls;
@@ -1256,6 +1257,7 @@ pub(crate) struct ImplicitTileFact {
 struct Check<'a> {
     resources: ArchiveResources<'a>,
     reports: Value,
+    hlod_identity: bool,
     tiles: usize,
     contents: usize,
     /// Link tiles: explicit tiles whose contents are all external tilesets.
@@ -1568,6 +1570,7 @@ impl Check<'_> {
                 .refuse(self.elements.saturating_add(planned), message),
             (error, _) => scene_error(error),
         })?;
+        self.hlod_identity |= identity::inspect(&bytes)?;
         drop(bytes);
         let mut exclusions = content_reasons(&facts.exclusions);
         if consumer.quaternion_window {
@@ -3220,6 +3223,7 @@ fn inspect_run(
             reference_visits: 0,
         },
         reports: report,
+        hlod_identity: false,
         tiles: 0,
         contents: 0,
         links: 0,
@@ -3375,6 +3379,7 @@ fn inspect_run(
             "recordedBudgets",
         ])
         .chain(contained.then_some("decodedContentContainment"))
+        .chain(check.hlod_identity.then_some("hlodFeatureIds"))
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),
