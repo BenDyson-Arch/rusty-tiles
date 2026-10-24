@@ -7,6 +7,7 @@ No producer incidence, geometry or report supplies the independent expectations.
 import argparse
 import hashlib
 import json
+import struct
 from pathlib import Path
 import subprocess
 
@@ -66,6 +67,48 @@ def generate(root):
             for member, data in files.items():
                 (folder / member).write_bytes(data)
             cases.append((name, folder, source_path, lost))
+    # Original identity remains authoritative when no geometric boundary
+    # survives reduction, including when the separated boxes do not overlap.
+    vertices = [A, B, C, D, E, F]
+    faces = [(0, 1, 2), (1, 0, 4), (0, 2, 4), (1, 4, 2),
+             (0, 1, 3), (1, 0, 5), (0, 3, 5), (1, 5, 3)]
+    xyz = [[vertices[v] for v in face] for face in faces]
+    source = {'triangles': {f'0,0,0,{i}': dict(xyz=points, vertices=faces[i],
+        expanded_ordinal=0, material_index=0, material=controls.MATERIALS[0],
+        normals=controls.NORMALS, uvs=controls.UVS) for i, points in enumerate(xyz)}}
+    source_path = root / 'shared-closed-source.json'
+    source_path.write_text(json.dumps(source))
+    def shared(ids, leaf, gap=0):
+        doc, data = native_controls.unpack(payload(ids, xyz, leaf))
+        doc['nodes'][0]['translation'] = [0, 0, gap]
+        for primitive in doc['meshes'][0]['primitives']:
+            primitive['material'] = 0
+        metadata = doc['extensions']['EXT_structural_metadata']
+        for table in metadata['propertyTables']:
+            schema = metadata['schema']['classes'][table['class']]['properties']
+            for key, column in table['properties'].items():
+                view = doc['bufferViews'][column['values']]
+                wide = schema[key]['componentType'] == 'UINT64'
+                for row, face in enumerate(ids):
+                    value = face if key == 'triangle_index' else (
+                        faces[face][int(key[-1])] if key.startswith('vertex_') else 0)
+                    struct.pack_into('<Q' if wide else '<I', data,
+                        view.get('byteOffset', 0) + row * (8 if wide else 4), value)
+        return native_controls.pack(doc, data)
+    for name, gap in [('shared-closed-retained', 0),
+                      ('shared-closed-gap', -.125), ('shared-closed-disjoint', -10)]:
+        folder = root / name
+        folder.mkdir(exist_ok=True)
+        files = {'coarse.glb': shared(list(range(4)), False),
+                 'left.glb': shared(list(range(4)), True),
+                 'right.glb': shared(list(range(4, 8)), True, gap)}
+        tile = native_controls.tile
+        files['tileset.json'] = json.dumps(dict(asset={'version': '1.1'},
+            geometricError=0, root=tile(children=[
+                tile('coarse.glb', [tile('left.glb')]), tile('right.glb')]))).encode()
+        for member, data in files.items():
+            (folder / member).write_bytes(data)
+        cases.append((name, folder, source_path, bool(gap)))
     return cases
 
 
@@ -75,13 +118,16 @@ def run(root, binary=None):
         binary = Path(binary).resolve(strict=True)
         digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     for name, folder, source, lost in generate(root):
+        identity = name.startswith('shared-closed-')
+        oracle_check = 'leafGeometry' if identity else 'interfaceSegments'
+        archive_check = 'sourceIdentity' if identity else 'interfaceSegments'
         try:
             result = audit(folder, source, scratch=root, work_limit=100_000)
             assert not lost, (name, result)
             assert result['checkedSegments'] >= 3, (name, result)
             verdict = 'pass'
         except Failure as error:
-            assert lost and error.check == 'interfaceSegments', (name, error)
+            assert lost and error.check == oracle_check, (name, error)
             verdict = error.check
         if binary:
             archive = folder.with_suffix('.3tz')
@@ -93,12 +139,13 @@ def run(root, binary=None):
             report = json.loads(checked.stdout)
             if lost:
                 assert checked.returncode == 3, (name, report)
-                assert 'interfaceSegments' in report['error']['message'], (name, report)
+                assert archive_check in report['error']['message'], (name, report)
             else:
                 assert checked.returncode == 0, (name, report)
                 assert {'hlodFeatureIds', 'replaceContentContinuity', 'interfaceSegments',
                         'interfacePoints', 'interfaceWinding'} <= set(report['checks']), name
-        results.append(dict(name=name, oracle=verdict, native=verdict if binary else 'not run'))
+        results.append(dict(name=name, oracle=verdict,
+            native=(archive_check if lost else 'pass') if binary else 'not run'))
     if binary:
         assert hashlib.sha256(binary.read_bytes()).hexdigest() == digest, 'binary changed'
     return results

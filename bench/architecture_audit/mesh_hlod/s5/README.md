@@ -42,7 +42,10 @@ contacts, including two closed leaves with no open-edge seeds. Each replay uses
 bounded per-document RAM edge maps; only discovered contact edges and ancestor
 requests survive on disk. Original payload admission runs once; selected rereads
 and decoding retain their shared byte/work charges. No full triangle soup is
-spilled. A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
+spilled. Compact per-source-primitive original-vertex ranges select a separate
+identity replay even when decoded boxes are disjoint. Every shared original key
+must have the same placed point; closed-leaf reduction cannot erase this join.
+A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
 subsegments, corner/T points and matching required-interface incidences. Keeping just a T vertex
 cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
 charged; dense queries refuse rather than truncate. Shared points and consecutive
