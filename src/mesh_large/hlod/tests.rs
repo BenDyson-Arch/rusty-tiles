@@ -2194,7 +2194,8 @@ fn donor_search_is_bounded_on_oblique_adversaries() {
             .map(|j| {
                 let mut budget = Budget::new(budget_steps);
                 let hit: Hit = surface.nearest_budget_hint([j as f64 / 1000., 0., 0.], key, &mut hint, &mut budget, frontier);
-                assert!(budget.steps <= budget_steps, "query {j}: {} steps", budget.steps);
+                // The budget, plus a cold search's greedy seed (depth + one leaf).
+                assert!(budget.steps <= budget_steps + 64, "query {j}: {} steps", budget.steps);
                 assert!(hit.distance2.is_finite());
                 (hit.rank, budget.exhausted)
             })
@@ -2203,4 +2204,70 @@ fn donor_search_is_bounded_on_oblique_adversaries() {
     let first = run(&mut frontier);
     assert!(first.iter().all(|q| q.1), "the adversary exhausts the budget");
     assert_eq!(first, run(&mut frontier), "deterministic");
+}
+
+/// Review round 4 defect 2: a cold search (no candidate yet) whose budget runs out before
+/// it reaches any triangle (here B = 2 against a paged hierarchy many levels deep; the
+/// review's adversary was 4,096 overlapping 256-triangle blocks against B = 4096) still
+/// returns a finite donor: its greedy seed. Budgets bound improvement, never existence;
+/// seeded and exhausted searches are counted, and an ample budget stays exact.
+#[test]
+fn cold_donor_search_always_has_a_finite_witness() {
+    use super::bake::Searcher;
+    use super::source_index::{Budget, Frontier, Hit, SourceIndex, Surface, Triangle};
+    use crate::mesh_large::{
+        config::{Profile, TreeConfig},
+        full,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let wave = |x: f32, z: f32| 0.05 * (7. * x).sin() * (5. * z).cos();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[grid((64, 64), (0., 1.), (0., 1.), &wave, [0.5, 0.5, 0.5, 1.])],
+    );
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(256);
+    config.lod = TilerLod::Hlod;
+    config.jobs = crate::mesh_large::config::Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let index = SourceIndex::build(&captured, &|| Ok(())).unwrap();
+    let key = super::store::TileKey {
+        first: 0,
+        end: captured.scan.triangles,
+        depth: 0,
+        leaf_begin: 0,
+        leaf_end: 1,
+    };
+    let points: Vec<[f64; 3]> = (0..16).map(|i| [0.03 + 0.06 * i as f64, 0.2, 0.97 - 0.05 * i as f64]).collect();
+    for p in &points {
+        let exact = index.query(&captured, key).unwrap().nearest(*p).unwrap();
+        let cold = |steps: u64| {
+            let mut query = index.query(&captured, key).unwrap();
+            let mut searcher = Searcher::paged_with_budget(&mut query, steps);
+            let hit = searcher.search(*p).unwrap();
+            (hit, searcher.exhausted, searcher.seeded)
+        };
+        let (starved, exhausted, seeded) = cold(2);
+        assert!(starved.distance2.is_finite(), "{p:?}: no finite witness");
+        assert_eq!((exhausted, seeded), (1, 1));
+        assert!(starved.distance2 >= exact.distance2);
+        let again = cold(2).0;
+        assert_eq!((again.rank, again.distance2.to_bits()), (starved.rank, starved.distance2.to_bits()), "deterministic");
+        let (ample, exhausted, seeded) = cold(1 << 20);
+        assert_eq!((ample.rank, ample.distance2.to_bits()), (exact.rank, exact.distance2.to_bits()));
+        assert_eq!((exhausted, seeded), (0, 1));
+    }
+    // The resident surface: a budget of one step still yields the seed.
+    let r = 4096u64;
+    let triangles: Vec<Triangle> = (0..r)
+        .map(|i| {
+            let d = i as f32 / 100_000.;
+            Triangle::new([[3. + d, -1., -1.], [-1., 3. + d, -1.], [-1., -1., 3. + d]], i)
+        })
+        .collect();
+    let surface = Surface::new(triangles).unwrap();
+    let key = super::store::TileKey { first: 0, end: r, depth: 0, leaf_begin: 0, leaf_end: 1 };
+    let mut budget = Budget::new(1);
+    let hit: Hit = surface.nearest_budget_hint([0.5, 0., 0.], key, &mut None, &mut budget, &mut Frontier::new());
+    assert!(hit.distance2.is_finite());
+    assert!(budget.seeded && budget.exhausted);
 }

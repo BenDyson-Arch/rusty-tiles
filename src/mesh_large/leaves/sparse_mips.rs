@@ -242,6 +242,242 @@ pub(in crate::mesh_large) fn refill_gutters(
     Ok(owners)
 }
 
+/// Support-weighted value of one level-0 texel of an averaged class: linear colour or
+/// data (or the unit normal) and linear alpha, each times the texel's support.
+fn weighted(class: Class, p: &[u8], s: u32) -> Result<[f64; 4], JobError> {
+    let rgb = match class {
+        Class::Colour => std::array::from_fn(|a| decode_colour(p[a])),
+        Class::Data => std::array::from_fn(|a| f64::from(p[a]) / 255.0),
+        Class::Normal => unit(normal(p))?,
+        Class::Id => unreachable!("ID levels take the mode"),
+    };
+    let s = f64::from(s);
+    Ok([rgb[0] * s, rgb[1] * s, rgb[2] * s, f64::from(p[3]) / 255.0 * s])
+}
+
+/// One destination level of [`direct_levels`] and its two accumulating rows.
+struct Direct {
+    level: Level,
+    /// Island label of each texel (that of its footprint's first level-0 texel) while
+    /// the level is isolated; such a texel integrates only its own island.
+    labels: Option<Vec<u32>>,
+    sum: [Vec<[f64; 4]>; 2],
+    area: [Vec<u128>; 2],
+}
+
+/// Levels `1..` of an averaged class, each integrated DIRECTLY over level 0 (decision
+/// (a)): texel `(x, y)` of a `w x h` level is the support-weighted average of level 0
+/// (`W x H`) over its footprint `[x·W/w, (x+1)·W/w) x [y·H/h, (y+1)·H/h)`, a fractional
+/// edge texel weighted by its overlap, so odd reductions never blur through earlier
+/// levels. One streaming pass over level-0 rows: each row's prefix sums (one row of a
+/// summed-area table) give every level's horizontal footprint integrals in O(1) per
+/// destination texel, accumulated into at most two destination rows per level with
+/// their vertical overlap. Total O(N) time; scratch O(W) besides the levels. Exact
+/// integer support (overlaps are integers in units of `1/w`, `1/h`), f64 value sums.
+/// Through `isolated` levels with `labels`, each destination texel integrates only
+/// level-0 texels of its own island, so islands stay isolated; deeper levels use the
+/// page-wide integral. A normal footprint whose unit vectors cancel takes its
+/// largest-weight contributor (first row-major on ties), by a direct footprint scan.
+fn direct_levels(
+    base: &Level,
+    labels: Option<&[u32]>,
+    isolated: u32,
+    class: Class,
+    dimensions: &[(u32, u32)],
+) -> Result<Vec<Direct>, JobError> {
+    let (w0, h0) = (base.width as usize, base.height as usize);
+    let block = 1usize << isolated.min(16);
+    let mut levels: Vec<Direct> = reserve(dimensions.len())?;
+    for (index, &(dw, dh)) in dimensions.iter().enumerate() {
+        let (dw, dh) = (dw as usize, dh as usize);
+        let n = dw.checked_mul(dh).ok_or_else(resource)?;
+        let mut level = Level {
+            width: dw as u32,
+            height: dh as u32,
+            rgba: reserve(n.checked_mul(4).ok_or_else(resource)?)?,
+            support: reserve(n)?,
+        };
+        level.rgba.resize(n * 4, 0);
+        level.support.resize(n, 0);
+        let labels = match labels {
+            Some(l) if (index as u32) < isolated => {
+                let mut out = reserve(n)?;
+                out.extend((0..n).map(|i| l[(i / dw * h0 / dh) * w0 + i % dw * w0 / dw]));
+                Some(out)
+            }
+            _ => None,
+        };
+        let row = || -> Result<_, JobError> {
+            let mut s = reserve(dw)?;
+            s.resize(dw, [0.0; 4]);
+            let mut a = reserve(dw)?;
+            a.resize(dw, 0u128);
+            Ok((s, a))
+        };
+        let ((s0, a0), (s1, a1)) = (row()?, row()?);
+        levels.push(Direct {
+            level,
+            labels,
+            sum: [s0, s1],
+            area: [a0, a1],
+        });
+    }
+    let mut value: Vec<[f64; 4]> = reserve(w0)?;
+    value.resize(w0, [0.0; 4]);
+    let mut prefix: Vec<[f64; 4]> = reserve(w0 + 1)?;
+    prefix.resize(w0 + 1, [0.0; 4]);
+    let mut support: Vec<u64> = reserve(w0 + 1)?;
+    support.resize(w0 + 1, 0);
+    let mut cuts: Vec<([f64; 4], u128)> = reserve(w0 + 1)?;
+    for y0 in 0..h0 {
+        let row = &base.support[y0 * w0..(y0 + 1) * w0];
+        for (t, &s) in row.iter().enumerate() {
+            value[t] = if s > 0 {
+                weighted(class, &base.rgba[(y0 * w0 + t) * 4..(y0 * w0 + t) * 4 + 4], s)?
+            } else {
+                [0.0; 4]
+            };
+            prefix[t + 1] = std::array::from_fn(|a| prefix[t][a] + value[t][a]);
+            support[t + 1] = support[t] + u64::from(s);
+        }
+        // Integral of this row over level-0 columns [0, c/u), c in units of 1/u.
+        let integral = |c: usize, u: usize| -> ([f64; 4], u128) {
+            let (t, f) = (c / u, c % u);
+            let mut v = prefix[t].map(|x| x * u as f64);
+            let mut s = u128::from(support[t]) * u as u128;
+            if f > 0 {
+                for (a, x) in v.iter_mut().enumerate() {
+                    *x += value[t][a] * f as f64;
+                }
+                s += u128::from(row[t]) * f as u128;
+            }
+            (v, s)
+        };
+        for d in levels.iter_mut() {
+            let (dw, dh) = (d.level.width as usize, d.level.height as usize);
+            // This row covers [y0, y0 + 1) = [lo, hi) in units of 1/dh.
+            let (lo, hi) = (y0 * dh, (y0 + 1) * dh);
+            if d.labels.is_none() {
+                cuts.clear();
+                cuts.extend((0..=dw).map(|x| integral(x * w0, dw)));
+            }
+            for y in lo / h0..=(hi - 1) / h0 {
+                let wy = hi.min((y + 1) * h0) - lo.max(y * h0);
+                let (sum, area) = (&mut d.sum[y & 1], &mut d.area[y & 1]);
+                for x in 0..dw {
+                    let (v, s) = match &d.labels {
+                        None => {
+                            let (a, b) = (cuts[x], cuts[x + 1]);
+                            (std::array::from_fn(|c| b.0[c] - a.0[c]), b.1 - a.1)
+                        }
+                        Some(own) => {
+                            let island = own[y * dw + x];
+                            let (a, b) = (x * w0, (x + 1) * w0);
+                            let (mut v, mut s) = ([0.0; 4], 0u128);
+                            for k in a / dw / block..=(b - 1) / dw / block {
+                                if labels.expect("isolated levels have labels")[y0 * w0 + k * block] != island {
+                                    continue;
+                                }
+                                let from = integral(a.max(k * block * dw), dw);
+                                let to = integral(b.min(((k + 1) * block).min(w0) * dw), dw);
+                                for (c, x) in v.iter_mut().enumerate() {
+                                    *x += to.0[c] - from.0[c];
+                                }
+                                s += to.1 - from.1;
+                            }
+                            (v, s)
+                        }
+                    };
+                    for (c, x) in sum[x].iter_mut().enumerate() {
+                        *x += v[c] * wy as f64;
+                    }
+                    area[x] += s * wy as u128;
+                }
+                if (y + 1) * h0 <= hi {
+                    finish_row(d, y, base, labels, class)?;
+                }
+            }
+        }
+    }
+    Ok(levels)
+}
+
+/// Writes destination row `y` of `d` from its accumulators and clears them for row `y+2`.
+fn finish_row(
+    d: &mut Direct,
+    y: usize,
+    base: &Level,
+    labels: Option<&[u32]>,
+    class: Class,
+) -> Result<(), JobError> {
+    let (dw, dh) = (d.level.width as usize, d.level.height as usize);
+    let unit_area = (dw * dh) as u128;
+    for x in 0..dw {
+        let i = y * dw + x;
+        let (sum, area) = (d.sum[y & 1][x], d.area[y & 1][x]);
+        d.sum[y & 1][x] = [0.0; 4];
+        d.area[y & 1][x] = 0;
+        d.level.support[i] = u32::try_from(area.div_ceil(unit_area)).map_err(|_| resource())?;
+        if area == 0 {
+            d.level.rgba[i * 4..i * 4 + 4].copy_from_slice(&empty_pixel(class));
+            continue;
+        }
+        let weight = area as f64;
+        let rgb = if class == Class::Normal {
+            let length = sum[..3].iter().map(|v| v * v).sum::<f64>().sqrt();
+            if length <= 1e-12 * weight {
+                let own = d.labels.as_ref().map(|l| (labels.expect("labelled level"), l[i]));
+                dominant_normal(base, own, x, y, dw, dh)?
+            } else {
+                unit([sum[0], sum[1], sum[2]])?
+            }
+        } else {
+            std::array::from_fn(|a| sum[a] / weight)
+        };
+        for (a, &v) in rgb.iter().enumerate() {
+            d.level.rgba[i * 4 + a] = match class {
+                Class::Colour => encode_colour(v),
+                Class::Data => quant(v),
+                Class::Normal => quant((v + 1.0) * 0.5),
+                Class::Id => unreachable!("ID levels take the mode"),
+            };
+        }
+        d.level.rgba[i * 4 + 3] = quant(sum[3] / weight);
+    }
+    Ok(())
+}
+
+/// Largest-weight level-0 unit normal of the footprint of `(x, y)` (first row-major on
+/// ties), restricted to island `own` when given.
+fn dominant_normal(
+    base: &Level,
+    own: Option<(&[u32], u32)>,
+    x: usize,
+    y: usize,
+    dw: usize,
+    dh: usize,
+) -> Result<[f64; 3], JobError> {
+    let (w0, h0) = (base.width as usize, base.height as usize);
+    let overlap = |t: usize, lo: usize, hi: usize, u: usize| hi.min((t + 1) * u) - lo.max(t * u);
+    let (xa, xb, ya, yb) = (x * w0, (x + 1) * w0, y * h0, (y + 1) * h0);
+    let mut best = ([0.0, 0.0, 1.0], 0u128);
+    for ty in ya / dh..yb.div_ceil(dh) {
+        for tx in xa / dw..xb.div_ceil(dw) {
+            let j = ty * w0 + tx;
+            if own.is_some_and(|(l, island)| l[j] != island) {
+                continue;
+            }
+            let w = u128::from(base.support[j])
+                * overlap(tx, xa, xb, dw) as u128
+                * overlap(ty, ya, yb, dh) as u128;
+            if w > best.1 {
+                best = (unit(normal(&base.rgba[j * 4..j * 4 + 4]))?, w);
+            }
+        }
+    }
+    Ok(best.0)
+}
+
 pub(in crate::mesh_large) fn build(
     width: u32,
     height: u32,
@@ -268,13 +504,15 @@ pub(in crate::mesh_large) fn build(
 pub(crate) const LEAF_ISLAND_ISOLATED_LEVELS: u32 = 3;
 
 /// [`build`] for packed island pages: a COMPLETE chain to 1x1 (a mipmapped consumer needs
-/// complete chains), every level the support-weighted box filter of the previous one.
+/// complete chains), every level the support-weighted area average of level 0 over its
+/// footprint ([`direct_levels`]; ID pages take the mode of the previous level instead).
 /// The guarantee: islands are isolated through level `isolated` (the caller's layout puts
 /// each island allocation of `labels`, 0 outside, on the `2^isolated` grid, which is
-/// verified here, and through that level each gutter is filled only from its own
-/// island); deeper levels are a page-wide box filter, where neighbouring islands may
-/// blend (bleed accepted, as standard; the HLOD parent replaces the leaf before deep
-/// levels dominate). Dimensions may be any multiple of four (whole KTX2 blocks).
+/// verified here; through that level each texel integrates and each gutter is filled
+/// only from its own island); deeper levels integrate the whole page, where neighbouring
+/// islands may blend (bleed accepted, as standard; the HLOD parent replaces the leaf
+/// before deep levels dominate). Dimensions may be any multiple of four (whole KTX2
+/// blocks).
 #[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn build_islands(
     width: u32,
@@ -345,6 +583,14 @@ pub(in crate::mesh_large) fn build_islands(
                     .ok_or_else(resource)?,
             )
             .ok_or_else(resource)?;
+        // Two accumulating rows of the direct integration (`Direct`).
+        charged = charged
+            .checked_add(
+                u64::from(w)
+                    .checked_mul(2 * (size_of::<[f64; 4]>() + size_of::<u128>()) as u64)
+                    .ok_or_else(resource)?,
+            )
+            .ok_or_else(resource)?;
         if w == 1 && h == 1 {
             break;
         }
@@ -355,6 +601,17 @@ pub(in crate::mesh_large) fn build_islands(
         .checked_add(
             pixels
                 .checked_mul(size_of::<Nearest>() as u64)
+                .ok_or_else(resource)?,
+        )
+        .ok_or_else(resource)?;
+    // One level-0 row of values, prefix sums and footprint cuts (`direct_levels`).
+    charged = charged
+        .checked_add(
+            (u64::from(width) + 1)
+                .checked_mul(
+                    (2 * size_of::<[f64; 4]>() + size_of::<u64>() + size_of::<([f64; 4], u128)>())
+                        as u64,
+                )
                 .ok_or_else(resource)?,
         )
         .ok_or_else(resource)?;
@@ -394,18 +651,18 @@ pub(in crate::mesh_large) fn build_islands(
     }
     fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
-    // Labels of the isolated levels (each texel's aligned block has one island).
-    let mut level_labels: Option<Vec<u32>> = labels.map(<[u32]>::to_vec);
-    for (index, &(dw, dh)) in dimensions[1..count].iter().enumerate() {
-        let level = index as u32 + 1;
+    if class != Class::Id {
+        for mut d in direct_levels(&chain.levels[0], labels, isolated, class, &dimensions[1..count])? {
+            fill_gutters(&mut d.level, class, &mut nearest, d.labels.as_deref());
+            chain.levels.push(d.level);
+        }
+        return Ok(chain);
+    }
+    // ID pages are never averaged: each level takes the mode of its previous level's
+    // footprint taps (decision (a)'s area average does not apply to identifiers).
+    for &(dw, dh) in &dimensions[1..count] {
         let src = chain.levels.last().expect("base exists");
         let sw = src.width as usize;
-        level_labels = level_labels.filter(|_| level <= isolated).map(|l| {
-            (0..dh as usize)
-                .flat_map(|y| (0..dw as usize).map(move |x| (y, x)))
-                .map(|(y, x)| l[(2 * y).min(src.height as usize - 1) * sw + (2 * x).min(sw - 1)])
-                .collect()
-        });
         let n = (dw as usize)
             .checked_mul(dh as usize)
             .ok_or_else(resource)?;
@@ -421,102 +678,41 @@ pub(in crate::mesh_large) fn build_islands(
             let (ty, ny, uy) = taps(y, src.height as usize, dh as usize);
             for x in 0..dw as usize {
                 let (tx, nx, ux) = taps(x, sw, dw as usize);
-                if class == Class::Id {
-                    let i = y * dw as usize + x;
-                    let mut len = 0;
-                    let mut tally = [([0u8; 4], 0u64); 9];
-                    let mut area = 0u64;
-                    for &(sy, wy) in &ty[..ny] {
-                        for &(sx, wx) in &tx[..nx] {
-                            let j = sy * sw + sx;
-                            let s = src.support[j];
-                            if s == 0 {
-                                continue;
-                            }
-                            let p: [u8; 4] = src.rgba[j * 4..j * 4 + 4].try_into().expect("RGBA8");
-                            let w = u64::from(s) * wx * wy;
-                            match tally[..len].iter_mut().find(|(v, _)| *v == p) {
-                                Some((_, t)) => *t += w,
-                                None => {
-                                    tally[len] = (p, w);
-                                    len += 1;
-                                }
-                            }
-                            area += w;
-                        }
-                    }
-                    let weight = u32::try_from(area.div_ceil(ux * uy)).map_err(|_| resource())?;
-                    dst.support[i] = weight;
-                    // Strictly greater keeps the first row-major value on ties.
-                    let mut best = (empty_pixel(class), 0u64);
-                    for &(v, w) in &tally[..len] {
-                        if w > best.1 {
-                            best = (v, w);
-                        }
-                    }
-                    dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&best.0);
-                    continue;
-                }
-                let mut sum = [0.0; 4];
-                let mut weight = 0f64;
+                let i = y * dw as usize + x;
+                let mut len = 0;
+                let mut tally = [([0u8; 4], 0u64); 9];
                 let mut area = 0u64;
-                let mut dominant = [0.0, 0.0, 1.0];
-                let mut dominant_weight = 0u64;
                 for &(sy, wy) in &ty[..ny] {
                     for &(sx, wx) in &tx[..nx] {
-                        let i = sy * sw + sx;
-                        let s = src.support[i];
+                        let j = sy * sw + sx;
+                        let s = src.support[j];
                         if s == 0 {
                             continue;
                         }
-                        // Exact halving weighs each child by its support alone (wx = wy = 1).
+                        let p: [u8; 4] = src.rgba[j * 4..j * 4 + 4].try_into().expect("RGBA8");
                         let w = u64::from(s) * wx * wy;
-                        let p = &src.rgba[i * 4..i * 4 + 4];
-                        let rgb = match class {
-                            Class::Colour => std::array::from_fn(|a| decode_colour(p[a])),
-                            Class::Data => std::array::from_fn(|a| f64::from(p[a]) / 255.0),
-                            Class::Normal => unit(normal(p))?,
-                            Class::Id => unreachable!("ID footprints take the mode above"),
-                        };
-                        if w > dominant_weight {
-                            dominant = rgb;
-                            dominant_weight = w;
+                        match tally[..len].iter_mut().find(|(v, _)| *v == p) {
+                            Some((_, t)) => *t += w,
+                            None => {
+                                tally[len] = (p, w);
+                                len += 1;
+                            }
                         }
-                        for (a, &v) in rgb.iter().enumerate() {
-                            sum[a] += v * w as f64;
-                        }
-                        sum[3] += f64::from(p[3]) / 255.0 * w as f64;
-                        weight += w as f64;
                         area += w;
                     }
                 }
-                let i = y * dw as usize + x;
                 dst.support[i] = u32::try_from(area.div_ceil(ux * uy)).map_err(|_| resource())?;
-                if area == 0 {
-                    dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&empty_pixel(class));
-                    continue;
-                }
-                let rgb = if class == Class::Normal {
-                    if sum[..3].iter().map(|v| v * v).sum::<f64>() <= 1e-24 {
-                        dominant
-                    } else {
-                        unit([sum[0], sum[1], sum[2]])?
+                // Strictly greater keeps the first row-major value on ties.
+                let mut best = (empty_pixel(class), 0u64);
+                for &(v, w) in &tally[..len] {
+                    if w > best.1 {
+                        best = (v, w);
                     }
-                } else {
-                    std::array::from_fn(|a| sum[a] / weight)
-                };
-                for (a, &v) in rgb.iter().enumerate() {
-                    dst.rgba[i * 4 + a] = match class {
-                        Class::Colour => encode_colour(v),
-                        Class::Data => quant(v),
-                        Class::Normal => quant((v + 1.0) * 0.5),
-                        Class::Id => unreachable!("ID footprints take the mode above"),
-                    };
                 }
-                dst.rgba[i * 4 + 3] = quant(sum[3] / weight);
+                dst.rgba[i * 4..i * 4 + 4].copy_from_slice(&best.0);
             }
         }
-        fill_gutters(&mut dst, class, &mut nearest, level_labels.as_deref());
+        fill_gutters(&mut dst, class, &mut nearest, None);
         chain.levels.push(dst);
     }
     Ok(chain)
@@ -560,49 +756,134 @@ mod tests {
             p.copy_from_slice(&[(i * 13) as u8, (255 - i * 11) as u8, (i * 7) as u8, 255]);
         }
         let chain = page(Class::Data, &pixels, &weights);
-        // Independent reference uses integer rational weighted byte means and
-        // explicit child index sets, not any production filtering helper.
-        let mut expected: Vec<([u8; 4], u32)> = pixels
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .copied()
-            .zip(weights)
-            .collect();
-        let mut width = 4;
-        for actual in &chain.levels[1..] {
-            let mut reduced = Vec::new();
-            for y in 0..width / 2 {
-                for x in 0..width / 2 {
-                    let ids = [
-                        (2 * y) * width + 2 * x,
-                        (2 * y) * width + 2 * x + 1,
-                        (2 * y + 1) * width + 2 * x,
-                        (2 * y + 1) * width + 2 * x + 1,
-                    ];
-                    let weight: u32 = ids.iter().map(|&i| expected[i].1).sum();
-                    let pixel = if weight == 0 {
-                        [0; 4]
-                    } else {
-                        std::array::from_fn(|a| {
-                            let numerator: u64 = ids
-                                .iter()
-                                .map(|&i| u64::from(expected[i].0[a]) * u64::from(expected[i].1))
-                                .sum();
-                            ((2 * numerator + u64::from(weight)) / (2 * u64::from(weight))) as u8
-                        })
-                    };
-                    reduced.push((pixel, weight));
+        // Independent reference: integer rational weighted byte means of each level's
+        // whole level-0 footprint (explicit index sets, no production filtering helper).
+        for (level, actual) in chain.levels.iter().enumerate().skip(1) {
+            let (side, width) = (1usize << level, 4usize >> level);
+            for y in 0..width {
+                for x in 0..width {
+                    let ids: Vec<usize> = (0..side * side)
+                        .map(|k| (y * side + k / side) * 4 + x * side + k % side)
+                        .collect();
+                    let weight: u32 = ids.iter().map(|&i| weights[i]).sum();
+                    let i = y * width + x;
+                    assert_eq!(actual.support[i], weight);
+                    if weight == 0 {
+                        continue;
+                    }
+                    for a in 0..4 {
+                        let numerator: u64 = ids
+                            .iter()
+                            .map(|&j| u64::from(pixels[j * 4 + a]) * u64::from(weights[j]))
+                            .sum();
+                        let want = (2 * numerator + u64::from(weight)) / (2 * u64::from(weight));
+                        assert_eq!(u64::from(actual.rgba[i * 4 + a]), want, "level {level} texel {i}");
+                    }
                 }
             }
-            for (i, (pixel, weight)) in reduced.iter().enumerate() {
-                assert_eq!(actual.support[i], *weight);
-                if *weight > 0 {
-                    assert_eq!(&actual.rgba[i * 4..i * 4 + 4], pixel);
+        }
+    }
+    /// Independent reference of decision (a): the support-weighted mean of level 0 over
+    /// the footprint of texel `(x, y)` of a `w x h` level, by explicit rational overlaps
+    /// (units `1/w`, `1/h`), restricted to texels `keep` accepts.
+    fn footprint_mean(
+        pixels: &[u8],
+        support: &[u32],
+        (width, height): (usize, usize),
+        (w, h): (usize, usize),
+        (x, y): (usize, usize),
+        keep: &dyn Fn(usize) -> bool,
+    ) -> Option<f64> {
+        let (mut sum, mut weight) = (0f64, 0u128);
+        for ty in y * height / h..((y + 1) * height).div_ceil(h) {
+            let oy = ((y + 1) * height).min((ty + 1) * h).saturating_sub((y * height).max(ty * h));
+            for tx in x * width / w..((x + 1) * width).div_ceil(w) {
+                let ox = ((x + 1) * width).min((tx + 1) * w).saturating_sub((x * width).max(tx * w));
+                let j = ty * width + tx;
+                if ox == 0 || oy == 0 || !keep(j) {
+                    continue;
+                }
+                let o = u128::from(support[j]) * ox as u128 * oy as u128;
+                sum += f64::from(pixels[j * 4]) * o as f64;
+                weight += o;
+            }
+        }
+        (weight > 0).then(|| sum / weight as f64)
+    }
+    /// Review round 4 defect 1: every level of every page size (odd reductions included)
+    /// is the direct level-0 footprint average, within RGBA8 rounding. Recursive reduction
+    /// gave 26 for 0 at mip 5 of an 88x24 step, 28 at mip 4 of 72x40 and 30 at mip 4 of
+    /// 104x216.
+    #[test]
+    fn every_level_is_the_direct_level0_footprint_average() {
+        for (w, h) in [(88usize, 24usize), (104, 216), (72, 40), (132, 128), (20, 28), (100, 60), (4, 4)] {
+            for pattern in 0..3 {
+                let value = |x: usize, y: usize| -> u8 {
+                    match pattern {
+                        0 => if x < w / 2 { 0 } else { 255 },
+                        1 => if x + 8 >= w { 255 } else { 0 },
+                        _ => if (x / 3 + y / 5).is_multiple_of(2) { 255 } else { (x * 7 + y * 3) as u8 },
+                    }
+                };
+                let pixels: Vec<u8> = (0..w * h).flat_map(|i| [value(i % w, i / w); 4]).collect();
+                let support: Vec<u32> = (0..w * h)
+                    .map(|i| if pattern < 2 { 1 } else { u32::from(i % w + 16 >= w || i / w + 4 >= h) * (1 + (i % 3) as u32) })
+                    .collect();
+                let one = vec![1; w * h];
+                for labels in [None, Some(&one[..])] {
+                    let chain =
+                        build_islands(w as u32, h as u32, &pixels, &support, labels, 3, Class::Data, 1 << 26).unwrap();
+                    assert_eq!((chain.levels.last().unwrap().width, chain.levels.last().unwrap().height), (1, 1));
+                    for (k, l) in chain.levels.iter().enumerate() {
+                        let (lw, lh) = (l.width as usize, l.height as usize);
+                        for y in 0..lh {
+                            for x in 0..lw {
+                                let Some(want) = footprint_mean(&pixels, &support, (w, h), (lw, lh), (x, y), &|_| true) else {
+                                    assert_eq!(l.support[y * lw + x], 0);
+                                    continue;
+                                };
+                                let got = f64::from(l.rgba[(y * lw + x) * 4]);
+                                assert!((got - want).abs() <= 0.5 + 1e-9, "{w}x{h} pattern {pattern} level {k} ({x},{y}): {got} vs {want}");
+                            }
+                        }
+                    }
                 }
             }
-            expected = reduced;
-            width /= 2;
+        }
+        let step = |w: usize, h: usize, level: usize, x: usize| {
+            let pixels: Vec<u8> = (0..w * h).flat_map(|i| [if i % w < w / 2 { 0 } else { 255 }; 4]).collect();
+            let chain =
+                build_islands(w as u32, h as u32, &pixels, &vec![1; w * h], None, 0, Class::Data, 1 << 26).unwrap();
+            chain.levels[level].rgba[x * 4]
+        };
+        assert_eq!(step(88, 24, 5, 0), 0);
+        assert_eq!(step(72, 40, 4, 1), 0);
+        assert_eq!(step(104, 216, 4, 2), 0);
+    }
+    /// Within the isolated levels a texel integrates only its own island, also where a
+    /// non-power-of-two page makes a level's footprint straddle two islands' blocks
+    /// (100 -> 50 -> 25 -> 12 columns: level 3 texel 5 covers columns 41.7..50).
+    #[test]
+    fn isolated_levels_integrate_only_their_own_island() {
+        let (w, h) = (100usize, 24usize);
+        let labels: Vec<u32> = (0..w * h).map(|i| if i % w < 48 { 1 } else { 2 }).collect();
+        let pixels: Vec<u8> = (0..w * h).flat_map(|i| [if labels[i] == 1 { 255 } else { 0 }; 4]).collect();
+        let support = vec![1; w * h];
+        for class in [Class::Data, Class::Colour] {
+            let chain = build_islands(w as u32, h as u32, &pixels, &support, Some(&labels), 3, class, 1 << 24).unwrap();
+            for (k, l) in chain.levels.iter().enumerate().take(4) {
+                let (lw, lh) = (l.width as usize, l.height as usize);
+                for y in 0..lh {
+                    for x in 0..lw {
+                        let island = labels[(y * h / lh) * w + x * w / lw];
+                        let want = footprint_mean(&pixels, &support, (w, h), (lw, lh), (x, y), &|j| labels[j] == island).unwrap();
+                        assert_eq!(f64::from(l.rgba[(y * lw + x) * 4]), want, "{class:?} level {k} ({x},{y})");
+                    }
+                }
+            }
+            // Below the isolated levels the page-wide integral blends them.
+            let level = &chain.levels[4];
+            assert!(level.rgba.as_chunks::<4>().0.iter().any(|p| p[0] != 0 && p[0] != 255));
         }
     }
     #[test]

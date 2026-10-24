@@ -388,12 +388,52 @@ impl Surface {
             .unwrap_or_else(Hit::empty);
         if best.distance2.is_finite() {
             budget.spend();
+        } else {
+            self.seed(p, key, &mut best, budget);
         }
         self.nearest_budget(p, key, &mut best, budget, frontier);
         if best.distance2.is_finite() {
             *hint = Some(best.index);
         }
         best
+    }
+    /// The greedy seed of a search without a candidate (see [`Budget`]): descend to the
+    /// child nearer `p` (the left on ties) among those intersecting `key`, then test the
+    /// leaf's triangles. Every triangle of a local surface lies in its key, so the leaf
+    /// always yields a finite witness. O(depth + 4) work, deterministic per query point.
+    fn seed(&self, p: V3, key: TileKey, best: &mut Hit, budget: &mut Budget) {
+        budget.seeded = true;
+        let mut i = 0usize;
+        loop {
+            budget.steps += 1;
+            let n = &self.nodes[i];
+            if n.count > 0 {
+                break;
+            }
+            let (a, b) = (&self.nodes[n.left as usize], &self.nodes[n.right as usize]);
+            i = match (a.intersects(key), b.intersects(key)) {
+                (true, true) if b.distance(p) < a.distance(p) => n.right as usize,
+                (true, _) => n.left as usize,
+                (false, true) => n.right as usize,
+                (false, false) => return,
+            };
+        }
+        let n = &self.nodes[i];
+        for (offset, t) in self.triangles[n.start as usize..(n.start + n.count) as usize]
+            .iter()
+            .enumerate()
+        {
+            if t.rank < key.first || t.rank >= key.end {
+                continue;
+            }
+            budget.steps += 1;
+            let hit = make_hit(p, *t, n.start as usize + offset);
+            if hit.distance2 < best.distance2
+                || (hit.distance2 == best.distance2 && (t.order, t.rank) < (best.order, best.rank))
+            {
+                *best = hit;
+            }
+        }
     }
     pub(crate) fn nearest(&self, p: V3, key: TileKey, best: &mut Hit) {
         let mut stack = [0usize; 64];
@@ -445,11 +485,16 @@ impl Surface {
 
 /// Work budget of one budgeted nearest search (the bake's donor search): one step per
 /// node visit and per triangle test. Exhaustion returns the best candidate found so far.
+/// A search that starts without a candidate first takes a greedy seed (one root-to-leaf
+/// descent, O(depth + leaf), counted in `steps` but outside the budget), so the budget
+/// only ever bounds improvement, never the existence of a donor.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Budget {
     left: u64,
     pub steps: u64,
     pub exhausted: bool,
+    /// The search began from its greedy seed (it had no candidate).
+    pub seeded: bool,
 }
 impl Budget {
     pub(crate) fn new(steps: u64) -> Self {
@@ -457,6 +502,7 @@ impl Budget {
             left: steps,
             steps: 0,
             exhausted: false,
+            seeded: false,
         }
     }
     fn spend(&mut self) -> bool {
@@ -930,6 +976,40 @@ impl SourceQuery<'_> {
         self.blocks.insert(n.first, surface);
         self.check_charge()
     }
+    /// The greedy seed of a paged search without a candidate (see [`Budget`]): descend to
+    /// the child nearer `p` (the left on ties) among those intersecting the key, down to
+    /// one fine block, and search that block exactly. A block intersecting the key holds
+    /// a key triangle (blocks are rank ranges), so the seed is always a finite witness.
+    /// O(depth + block) work (one block read), deterministic per query point.
+    fn seed(
+        &mut self,
+        p: V3,
+        best: &mut Hit,
+        budget: &mut Budget,
+    ) -> Result<Option<Triangle>, JobError> {
+        budget.seeded = true;
+        let mut at = self.visit(Visit::Resident(self.region_root))?;
+        while at.0.count == 0 {
+            budget.steps += 1;
+            let [left, right] = at.1.ok_or_else(|| state("source branch without children"))?;
+            let (a, b) = (self.visit(left)?, self.visit(right)?);
+            at = match (a.0.intersects(self.key), b.0.intersects(self.key)) {
+                (true, true) if b.0.distance(p) < a.0.distance(p) => b,
+                (true, _) => a,
+                (false, true) => b,
+                (false, false) => return Err(state("source branch without key children")),
+            };
+        }
+        let n = at.0;
+        self.load_block(&n)?;
+        let surface = &self.blocks[&n.first];
+        budget.steps += 1 + u64::from(n.count);
+        surface.nearest(p, self.key, best);
+        Ok(best
+            .distance2
+            .is_finite()
+            .then(|| surface.triangles[best.index]))
+    }
     /// Budgeted best-first [`SourceQuery::nearest`] over the paged hierarchy and its fine
     /// blocks (see [`Surface::nearest_budget`]): exact unless `budget` runs out, then the
     /// best candidate so far; deterministic per query point and hint.
@@ -949,6 +1029,8 @@ impl SourceQuery<'_> {
             .unwrap_or_else(Hit::empty);
         if best.distance2.is_finite() {
             budget.spend();
+        } else {
+            winning = self.seed(p, &mut best, budget)?;
         }
         let mut entries = std::mem::take(&mut self.frontier_entries);
         entries.clear();

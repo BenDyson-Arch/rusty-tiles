@@ -153,6 +153,8 @@ pub(crate) struct TileAppearance {
     pub isolated_levels: u32,
     /// Donor searches that ran out of budget (best candidate so far used).
     pub donor_budget_exhausted: u64,
+    /// Donor searches that began from their greedy seed (no candidate yet).
+    pub donor_seeded: u64,
     /// Most steps one donor search of the tile took.
     pub donor_search_steps_max: u64,
 }
@@ -394,6 +396,7 @@ pub(crate) fn build(
         groups.push(group);
     }
     facts.donor_budget_exhausted = searcher.exhausted;
+    facts.donor_seeded = searcher.seeded;
     facts.donor_search_steps_max = searcher.max_steps;
     Ok(Appearance {
         groups,

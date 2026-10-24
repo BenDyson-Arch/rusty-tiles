@@ -171,6 +171,8 @@ pub(crate) struct Searcher<'q, 'a> {
     inner: Frontier,
     /// Searches that ran out of budget (their best candidate so far was used).
     pub exhausted: u64,
+    /// Searches that began from their greedy seed (no candidate yet; see `Budget`).
+    pub seeded: u64,
     /// Most steps one search took.
     pub max_steps: u64,
 }
@@ -206,6 +208,7 @@ impl<'q, 'a> Searcher<'q, 'a> {
             frontier: Frontier::new(),
             inner: Frontier::new(),
             exhausted: 0,
+            seeded: 0,
             max_steps: 0,
         }
     }
@@ -220,6 +223,16 @@ impl<'q, 'a> Searcher<'q, 'a> {
     #[cfg(test)]
     pub(crate) fn paged(query: &'q mut SourceQuery<'a>) -> Self {
         Self::with(query, None, DONOR_SEARCH_STEPS)
+    }
+    /// The paged query with an explicit budget (tests).
+    #[cfg(test)]
+    pub(crate) fn paged_with_budget(query: &'q mut SourceQuery<'a>, steps: u64) -> Self {
+        Self::with(query, None, steps)
+    }
+    /// One donor search (tests).
+    #[cfg(test)]
+    pub(crate) fn search(&mut self, p: [f64; 3]) -> Result<SourceHit, JobError> {
+        self.nearest(p)
     }
     pub(crate) fn query(&mut self) -> &mut SourceQuery<'a> {
         self.query
@@ -239,6 +252,7 @@ impl<'q, 'a> Searcher<'q, 'a> {
             return Err(state("coarse bake donor search found no candidate"));
         }
         self.exhausted += u64::from(budget.exhausted);
+        self.seeded += u64::from(budget.seeded);
         self.max_steps = self.max_steps.max(budget.steps);
         Ok(hit)
     }
