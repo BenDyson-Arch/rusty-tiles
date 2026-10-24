@@ -28,6 +28,9 @@ const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
 pub(crate) const GUTTER: u32 = 2;
+/// Islands of the page stay isolated through this many mip levels: chart rectangles sit
+/// on the `2^K` grid with gutters of `2^K` (the shared island tuning constant).
+use crate::mesh_large::leaves::sparse_mips::ISLAND_ISOLATED_LEVELS;
 pub(crate) const MIN_PAGE: u32 = 32;
 /// Page dimensions are whole codec blocks.
 const BLOCK: u32 = 4;
@@ -75,6 +78,10 @@ pub(crate) struct Layout {
     pub size: [u32; 2],
     /// Page texels per metre on every chart plane.
     pub scale: f64,
+    /// Mip levels through which the charts stay isolated (`2^isolated` alignment and
+    /// gutters): [`ISLAND_ISOLATED_LEVELS`], lower only when the charts cannot fit the
+    /// page at that alignment even at zero scale.
+    pub isolated: u32,
     /// The requested spacing could not fit `max_edge²`: `scale < 1 / spacing`.
     pub capped: bool,
 }
@@ -472,14 +479,16 @@ fn shelf(charts: &mut [Chart], order: &[usize], width: u32, max_height: u32) -> 
     Some((used, y + row))
 }
 
-fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
+fn sizes(charts: &mut [Chart], scale: f64, a: u32) -> Option<()> {
     for c in charts.iter_mut() {
         let extent = |a: usize| ((c.hi[a] - c.lo[a]).max(0.) * scale).ceil();
         let (w, h) = (extent(0), extent(1));
         if !(w.is_finite() && h.is_finite()) || w > 1e6 || h > 1e6 {
             return None;
         }
-        c.size = [w.max(1.) as u32 + 2 * GUTTER, h.max(1.) as u32 + 2 * GUTTER];
+        // Gutters of `a` and rectangles on the `a` grid (isolation through log2 a).
+        let g = a.max(GUTTER);
+        c.size = [w.max(1.) as u32, h.max(1.) as u32].map(|e| (e + 2 * g).div_ceil(a) * a);
     }
     Some(())
 }
@@ -487,13 +496,14 @@ fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
 /// The least-area block-aligned page in `MIN_PAGE..=max_edge` per side holding every
 /// chart at `scale` (shelves by descending height at a few widths around the square
 /// root of the chart area; ties to the narrower); packs the charts into it.
-fn fit(charts: &mut [Chart], scale: f64, max_edge: u32, max_texels: u64) -> Option<[u32; 2]> {
-    sizes(charts, scale)?;
+fn fit(charts: &mut [Chart], scale: f64, max_edge: u32, max_texels: u64, a: u32) -> Option<[u32; 2]> {
+    sizes(charts, scale, a)?;
+    let unit = a.max(BLOCK);
     // Small allowances may use pages below MIN_PAGE (whole blocks).
-    let min_edge = ((max_texels as f64).sqrt() as u32 / BLOCK * BLOCK).clamp(BLOCK, MIN_PAGE);
+    let min_edge = ((max_texels as f64).sqrt() as u32 / unit * unit).clamp(unit, MIN_PAGE.max(unit));
     let mut order: Vec<usize> = (0..charts.len()).collect();
     order.sort_by(|&a, &b| charts[b].size[1].cmp(&charts[a].size[1]).then(a.cmp(&b)));
-    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(BLOCK)) * u64::from(BLOCK)) as u32;
+    let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(unit)) * u64::from(unit)) as u32;
     let area: f64 = charts.iter().map(|c| f64::from(c.size[0]) * f64::from(c.size[1])).sum();
     let widest = charts.iter().map(|c| c.size[0]).max().unwrap_or(1);
     let mut widths: Vec<u32> = [1., 1.1, 1.25, 1.4, 1.6, 2., 2.5, 3.2]
@@ -542,29 +552,35 @@ pub(crate) fn layout(
     }
     let (mut charts, chart_of) = grow(positions, faces);
     let target = 1. / spacing;
-    let (scale, size, capped) = if let Some(size) = fit(&mut charts, target, max_edge, max_texels) {
+    // The deepest isolation whose alignment and gutters still fit at zero scale.
+    let Some(isolated) = (1..=ISLAND_ISOLATED_LEVELS.max(1))
+        .rev()
+        .find(|&k| fit(&mut charts, 0., max_edge, max_texels, 1 << k).is_some())
+    else {
+        return Err(JobError::new(
+            JobErrorKind::Unsupported,
+            format!(
+                "{} coarse charts cannot fit one {max_edge}² page of {max_texels} texels even at zero scale",
+                charts.len()
+            ),
+        ));
+    };
+    let a = 1u32 << isolated;
+    let gutter = a.max(GUTTER);
+    let (scale, size, capped) = if let Some(size) = fit(&mut charts, target, max_edge, max_texels, a) {
         (target, size, false)
     } else {
         // The finest scale that fits the cap: bisection on a monotone shelf fit.
         let (mut lo, mut hi) = (0., target);
-        if fit(&mut charts, lo, max_edge, max_texels).is_none() {
-            return Err(JobError::new(
-                JobErrorKind::Unsupported,
-                format!(
-                    "{} coarse charts cannot fit one {max_edge}² page of {max_texels} texels even at zero scale",
-                    charts.len()
-                ),
-            ));
-        }
         for _ in 0..40 {
             let mid = 0.5 * (lo + hi);
-            if fit(&mut charts, mid, max_edge, max_texels).is_some() {
+            if fit(&mut charts, mid, max_edge, max_texels, a).is_some() {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        let size = fit(&mut charts, lo, max_edge, max_texels).expect("bisection keeps a fitting scale");
+        let size = fit(&mut charts, lo, max_edge, max_texels, a).expect("bisection keeps a fitting scale");
         (lo, size, true)
     };
     let mut pixels = vec![[[0.; 2]; 3]; faces.len()];
@@ -572,7 +588,7 @@ pub(crate) fn layout(
         for (k, &f) in c.faces.iter().enumerate() {
             pixels[f] = c.points[k].map(|q| {
                 std::array::from_fn(|a| {
-                    f64::from(c.origin[a]) + f64::from(GUTTER) + (q[a] - c.lo[a]) * scale
+                    f64::from(c.origin[a]) + f64::from(gutter) + (q[a] - c.lo[a]) * scale
                 })
             });
         }
@@ -583,6 +599,7 @@ pub(crate) fn layout(
         pixels,
         size,
         scale,
+        isolated,
         capped,
     })
 }
@@ -681,9 +698,12 @@ mod tests {
         assert_ne!(l.chart_of[0], l.chart_of[2]);
         assert!(!l.capped);
         assert!((l.scale - 10.).abs() < 1e-12);
-        // Content sized, block aligned: two 104-texel charts stacked, the point chart beside.
-        assert_eq!(l.size, [104, 216]);
-        assert!(l.size.iter().all(|e| e % 4 == 0));
+        // Content sized on the 2^K grid with 2^K gutters: two 120-texel charts (100 + 2*8,
+        // rounded to 8) stacked, the point chart's 24 below.
+        assert_eq!(l.isolated, ISLAND_ISOLATED_LEVELS);
+        assert_eq!(l.size, [120, 264]);
+        assert!(l.size.iter().all(|e| e % 8 == 0));
+        assert!(l.charts.iter().all(|c| c.origin.iter().chain(&c.size).all(|v| v % 8 == 0)));
         let r = rects(&l);
         for (i, a) in r.iter().enumerate() {
             assert!(a[0] + a[2] <= l.size[0] && a[1] + a[3] <= l.size[1]);
@@ -728,7 +748,7 @@ mod tests {
         assert!(l.scale < 1000. && l.scale > 40.);
         // Smallest page at the minimum edge for tiny content.
         let l = layout(&p, &f, 10., 1024, 1 << 20).unwrap();
-        assert_eq!(l.size, [MIN_PAGE, MIN_PAGE]);
+        assert_eq!(l.size, [48, 48], "two 24-texel point-sized charts and a point chart");
         assert!(!l.capped);
     }
 
@@ -750,7 +770,7 @@ mod tests {
         let l = layout(&positions, &faces, 0.1, 1024, 1 << 20).unwrap();
         assert_eq!(l.charts.len(), 1);
         let area: u64 = l.charts.iter().map(|c| u64::from(c.size[0]) * u64::from(c.size[1])).sum();
-        assert!(area < 160 * 20, "the rotated strip stays thin: {area} texels, unrotated ~111^2");
+        assert!(area < 160 * 40, "the rotated strip stays thin: {area} texels, unrotated ~127^2");
         assert!(l.charts.iter().all(|c| c.size[0] >= c.size[1]), "long side along u");
     }
 

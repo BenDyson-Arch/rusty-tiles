@@ -102,6 +102,9 @@ pub(crate) struct DeliveredPage {
     pub bytes: Vec<u8>,
     pub mime: &'static str,
     pub escalated: bool,
+    /// The complete KTX2 chain (mipmapped sampler); otherwise the exact level-0 PNG,
+    /// sampled without mips.
+    pub mipmapped: bool,
 }
 
 /// One material group of a tile: one glTF primitive.
@@ -146,6 +149,8 @@ pub(crate) struct TileAppearance {
     pub escalated_pages: u32,
     /// Pages delivered as the exact level-0 PNG (no codec step met its gates).
     pub png_pages: u32,
+    /// Least mip levels through which a page of the tile keeps its charts isolated.
+    pub isolated_levels: u32,
 }
 
 /// Thread CPU seconds of one tile's appearance work (wall seconds where the platform
@@ -492,10 +497,15 @@ fn textured(
         let d = deliver(
             (services.profile, services.page_memory, services.check),
             page,
-            &labels,
+            (&labels, p.layout.isolated),
             mask,
         )?;
         facts.escalated_pages += u32::from(d.escalated);
+        facts.isolated_levels = if facts.textured_groups == 0 {
+            p.layout.isolated
+        } else {
+            facts.isolated_levels.min(p.layout.isolated)
+        };
         facts.png_pages += u32::from(d.mime == "image/png");
         delivered.push(d);
     }
@@ -932,29 +942,28 @@ fn write(rgba: &mut [u8], texel: u32, slot: TextureSlot, v: [f64; 4], hit: &Hit,
 }
 
 /// Encode one pre-encode page through the shared leaf delivery path (the profile's
-/// codec, level 0 with gutters filled per chart (`labels`), MASK coverage for MASK base
-/// colour, decoded gates).
+/// codec, a complete colour-correct chain with charts isolated through the layout's
+/// levels (`labels`), MASK coverage for MASK base colour, decoded gates).
 pub(crate) fn deliver(
     (profile, page_memory, check): (Profile, u64, &dyn Fn() -> Result<(), JobError>),
     page: &CoarsePage,
-    labels: &[u32],
+    (labels, isolated): (&[u32], u32),
     mask: Option<delivery::MaskDelivery<'_>>,
 ) -> Result<DeliveredPage, JobError> {
     let delivered = delivery::encode_islands(
         page.size,
         &page.rgba,
         &page.support,
+        // A complete chain: charts isolated through `isolated` (their layout's 2^K grid
+        // and gutters), a page-wide box filter below (bleed accepted, as standard).
         Some(labels),
-        // Level 0 only, sampled with LINEAR minification: a page of several charts
-        // cannot keep them apart in a complete mip chain (a texel coarser than a chart
-        // holds its neighbours), and the consumer needs complete chains for mipmapped
-        // sampling. Coarse texels are about a pixel where the tile is shown.
-        true,
+        isolated,
         page.slot,
         profile,
         page_memory,
         mask,
-        // Level 0 only, so the ladder ends at the exact level-0 PNG.
+        // A chain that misses its gates on every codec step is delivered as the exact
+        // level-0 PNG and sampled without mips, rather than refusing the run.
         delivery::Ladder {
             level0_sampled: true,
             check,
@@ -962,6 +971,7 @@ pub(crate) fn deliver(
     )?;
     Ok(DeliveredPage {
         slot: page.slot,
+        mipmapped: delivered.mime == "image/ktx2",
         bytes: delivered.bytes,
         mime: delivered.mime,
         escalated: delivered.escalation.is_some(),
@@ -1020,32 +1030,31 @@ mod tests {
             .collect();
         let check = || Ok(());
         let mask = delivery::MaskDelivery { samples: &samples, factor, cutoff, linear: true, min_linear: true };
-        let d = deliver((Profile::Balanced, 1 << 28, &check), &page, &labels, Some(mask)).unwrap();
+        let d = deliver((Profile::Balanced, 1 << 28, &check), &page, (&labels, 3), Some(mask)).unwrap();
         let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
-        assert_eq!(decoder.level_count(), 1, "coarse pages publish level 0 only");
         let level = decoder.transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE).unwrap();
         for (i, s) in samples.iter().enumerate() {
             assert_eq!(f64::from(level[i * 4 + 3]) / 255. * factor >= cutoff, s.source_pass, "texel {i}");
         }
     }
 
-    /// Review probe (round 2, item 2): two constant islands, black and white, packed side
-    /// by side. No published level holds both: the page is level 0 alone, each island
-    /// keeps its own value, and each gutter is filled from its own island.
+    /// Review probe (round 2, item 2): two constant islands, black and white, each on a
+    /// 32-texel aligned rectangle with 8-texel (2^K) gutters. The chain is complete to
+    /// 1x1; levels 0..=K keep each island its own value; the 1x1 level is the page-wide
+    /// box filter, so the islands blend to grey (never one island's value).
     #[test]
-    fn islands_never_mix_on_published_pages() {
-        let (w, h) = (32u32, 16u32);
+    fn islands_isolated_through_k_and_box_filtered_below() {
+        let k = crate::mesh_large::leaves::sparse_mips::ISLAND_ISOLATED_LEVELS;
+        let (w, h) = (64u32, 32u32);
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         let mut support = vec![0u32; (w * h) as usize];
         let mut labels = vec![0u32; (w * h) as usize];
         for y in 0..h {
             for x in 0..w {
                 let i = (y * w + x) as usize;
-                let island = if x < 16 { 1 } else { 2 };
+                let island = if x < 32 { 1 } else { 2 };
                 labels[i] = island;
-                // Two-texel gutters around each island's covered core.
-                let local = x % 16;
-                if (2..14).contains(&local) && (2..14).contains(&y) {
+                if (8..24).contains(&(x % 32)) && (8..24).contains(&y) {
                     support[i] = 1;
                     let v = if island == 1 { 0 } else { 255 };
                     rgba[i * 4..i * 4 + 4].copy_from_slice(&[v, v, v, 255]);
@@ -1054,20 +1063,26 @@ mod tests {
         }
         let page = CoarsePage { slot: TextureSlot::BaseColor, size: [w, h], rgba, support };
         let check = || Ok(());
-        let d = deliver((Profile::Quality, 1 << 28, &check), &page, &labels, None).unwrap();
+        let d = deliver((Profile::Quality, 1 << 28, &check), &page, (&labels, k), None).unwrap();
+        assert!(d.mipmapped);
         let decoder = basisu::Transcoder::new(&d.bytes).unwrap();
-        assert_eq!(decoder.level_count(), 1);
-        let level = decoder.transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE).unwrap();
-        for y in 0..h {
-            for x in 0..w {
-                let v = level[((y * w + x) * 4) as usize];
-                if x < 16 {
-                    assert!(v < 24, "black island texel ({x},{y}) = {v}");
-                } else {
-                    assert!(v > 231, "white island texel ({x},{y}) = {v}");
+        assert_eq!(decoder.level_count(), 7, "complete chain 64x32 .. 1x1");
+        for level in 0..=k {
+            let (lw, lh) = (w >> level, h >> level);
+            let texels = decoder.transcode(level, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE).unwrap();
+            for y in 0..lh {
+                for x in 0..lw {
+                    let v = texels[((y * lw + x) * 4) as usize];
+                    if x < lw / 2 {
+                        assert!(v < 24, "level {level} black island ({x},{y}) = {v}");
+                    } else {
+                        assert!(v > 231, "level {level} white island ({x},{y}) = {v}");
+                    }
                 }
             }
         }
+        let last = decoder.transcode(6, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE).unwrap();
+        assert!((40..216).contains(&last[0]), "1x1 is the page-wide blend, got {}", last[0]);
     }
 
 }

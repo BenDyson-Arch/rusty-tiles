@@ -265,9 +265,9 @@ pub(crate) fn encode(
                 images.push(json!({"bufferView":wire.view(&page.bytes, None),"mimeType":page.mime}));
                 if page.mime == "image/ktx2" {
                     basis = true;
-                    textures.push(json!({"sampler":0,"extensions":{"KHR_texture_basisu":{"source":image}}}));
+                    textures.push(json!({"sampler":u32::from(!page.mipmapped),"extensions":{"KHR_texture_basisu":{"source":image}}}));
                 } else {
-                    textures.push(json!({"sampler":0,"source":image}));
+                    textures.push(json!({"sampler":u32::from(!page.mipmapped),"source":image}));
                 }
             }
             offset_textures(&mut material, base);
@@ -411,8 +411,9 @@ pub(crate) fn encode(
     let mut document = json!({"asset":{"version":"2.0","generator":"rusty-tiles HLOD"},"scene":0,
         "scenes":[{"nodes":(0..nodes.len()).collect::<Vec<_>>()}],"nodes":nodes,"meshes":meshes,
         "materials":materials_json,"images":images,"textures":textures,
-        // Coarse pages are level 0 only (see appearance::deliver).
-        "samplers":[{"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071}],
+        // Complete KTX2 chains are mip-sampled; a PNG fallback page is level 0 only.
+        "samplers":[{"magFilter":9729,"minFilter":9987,"wrapS":33071,"wrapT":33071},
+            {"magFilter":9729,"minFilter":9729,"wrapS":33071,"wrapT":33071}],
         "buffers":[{"byteLength":binary.len()}],"bufferViews":views,
         "accessors":accessors,"extensionsUsed":["EXT_mesh_features","EXT_structural_metadata"],
         "extensions":{"EXT_structural_metadata":{"schema":{"id":"rusty_tiles_large_hlod_v1",

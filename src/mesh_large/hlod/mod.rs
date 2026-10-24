@@ -82,7 +82,7 @@ impl FromStr for TilerLod {
 }
 
 /// S3's coarse appearance policy (recorded in the stage manifest).
-pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized level-0 pages at max(G/16, 1e-5 m), \
+pub(crate) const APPEARANCE_POLICY: &str = "hlod-s3-fresh-charts: content-sized pages, charts isolated through ISLAND_ISOLATED_LEVELS mips, at max(G/16, 1e-5 m), \
      1024 cap, never finer than the source's texel spacing, nearest captured-source bake; per-vertex COLOR_0 or flat factors untextured";
 
 /// Hard published triangle cap of every coarse tile (D1).

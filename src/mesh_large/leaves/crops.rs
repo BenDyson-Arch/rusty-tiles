@@ -193,6 +193,22 @@ pub(crate) fn plan_islands(
     gutter: u32,
     align: u32,
 ) -> Result<Block, JobError> {
+    plan_islands_aligned(uvs, image_width, image_height, max_edge, gutter, align, false)
+}
+
+/// [`plan_islands`]; with `align_origin` every island's real-source interior also
+/// starts and ends on the `align` grid of the source (and its allocation on the page
+/// grid, when `gutter` is a multiple of `align`), so the first `log2(align)` box-reduced
+/// page levels of a mipmapped binding are exactly the source's own levels.
+pub(crate) fn plan_islands_aligned(
+    uvs: &[[f32; 2]],
+    image_width: u32,
+    image_height: u32,
+    max_edge: u32,
+    gutter: u32,
+    align: u32,
+    align_origin: bool,
+) -> Result<Block, JobError> {
     if uvs.is_empty() || !uvs.len().is_multiple_of(3) || align == 0 || !align.is_power_of_two() {
         return Err(invalid(
             "island crop requires whole triangles and POT alignment",
@@ -289,9 +305,16 @@ pub(crate) fn plan_islands(
     let round = |v: u64| v.div_ceil(u64::from(align)) * u64::from(align);
     // One island over the union of every footprint: plan()'s classic crop,
     // with the allocation rounded to the alignment.
-    let island = |lo: [i64; 2], hi: [i64; 2]| -> Result<Option<Crop>, JobError> {
+    let island = |mut lo: [i64; 2], mut hi: [i64; 2]| -> Result<Option<Crop>, JobError> {
         let mut interior = [0u32; 2];
         let mut extent = [0u32; 2];
+        if align_origin {
+            let (a, g) = (i64::from(align), i64::from(gutter));
+            for axis in 0..2 {
+                lo[axis] = (lo[axis] - g).div_euclid(a) * a + g;
+                hi[axis] = lo[axis] + ((hi[axis] - lo[axis]).max(1) + a - 1) / a * a;
+            }
+        }
         for axis in 0..2 {
             let span = u64::try_from(hi[axis] - lo[axis]).map_err(|_| resource())?;
             let full = round(span + 2 * u64::from(gutter));
@@ -863,5 +886,89 @@ mod tests {
         assert!(plan(&spread, 4096, 4096, 1024, 2).is_err());
         let block = plan_islands(&spread, 4096, 4096, 1024, 2, 4).unwrap();
         assert!(block.width <= 1024 && block.height <= 1024);
+    }
+    /// Review probe (Sol, round 2): a 128² source striped in 16-texel bands, a mipmapped
+    /// island whose real-source footprint starts at texel (16, 16), K = 3. The crop's
+    /// interior sits on the 2^K grid, so page levels 0..=K are the source's own levels;
+    /// deeper levels are the page-wide box filter of the level above, and the chain is
+    /// complete to 1x1.
+    #[test]
+    fn mipmapped_islands_are_exact_through_k_and_box_filtered_below() {
+        use super::super::{mips::Class, sparse_mips};
+        let k = sparse_mips::ISLAND_ISOLATED_LEVELS;
+        let a = 1u32 << k;
+        let n = 128u32;
+        let source: Vec<u8> = (0..n * n)
+            .flat_map(|i| {
+                let (x, y) = (i % n, i / n);
+                let v = if (x / 16 + y / 16) % 2 == 0 { 0 } else { 255 };
+                [v, v, v, 255]
+            })
+            .collect();
+        let full = sparse_mips::build(n, n, &source, &vec![1; (n * n) as usize], Class::Data, 1 << 26).unwrap();
+        let texel = |t: f32| (t + 0.5) / n as f32;
+        let uvs = [[texel(17.), texel(17.)], [texel(70.), texel(17.)], [texel(17.), texel(70.)]];
+        let sampler = SourceSampler {
+            wrap_s: 10497,
+            wrap_t: 10497,
+            min_filter: 9987,
+            mag_filter: 9729,
+        };
+        let block = plan_islands_aligned(&uvs, n, n, 4096, a, a, true).unwrap();
+        let crop = &block.islands[0].crop;
+        assert_eq!(crop.origin.map(|o| o.rem_euclid(i64::from(a))), [0, 0], "{crop:?}");
+        assert_eq!([crop.interior_width % a, crop.interior_height % a], [0, 0]);
+        let start = [crop.origin[0] - i64::from(a), crop.origin[1] - i64::from(a)];
+        let page = copy_crop(&source, n, n, crop, sampler, 1 << 26).unwrap();
+        let (w, h) = (crop.width, crop.height);
+        let mut support = vec![0u32; (w * h) as usize];
+        for y in a..a + crop.interior_height {
+            for x in a..a + crop.interior_width {
+                support[(y * w + x) as usize] = 1;
+            }
+        }
+        let chain = sparse_mips::build_islands(w, h, &page, &support, Some(&vec![1; (w * h) as usize]), k, Class::Data, 1 << 26).unwrap();
+        // Complete chain: dimensions halve to 1x1.
+        let last = chain.levels.last().unwrap();
+        assert_eq!([last.width, last.height], [1, 1]);
+        for pair in chain.levels.windows(2) {
+            assert_eq!([pair[1].width, pair[1].height], [(pair[0].width / 2).max(1), (pair[0].height / 2).max(1)]);
+        }
+        // Levels 0..=K: every interior texel is the source's own level.
+        for level in 0..=k as usize {
+            let (pl, sl) = (&chain.levels[level], &full.levels[level]);
+            let s = 1i64 << level;
+            for py in (a >> level)..((a + crop.interior_height) >> level) {
+                for px in (a >> level)..((a + crop.interior_width) >> level) {
+                    let (sx, sy) = ((start[0] / s + i64::from(px)) as u32, (start[1] / s + i64::from(py)) as u32);
+                    assert_eq!(
+                        pl.rgba[((py * pl.width + px) * 4) as usize],
+                        sl.rgba[((sy * sl.width + sx) * 4) as usize],
+                        "level {level} texel ({px},{py})"
+                    );
+                }
+            }
+        }
+        // Below K: the support-weighted box filter of the level above.
+        for level in k as usize + 1..chain.levels.len() {
+            let (up, l) = (&chain.levels[level - 1], &chain.levels[level]);
+            for y in 0..l.height {
+                for x in 0..l.width {
+                    let (mut sum, mut weight) = (0f64, 0u64);
+                    for cy in 2 * y..(2 * y + 2).min(up.height) {
+                        for cx in 2 * x..(2 * x + 2).min(up.width) {
+                            let i = (cy * up.width + cx) as usize;
+                            sum += f64::from(up.rgba[i * 4]) * f64::from(up.support[i]);
+                            weight += u64::from(up.support[i]);
+                        }
+                    }
+                    if weight > 0 {
+                        let want = (sum / weight as f64).round();
+                        let got = f64::from(l.rgba[((y * l.width + x) * 4) as usize]);
+                        assert!((got - want).abs() <= 1., "level {level} ({x},{y}): {got} vs {want}");
+                    }
+                }
+            }
+        }
     }
 }

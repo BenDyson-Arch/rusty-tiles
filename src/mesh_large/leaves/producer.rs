@@ -1453,21 +1453,20 @@ mod tests {
             let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
             let document: serde_json::Value =
                 serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
-            // Unspecified source minification is mipmapped: lossless keeps it (PNG with
-            // viewer mips); lossy cropped island pages publish level 0 with LINEAR.
-            let want = if profile == LeafProfile::Lossless { 9987 } else { 9729 };
             for sampler in document["samplers"].as_array().unwrap() {
-                assert_eq!(sampler["minFilter"], want, "{name}");
+                assert_eq!(
+                    sampler["minFilter"], 9987,
+                    "unspecified source minification uses authored mips"
+                );
             }
         }
     }
-
-    /// Review round 2, probe 1: a mipmapped source striped in 16-texel bands, cropped
-    /// from texel 16. A cropped island page cannot carry source-exact levels beyond its
-    /// alignment, so it publishes level 0 alone (KTX2 levelCount 1) with LINEAR
-    /// minification, and that level is the source's own bands (no 128 blend).
+    /// Review round 2 (coordinator decision): a mipmapped source striped in 16-texel
+    /// bands, cropped from texel 16. The cropped island page keeps a COMPLETE authored
+    /// chain to 1x1 and its mipmapped sampler (so the consumer treats it as complete),
+    /// and level 0 is the source's own bands.
     #[test]
-    fn cropped_mipmapped_leaf_pages_publish_only_exact_level_zero() {
+    fn cropped_mipmapped_leaf_pages_publish_complete_chains() {
         let work = tempfile::tempdir().unwrap();
         let source = work.path().join("source");
         fs::create_dir_all(&source).unwrap();
@@ -1505,14 +1504,15 @@ mod tests {
         let leaf = fs::read(output.join("leaves/000000000000.glb")).unwrap();
         let json_len = u32::from_le_bytes(leaf[12..16].try_into().unwrap()) as usize;
         let document: serde_json::Value = serde_json::from_slice(&leaf[20..20 + json_len]).unwrap();
-        assert_eq!(document["samplers"][0]["minFilter"], 9729);
+        assert_eq!(document["samplers"][0]["minFilter"], 9987);
         let bin = &leaf[20 + json_len + 8..];
         let view = &document["bufferViews"][document["images"][0]["bufferView"].as_u64().unwrap() as usize];
         let start = view["byteOffset"].as_u64().unwrap_or(0) as usize;
         let ktx2 = &bin[start..start + view["byteLength"].as_u64().unwrap() as usize];
-        assert_eq!(u32::from_le_bytes(ktx2[40..44].try_into().unwrap()), 1, "KTX2 levelCount");
+        let field = |o: usize| u32::from_le_bytes(ktx2[o..o + 4].try_into().unwrap());
+        let (w, h) = (field(20), field(24));
+        assert_eq!(field(40), 32 - w.max(h).leading_zeros(), "KTX2 levelCount: complete to 1x1");
         let decoder = basisu::Transcoder::new(ktx2).unwrap();
-        assert_eq!(decoder.level_count(), 1);
         let level = decoder
             .transcode(0, basisu::TargetFormat::Rgba32, basisu::DecodeFlags::NONE)
             .unwrap();
@@ -1877,9 +1877,7 @@ mod tests {
     /// the refusal names the leaf, page, slot, source image and material, and
     /// each step's missed level.
     #[test]
-    fn escalated_page_diagnostics_name_leaf_page_slot_sources_and_level() {
-        // A hard mipmapped page: cropped island pages are level 0 only, so it recovers on
-        // the ladder (it can no longer be unrecoverable) and its diagnostic names it.
+    fn unrecoverable_page_failure_names_leaf_page_slot_sources_and_level() {
         let work = tempfile::tempdir().unwrap();
         let input = textured_fixture(
             &work.path().join("source"),
@@ -1888,18 +1886,23 @@ mod tests {
             Texture::Hard(1),
             256,
         );
-        let result = mesh_to_leaf_payloads(
+        let failure = mesh_to_leaf_payloads(
             LeafOutputRequest::new(&input, work.path().join("out"), LeafProfile::Balanced)
                 .with_jobs(NonZeroUsize::new(2).unwrap()),
             &RunControl::default(),
         )
-        .unwrap();
-        let d = &result.report.escalation_diagnostics[0];
-        assert_eq!(d.leaf, "leaves/000000000000.glb");
-        assert_eq!((d.page, d.slot), (0, "baseColorTexture"));
-        assert_eq!((d.sources[0].image, d.sources[0].material), (0, 0));
-        assert_eq!(d.misses[0].step, "profile");
-        assert_eq!(d.misses[0].mip, Some(0), "level 0 is the only published level");
+        .unwrap_err();
+        let message = failure.error.to_string();
+        assert_eq!(failure.error.kind(), JobErrorKind::Unsupported, "{message}");
+        for text in [
+            "leaf 000000000000 (first 0, depth ",
+            "page 0 baseColorTexture (source image 0 material 0)",
+            "profile mip",
+            "uastc_level3 mip",
+            "no lossless PNG step",
+        ] {
+            assert!(message.contains(text), "{text}: {message}");
+        }
     }
 
     /// Several cropped mip-sampled noise pages (one per distinct sampler) that miss a

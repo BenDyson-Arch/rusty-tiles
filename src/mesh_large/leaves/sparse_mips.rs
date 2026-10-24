@@ -228,15 +228,23 @@ pub(in crate::mesh_large) fn build(
             "sparse mip page requires power-of-two dimensions >=4",
         ));
     }
-    build_islands(width, height, rgba, support, None, false, class, memory_limit)
+    build_islands(width, height, rgba, support, None, 0, class, memory_limit)
 }
 
-/// [`build`] for packed island pages. `labels` names each texel's island allocation (0
-/// outside every allocation): a level-0 gutter texel is filled only from its own island.
-/// `base_only` builds level 0 alone: a page holding several islands cannot keep them
-/// apart in a full chain (a texel coarser than an island holds its neighbours too), so
-/// island pages are published unmipped (sampled with LINEAR minification). Dimensions may
-/// be any multiple of four (whole KTX2 blocks).
+/// Mip levels through which packed island pages keep every island isolated: islands sit
+/// on a `2^K` grid with gutters of at least `2^K` texels (leaf island crops and coarse
+/// charts), so levels `0..=K` never mix two islands (leaf islands also match the source's
+/// own reduction there). A scale-gate tuning constant.
+pub(crate) const ISLAND_ISOLATED_LEVELS: u32 = 3;
+
+/// [`build`] for packed island pages: a COMPLETE chain to 1x1 (a mipmapped consumer needs
+/// complete chains), every level the support-weighted box filter of the previous one.
+/// The guarantee: islands are isolated through level `isolated` (the caller's layout puts
+/// each island allocation of `labels`, 0 outside, on the `2^isolated` grid, which is
+/// verified here, and through that level each gutter is filled only from its own
+/// island); deeper levels are a page-wide box filter, where neighbouring islands may
+/// blend (bleed accepted, as standard; the HLOD parent replaces the leaf before deep
+/// levels dominate). Dimensions may be any multiple of four (whole KTX2 blocks).
 #[allow(clippy::too_many_arguments)]
 pub(in crate::mesh_large) fn build_islands(
     width: u32,
@@ -244,7 +252,7 @@ pub(in crate::mesh_large) fn build_islands(
     rgba: &[u8],
     support: &[u32],
     labels: Option<&[u32]>,
-    base_only: bool,
+    isolated: u32,
     class: Class,
     memory_limit: u64,
 ) -> Result<Chain, JobError> {
@@ -259,6 +267,24 @@ pub(in crate::mesh_large) fn build_islands(
             JobErrorKind::InvalidRequest,
             "sparse mip label/page shape mismatch",
         ));
+    }
+    // The layout's promise: every aligned 2^isolated block holds one island allocation.
+    if let Some(l) = labels {
+        let a = 1usize << isolated.min(16);
+        let (w, h) = (width as usize, height as usize);
+        for by in (0..h).step_by(a) {
+            for bx in (0..w).step_by(a) {
+                let first = l[by * w + bx];
+                for y in by..(by + a).min(h) {
+                    if l[y * w + bx..y * w + (bx + a).min(w)].iter().any(|&v| v != first) {
+                        return Err(error(
+                            JobErrorKind::InvalidState,
+                            "island page block mixes two islands below its isolated levels",
+                        ));
+                    }
+                }
+            }
+        }
     }
     let pixels = u64::from(width)
         .checked_mul(u64::from(height))
@@ -289,7 +315,7 @@ pub(in crate::mesh_large) fn build_islands(
                     .ok_or_else(resource)?,
             )
             .ok_or_else(resource)?;
-        if (w == 1 && h == 1) || base_only {
+        if w == 1 && h == 1 {
             break;
         }
         w = (w / 2).max(1);
@@ -338,9 +364,18 @@ pub(in crate::mesh_large) fn build_islands(
     }
     fill_gutters(&mut base, class, &mut nearest, labels);
     chain.levels.push(base);
-    for &(dw, dh) in &dimensions[1..count] {
+    // Labels of the isolated levels (each texel's aligned block has one island).
+    let mut level_labels: Option<Vec<u32>> = labels.map(<[u32]>::to_vec);
+    for (index, &(dw, dh)) in dimensions[1..count].iter().enumerate() {
+        let level = index as u32 + 1;
         let src = chain.levels.last().expect("base exists");
         let sw = src.width as usize;
+        level_labels = level_labels.filter(|_| level <= isolated).map(|l| {
+            (0..dh as usize)
+                .flat_map(|y| (0..dw as usize).map(move |x| (y, x)))
+                .map(|(y, x)| l[(2 * y).min(src.height as usize - 1) * sw + (2 * x).min(sw - 1)])
+                .collect()
+        });
         let n = (dw as usize)
             .checked_mul(dh as usize)
             .ok_or_else(resource)?;
@@ -443,7 +478,7 @@ pub(in crate::mesh_large) fn build_islands(
                 dst.rgba[i * 4 + 3] = quant(sum[3] / f64::from(weight));
             }
         }
-        fill_gutters(&mut dst, class, &mut nearest, None);
+        fill_gutters(&mut dst, class, &mut nearest, level_labels.as_deref());
         chain.levels.push(dst);
     }
     Ok(chain)
