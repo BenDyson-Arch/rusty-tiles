@@ -55,6 +55,12 @@ const SORT: SortConfig = SortConfig {
     jobs: 1,
 };
 
+/// Resident bytes of the archive writer: the index sorter, the central-directory spool,
+/// the output writer and the copy buffer.
+pub(crate) fn resident_bound() -> u64 {
+    SORT.memory_bound::<IndexRow>() + (1 << 20) + (1 << 20) + (1 << 16)
+}
+
 fn io<'p>(operation: &'static str, path: &'p Path) -> impl Fn(std::io::Error) -> JobError + 'p {
     move |error| JobError::io(operation, path, error)
 }

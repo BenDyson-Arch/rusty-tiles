@@ -61,6 +61,9 @@ pub struct LeafOutputRequest {
     lod_mutation: super::super::lod::Mutation,
     lod_target: usize,
     baker: Option<std::sync::Arc<dyn super::super::bake_pass::ProxyBaker>>,
+    lod: super::super::hlod::TilerLod,
+    memory_budget: Option<u64>,
+    hlod: super::super::hlod::Settings,
     #[cfg(test)]
     leaf_triangles: Option<u64>,
 }
@@ -79,9 +82,28 @@ impl LeafOutputRequest {
             lod_mutation: super::super::lod::Mutation::None,
             lod_target: super::super::lod::TARGET_FACES,
             baker: None,
+            lod: super::super::hlod::TilerLod::H17,
+            memory_budget: None,
+            hlod: super::super::hlod::Settings::default(),
             #[cfg(test)]
             leaf_triangles: None,
         }
+    }
+    /// Build coarse tiles with the 0.4 HLOD stage instead of H17.
+    pub(crate) fn with_lod(mut self, lod: super::super::hlod::TilerLod) -> Self {
+        self.lod = lod;
+        self
+    }
+    /// Declared memory budget (HLOD runs).
+    pub(crate) fn with_memory_budget(mut self, bytes: u64) -> Self {
+        self.memory_budget = Some(bytes);
+        self
+    }
+    /// Test controls: HLOD triangle cap and mutations.
+    #[cfg(test)]
+    pub(crate) fn with_hlod_settings(mut self, settings: super::super::hlod::Settings) -> Self {
+        self.hlod = settings;
+        self
     }
     pub fn with_jobs(mut self, jobs: NonZeroUsize) -> Self {
         self.jobs = Jobs::Fixed(jobs);
@@ -265,14 +287,17 @@ pub(crate) struct StagePlan {
     jobs_limited_by: &'static str,
     available_bytes: Option<u64>,
     bound_bytes: u64,
+    /// The least available memory (memory-backed scratch included) admitting one leaf job.
+    minimum_bytes: u64,
 }
 /// Bytes reserved for the runtime, allocator slack and the output writer.
 const STAGE_RESERVE: u64 = 256 << 20;
 pub(crate) fn stage_plan(
-    profile: Profile,
+    config: &TreeConfig,
     captured: &full::FullCaptured,
-    requested: Jobs,
 ) -> Result<StagePlan, JobError> {
+    let profile = config.profile;
+    let requested = config.jobs;
     let edge: u64 = match profile {
         Profile::Fast => 2048,
         Profile::Lossless => 8192,
@@ -302,17 +327,22 @@ pub(crate) fn stage_plan(
     .ok_or_else(|| resource("leaf texture workspace overflow"))?;
     // The largest page: codec workspace, assembly, MIP-binding source chain
     // and the largest source decode transient (density reduction included).
-    let page_bytes = texture
-        .checked_add(if profile == Profile::Lossless {
-            0
-        } else {
-            (128u64 << 20)
-                .checked_add(pixels.checked_mul(6).ok_or_else(|| resource("page"))?)
-                .ok_or_else(|| resource("page"))?
-        })
-        .and_then(|n| n.checked_add(largest_source.checked_mul(32)?))
-        .and_then(|n| n.checked_add(64 << 20))
-        .ok_or_else(|| resource("leaf workspace overflow"))?;
+    // Image-free input builds no page, so it reserves no texture workspace (D8).
+    let page_bytes = if captured.image_info.is_empty() {
+        0
+    } else {
+        texture
+            .checked_add(if profile == Profile::Lossless {
+                0
+            } else {
+                (128u64 << 20)
+                    .checked_add(pixels.checked_mul(6).ok_or_else(|| resource("page"))?)
+                    .ok_or_else(|| resource("page"))?
+            })
+            .and_then(|n| n.checked_add(largest_source.checked_mul(32)?))
+            .and_then(|n| n.checked_add(64 << 20))
+            .ok_or_else(|| resource("leaf workspace overflow"))?
+    };
     let global_bytes = captured
         .report
         .memory
@@ -333,16 +363,11 @@ pub(crate) fn stage_plan(
     } else {
         0
     };
-    let available = config::available_memory();
+    let available = config.available_memory();
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as u64;
-    let usable = available.map(|a| {
-        a.saturating_sub(tmpfs)
-            .saturating_sub(global_bytes)
-            .saturating_sub(STAGE_RESERVE)
-    });
     // Cache every decoded source when it fits half the usable memory;
     // otherwise half the usable memory, and always at least two images.
-    let cache_bytes = match usable {
+    let cache_for = |usable: Option<u64>| match usable {
         Some(u) => total_source.min((u / 2).max(largest_source * 8)),
         None => total_source.min(largest_source * 8 * 4),
     };
@@ -358,10 +383,53 @@ pub(crate) fn stage_plan(
                 .ok_or_else(|| resource("window"))?,
         )
         .ok_or_else(|| resource("per-job overflow"))?;
-    let fixed = cache_bytes
-        .checked_add(page_bytes)
-        .and_then(|n| n.checked_add(2 * leaf_owned))
-        .ok_or_else(|| resource("leaf fixed memory overflow"))?;
+    let fixed_for = |cache: u64| {
+        cache
+            .checked_add(page_bytes)
+            .and_then(|n| n.checked_add(2 * leaf_owned))
+            .ok_or_else(|| resource("leaf fixed memory overflow"))
+    };
+    // One leaf job fits usable memory `u` when `u >= cache(u) + page + one job's window`,
+    // and `u - cache(u)` never decreases in `u`: the least such `u`, by bisection.
+    let fits = |u: u64| -> bool {
+        fixed_for(cache_for(Some(u)))
+            .ok()
+            .and_then(|f| f.checked_add(per_job))
+            .is_some_and(|need| u >= need)
+    };
+    let minimum_usable = {
+        let (mut lo, mut hi) = (0u64, u64::MAX / 2);
+        if !fits(hi) {
+            return Err(resource("one leaf job's memory exceeds any budget"));
+        }
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if fits(mid) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        lo
+    };
+    let minimum_bytes = minimum_usable
+        .checked_add(tmpfs)
+        .and_then(|n| n.checked_add(global_bytes))
+        .and_then(|n| n.checked_add(STAGE_RESERVE))
+        .ok_or_else(|| resource("leaf minimum overflow"))?;
+    let usable = available.map(|a| {
+        a.saturating_sub(tmpfs)
+            .saturating_sub(global_bytes)
+            .saturating_sub(STAGE_RESERVE)
+    });
+    if usable.is_some_and(|u| !fits(u)) {
+        return Err(resource(&format!(
+            "one leaf job cannot fit available memory including owned scratch: needs {minimum_bytes} bytes, has {}",
+            available.unwrap_or(0)
+        )));
+    }
+    let cache_bytes = cache_for(usable);
+    let fixed = fixed_for(cache_bytes)?;
     let plan = config::plan_jobs(requested, cores as usize, usable, 0, fixed, per_job);
     let jobs = plan.jobs;
     let limited_by = plan.limited_by;
@@ -399,7 +467,19 @@ pub(crate) fn stage_plan(
         jobs,
         jobs_limited_by: limited_by,
         available_bytes: available,
+        minimum_bytes,
     })
+}
+impl StagePlan {
+    pub(crate) fn jobs(&self) -> u64 {
+        self.jobs
+    }
+    pub(crate) fn minimum_bytes(&self) -> u64 {
+        self.minimum_bytes
+    }
+    pub(crate) fn bound_bytes(&self) -> u64 {
+        self.bound_bytes
+    }
 }
 fn write_file(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
     let mut file = File::create(path).map_err(|e| JobError::io("create leaf member", path, e))?;
@@ -639,13 +719,19 @@ pub(crate) fn produce(
     config: &TreeConfig,
     stage: &StagePlan,
     profile: LeafProfile,
-    mutation: super::super::lod::Mutation,
-    target: usize,
-    baker: Option<&dyn super::super::bake_pass::ProxyBaker>,
+    coarse: Coarse<'_>,
     phases: &Phases<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<LeafStageOutput, JobError> {
     use super::super::{bake_pass, lod::handoff::HandoffSink};
+    let (mutation, target, baker) = match coarse {
+        Coarse::H17 {
+            mutation,
+            target,
+            baker,
+        } => (mutation, target, baker),
+        Coarse::Hlod { .. } => (super::super::lod::Mutation::None, 0, None),
+    };
     let leaf_started = std::time::Instant::now();
     let total_leaves = captured.tree.stats.leaves;
     phases.progress(Phase::LeafBuild, 0, Some(total_leaves))?;
@@ -826,6 +912,62 @@ pub(crate) fn produce(
         .map_err(|e| JobError::io("finish leaf manifest", &manifest_path, e))?;
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
+    if let Coarse::Hlod { plan, settings } = coarse {
+        // HLOD needs no decoded image or leaf worker: record the cache and page-gate
+        // observations, then release the decoded images and the pool before its own
+        // admission takes effect (the gate and services own no memory).
+        let stats = cache.stats();
+        let gate_peak = gate.peak();
+        drop(cache);
+        drop(pool);
+        let (hlod, hlod_diagnostics) = timing::time(Stage::Lod, || {
+            super::super::hlod::produce(
+                super::super::hlod::HlodInput {
+                    stage: path,
+                    captured,
+                    config,
+                    plan,
+                    settings,
+                    phases,
+                },
+                check,
+            )
+        })?;
+        report.proxies = hlod.tiles;
+        report.texel_ownership.unique_proxies = hlod.tiles;
+        report.proxy_bytes = hlod.bytes;
+        let doc = json!({"schemaVersion":1,"kind":"full_detail_leaf_payloads","report":report,"lattice":captured.lattice,"provenanceSchema":"rusty_tiles_large_source_v1","leafManifest":"leaves.jsonl","proxyManifest":"proxies.jsonl","hlod":hlod,"losslessMipGuarantee":"PNG level0 exact; viewer-generated minification levels outside guarantee"});
+        write_file(
+            &path.join("manifest.json"),
+            &serde_json::to_vec_pretty(&doc).map_err(|e| invariant(&e.to_string()))?,
+        )?;
+        let resources = json!({"hlod":{"plan":plan,"diagnostics":hlod_diagnostics},"capture":captured.report,"deliveryJobs":stage.jobs,"delivery":stage,"pageGatePeakBytes":gate_peak,"sourceCache":stats});
+        write_file(
+            &path.join("resources.json"),
+            &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
+        )?;
+        return Ok(LeafStageOutput {
+            report,
+            diagnostics: LeafStageDiagnostics {
+                memory_bound_bytes: stage.bound_bytes,
+                jobs: stage.jobs,
+                jobs_limited_by: stage.jobs_limited_by,
+                available_bytes: stage.available_bytes,
+                page_bytes: stage.page_bytes,
+                gate_bytes: stage.gate_bytes,
+                cache_bytes: stage.cache_bytes,
+                global_bytes: stage.global_bytes,
+                leaf_bytes: stage.leaf_bytes,
+                window: stage.window,
+                page_gate_peak_bytes: gate_peak,
+                cache_peak_resident_bytes: stats.peak_resident_bytes,
+                cache_hits: stats.hits,
+                cache_misses: stats.misses,
+                lod_prepass_scratch_peak_bytes: hlod_diagnostics.incidence_scratch_peak_bytes,
+            },
+            hlod: Some(hlod_diagnostics),
+        });
+    }
     let mut lod = timing::time(Stage::Lod, || {
         super::super::lod::produce(
             super::super::lod::LodInput {
@@ -916,6 +1058,7 @@ pub(crate) fn produce(
             cache_misses: stats.misses,
             lod_prepass_scratch_peak_bytes: lod.prepass_scratch_peak_bytes,
         },
+        hlod: None,
     })
 }
 
@@ -942,6 +1085,24 @@ pub struct LeafStageDiagnostics {
 pub(crate) struct LeafStageOutput {
     pub report: LeafOutputReport,
     pub diagnostics: LeafStageDiagnostics,
+    /// HLOD stage run facts (HLOD runs only).
+    pub hlod: Option<super::super::hlod::HlodDiagnostics>,
+}
+
+/// The coarse-tile stage run inside the producer while the capture is live.
+#[derive(Clone, Copy)]
+pub(crate) enum Coarse<'a> {
+    /// H17 certified geometry, optionally textured by the H27 bake.
+    H17 {
+        mutation: super::super::lod::Mutation,
+        target: usize,
+        baker: Option<&'a dyn super::super::bake_pass::ProxyBaker>,
+    },
+    /// 0.4 HLOD geometry under its admitted memory plan.
+    Hlod {
+        plan: &'a super::super::hlod::HlodMemoryPlan,
+        settings: super::super::hlod::Settings,
+    },
 }
 
 fn write_leaf(
@@ -1064,9 +1225,25 @@ pub fn mesh_to_leaf_payloads(
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs;
     config.scratch_dir = request.scratch_dir;
+    config.lod = request.lod;
     #[cfg(test)]
     if let Some(leaf_triangles) = request.leaf_triangles {
         config = config.with_leaf_triangles(leaf_triangles);
+    }
+    match request.lod {
+        super::super::hlod::TilerLod::Hlod => {
+            config.memory_budget = Some(
+                crate::mesh_large::resources::MemoryBudget::resolve(request.memory_budget)
+                    .map_err(|e| attempt.fail(e))?,
+            );
+        }
+        super::super::hlod::TilerLod::H17 if request.memory_budget.is_some() => {
+            return Err(attempt.fail(JobError::new(
+                JobErrorKind::InvalidRequest,
+                "a memory budget requires the HLOD coarse-tile method",
+            )));
+        }
+        super::super::hlod::TilerLod::H17 => {}
     }
     let captured = match timing::time(Stage::Capture, || {
         full::capture(&request.input, &config, &mut || attempt.check())
@@ -1080,13 +1257,37 @@ pub fn mesh_to_leaf_payloads(
             return Err(finished);
         }
     };
-    let stage_plan = match stage_plan(config.profile, &captured, config.jobs) {
+    let stage_plan = match stage_plan(&config, &captured) {
         Ok(plan) => plan,
         Err(error) => {
             let mut failed = attempt.fail(error);
             close_failed_capture(captured, &mut failed);
             return Err(failed);
         }
+    };
+    let hlod_plan = match &config.memory_budget {
+        Some(budget) if config.lod == super::super::hlod::TilerLod::Hlod => {
+            match super::super::hlod::plan(&captured, &config, budget, request.hlod.cap) {
+                Ok(plan) => Some(plan),
+                Err(error) => {
+                    let mut failed = attempt.fail(error);
+                    close_failed_capture(captured, &mut failed);
+                    return Err(failed);
+                }
+            }
+        }
+        _ => None,
+    };
+    let coarse = match &hlod_plan {
+        Some(plan) => Coarse::Hlod {
+            plan,
+            settings: request.hlod,
+        },
+        None => Coarse::H17 {
+            mutation: request.lod_mutation,
+            target: request.lod_target,
+            baker: request.baker.as_deref(),
+        },
     };
     let stage = match target.stage_pending(&attempt) {
         Ok(stage) => stage,
@@ -1102,9 +1303,7 @@ pub fn mesh_to_leaf_payloads(
         &config,
         &stage_plan,
         request.profile,
-        request.lod_mutation,
-        request.lod_target,
-        request.baker.as_deref(),
+        coarse,
         &Phases::silent(),
         &|| attempt.check(),
     );

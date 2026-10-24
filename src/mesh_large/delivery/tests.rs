@@ -4,7 +4,7 @@
 use super::{
     plan::{tile_box, Builder, Limits, Linked, Node, Sink, LIMITS},
     publish_with,
-    source::{glb_bounds, Aabb, Digits, LeafRow},
+    source::{glb_bounds, payload_bounds, Aabb, Digits, LeafRow, MAX_GLB_JSON},
     *,
 };
 use crate::validate::{inspect, ValidationRequest};
@@ -1401,6 +1401,12 @@ fn glb_bounds_are_outward_and_z_up() {
     };
     let (path, bytes) = write(doc(node));
     let b = glb_bounds(&path, &row(bytes)).unwrap();
+    // A JSON chunk above the caller's cap is refused before it is read.
+    let refused = payload_bounds(&path, "leaf", bytes, 64).unwrap_err();
+    assert!(
+        refused.to_string().contains("exceeds 64 bytes"),
+        "{refused}"
+    );
     // Exact y-up bounds: x in [0.1, 0.1 + 0.3·65535], y in [-5 + 0.007, -5 + 0.009],
     // z in [1e7 + 2, 1e7 + 6]; z-up is (x, -z, y).
     let exact_lo_x = 0.1f64;
@@ -1441,6 +1447,7 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
             report_called = true;
             Ok(b"{}".to_vec())
         },
+        MAX_GLB_JSON,
     );
     let error = match refused {
         Err(error) => error,
@@ -1459,6 +1466,7 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
             assert_eq!(facts.members, 4); // content + tileset + conversion + archive index
             Ok(b"{}".to_vec())
         },
+        MAX_GLB_JSON,
     )
     .unwrap();
     assert_eq!(admitted.facts().members, 4);
@@ -1497,4 +1505,75 @@ fn reviewer_tiler_conversion_member_is_in_early_and_exact_ceiling() {
     .unwrap();
     assert_eq!(admitted.facts().members, exact + 1);
     assert!(!output.exists());
+}
+
+/// Round 4: a chain cell that repeats its coarse payload (here inside an implicit root,
+/// forced by tight caps) holds that payload's bounds, which reach past its children's.
+#[test]
+fn repeated_chain_content_stays_inside_its_tile() {
+    struct Capture(Option<Node>);
+    impl Sink for Capture {
+        fn external(&mut self, _: Node) -> Result<Linked, JobError> {
+            panic!("no external document expected")
+        }
+        fn root(&mut self, node: Node) -> Result<(), JobError> {
+            self.0 = Some(node);
+            Ok(())
+        }
+    }
+    let (fine, coarse) = (3. / 4096., 4. / 4096.);
+    let row = super::source::ProxyRow {
+        uri: "proxies/f0-d0.glb".into(),
+        sha256: [0; 32],
+        bytes: 64,
+        first: 0,
+        end: 2,
+        depth: 0,
+        geometric_error: 1.,
+        primitives: 1,
+    };
+    let payload = Aabb {
+        lo: [-1., -coarse, -1.],
+        hi: [1., coarse, 1.],
+    };
+    let proxies: super::plan::Proxies<'_> = Box::new(std::iter::once(Ok((row, payload))));
+    let mut sink = Capture(None);
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let mut builder =
+        Builder::with_proxies(&mut sink, tight, Some(proxies)).with_sparse_proxies(true);
+    for i in 0..2u64 {
+        let mut digits = Digits::ROOT;
+        for d in [0, 0, i as u8] {
+            digits.push(d);
+        }
+        let leaf = LeafRow {
+            uri: format!("leaves/{i:012}.glb"),
+            sha256: [0; 32],
+            bytes: 64,
+            first: i,
+            end: i + 1,
+            digits,
+            last_octant: i as u8,
+            packed: false,
+            synthetic: 0,
+            geometry_error: 0.,
+        };
+        let bounds = Aabb {
+            lo: [-1., -fine, -1.],
+            hi: [1., fine, 1.],
+        };
+        builder.push(leaf, bounds).unwrap();
+    }
+    builder.finish().unwrap();
+    let root = sink.0.unwrap();
+    assert!(root.is_implicit_root());
+    let chain = &root.children[0];
+    assert!(chain.is_chain_cell());
+    for i in 0..3 {
+        assert!(chain.extent.lo[i] <= payload.lo[i] && chain.extent.hi[i] >= payload.hi[i]);
+    }
 }

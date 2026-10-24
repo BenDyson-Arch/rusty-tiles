@@ -222,6 +222,21 @@ impl Sink for PlanSink {
     }
 }
 
+/// Explicit children with every chain or omitted cell replaced by its children
+/// (recursively): a coarse tile's children are then its renderable replacements, each with
+/// its own box and error (no greater than the coarse tile's).
+fn spliced(children: Vec<Node>) -> Vec<Node> {
+    let mut out = Vec::with_capacity(children.len());
+    for child in children {
+        if child.is_chain_cell() && !child.is_implicit_root() {
+            out.extend(spliced(child.children));
+        } else {
+            out.push(child);
+        }
+    }
+    out
+}
+
 /// Run a forest-writer call with the job's cancellation as its checkpoint.
 fn forest<T>(
     staging: &Path,
@@ -267,9 +282,17 @@ impl WriteSink<'_> {
         self.stage_payload(&row.uri, row.bytes, row.sha256, member)
     }
 
-    fn stage_proxy(&mut self, node: &Node, member: &str) -> Result<Vec<ContentRef>, JobError> {
-        let Some(row) = node.proxy.as_deref() else {
-            return Ok(Vec::new());
+    /// Stage a tile's coarse content; with `chain`, a chain cell repeats its coarse tile.
+    fn stage_proxy(
+        &mut self,
+        node: &Node,
+        member: &str,
+        chain: bool,
+    ) -> Result<Vec<ContentRef>, JobError> {
+        let row = match (node.proxy.as_deref(), node.chain.as_deref()) {
+            (Some(row), _) => row,
+            (None, Some(row)) if chain => row,
+            _ => return Ok(Vec::new()),
         };
         self.stage_payload(&row.uri, row.bytes, row.sha256, member)?;
         Ok(vec![proxy_content(row, member.to_owned())?])
@@ -309,7 +332,12 @@ impl WriteSink<'_> {
         }
     }
 
+    /// A document's root tile (a chain cell there repeats its coarse tile).
     fn tile(&mut self, node: Node) -> Result<ForestTile<TileExtras>, JobError> {
+        self.tile_in(node, true)
+    }
+
+    fn tile_in(&mut self, node: Node, root: bool) -> Result<ForestTile<TileExtras>, JobError> {
         if let Some(link) = node.link {
             return link
                 .map(ForestTile::Link)
@@ -331,13 +359,13 @@ impl WriteSink<'_> {
         let contents = self.stage_proxy(
             &node,
             &format!("content/f{}-d{}.glb", node.first, node.depth),
+            root,
         )?;
         let own = record(&node, contents)?;
-        let children = node
-            .children
-            .into_iter()
-            .map(|child| self.tile(child))
-            .collect::<Result<_, _>>()?;
+        let mut children = Vec::with_capacity(node.children.len());
+        for child in spliced(node.children) {
+            children.push(self.tile_in(child, false)?);
+        }
         Ok(ForestTile::explicit(own, children))
     }
 
@@ -401,7 +429,7 @@ impl WriteSink<'_> {
             "implicit-content/{key}-{}-{}-{}-{}.glb",
             c.level, c.x, c.y, c.z
         );
-        let contents = self.stage_proxy(&node, &member)?;
+        let contents = self.stage_proxy(&node, &member, true)?;
         if !contents.is_empty() {
             planned.contents[0].push(c);
         }
@@ -497,7 +525,8 @@ fn plan_pass(
 ) -> Result<Planned, JobError> {
     let mut sink = PlanSink::default();
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
+        .with_sparse_proxies(leaves.sparse_proxies);
     let mut triangles = 0u64;
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
@@ -544,6 +573,17 @@ pub(crate) fn publish(
     work_parent: &Path,
 ) -> Result<(MeshTilesetReport, u64), JobError> {
     publish_with(request, LIMITS, attempt_check, out, work_parent)
+}
+
+/// [`publish`] under other fragment caps (tests forcing implicit roots and documents).
+#[cfg(test)]
+pub(crate) fn publish_with_limits(
+    request: &MeshTilesetRequest,
+    limits: Limits,
+    out: &mut File,
+    work_parent: &Path,
+) -> Result<(MeshTilesetReport, u64), JobError> {
+    publish_with(request, limits, &mut || Ok(()), out, work_parent)
 }
 
 fn publish_with(
@@ -615,7 +655,14 @@ fn prepare(
     conversion_member: bool,
 ) -> Result<PreparedDelivery, JobError> {
     let placement = ResolvedPlacement::resolve(&request.placement)?;
-    prepare_resolved(request, placement, limits, check, conversion_member)
+    prepare_resolved(
+        request,
+        placement,
+        limits,
+        check,
+        conversion_member,
+        source::MAX_GLB_JSON,
+    )
 }
 
 fn prepare_resolved(
@@ -624,9 +671,10 @@ fn prepare_resolved(
     limits: Limits,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     conversion_member: bool,
+    max_glb_json: u64,
 ) -> Result<PreparedDelivery, JobError> {
     let root = root_placement(&placement)?;
-    let leaves = LeafDirectory::open(&request.leaves)?;
+    let leaves = LeafDirectory::open(&request.leaves)?.with_max_glb_json(max_glb_json);
     // Early: every leaf is a member, as are tileset.json and the index.
     ceiling(
         leaves
@@ -651,13 +699,16 @@ fn prepare_resolved(
     })
 }
 
+/// `max_glb_json` caps each member's GLB JSON chunk read for bounds: a budgeted run passes
+/// [`source::TILER_MAX_GLB_JSON`], which its [`resident_bound`] charges.
 pub(crate) fn prepare_tiler(
     request: &MeshTilesetRequest,
     placement: ResolvedPlacement,
     check: &mut dyn FnMut() -> Result<(), JobError>,
     make_report: impl FnOnce(&DeliveryFacts) -> Result<Vec<u8>, JobError>,
+    max_glb_json: u64,
 ) -> Result<PreparedDelivery, JobError> {
-    let mut prepared = prepare_resolved(request, placement, LIMITS, check, true)?;
+    let mut prepared = prepare_resolved(request, placement, LIMITS, check, true, max_glb_json)?;
     prepared.conversion = Some(make_report(&prepared.facts())?);
     Ok(prepared)
 }
@@ -710,7 +761,8 @@ pub(crate) fn write_prepared(
         check,
     };
     let proxies = leaves.proxies.then(|| leaves.proxy_rows()).transpose()?;
-    let mut builder = Builder::with_proxies(&mut sink, limits, proxies);
+    let mut builder = Builder::with_proxies(&mut sink, limits, proxies)
+        .with_sparse_proxies(leaves.sparse_proxies);
     for (index, item) in leaves.leaves()?.enumerate() {
         if index % 256 == 0 {
             (builder.sink().check)()?;
@@ -777,6 +829,25 @@ pub(crate) fn write_prepared(
         placement: placement.report(),
     };
     Ok((report, archive_bytes))
+}
+
+/// Bytes of parsed `serde_json::Value` per byte of JSON text, a proven ceiling: a `Value`
+/// is 32 bytes and every value takes at least two bytes of text with its separator, arrays
+/// hold at most twice their length in capacity (32 per text byte), a map entry (24-byte key
+/// and a value in a B-tree node at least half full, at most 128 bytes) takes at least five
+/// bytes of text, and string contents are at most the text itself.
+const JSON_VALUE_BYTES_PER_TEXT_BYTE: u64 = 33;
+
+/// Declared resident bound of preparing and writing a tiler archive (D8), which runs after
+/// the leaf and coarse stages have released their workspaces: the planner's held records,
+/// the archive writer, one member's parsed GLB JSON (members are read one at a time, each
+/// JSON chunk at most `max_glb_json` bytes, with its text), and an allowance for one
+/// hierarchy document or subtree, the conversion report and row lines being serialized.
+pub(crate) fn resident_bound(max_glb_json: u64) -> u64 {
+    plan::held_bytes_bound()
+        + archive::resident_bound()
+        + (JSON_VALUE_BYTES_PER_TEXT_BYTE + 1) * max_glb_json
+        + (64 << 20)
 }
 
 /// Publish an H8 leaf directory as a Tiles 1.1 `.3tz` (hidden CLI `mesh-leaves-to-3tz`).
