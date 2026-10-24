@@ -155,7 +155,7 @@ def structural_face(f):
             'codecStructure','invalid decoded position tolerance')
 
 
-def check_leaf(f,manifest,stats=None):
+def check_leaf(f,manifest,stats=None,*,geometry=True):
     row=f['ids'].get('source_triangle',{})
     key=tuple(row.get(k) for k in KEYS)
     want=manifest['triangles'].get(','.join(map(str,key)))
@@ -165,8 +165,9 @@ def check_leaf(f,manifest,stats=None):
     require(all(row.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'sourceIdentity',str(key))
     require([row.get(f'vertex_{k}') for k in range(3)]==want['vertices'],'sourceIdentity',str(key))
     tolerance=f.get('positionTolerance',[0,0,0])
-    require(all(abs(f['xyz'][i][k]-want['xyz'][i][k])<=tolerance[k]+1e-10 for i in range(3) for k in range(3)),
-            'leafGeometry',str(key))
+    if geometry:
+        require(all(abs(f['xyz'][i][k]-want['xyz'][i][k])<=tolerance[k]+1e-10 for i in range(3) for k in range(3)),
+                'leafGeometry',str(key))
     source_glb=manifest.get('metadata',{}).get('sourceKind')=='sourceGLB'
     if source_glb:
         require(material_semantics(f['material'])==material_semantics(want['material']),'leafMaterial',str(key))
@@ -271,8 +272,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                             require(not t['children'] or 'source_triangle' not in ids,'featureIdentity','coarse source_triangle '+uri)
                         t['rendered']=True
                         if not t['children']:
-                            key,want=check_leaf(f,manifest,attributes)
-                            require(store.source_face(key,want,t['lo']),'leafCoverage','duplicate '+key)
+                            key,want=check_leaf(f,manifest,attributes,geometry=False)
+                            require(store.source_face(key,want,t['lo'],actual=f),'leafCoverage','duplicate '+key)
                             leaf_count+=1
                     store.put_faces(int(t['id']),faces)
                 if not t['children']:
@@ -281,6 +282,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     store.leaf_bounds(t['lo'])
                 store.db.commit()
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
+            source_points=store.validate_leaf_points(require)
             result=store.census(tiles,leaves,require)
             for t in tiles:
                 if not t['children']: continue
@@ -300,6 +302,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         require(sum(x*y for x,y in zip(a,b))>0,'interfaceWinding',t['id'])
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           legacyCoarseTriangles=legacy,coordinateFrame=coordinate_frame,profile=profile,
+                          leafSourcePointsChecked=source_points,
                           candidateWork=work.used,sourceManifestSha256=file_hash(expected))
             result['attributes']=dict(attributes)
             result['uninspected']=(['textured leaf UV/source-pixel correspondence: crop/repack transforms require independent image-content proof']

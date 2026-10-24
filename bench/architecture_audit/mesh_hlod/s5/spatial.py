@@ -4,7 +4,6 @@ No producer census, interface lock, sampled error or tile extras enter this inde
 The R-trees are broad phases only: all geometric decisions use binary64 values.
 """
 import collections
-import heapq
 import itertools
 import json
 import math
@@ -38,37 +37,6 @@ def box_distance(p, box):
     return sum(max(box[2*k]-p[k], 0, p[k]-box[2*k+1])**2 for k in range(3))
 
 
-class PointIndex:
-    """Balanced BVH for one decoded tile; exact tolerant point matching."""
-    def __init__(self, points, work):
-        self.points, self.work = list(points), work
-        def build(ids):
-            box = bounds([self.points[i] for i in ids])
-            if len(ids) <= 16:
-                return box, ids, None
-            axis = max(range(3), key=lambda k: box[2*k+1]-box[2*k])
-            ids.sort(key=lambda i: self.points[i][axis])
-            mid = len(ids)//2
-            return box, build(ids[:mid]), build(ids[mid:])
-        self.root = build(list(range(len(self.points)))) if self.points else None
-
-    def matches(self, point, tolerance):
-        pending = [self.root] if self.root else []
-        radius2 = sum(x*x for x in tolerance)
-        while pending:
-            box, left, right = pending.pop()
-            self.work.charge()
-            if box_distance(point, box) > radius2:
-                continue
-            if right is None:
-                for i in left:
-                    self.work.charge()
-                    if all(abs(point[k]-self.points[i][k]) <= tolerance[k] for k in range(3)):
-                        yield i
-            else:
-                pending.extend((left, right))
-
-
 class Store:
     def __init__(self, path, work=None):
         self.db = sqlite3.connect(path)
@@ -83,7 +51,9 @@ class Store:
           CREATE TABLE source(id INTEGER PRIMARY KEY, leaf INTEGER, key TEXT UNIQUE, data TEXT);
           CREATE INDEX source_leaf ON source(leaf);
           CREATE VIRTUAL TABLE source_box USING rtree(id,x0,x1,y0,y1,z0,z1);
-          CREATE TABLE points(id INTEGER PRIMARY KEY, xyz BLOB UNIQUE);
+          CREATE TABLE points(id INTEGER PRIMARY KEY, xyz BLOB UNIQUE, rendered BLOB,
+            tx REAL DEFAULT 0,ty REAL DEFAULT 0,tz REAL DEFAULT 0,
+            x0 REAL,x1 REAL,y0 REAL,y1 REAL,z0 REAL,z1 REAL,conflict INTEGER DEFAULT 0);
           CREATE TABLE owners(point INTEGER, leaf INTEGER, PRIMARY KEY(point,leaf)) WITHOUT ROWID;
           CREATE VIRTUAL TABLE point_box USING rtree(id,x0,x1,y0,y1,z0,z1);
           CREATE TABLE edges(a INTEGER,b INTEGER,leaf INTEGER,PRIMARY KEY(a,b,leaf)) WITHOUT ROWID;
@@ -117,10 +87,45 @@ class Store:
     def xyz(self, point):
         return struct.unpack('<3d', self.db.execute('SELECT xyz FROM points WHERE id=?', (point,)).fetchone()[0])
 
+    def rendered_xyz(self, point):
+        row=self.db.execute('SELECT rendered,xyz FROM points WHERE id=?',(point,)).fetchone()
+        return struct.unpack('<3d',row[0] if row[0] is not None else row[1])
+
+    def observe_point(self,point,xyz,tolerance):
+        """Join by authoritative source XYZ, independent of original corner IDs.
+
+        The same source point may cross primitive/UV seams or appear in leaves
+        with different storage grids. Max incident intrinsic error is permitted
+        by the shared canonical lattice; unrelated coarse leaves do not enter.
+        """
+        packed=struct.pack('<3d',*(0.0 if x==0 else x for x in xyz))
+        row=self.db.execute('SELECT rendered FROM points WHERE id=?',(point,)).fetchone()
+        if row[0] is None:
+            self.db.execute('UPDATE points SET rendered=?,tx=?,ty=?,tz=?,x0=?,x1=?,y0=?,y1=?,z0=?,z1=? WHERE id=?',
+                (packed,*tolerance,xyz[0],xyz[0],xyz[1],xyz[1],xyz[2],xyz[2],point))
+        else:
+            self.db.execute('UPDATE points SET tx=max(tx,?),ty=max(ty,?),tz=max(tz,?),'
+                'x0=min(x0,?),x1=max(x1,?),y0=min(y0,?),y1=max(y1,?),z0=min(z0,?),z1=max(z1,?),'
+                'conflict=max(conflict,?) WHERE id=?',
+                (*tolerance,xyz[0],xyz[0],xyz[1],xyz[1],xyz[2],xyz[2],int(row[0]!=packed),point))
+
+    def validate_leaf_points(self,require):
+        checked=0
+        for row in self.db.execute('SELECT id,xyz,tx,ty,tz,x0,x1,y0,y1,z0,z1,conflict FROM points WHERE rendered IS NOT NULL'):
+            self.work.charge()
+            point,packed,*values=row
+            expected=struct.unpack('<3d',packed)
+            tol=values[:3];ranges=values[3:9];conflict=values[9]
+            require(all(expected[k]-tol[k]-1e-10<=ranges[2*k] and ranges[2*k+1]<=expected[k]+tol[k]+1e-10 for k in range(3)),
+                    'leafGeometry',f'source point {point} {expected}: rendered range {ranges}, incident tolerance {tol}')
+            require(not conflict,'interfacePoints',f'leaf decoded disagreement at source point {point} {expected}')
+            checked+=1
+        return checked
+
     def owners(self, point):
         return {r[0] for r in self.db.execute('SELECT leaf FROM owners WHERE point=?', (point,))}
 
-    def source_face(self, key, want, leaf):
+    def source_face(self, key, want, leaf, actual=None):
         self.work.charge()
         try:
             i = self.db.execute('INSERT INTO source(leaf,key,data) VALUES (?,?,?)',
@@ -129,6 +134,10 @@ class Store:
             return False
         self.db.execute('INSERT INTO source_box VALUES (?,?,?,?,?,?,?)', (i,*bounds(want['xyz'])))
         ids = [self.point(p) for p in want['xyz']]
+        if actual is not None:
+            tolerance=actual.get('positionTolerance',[0.,0.,0.])
+            for p,xyz in zip(ids,actual['xyz']):
+                self.observe_point(p,xyz,tolerance)
         self.db.executemany('INSERT OR IGNORE INTO owners VALUES (?,?)', ((p,leaf) for p in ids))
         self.db.executemany('INSERT OR IGNORE INTO edges VALUES (?,?,?)',
                             ((*sorted((ids[k],ids[(k+1)%3])),leaf) for k in range(3)))
@@ -288,37 +297,30 @@ class Store:
                 continue
             vertices = set()
             adjacency=collections.defaultdict(set)
-            tol = [0.,0.,0.]
             for f in self.faces(int(t['id'])):
                 ps = [tuple(p) for p in f['xyz']]
                 vertices.update(ps)
                 for k in range(3):
                     a,b=ps[k],ps[(k+1)%3]
                     adjacency[a].add(b);adjacency[b].add(a)
-                ft = f.get('positionTolerance',[0.,0.,0.])
-                tol = [max(tol[k],ft[k]) for k in range(3)]
-            # Arithmetic slack only; quantization tolerance is decoder-derived.
-            tol = [v+1e-10 for v in tol]
-            index = PointIndex(vertices,self.work)
             cache = {}
-            def matches(p):
+            def canonical(p):
                 if p not in cache:
-                    cache[p] = list(index.matches(self.xyz(p),tol))
+                    cache[p] = self.rendered_xyz(p)
                 return cache[p]
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
                 if kind == 0:
                     points += 1
-                    require(bool(matches(a)),'interfacePoints',t['id'])
+                    self.work.charge()
+                    require(canonical(a) in vertices,'interfacePoints',t['id'])
                 else:
                     segments += 1
-                    targets={index.points[y] for y in matches(b)}
-                    found=False
-                    for x in matches(a):
-                        neighbors=adjacency[index.points[x]]
-                        self.work.charge(len(neighbors)+1)
-                        if not neighbors.isdisjoint(targets):
-                            found=True;break
-                    require(found,'interfaceSegments',t['id'])
+                    self.work.charge(2)
+                    # Codec error bounds govern fidelity to source, never a
+                    # crack between two rendered levels. Canonical leaf points
+                    # have already passed independent source/incident-grid
+                    # validation and exact cross-leaf agreement.
+                    require(canonical(b) in adjacency.get(canonical(a),()),'interfaceSegments',t['id'])
         depths = {int(t['id']):t['depth'] for t in tiles}
         mixed = same = 0
         for a,b in self.db.execute('SELECT a,b FROM pairs'):
