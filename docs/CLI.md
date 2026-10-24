@@ -61,7 +61,6 @@ Rust exports are now internal.
 | --- | --- | --- | --- |
 | `--profile` | | `balanced` | `fast`, `balanced`, `quality` or `lossless`; policies/constants are provisional |
 | `--jobs` | | `auto` | Positive maximum workers or memory-aware auto; actual workers are capped per stage by cores and memory; unknown memory uses one worker |
-| `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Declared memory ceiling, never raised: a positive byte count, or with a `KiB`/`MiB`/`GiB`/`TiB` suffix (`2GiB`); zero, signs, fractions and overflow are usage errors before any source I/O. The current default coarse-tile method does not enforce one and refuses it |
 | `--scratchDir` | `--scratch-dir` | platform scratch parent | Owned working-data parent; final archive staging stays beside output |
 | `--anchor LON LAT HEIGHT` | | none | WGS84 longitude/latitude degrees and ellipsoidal height metres; omission keeps local output |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with anchor | Active ENU near-unit quaternion, scalar W last; requires anchor |

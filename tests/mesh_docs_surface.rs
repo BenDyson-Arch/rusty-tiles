@@ -90,7 +90,14 @@ const REMOVED: [&str; 10] = [
     "--rotation-degrees",
 ];
 // Flags of other commands or the global options that the mesh guide may name.
-const OTHER: [&str; 6] = ["--command", "--json", "--progress", "--help", "--version", "--force"];
+const OTHER: [&str; 6] = [
+    "--command",
+    "--json",
+    "--progress",
+    "--help",
+    "--version",
+    "--force",
+];
 
 fn mesh_flags() -> BTreeSet<String> {
     let mut known = flags(&help(&["mesh"]));
@@ -99,13 +106,16 @@ fn mesh_flags() -> BTreeSet<String> {
 }
 
 #[test]
-fn help_names_no_removed_option_and_documents_the_budget() {
+fn help_names_no_removed_option_and_no_hidden_one() {
     let mesh = help(&["mesh"]);
     for removed in REMOVED {
         assert!(!mesh.contains(removed), "{removed} in mesh --help");
     }
-    for needed in ["--memory-budget", "--profile", "--jobs", "--scratchDir"] {
+    for needed in ["--profile", "--jobs", "--scratchDir"] {
         assert!(mesh.contains(needed), "{needed} missing from mesh --help");
+    }
+    for hidden in ["--memory-budget", "--memoryBudget", "--lod"] {
+        assert!(!mesh.contains(hidden), "hidden {hidden} in mesh --help");
     }
 }
 
@@ -165,11 +175,26 @@ fn the_hlod_selector_is_never_advertised() {
     };
     for (name, text) in [
         ("docs/MESH.md", read("docs/MESH.md")),
-        ("docs/CLI.md (mesh)", section(&read("docs/CLI.md"), "### mesh", false)),
+        (
+            "docs/CLI.md (mesh)",
+            section(&read("docs/CLI.md"), "### mesh", false),
+        ),
         ("docs/CONVERTERS.md", read("docs/CONVERTERS.md")),
-        ("bindings/python/README.md", read("bindings/python/README.md")),
+        (
+            "bindings/python/README.md",
+            read("bindings/python/README.md"),
+        ),
     ] {
-        for hidden in ["--lod", "_lod", "TilerLod", "with_lod"] {
+        for hidden in [
+            "--lod",
+            "_lod",
+            "TilerLod",
+            "with_lod",
+            "--memory-budget",
+            "--memoryBudget",
+            "memory_budget_bytes",
+            "with_memory_budget",
+        ] {
             assert!(!token(&text, hidden), "{name} advertises {hidden}");
         }
     }
@@ -221,8 +246,14 @@ fn certified_proxy_and_ledger_claims_stay_in_the_legacy_sections() {
     // The legacy fence exists and says so.
     let legacy = section(&guide, "## Legacy H17 coarse tiles", false);
     assert!(legacy.contains("proxy_source") && legacy.contains("certified"));
-    let status = guide.lines().filter(|l| l.starts_with('>')).collect::<String>();
-    assert!(status.contains("legacy"), "status note must name the legacy path");
+    let status = guide
+        .lines()
+        .filter(|l| l.starts_with('>'))
+        .collect::<String>();
+    assert!(
+        status.contains("legacy"),
+        "status note must name the legacy path"
+    );
 }
 
 #[test]
@@ -230,8 +261,9 @@ fn documented_budget_defaults_match_the_code() {
     let guide = read("docs/MESH.md");
     let budget = section(&guide, "### Memory budget", false);
     assert!(budget.contains("**4 GiB**") && budget.contains("2 GiB when headroom"));
-    let cli = read("docs/CLI.md");
-    assert!(cli.contains("lesser of 4 GiB and half the detected headroom (2 GiB if undetected)"));
+    // The budget is documented only as planned, never as a current option.
+    assert!(budget.contains("**Not a current option.**"), "{budget}");
+    assert!(guide.contains("### Memory budget (coming with the HLOD default)"));
     // 4 GiB ceiling and 2 GiB undetected default are the constants the guide quotes.
     let resources = read("src/mesh_large/resources.rs");
     assert!(resources.contains("DEFAULT_CEILING_BYTES: u64 = 4 << 30"));

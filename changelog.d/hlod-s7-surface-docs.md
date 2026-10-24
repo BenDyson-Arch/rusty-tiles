@@ -1,16 +1,14 @@
 ### Added
 
-- `mesh --memory-budget BYTES` (`--memoryBudget`), Rust `TilerRequest::with_memory_budget`
-  and Python `mesh_to_tileset(memory_budget_bytes=...)` declare one memory ceiling
-  for the run, with one rule on every surface. The value is a positive byte count
-  (the CLI also takes `B`/`KiB`/`MiB`/`GiB`/`TiB` suffixes, Python an `int`).
-  Zero, signs, fractions, decimal-unit suffixes, booleans and overflow are
-  `invalid_request`, refused before any source I/O. Without one, the budget is the
-  lesser of 4 GiB and half the detected host/cgroup headroom, or 2 GiB when it
-  cannot be detected; an explicit budget is never raised. `diagnostics.memory`
-  reports the requested and resolved budget and each stage's minimum. The
-  default coarse-tile method does not enforce a budget, so it refuses one
-  (`invalid_request`) instead of ignoring it; the HLOD method does.
+- Hidden, not yet public: `mesh --memory-budget BYTES` (`--memoryBudget`), Rust
+  `TilerRequest::with_memory_budget` (`#[doc(hidden)]`) and the private Python keyword
+  `_memory_budget_bytes` share one parser and validator, refuse zero, signs,
+  fractions, decimal units, booleans and overflow as `invalid_request` before any
+  source I/O, and report the resolved budget (default: the lesser of 4 GiB and half
+  the detected headroom, 2 GiB when undetected; an explicit budget is never raised).
+  They are hidden until HLOD is the default coarse-tile method, because the
+  default method cannot enforce a budget and refuses one. The planned surface is
+  described in the mesh guide, marked as not a current option.
 
 ### Changed
 

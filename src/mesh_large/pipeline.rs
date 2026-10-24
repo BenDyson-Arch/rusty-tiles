@@ -121,8 +121,9 @@ impl TilerRequest {
     /// and a run that cannot fit under it is refused as `resource_limit` before the binding
     /// stage allocates. Without one the run resolves the lesser of 4 GiB and half the
     /// detected host/cgroup headroom (2 GiB when headroom is undetected). Zero is refused as
-    /// `invalid_request` before any source I/O. The current default coarse-tile method does
-    /// not enforce a budget, so it refuses one instead of ignoring it.
+    /// `invalid_request` before any source I/O. Hidden until HLOD is the default: the
+    /// current default coarse-tile method does not enforce a budget, so it refuses one.
+    #[doc(hidden)]
     pub fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
         self

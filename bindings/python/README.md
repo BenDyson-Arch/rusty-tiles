@@ -54,7 +54,7 @@ required reports and cleanup diagnostics, as described below.
 
 | Function | Keyword arguments |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `memory_budget_bytes=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | Same rigid placement/policy/callback keywords; returns `ModelManifestResult` with fixed sibling output |
 | `point_cloud_to_3tz(input, output, ...)` | `force=False`, required `source_crs`, `height_offset=None`, `max_points=8192` (at most 8192), `chunk_points=100000`, `metadata_attributes=False`, `callback=None` |
@@ -65,7 +65,7 @@ required reports and cleanup diagnostics, as described below.
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` is the single new public
 source-mesh operation.
@@ -109,15 +109,7 @@ callback is polled before every re-encode step. See the
 `jobs=None` means memory-aware auto. A positive integer is a maximum capped by
 cores and the stage's memory admission. Unknown memory uses one worker; a
 mandatory item that cannot fit is still refused. Booleans/nonintegers are
-rejected. `memory_budget_bytes=None` takes the default [memory
-budget](../../docs/MESH.md#memory-budget), the lesser of 4 GiB and half the detected
-host/cgroup headroom (2 GiB when undetected); an `int` byte count declares a ceiling
-that is never raised. A bool or non-integer raises `TypeError`; zero, a negative or a
-value above 2⁶⁴−1 raises `InvalidRequestError` before any source I/O; a run that
-cannot fit is a `ResourceLimitError` before it allocates. The current default
-coarse-tile method does not enforce a budget, so it refuses one instead of ignoring
-it. `result.diagnostics["memory"]["budget"]` reports the requested and resolved
-budget. `scratch_dir` selects owned working data, while final archive staging
+rejected. `scratch_dir` selects owned working data, while final archive staging
 stays beside output. Output must be `.3tz`. `force=True` allows completed-file
 replacement while preserving the original on precommit failure.
 

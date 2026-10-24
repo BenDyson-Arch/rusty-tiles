@@ -268,7 +268,7 @@ class WheelAPI(unittest.TestCase):
                         with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
                             rusty_tiles.mesh_to_tileset(
                                 source, output, force=True, callback=events.append,
-                                memory_budget_bytes=int(text), _lod=lod)
+                                _memory_budget_bytes=int(text), _lod=lod)
                         self.assertEqual(caught.exception.kind, "invalid_request")
                         self.assertIn("memory budget", str(caught.exception))
                     else:
@@ -276,12 +276,12 @@ class WheelAPI(unittest.TestCase):
                         with self.assertRaises(TypeError):
                             rusty_tiles.mesh_to_tileset(
                                 source, output, force=True, callback=events.append,
-                                memory_budget_bytes=text, _lod=lod)
+                                _memory_budget_bytes=text, _lod=lod)
                     self.assertEqual(output.read_bytes(), b"previous")
                     self.assertEqual(events, [])
         for value in (True, False, 1.0, 2.5, b"1", [1], "1"):
             with self.subTest(value=value), self.assertRaises(TypeError):
-                rusty_tiles.mesh_to_tileset(source, output, memory_budget_bytes=value)
+                rusty_tiles.mesh_to_tileset(source, output, _memory_budget_bytes=value)
         for row in BUDGET_MATRIX["valid"]:
             if not re.fullmatch(r"\d+", row["text"]):
                 continue
@@ -289,7 +289,7 @@ class WheelAPI(unittest.TestCase):
                 # Accepted: the run proceeds to the source, which is missing.
                 with self.assertRaises(rusty_tiles.TilesIOError):
                     rusty_tiles.mesh_to_tileset(
-                        source, output, force=True, memory_budget_bytes=int(row["bytes"]),
+                        source, output, force=True, _memory_budget_bytes=int(row["bytes"]),
                         _lod="hlod")
         # The legacy default method does not enforce a budget, so it refuses one, ahead of
         # the (missing) source and an output that fails its own rules.
@@ -297,7 +297,7 @@ class WheelAPI(unittest.TestCase):
             with self.subTest(default_method=budget), \
                     self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
                 rusty_tiles.mesh_to_tileset(source, self.root / "x.txt",
-                                            memory_budget_bytes=budget)
+                                            _memory_budget_bytes=budget)
             self.assertIn("memory budget", str(caught.exception))
         with self.assertRaises(rusty_tiles.InvalidRequestError):
             rusty_tiles.mesh_to_tileset(source, output, _lod="octree")
@@ -313,7 +313,7 @@ class WheelAPI(unittest.TestCase):
             events.append(event)
 
         result = rusty_tiles.mesh_to_tileset(
-            source, output, jobs=1, memory_budget_bytes=2 << 30, callback=observe, _lod="hlod")
+            source, output, jobs=1, _memory_budget_bytes=2 << 30, callback=observe, _lod="hlod")
         budget = result.diagnostics["memory"]["budget"]
         self.assertEqual((budget["requested_bytes"], budget["resolved_bytes"], budget["source"]),
                          (2 << 30, 2 << 30, "explicit"))
@@ -349,7 +349,7 @@ class WheelAPI(unittest.TestCase):
         # Below the stage minimum the run is a typed resource refusal that publishes nothing.
         refused = self.root / "refused.3tz"
         with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
-            rusty_tiles.mesh_to_tileset(source, refused, jobs=1, memory_budget_bytes=1 << 20,
+            rusty_tiles.mesh_to_tileset(source, refused, jobs=1, _memory_budget_bytes=1 << 20,
                                         _lod="hlod")
         self.assertEqual(caught.exception.kind, "resource_limit")
         self.assertFalse(refused.exists())
@@ -366,7 +366,7 @@ class WheelAPI(unittest.TestCase):
             capture_output=True, check=True, timeout=300)
         envelope = json.loads(completed.stdout)
         python = rusty_tiles.mesh_to_tileset(
-            source, self.root / "python.3tz", jobs=1, memory_budget_bytes=2 << 30, _lod="hlod")
+            source, self.root / "python.3tz", jobs=1, _memory_budget_bytes=2 << 30, _lod="hlod")
         self.assertEqual((self.root / "python.3tz").read_bytes(), cli_output.read_bytes())
         self.assertEqual(python.report, envelope["tilerReport"])
         with zipfile.ZipFile(cli_output) as archive:
@@ -394,15 +394,16 @@ class WheelAPI(unittest.TestCase):
 
     def test_tiler_documented_signatures_name_only_installed_parameters(self):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
-        documented = {"input", "output", "profile", "jobs", "memory_budget_bytes", "scratch_dir",
+        documented = {"input", "output", "profile", "jobs", "scratch_dir",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
                       "source_offset", "source_offset_file", "height_offset", "force", "callback"}
-        # The private selector is installed but is never documented.
-        self.assertEqual(installed - documented, {"_lod"})
+        # The private selector and budget are installed but never documented as options.
+        self.assertEqual(installed - documented, {"_lod", "_memory_budget_bytes"})
         self.assertLessEqual(documented, installed)
         for name in ("docs/MESH.md", "bindings/python/README.md"):
             text = (ROOT / name).read_text()
             self.assertNotIn("_lod", text, name)
+            self.assertNotIn("memory_budget_bytes", text, name)
             signature = re.search(r"mesh_to_tileset\(input, output, \*,([^)]*)\)", text, re.S)
             self.assertIsNotNone(signature, name)
             names = re.findall(r"(\w+)=", signature.group(1))

@@ -1,4 +1,4 @@
-//! The declared memory budget as one public option: the shared valid/invalid matrix through the
+//! The declared memory budget, a hidden option until HLOD is the default: the shared valid/invalid matrix through the
 //! CLI and the Rust request, refusal ordering before any source I/O, and the reported budget.
 //! Python reads the same matrix in `bindings/python/tests/test_api.py`.
 use rusty_tiles::{mesh_to_tileset, JobErrorKind, RunControl, TilerLod, TilerRequest};
@@ -232,15 +232,20 @@ fn a_budget_below_the_stage_minimum_is_a_resource_refusal_that_publishes_nothing
 }
 
 #[test]
-fn help_advertises_the_budget_and_never_the_hlod_selector() {
+fn help_advertises_neither_the_budget_nor_the_hlod_selector() {
     let help = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
         .args(["mesh", "--help"])
         .output()
         .unwrap();
     let help = String::from_utf8(help.stdout).unwrap();
-    assert!(help.contains("--memory-budget"), "{help}");
-    assert!(help.contains("--memoryBudget"), "{help}");
-    for hidden in ["--lod", "hlod", "H17", "h17"] {
+    for hidden in [
+        "--memory-budget",
+        "--memoryBudget",
+        "--lod",
+        "hlod",
+        "H17",
+        "h17",
+    ] {
         assert!(!help.contains(hidden), "{hidden} in help:\n{help}");
     }
 }

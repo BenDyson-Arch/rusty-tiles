@@ -7,7 +7,7 @@
 > HLOD stage's `proxies.jsonl` rows (`HlodRow`) rather than H17 certificates. The
 > declared memory budget bounds archive preparation too: a budgeted run caps member
 > GLB JSON at 1 MiB and reserves H16's resident bound before leaves are built
-> ([memory budget](../MESH.md#memory-budget)). References below to certified H17
+> ([memory budget](../MESH.md#memory-budget-coming-with-the-hlod-default)). References below to certified H17
 > content describe the legacy path.
 
 

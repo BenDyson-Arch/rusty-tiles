@@ -340,14 +340,19 @@ individual-item and format limits still apply. The 3TZ member ceiling is
 texture-format option, external encoder fallback or compression bypass on
 `mesh`.
 
-### Memory budget
+### Memory budget (coming with the HLOD default)
 
-One declared ceiling governs the whole run, with one rule on every surface: CLI
-`--memory-budget BYTES` (`--memoryBudget`), Rust `TilerRequest::with_memory_budget`
-and Python `memory_budget_bytes=`.
+**Not a current option.** A plain `mesh` run takes no budget, and no public CLI
+option, Python keyword or Rust method accepts one yet: the option stays hidden until
+the HLOD coarse levels are the default, because the legacy path cannot enforce a
+budget. This section describes the planned surface so the defaults are settled
+before it appears.
+
+One declared ceiling will govern the whole run, with one rule on every surface (a
+CLI option, a Python keyword and a Rust request method, all taking a byte count).
 
 - **Values.** A positive integer number of bytes. The CLI also takes the binary
-  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`--memory-budget 2GiB`); Python takes
+  suffixes `B`, `KiB`, `MiB`, `GiB` and `TiB` (`2GiB`); Python takes
   an `int`. Zero, signs, fractions, exponents, decimal-unit (`GB`) or lowercase
   suffixes, booleans (Python: `TypeError`) and values above 2⁶⁴−1 are
   `invalid_request`, refused before any source or output is touched (a CLI usage
@@ -376,8 +381,8 @@ and Python `memory_budget_bytes=`.
 - **What it is not.** It is an admission and planning ceiling, not an operating
   system limit or a measured peak-RSS guarantee; measured peaks come from the
   acceptance campaign.
-- **Today.** The legacy path a plain run still takes does not enforce a budget, so it
-  refuses one (`invalid_request`) instead of ignoring it.
+- **Until then.** The legacy path a plain run takes does not enforce a budget, so
+  the hidden option is refused there (`invalid_request`) instead of being ignored.
 
 ### Primitives, atlases and editability
 
@@ -513,7 +518,7 @@ import rusty_tiles
 
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
-    profile="balanced", jobs=None, memory_budget_bytes=2 * 1024**3, scratch_dir=None,
+    profile="balanced", jobs=None, scratch_dir=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -527,7 +532,7 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
+scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` accepts `str` or `os.PathLike`
 paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
@@ -535,11 +540,7 @@ paths. `source_crs=None` or `"local"` keeps local input; `source_axes` is
 sequence, `source_offset_file` a path, and `height_offset` defaults to 0, with
 the CLI's rules. `jobs=None`
 means auto; a positive integer is a maximum. Booleans and noninteger worker
-counts are rejected. `memory_budget_bytes=None` takes the default
-[memory budget](#memory-budget); an `int` byte count declares it. A bool or
-non-integer raises `TypeError`; zero, a negative or a value above 2⁶⁴−1 raises
-`InvalidRequestError` before any source I/O, exactly as the CLI refuses them. Unknown
-legacy keywords raise `TypeError`. Python calls
+counts are rejected. Unknown legacy keywords raise `TypeError`. Python calls
 the same core operation without launching the CLI or an encoder, and releases
 the GIL during native work.
 
@@ -596,7 +597,7 @@ the error. The legacy path's error semantics are described under
 Runtime diagnostics stay **outside the archive** so worker/scratch choices do
 not alter its semantic bytes. They include `requested_jobs`, `capture`,
 `leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds`, the
-[`memory`](#memory-budget) budget and stage plan, and the coarse stage's `hlod`
+`memory` budget and stage plan (coarse-stage runs), and the coarse stage's `hlod`
 facts (tiles, workers, CPU seconds, lease peak, `error_measurement` and the
 per-depth appearance summary: page texels, covered texels, cap hits and the
 requested and achieved spacing). `phase_seconds` holds the wall seconds of
@@ -682,7 +683,7 @@ These changes take effect for a plain `mesh` run when HLOD replaces the legacy p
 | Coarse tiles carry `proxy_source` rows naming a source triangle (or a fill) | One representative `source_primitive` ID per coarse triangle; no `proxy_source`, no coarse source-triangle table. Read leaves for exact provenance and annotation |
 | Coarse textures are baked per texel against a certified proxy and a bake ledger | Fresh content-sized charts, nearest-source bake, no ledger or drift gate |
 | Phases `lod_prepass`, `lod_simplify`, `seam_resolution`, `lod_finish`, `proxy_bake` and the `proxy_bake` diagnostics | Phases `hlod_incidence` and `hlod_geometry`; diagnostics `hlod` and `memory` |
-| No memory budget; capture and leaves size themselves to detected headroom | `--memory-budget` / `memory_budget_bytes`, default the lesser of 4 GiB and half the headroom |
+| No memory budget; capture and leaves size themselves to detected headroom | A declared [memory budget](#memory-budget-coming-with-the-hlod-default) is planned, with a default of the lesser of 4 GiB and half the headroom |
 | Crack-freedom by certified seam thinning | Crack-free by construction with locked outer interfaces |
 
 Scripts that read `proxy_source`, the legacy phase names or `proxy_bake` need

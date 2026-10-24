@@ -343,7 +343,7 @@ fn tiler_jobs(py: Python<'_>, jobs: Option<Bound<'_, PyAny>>) -> PyResult<TilerJ
     Ok(TilerJobs::Maximum(count))
 }
 
-/// A declared memory budget: an integer byte count (not a bool), refused as an invalid request
+/// The private memory budget: an integer byte count (not a bool), refused as an invalid request
 /// when zero, negative or beyond 2^64 - 1. The conversion to decimal text lets the shared
 /// core parser own every rule, so the CLI and Python refuse identically.
 fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyResult<Option<u64>> {
@@ -352,7 +352,7 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
     };
     if budget.is_instance_of::<PyBool>() || !budget.is_instance_of::<PyInt>() {
         return Err(PyTypeError::new_err(
-            "memory_budget_bytes must be an integer byte count or None",
+            "_memory_budget_bytes must be an integer byte count or None",
         ));
     }
     let text = budget
@@ -366,10 +366,9 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
-/// maximum, and None means auto. memory_budget_bytes is a positive integer ceiling for the
-/// run (default: the lesser of 4 GiB and half the detected headroom, 2 GiB if undetected).
+/// maximum, and None means auto.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, memory_budget_bytes=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, _lod=None))]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None, _lod=None, _memory_budget_bytes=None))]
 #[allow(clippy::too_many_arguments)]
 fn mesh_to_tileset(
     py: Python<'_>,
@@ -377,7 +376,6 @@ fn mesh_to_tileset(
     output: PathBuf,
     profile: &str,
     jobs: Option<Bound<'_, PyAny>>,
-    memory_budget_bytes: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
@@ -392,12 +390,14 @@ fn mesh_to_tileset(
     // Private coarse-tile selector ("h17" or "hlod"), the CLI's hidden `--lod`. Undocumented
     // and unsupported; it goes when HLOD becomes the only method.
     _lod: Option<&str>,
+    // Private memory budget in bytes, hidden like `_lod` until HLOD is the default.
+    _memory_budget_bytes: Option<Bound<'_, PyAny>>,
 ) -> PyResult<TilerResult> {
     let profile = profile
         .parse::<TilerProfile>()
         .map_err(|error| tiler_request_error(py, error))?;
     let jobs = tiler_jobs(py, jobs)?;
-    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let memory_budget = tiler_memory_budget(py, _memory_budget_bytes)?;
     let lod = _lod
         .map(str::parse::<TilerLod>)
         .transpose()

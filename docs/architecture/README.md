@@ -92,8 +92,8 @@ wherever the concrete scope has not adopted them.
 - [H28 per-tile primitive batching contract](h28-tile-batching-contract.md)
 - [0.4 mesh direction: classic octree HLOD](hlod-040-decision.md) governs coarse
   tiles; the [H17 LOD contract](h17-lod-contract.md) is superseded when its code is
-  removed, and the [mesh guide](../MESH.md#coarse-levels-hlod) and its
-  [memory budget](../MESH.md#memory-budget) describe the public surface
+  removed, and the [mesh guide](../MESH.md#coarse-levels-hlod) describes the public
+  surface (its [memory budget](../MESH.md#memory-budget-coming-with-the-hlod-default) is planned, not yet an option)
 - [HLOD S2 sampled-error measurement](hlod-s2-error.md)
 
 - [I1 implicit read contract](i1-implicit-read-contract.md)
