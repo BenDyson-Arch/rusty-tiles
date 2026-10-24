@@ -80,3 +80,9 @@ a skipped check. Configurable identity work refusals use the shared budget owner
 and retain key/value/observed/derivation. Coarse materials are checked against
 independent source alpha/MASK, double-sided and lit/unlit classes; baked colour
 and texture quality remain the separate appearance audit's responsibility.
+
+The source identity profile requires one URI-free buffer backed by an actual BIN
+chunk. Both archive identity admission and the independent decoder refuse URI
+buffers with shadow BIN data; missing BIN chunks fail resource/container checks.
+All metadata and geometry reads use the declared logical buffer extent. This is
+an explicit format boundary, not a second interpretation of URI-resolved bytes.

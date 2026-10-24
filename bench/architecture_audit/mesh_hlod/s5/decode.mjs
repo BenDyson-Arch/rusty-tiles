@@ -13,8 +13,10 @@ const point=(m,p)=>[0,1,2].map(a=>m[a]*p[0]+m[a+4]*p[1]+m[a+8]*p[2]+m[a+12]);
 let meshopt;
 export async function decode(file) {
  const b=fs.readFileSync(file);
- if(b.toString('ascii',0,4)!=='glTF'||b.readUInt32LE(8)!==b.length)throw Error('codecStructure: GLB');
- const jl=b.readUInt32LE(12),j=JSON.parse(b.subarray(20,20+jl)),bin=b.subarray(28+jl),cache=new Map();
+ if(b.length<28||b.toString('ascii',0,4)!=='glTF'||b.readUInt32LE(4)!==2||b.readUInt32LE(8)!==b.length||b.toString('ascii',16,20)!=='JSON')throw Error('codecStructure: GLB');
+ const jl=b.readUInt32LE(12),j=JSON.parse(b.subarray(20,20+jl)),cache=new Map();
+ if(j.buffers?.length!==1||j.buffers[0].uri!==undefined||!b.subarray(24+jl,28+jl).equals(Buffer.from('BIN\0'))||j.buffers[0].byteLength>b.readUInt32LE(20+jl)||28+jl+b.readUInt32LE(20+jl)>b.length)throw Error('codecStructure: URI-free embedded BIN buffer required');
+ const bin=b.subarray(28+jl,28+jl+j.buffers[0].byteLength);
  for(const [owner,allowed] of [[j,['EXT_structural_metadata']],...(j.nodes??[]).map(n=>[n,[]]),...(j.meshes??[]).map(m=>[m,[]]),...(j.meshes??[]).flatMap(m=>m.primitives.map(p=>[p,['EXT_mesh_features']]))])if(Object.keys(owner.extensions??{}).some(k=>!allowed.includes(k)))throw Error('unsupported oracle scene extension');
  if(j.animations||j.skins||j.meshes?.some(m=>m.weights||m.primitives.some(p=>p.targets))||j.nodes?.some(n=>n.weights))throw Error('unsupported oracle animation, skin or morph scene');
  async function view(id){

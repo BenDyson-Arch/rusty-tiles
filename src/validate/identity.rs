@@ -56,6 +56,7 @@ fn declares(raw: &RawValue) -> bool {
 fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
     let element = match kind {
         "meshes" => Some("mesh"),
+        "buffers" => Some("buffer"),
         "primitives" => Some("primitive"),
         "accessors" => Some("accessor"),
         "views" => Some("view"),
@@ -90,6 +91,9 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("doc", "meshes") => Some("meshes"),
             ("doc", "accessors") => Some("accessors"),
             ("doc", "bufferViews") => Some("views"),
+            ("doc", "buffers") => Some("buffers"),
+            ("buffer", "byteLength") => Some("number"),
+            ("buffer", "uri") => Some("present"),
             (_, "extensions") if matches!(kind, "doc" | "primitive" | "view") => Some("extensions"),
             ("mesh", "primitives") => Some("primitives"),
             ("primitive", "attributes") => Some("attributes"),
@@ -308,7 +312,21 @@ pub(super) fn inspect(
     if !has_table {
         return Err(fail());
     }
-    let bin = bytes.get(28 + length..).ok_or_else(fail)?;
+    let buffers = doc["buffers"].as_array().ok_or_else(fail)?;
+    if buffers.len() != 1 || buffers[0].get("uri").is_some() {
+        return Err(Error::unsupported(
+            "hlodFeatureIds: source identity requires one URI-free embedded BIN buffer",
+        ));
+    }
+    let header = slice(bytes, 20 + length, 8)?;
+    if &header[4..8] != b"BIN\0" {
+        return Err(invalid(
+            "hlodFeatureIds: source identity requires an actual BIN chunk",
+        ));
+    }
+    let bin_length = u32::from_le_bytes(header[..4].try_into().unwrap()) as usize;
+    let bin = slice(bytes, 28 + length, bin_length)?;
+    let bin = slice(bin, 0, uint(&buffers[0]["byteLength"])?)?;
     for table in tables.iter().filter(|t| {
         matches!(
             t["class"].as_str(),
