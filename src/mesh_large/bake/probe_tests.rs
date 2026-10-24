@@ -1157,7 +1157,7 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
                             if quality {
                                 23.
                             } else if metric["texels"].as_u64().unwrap() < 64 {
-                                12.
+                                13.
                             } else {
                                 16.
                             }

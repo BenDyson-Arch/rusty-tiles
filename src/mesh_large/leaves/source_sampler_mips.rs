@@ -441,6 +441,20 @@ pub(super) fn check_authored(
 ) -> Result<SamplerReceipt, JobError> {
     check_levels(chain, &chain.page.levels, context, false)
 }
+/// The sampler has no support mask: its band uses the sampled level's area,
+/// unlike the leaf texel gate's count of positively supported texels.
+fn sampled_level_area<L: ImageLevel>(levels: &[L], min_filter: u32, lod: f64) -> u64 {
+    let index = if lod <= 0. || matches!(min_filter, 9728 | 9729) {
+        0
+    } else if matches!(min_filter, 9984 | 9985) {
+        (lod + 0.5).floor() as usize
+    } else {
+        lod.ceil() as usize
+    };
+    let level = &levels[index.min(levels.len() - 1)];
+    u64::from(level.width()) * u64::from(level.height())
+}
+
 fn check_levels<L: ImageLevel>(
     chain: &Chain,
     delivered: &[L],
@@ -615,6 +629,25 @@ fn check_levels<L: ImageLevel>(
         if !total.is_finite() {
             return Err(invalid("source sampler sample total weight invalid"));
         }
+        if decoded && matches!(slot, TextureSlot::BaseColor | TextureSlot::Emissive) {
+            if let Some(floor) = super::delivery::tiny_colour_rgb_floor(
+                profile,
+                sampled_level_area(delivered, page_sampler.min_filter, lod),
+            ) {
+                let rgb_sse: f64 = squared[..3].iter().sum();
+                let psnr = if rgb_sse == 0. {
+                    f64::INFINITY
+                } else {
+                    10. * (65025. * total * 3. / rgb_sse).log10()
+                };
+                if psnr < floor {
+                    return Err(error(
+                        JobErrorKind::Unsupported,
+                        &format!("source sampler combined RGB LOD{lod} PSNR{psnr} below {floor}"),
+                    ));
+                }
+            }
+        }
         for &a in channels {
             let psnr = if squared[a] == 0.0 {
                 f64::INFINITY
@@ -636,18 +669,10 @@ fn check_levels<L: ImageLevel>(
                 if decoded && matches!(profile, Profile::Fast | Profile::Balanced) {
                     // At a fractional LOD use the coarser participating level's
                     // band. Pre-encode correspondence retains its stricter floors.
-                    let sampled = if lod <= 0. || matches!(page_sampler.min_filter, 9728 | 9729) {
-                        0
-                    } else if matches!(page_sampler.min_filter, 9984 | 9985) {
-                        (lod + 0.5).floor() as usize
-                    } else {
-                        lod.ceil() as usize
-                    };
-                    let level = &delivered[sampled.min(delivered.len() - 1)];
                     (
                         super::delivery::colour_psnr(
                             profile,
-                            u64::from(level.width()) * u64::from(level.height()),
+                            sampled_level_area(delivered, page_sampler.min_filter, lod),
                         ),
                         if fast { 160. } else { 144. },
                     )
@@ -739,6 +764,160 @@ mod tests {
             .iter()
             .flat_map(|&v| [v, v, v, 255])
             .collect()
+    }
+    fn flat_colour_chain() -> Chain {
+        let rgba = [100, 100, 100, 255].repeat(32 * 32);
+        // Only one supported leaf texel, while sampler level0 area is1024.
+        let mut support = vec![0; 32 * 32];
+        support[0] = 1;
+        Chain {
+            original: mips::build(32, 32, rgba.clone(), Class::Colour, None, usize::MAX).unwrap(),
+            page: sparse_mips::build(32, 32, &rgba, &support, Class::Colour, u64::MAX).unwrap(),
+            charged_bytes: 0,
+        }
+    }
+    #[test]
+    fn decoded_colour_sampler_bands_caps_and_authored_correspondence() {
+        let chain = flat_colour_chain();
+        let samples = [SamplerSample {
+            source_uv: [0.5; 2],
+            page_uv: [0.5; 2],
+            weight: 1.,
+            source_lod_bias: 0.,
+        }];
+        for min in [9728, 9729, 9984, 9985, 9986, 9987] {
+            let mode = sampler(min, 33071);
+            for profile in [Profile::Fast, Profile::Balanced] {
+                let context = SamplerCheck {
+                    samples: &samples,
+                    sampler: mode,
+                    slot: TextureSlot::BaseColor,
+                    profile,
+                    density_drop: 0,
+                    mask: false,
+                };
+                let mut delivered = decoded(&chain);
+                for level in &mut delivered {
+                    let area = level.width * level.height;
+                    // Red errors24/38/48 have20.53/16.54/14.51dB;
+                    // tiny G/B errors24 keep joint RGB above16dB.
+                    // Fractional blends cross the finer band's floor, making
+                    // the coarser participating band a sensitive requirement.
+                    let offsets = if area >= 1024 {
+                        [24; 3]
+                    } else if area >= 64 {
+                        [38; 3]
+                    } else {
+                        [48, 24, 24]
+                    };
+                    for pixel in level.rgba.as_chunks_mut::<4>().0 {
+                        for (v, offset) in pixel[..3].iter_mut().zip(offsets) {
+                            *v += offset;
+                        }
+                    }
+                }
+                check_samples(&chain, &delivered, &context).unwrap();
+                check_authored(&chain, &context).unwrap();
+                // A leaf gate would use one supported texel and admit error30
+                // under13dB/channel and16dB RGB. The sampler uses area1024
+                // and must reject it at20dB/channel.
+                for pixel in delivered[0].rgba.as_chunks_mut::<4>().0 {
+                    pixel[..3].fill(130);
+                }
+                assert!(check_samples(&chain, &delivered, &context).is_err());
+                let mut wrong = flat_colour_chain();
+                for level in &mut wrong.page.levels {
+                    for pixel in level.rgba.as_chunks_mut::<4>().0 {
+                        pixel[..3].fill(124);
+                    }
+                }
+                assert!(
+                    check_authored(&wrong, &context).is_err(),
+                    "authored floor remains22dB"
+                );
+                if matches!(min, 9984..=9987) {
+                    let mut bad_tail = decoded(&chain);
+                    bad_tail.last_mut().unwrap().rgba[..3].fill(152);
+                    let error = check_samples(&chain, &bad_tail, &context).unwrap_err();
+                    assert!(error.message().contains("combined RGB"), "{error:?}");
+                    bad_tail.last_mut().unwrap().rgba[..3].copy_from_slice(&[160, 100, 100]);
+                    assert!(
+                        check_samples(&chain, &bad_tail, &context).is_err(),
+                        "tiny channel floor"
+                    );
+                }
+            }
+        }
+        let mut delivered = decoded(&chain);
+        delivered[0].rgba[0] = 255;
+        let weighted = [
+            samples[0],
+            SamplerSample {
+                source_uv: [1. / 64.; 2],
+                page_uv: [1. / 64.; 2],
+                weight: 1e-6,
+                source_lod_bias: 0.,
+            },
+        ];
+        for (profile, accepts) in [(Profile::Fast, true), (Profile::Balanced, false)] {
+            let context = SamplerCheck {
+                samples: &weighted,
+                sampler: sampler(9987, 33071),
+                slot: TextureSlot::BaseColor,
+                profile,
+                density_drop: 0,
+                mask: false,
+            };
+            assert_eq!(
+                check_samples(&chain, &delivered, &context).is_ok(),
+                accepts,
+                "155-byte outlier vs160/144 caps"
+            );
+        }
+    }
+
+    #[test]
+    fn sampled_level_selector_uses_literal_gles_mip_rules() {
+        let levels = decoded(&flat_colour_chain());
+        for min in [9728, 9729, 9984, 9985, 9986, 9987] {
+            assert_eq!(sampled_level_area(&levels, min, -1.), 1024);
+            assert_eq!(sampled_level_area(&levels, min, 0.), 1024);
+        }
+        for min in [9728, 9729] {
+            assert_eq!(sampled_level_area(&levels, min, 100.), 1024);
+        }
+        for min in [9984, 9985] {
+            for (lod, area) in [
+                (0.25, 1024),
+                (0.5, 256),
+                (0.75, 256),
+                (2.25, 64),
+                (2.5, 16),
+                (100., 1),
+            ] {
+                assert_eq!(
+                    sampled_level_area(&levels, min, lod),
+                    area,
+                    "nearest {min}/{lod}"
+                );
+            }
+        }
+        for min in [9986, 9987] {
+            for (lod, area) in [
+                (0.25, 256),
+                (0.5, 256),
+                (0.75, 256),
+                (2., 64),
+                (2.25, 16),
+                (100., 1),
+            ] {
+                assert_eq!(
+                    sampled_level_area(&levels, min, lod),
+                    area,
+                    "blend {min}/{lod}"
+                );
+            }
+        }
     }
     // Separate literal source levels and integer wrapping, no production class
     // chain, filtering, wrap, LOD or planning helper used as expected truth.

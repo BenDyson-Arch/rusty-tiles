@@ -1,5 +1,10 @@
 # ETC1S colour default — 2026-10-24
 
+This is the historical effort-3 campaign at `8df9cf4db3f5edf01c690add117506b797ff046b`.
+Its raw evidence and identities remain unchanged. The follow-up
+[processing-cost revision](effort.md) owns the current effort choice, tightened
+tiny RGB floor, additional corruption/sampler tests and default-lossy golden.
+
 Owner decision brings D7 forward for both leaves and H17 coarse pages.
 Scope: fast q50, balanced q90, ETC1S effort 3; quality UASTC and lossless PNG.
 Codec/profile policy is owned by `leaves::delivery::codec_settings`.

@@ -1,6 +1,10 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+#[cfg(target_os = "linux")]
+#[path = "effort_sweep.rs"]
+mod effort_sweep;
+
 /// splitmix64, so fixtures are identical on every target.
 struct Rng(u64);
 

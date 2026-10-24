@@ -251,7 +251,7 @@ impl ChannelGate {
             && self.max.is_none_or(|cap| stats.max <= cap)
     }
 }
-/// Below this many supported texels (a 32x32 level) a 99.9th percentile is
+/// Below this many positive-support texels a 99.9th percentile is
 /// the maximum of a few hundred samples, and mips this small are sampled only
 /// at extreme minification. Small colour levels of packed island pages mix
 /// neighbouring islands inside codec blocks; they retain the block corruption
@@ -260,6 +260,8 @@ pub(in crate::mesh_large) const SMALL_LEVEL_TEXELS: u64 = 1024;
 /// Colour reconstruction floor shared by decoded texels and source sampling.
 /// ETC1S's shared palette is least accurate on tiny/coarse levels; these bands
 /// are calibrated on photo, alpha, odd-sized, flat and high-contrast controls.
+/// Delivery passes the positive-support count; source sampling passes selected
+/// level area, since its finite sample set does not carry the support ledger.
 pub(super) fn colour_psnr(profile: Profile, texels: u64) -> f64 {
     if profile == Profile::Quality {
         if texels < SMALL_LEVEL_TEXELS {
@@ -276,12 +278,19 @@ pub(super) fn colour_psnr(profile: Profile, texels: u64) -> f64 {
             24.
         }
     } else if texels < 64 {
-        12.
+        13.
     } else if texels < SMALL_LEVEL_TEXELS {
         16.
     } else {
         20.
     }
+}
+
+/// Tiny ETC1S levels need a joint RGB guard as well as a channel floor: a
+/// shared palette can shift one channel more than all three together. Both
+/// delivery (positive support) and decoded sampling (level area) use this.
+pub(super) fn tiny_colour_rgb_floor(profile: Profile, texels: u64) -> Option<f64> {
+    (matches!(profile, Profile::Fast | Profile::Balanced) && texels < 64).then_some(16.)
 }
 
 /// Colour channels: PSNR bounds mean quality, the 99.9th percentile bounds
@@ -290,8 +299,8 @@ pub(super) fn colour_psnr(profile: Profile, texels: u64) -> f64 {
 /// can see on a large page. They are calibrated on every level of the real
 /// original 10M-triangle mesh and the ETC1S fixture/tex3 campaign
 /// (bench/architecture_audit/etc1s_default/README.md). Alpha, data and normal
-/// channels have no real-data
-/// calibration yet and keep their previous PSNR floors and maximum caps.
+/// channels have no real-data calibration yet and retain their previous
+/// PSNR floors and maximum caps.
 pub(in crate::mesh_large) fn channel_gate(
     slot: TextureSlot,
     profile: Profile,
@@ -374,6 +383,8 @@ pub(in crate::mesh_large) fn check_level(
     let quality = profile == Profile::Quality;
     let fast = profile == Profile::Fast;
     let mut metrics = Vec::new();
+    let mut rgb_inverse_snr = 0.;
+    let mut rgb_texels = 0;
     let channels: &[usize] = match slot {
         TextureSlot::Normal => &[0, 1, 2, 3],
         TextureSlot::Occlusion => &[0, 3],
@@ -383,11 +394,30 @@ pub(in crate::mesh_large) fn check_level(
     for &channel in channels {
         let stats = channel_stats(expected, decoded, support, width as usize, channel);
         let gate = channel_gate(slot, profile, channel, stats.texels);
+        if channel < 3 {
+            rgb_inverse_snr += 10f64.powf(-stats.psnr / 10.);
+            rgb_texels = stats.texels;
+        }
         metrics.push(json!({"channel":channel,"psnr":if stats.psnr.is_finite(){Some(stats.psnr)}else{None},"exact":stats.psnr.is_infinite(),"p999":stats.p999,"max":stats.max,"blockRmse":stats.block_rmse,"texels":stats.texels,"floor":gate.psnr,"p999Cap":gate.p999,"blockRmseCap":gate.block_rmse,"maxCap":gate.max}));
         if !gate.accepts(&stats) {
             return Err(fidelity(format!(
                 "texture {slot:?} {profile:?} mip{mip} channel{channel} PSNR{} p99.9 {} blockRMSE{} max{} over {} texels (gate {gate:?})",
                 stats.psnr, stats.p999, stats.block_rmse, stats.max, stats.texels
+            )));
+        }
+    }
+    let rgb = if class(slot) == Class::Colour {
+        tiny_colour_rgb_floor(profile, rgb_texels).map(|floor| {
+            let psnr = -10. * (rgb_inverse_snr / 3.).log10();
+            (psnr, floor)
+        })
+    } else {
+        None
+    };
+    if let Some((psnr, floor)) = rgb {
+        if psnr < floor {
+            return Err(fidelity(format!(
+                "texture {slot:?} {profile:?} mip{mip} combined RGB PSNR{psnr} below {floor} over {rgb_texels} texels"
             )));
         }
     }
@@ -464,7 +494,11 @@ pub(in crate::mesh_large) fn check_level(
             )));
         }
     }
-    Ok(json!({"mip":mip,"channels":metrics,"normal":normals}))
+    let mut receipt = json!({"mip":mip,"channels":metrics,"normal":normals});
+    if let Some((psnr, floor)) = rgb {
+        receipt["rgb"] = json!({"psnr":if psnr.is_finite(){Some(psnr)}else{None},"exact":psnr.is_infinite(),"floor":floor});
+    }
+    Ok(receipt)
 }
 
 /// Whether a slot/profile stores occlusion as scalar ETC1S (R replicated).
@@ -502,14 +536,9 @@ pub(in crate::mesh_large) fn codec_settings(
     (
         mode,
         codec::Params {
-            // ETC1S compression level 2 (Basis CLI default) maps to effort 3.
-            effort: if colour {
-                3
-            } else if scalar {
-                0
-            } else {
-                effort
-            },
+            // Native ETC1S level 0 retains the measured byte saving while
+            // avoiding the costly refinement/selector ordering of level 2.
+            effort: if colour || scalar { 0 } else { effort },
             transfer: if class(slot) == Class::Colour {
                 codec::Transfer::Srgb
             } else {
@@ -1829,7 +1858,7 @@ mod tests {
             for slot in [TextureSlot::BaseColor, TextureSlot::Emissive] {
                 let (mode, params) = codec_settings(slot, profile);
                 assert_eq!(mode, codec::Mode::Etc1s { quality });
-                assert_eq!(params.effort, 3);
+                assert_eq!(params.effort, 0);
                 assert_eq!(params.transfer, codec::Transfer::Srgb);
                 let edge = 64;
                 let rgba = photo_page(edge);
@@ -1940,6 +1969,121 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn blank_inversion_wrong_mip_and_light_flat_transfer_controls() {
+        for profile in [Profile::Fast, Profile::Balanced] {
+            for side in [4u32, 8, 32, 64] {
+                let count = (side * side) as usize;
+                let support = vec![1; count];
+                let flat = [32, 96, 208, 255].repeat(count);
+                let gate = |expected: &[u8], actual: &[u8]| {
+                    check_level(
+                        expected,
+                        actual,
+                        &support,
+                        side,
+                        TextureSlot::BaseColor,
+                        profile,
+                        0,
+                    )
+                };
+                assert!(
+                    gate(&flat, &[0, 0, 0, 255].repeat(count)).is_err(),
+                    "black page {side}"
+                );
+                assert!(
+                    gate(&flat, &[223, 96, 208, 255].repeat(count)).is_err(),
+                    "inverted red {side}"
+                );
+                let light = [200, 200, 200, 255].repeat(count);
+                // Literal independent sRGB decoding of 200 rounds to147. The
+                // former tiny 12dB floor admitted this wrong-transfer page.
+                assert!(
+                    gate(&light, &[147, 147, 147, 255].repeat(count)).is_err(),
+                    "light flat wrong transfer {side}"
+                );
+                if side == 4 {
+                    let error = gate(&light, &[147, 147, 147, 255].repeat(count)).unwrap_err();
+                    assert!(error.message().contains("combined RGB"));
+                    // Shared-palette one-channel tails remain acceptable:
+                    // R13.65/G20.53/B21.69dB combine to17.07dB, unlike the
+                    // wrong transfer's13.65dB in every channel.
+                    let witness = gate(
+                        &[180, 180, 180, 255].repeat(count),
+                        &[127, 204, 201, 255].repeat(count),
+                    )
+                    .unwrap();
+                    assert_eq!(witness["rgb"]["floor"], 16.);
+                    assert_eq!(witness["channels"][0]["floor"], 13.);
+                }
+                let checker: Vec<u8> = (0..count)
+                    .flat_map(|i| {
+                        if (i % side as usize + i / side as usize).is_multiple_of(2) {
+                            [0, 255, 0, 255]
+                        } else {
+                            [255, 0, 255, 255]
+                        }
+                    })
+                    .collect();
+                let mips = chain(&checker, side as usize);
+                let coarse = &mips.levels[1];
+                let wrong: Vec<u8> = (0..count)
+                    .flat_map(|i| {
+                        let x = i % side as usize / 2;
+                        let y = i / side as usize / 2;
+                        let offset = (y * coarse.width as usize + x) * 4;
+                        coarse.rgba[offset..offset + 4].iter().copied()
+                    })
+                    .collect();
+                assert_eq!(wrong.len(), checker.len());
+                assert!(
+                    gate(&checker, &wrong).is_err(),
+                    "wrong mip at right size {side}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn smooth_wrong_mip_is_a_documented_psnr_blind_spot() {
+        let side = 64usize;
+        let rgba: Vec<u8> = (0..side * side)
+            .flat_map(|i| {
+                let x = (i % side) as u8;
+                [96 + x, 96 + x, 96 + x, 255]
+            })
+            .collect();
+        let mips = chain(&rgba, side);
+        let coarse = &mips.levels[1];
+        let wrong: Vec<u8> = (0..side * side)
+            .flat_map(|i| {
+                let offset = (i / side / 2 * coarse.width as usize + i % side / 2) * 4;
+                coarse.rgba[offset..offset + 4].iter().copied()
+            })
+            .collect();
+        let stats = channel_stats(&rgba, &wrong, &vec![1; side * side], side, 0);
+        assert!(stats.psnr > 40., "{stats:?}");
+        assert_ne!(rgba, wrong);
+        for profile in [Profile::Fast, Profile::Balanced] {
+            assert!(check_level(
+                &rgba,
+                &wrong,
+                &vec![1; side * side],
+                side as u32,
+                TextureSlot::BaseColor,
+                profile,
+                0
+            )
+            .is_ok());
+        }
+        // A detail-sensitive witness sees the changed spatial derivatives:
+        // the source's adjacent x differences are all1, the shifted mip's
+        // nearest-upsampled differences alternate0/2. A calibrated spatial
+        // detail/gradient check is needed to enforce this additional contract.
+        assert!((0..side - 1).all(|x| rgba[(x + 1) * 4] - rgba[x * 4] == 1));
+        assert!((0..side - 1).any(|x| wrong[(x + 1) * 4] == wrong[x * 4]));
     }
 
     #[test]

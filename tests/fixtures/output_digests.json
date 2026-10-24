@@ -1,5 +1,5 @@
 {
-  "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes the archive entry order). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
+  "about": "sha256 per output entry of the GDAL-independent recipes in tests/support/mod.rs ('#order' hashes entry order; '#archive' pins the complete default balanced mesh archive). Regenerate with UPDATE_OUTPUT_DIGESTS=1 cargo test --test output_digests.",
   "platform": "linux-x86_64",
   "recipes": {
     "convert": {
@@ -24,6 +24,14 @@
       "content/f0-d0.glb": "a7747937e880c0408dc874d0a8a658da774011d14905b47fc3196073886f3590",
       "conversion.json": "e902182bb20d556f18ba7c8f900592f5fd8d2b0cf122cbc7bf440b3e71cc8f16",
       "tileset.json": "503a7e4ed586249e9ed9cb77cda6efd3729a03a9afbdcfe523788b4af35c520d"
+    },
+    "mesh-balanced": {
+      "#archive": "57065671d8a7878f9f3d638e98edf714d43834a2cdc48610aca8858ef639bf9e",
+      "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
+      "@3dtilesIndex1@": "409aca8b686079a2e62823a084076e0d5793f50ab8ad67fbdf1f4846de6568ae",
+      "content/f0-d0.glb": "73590d4e665d98acc36402f2aebad769fede3b47e6464807a434e5624b2cbce8",
+      "conversion.json": "74a3819534f89a442b413f0e54c05fed6c9391b3d703af733625ef9c42d8536b",
+      "tileset.json": "06ed1a350bc433c4ef1ed6e19147cecf56b740d2457ef972ca6687617ca80fe0"
     }
   }
 }
