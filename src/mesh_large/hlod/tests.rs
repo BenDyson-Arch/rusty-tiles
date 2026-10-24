@@ -37,6 +37,11 @@ struct Mesh {
 }
 
 fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
+    write_gltf_scaled(dir, meshes, &[])
+}
+
+/// `write_gltf` with a node scale per mesh (`[1; 3]` where `scales` is shorter).
+fn write_gltf_scaled(dir: &Path, meshes: &[Mesh], scales: &[[f32; 3]]) -> PathBuf {
     fs::create_dir_all(dir).unwrap();
     let mut bin = Vec::new();
     let (mut views, mut accessors, mut gltf_meshes, mut nodes, mut materials) =
@@ -61,7 +66,7 @@ fn write_gltf(dir: &Path, meshes: &[Mesh]) -> PathBuf {
         views.push(json!({"buffer":0,"byteOffset":start,"byteLength":bin.len()-start}));
         accessors.push(json!({"bufferView":views.len()-1,"componentType":5125,"count":m.indices.len(),"type":"SCALAR"}));
         gltf_meshes.push(json!({"primitives":[{"attributes":{"POSITION":accessors.len()-2},"indices":accessors.len()-1,"material":i}]}));
-        nodes.push(json!({"mesh":i}));
+        nodes.push(json!({"mesh":i,"scale":scales.get(i).copied().unwrap_or([1.; 3])}));
         materials
             .push(json!({"pbrMetallicRoughness":{"baseColorFactor":m.color,"metallicFactor":0.0}}));
     }
@@ -505,6 +510,9 @@ struct Census {
     max_perpendicular_excess_m: f64,
     /// Pairs of tiles on one root-to-leaf path with identical decoded content.
     duplicate_chain_tiles: usize,
+    /// Coarse faces whose corners are exactly those of a descendant leaf face in reverse,
+    /// with no descendant face of their own orientation (S5's source-orientation check).
+    reversed_coarse_faces: usize,
 }
 
 /// Search radius of the perpendicular census, metres: a point farther than this from every
@@ -923,6 +931,29 @@ fn census(dir: &Path) -> Census {
         }
     }
     c.duplicate_chain_tiles = duplicates.len();
+    // Source orientation: each oriented leaf face (rotated to its least corner) by leaf.
+    let rotate = |f: [Point; 3]| {
+        let k = (0..3).min_by_key(|&k| f[k]).unwrap();
+        [f[k], f[(k + 1) % 3], f[(k + 2) % 3]]
+    };
+    let mut oriented: HashMap<[Point; 3], Vec<usize>> = HashMap::new();
+    for (i, leaf) in leaves.iter().enumerate() {
+        for f in leaf.faces.iter().filter(|f| !degenerate(f)) {
+            oriented.entry(rotate(*f)).or_default().push(i);
+        }
+    }
+    for t in tiles.iter().filter(|t| !t.leaf) {
+        let within = |key: &[Point; 3]| {
+            oriented
+                .get(key)
+                .is_some_and(|l| l.iter().any(|&i| (t.begin..t.end).contains(&i)))
+        };
+        for f in t.faces.iter().filter(|f| !degenerate(f)) {
+            if !within(&rotate(*f)) && within(&rotate([f[0], f[2], f[1]])) {
+                c.reversed_coarse_faces += 1;
+            }
+        }
+    }
     let mut adjacent: BTreeSet<(usize, usize)> = BTreeSet::new();
     for l in edge_leaves.values().chain(point_leaves.values()) {
         let l: Vec<usize> = l.iter().copied().collect();
@@ -1067,6 +1098,7 @@ fn accept(name: &str, source: &[Mesh], run: Run) -> Census {
     assert!(census.perpendicular_checked > 0, "{name}: {census:?}");
     assert_eq!(census.perpendicular_displaced, 0, "{name}: {census:?}");
     assert_eq!(census.duplicate_chain_tiles, 0, "{name}: {census:?}");
+    assert_eq!(census.reversed_coarse_faces, 0, "{name}: {census:?}");
     assert!(census.max_coarse_triangles <= run.cap, "{name}: {census:?}");
     assert!(
         census.mixed_pairs > 0 && census.same_depth_pairs > 0,
@@ -1430,8 +1462,12 @@ fn random_chords_fall_back_resolve_and_never_refuse() {
     let (m1, m4) = (manifest(&one), manifest(&four));
     let incidence = &m1["hlod"]["incidence"];
     eprintln!(
-        "FALLBACK {incidence} resolved {}",
-        m1["hlod"]["resolvedTiles"]
+        "FALLBACK {incidence} resolved tiles {} rows {} visits {} tests {} over budget {}",
+        m1["hlod"]["resolvedTiles"],
+        m1["hlod"]["resolvedRows"],
+        m1["hlod"]["resolveVisits"],
+        m1["hlod"]["resolveTests"],
+        m1["hlod"]["resolveOverBudget"]
     );
     assert!(
         incidence["fallbackRegions"].as_u64().unwrap() > 0,
@@ -1441,6 +1477,20 @@ fn random_chords_fall_back_resolve_and_never_refuse() {
         m1["hlod"]["resolvedTiles"].as_u64().unwrap() > 0,
         "{}",
         m1["hlod"]
+    );
+    // A row is final once resolved, so ancestors resolving what their children left provisional
+    // never resolve it again: at most every provisional leaf row once, each with one index
+    // query (node levels plus the groups near it).
+    let hlod = &m1["hlod"];
+    let (resolved, provisional) = (
+        hlod["resolvedRows"].as_u64().unwrap(),
+        incidence["provisionalRows"].as_u64().unwrap(),
+    );
+    assert!(resolved <= provisional, "{hlod}");
+    let groups = incidence["fallbackGroups"].as_u64().unwrap();
+    assert!(
+        hlod["resolveTests"].as_u64().unwrap() <= resolved * groups / 4,
+        "{hlod}"
     );
     assert_eq!(m1["hlod"], m4["hlod"]);
     assert_eq!(published(&one), published(&four));
@@ -1590,7 +1640,7 @@ fn parent_jobs_allocate_within_their_charge() {
                 fallback: &fallback,
                 check: &|| Ok(()),
             };
-            geometry::build_parent(parent, &children, cap, &resolve)
+            geometry::build_parent(parent, &children, &[cap], &resolve)
         });
         eprintln!(
             "JOB kind {kind}: peak {peak} bytes = {:.0} per merged triangle (charge {})",
@@ -1608,12 +1658,8 @@ fn parent_jobs_allocate_within_their_charge() {
     }
     let built = grid.unwrap();
     let (checked, peak) = crate::test_alloc::peak(|| {
-        let positions = encode::positions(
-            &built.geometry,
-            &built.locked,
-            &lattice,
-            Mutation::None,
-        )?;
+        let positions =
+            encode::positions(&built.geometry, &built.locked, &lattice, Mutation::None)?;
         let appearance = super::appearance::Appearance {
             groups: vec![super::appearance::Group {
                 class: 0,
@@ -1628,12 +1674,7 @@ fn parent_jobs_allocate_within_their_charge() {
             facts: Default::default(),
             timing: Default::default(),
         };
-        let encoded = encode::encode(
-            &built.geometry,
-            positions,
-            &appearance,
-            Mutation::None,
-        )?;
+        let encoded = encode::encode(&built.geometry, positions, &appearance, Mutation::None)?;
         encode::check(&built.geometry, &built.locked, &encoded)
     });
     checked.unwrap();
@@ -1746,6 +1787,7 @@ fn single_child_chains_publish_their_content_once() {
     let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
     let census = census(&dir);
     assert_eq!(census.duplicate_chain_tiles, 0, "{census:?}");
+    assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
     assert_eq!(
         census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
         0,
@@ -2035,7 +2077,8 @@ fn dense_sliver_borders_are_joined_not_refused() {
             + census.missing_vertices
             + census.missing_overlap_items
             + census.perpendicular_displaced
-            + census.duplicate_chain_tiles,
+            + census.duplicate_chain_tiles
+            + census.reversed_coarse_faces,
         0,
         "{census:?}"
     );
@@ -2271,6 +2314,92 @@ fn measured_positions_must_match_decoded_glb_bits() {
             .contains("measured positions differ from decoded GLB bits"),
         "{error}"
     );
+}
+
+/// S5 round 5: a thin two-sided plate (an up-facing sheet a millimetre above a down-facing
+/// one, joined along one edge: a fold) simplifies across the fold, where a collapsed face
+/// can land on an opposite-facing source face. Every coarse face keeps its source
+/// orientation (the census's exact reversal check, independent of the producer's).
+#[test]
+fn back_to_back_sheets_keep_their_source_orientation() {
+    let top = grid(
+        (40, 80),
+        (0., 100.),
+        (0., 100.),
+        &|x, z| bump(x, z) + 1e-3 * (x / 100.),
+        [0.6, 0.5, 0.4, 1.],
+    );
+    let mut bottom = grid((40, 80), (0., 100.), (0., 100.), &bump, [0.3, 0.6, 0.3, 1.]);
+    for t in bottom.indices.chunks_mut(3) {
+        t.swap(1, 2);
+    }
+    let census = accept("back-to-back plate", &[top, bottom], Run::default());
+    assert_eq!(census.reversed_coarse_faces, 0, "{census:?}");
+}
+
+/// Mirrored nodes (negative-determinant scale) face where their leaves face at every depth:
+/// capture reverses their corners once, and coarse tiles inherit them. Every coarse face of
+/// a bumpy sheet points to the side its leaves' faces point to on average, and mirroring the
+/// sheet turns that side over.
+#[test]
+fn mirrored_nodes_keep_their_orientation_in_coarse_tiles() {
+    let normal = |f: &[Point; 3]| {
+        let p = f.map(|v| v.map(|b| f64::from(f32::from_bits(b))));
+        let (u, w): ([f64; 3], [f64; 3]) = (
+            std::array::from_fn(|i| p[1][i] - p[0][i]),
+            std::array::from_fn(|i| p[2][i] - p[0][i]),
+        );
+        [
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+        ]
+    };
+    let dot = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| a[i] * b[i]).sum::<f64>();
+    let mut sides = Vec::new();
+    for mirrored in [false, true] {
+        let work = tempfile::tempdir().unwrap();
+        let mut meshes = sheet();
+        let mut scales = Vec::new();
+        if mirrored {
+            for m in &mut meshes {
+                for p in &mut m.positions {
+                    p[0] = -p[0];
+                }
+                scales.push([-1., 1., 1.]);
+            }
+        }
+        let input = write_gltf_scaled(&work.path().join("src"), &meshes, &scales);
+        let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+        let census = census(&dir);
+        assert_eq!(
+            census.missing_segments + census.reversed_coarse_faces,
+            0,
+            "{census:?}"
+        );
+        let tiles = load(&dir);
+        let mut side = [0f64; 3];
+        for f in tiles.iter().filter(|t| t.leaf).flat_map(|t| &t.faces) {
+            let n = normal(f);
+            side = std::array::from_fn(|i| side[i] + n[i]);
+        }
+        let coarse: Vec<&[Point; 3]> = tiles
+            .iter()
+            .filter(|t| !t.leaf)
+            .flat_map(|t| &t.faces)
+            .filter(|f| !degenerate(f))
+            .collect();
+        assert!(!coarse.is_empty());
+        let against = coarse.iter().filter(|f| dot(normal(f), side) <= 0.).count();
+        assert_eq!(
+            against,
+            0,
+            "mirrored {mirrored}: {against} of {}",
+            coarse.len()
+        );
+        sides.push(side);
+    }
+    assert!(dot(sides[0], sides[1]) < 0., "{sides:?}");
 }
 
 /// Control: a moved interface vertex that bypasses the producer's check is found by the
@@ -2559,6 +2688,7 @@ fn evidence_census() {
         "perpendicularDisplaced": census.perpendicular_displaced,
         "maxPerpendicularExcessM": census.max_perpendicular_excess_m,
         "duplicateChainTiles": census.duplicate_chain_tiles,
+        "reversedCoarseFaces": census.reversed_coarse_faces,
         "hlod": manifest["hlod"], "resources": resources["hlod"], "members": members,
     });
     fs::write(
@@ -2573,7 +2703,8 @@ fn evidence_census() {
             + census.missing_overlap_items
             + census.moved_border_vertices
             + census.perpendicular_displaced
-            + census.duplicate_chain_tiles,
+            + census.duplicate_chain_tiles
+            + census.reversed_coarse_faces,
         0
     );
     assert!(census.max_coarse_triangles <= super::TRIANGLE_CAP);
@@ -2792,9 +2923,17 @@ fn bake_donors_are_exact_across_close_parallel_sheets() {
     };
     let (paged, local) = (run(false), run(true));
     for (i, (a, b)) in paged.iter().zip(&local).enumerate() {
-        assert_eq!((a.rank, a.material, a.d2.to_bits(), a.uv), (b.rank, b.material, b.d2.to_bits(), b.uv), "point {i}");
+        assert_eq!(
+            (a.rank, a.material, a.d2.to_bits(), a.uv),
+            (b.rank, b.material, b.d2.to_bits(), b.uv),
+            "point {i}"
+        );
         let on_b = points[i][1] > 0.;
-        assert_eq!(b.material, u32::from(on_b), "point {i} took the other sheet's donor");
+        assert_eq!(
+            b.material,
+            u32::from(on_b),
+            "point {i} took the other sheet's donor"
+        );
         assert!(b.d2 < 1e-12, "point {i} lies on its donor");
     }
 }

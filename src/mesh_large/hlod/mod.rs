@@ -96,7 +96,7 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// of `k` entries of `T` bytes holds at most `16k/7` buckets of `T + 1` bytes:
 /// - merged vertices (key 12, depth 1, position 12; grown by doubling, at most twice) and
 ///   triangles (12), representatives (24): `2 * 3 * 25 + 36 = 186`;
-/// - the parent's interface rows, at most six (leaf, item) rows of 44 bytes: 264;
+/// - the parent's interface rows, at most six (leaf, item) rows of 48 bytes: 288;
 /// - required segment and point sets (at most `3m` each): `171.4 + 89.1`;
 /// - the lock and protection flags: 4;
 /// - the retry's keep and rest lists (doubling: 24), kept vertices (`3m` u32: 34.3), the lost
@@ -109,10 +109,14 @@ const STAGE_RESERVE: u64 = 256 << 20;
 ///   quadric (44), collapse remap and lock), per index 24 (adjacency edge, collapse, order),
 ///   so 372.
 ///
-/// The sum is under 1,610. Earlier phases (the weld index while merging, the interface rows
+/// The sum is under 1,640. After meshopt returns (its temporaries and `simplify`'s arrays
+/// freed), keeping faces on their source orientation (`geometry::orient`) holds two face
+/// sets (12-byte entries, under 30 bytes each per merged triangle). Earlier phases (the weld index while merging, the interface rows
 /// while merging them, the representative tables) peak lower, and so does an exact
-/// resolution of provisional rows (`Fallback::resolve`: its row maps and the tile's kept
-/// candidates beside the merged data and rows, under 1,550, between two builds). Measured on adversarial jobs by
+/// resolution of provisional rows between two builds (`Fallback::resolve`: beside the merged
+/// data and rows, the rows' previous locks (8 bytes each) and item map (a 24-byte key and an
+/// index, under 76 bytes each), at most six per merged triangle, and one index query's node
+/// stack and page). Measured on adversarial jobs by
 /// `parent_jobs_allocate_within_their_charge` (a counting allocator, meshoptimizer routed
 /// through it).
 const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
@@ -317,7 +321,7 @@ pub(crate) fn plan(
         ),
     );
     let tmpfs = if captured.scratch.memory_backed() {
-        captured.report.scratch.need_bytes
+        memory_backed_need(captured, config)?
     } else {
         0
     };
@@ -393,9 +397,17 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
-    /// Tiles whose provisional interface rows were resolved exactly, and those rows.
+    /// Tiles whose provisional interface rows were resolved exactly, those rows, the index
+    /// records read and exact tests it took, and the tiles whose comparisons (records read
+    /// and tests) passed `BUDGET_TESTS_PER_RECORD` per resolved row: counted, never refused
+    /// (exact incidence has no such bound in general; `Fallback::resolve`).
     pub resolved_tiles: u64,
     pub resolved_rows: u64,
+    pub resolve_visits: u64,
+    pub resolve_tests: u64,
+    pub resolve_over_budget: u64,
+    /// Simplified faces kept on their source orientation (`geometry::orient`).
+    pub reoriented_faces: u64,
     pub interface_segments: u64,
     pub interface_vertices: u64,
     pub quantized_tiles: u64,
@@ -459,6 +471,9 @@ pub struct HlodDiagnostics {
     pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
+    /// The incidence pass's staged scratch declarations (its declared bound is their
+    /// largest) against which that peak is checked.
+    pub incidence_scratch: interfaces::ScratchPhases,
     /// Highest simultaneously leased bytes of the walk's ledger.
     pub lease_peak_bytes: u64,
     pub ledger_bytes: u64,
@@ -578,6 +593,7 @@ pub(crate) fn produce(
     input.phases.progress(Phase::HlodIncidence, 0, Some(1))?;
     let incidence_started = std::time::Instant::now();
     captured.scratch.begin_stage();
+    let admit = |bound: u64| admit_scratch(captured, input.config, bound);
     let (rows, stats, fallback) = interfaces::build(
         &captured.scratch,
         input.config.sorter(1),
@@ -585,8 +601,10 @@ pub(crate) fn produce(
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
+        &admit,
         check,
     )?;
+    diagnostics.incidence_scratch = stats.scratch;
     report.incidence = stats;
     diagnostics.incidence_cpu_seconds = resources::process_cpu_seconds()
         .zip(cpu_started)
@@ -617,7 +635,7 @@ pub(crate) fn produce(
     diagnostics.error_cpu = report.error_cpu;
     diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
-    let bound = captured.report.scratch.stages.lod_prepass;
+    let bound = diagnostics.incidence_scratch.declared();
     let (lease_peak, timings, cache) = result?;
     diagnostics.appearance_seconds = timings;
     diagnostics.image_cache = cache;
@@ -820,7 +838,18 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
             [r.a, r.b]
         };
         for p in ends {
-            let as_point = InterfaceRow { a: p, b: p, ..*r };
+            // A segment's tolerance is its own candidate's, not its endpoints'.
+            let tol = if r.is_vertex() {
+                r.tol
+            } else {
+                interfaces::NO_TOL
+            };
+            let as_point = InterfaceRow {
+                a: p,
+                b: p,
+                tol,
+                ..*r
+            };
             points
                 .entry(p)
                 .and_modify(|e| e.absorb(&as_point))
@@ -877,6 +906,7 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
             hi: pa.hi.min(pb.hi),
             clo: pa.clo.max(pb.clo),
             chi: pa.chi.min(pb.chi),
+            tol: interfaces::NO_TOL,
         };
         if edge.clo > edge.chi {
             (edge.clo, edge.chi) = interfaces::NO_LEAF;
@@ -905,6 +935,48 @@ fn shrink(tile: &mut TileGeometry) {
     tile.interface.shrink_to_fit();
 }
 
+/// Memory-backed scratch charged to memory by the HLOD plan: capture's declared need, raised
+/// to the incidence pass's worst case beside capture's retained files (staged admission
+/// cannot take memory nobody charged).
+fn memory_backed_need(captured: &FullCaptured, config: &TreeConfig) -> Result<u64, JobError> {
+    let need = &captured.report.scratch;
+    interfaces::memory_backed_need(captured.triangles.len(), config.sorter(1))
+        .and_then(|b| b.checked_add(need.stages.leaf_plans))
+        .map(|b| b.max(need.need_bytes))
+        .ok_or_else(|| resource("HLOD memory-backed scratch need overflows"))
+}
+
+/// Staged admission of one incidence phase declared at `bound` bytes (live files included):
+/// free space for what is not yet written plus per-file rounding (capture's live files and
+/// the phase's chunk files), as capture admits its own stages. Memory-backed scratch was
+/// charged to memory at capture for its declared need, so a phase past that need is refused
+/// rather than taken from memory nobody charged.
+fn admit_scratch(captured: &FullCaptured, config: &TreeConfig, bound: u64) -> Result<(), JobError> {
+    let need = &captured.report.scratch;
+    let scratch = &captured.scratch;
+    if scratch.memory_backed() {
+        let charged = memory_backed_need(captured, config)?;
+        if bound > charged {
+            return Err(resource(format!(
+                "HLOD incidence needs {bound} bytes of memory-backed scratch, past the \
+                 {charged} charged to memory"
+            )));
+        }
+    }
+    let files = bound.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
+    let total = config::file_rounding(scratch.allocation_unit_bytes(), files)
+        .and_then(|r| r.checked_add(need.file_rounding_bytes))
+        .and_then(|r| r.checked_add(bound))
+        .ok_or_else(|| resource("HLOD incidence scratch admission overflows"))?;
+    crate::spill::preflight(
+        scratch.path(),
+        total.saturating_sub(scratch.live_bytes()),
+        crate::spill::SpaceRole::Scratch,
+        crate::spill::PreflightStage::Lod,
+    )?;
+    Ok(())
+}
+
 /// One parent: geometry, encoding, the pre-publication check, error and its member.
 #[allow(clippy::too_many_arguments)]
 fn build_tile(
@@ -926,16 +998,11 @@ fn build_tile(
         .and_then(|c| c.measurement.map(|m| (c.key.depth, m)));
     let resolve = geometry::Resolve { fallback, check };
     let mut built = if closed.single_leaf {
+        // Halved, or where its interface cannot be halved, the copy within the cap.
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
-        match geometry::build_parent(closed.key, &children, half, &resolve) {
-            // Its interface cannot be halved: the copy within the cap.
-            Err(e) if e.kind() == JobErrorKind::Unsupported => {
-                geometry::build_parent(closed.key, &children, settings.cap, &resolve)?
-            }
-            built => built?,
-        }
+        geometry::build_parent(closed.key, &children, &[half, settings.cap], &resolve)?
     } else {
-        geometry::build_parent(closed.key, &children, settings.cap, &resolve)?
+        geometry::build_parent(closed.key, &children, &[settings.cap], &resolve)?
     };
     drop(children);
     if settings.mutation == Mutation::DropSegment {
@@ -1087,7 +1154,10 @@ fn build_tile(
         retries: built.retries,
         interface_vertices: built.interface_vertices,
         interface_segments: built.interface_segments,
-        resolved_rows: built.resolved,
+        resolved_rows: built.resolved.tested as u32,
+        resolve_visits: built.resolved.visits,
+        resolve_tests: built.resolved.tests,
+        reoriented_faces: built.reoriented,
         quantized: encoded.quantized,
         bounds: encoded.bounds.into(),
         appearance: appearance.facts,
@@ -1148,6 +1218,13 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.retries += u64::from(row.retries);
     report.resolved_tiles += u64::from(row.resolved_rows > 0);
     report.resolved_rows += u64::from(row.resolved_rows);
+    report.resolve_visits += row.resolve_visits;
+    report.reoriented_faces += u64::from(row.reoriented_faces);
+    report.resolve_tests += row.resolve_tests;
+    report.resolve_over_budget += u64::from(
+        row.resolve_visits + row.resolve_tests
+            > interfaces::BUDGET_TESTS_PER_RECORD * u64::from(row.resolved_rows),
+    );
     report.interface_segments += u64::from(row.interface_segments);
     report.interface_vertices += u64::from(row.interface_vertices);
     if row.quantized {

@@ -34,8 +34,13 @@ pub(crate) struct Built {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
-    /// Provisional rows resolved exactly for this parent (zero unless it needed it).
-    pub resolved: u32,
+    /// Provisional rows resolved exactly for this parent and the work it took (zero unless
+    /// it needed it).
+    pub resolved: super::interfaces::Resolved,
+    /// Builds of the parent (`attempt`): one per cap tried, plus one after a resolution.
+    pub attempts: u32,
+    /// Output faces turned to (or dropped beside) their source orientation (`orient`).
+    pub reoriented: u32,
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -191,6 +196,40 @@ fn simplify(
     (triangles, f64::from(error))
 }
 
+/// A triangle rotated to start at its least vertex: equal for the same oriented face.
+fn oriented(t: &[u32; 3]) -> [u32; 3] {
+    let k = (0..3).min_by_key(|&k| t[k]).unwrap();
+    [t[k], t[(k + 1) % 3], t[(k + 2) % 3]]
+}
+fn reversed(t: &[u32; 3]) -> [u32; 3] {
+    oriented(&[t[0], t[2], t[1]])
+}
+
+/// Keep every output face on its source orientation. Collapsing an edge across a fold (two
+/// sheets of the surface back to back) can land a face exactly on an opposite-facing input
+/// face: its own normal did not flip (meshopt's check), but it now duplicates that face's
+/// corners in reverse. Such a face, the exact reverse of an input face and not itself one,
+/// is dropped where its source-facing twin is in the output (the same corners, edges and
+/// area remain) and turned to the source's orientation otherwise. Returns the faces fixed.
+fn orient(merged: &Merged, output: &mut Vec<[u32; 3]>) -> u32 {
+    let input: HashSet<[u32; 3]> = merged.triangles.iter().map(oriented).collect();
+    let present: HashSet<[u32; 3]> = output.iter().map(oriented).collect();
+    let mut fixed = 0;
+    output.retain_mut(|t| {
+        let degenerate = t[0] == t[1] || t[1] == t[2] || t[0] == t[2];
+        if degenerate || input.contains(&oriented(t)) || !input.contains(&reversed(t)) {
+            return true;
+        }
+        fixed += 1;
+        if present.contains(&reversed(t)) {
+            return false;
+        }
+        t.swap(1, 2);
+        true
+    });
+    fixed
+}
+
 /// For each output triangle, the representative of the input triangle sharing one of its
 /// corners whose centroid is nearest its own (ties: earlier input triangle). Provisional
 /// until S2's source index selects the nearest source primitive (D4).
@@ -242,16 +281,18 @@ pub(crate) struct Resolve<'a> {
     pub check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
 }
 
-/// Build `key`'s parent from its children (in slot order) under a `cap`-triangle limit.
+/// Build `key`'s parent from its children (in slot order) under the first of `caps` (each a
+/// triangle limit, tried in order) it can keep its interface within.
 ///
 /// An outer interface holding provisional rows (an over-budget join region's superset) that
-/// keeps the parent from the cap is resolved exactly (`Fallback::resolve`, dropping the false
-/// locks) and the parent rebuilt once with its certain locks only; a parent that still
-/// cannot fit is a genuine interface limit (D1), never one from over-locking.
+/// keeps the parent from a cap is resolved exactly (`Fallback::resolve`, dropping the false
+/// locks) once, and that cap tried again with the certain locks only: a parent resolves and
+/// rebuilds at most once whatever its caps. A parent that still cannot fit is a genuine
+/// interface limit (D1), never one from over-locking.
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
-    cap: usize,
+    caps: &[usize],
     resolve: &Resolve<'_>,
 ) -> Result<Built, JobError> {
     let merged = merge(children);
@@ -273,21 +314,41 @@ pub(crate) fn build_parent(
         .copied()
         .collect();
     super::interfaces::merge_rows(&mut interface);
-    match attempt(tile, &merged, &interface, cap, children_error) {
-        Err(e)
-            if e.kind() == JobErrorKind::Unsupported
-                && !resolve.fallback.is_empty()
-                && interface.iter().any(InterfaceRow::provisional) =>
-        {
-            let resolved = resolve.fallback.resolve(&mut interface, resolve.check)?;
-            interface.retain(|r| r.outer(tile.leaf_begin, tile.leaf_end));
-            super::interfaces::merge_rows(&mut interface);
-            let mut built = attempt(tile, &merged, &interface, cap, children_error)?;
-            built.resolved = resolved as u32;
-            Ok(built)
+    let mut resolved = None;
+    let mut attempts = 0;
+    let mut refusal = None;
+    for &cap in caps {
+        loop {
+            attempts += 1;
+            match attempt(tile, &merged, &interface, cap, children_error) {
+                Err(e)
+                    if e.kind() == JobErrorKind::Unsupported
+                        && resolved.is_none()
+                        && !resolve.fallback.is_empty()
+                        && interface.iter().any(InterfaceRow::provisional) =>
+                {
+                    resolved = Some(resolve.fallback.resolve(
+                        &mut interface,
+                        tile.leaf_begin,
+                        tile.leaf_end,
+                        resolve.check,
+                    )?);
+                    interface.retain(|r| r.outer(tile.leaf_begin, tile.leaf_end));
+                }
+                Err(e) if e.kind() == JobErrorKind::Unsupported => {
+                    refusal = Some(e);
+                    break;
+                }
+                built => {
+                    let mut built = built?;
+                    built.resolved = resolved.unwrap_or_default();
+                    built.attempts = attempts;
+                    return Ok(built);
+                }
+            }
         }
-        built => built,
     }
+    Err(refusal.unwrap_or_else(|| state("a parent build needs at least one cap")))
 }
 
 /// One build of the parent from `merged` children under `interface`.
@@ -323,6 +384,7 @@ fn attempt(
     let input = merged.triangles.len();
     let mut protected = vec![false; input];
     let mut retries = 0;
+    let mut reoriented = 0;
     let degenerate_only = merged
         .triangles
         .iter()
@@ -338,6 +400,7 @@ fn attempt(
     } else {
         let (mut output, mut error) =
             simplify(merged, &merged.triangles, &|v| locked[v as usize], cap);
+        reoriented = orient(merged, &mut output);
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             if edges.is_empty() && points.is_empty() {
@@ -396,6 +459,7 @@ fn attempt(
             };
             reduced.extend(keep);
             output = reduced;
+            reoriented = orient(merged, &mut output);
             error = e;
         }
         if output.len() > cap {
@@ -480,7 +544,42 @@ fn attempt(
         retries,
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
-        resolved: 0,
+        resolved: Default::default(),
+        attempts: 0,
+        reoriented,
         geometry,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn merged(triangles: Vec<[u32; 3]>) -> Merged {
+        Merged {
+            keys: Vec::new(),
+            ells: Vec::new(),
+            positions: Vec::new(),
+            triangles,
+            representative: Vec::new(),
+        }
+    }
+
+    /// S5 round 5: a face collapsed onto an opposite-facing input face is dropped beside its
+    /// source-facing twin, turned where it stands alone, and left alone where the input holds
+    /// both orientations (back-to-back coincident sheets) or it reverses no input face.
+    #[test]
+    fn simplified_faces_keep_their_source_orientation() {
+        let input = merged(vec![[0, 1, 2], [2, 1, 3]]);
+        let mut beside = vec![[1, 2, 0], [0, 2, 1], [1, 3, 4]];
+        assert_eq!(orient(&input, &mut beside), 1);
+        assert_eq!(beside, vec![[1, 2, 0], [1, 3, 4]]);
+        let mut alone = vec![[2, 1, 0], [1, 3, 4]];
+        assert_eq!(orient(&input, &mut alone), 1);
+        assert_eq!(alone, vec![[2, 0, 1], [1, 3, 4]]);
+        let both = merged(vec![[0, 1, 2], [0, 2, 1]]);
+        let mut kept = vec![[0, 2, 1], [1, 2, 0]];
+        assert_eq!(orient(&both, &mut kept), 0);
+        assert_eq!(kept, vec![[0, 2, 1], [1, 2, 0]]);
+    }
 }
