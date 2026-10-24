@@ -47,8 +47,8 @@ cache and git history; they do not describe this producer.
   of the total area; a larger incomplete schedule returns a typed refusal. This
   numerical selection guard adds no geometric-error margin.
 - Incomplete/nonfinite sampling is a typed refusal. Delivery requires v2 policy
-  and summaries for HLOD manifests and validates counts, occupied encoded-depth totals and encoded-tile seed,
-  distributions, margin, q and parent ordering. Historical H17 rows remain readable
+  and summaries for HLOD manifests and validates counts, occupied encoded-depth
+  totals, encoded-tile seed, distributions, margin, q and parent ordering. Historical H17 rows remain readable
   until S6 removes that producer. No simplifier estimate is a fallback.
 
 ## Decoded bytes and S3 handoff
@@ -95,7 +95,8 @@ certificate is part of this nearest-surface API.
 The HLOD plan charges 8 MiB query workspace and 4 MiB measurement workspace per
 worker, plus 2 MiB fixed construction workspace. Histograms, bounded patch
 connectivity, source/proxy buffers, coarse BVH, unique edge/vertex controls and
-centroid checks fit these allowances. Held tiles use S1’s exact vector-capacity accounting; no summary cache remains. Query checks use a running total of retained fine-block capacities,
+centroid checks fit these allowances. Held tiles use S1’s exact vector-capacity accounting; no summary cache remains.
+Query checks use a running total of retained fine-block capacities,
 actual vector capacities and conservative hash capacities plus replacement slack;
 a change that exceeds the allowance refuses instead of allocating silently.
 Disk allowance is `160 * source_triangles + 1 MiB`, including larger compact
@@ -112,15 +113,17 @@ density refusal. Their allowance is 256 bytes/source triangle with a 64 MiB floo
 A shared prospective charge additionally covers retained candidate bytes, full
 probe and row-sort spill generations, and actual live dense spills. Every output
 burst and dense write must fit the declared interface-stage envelope first.
-The final stream envelope includes candidates and the overlap allowance too.
+Both recursive partition scans check cancellation every 256 records, even when
+every candidate is pruned. The final stream envelope includes candidates and
+the overlap allowance too.
 
 Known analytic maxima cover tilted/offset planes and a polygonal cone against
 its flat disc base. A triangular hole in a proxy ring has its maximum strictly
 inside one source triangle; only area samples discover it. A closed tetrahedron
 checks the actual source control path and unique proxy edges/vertices. Additional
 controls cover tiny distant components, degenerates, extreme 1e8:1 slivers,
-unsupported scheduling depth, collapsed-chain scheduling, encoded tile identity and child floors. Resident and
-forced-paged nearest queries compare with exhaustive arithmetic through clipped
+unsupported scheduling depth, collapsed-chain scheduling, encoded tile identity
+and child floors. Resident and forced-paged nearest queries compare with exhaustive arithmetic through clipped
 block ranges and preserve original donor rows. Cancellation checks occur within
 256-sample batches, including zero-area surfaces. Compensated means remain finite.
 
@@ -130,7 +133,8 @@ oracle hashes. Independent seed 20261025 uses 200,000 samples/direction at cuts
 maximum G; they do not independently certify every tile's own source range.
 Full-model, appearance and integrated speed gates remain S8/S3 obligations.
 CPU diagnostics use process CPU for index construction and summed worker CPU for
-representatives and each directed pass. Collapsed cells incur no measurement CPU. CPU counters stay outside deterministic publication metadata.
+representatives and each directed pass. Collapsed cells incur no measurement CPU. CPU counters stay outside
+deterministic publication metadata.
 
 All local builds/tests/bakes run under a user systemd scope with `MemoryMax=10G`
 and `MemorySwapMax=0`, at idle priority. HLOD crop bakes additionally use the
