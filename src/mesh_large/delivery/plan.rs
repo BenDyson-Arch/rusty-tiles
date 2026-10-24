@@ -112,6 +112,19 @@ pub(crate) struct Node {
     /// empty: explicit output splices it out (its child replaces it), and where the layout
     /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
     pub chain: Option<Box<ProxyRow>>,
+    /// An HLOD cell whose coarse tile was omitted (its exact interface cannot fit the cap):
+    /// its capped descendants are the refinement frontier. It is never published empty
+    /// between content levels: it repeats its frontier, the content of each child (an omitted
+    /// child's own frontier), as its contents, so it renders exactly what replaces it. It is
+    /// kept explicit: never demoted into an implicit tree or written as a document's root
+    /// (`omits`).
+    pub omitted: bool,
+    /// An omitted cell's repeated contents (see `omitted`).
+    pub frontier: Vec<Payload>,
+    /// A link's root content, kept for an omitted parent's frontier.
+    pub repeat: Option<Payload>,
+    /// This inline fragment holds an omitted cell (itself or below, not across links).
+    pub omits: bool,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -121,7 +134,30 @@ pub(crate) struct Node {
     pub levels: u32,
 }
 
+/// A published payload an omitted cell repeats.
+#[derive(Clone, Debug)]
+pub(crate) enum Payload {
+    Proxy(Box<ProxyRow>),
+    Leaf(Box<LeafRow>),
+}
+
 impl Node {
+    /// The content this node publishes, as an omitted parent repeats it: its leaf, coarse
+    /// tile or chain's coarse tile, a link's root content, or an omitted cell's frontier.
+    fn content(&self) -> Vec<Payload> {
+        if self.omitted {
+            return self.frontier.clone();
+        }
+        if let Some(r) = &self.repeat {
+            return vec![r.clone()];
+        }
+        match (&self.leaf, &self.proxy, &self.chain) {
+            (Some(l), _, _) => vec![Payload::Leaf(l.clone())],
+            (None, Some(p), _) | (None, None, Some(p)) => vec![Payload::Proxy(p.clone())],
+            _ => Vec::new(),
+        }
+    }
+
     pub(crate) fn is_skeleton(&self) -> bool {
         self.height >= SKELETON_HEIGHT
     }
@@ -146,6 +182,7 @@ impl Node {
         self.objects = 1 + self.children.iter().map(|c| c.objects).sum::<u64>();
         self.records = 1 + self.children.iter().map(|c| c.records).sum::<u64>();
         self.levels = 1 + self.children.iter().map(|c| c.levels).max().unwrap_or(0);
+        self.omits = self.omitted || self.children.iter().any(|c| c.omits);
     }
 
     /// The path (child indices) to the explicit shallow tree of this fragment to demote
@@ -157,7 +194,11 @@ impl Node {
                 path.push(i);
                 if child.is_inline_skeleton() {
                     visit(child, path, best);
-                } else if child.leaf.is_none() && child.link.is_none() && !child.implicit {
+                } else if child.leaf.is_none()
+                    && child.link.is_none()
+                    && !child.implicit
+                    && !child.omits
+                {
                     let key = (child.records, child.height, std::cmp::Reverse(child.first));
                     if best.as_ref().is_none_or(|(k, _)| key > *k) {
                         *best = Some((key, path.clone()));
@@ -233,6 +274,7 @@ pub(crate) fn document_members(node: &Node) -> u64 {
             1
         } else {
             u64::from(node.proxy.is_some() || (chains && node.chain.is_some()))
+                + node.frontier.len() as u64
                 + node
                     .children
                     .iter()
@@ -253,6 +295,7 @@ pub(crate) fn document_members(node: &Node) -> u64 {
             u64::from(root && node.is_chain_cell()) + payloads(node, false)
         } else {
             u64::from(node.proxy.is_some() || (root && node.is_chain_cell()))
+                + node.frontier.len() as u64
                 + node.children.iter().map(|c| walk(c, false)).sum::<u64>()
         }
     }
@@ -275,6 +318,9 @@ pub(crate) struct Shape {
     pub proxies: u64,
     /// HLOD chain cells spliced out of explicit output (not in `tiles`).
     pub spliced_chain_cells: u64,
+    /// HLOD cells whose coarse tile was omitted, and the frontier contents they repeat.
+    pub omitted_cells: u64,
+    pub repeated_frontier_contents: u64,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -455,6 +501,10 @@ impl<'s, S: Sink> Builder<'s, S> {
             leaf: Some(Box::new(row)),
             proxy: None,
             chain: None,
+            omitted: false,
+            frontier: Vec::new(),
+            repeat: None,
+            omits: false,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -489,6 +539,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         // An HLOD cell without content sits below its single-child chain's coarse tile.
         let mut chain_error = None;
         let mut chain = None;
+        let mut omitted = false;
         let proxy = if let Some(rows) = self.proxies.as_mut() {
             let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
             let next = match self.lookahead.take() {
@@ -526,6 +577,14 @@ impl<'s, S: Sink> Builder<'s, S> {
                     self.lookahead = Some((row, bounds));
                     None
                 }
+                // Sparse coarse rows (HLOD): a cell whose coarse tile was omitted has no row
+                // (the next row is a later tile's in postorder, or there is none).
+                next if self.sparse => {
+                    omitted = true;
+                    self.shape.omitted_cells += 1;
+                    self.lookahead = next;
+                    None
+                }
                 Some((row, _)) => {
                     return Err(bad(format!(
                         "proxies.jsonl row {} is not internal tile f{}-d{} (postorder)",
@@ -557,6 +616,8 @@ impl<'s, S: Sink> Builder<'s, S> {
                     ),
                 ))
             }
+            // An omitted cell (spliced) refines exactly where its children do.
+            (None, None) if omitted => children_error,
             (None, None) => children_error.max(EMPTY_PARENT_SCALE * diagonal),
         };
         if !error.is_finite() {
@@ -577,18 +638,28 @@ impl<'s, S: Sink> Builder<'s, S> {
             leaf: None,
             proxy,
             chain,
+            omitted,
+            frontier: Vec::new(),
+            repeat: None,
+            omits: false,
             children: frame.children,
             link: None,
             objects: 0,
             records: 0,
             levels: 0,
         };
+        if omitted {
+            node.frontier = node.children.iter().flat_map(Node::content).collect();
+            self.shape.repeated_frontier_contents += node.frontier.len() as u64;
+        }
         // Every tile starts explicit: a shallow tree's totals are its own explicit tiles.
         node.aggregate();
         if frame.depth == 0 {
             if skeleton {
                 self.fit(&mut node)?;
-            } else if node.objects > self.limits.objects || node.levels > self.limits.levels {
+            } else if (node.objects > self.limits.objects || node.levels > self.limits.levels)
+                && !node.omits
+            {
                 node.implicit = true;
             }
             tally(&mut self.shape, &node);
@@ -598,7 +669,8 @@ impl<'s, S: Sink> Builder<'s, S> {
         }
         if skeleton {
             self.fit(&mut node)?;
-            if node.over(&self.limits) {
+            // An omitted cell is never a document's root (it would be published empty).
+            if node.over(&self.limits) && !node.omitted {
                 node = self.externalize(node)?;
             }
         }
@@ -635,7 +707,8 @@ impl<'s, S: Sink> Builder<'s, S> {
                     .map(|(i, _)| i)
             };
             let index = if node.levels > limits.levels {
-                let shallow = |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit;
+                let shallow =
+                    |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit && !c.omits;
                 match largest(&|c| u64::from(c.levels), &shallow) {
                     Some(i) if !node.children[i].is_skeleton() => {
                         node.demote(&[i]);
@@ -644,9 +717,9 @@ impl<'s, S: Sink> Builder<'s, S> {
                     found => found,
                 }
             } else if node.objects > limits.objects {
-                largest(&|c| c.objects, &Node::is_inline_skeleton)
+                largest(&|c| c.objects, &|c| c.is_inline_skeleton() && !c.omitted)
             } else {
-                largest(&|c| c.records, &Node::is_inline_skeleton)
+                largest(&|c| c.records, &|c| c.is_inline_skeleton() && !c.omitted)
             };
             let Some(index) = index else {
                 break;
@@ -673,6 +746,8 @@ impl<'s, S: Sink> Builder<'s, S> {
             node.error,
             node.height,
         );
+        // An omitted parent repeats this document's root content (never an omitted cell).
+        let repeat = node.content().pop();
         let link = self.sink.external(node)?;
         Ok(Node {
             first,
@@ -688,6 +763,10 @@ impl<'s, S: Sink> Builder<'s, S> {
             // The proxy is the external document's root content, not the link's.
             proxy: None,
             chain: None,
+            omitted: false,
+            frontier: Vec::new(),
+            repeat,
+            omits: false,
             children: Vec::new(),
             link: Some(link),
             objects: 1,

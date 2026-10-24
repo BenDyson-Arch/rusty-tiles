@@ -209,12 +209,8 @@ pub(crate) fn encode(
 ) -> Result<Encoded, JobError> {
     let rows = tile.primitives.len();
     let limit = crate::mesh_large::config::CONSUMER_TABLE_ROWS as usize;
-    // The property table is what CesiumJS bounds (8,192 rows); triangles are the cap's
-    // business, and a tile kept above it (`StoppingBound::AboveCap`) encodes like any other.
-    if rows == 0 || rows > limit || tile.triangles.is_empty() {
-        return Err(invalid(
-            "coarse tile needs 1..=8192 primitive rows and a triangle",
-        ));
+    if rows == 0 || rows > limit || tile.triangles.is_empty() || tile.triangles.len() > limit {
+        return Err(invalid("coarse tile rows or triangles outside 1..=8192"));
     }
     // Outer-interface vertices and every vertex on the tile's open border keep their
     // leaf-canonical decode: snapping a border vertex to the coarser tile lattice would

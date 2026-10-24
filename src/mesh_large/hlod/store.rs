@@ -46,11 +46,6 @@ pub(crate) enum StoppingBound {
     Input,
     /// Reduced to the triangle cap (the budget-led target).
     TriangleBudget,
-    /// Kept above the cap: the least simplification that keeps its exact outer interface
-    /// (items shared with leaves outside: D1's genuine limit), or that meshopt can reach
-    /// without pruning components (D3), needs more triangles than the cap. Never refused:
-    /// at most its merged children.
-    AboveCap,
 }
 
 /// A finished tile held for its parent: welded vertices with their leaf-canonical decode,

@@ -1564,7 +1564,7 @@ fn parent_jobs_allocate_within_their_charge() {
     };
     let merged = (8 * n) as u64;
     let charge = merged * super::JOB_BYTES_PER_TRIANGLE;
-    let (mut grid, mut over) = (None, None);
+    let mut grid = None;
     for kind in [0u8, 1, 3, 2] {
         let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
         let (built, peak) = crate::test_alloc::peak(|| {
@@ -1577,43 +1577,21 @@ fn parent_jobs_allocate_within_their_charge() {
         );
         assert!(peak as u64 <= charge, "kind {kind}: {peak} > {charge}");
         match (kind, built) {
-            // Its whole interface cannot fit the cap: kept above it, never refused.
+            // Its whole interface cannot fit the cap: omitted (held for its parent above the
+            // cap, never published), never refused.
             (0, built) => {
                 let built = built.unwrap();
-                assert_eq!(built.stopping, StoppingBound::AboveCap);
+                assert!(built.omitted);
                 assert!(built.geometry.triangles.len() > cap);
                 assert!(built.geometry.triangles.len() as u64 <= merged);
-                over = Some(built);
             }
             (2, built) => grid = Some(built.unwrap()),
             // The retries ran (and fitted, or ran out and kept the interface above the cap).
-            (_, Ok(b)) => assert!(
-                b.retries > 0 || b.stopping == StoppingBound::AboveCap,
-                "kind {kind}"
-            ),
+            (_, Ok(b)) => assert!(b.retries > 0 || b.omitted, "kind {kind}"),
             (_, Err(e)) => panic!("kind {kind}: {e}"),
         }
     }
-    // A tile kept above the cap encodes within 1,024 bytes per triangle (`job_charge`).
-    let built = over.unwrap();
-    let triangles = built.geometry.triangles.len() as u64;
-    let (checked, peak) = crate::test_alloc::peak(|| {
-        let encoded = encode::encode(
-            &built.geometry,
-            &built.locked,
-            &lattice,
-            &[],
-            &crate::mesh_large::batching::MaterialClasses::EMPTY,
-            Mutation::None,
-        )?;
-        encode::check(&built.geometry, &built.locked, &encoded.glb)
-    });
-    checked.unwrap();
-    eprintln!(
-        "JOB over-cap encode+check peak {peak} for {triangles} triangles = {:.0} per triangle",
-        peak as f64 / triangles as f64
-    );
-    assert!(peak as u64 <= 1024 * triangles, "{peak}");
+
     let built = grid.unwrap();
     let (checked, peak) = crate::test_alloc::peak(|| {
         let encoded = encode::encode(
@@ -2174,18 +2152,14 @@ fn duplicated_soup_is_admitted_and_crack_free() {
         0,
         "{census:?}"
     );
-    // Plain simplification cannot reduce disconnected single-triangle components (no
-    // pruning, D3): below the cap that topology is kept above it (`above_cap`), at most its
-    // merged children, crack-free, never refused.
+    // Plain simplification cannot reduce duplicated disconnected triangles (no pruning,
+    // D3): below the cap those parents are omitted, never published above it, never refused.
     let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    assert!(manifest["hlod"]["stoppedAboveCap"].as_u64().unwrap() > 0);
+    assert!(manifest["hlod"]["omittedProxies"].as_u64().unwrap() > 0);
     for row in rows(&dir.join("proxies.jsonl")) {
-        assert!(
-            row["triangles"].as_u64() <= row["inputTriangles"].as_u64(),
-            "{row}"
-        );
+        assert!(row["triangles"].as_u64().unwrap() <= 1024, "{row}");
     }
     let capped = super::tests::census(&dir);
     assert_eq!(
@@ -2369,11 +2343,42 @@ fn moved_or_dropped_segments_fail() {
     assert!(!work.path().join("dropped").exists());
 }
 
-/// An exact interface that cannot fit the cap is a genuine D1 limit: the parent is kept above
-/// the cap (the least simplification holding its interface, at most its merged children),
-/// reported as `interface`-stopped, crack-free, never refused.
+/// The published tiles a view refined to depth `d` needs (each leaf's shallowest published
+/// tile at depth `d` or deeper), their bytes, and how many of them lie deeper than `d`.
+fn frontier(dir: &Path, d: u32) -> (usize, u64, usize) {
+    let tiles = load(dir);
+    let leaves = tiles.iter().filter(|t| t.leaf).count();
+    let mut chosen = BTreeSet::new();
+    for i in 0..leaves {
+        if let Some(t) = tiles
+            .iter()
+            .filter(|t| t.depth >= d && t.begin <= i && i < t.end)
+            .min_by_key(|t| t.depth)
+        {
+            chosen.insert(t.uri.clone());
+        }
+    }
+    let bytes = chosen
+        .iter()
+        .map(|u| fs::metadata(dir.join(u)).unwrap().len())
+        .sum();
+    let deeper = tiles
+        .iter()
+        .filter(|t| chosen.contains(&t.uri) && t.depth > d)
+        .count();
+    (chosen.len(), bytes, deeper)
+}
+
+/// Round 7 (Sol): an exact interface that cannot fit the cap omits that parent's coarse tile
+/// instead of publishing it above the cap or refusing. Its capped descendants are the
+/// refinement frontier, and its own parent is built from what it held. The archive has no
+/// content-less tile below content under the default and under tight fragment caps (an
+/// omitted cell repeats its frontier as its contents, and is never demoted into an implicit
+/// tree or made a document's root). The cost: a view refined to the omitted cells' depth
+/// loads their frontier.
 #[test]
-fn interface_that_cannot_fit_the_cap_is_kept_above_it() {
+fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     let dir = stage(
@@ -2388,20 +2393,16 @@ fn interface_that_cannot_fit_the_cap_is_kept_above_it() {
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     let hlod = &manifest["hlod"];
-    assert!(hlod["stoppedAboveCap"].as_u64().unwrap() > 0, "{hlod}");
+    let omitted = hlod["omittedProxies"].as_u64().unwrap();
+    assert!(omitted > 0, "{hlod}");
+    let by_depth: Vec<u64> = serde_json::from_value(hlod["omittedByDepth"].clone()).unwrap();
+    assert_eq!(by_depth.iter().sum::<u64>(), omitted);
     assert!(
-        hlod["maxAboveCapTriangles"].as_u64().unwrap() > 12,
+        hlod["maxOmittedHeldTriangles"].as_u64().unwrap() > 12,
         "{hlod}"
     );
     for row in rows(&dir.join("proxies.jsonl")) {
-        let (t, input) = (
-            row["triangles"].as_u64().unwrap(),
-            row["inputTriangles"].as_u64().unwrap(),
-        );
-        assert!(t <= input, "{row}");
-        if t > 12 {
-            assert_eq!(row["stoppingBound"], "above_cap", "{row}");
-        }
+        assert!(row["triangles"].as_u64().unwrap() <= 12, "{row}");
     }
     let census = census(&dir);
     assert_eq!(
@@ -2409,6 +2410,47 @@ fn interface_that_cannot_fit_the_cap_is_kept_above_it() {
         0,
         "{census:?}"
     );
+    for (name, limits) in [
+        ("default.3tz", delivery::plan::LIMITS),
+        (
+            "tight.3tz",
+            Limits {
+                objects: 3,
+                records: 6,
+                levels: 2,
+            },
+        ),
+    ] {
+        let output = work.path().join(name);
+        let mut file = fs::File::create(&output).unwrap();
+        let (report, _) = delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            limits,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        inspect(ValidationRequest::new(&output)).unwrap();
+        let shape = refinement_shape(&output);
+        assert_eq!(
+            shape.empty_below_content + shape.error_inversions,
+            0,
+            "{name}: {shape:?} {report:?}"
+        );
+    }
+    let d = by_depth.iter().position(|n| *n > 0).unwrap() as u32;
+    let (tiles, bytes, deeper) = frontier(&dir, d);
+    let published = rows(&dir.join("proxies.jsonl"))
+        .iter()
+        .filter(|r| r["depth"].as_u64() == Some(u64::from(d)))
+        .count();
+    eprintln!(
+        "OMITTED {omitted} by depth {by_depth:?}; a view refined to depth {d} needs {tiles} \
+         tiles ({bytes} bytes), {deeper} of them deeper than {d} (frontier of omitted cells); \
+         {published} depth-{d} coarse tiles published"
+    );
+    assert!(deeper > 0);
 }
 
 /// Output is identical for any job count, any admitted budget and spilled sorts.
@@ -2647,5 +2689,5 @@ fn evidence_census() {
     );
     // Exact seams: source T-junctions and unwelded seams are reported (the census's
     // overlap and perpendicular counts above, the manifest's source-defect counts), not
-    // asserted; tiles above the cap are reported by `stoppedAboveCap`.
+    // asserted; omitted coarse tiles are reported by `omittedProxies`.
 }

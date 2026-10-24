@@ -82,18 +82,24 @@ follows industry practice (Nanite, Simplygon) and locks only exactly shared item
 - **Consequence for source defects:** T-junctions, partial collinear overlaps and unwelded
   near-seams in the source are not locked. They may open cracks at mixed depths exactly
   there. They are reported, never matched by distance (see D3).
-- **Above the cap (replaces the `unsupported` rule above):** when a parent's exact
-  interface, or topology plain simplification cannot reduce (D3), needs more triangles than
-  its cap, the parent is published above the cap. It keeps the least simplification that
-  holds its interface (meshopt's result, or its merged children when protected retries
-  still lose an item), reported as `stoppingBound: above_cap`.
-  - **Bounds:** never more triangles than its merged children, so never more than the source
-    triangles below it.
-  - **Memory:** its held footprint and encoding fit in its own job's admission. A parent of
-    such tiles is admitted at its actual merged size. The stage can refuse only for memory
-    (D8), never for an interface.
-  - **What still refuses:** the property-table row limit (8,192 representative primitives)
-    still applies to every coarse tile.
+- **Infeasible parents (replaces the `unsupported` rule above; round 7):** 8,192 stays the
+  hard published cap. A parent whose exact interface, or topology plain simplification
+  cannot reduce (D3), needs more triangles than its cap has its coarse tile **omitted**. It
+  is never published above the cap and never refused.
+  - **Frontier:** its capped descendants are the refinement frontier.
+  - **What the omitted cell publishes:** it repeats that frontier's payloads as its own
+    contents. So it is never content-less between content levels (the Cesium vanishing
+    lesson), and it renders exactly what replaces it.
+  - **Layout:** it is never demoted into an implicit tree or written as a document's root.
+  - **Its parent's input:** the parent is built from the least simplification that holds the
+    omitted cell's interface. That geometry is held, never published, and is at most its
+    merged children.
+  - **Reported:** `hlod.omittedProxies` and `omittedByDepth`. The cost is that a view refined
+    to that depth loads the frontier instead of one tile.
+  - **Scope:** this is a safety net only. Whether large models need a different border scheme
+    is a separate owner decision. Exact seams keep each tile's outer border at leaf
+    resolution, so at about 500M source triangles mid-level tiles need roughly twice the
+    cap.
 - **Winding:** simplified faces keep their source orientation. A face collapsed onto an
   opposite-facing source face is dropped beside its twin, or turned.
 
@@ -196,9 +202,8 @@ leaf recovery and visible-quality gates. **Evidence:** E2, E3, E5, C/H17.
 
 ### D4 — representative coarse identity and annotation
 
-**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged, except that a coarse tile
-kept above the triangle cap still carries at most 8,192 `source_primitive` rows. The
-consumer table limit is on rows, not triangles.
+**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. An omitted cell repeats
+its frontier's payloads with their own identity tables.
 
 
 Each coarse triangle carries one `source_primitive` feature ID selected from

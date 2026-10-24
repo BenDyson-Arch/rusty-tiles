@@ -18,6 +18,7 @@
 mod encode;
 mod geometry;
 pub(crate) mod interfaces;
+pub(crate) mod scratch;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
@@ -113,11 +114,10 @@ const ROW_WINDOW: usize = 1024;
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance
-/// and a cap-sized output. A parent kept above the cap by its exact interface
-/// (`StoppingBound::AboveCap`) holds at most its merged triangles, whose held footprint
-/// (`HELD_BYTES_PER_TRIANGLE`, under 300 bytes) and encoding (under 1,024 bytes per
-/// triangle, measured by `parent_jobs_allocate_within_their_charge`) fit in the workspace its
-/// simplification has released, so its output never needs more than this admission.
+/// and a cap-sized output. An omitted parent (`Built::omitted`) holds at most its merged
+/// triangles for its own parent, unencoded; their held footprint (`HELD_BYTES_PER_TRIANGLE`,
+/// under 300 bytes) fits in the workspace its simplification released, so it never needs
+/// more than this admission. A parent merging such a child is admitted at its actual size.
 fn job_charge(merged: u64, cap: usize) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
@@ -270,10 +270,13 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
-    /// Tiles kept above the cap because their exact outer interface (or unprunable topology)
-    /// needs more triangles (`StoppingBound::AboveCap`), and the most triangles any kept.
-    pub stopped_above_cap: u64,
-    pub max_above_cap_triangles: u64,
+    /// Cells whose coarse tile was omitted because their exact interface (or topology plain
+    /// simplification cannot reduce) needs more triangles than the cap, by cell depth, and
+    /// the most triangles any of them held for its parent (never published). Their capped
+    /// descendants are the refinement frontier.
+    pub omitted_proxies: u64,
+    pub omitted_by_depth: Vec<u64>,
+    pub max_omitted_held_triangles: u64,
     /// Simplified faces kept on their source orientation (`geometry::orient`).
     pub reoriented_faces: u64,
     pub interface_segments: u64,
@@ -286,18 +289,6 @@ pub(crate) struct HlodReport {
     pub pass_through: u64,
     pub max_error_by_depth: Vec<f64>,
     pub incidence: IncidenceStats,
-}
-
-impl HlodDiagnostics {
-    /// The stage's declared scratch bound: the incidence pass's own (checked as it returns),
-    /// or during the walk its row stream beside every declared component, whichever is
-    /// larger.
-    pub fn stage_scratch_bound(&self) -> u64 {
-        let components: u64 = self.scratch_components.values().sum();
-        self.incidence_scratch
-            .declared()
-            .max(self.incidence_scratch.walk.saturating_add(components))
-    }
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -313,14 +304,14 @@ pub struct HlodDiagnostics {
     /// The incidence pass's staged scratch declarations (its declared bound is their
     /// largest) against which that peak is checked as the pass returns.
     pub incidence_scratch: interfaces::ScratchPhases,
-    /// The scratch ledger contract for the walk: each downstream slice (S2 samples, S3
-    /// pages and charts, ...) declares the most scratch it holds at once as a named component
-    /// and checks its own bytes against it; the stage's peak over the walk is checked against
-    /// the incidence row stream's walk phase plus the sum of the components (see
-    /// `stage_scratch_bound`), so no slice can trip another's bound.
+    /// The largest admission of each walk scratch component (`scratch::ScratchLedger`: S2
+    /// samples, S3 pages and charts, ...; none in S1).
     pub scratch_components: std::collections::BTreeMap<&'static str, u64>,
-    /// The stage's scratch peak from the incidence pass's start to the walk's end.
+    /// The stage's scratch peak from the incidence pass's start to the walk's end, and its
+    /// bound: the incidence pass's own, or the walk's base plus its largest simultaneous
+    /// admission, whichever is larger.
     pub stage_scratch_peak_bytes: u64,
+    pub stage_scratch_bound_bytes: u64,
     /// Highest simultaneously leased bytes of the walk's ledger.
     pub lease_peak_bytes: u64,
     pub ledger_bytes: u64,
@@ -397,7 +388,19 @@ struct Frame {
     started: usize,
 }
 
-type Done = Result<(TileGeometry, HlodRow), JobError>;
+/// A finished parent: its geometry (held for its own parent) and its published row, or
+/// none when its coarse tile is omitted.
+type Done = Result<(TileGeometry, Finished), JobError>;
+
+/// A parent's outcome in postorder.
+enum Finished {
+    Row(Box<HlodRow>),
+    /// Omitted (its interface cannot fit the cap): its cell depth and held triangles.
+    Omitted {
+        depth: u32,
+        triangles: u64,
+    },
+}
 
 /// Build, check and write every coarse tile; writes `proxies/` and `proxies.jsonl`.
 pub(crate) fn produce(
@@ -466,12 +469,23 @@ pub(crate) fn produce(
         incidence_started.elapsed().as_secs_f64(),
     )?;
     let walk_started = std::time::Instant::now();
-    let result = walk(&input, rows, &rows_path, &mut report, check);
-    let lease_peak = result?;
     // The walk's scratch: the incidence row stream (at most its walk phase) beside every
-    // downstream component declared in `scratch_components` (none in S1).
+    // component a downstream slice admits before allocating (none in S1).
+    let ledger = scratch::ScratchLedger::new(
+        &captured.scratch,
+        diagnostics.incidence_scratch.walk,
+        &admit,
+    );
+    let result = walk(&input, rows, &rows_path, &mut report, &ledger, check);
+    let lease_peak = result?;
+    ledger.check()?;
+    diagnostics.scratch_components = ledger.components();
     diagnostics.stage_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
-    let stage_bound = diagnostics.stage_scratch_bound();
+    let stage_bound = diagnostics
+        .incidence_scratch
+        .declared()
+        .max(ledger.peak_bound());
+    diagnostics.stage_scratch_bound_bytes = stage_bound;
     if diagnostics.stage_scratch_peak_bytes > stage_bound {
         return Err(resource(format!(
             "HLOD stage scratch {} bytes exceeded its declared bound {stage_bound} \
@@ -707,6 +721,8 @@ fn build_tile(
     materials: &[Value],
     stage: &Path,
     settings: Settings,
+    // Downstream slices admit their walk scratch here before allocating (unused in S1).
+    _ledger: &scratch::ScratchLedger<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Done {
     let mut built = if closed.single_leaf {
@@ -716,7 +732,22 @@ fn build_tile(
     } else {
         geometry::build_parent(closed.key, &children, &[settings.cap], check)?
     };
+    let children_error = built.children_error;
     drop(children);
+    if built.omitted {
+        // Never published: its capped descendants are the frontier; its parent takes this
+        // geometry (the least simplification holding its interface) as input.
+        let mut geometry = built.geometry;
+        geometry.geometric_error = children_error;
+        let triangles = geometry.triangles.len() as u64;
+        return Ok((
+            geometry,
+            Finished::Omitted {
+                depth: closed.key.depth,
+                triangles,
+            },
+        ));
+    }
     if settings.mutation == Mutation::DropSegment {
         let tile = &mut built.geometry;
         let locked: Vec<bool> = built.locked.clone();
@@ -798,7 +829,7 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
-    Ok((geometry, row))
+    Ok((geometry, Finished::Row(Box::new(row))))
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
@@ -809,11 +840,6 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     match row.stopping_bound {
         StoppingBound::Input => report.stopped_by_input += 1,
         StoppingBound::TriangleBudget => report.stopped_by_triangle_budget += 1,
-        StoppingBound::AboveCap => {
-            report.stopped_above_cap += 1;
-            report.max_above_cap_triangles =
-                report.max_above_cap_triangles.max(u64::from(row.triangles));
-        }
     }
     report.tiles_with_protected_faces += u64::from(row.protected_faces > 0);
     report.protected_faces += u64::from(row.protected_faces);
@@ -841,6 +867,7 @@ fn walk(
     rows: crate::spill::SortedStream<'_, InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
+    scratch_ledger: &scratch::ScratchLedger<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
     let captured = input.captured;
@@ -881,7 +908,7 @@ fn walk(
         let mut stack: Vec<Frame> = Vec::new();
         let mut ready: HashMap<u64, TileGeometry> = HashMap::new();
         let mut pending: Vec<Closed> = Vec::new();
-        let mut finished_rows: BTreeMap<u64, HlodRow> = BTreeMap::new();
+        let mut finished_rows: BTreeMap<u64, Finished> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
         let mut leaf = 0u32;
         let materials = &materials;
@@ -920,7 +947,14 @@ fn walk(
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let mut built = build_tile(
-                            &closed, children, captured, materials, stage, settings, check,
+                            &closed,
+                            children,
+                            captured,
+                            materials,
+                            stage,
+                            settings,
+                            scratch_ledger,
+                            check,
                         )?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
@@ -942,7 +976,7 @@ fn walk(
         let receive = |pending: &mut Vec<Closed>,
                        ready: &mut HashMap<u64, TileGeometry>,
                        inflight: &mut usize,
-                       finished_rows: &mut BTreeMap<u64, HlodRow>|
+                       finished_rows: &mut BTreeMap<u64, Finished>|
          -> Result<(), JobError> {
             if *inflight == 0 {
                 return Err(resource(
@@ -959,15 +993,30 @@ fn walk(
             spawn(pending, ready, inflight)
         };
         // Write finished rows in postorder once their published depth is final.
-        let mut flush = |finished_rows: &mut BTreeMap<u64, HlodRow>,
+        let mut flush = |finished_rows: &mut BTreeMap<u64, Finished>,
                          publish: &mut HashMap<u64, Publish>,
                          written: &mut u64|
          -> Result<(), JobError> {
             while publish.get(written).is_some_and(|p| p.done)
                 && finished_rows.contains_key(written)
             {
-                let mut row = finished_rows.remove(written).unwrap();
+                let finished = finished_rows.remove(written).unwrap();
                 let depth = publish.remove(written).unwrap().depth;
+                let mut row = match finished {
+                    Finished::Row(row) => *row,
+                    Finished::Omitted { depth, triangles } => {
+                        report.omitted_proxies += 1;
+                        let d = depth as usize;
+                        if report.omitted_by_depth.len() <= d {
+                            report.omitted_by_depth.resize(d + 1, 0);
+                        }
+                        report.omitted_by_depth[d] += 1;
+                        report.max_omitted_held_triangles =
+                            report.max_omitted_held_triangles.max(triangles);
+                        *written += 1;
+                        continue;
+                    }
+                };
                 if depth != row.depth {
                     // Published at the top of its single-child chain: the member is named
                     // for that cell.

@@ -36,6 +36,10 @@ pub(crate) struct Built {
     pub interface_segments: u32,
     /// Output faces turned to (or dropped beside) their source orientation (`orient`).
     pub reoriented: u32,
+    /// Its interface cannot fit the cap: never published, held above the cap for its parent.
+    pub omitted: bool,
+    /// Triangle visits of the representative selection (linear: `representatives`).
+    pub representative_visits: u64,
 }
 
 /// Children merged into one vertex space welded by canonical decoded position, in child
@@ -225,59 +229,65 @@ fn orient(merged: &Merged, output: &mut Vec<[u32; 3]>) -> u32 {
     fixed
 }
 
-/// For each output triangle, the representative of the input triangle sharing one of its
-/// corners whose centroid is nearest its own (ties: earlier input triangle). Provisional
-/// until S2's source index selects the nearest source primitive (D4).
-fn representatives(merged: &Merged, output: &[[u32; 3]]) -> Vec<SourcePrimitive> {
-    let n = merged.positions.len();
-    let mut start = vec![0u32; n + 1];
-    for t in &merged.triangles {
-        for &v in t {
-            start[v as usize + 1] += 1;
-        }
-    }
-    for i in 0..n {
-        start[i + 1] += start[i];
-    }
-    let mut fill = start.clone();
-    let mut incident = vec![0u32; merged.triangles.len() * 3];
-    for (i, t) in merged.triangles.iter().enumerate() {
-        for &v in t {
-            incident[fill[v as usize] as usize] = i as u32;
-            fill[v as usize] += 1;
-        }
-    }
+/// For each output triangle, the representative of an input triangle at one of its corners.
+/// Each merged vertex first picks its incident input triangle whose centroid is nearest the
+/// vertex (ties: earlier triangle); each output triangle then takes, of its three corners'
+/// picks, the one whose centroid is nearest its own (ties: earlier triangle). Every input
+/// and output triangle is visited three times, whatever the valence: `O(input + output)`
+/// (the visits are returned). Provisional until S2's source index selects the nearest source
+/// primitive (D4).
+fn representatives(merged: &Merged, output: &[[u32; 3]]) -> (Vec<SourcePrimitive>, u64) {
     let centroid = |t: &[u32; 3]| -> [f64; 3] {
         let p = t.map(|v| merged.positions[v as usize].map(f64::from));
         std::array::from_fn(|a| (p[0][a] + p[1][a] + p[2][a]) / 3.)
     };
-    output
+    let d2 = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>();
+    let mut visits = 0u64;
+    let mut pick = vec![(f64::INFINITY, u32::MAX); merged.positions.len()];
+    for (i, t) in merged.triangles.iter().enumerate() {
+        let c = centroid(t);
+        for &v in t {
+            visits += 1;
+            let at = merged.positions[v as usize].map(f64::from);
+            let candidate = (d2(c, at), i as u32);
+            let best = &mut pick[v as usize];
+            if candidate < *best {
+                *best = candidate;
+            }
+        }
+    }
+    let reps = output
         .iter()
         .map(|t| {
             let c = centroid(t);
             let mut best = (f64::INFINITY, u32::MAX);
             for &v in t {
-                for &i in &incident[start[v as usize] as usize..start[v as usize + 1] as usize] {
-                    let d = centroid(&merged.triangles[i as usize]);
-                    let d2 = (0..3).map(|a| (d[a] - c[a]).powi(2)).sum::<f64>();
-                    if (d2, i) < best {
-                        best = (d2, i);
-                    }
+                visits += 1;
+                let i = pick[v as usize].1;
+                if i == u32::MAX {
+                    continue;
+                }
+                let candidate = (d2(centroid(&merged.triangles[i as usize]), c), i);
+                if candidate < best {
+                    best = candidate;
                 }
             }
             merged.representative[best.1 as usize]
         })
-        .collect()
+        .collect();
+    (reps, visits)
 }
 
 /// Build `key`'s parent from its children (in slot order) under the first of `caps` (each a
 /// triangle limit, tried in order) it can keep its interface within.
 ///
 /// The interface is exact (shared points and segments only), so a parent that cannot keep
-/// it within its last cap has a genuine interface limit (D1). It is never refused: the
-/// parent keeps the least simplification that holds the interface (meshopt's result, or its
-/// merged children where protected retries still lose an item), at most its merged input,
-/// and reports `StoppingBound::AboveCap`.
+/// it within its last cap has a genuine limit (D1: its exact interface, or topology plain
+/// simplification cannot reduce, D3). Its coarse tile is **omitted** (`Built::omitted`): it
+/// is never published and never refused. What it hands its own parent is the least
+/// simplification that holds its interface (meshopt's result, or its merged children where
+/// protected retries still lose an item), at most its merged input; its capped descendants
+/// are the published refinement frontier.
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
@@ -316,9 +326,9 @@ pub(crate) fn build_parent(
     attempt(tile, &merged, &interface, last, children_error, true)
 }
 
-/// One build of the parent from `merged` children under `interface`; `over` keeps a parent
-/// whose interface cannot fit `cap` above it (`StoppingBound::AboveCap`) instead of
-/// refusing.
+/// One build of the parent from `merged` children under `interface`; `over` returns a
+/// parent whose interface cannot fit `cap` as omitted (held above the cap for its parent,
+/// never published) instead of refusing.
 fn attempt(
     tile: TileKey,
     merged: &Merged,
@@ -353,6 +363,7 @@ fn attempt(
     let mut protected = vec![false; input];
     let mut retries = 0;
     let mut reoriented = 0;
+    let mut omitted = false;
     let degenerate_only = merged
         .triangles
         .iter()
@@ -437,7 +448,8 @@ fn attempt(
             error = e;
         }
         if output.len() > cap && over {
-            (output, error, StoppingBound::AboveCap)
+            omitted = true;
+            (output, error, StoppingBound::TriangleBudget)
         } else if output.len() > cap {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
@@ -469,7 +481,7 @@ fn attempt(
     if !simplifier_error.is_finite() {
         return Err(state("meshopt reported a nonfinite error"));
     }
-    let reps = representatives(merged, &output);
+    let (reps, representative_visits) = representatives(merged, &output);
     // Compact to the vertices the output uses, in first-use order.
     let mut remap = vec![u32::MAX; merged.keys.len()];
     let mut geometry = TileGeometry {
@@ -521,6 +533,8 @@ fn attempt(
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
         reoriented,
+        omitted,
+        representative_visits,
         geometry,
     })
 }
@@ -536,6 +550,44 @@ mod tests {
             positions: Vec::new(),
             triangles,
             representative: Vec::new(),
+        }
+    }
+
+    /// Sol round 7: a locked fan of `m` faces about one corner (every face kept) once cost
+    /// `m * m` visits picking representatives. Each vertex now picks once and each output
+    /// face looks at its three corners' picks: exactly three visits per input and per output
+    /// face.
+    #[test]
+    fn representative_selection_is_linear_in_a_locked_fan() {
+        for m in [1024u32, 2048, 4096, 8192, 16384] {
+            let mut positions = vec![[0f32; 3]];
+            let mut triangles = Vec::new();
+            for i in 0..=m {
+                let a = f64::from(i) / f64::from(m) * std::f64::consts::PI;
+                positions.push([a.cos() as f32, a.sin() as f32, 0.]);
+            }
+            for i in 0..m {
+                triangles.push([0, i + 1, i + 2]);
+            }
+            let representative: Vec<SourcePrimitive> = (0..m)
+                .map(|i| SourcePrimitive {
+                    node: 0,
+                    mesh: 0,
+                    primitive: 0,
+                    expanded_ordinal: u64::from(i),
+                    material: u32::MAX,
+                })
+                .collect();
+            let merged = Merged {
+                keys: positions.iter().map(|p| key(*p)).collect(),
+                ells: vec![0; positions.len()],
+                positions,
+                triangles: triangles.clone(),
+                representative,
+            };
+            let (reps, visits) = representatives(&merged, &triangles);
+            assert_eq!(visits, 6 * u64::from(m), "fan {m}");
+            assert_eq!(reps.len(), m as usize);
         }
     }
 
