@@ -291,7 +291,13 @@ fn merge_small(
             let Some(m) = normals[f] else { continue };
             let target = (start[f]..start[f + 1])
                 .map(|k| chart_of[pairs[k as usize].1 as usize] as usize)
-                .filter(|&c| c != small && charts[c].faces.len() > charts[small].faces.len())
+                .filter(|&c| {
+                    c != small
+                        && charts[c].faces.len() > charts[small].faces.len()
+                        // Merges never grow a chart past the growth cap: overlap tests stay
+                        // bounded per face.
+                        && charts[c].faces.len() < CHART_FACES
+                })
                 .find(|&c| {
                     let (origin, normal) = frames[c];
                     if dot(m, normal) < MERGE_COS {
@@ -473,8 +479,10 @@ fn sizes(charts: &mut [Chart], scale: f64) -> Option<()> {
 /// The least-area block-aligned page in `MIN_PAGE..=max_edge` per side holding every
 /// chart at `scale` (shelves by descending height at a few widths around the square
 /// root of the chart area; ties to the narrower); packs the charts into it.
-fn fit(charts: &mut [Chart], scale: f64, max_edge: u32) -> Option<[u32; 2]> {
+fn fit(charts: &mut [Chart], scale: f64, max_edge: u32, max_texels: u64) -> Option<[u32; 2]> {
     sizes(charts, scale)?;
+    // Small allowances may use pages below MIN_PAGE (whole blocks).
+    let min_edge = ((max_texels as f64).sqrt() as u32 / BLOCK * BLOCK).clamp(BLOCK, MIN_PAGE);
     let mut order: Vec<usize> = (0..charts.len()).collect();
     order.sort_by(|&a, &b| charts[b].size[1].cmp(&charts[a].size[1]).then(a.cmp(&b)));
     let round = |v: f64| ((v.ceil() as u64).div_ceil(u64::from(BLOCK)) * u64::from(BLOCK)) as u32;
@@ -484,7 +492,7 @@ fn fit(charts: &mut [Chart], scale: f64, max_edge: u32) -> Option<[u32; 2]> {
         .iter()
         .map(|f| round(area.sqrt() * f))
         .chain([round(f64::from(widest)), max_edge])
-        .map(|w| w.clamp(MIN_PAGE, max_edge).max(round(f64::from(widest))))
+        .map(|w| w.clamp(min_edge, max_edge).max(round(f64::from(widest))))
         .filter(|&w| w <= max_edge)
         .collect();
     widths.sort_unstable();
@@ -494,8 +502,8 @@ fn fit(charts: &mut [Chart], scale: f64, max_edge: u32) -> Option<[u32; 2]> {
         let Some((used, h)) = shelf(charts, &order, w, max_edge) else {
             continue;
         };
-        let page = [round(f64::from(used)).max(MIN_PAGE), round(f64::from(h)).max(MIN_PAGE)];
-        if page[1] > max_edge {
+        let page = [round(f64::from(used)).max(min_edge), round(f64::from(h)).max(min_edge)];
+        if page[1] > max_edge || u64::from(page[0]) * u64::from(page[1]) > max_texels {
             continue;
         }
         let key = (u64::from(page[0]) * u64::from(page[1]), page[0].max(page[1]));
@@ -509,12 +517,14 @@ fn fit(charts: &mut [Chart], scale: f64, max_edge: u32) -> Option<[u32; 2]> {
     Some(page)
 }
 
-/// Chart and pack one group at `spacing` metres per texel (capped at `max_edge` per side).
+/// Chart and pack one group at `spacing` metres per texel, capped at `max_edge` per side
+/// and `max_texels` per page (the group's share of its tile's texel budget).
 pub(crate) fn layout(
     positions: &[[f32; 3]],
     faces: &[[u32; 3]],
     spacing: f64,
     max_edge: u32,
+    max_texels: u64,
 ) -> Result<Layout, JobError> {
     if faces.is_empty() || !(spacing.is_finite() && spacing > 0.) {
         return Err(JobError::new(
@@ -524,29 +534,29 @@ pub(crate) fn layout(
     }
     let (mut charts, chart_of) = grow(positions, faces);
     let target = 1. / spacing;
-    let (scale, size, capped) = if let Some(size) = fit(&mut charts, target, max_edge) {
+    let (scale, size, capped) = if let Some(size) = fit(&mut charts, target, max_edge, max_texels) {
         (target, size, false)
     } else {
         // The finest scale that fits the cap: bisection on a monotone shelf fit.
         let (mut lo, mut hi) = (0., target);
-        if fit(&mut charts, lo, max_edge).is_none() {
+        if fit(&mut charts, lo, max_edge, max_texels).is_none() {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(
-                    "{} coarse charts cannot fit one {max_edge}² page even at zero scale",
+                    "{} coarse charts cannot fit one {max_edge}² page of {max_texels} texels even at zero scale",
                     charts.len()
                 ),
             ));
         }
         for _ in 0..40 {
             let mid = 0.5 * (lo + hi);
-            if fit(&mut charts, mid, max_edge).is_some() {
+            if fit(&mut charts, mid, max_edge, max_texels).is_some() {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        let size = fit(&mut charts, lo, max_edge).expect("bisection keeps a fitting scale");
+        let size = fit(&mut charts, lo, max_edge, max_texels).expect("bisection keeps a fitting scale");
         (lo, size, true)
     };
     let mut pixels = vec![[[0.; 2]; 3]; faces.len()];
@@ -571,24 +581,51 @@ pub(crate) fn layout(
 
 /// Texels whose centres lie inside a face, with their barycentric weights (corner order).
 /// A face covering no texel centre (sliver, point chart) gets the texel holding its
-/// pixel-space centroid, so every face has appearance.
+/// pixel-space centroid, so every face has appearance. Row spans: O(rows + covered) per
+/// face, never its bounding box (a long sliver costs its length, not its box area).
 pub(crate) fn raster(pixels: &[[f64; 2]; 3], size: [u32; 2], out: &mut Vec<(u32, [f64; 3])>) {
     out.clear();
     let p = pixels;
     let den = (p[1][1] - p[2][1]) * (p[0][0] - p[2][0]) + (p[2][0] - p[1][0]) * (p[0][1] - p[2][1]);
     if den.abs() > 1e-12 {
-        let lo = |a: usize| p[0][a].min(p[1][a]).min(p[2][a]).floor().max(0.) as u32;
-        let hi = |a: usize| {
-            (p[0][a].max(p[1][a]).max(p[2][a]).ceil() as u32).min(size[a].saturating_sub(1))
+        let ylo = (p[0][1].min(p[1][1]).min(p[2][1]) - 0.5).ceil().max(0.) as u32;
+        let yhi = ((p[0][1].max(p[1][1]).max(p[2][1]) - 0.5).floor().max(-1.) as i64)
+            .min(i64::from(size[1]) - 1);
+        let bary = |cx: f64, cy: f64| {
+            let u = ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
+            let v = ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
+            [u, v, 1. - u - v]
         };
-        for y in lo(1)..=hi(1) {
-            for x in lo(0)..=hi(0) {
-                let (cx, cy) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
-                let u = ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
-                let v = ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
-                let w = 1. - u - v;
-                if u >= -1e-9 && v >= -1e-9 && w >= -1e-9 {
-                    out.push((y * size[0] + x, [u.max(0.), v.max(0.), w.max(0.)]));
+        for y in i64::from(ylo)..=yhi {
+            let cy = y as f64 + 0.5;
+            // The span of the row's centre line inside the triangle (edge crossings).
+            let (mut xl, mut xr) = (f64::INFINITY, f64::NEG_INFINITY);
+            for k in 0..3 {
+                let (a, b) = (p[k], p[(k + 1) % 3]);
+                if (a[1] - cy) * (b[1] - cy) <= 0. {
+                    let x = if a[1] == b[1] {
+                        xl = xl.min(a[0].min(b[0]));
+                        xr = xr.max(a[0].max(b[0]));
+                        continue;
+                    } else {
+                        a[0] + (cy - a[1]) / (b[1] - a[1]) * (b[0] - a[0])
+                    };
+                    xl = xl.min(x);
+                    xr = xr.max(x);
+                }
+            }
+            if xl > xr {
+                continue;
+            }
+            let x0 = ((xl - 0.5).ceil() - 1.).max(0.) as u32;
+            let x1 = ((xr - 0.5).floor() + 1.).min(f64::from(size[0]) - 1.);
+            if x1 < 0. {
+                continue;
+            }
+            for x in x0..=x1 as u32 {
+                let w = bary(f64::from(x) + 0.5, cy);
+                if w.iter().all(|&v| v >= -1e-9) {
+                    out.push((y as u32 * size[0] + x, w.map(|v| v.max(0.))));
                 }
             }
         }
@@ -629,7 +666,7 @@ mod tests {
     #[test]
     fn charts_respect_the_cone_and_never_overlap() {
         let (p, f) = fold();
-        let l = layout(&p, &f, 0.1, 1024).unwrap();
+        let l = layout(&p, &f, 0.1, 1024, 1 << 20).unwrap();
         // Two planes plus the degenerate point chart.
         assert_eq!(l.charts.len(), 3);
         assert_eq!(l.chart_of[0], l.chart_of[1]);
@@ -677,12 +714,12 @@ mod tests {
     #[test]
     fn requested_density_beyond_the_cap_is_reported_and_reduced() {
         let (p, f) = fold();
-        let l = layout(&p, &f, 0.001, 1024).unwrap();
+        let l = layout(&p, &f, 0.001, 1024, 1 << 20).unwrap();
         assert!(l.capped);
         assert_eq!(l.size[0].max(l.size[1]), 1024);
         assert!(l.scale < 1000. && l.scale > 40.);
         // Smallest page at the minimum edge for tiny content.
-        let l = layout(&p, &f, 10., 1024).unwrap();
+        let l = layout(&p, &f, 10., 1024, 1 << 20).unwrap();
         assert_eq!(l.size, [MIN_PAGE, MIN_PAGE]);
         assert!(!l.capped);
     }
@@ -702,10 +739,56 @@ mod tests {
                 [[l, l + 2, r], [r, l + 2, r + 2]]
             })
             .collect();
-        let l = layout(&positions, &faces, 0.1, 1024).unwrap();
+        let l = layout(&positions, &faces, 0.1, 1024, 1 << 20).unwrap();
         assert_eq!(l.charts.len(), 1);
         let area: u64 = l.charts.iter().map(|c| u64::from(c.size[0]) * u64::from(c.size[1])).sum();
         assert!(area < 160 * 20, "the rotated strip stays thin: {area} texels, unrotated ~111^2");
         assert!(l.charts.iter().all(|c| c.size[0] >= c.size[1]), "long side along u");
+    }
+
+    /// A long sliver across a 1024² page rasterises by row spans (exactly the texel
+    /// centres inside it, the same set a bounding-box scan finds) and a 50,000-face
+    /// bumpy grid's charts never exceed the growth cap after merging.
+    #[test]
+    fn slivers_raster_by_spans_and_merges_respect_the_cap() {
+        let sliver = [[1.3, 2.1], [1020.7, 1019.2], [1021.1, 1018.6]];
+        let size = [1024, 1024];
+        let mut spans = Vec::new();
+        raster(&sliver, size, &mut spans);
+        let mut boxed = Vec::new();
+        let den = (sliver[1][1] - sliver[2][1]) * (sliver[0][0] - sliver[2][0])
+            + (sliver[2][0] - sliver[1][0]) * (sliver[0][1] - sliver[2][1]);
+        for y in 0..1024u32 {
+            for x in 0..1024u32 {
+                let (cx, cy) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
+                let p = sliver;
+                let u = ((p[1][1] - p[2][1]) * (cx - p[2][0]) + (p[2][0] - p[1][0]) * (cy - p[2][1])) / den;
+                let v = ((p[2][1] - p[0][1]) * (cx - p[2][0]) + (p[0][0] - p[2][0]) * (cy - p[2][1])) / den;
+                if u >= -1e-9 && v >= -1e-9 && 1. - u - v >= -1e-9 {
+                    boxed.push(y * 1024 + x);
+                }
+            }
+        }
+        assert!(!boxed.is_empty());
+        assert_eq!(spans.iter().map(|t| t.0).collect::<Vec<_>>(), boxed);
+        // Bumpy grid: alternating tilts keep charts small, so merging is exercised.
+        let n = 160u32;
+        let positions: Vec<[f32; 3]> = (0..=n)
+            .flat_map(|i| (0..=n).map(move |j| [i as f32, ((i * 7 + j * 13) % 5) as f32 * 0.4, j as f32]))
+            .collect();
+        let faces: Vec<[u32; 3]> = (0..n)
+            .flat_map(|i| {
+                (0..n).flat_map(move |j| {
+                    let v = |a: u32, b: u32| a * (n + 1) + b;
+                    [[v(i, j), v(i, j + 1), v(i + 1, j)], [v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]]
+                })
+            })
+            .collect();
+        let (charts, chart_of) = grow(&positions, &faces);
+        assert!(charts.iter().all(|c| c.faces.len() <= CHART_FACES));
+        assert_eq!(charts.iter().map(|c| c.faces.len()).sum::<usize>(), faces.len());
+        for (i, c) in charts.iter().enumerate() {
+            assert!(c.faces.iter().all(|&f| chart_of[f] as usize == i));
+        }
     }
 }
