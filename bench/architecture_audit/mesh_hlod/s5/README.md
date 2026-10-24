@@ -91,3 +91,28 @@ an explicit format boundary, not a second interpretation of URI-resolved bytes.
 UINT64 columns cross decoder JSON as decimal strings and become exact Python
 integers before comparisons. The adjacent-integer leaf and representative
 controls distinguish 9007199254740992 from 9007199254740993.
+
+Execution receipt: source `b80917e1397e6b0e88215942ef1a608588402f0f`, S3 base
+`4e8aabfabe0c201438c790b24bc04150d5f41b3b`. Eight positive controls and 35 named
+negative controls plus retained I1 incomplete availability have zero false accepts;
+391 generated fixture members match the hash manifest. Each small census checks
+4 leaf triangles, 10 representatives, 2 segment/8 point visits, 1 T contact and
+all 8 mixed/4 same-depth disjoint ancestor pairs; no identity/interface errors.
+Final identity unit controls, Rust/CLI parity and all-target Clippy pass. Earlier
+C1/C2/I1/VS and H26 regression receipts are identified separately in the cache.
+Owned Rust formatting passes; inherited S3 producer formatting needs its owner's
+correction and is not changed here.
+
+The pinned tex3 archive passes archive validation in **0.797305 CPU-s / 70.4 MiB
+peak RSS** (0.805682 wall-s); crop3 is 1.020442 CPU-s / 71.0 MiB (1.050164 wall-s).
+Measured release binary SHA-256 is
+`cfe86c38dd874b6b774435622a047bc025608c18be67f9634d89da946d11cc4c`.
+Measurements use per-child wait4 accounting under the mandatory 10 GiB/zero-swap
+scope; this is separate from bake/source-distance CPU. No new bakes were needed.
+The retained real tex3 continuity failure remains a producer acceptance finding.
+
+Bulk immutable archives, binary, measurements, review probes and execution logs:
+`/home/bend/.cache/rusty-tiles-evidence/hlod-s5-20261024/`.
+`manifest.json` SHA-256: `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`. It binds each
+receipt to its source/artifact identities; earlier regression logs are explicitly
+historical. Full 2048 pair counts and scale/appearance/consumer gates remain S8.
