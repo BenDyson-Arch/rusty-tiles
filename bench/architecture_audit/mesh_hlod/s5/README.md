@@ -57,3 +57,18 @@ all eight depth-4 descendants below `root/1/0/0`. This reproduces today's loadin
 barrier lesson on the real bytes, without a browser. S5 owns detection; collapsing
 or republishing the hierarchy is S1's producer change. Until the revised base is
 published, archive integrity success must not be called integrated acceptance.
+
+Source identity columns admit raw unsigned SCALAR values. Arrays, normalization,
+value transforms, defaults and no-data modifiers are refused on these columns;
+source corners cannot use a declared null feature ID. The census reads every
+`contents` entry. Geometry-moving glTF extensions outside the admitted scene
+shape fail closed, including GPU instancing and morph targets. Review controls
+also corrupt correlated source ordinals/materials and exercise these modifiers.
+
+Identity inspection projects only its owned fields from C1-admitted raw JSON,
+using C1's exact unsigned-lexeme interpretation. Opaque `1e400` extras remain
+opaque, and integer spellings `0.0`/`3e0` remain accepted. Decoded view caching is
+bounded by the document decode limit; decode, schema, scalar, range and corner
+visits consume the remaining payload-element budget before work. Shared-accessor
+amplification has a preflight control. Facts and replay retain these work charges;
+no persistent producer record supplies validation facts.

@@ -133,9 +133,14 @@ def audit(root, expected):
         g = node.get('geometricError')
         require(isinstance(g,(int,float)) and math.isfinite(g) and g>=0,'geometricErrorFinite',str(g))
         require(g <= (parent['g'] if parent else doc['geometricError'])+1e-8,'geometricErrorOrder',str(g))
-        content = node.get('content')
+        require(not ('content' in node and 'contents' in node),'oracleDomain','both content forms')
+        contents = node.get('contents', [node['content']] if 'content' in node else [])
+        content = bool(contents)
         require(not (content and renderable_above and empty_between), 'replaceContentContinuity', f'depth {depth}')
-        faces = decode(root/content['uri'])['faces'] if content else []
+        faces=[]
+        for entry in contents:
+            require(not entry['uri'].endswith('.json'),'oracleDomain','source oracle requires inline explicit hierarchy')
+            faces.extend(decode(root/entry['uri'])['faces'])
         tile = dict(id=str(len(tiles)),g=g,faces=faces,depth=depth,parent=parent,children=[])
         tiles.append(tile)
         for child in node.get('children',[]):

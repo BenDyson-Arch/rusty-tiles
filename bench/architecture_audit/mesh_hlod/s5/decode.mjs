@@ -15,6 +15,7 @@ export async function decode(file) {
  const b=fs.readFileSync(file);
  if(b.toString('ascii',0,4)!=='glTF'||b.readUInt32LE(8)!==b.length)throw Error('codecStructure: GLB');
  const jl=b.readUInt32LE(12),j=JSON.parse(b.subarray(20,20+jl)),bin=b.subarray(28+jl),cache=new Map();
+ for(const [owner,allowed] of [[j,['EXT_structural_metadata']],...(j.nodes??[]).map(n=>[n,[]]),...(j.meshes??[]).map(m=>[m,[]]),...(j.meshes??[]).flatMap(m=>m.primitives.map(p=>[p,['EXT_mesh_features']]))])if(Object.keys(owner.extensions??{}).some(k=>!allowed.includes(k)))throw Error('unsupported oracle scene extension');
  if(j.animations||j.skins||j.meshes?.some(m=>m.weights||m.primitives.some(p=>p.targets))||j.nodes?.some(n=>n.weights))throw Error('unsupported oracle animation, skin or morph scene');
  async function view(id){
   if(cache.has(id))return cache.get(id);
@@ -34,7 +35,7 @@ export async function decode(file) {
  }
  const meta=j.extensions?.EXT_structural_metadata, tables=[];
  for(const t of meta?.propertyTables??[]){const props={};if(!meta.schema.classes[t.class])throw Error('metadataIntegrity');
-  for(const [key,p] of Object.entries(t.properties)){const schema=meta.schema.classes[t.class].properties[key];if(!schema||schema.type!=='SCALAR')throw Error('metadataIntegrity');if(!j.bufferViews[p.values])throw Error('metadataIntegrity');const raw=await view(p.values),d=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),wide=schema.componentType==='UINT64',width=wide?8:schema.componentType==='UINT8'?1:4;
+  for(const [key,p] of Object.entries(t.properties)){const schema=meta.schema.classes[t.class].properties[key];if(!schema||schema.type!=='SCALAR'||('normalized' in schema&&schema.normalized!==false)||('array' in schema&&schema.array!==false)||['count','offset','scale','noData','default'].some(k=>k in schema||k in p))throw Error('metadataIntegrity');if(!j.bufferViews[p.values])throw Error('metadataIntegrity');const raw=await view(p.values),d=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),wide=schema.componentType==='UINT64',width=wide?8:schema.componentType==='UINT8'?1:4;
    if(!['UINT8','UINT32','UINT64'].includes(schema.componentType)||raw.length<t.count*width)throw Error('metadataIntegrity');
    props[key]=Array.from({length:t.count},(_,i)=>Number(wide?d.getBigUint64(i*8,true):width===1?d.getUint8(i):d.getUint32(i*4,true)));
   }tables.push({class:t.class,count:t.count,props});
@@ -45,7 +46,7 @@ export async function decode(file) {
    if((p.mode??4)!==4)throw Error('unsupported oracle primitive mode');
    const pos=(await acc(p.attributes.POSITION)).map(v=>point(m,v)),idx=p.indices===undefined?pos.map((_,i)=>i):(await acc(p.indices)).flat(),sets=[];
    for(const f of p.extensions?.EXT_mesh_features?.featureIds??[]){if(f.attribute===undefined)continue;const values=(await acc(p.attributes[`_FEATURE_ID_${f.attribute}`])).flat();const table=tables[f.propertyTable];
-    if(!table||table.class!==f.label||f.featureCount!==table.count||values.length!==pos.length||values.some(i=>!Number.isInteger(i)||i<0||i>=table.count))throw Error('featureIdentity');sets.push({label:f.label,values,table});}
+    if(!table||table.class!==f.label||f.featureCount!==table.count||values.length!==pos.length||values.some(i=>!Number.isInteger(i)||i<0||i>=table.count||i===f.nullFeatureId))throw Error('featureIdentity');sets.push({label:f.label,values,table});}
    if(idx.length%3)throw Error('primitiveIndices');
    for(let k=0;k<idx.length;k+=3){const ids={};for(const s of sets){const a=s.values[idx[k]];if([1,2].some(c=>s.values[idx[k+c]]!==a))throw Error('featureIdentity');ids[s.label]=Object.fromEntries(Object.entries(s.table.props).map(([key,col])=>[key,col[a]]));}
     faces.push({xyz:idx.slice(k,k+3).map(i=>pos[i]),ids,source:[id,n.mesh,pi,k/3],material:p.material===undefined?null:j.materials[p.material]});

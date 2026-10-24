@@ -113,7 +113,12 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("classes", "source_primitive" | "source_triangle") => Some("class"),
             ("class", "properties") => Some("properties"),
             ("properties", _) => Some("property"),
-            ("property", "type" | "componentType" | "required") => Some("leaf"),
+            ("property", "type" | "componentType" | "required" | "normalized" | "array") => {
+                Some("leaf")
+            }
+            ("property" | "column", "count" | "offset" | "scale" | "noData" | "default") => {
+                Some("present")
+            }
             ("table", "class") => Some("leaf"),
             ("table", "count") => Some("number"),
             ("table", "properties") => Some("columns"),
@@ -121,7 +126,9 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
             ("column", "values") => Some("number"),
             ("features", "featureIds") => Some("sets"),
             ("set", "label") => Some("leaf"),
-            ("set", "attribute" | "featureCount" | "propertyTable") => Some("number"),
+            ("set", "attribute" | "featureCount" | "propertyTable" | "nullFeatureId") => {
+                Some("number")
+            }
             _ => None,
         };
         if let Some(next) = next {
@@ -343,9 +350,19 @@ pub(super) fn inspect(
                 return Err(fail());
             }
         }
+        work.charge(props.len())?;
         for (key, schema) in props {
             if schema["required"] != true && table["properties"].get(key).is_none() {
                 continue;
+            }
+            let column = &table["properties"][key];
+            if schema.get("normalized").is_some_and(|v| v != false)
+                || schema.get("array").is_some_and(|v| v != false)
+                || ["count", "offset", "scale", "noData", "default"]
+                    .iter()
+                    .any(|key| schema.get(key).is_some() || column.get(key).is_some())
+            {
+                return Err(fail());
             }
             if schema["type"] != "SCALAR" {
                 return Err(fail());
@@ -368,6 +385,7 @@ pub(super) fn inspect(
             }
         }
     }
+    let has_triangles = tables.iter().any(|t| t["class"] == "source_triangle");
     for mesh in doc["meshes"].as_array().into_iter().flatten() {
         for p in mesh["primitives"].as_array().into_iter().flatten() {
             let sets = p["extensions"]["EXT_mesh_features"]["featureIds"]
@@ -402,7 +420,12 @@ pub(super) fn inspect(
                 let ids = scalars(&doc, bin, id, &mut work)?;
                 if ids.len()
                     != uint(&doc["accessors"][uint(&p["attributes"]["POSITION"])?]["count"])?
-                    || ids.iter().any(|&i| i as usize >= count)
+                    || ids.iter().any(|&i| {
+                        i as usize >= count
+                            || set
+                                .get("nullFeatureId")
+                                .is_some_and(|n| n.as_u64() == Some(i as u64))
+                    })
                 {
                     return Err(fail());
                 }
@@ -428,7 +451,7 @@ pub(super) fn inspect(
                     }
                 }
             }
-            if !source || (tables.iter().any(|t| t["class"] == "source_triangle") && !triangle) {
+            if !source || (has_triangles && !triangle) {
                 return Err(fail());
             }
         }
