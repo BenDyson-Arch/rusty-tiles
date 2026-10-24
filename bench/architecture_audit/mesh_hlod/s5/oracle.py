@@ -213,9 +213,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
     transforms by standard glTF Y-up -> 3D Tiles Z-up. Source expectations stay
     in authored glTF coordinates. world frame retains placement and applies that
     conversion, so its source manifest must independently use the same frame.
-    Legacy H17 explicitly relaxes only D4 coarse identity; geometry/interfaces,
-    leaves, rendered attributes and winding remain checked.
+    HLOD is the only supported acceptance profile; profile selection cannot
+    weaken identity or representative checks.
     """
+    require(profile=='hlod','oracleDomain','unsupported acceptance profile: '+str(profile))
     from source_manifest import load_manifest
     with load_manifest(expected) as manifest, Archive(root) as archive, tempfile.TemporaryDirectory(prefix='s5-oracle-',dir=scratch) as temporary:
         metadata=manifest.get('metadata',{})
@@ -261,7 +262,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
         # the overwhelmingly common root-only placement case.
         work=Work(work_limit)
         store=Store(Path(temporary)/'census.sqlite',work)
-        leaf_count=representatives=legacy=0
+        leaf_count=representatives=0
         attributes=collections.Counter()
         try:
             for t in tiles:
@@ -280,9 +281,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         ids=f['ids']
                         # Every HLOD payload participates, even if its identity
                         # declarations were completely removed by a mutant.
-                        if profile=='hlod':
-                            require('source_primitive' in ids,'featureIdentity',uri)
-                            require(not t['children'] or 'source_triangle' not in ids,'featureIdentity','coarse source_triangle '+uri)
+                        require('source_primitive' in ids,'featureIdentity',uri)
+                        require(not t['children'] or 'source_triangle' not in ids,'featureIdentity','coarse source_triangle '+uri)
                         t['rendered']=True
                         if not t['children']:
                             key,want=check_leaf(f,manifest,attributes,geometry=False)
@@ -311,14 +311,12 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     p=[sum(v[k] for v in f['xyz'])/3 for k in range(3)]
                     nearest,want=store.nearest(p,t['lo'],t['hi'],distance2)
                     actual=f['ids'].get('source_primitive',{})
-                    if profile=='hlod':
-                        require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'representativeIdentity',t['id'])
-                        require(tuple(actual.get(k) for k in KEYS[:3])==nearest[:3],'representativeIdentity',t['id'])
-                        representatives+=1
-                    else: legacy+=1
+                    require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'representativeIdentity',t['id'])
+                    require(tuple(actual.get(k) for k in KEYS[:3])==nearest[:3],'representativeIdentity',t['id'])
+                    representatives+=1
                     require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
-                          legacyCoarseTriangles=legacy,coordinateFrame=coordinate_frame,profile=profile,
+                          coordinateFrame=coordinate_frame,profile=profile,
                           leafSourcePointsChecked=source_points,
                           candidateWork=work.used,sourceManifestSha256=file_hash(expected))
             result['attributes']=dict(attributes)
@@ -342,7 +340,7 @@ if __name__=='__main__':
     p.add_argument('root');p.add_argument('expected')
     p.add_argument('--scratch');p.add_argument('--work-limit',type=int,default=300_000_000)
     p.add_argument('--coordinate-frame',choices=('root','world'),default='root')
-    p.add_argument('--profile',choices=('hlod','h17'),default='hlod')
+    p.add_argument('--profile',choices=('hlod',),default='hlod')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,

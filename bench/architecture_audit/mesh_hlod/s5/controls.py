@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import runpy
 import struct
+import subprocess
 import sys
 
 POINTS = [
@@ -330,4 +331,16 @@ if __name__=='__main__':
             assert e.check==c['oracleCheck'], (c,e)
             result=dict(ok=False,check=e.check)
         results.append(dict(name=c['name'],**result))
+    # Profile selection must never turn a wrong representative into acceptance.
+    for profile in ('h17','unknown'):
+        try:
+            audit(root/'wrong-representative',root/'source.json',profile=profile)
+        except Failure as error:
+            assert error.check=='oracleDomain' and 'unsupported acceptance profile' in error.detail
+        else:
+            raise AssertionError('unsupported profile accepted: '+profile)
+        refused=subprocess.run([sys.executable,str(Path(__file__).with_name('oracle.py')),
+            str(root/'wrong-representative'),str(root/'source.json'),'--profile',profile],
+            capture_output=True,text=True,timeout=10)
+        assert refused.returncode==2 and 'invalid choice' in refused.stderr,(profile,refused)
     print(json.dumps(results,indent=2))

@@ -229,3 +229,22 @@ source-aware campaign, not producer reports.
 Receipts are retained under the same evidence cache's `exact-d1/` directory;
 its `sha256.json` has SHA256
 `43aae428cd257339d266fb27b0a4ed4d61d29de9ba31ac262ee2ceeef6705350`.
+
+R11 reviewed `284c6391` and reproduced one P2: the surviving H17 profile could
+bypass representative identity. The relaxation is removed; HLOD checks are
+unconditional and unsupported API/CLI profiles refuse. The 52 applicable base
+cases pass, including the wrong representative, plus H17/unknown API and CLI
+refusals. All 503 base fixture hashes remain unchanged. The exact R11 witness
+now fails `representativeIdentity` in HLOD mode and cannot return acceptance
+under either unsupported profile. This correction has no fresh nonauthor review
+yet; the owner requested handoff without another Codex review.
+
+R11's source/resource/width findings and correction receipts are cached under
+`r11-profile-fix/`, with immutable manifest `sha256-r11-profile-fix.json`, SHA256
+`ae5e81bcd67fcf4a1314f89ef1f14e3e1bcec32157943decee5ab7ad6fcd6b2f`.
+The hard 8,192 limit and upward-omission/frontier checks remain pending. The
+above-cap positive described above is superseded, not current-contract evidence.
+Neither `055be853` nor the withdrawn `8074b7db` clone-frontier head was merged.
+The next S1 head must publish the top-connected empty cap before integration.
+D11 border certificates, E/G inequalities, terminal locks, appearance continuity
+and topology-loss audits remain deferred to S1b's implementation.
