@@ -33,6 +33,8 @@ use crate::{
     JobError, JobErrorKind,
 };
 
+use std::cell::Cell;
+
 fn state(message: &str) -> JobError {
     JobError::new(JobErrorKind::InvalidState, message.to_owned())
 }
@@ -244,13 +246,17 @@ pub(crate) fn scratch_need(triangles: u64, sorter: SortConfig) -> Option<u64> {
         .checked_add(item.stream_slack)?
         .checked_add(rows.push_peak)?
         .checked_add(overlap)?;
-    let walk = rows.finish_peak.checked_add(rows.stream_slack)?;
+    let walk = rows
+        .finish_peak
+        .checked_add(rows.stream_slack)?
+        .checked_add(items.checked_mul(Candidate::SIZE as u64)?)?
+        .checked_add(overlap)?;
     Some(item.finish_peak.max(reduce).max(walk))
 }
 
 /// Resident bound of the pass: two sorters live at once (items or probes streamed into
 /// rows), one leaf's deduplicated items, one item group (at most one item per leaf, in a
-/// vector at most twice that), one grid cell's hosts (twice: held and a dense cell's scan
+/// vector plus its reallocation transient (at most three times that)), one grid cell's hosts (twice: held and a dense cell's scan
 /// chunk) and the sequences a dense cell's split keeps open.
 pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, leaves: u64) -> u64 {
     let item = std::mem::size_of::<Item>() as u64;
@@ -259,7 +265,7 @@ pub(crate) fn memory_need(sorter: SortConfig, leaf_triangles: u64, leaves: u64) 
         .max(sorter.memory_bound::<Item>())
         .saturating_add(sorter.memory_bound::<InterfaceRow>())
         .saturating_add(leaf_triangles.saturating_mul(12 * item))
-        .saturating_add(leaves.saturating_mul(2 * item))
+        .saturating_add(leaves.saturating_mul(3 * item))
         .saturating_add(2 * (CELL_HOSTS as u64) * std::mem::size_of::<Probe>() as u64)
         .saturating_add(SPLIT_STREAMS.saturating_mul(sorter.buffer_bytes as u64))
 }
@@ -599,7 +605,10 @@ struct Join {
 
 impl Join {
     fn pad(&self, h: &Candidate) -> f64 {
-        f64::from(f32::from_bits(h.tol)).max(self.guest_tol) + rounding(&[h.a, h.b]).max(self.floor)
+        // The predicate allows independent axial and perpendicular offsets <=tol.
+        // Their combined displacement is <=sqrt(2)*tol; twice the radius covers it.
+        2. * (f64::from(f32::from_bits(h.tol)).max(self.guest_tol)
+            + rounding(&[h.a, h.b]).max(self.floor))
     }
     /// The host's level and its cell range there (at most two cells per axis).
     fn cells(&self, h: &Candidate) -> Result<(u8, [i32; 3], [i32; 3]), JobError> {
@@ -639,6 +648,42 @@ fn overlap_allowance(triangles: u64) -> u64 {
         .max(OVERLAP_FLOOR_BYTES)
 }
 
+/// Shared prospective charge for every live join stream. Exact-item files have
+/// been consumed, so their admitted space is reusable. Probe generations stay
+/// conservatively charged in full while row bursts and dense spills grow.
+struct JoinCharge {
+    limit: u64,
+    candidates: u64,
+    probe_sort: u64,
+    sorter: SortConfig,
+    rows: Cell<u64>,
+    live: Cell<u64>,
+}
+impl JoinCharge {
+    fn check(&self, rows: u64, live: u64) -> Result<(), JobError> {
+        let row_sort = config::sort_spill::<InterfaceRow>(rows, self.sorter)
+            .and_then(|s| s.finish_peak.checked_add(s.stream_slack))
+            .ok_or_else(|| {
+                JobError::new(JobErrorKind::ResourceLimit, "interface row spill overflow")
+            })?;
+        let need = self
+            .candidates
+            .saturating_add(self.probe_sort)
+            .saturating_add(row_sort)
+            .saturating_add(live);
+        if need > self.limit {
+            return Err(JobError::new(
+                JobErrorKind::ResourceLimit,
+                format!(
+                    "overlap join needs {need} scratch bytes, above its admitted {}",
+                    self.limit
+                ),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// The grid join of open points (guests) against open segments of other leaves (hosts):
 /// streamed in sorted cells, each cell's hosts in memory up to [`CELL_HOSTS`]; a denser
 /// cell is spilled, split into octants to a bounded depth and finished by a chunked scan,
@@ -661,7 +706,10 @@ fn overlaps<'s>(
     // Exact probe count and host levels before anything is written.
     let mut host_levels = 0u32;
     let mut probes_count = 0u64;
-    for host in hosts.reader()? {
+    for (i, host) in hosts.reader()?.enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
         let (level, lo, hi) = join.cells(&host?)?;
         host_levels |= 1 << level;
         probes_count += (0..3).map(|i| (hi[i] - lo[i] + 1) as u64).product::<u64>();
@@ -687,8 +735,28 @@ fn overlaps<'s>(
         crate::spill::SpaceRole::Scratch,
         crate::spill::PreflightStage::Lod,
     )?;
+    let charge = JoinCharge {
+        limit: scratch_need(triangles, sorter).ok_or_else(|| {
+            JobError::new(
+                JobErrorKind::ResourceLimit,
+                "interface stage spill overflow",
+            )
+        })?,
+        candidates: hosts
+            .len()
+            .saturating_add(guests.len())
+            .saturating_mul(Candidate::SIZE as u64),
+        probe_sort: sort,
+        sorter,
+        rows: Cell::new(stats.rows),
+        live: Cell::new(0),
+    };
+    charge.check(stats.rows, 0)?;
     let mut probes = ExternalSorter::<Probe>::new(scratch, sorter)?;
-    for host in hosts.reader()? {
+    for (i, host) in hosts.reader()?.enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
         let h = host?;
         let (level, lo, hi) = join.cells(&h)?;
         for x in lo[0]..=hi[0] {
@@ -708,7 +776,10 @@ fn overlaps<'s>(
             }
         }
     }
-    for guest in guests.reader()? {
+    for (i, guest) in guests.reader()?.enumerate() {
+        if i.is_multiple_of(1024) {
+            check()?;
+        }
         let g = guest?;
         for level in (0..=MAX_LEVEL).filter(|l| host_levels & (1 << l) != 0) {
             probes.push(Probe {
@@ -728,10 +799,15 @@ fn overlaps<'s>(
         sorter,
         join,
         budget: allowance - sort,
-        live: 0,
+        charge: &charge,
         check,
     };
+    let mut pairs = 0u64;
     let mut emit = |h: &Probe, g: &Probe, stats: &mut IncidenceStats| -> Result<(), JobError> {
+        pairs += 1;
+        if pairs.is_multiple_of(256) {
+            check()?;
+        }
         if h.leaf == g.leaf {
             return Ok(());
         }
@@ -740,6 +816,7 @@ fn overlaps<'s>(
         if !on_segment(h.a, h.b, g.a, tol) {
             return Ok(());
         }
+        charge.check(stats.rows.saturating_add(4), charge.live.get())?;
         stats.overlaps += 1;
         let (lo, hi) = (h.leaf.min(g.leaf), h.leaf.max(g.leaf));
         for (leaf, a, b) in [
@@ -751,6 +828,7 @@ fn overlaps<'s>(
             rows.push(InterfaceRow { leaf, a, b, lo, hi })?;
             stats.rows += 1;
         }
+        charge.rows.set(stats.rows);
         Ok(())
     };
     let mut cell_hosts: Vec<Probe> = Vec::with_capacity(CELL_HOSTS);
@@ -781,7 +859,7 @@ fn overlaps<'s>(
                 cut_hi: [false; 3],
             };
             dense.join_spilled(&h, &g, region, 0, emit, stats)?;
-            dense.live -= dense.bytes(&h) + dense.bytes(&g);
+            dense.release(dense.bytes(&h) + dense.bytes(&g));
             Ok(())
         };
     for probe in probes.finish()? {
@@ -892,7 +970,7 @@ struct Dense<'c, 's> {
     sorter: SortConfig,
     join: Join,
     budget: u64,
-    live: u64,
+    charge: &'c JoinCharge,
     check: &'c (dyn Fn() -> Result<(), JobError> + Sync),
 }
 
@@ -901,8 +979,8 @@ impl<'s> Dense<'_, 's> {
         s.len() * Probe::SIZE as u64
     }
     fn push(&mut self, w: &mut SequenceWriter<Probe>, p: &Probe) -> Result<(), JobError> {
-        self.live += Probe::SIZE as u64;
-        if self.live > self.budget {
+        let live = self.charge.live.get().saturating_add(Probe::SIZE as u64);
+        if live > self.budget {
             return Err(JobError::new(
                 JobErrorKind::ResourceLimit,
                 format!(
@@ -912,8 +990,13 @@ impl<'s> Dense<'_, 's> {
                 ),
             ));
         }
+        self.charge.check(self.charge.rows.get(), live)?;
+        self.charge.live.set(live);
         w.push(p)?;
         Ok(())
+    }
+    fn release(&self, bytes: u64) {
+        self.charge.live.set(self.charge.live.get() - bytes);
     }
     fn writer(&self, stem: &str) -> Result<SequenceWriter<Probe>, JobError> {
         Ok(SequenceWriter::<Probe>::new(
@@ -943,7 +1026,10 @@ impl<'s> Dense<'_, 's> {
                 (self.check)()?;
                 let octant = region.octant(o);
                 let mut h = self.writer("hlod-dense-hosts")?;
-                for q in hosts.reader()? {
+                for (i, q) in hosts.reader()?.enumerate() {
+                    if i.is_multiple_of(256) {
+                        (self.check)()?;
+                    }
                     let q = q?;
                     let pad = self.join.pad(&Candidate {
                         leaf: q.leaf,
@@ -956,7 +1042,10 @@ impl<'s> Dense<'_, 's> {
                     }
                 }
                 let mut g = self.writer("hlod-dense-guests")?;
-                for q in guests.reader()? {
+                for (i, q) in guests.reader()?.enumerate() {
+                    if i.is_multiple_of(256) {
+                        (self.check)()?;
+                    }
                     let q = q?;
                     if octant.holds(point(q.a)) {
                         self.push(&mut g, &q)?;
@@ -965,7 +1054,7 @@ impl<'s> Dense<'_, 's> {
                 let (h, g) = (h.finish()?, g.finish()?);
                 stats.dense_splits += 1;
                 self.join_spilled(&h, &g, octant, depth + 1, emit, stats)?;
-                self.live -= self.bytes(&h) + self.bytes(&g);
+                self.release(self.bytes(&h) + self.bytes(&g));
             }
             return Ok(());
         }
@@ -1137,11 +1226,145 @@ mod tests {
         assert!(brute > 0);
     }
 
+    #[test]
+    fn dense_partition_cancels_even_when_every_candidate_is_pruned() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // Entry plus ceil((CELL_HOSTS + 1) / 256) host checks precede the
+        // guest scan. Interrupt each scan before its first partition completes.
+        let host_checks = (CELL_HOSTS + 1).div_ceil(256);
+        for stop in [3, 1 + host_checks + 2] {
+            let dir = tempfile::tempdir().unwrap();
+            let scratch = Scratch::create(Some(dir.path()), 0).unwrap();
+            let mut h = SequenceWriter::<Probe>::new(&scratch, "hosts", 4096).unwrap();
+            let mut g = SequenceWriter::<Probe>::new(&scratch, "guests", 4096).unwrap();
+            for _ in 0..=CELL_HOSTS {
+                let p = Probe {
+                    level: 0,
+                    cell: [0; 3],
+                    guest: false,
+                    leaf: 0,
+                    a: k([10., 10., 10.]),
+                    b: k([11., 10., 10.]),
+                    tol: 0f32.to_bits(),
+                };
+                h.push(&p).unwrap();
+                g.push(&p).unwrap();
+            }
+            let (h, g) = (h.finish().unwrap(), g.finish().unwrap());
+            let charge = JoinCharge {
+                limit: 64 << 20,
+                candidates: 0,
+                probe_sort: 0,
+                sorter: SORT,
+                rows: Cell::new(0),
+                live: Cell::new((h.len() + g.len()) * Probe::SIZE as u64),
+            };
+            let initial_live = charge.live.get();
+            let calls = AtomicUsize::new(0);
+            let check = || {
+                if calls.fetch_add(1, Ordering::Relaxed) + 1 == stop {
+                    Err(JobError::new(JobErrorKind::Cancelled, "partition control"))
+                } else {
+                    Ok(())
+                }
+            };
+            let mut dense = Dense {
+                scratch: &scratch,
+                sorter: SORT,
+                join: Join {
+                    cube: Cube {
+                        origin: [0.; 3],
+                        side: 1.,
+                    },
+                    guest_tol: 0.,
+                    floor: 0.,
+                },
+                budget: 64 << 20,
+                charge: &charge,
+                check: &check,
+            };
+            let mut stats = IncidenceStats::default();
+            let error = dense
+                .join_spilled(
+                    &h,
+                    &g,
+                    Region {
+                        lo: [0.; 3],
+                        hi: [1.; 3],
+                        cut_lo: [true; 3],
+                        cut_hi: [true; 3],
+                    },
+                    0,
+                    &mut |_, _, _| panic!("all candidates must be pruned"),
+                    &mut stats,
+                )
+                .unwrap_err();
+            assert_eq!(error.kind(), JobErrorKind::Cancelled);
+            assert_eq!(stats.dense_splits, 0, "scan completed before cancellation");
+            assert_eq!(charge.live.get(), initial_live);
+        }
+    }
+
     /// A group of one item per leaf is charged in the stage's resident bound.
     #[test]
     fn item_groups_are_charged_per_leaf() {
         let base = memory_need(SORT, 256, 0);
         let more = memory_need(SORT, 256, 1 << 20);
         assert!(more - base >= (1 << 20) * std::mem::size_of::<Item>() as u64);
+    }
+    #[test]
+    fn diagonal_endpoint_offset_is_inside_the_candidate_box() {
+        let cube = Cube {
+            origin: [0.; 3],
+            side: 16.,
+        };
+        let host = (0, k([2.3125, 3., 0.]), k([3.8125, 4.5, 0.]), 1f32 / 16.);
+        let guest = (1, k([4.5, 4.5, 0.]), 0.5f32);
+        assert!(on_segment(host.1, host.2, guest.1, 0.5));
+        let (rows, stats) = join(cube, &[host], &[guest]);
+        assert_eq!(stats.overlaps, 1);
+        assert_eq!(rows.len(), 4);
+    }
+    #[test]
+    fn row_spill_refuses_before_the_admitted_prefix_is_exceeded() {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = Scratch::create(Some(dir.path()), 4096).unwrap();
+        scratch.set_chunk_bytes(64);
+        let sorter = SortConfig {
+            run_bytes: 256,
+            fan_in: 2,
+            buffer_bytes: 16,
+            jobs: 1,
+        };
+        let charge = JoinCharge {
+            limit: 4096,
+            candidates: 128,
+            probe_sort: 256,
+            sorter,
+            rows: Cell::new(0),
+            live: Cell::new(0),
+        };
+        let mut rows = ExternalSorter::new(&scratch, sorter).unwrap();
+        let mut count = 0;
+        loop {
+            if let Err(error) = charge.check(count + 1, 0) {
+                assert_eq!(error.kind(), JobErrorKind::ResourceLimit);
+                break;
+            }
+            rows.push(InterfaceRow {
+                leaf: count as u32,
+                a: [0; 3],
+                b: [0; 3],
+                lo: 0,
+                hi: 1,
+            })
+            .unwrap();
+            count += 1;
+            charge.rows.set(count);
+        }
+        assert!(count > 0 && count < 1000);
+        assert!(scratch.peak_bytes() <= 4096);
+        assert!(charge.check(count, 4096).is_err());
     }
 }

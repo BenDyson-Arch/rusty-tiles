@@ -172,21 +172,6 @@ pub(crate) struct TileError {
     pub policy: &'static str,
 }
 
-/// S1's error policy, until S2's sampled two-sided measurement replaces it: the largest of
-/// the children's errors, meshopt's absolute error estimate and the coarse lattice move.
-/// Monotone and finite, but an estimate: not sampled, not a bound.
-pub(crate) const PROVISIONAL_POLICY: &str = "hlod-s1-provisional-simplifier-estimate";
-
-pub(crate) fn provisional_error(tile: &CoarseTile<'_>) -> TileError {
-    TileError {
-        geometric_error: tile
-            .children_error
-            .max(tile.simplifier_error)
-            .max(tile.encode_displacement),
-        policy: PROVISIONAL_POLICY,
-    }
-}
-
 /// The persisted handoff row of one coarse tile (`proxies.jsonl`, postorder). Delivery
 /// reads `uri`, `sha256`, `bytes`, `first`, `end`, `depth`, `geometricError` and
 /// `primitives`; the rest is the S1 record S2/S3 extend.
@@ -207,6 +192,11 @@ pub(crate) struct HlodRow {
     pub leaf_end: u32,
     pub geometric_error: f64,
     pub error_policy: &'static str,
+    pub measurement: super::error::Summary,
+    #[serde(skip)]
+    pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub error_cpu: super::error::CpuReport,
     pub children_error: f64,
     pub simplifier_error: f64,
     pub encode_displacement: f64,

@@ -670,7 +670,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             ));
         }
         if let Some(rows) = self.proxies.as_mut() {
-            if self.lookahead.is_some() || rows.next().is_some() {
+            if self.lookahead.is_some() || rows.next().transpose()?.is_some() {
                 return Err(JobError::new(
                     JobErrorKind::InvalidInput,
                     "proxies.jsonl has rows beyond the internal tiles",

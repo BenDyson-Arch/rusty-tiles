@@ -14,10 +14,12 @@
 //! each is a pure function of its children, so output is identical for any job count or
 //! budget. It writes `proxies/` and `proxies.jsonl` (postorder) for H16 delivery, exactly
 //! where H17 did; coarse tiles are untextured (flat class materials) until S3, and their
-//! error is S1's provisional estimate until S2.
+//! error is measured against the source in both directions by S2.
 mod encode;
+pub(crate) mod error;
 mod geometry;
 pub(crate) mod interfaces;
+pub(crate) mod source_index;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
@@ -55,7 +57,7 @@ pub enum TilerLod {
     /// H17 certified geometry with the H27 proxy bake (current default).
     #[default]
     H17,
-    /// 0.4 classic octree HLOD (S1: untextured coarse tiles, provisional error).
+    /// 0.4 classic octree HLOD (untextured coarse tiles, measured source error).
     Hlod,
 }
 
@@ -154,6 +156,7 @@ pub(crate) fn plan(
     let job = merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
         .saturating_add(JOB_ENCODE_BYTES)
+        .saturating_add(source_index::QUERY_BYTES + error::WORK_BYTES)
         .saturating_add(TileGeometry::charge(cap as u64));
     let sorter = config.sorter(1);
     let incidence = interfaces::memory_need(sorter, leaf_cap, captured.tree.stats.leaves);
@@ -168,6 +171,7 @@ pub(crate) fn plan(
         .owned_metadata_bytes
         .saturating_add(captured.report.memory.geometry.document_bytes)
         .saturating_add(STAGE_RESERVE)
+        .saturating_add(source_index::BUILD_BYTES)
         .saturating_add(streams);
     let minimum = fixed.saturating_add(incidence.max(window.saturating_add(job)));
     let tmpfs = if captured.scratch.memory_backed() {
@@ -243,6 +247,11 @@ pub(crate) struct HlodReport {
     pub pass_through: u64,
     pub max_error_by_depth: Vec<f64>,
     pub incidence: IncidenceStats,
+    pub error_measurement: error::ErrorReport,
+    #[serde(skip)]
+    pub error_cpu_seconds: f64,
+    #[serde(skip)]
+    pub error_cpu: error::CpuReport,
 }
 
 /// Run facts of the stage outside the deterministic manifest.
@@ -253,6 +262,10 @@ pub struct HlodDiagnostics {
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
     pub incidence_cpu_seconds: Option<f64>,
+    /// Source-index construction plus summed worker-thread measurement/identity CPU.
+    pub error_cpu_seconds: Option<f64>,
+    pub error_cpu: error::CpuReport,
+    pub error_measurement: error::ErrorReport,
     pub wall_seconds: f64,
     pub incidence_scratch_peak_bytes: u64,
     /// Highest simultaneously leased bytes of the walk's ledger.
@@ -345,9 +358,10 @@ pub(crate) fn produce(
     let mut report = HlodReport {
         schema_version: 1,
         method: "octree-hlod",
-        error_policy: store::PROVISIONAL_POLICY,
+        error_policy: error::POLICY,
         appearance: "untextured: flat material-class factors and smooth normals until S3",
         triangle_cap: settings.cap as u64,
+        error_measurement: error::ErrorReport {policy:error::POLICY,seed_rule:"SplitMix64; 0x5332202610240001 xor first*0x9e3779b97f4a7c15 xor rotl(end,23) xor depth; P-to-S xor 0xa5a5a5a5a5a5a5a5",..Default::default()},
         ..Default::default()
     };
     let mut diagnostics = HlodDiagnostics {
@@ -388,7 +402,24 @@ pub(crate) fn produce(
         incidence_started.elapsed().as_secs_f64(),
     )?;
     let walk_started = std::time::Instant::now();
-    let result = walk(&input, rows, &rows_path, &mut report, check);
+    let index_start = resources::process_cpu_seconds();
+    let source = source_index::SourceIndex::build(captured, check)?;
+    let sampling = error::SamplingPlan::new(captured)?;
+    let index_cpu = resources::process_cpu_seconds()
+        .zip(index_start)
+        .map(|(b, a)| b - a);
+    let result = walk(
+        &input,
+        rows,
+        &rows_path,
+        &mut report,
+        &source,
+        &sampling,
+        check,
+    );
+    diagnostics.error_cpu_seconds = index_cpu.map(|s| s + report.error_cpu_seconds);
+    diagnostics.error_cpu = report.error_cpu;
+    diagnostics.error_cpu.index = index_cpu.unwrap_or(0.);
     diagnostics.incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     let bound = captured.report.scratch.stages.lod_prepass;
     let lease_peak = result?;
@@ -401,6 +432,7 @@ pub(crate) fn produce(
     input
         .phases
         .finished(Phase::HlodGeometry, walk_started.elapsed().as_secs_f64())?;
+    diagnostics.error_measurement = report.error_measurement.clone();
     diagnostics.tiles = report.tiles;
     diagnostics.lease_peak_bytes = lease_peak;
     diagnostics.cpu_seconds = resources::process_cpu_seconds()
@@ -645,11 +677,15 @@ fn shrink(tile: &mut TileGeometry) {
 fn build_tile(
     closed: &Closed,
     children: Vec<TileGeometry>,
-    captured: &FullCaptured,
+    input: &HlodInput<'_>,
     materials: &[Value],
-    stage: &Path,
-    settings: Settings,
+    source: &source_index::SourceIndex,
+    sampling: &error::SamplingPlan,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Done {
+    let captured = input.captured;
+    let settings = input.settings;
+    let stage = input.stage;
     let mut built = if closed.single_leaf {
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
         match geometry::build_parent(closed.key, &children, half) {
@@ -675,31 +711,92 @@ fn build_tile(
             tile.representative.remove(t);
         }
     }
+    let cpu_start = error::thread_cpu();
+    let mut query = source.query(captured, built.geometry.key)?;
+    // Identity is chosen on the final decoded centroid, in the descendant SOURCE range.
+    // Charting/encoding must preserve these positions and source rows in S3.
+    // Keep S1's open-border vertices at their leaf-canonical decode. Prepare once:
+    // both representatives and measurement consume this same final publication.
+    let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
+    let fixed: Vec<bool> = built
+        .locked
+        .iter()
+        .zip(&border)
+        .map(|(l, b)| *l || *b)
+        .collect();
+    let positions = captured.lattice.encode_coarse(
+        &built.geometry.positions,
+        &built.geometry.ells,
+        &fixed,
+        built.geometry.key.depth,
+    )?;
+    let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
+    let mut centroid_checks = Vec::with_capacity(built.geometry.triangles.len());
+    for (i, t) in built.geometry.triangles.iter().enumerate() {
+        if i % 256 == 0 {
+            check()?;
+        }
+        let p = std::array::from_fn(|a| {
+            t.iter()
+                .map(|&v| f64::from(positions.decoded[v as usize][a]))
+                .sum::<f64>()
+                / 3.
+        });
+        let hit = query.nearest(p)?;
+        representatives.push(query.primitive(hit));
+        centroid_checks.push(hit.distance2.sqrt());
+    }
+    let mut table = representatives.clone();
+    table.sort_unstable();
+    table.dedup();
+    built.geometry.representative = representatives
+        .iter()
+        .map(|p| table.binary_search(p).unwrap() as u32)
+        .collect();
+    built.geometry.primitives = table;
+    let identity_cpu = error::thread_cpu().zip(cpu_start).map(|(b, a)| b - a);
     let tile = &built.geometry;
     let encoded = encode::encode(
         tile,
         &built.locked,
-        &captured.lattice,
+        positions,
         materials,
         &captured.material_classes,
         settings.mutation,
     )?;
-    if settings.mutation != Mutation::MoveVertexUnchecked {
-        encode::check(tile, &built.locked, &encoded.glb)?;
-    }
-    let error = store::provisional_error(&CoarseTile {
-        key: tile.key,
-        decoded: &encoded.decoded,
-        triangles: &tile.triangles,
-        locked: &built.locked,
-        representative: &tile.representative,
-        primitives: &tile.primitives,
-        bounds: encoded.bounds,
-        children_error: built.children_error,
-        simplifier_error: built.simplifier_error,
-        encode_displacement: encoded.displacement,
-        stopping: built.stopping,
-    });
+    let published = if settings.mutation != Mutation::MoveVertexUnchecked {
+        encode::check(tile, &built.locked, &encoded)?
+    } else {
+        crate::mesh_large::lod::codec::decode(&encoded.glb)?;
+        encoded.decoded.clone()
+    };
+    let sha256: [u8; 32] = Sha256::digest(&encoded.glb).into();
+    let count = sampling.count(tile.key)?;
+    let cpu_start = error::thread_cpu();
+    let (error, measurement, mut error_cpu) = error::measure(
+        &CoarseTile {
+            key: tile.key,
+            decoded: &published,
+            triangles: &tile.triangles,
+            locked: &built.locked,
+            representative: &tile.representative,
+            primitives: &tile.primitives,
+            bounds: encoded.bounds,
+            children_error: built.children_error,
+            simplifier_error: built.simplifier_error,
+            encode_displacement: encoded.displacement,
+            stopping: built.stopping,
+        },
+        &mut query,
+        count,
+        &centroid_checks,
+        check,
+    )?;
+    error_cpu.representatives = identity_cpu.unwrap_or(0.);
+    let error_cpu_seconds = error::thread_cpu()
+        .zip(cpu_start)
+        .zip(identity_cpu)
+        .map_or(0., |((b, a), i)| b - a + i);
     if !error.geometric_error.is_finite() || error.geometric_error < built.children_error {
         return Err(state("coarse error is nonfinite or below its children's"));
     }
@@ -713,10 +810,7 @@ fn build_tile(
     let row = HlodRow {
         schema_version: 1,
         uri,
-        sha256: Sha256::digest(&encoded.glb)
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect(),
+        sha256: sha256.iter().map(|b| format!("{b:02x}")).collect(),
         bytes: encoded.glb.len() as u64,
         first: tile.key.first,
         end: tile.key.end,
@@ -726,6 +820,9 @@ fn build_tile(
         leaf_end: tile.key.leaf_end,
         geometric_error: error.geometric_error,
         error_policy: error.policy,
+        measurement,
+        error_cpu_seconds,
+        error_cpu,
         children_error: built.children_error,
         simplifier_error: built.simplifier_error,
         encode_displacement: encoded.displacement,
@@ -743,10 +840,13 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
+    shrink(&mut geometry);
     Ok((geometry, row))
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
+    report.error_cpu_seconds += row.error_cpu_seconds;
+    report.error_cpu.add(row.error_cpu);
     report.tiles += 1;
     report.triangles += u64::from(row.triangles);
     report.max_triangles = report.max_triangles.max(u64::from(row.triangles));
@@ -766,7 +866,17 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
         report.float_tiles += 1;
     }
     report.bytes += row.bytes;
-    let depth = row.depth as usize;
+    let depth = row.encoded_depth as usize;
+    if report.error_measurement.by_depth.len() <= depth {
+        report
+            .error_measurement
+            .by_depth
+            .resize_with(depth + 1, Default::default);
+    }
+    report.error_measurement.by_depth[depth].add(row.measurement, row.geometric_error);
+    if row.depth == 0 {
+        report.error_measurement.root = Some(row.measurement);
+    }
     if report.max_error_by_depth.len() <= depth {
         report.max_error_by_depth.resize(depth + 1, 0.);
     }
@@ -779,9 +889,12 @@ fn walk(
     rows: crate::spill::SortedStream<'_, InterfaceRow>,
     rows_path: &Path,
     report: &mut HlodReport,
+    source: &source_index::SourceIndex,
+    sampling: &error::SamplingPlan,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<u64, JobError> {
     let captured = input.captured;
+    let stage = input.stage;
     let plan = input.plan;
     let settings = input.settings;
     let materials = encode::flat_materials(&captured.materials);
@@ -824,7 +937,6 @@ fn walk(
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
         let mut leaf = 0u32;
         let materials = &materials;
-        let stage = input.stage;
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
         let spawn = |pending: &mut Vec<Closed>,
@@ -851,8 +963,9 @@ fn walk(
                 scope.spawn(move |_| {
                     let (id, seq) = (closed.id, closed.seq);
                     let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let mut built =
-                            build_tile(&closed, children, captured, materials, stage, settings)?;
+                        let mut built = build_tile(
+                            &closed, children, input, materials, source, sampling, check,
+                        )?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
                         let mut lease = job_lease;

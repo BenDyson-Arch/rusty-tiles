@@ -206,6 +206,8 @@ pub(crate) struct ProxyRow {
     pub depth: u32,
     pub geometric_error: f64,
     pub primitives: u32,
+    pub sample_count: Option<u64>,
+    pub encoded_depth: u32,
 }
 
 #[derive(Deserialize)]
@@ -218,16 +220,51 @@ struct ProxyWire {
     first: u64,
     end: u64,
     depth: u32,
+    #[serde(default)]
+    encoded_depth: Option<u32>,
     geometric_error: f64,
     primitives: u32,
+    #[serde(default)]
+    error_policy: Option<String>,
+    #[serde(default)]
+    measurement: Option<crate::mesh_large::hlod::error::Summary>,
+    #[serde(default)]
+    children_error: Option<f64>,
 }
 
 impl ProxyRow {
-    pub(crate) fn parse(line: &str, row: u64) -> Result<Self, JobError> {
+    pub(crate) fn parse(line: &str, row: u64, hlod: bool) -> Result<Self, JobError> {
         let bad = |why: &str| input(format!("proxies.jsonl row {row}: {why}"));
         let w: ProxyWire = serde_json::from_str(line).map_err(|e| bad(&e.to_string()))?;
         if w.schema_version != 1 {
             return Err(bad("unsupported schemaVersion"));
+        }
+        let encoded_depth = match w.encoded_depth {
+            Some(d) if d >= w.depth && d <= 30 => d,
+            None if !hlod => w.depth,
+            _ => return Err(bad("missing or invalid encodedDepth")),
+        };
+        match (w.error_policy.as_deref(), w.measurement.as_ref()) {
+            (Some(crate::mesh_large::hlod::error::POLICY), Some(summary)) => {
+                let key = crate::mesh_large::hlod::store::TileKey {
+                    first: w.first,
+                    end: w.end,
+                    depth: encoded_depth,
+                    leaf_begin: 0,
+                    leaf_end: 0,
+                };
+                if summary.seed != crate::mesh_large::hlod::error::seed(key) {
+                    return Err(bad("measurement seed differs from encoded tile"));
+                }
+                let children = w
+                    .children_error
+                    .ok_or_else(|| bad("S2 row has no childrenError"))?;
+                summary
+                    .validate(w.geometric_error, children)
+                    .map_err(|e| bad(&e.to_string()))?;
+            }
+            (None, None) if !hlod => {} // Historical H17 rows, removed with that producer in S6.
+            _ => return Err(bad("missing or unsupported sampled-error policy/summary")),
         }
         let expected = format!("proxies/f{}-d{}.glb", w.first, w.depth);
         if w.uri != expected {
@@ -251,6 +288,8 @@ impl ProxyRow {
             depth: w.depth,
             geometric_error: w.geometric_error,
             primitives: w.primitives,
+            encoded_depth,
+            sample_count: w.measurement.as_ref().map(|s| s.area_samples_per_direction),
         })
     }
 }
@@ -526,13 +565,38 @@ impl LeafDirectory {
         let file = File::open(&path).map_err(|e| JobError::io("open proxy rows", &path, e))?;
         let mut lines = BufReader::new(file).lines();
         let mut row = 0u64;
+        let mut samples = [0u64; 32];
+        let mut finished = false;
         Ok(Box::new(std::iter::from_fn(move || {
-            let line = lines.next()?;
+            if finished {
+                return None;
+            }
+            let line = match lines.next() {
+                Some(line) => line,
+                None => {
+                    finished = true;
+                    return samples
+                        .iter()
+                        .enumerate()
+                        .find(|(_, n)| **n > 0 && **n < crate::mesh_large::hlod::error::MIN_DEPTH)
+                        .map(|(depth, n)| {
+                            Err(input(format!(
+                                "incomplete HLOD depth {depth} sampling: {n}/200000 per direction"
+                            )))
+                        });
+                }
+            };
             row += 1;
             Some(
                 line.map_err(|e| JobError::io("read proxy rows", &path, e))
-                    .and_then(|line| ProxyRow::parse(&line, row))
+                    .and_then(|line| ProxyRow::parse(&line, row, self.sparse_proxies))
                     .and_then(|proxy| {
+                        if let Some(n) = proxy.sample_count {
+                            samples[proxy.encoded_depth as usize] = samples
+                                [proxy.encoded_depth as usize]
+                                .checked_add(n)
+                                .ok_or_else(|| input("HLOD sample count overflow"))?;
+                        }
                         let bounds = payload_bounds(
                             &self.member(&proxy.uri),
                             &proxy.uri,

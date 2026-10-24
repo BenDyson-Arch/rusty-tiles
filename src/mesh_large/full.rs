@@ -339,7 +339,10 @@ fn scratch_need(
         )?,
         super::hlod::TilerLod::Hlod => add(
             leaf_plans,
-            super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+            add(
+                super::hlod::interfaces::scratch_need(n, config.sorter(1)).ok_or_else(overflow)?,
+                super::hlod::source_index::scratch_need(n).ok_or_else(overflow)?,
+            )?,
         )?,
     };
     let stages = ScratchStages {
