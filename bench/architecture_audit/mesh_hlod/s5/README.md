@@ -116,3 +116,13 @@ Bulk immutable archives, binary, measurements, review probes and execution logs:
 `manifest.json` SHA-256: `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`. It binds each
 receipt to its source/artifact identities; earlier regression logs are explicitly
 historical. Full 2048 pair counts and scale/appearance/consumer gates remain S8.
+
+Separate final-source review approved `b80917e1` for this bounded S5 domain,
+verified the previous fixes, regenerated all 391 hashes and 39 independent oracle
+verdicts, and checked additional UINT64/fallback boundaries and codec vectors.
+It found no further actionable defect or budget amplification. It also reproduced
+the eight real tex3 continuity failures; this is not integrated producer approval.
+The review ran no Cargo/build/bake/browser. Its receipt, exact identities and
+probes are retained in the same cache under `review6/`, bound by
+`final-review-manifest.json` SHA-256
+`6f94c1c7f748799bcc273f8fddc1a178f2b6e0670ee3596882e0c19247034b13`. Subsequent commits only add these documentation receipts.
