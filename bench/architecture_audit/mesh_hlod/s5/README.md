@@ -1,128 +1,126 @@
-# S5 acceptance boundary
+# S5 validator and independent HLOD acceptance
 
-Invariants: sampled G is finite, nonnegative and ordered, never a certificate;
-C1 resources/codecs and C2 decoded containment remain archive checks. Identity
-attributes must address their declared property tables and be constant on each
-triangle. Source identity, exact leaf multiplicity and decoded interfaces require
-an independent source/baseline oracle, never `proxies.jsonl`, interface locks or
-producer census counts. Empty ordinary REPLACE intermediates below renderable
-content are a delivery failure even when their G and boxes equal their parent's.
+Sampled G is finite, nonnegative and ordered; it is not a certified maximum.
+C1 still owns resources, hashes, codecs and accessor admission, C2 owns decoded
+bounds, and I1 owns implicit availability. No H17 certificate is required for
+HLOD. `geometricErrorAccuracy` remains explicitly uninspected. Source-distance
+sampling is the separately invoked `../s2/audit.py`, never an archive certificate.
 
-Retain archive admission, bounded facts/row storage, C2 and I1. Rework attribute
-identity admission. Replace ad-hoc evidence-only seam probes with a permanent
-published-byte census, harvesting E2 `816d0670`'s owner/ancestor cross-product
-and S1's decoded-leaf segment and point incidence. Add corner and T contacts.
-Remove no unrelated terrain or containment checks. There are no H17 certificate
-checks in archive validation to remove; do not invent a certificate-shaped HLOD
-record. Source-distance sampling stays in `../s2/`, separately invoked and timed.
+Retain the bounded validator/facts/replay owners. Add source-identity admission
+and a disk-backed decoded delivery relation; replace ad-hoc seam probes with
+permanent independent controls. The census harvests E2 `816d0670`'s decoded leaf
+incidence/ancestor cross-product and extends it to corner and T contacts. No
+producer facts, lock files, reports or producer imports supply independent truth.
 
-Supported oracle input: unpacked explicit archives; embedded GLB buffers,
-Khronos-spec meshopt decode (ATTRIBUTES/TRIANGLES, filter NONE), scalar/vector accessors including normalization and
-stride, selected-scene nested matrix/TRS transforms, material classes and source
-primitive/triangle property tables. Implicit availability remains I1's archive
-check and controls, rather than treating producer availability as evidence.
-Unsupported oracle codecs/scene constructs fail closed. This small oracle is not
-a scale gate. Full 2048, appearance quality and consumer acceptance belong to S8.
+## Archive validation
 
-Implementation and execution receipts follow below.
+`src/validate/identity.rs` projects only owned C1-admitted raw JSON, preserving
+opaque overflowing extras and exact integer lexemes. It validates every present
+identity column, unsigned scalar representation, counts/ranges, null IDs and
+triangle-constant feature IDs. Unsupported metadata modifiers and declared local
+`.gltf` identity fail closed. Views are cached within the document decode limit;
+repeated scans are preflighted through the shared payload-element budget.
 
-Run `cargo test --test hlod_acceptance` (under the mandated 10 GiB scope). It
-regenerates literal fixtures, verifies every member against
-`controls-sha256.json`, runs the independent oracle and compares Rust/CLI archive
-verdicts. Python 3 and Node are required; the analytic controls need no npm
-packages. Compressed controls use `tests/ext_meshopt_spec.py`, the retained
-independent specification encoder/decoder, through `meshopt.py`. They exercise
-real compressed metadata, positions and indices and the virtual fallback buffer.
+`src/validate/hlod_delivery.rs` stores hierarchy, references, original vertex
+correspondence and decoded boundary incidences in scratch SQLite. A partial
+identity strip is rejected regardless of traversal order once source identity is
+expected. Original triangle IDs must address the matching primitive identity and
+use rows one-to-one. Coarse `source_triangle` is refused under D4; same-payload
+repeated cells do not change the payload's role. Semantic NORMAL/TEXCOORD accessor
+shapes are checked. Archive correspondence does not establish external source truth.
 
-`python3 controls.py SCRATCH` runs the small source-aware census and controls.
-`python3 continuity.py OUTPUT.3tz` independently checks the real explicit archive
-for `replaceContentContinuity`, without decoding geometry or requiring source.
-Leading empty roots, ADD ancestors and external-link placeholders have positive
-controls. The source-aware oracle refuses implicit roots and nested tile
-transforms; C2/I1 retain those archive checks. Selected-scene glTF matrix/TRS,
-normalized signed-short positions, nonuniform/reflected scale and PBR/MASK/unlit
-material delivery have analytic positive controls. Sparse/animated/skinned input
-is outside this small oracle's domain and fails closed.
+The native hierarchy includes the explicit walk, external-document placements,
+I1's expanded availability walk and memo replays. `replaceContentContinuity`
+rejects ordinary contentless cells between a REPLACE renderable ancestor and its
+renderable descendants. Leading empty roots and external-link placeholders are
+valid, as are S1's repeated coarse-content cells. An empty ADD override cannot
+clear a barrier owned by a renderable REPLACE ancestor.
 
-The small census reports complete source-shared segment/point and T-contact
-retention and enumerates all disjoint ancestor pairs, including T contacts.
-Coarse representative centroids are queried against independent source triangles
-in their decoded leaves' verified source set. Exact original leaf corner order,
-source rows and leaf material values are compared with literal analytic truth.
-These are separate from archive-only `hlodFeatureIds`, which checks integrity,
-not nearest-source truth. `geometricErrorAccuracy` stays uninspected in archive
-reports; no producer fact, certificate or sampled maximum is promoted to proof.
+Only open/nonmanifold decoded edges survive each bounded payload reduction.
+A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
+subsegments, corner/T points and matching interface incidences; root exterior
+incidences also have descendant orientation witnesses. Keeping just a T vertex
+cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
+charged; dense queries refuse rather than truncate. Decoded quantization spacing
+and transforms supply tolerances, never producer error summaries. Native winding
+checks cover interfaces/coincident exterior witnesses, not every isolated interior.
+Fresh coarse UV/source-pixel correspondence cannot be inferred from leaf UVs.
 
-The retained S3 tex3 archive independently fails `replaceContentContinuity` at
-all eight depth-4 descendants below `root/1/0/0`. This reproduces today's loading
-barrier lesson on the real bytes, without a browser. S5 owns detection; collapsing
-or republishing the hierarchy is S1's producer change. Until the revised base is
-published, archive integrity success must not be called integrated acceptance.
+## Independent real-archive oracle
 
-Source identity columns admit raw unsigned SCALAR values. Arrays, normalization,
-value transforms, defaults and no-data modifiers are refused on these columns;
-source corners cannot use a declared null feature ID. The census reads every
-`contents` entry. Geometry-moving glTF extensions outside the admitted scene
-shape fail closed, including GPU instancing and morph targets. Review controls
-also corrupt correlated source ordinals/materials and exercise these modifiers.
+`archive.py` reads directories or `.3tz` directly and expands explicit, external
+and implicit trees, including subtree availability/metadata. `continuity.py`
+uses that same independent expansion and produces a named verdict for implicit
+and legacy archives. `decode.mjs` accepts paths or GLB bytes on stdin, decodes
+POSITION/NORMAL/TEXCOORD_0 and selected-scene matrix/TRS transforms, and derives
+position/normal/UV tolerances independently from scalar storage, codec bits and
+transforms. UINT64 columns cross JSON as decimal strings and become Python exact
+integers. URI-shadow buffers and unknown BIN replacements are refused; required
+meshopt virtual fallback buffers are supported.
 
-Identity inspection projects only its owned fields from C1-admitted raw JSON,
-using C1's exact unsigned-lexeme interpretation. Opaque `1e400` extras remain
-opaque, and integer spellings `0.0`/`3e0` remain accepted. Decoded view caching is
-bounded by the document decode limit; decode, schema, scalar, range and corner
-visits consume the remaining payload-element budget before work. Shared-accessor
-amplification has a preflight control. Facts and replay retain these work charges;
-no persistent producer record supplies validation facts.
+`meshopt.py` uses the retained independent Khronos-spec codec in
+`tests/ext_meshopt_spec.py`, plus specification-based OCTAHEDRAL, QUATERNION,
+EXPONENTIAL and index decoding. No npm package or producer decoder is required.
+Unsupported scene extensions, animation, skin, morph or UV1 source expectations
+fail closed.
 
-Either owned identity marker (`source_primitive` or `source_triangle`) triggers
-admission; incomplete pairs cannot hide a corrupt triangle set. Declared source
-identity in local `.gltf` is an explicit Unsupported profile refusal, rather than
-a skipped check. Configurable identity work refusals use the shared budget owner
-and retain key/value/observed/derivation. Coarse materials are checked against
-independent source alpha/MASK, double-sided and lit/unlit classes; baked colour
-and texture quality remain the separate appearance audit's responsibility.
+`source_manifest.py` independently reads the input GLB with mmap and streams
+original geometry, vertex IDs, normals, UVs, material classes/constants and source
+order to SQLite. Source keys and ordinals remain exact. It imports no producer.
+The default root-relative glTF frame removes common archive placement and applies
+relative tile transforms; explicit world frames require a documented 4x4 source
+transform. Source manifests can also pin a separately accepted baseline, but the
+real campaign uses the original input GLBs.
 
-The source identity profile requires a URI-free primary buffer backed by an actual BIN
-chunk; additional URI-free virtual meshopt fallback buffers are admitted only
-when meshopt is required. An uncompressed view cannot read those placeholders. Both archive identity admission and the independent decoder refuse URI
-buffers with shadow BIN data; missing BIN chunks fail resource/container checks.
-All metadata and geometry reads use the declared logical buffer extent. This is
-an explicit format boundary, not a second interpretation of URI-resolved bytes.
-UINT64 columns cross decoder JSON as decimal strings and become exact Python
-integers before comparisons. The adjacent-integer leaf and representative
-controls distinguish 9007199254740992 from 9007199254740993.
+`oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
+nearest coarse representatives, with D4 ties in source order. Analytic manifests
+check exact UVs/materials. Real textured leaves may legitimately crop/repack UVs
+and texture bindings: their material class/PBR constants/slot presence and
+rendered UV structure are checked, while UV/source-pixel correspondence is
+explicitly counted as uninspected. No large epsilon substitutes for image proof.
 
-Execution receipt: source `b80917e1397e6b0e88215942ef1a608588402f0f`, S3 base
-`4e8aabfabe0c201438c790b24bc04150d5f41b3b`. Eight positive controls and 35 named
-negative controls plus retained I1 incomplete availability have zero false accepts;
-391 generated fixture members match the hash manifest. Each small census checks
-4 leaf triangles, 10 representatives, 2 segment/8 point visits, 1 T contact and
-all 8 mixed/4 same-depth disjoint ancestor pairs; no identity/interface errors.
-Final identity unit controls, Rust/CLI parity and all-target Clippy pass. Earlier
-C1/C2/I1/VS and H26 regression receipts are identified separately in the cache.
-Owned Rust formatting passes; inherited S3 producer formatting needs its owner's
-correction and is not changed here.
+`spatial.py` keeps archive-sized geometry/indexes on disk. R-tree candidate rows,
+leaf-box broadphase visits, descendant interval tests, segment-chain candidates
+and nearest-source queries have charges and caps. The T census requires all
+original split-side subsegments even when another contact point interleaves.
+It enumerates disjoint same/mixed-depth ancestor pairs without retaining an
+archive-sized pair cross-product. Full 2048 CPU/RSS and pair counts remain S8
+measurements, not extrapolated acceptance claims.
 
-The pinned tex3 archive passes archive validation in **0.797305 CPU-s / 70.4 MiB
-peak RSS** (0.805682 wall-s); crop3 is 1.020442 CPU-s / 71.0 MiB (1.050164 wall-s).
-Measured release binary SHA-256 is
-`cfe86c38dd874b6b774435622a047bc025608c18be67f9634d89da946d11cc4c`.
-Measurements use per-child wait4 accounting under the mandatory 10 GiB/zero-swap
-scope; this is separate from bake/source-distance CPU. No new bakes were needed.
-The retained real tex3 continuity failure remains a producer acceptance finding.
+## Reproduction and evidence
 
-Bulk immutable archives, binary, measurements, review probes and execution logs:
-`/home/bend/.cache/rusty-tiles-evidence/hlod-s5-20261024/`.
-`manifest.json` SHA-256: `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`. It binds each
-receipt to its source/artifact identities; earlier regression logs are explicitly
-historical. Full 2048 pair counts and scale/appearance/consumer gates remain S8.
+All builds, tests and bakes use the required scope:
 
-Separate final-source review approved `b80917e1` for this bounded S5 domain,
-verified the previous fixes, regenerated all 391 hashes and 39 independent oracle
-verdicts, and checked additional UINT64/fallback boundaries and codec vectors.
-It found no further actionable defect or budget amplification. It also reproduced
-the eight real tex3 continuity failures; this is not integrated producer approval.
-The review ran no Cargo/build/bake/browser. Its receipt, exact identities and
-probes are retained in the same cache under `review6/`, bound by
-`final-review-manifest.json` SHA-256
-`6f94c1c7f748799bcc273f8fddc1a178f2b6e0670ee3596882e0c19247034b13`. Subsequent commits only add these documentation receipts.
+```sh
+systemd-run --user --scope -q -p MemoryMax=10G -p MemorySwapMax=0 -- chrt -i 0 nice -n 19 COMMAND
+```
+
+Set `CARGO_TARGET_DIR=/home/bend/.cache/rt-wt/target-hlod-s5`,
+`CARGO_BUILD_JOBS=3`, and both dev/test debug settings to zero for Cargo.
+`cargo test --test hlod_acceptance` regenerates the permanent corpus and checks
+all generated members against `controls-sha256.json`; positives assert that
+`hlodFeatureIds` and continuity actually ran. Rust/CLI verdicts must agree.
+Python 3 and Node are needed. `python3 controls.py SCRATCH` runs the independent
+named controls without Rust. The final native and real-archive receipts follow
+in the execution record below.
+
+From the repository root, inside that scope:
+
+```sh
+python3 bench/architecture_audit/mesh_hlod/s5/source_manifest.py INPUT.glb SOURCE.sqlite
+python3 bench/architecture_audit/mesh_hlod/s5/oracle.py OUTPUT.3tz SOURCE.sqlite --scratch SCRATCH --profile hlod
+python3 bench/architecture_audit/mesh_hlod/s5/continuity.py OUTPUT.3tz
+```
+
+Use `--profile h17` to audit retained legacy archives without applying D4's new
+coarse representative identity policy. Source leaves and geometry/material/
+winding/interface checks remain active. A named failed geometry check is a
+verdict, not a decoder crash or legacy certificate interpretation.
+
+The earlier S5 receipts at `33ce60c5` are historical and superseded by this
+review revision. Their cache remains
+`/home/bend/.cache/rusty-tiles-evidence/hlod-s5-20261024/`, bound by execution
+manifest `afd9e6fa265fc9c2e1659186304a9f22bce41d6a6436b77196435a9f77a3cb72`
+and review manifest `6f94c1c7f748799bcc273f8fddc1a178f2b6e0670ee3596882e0c19247034b13`.
+The old retained tex3's eight continuity failures remain reproducible; fresh
+latest-S1 output is measured separately. No browser or 2048 bake runs in S5.

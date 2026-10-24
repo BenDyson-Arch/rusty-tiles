@@ -1,3 +1,3 @@
 ### Added
 
-- Permanent independent HLOD acceptance controls for decoded interfaces, identity, leaf coverage, resource integrity and empty REPLACE intermediates; sampled errors require no H17 certificates.
+- Bounded HLOD identity, decoded interface and explicit/implicit REPLACE continuity validation, with a permanent independent real-archive/source oracle and sensitive geometry, metadata and delivery controls; sampled errors require no H17 certificates.

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Small decoded oracle: source manifest + published explicit hierarchy, never producer facts.
-E2's complete segment incidence/ancestor cross-product, plus corner and T contacts.
-No source-distance bound is inferred from this census. Use ../s2/audit.py separately.
+"""Published-byte/source oracle for directories and .3tz, including implicit forests.
+
+Archive-sized state is disk backed. No producer facts or interface locks are read.
+This checks topology/identity/attributes, not a source-distance certificate.
+Generate independent source expectations with source_manifest.py.
 """
 import argparse
 import collections
@@ -11,7 +13,12 @@ import json
 import math
 from pathlib import Path
 import subprocess
-from continuity import inspect as inspect_continuity
+import sqlite3
+import tempfile
+import zipfile
+from archive import Archive, expand
+from continuity import check_tiles
+from spatial import Store, Work, WorkLimit
 
 ROOT = Path(__file__).parent
 
@@ -25,8 +32,11 @@ def require(ok, check, detail):
         raise Failure(check, detail)
 
 def decode(path):
-    r = subprocess.run(['node', str(ROOT / 'decode.mjs'), str(path)], capture_output=True, text=True)
-    require(r.returncode == 0, 'codecStructure' if 'featureIdentity' not in r.stderr and 'metadataIntegrity' not in r.stderr else 'featureIdentity', r.stderr[-1500:])
+    binary = isinstance(path,(bytes,bytearray))
+    r = subprocess.run(['node', '--max-old-space-size=2048', str(ROOT / 'decode.mjs'), '-' if binary else str(path)],
+                       input=bytes(path) if binary else None,capture_output=True,timeout=180)
+    stderr=r.stderr.decode(errors='replace')
+    require(r.returncode == 0, 'codecStructure' if 'featureIdentity' not in stderr and 'metadataIntegrity' not in stderr else 'featureIdentity', stderr[-1500:])
     decoded = json.loads(r.stdout)
     # UINT64 columns cross JSON as decimal strings; Python integers retain every bit.
     for face in decoded['faces']:
@@ -35,75 +45,6 @@ def decode(path):
                 if isinstance(value, str):
                     row[key] = int(value)
     return decoded
-
-def edges(faces):
-    return {tuple(sorted((tuple(f['xyz'][k]), tuple(f['xyz'][(k+1)%3]))))
-            for f in faces for k in range(3)}
-
-def census(tiles):
-    leaves = [t for t in tiles if not t['children']]
-    point_owners, edge_owners = collections.defaultdict(set), collections.defaultdict(set)
-    for i, t in enumerate(leaves):
-        for e in edges(t['faces']):
-            edge_owners[e].add(i)
-            for p in e:
-                point_owners[p].add(i)
-    # All corner contacts, including those with no shared edge.
-    items = [(e, owners) for e, owners in edge_owners.items() if len(owners)>1]
-    points = [(p, owners) for p, owners in point_owners.items() if len(owners)>1]
-    # Small oracle deliberately brute-forces the independent T/collinear join.
-    contacts = []
-    for (a,b), owners in edge_owners.items():
-        d = [b[k]-a[k] for k in range(3)]
-        l2 = sum(x*x for x in d)
-        if not l2:
-            continue
-        for p, other in point_owners.items():
-            if not other-owners or p in (a,b):
-                continue
-            u = sum((p[k]-a[k])*d[k] for k in range(3))/l2
-            if 0<u<1 and sum((p[k]-a[k]-u*d[k])**2 for k in range(3)) <= 1e-14*l2:
-                contacts.append((a,b,p,owners,other))
-    pairs = set()
-    checked_segments = checked_points = 0
-    leaf_index = {t['id']:i for i,t in enumerate(leaves)}
-    def descendant_ids(t):
-        if not t['children']:
-            return {leaf_index[t['id']]}
-        return set.union(*(descendant_ids(c) for c in t['children']))
-    for t in tiles:
-        inside = descendant_ids(t)
-        es = edges(t['faces'])
-        ps = {p for e in es for p in e}
-        for e, owners in items:
-            if owners & inside and owners-inside:
-                checked_segments += 1
-                require(e in es, 'interfaceSegments', t['id'])
-        for p, owners in points:
-            if owners & inside and owners-inside:
-                checked_points += 1
-                require(p in ps, 'interfacePoints', t['id'])
-        for a,b,p,owners,other in contacts:
-            if owners & inside and other-inside:
-                require(tuple(sorted((a,b))) in es, 'interfaceSegments', t['id'])
-            if other & inside and owners-inside:
-                require(p in ps, 'interfacePoints', t['id'])
-    ancestors = {}
-    for i,t in enumerate(leaves):
-        chain = []
-        while t is not None:
-            chain.append(t)
-            t = t['parent']
-        ancestors[i] = chain
-    for _, owners in items + [(None, owners) for _,owners in points] + [(None,owners|other) for _,_,_,owners,other in contacts]:
-        for a,b in itertools.combinations(owners,2):
-            for x,y in itertools.product(ancestors[a],ancestors[b]):
-                if descendant_ids(x).isdisjoint(descendant_ids(y)):
-                    pairs.add(tuple(sorted((x['id'],y['id']))))
-    depths = {t['id']:t['depth'] for t in tiles}
-    mixed = sum(depths[a]!=depths[b] for a,b in pairs)
-    return dict(checkedSegments=checked_segments,checkedPoints=checked_points,
-                cornerContacts=len(points),tContacts=len(contacts),mixedPairs=mixed,sameDepthPairs=len(pairs)-mixed)
 
 def distance2(p, face):
     """Orthogonal triangle projection plus three closed segments, independent of S2."""
@@ -131,80 +72,263 @@ def material_class(m):
     return (mode,m.get('alphaCutoff',.5) if mode=='MASK' else None,
             m.get('doubleSided',False),'KHR_materials_unlit' in m.get('extensions',{}))
 
-def audit(root, expected):
-    root = Path(root)
-    manifest = json.loads(Path(expected).read_text())
-    doc = json.loads((root/'tileset.json').read_text())
-    barrier = inspect_continuity(root)
-    require(barrier['ok'], 'replaceContentContinuity', str(barrier['violations']))
-    require(type(doc.get('geometricError')) in (int,float) and math.isfinite(doc['geometricError']) and doc['geometricError']>=0,'geometricErrorFinite','tileset G')
-    tiles, observed = [], collections.Counter()
-    def visit(node, parent=None, depth=0, refine='REPLACE', renderable_above=False, empty_between=False):
-        require(parent is None or 'transform' not in node, 'oracleDomain', 'nested tile transforms require archive C2')
-        require('implicitTiling' not in node, 'oracleDomain', 'use I1 for implicit archives')
-        refine = node.get('refine',refine)
-        g = node.get('geometricError')
-        require(isinstance(g,(int,float)) and math.isfinite(g) and g>=0,'geometricErrorFinite',str(g))
-        require(g <= (parent['g'] if parent else doc['geometricError'])+1e-8,'geometricErrorOrder',str(g))
-        require(not ('content' in node and 'contents' in node),'oracleDomain','both content forms')
-        contents = node.get('contents', [node['content']] if 'content' in node else [])
-        content = bool(contents)
-        require(not (content and renderable_above and empty_between), 'replaceContentContinuity', f'depth {depth}')
-        faces=[]
-        for entry in contents:
-            require(not entry['uri'].endswith('.json'),'oracleDomain','source oracle requires inline explicit hierarchy')
-            faces.extend(decode(root/entry['uri'])['faces'])
-        tile = dict(id=str(len(tiles)),g=g,faces=faces,depth=depth,parent=parent,children=[])
-        tiles.append(tile)
-        for child in node.get('children',[]):
-            tile['children'].append(visit(child,tile,depth+1,refine,(refine=='REPLACE') if content else renderable_above,
-                False if content else empty_between or (renderable_above and refine=='REPLACE')))
-        if not tile['children']:
-            require(bool(content), 'leafCoverage', tile['id'])
-            for f in faces:
-                row=f['ids'].get('source_triangle',{})
-                key=tuple(row.get(k) for k in ('node_index','mesh_index','primitive_index','triangle_index'))
-                observed[key]+=1
-                want=manifest['triangles'].get(','.join(map(str,key)))
-                require(want is not None,'sourceIdentity',str(key))
-                primitive=f['ids'].get('source_primitive',{})
-                require(all(primitive.get(k)==row.get(k) for k in ('node_index','mesh_index','primitive_index','expanded_ordinal','material_index')),'sourceIdentity',str(key))
-                require(all(row.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'sourceIdentity',str(key))
-                require(f['xyz']==want['xyz'],'leafGeometry',str(key))
-                require(f['material']==want['material'],'leafMaterial',str(key))
-                require([row.get(f'vertex_{k}') for k in range(3)]==want['vertices'],'sourceIdentity',str(key))
-        return tile
-    visit(doc['root'])
-    wanted=collections.Counter({tuple(map(int,k.split(','))):1 for k in manifest['triangles']})
-    require(observed==wanted,'leafCoverage',f'{observed} != {wanted}')
-    result=census(tiles)
-    representatives=0
-    def leaf_keys(t):
-        if not t['children']:
-            return {tuple(f['ids']['source_triangle'][k] for k in ('node_index','mesh_index','primitive_index','triangle_index')) for f in t['faces']}
-        return set.union(*(leaf_keys(c) for c in t['children']))
-    for t in tiles:
-        if not t['children']:continue
-        candidates=sorted(leaf_keys(t))
-        for f in t['faces']:
-            p=[sum(v[k] for v in f['xyz'])/3 for k in range(3)]
-            distances=[(distance2(p,manifest['triangles'][','.join(map(str,key))]['xyz']),key) for key in candidates]
-            nearest=min(distances)[1]
-            actual=f['ids'].get('source_primitive',{})
-            want=manifest['triangles'][','.join(map(str,nearest))]
-            require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')), 'representativeIdentity',t['id'])
-            require(tuple(actual.get(k) for k in ('node_index','mesh_index','primitive_index'))==nearest[:3], 'representativeIdentity',t['id'])
-            require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
-            representatives+=1
-    result['representatives']=representatives
-    result.update(ok=True,leafTriangles=sum(observed.values()),tiles=len(tiles),sourceManifestSha256=hashlib.sha256(Path(expected).read_bytes()).hexdigest())
-    return result
+
+def material_semantics(material):
+    """PBR constants and texture-slot presence, independent of resource indices.
+
+    Texture pixels/crop transforms are a separate source-correspondence proof;
+    source GLB material indices are local to that GLB and cannot be compared to
+    the copied/cropped leaf's indices.
+    """
+    m=material or {};p=m.get('pbrMetallicRoughness',{})
+    require(set(m.get('extensions',{}))<={'KHR_materials_unlit'},'oracleDomain','unsupported source material extension')
+    slots=(p.get('baseColorTexture'),p.get('metallicRoughnessTexture'),m.get('normalTexture'),m.get('occlusionTexture'),m.get('emissiveTexture'))
+    return (material_class(m),p.get('baseColorFactor',[1,1,1,1]),p.get('metallicFactor',1),
+            p.get('roughnessFactor',1),m.get('emissiveFactor',[0,0,0]),
+            (m.get('normalTexture') or {}).get('scale',1),
+            (m.get('occlusionTexture') or {}).get('strength',1),tuple(v is not None for v in slots))
+
+
+def textured(material):
+    m=material or {};p=m.get('pbrMetallicRoughness',{})
+    return any(key in owner for owner,keys in ((p,('baseColorTexture','metallicRoughnessTexture')),
+        (m,('normalTexture','occlusionTexture','emissiveTexture'))) for key in keys)
+
+
+IDENTITY = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
+KEYS = ('node_index','mesh_index','primitive_index','triangle_index')
+
+
+def multiply(a,b):
+    return [sum(a[i%4+k*4]*b[k+(i//4)*4] for k in range(4)) for i in range(16)]
+
+
+def inverse(m):
+    rows = [[float(m[r+c*4]) for c in range(4)]+[float(r==c) for c in range(4)] for r in range(4)]
+    for c in range(4):
+        pivot=max(range(c,4),key=lambda r:abs(rows[r][c]))
+        require(abs(rows[pivot][c])>1e-30,'oracleDomain','singular tile transform')
+        rows[c],rows[pivot]=rows[pivot],rows[c]
+        scale=rows[c][c];rows[c]=[x/scale for x in rows[c]]
+        for r in range(4):
+            if r!=c:
+                scale=rows[r][c];rows[r]=[x-scale*y for x,y in zip(rows[r],rows[c])]
+    return [rows[r][c+4] for c in range(4) for r in range(4)]
+
+
+def transform_face(f,m):
+    if m == IDENTITY:
+        return
+    f['xyz']=[[sum(m[a+k*4]*p[k] for k in range(3))+m[a+12] for a in range(3)] for p in f['xyz']]
+    tol=f.get('positionTolerance',[0,0,0])
+    f['positionTolerance']=[sum(abs(m[a+k*4])*tol[k] for k in range(3))+1e-12 for a in range(3)]
+    if f.get('normals') is not None:
+        inv=inverse(m)
+        ns=[[sum(inv[k+a*4]*n[k] for k in range(3)) for a in range(3)] for n in f['normals']]
+        frobenius=math.sqrt(sum(inv[k+a*4]**2 for a in range(3) for k in range(3)))
+        if f.get('normalTolerance') is not None:
+            conditioning=max(2*frobenius/math.sqrt(sum(v*v for v in n)) for n in ns)
+            f['normalTolerance']=min(2,conditioning*f['normalTolerance']+1e-12)
+        f['normals']=[[x/math.sqrt(sum(v*v for v in n)) for x in n] for n in ns]
+
+
+def area_vector(face):
+    a,b,c=face
+    u=[b[k]-a[k] for k in range(3)];v=[c[k]-a[k] for k in range(3)]
+    return [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
+
+
+def structural_face(f):
+    for name,width in (('xyz',3),('normals',3),('uvs',2)):
+        values=f.get(name)
+        if values is None and name!='xyz':
+            continue
+        require(isinstance(values,list) and len(values)==3 and
+                all(isinstance(v,list) and len(v)==width and
+                    all(type(x) in (int,float) and math.isfinite(x) for x in v) for v in values),
+                'codecStructure',f'{name} rendered triangle shape/values')
+    if f.get('normals') is not None:
+        require(all(abs(sum(x*x for x in n)-1)<2e-3 for n in f['normals']),
+                'codecStructure','rendered NORMAL must be unit length')
+    tol=f.get('positionTolerance',[0,0,0])
+    require(isinstance(tol,list) and len(tol)==3 and all(type(x) in (int,float) and math.isfinite(x) and x>=0 for x in tol),
+            'codecStructure','invalid decoded position tolerance')
+
+
+def check_leaf(f,manifest,stats=None):
+    row=f['ids'].get('source_triangle',{})
+    key=tuple(row.get(k) for k in KEYS)
+    want=manifest['triangles'].get(','.join(map(str,key)))
+    require(want is not None,'sourceIdentity',str(key))
+    primitive=f['ids'].get('source_primitive',{})
+    require(all(primitive.get(k)==row.get(k) for k in KEYS[:3]+('expanded_ordinal','material_index')),'sourceIdentity',str(key))
+    require(all(row.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'sourceIdentity',str(key))
+    require([row.get(f'vertex_{k}') for k in range(3)]==want['vertices'],'sourceIdentity',str(key))
+    tolerance=f.get('positionTolerance',[0,0,0])
+    require(all(abs(f['xyz'][i][k]-want['xyz'][i][k])<=tolerance[k]+1e-10 for i in range(3) for k in range(3)),
+            'leafGeometry',str(key))
+    source_glb=manifest.get('metadata',{}).get('sourceKind')=='sourceGLB'
+    if source_glb:
+        require(material_semantics(f['material'])==material_semantics(want['material']),'leafMaterial',str(key))
+    else:
+        require(f['material']==want['material'],'leafMaterial',str(key))
+    texcoord_sets=want.get('texcoord_sets',{})
+    if isinstance(want.get('texcoords'),dict):texcoord_sets=want['texcoords']
+    require(not any(str(k)!='0' for k in texcoord_sets),'oracleDomain','source TEXCOORD sets beyond 0 are unsupported')
+    for actual,expected,check in (('uvs',want.get('uvs',want.get('texcoords')),'sourceTexcoords'),
+                                  ('normals',want.get('normals'),'sourceNormals')):
+        if actual=='uvs' and isinstance(expected,dict):
+            expected=expected.get('0',expected.get(0))
+        if expected is not None:
+            values=f.get(actual)
+            if actual=='uvs' and source_glb and textured(want['material']):
+                # Cropped leaf coordinates need not equal authored UVs. Without
+                # independently decoded texture pixels, their physical mapping
+                # is explicitly uninspected, never accepted by a wide epsilon.
+                require(values is not None,'sourceTexcoords',str(key)+' missing rendered TEXCOORD_0')
+                if stats is not None:stats['leafTexcoordCorrespondenceUninspected']+=1
+                continue
+            tolerance=f.get('uvTolerance' if actual=='uvs' else 'normalTolerance',2e-4)
+            tolerances=tolerance if isinstance(tolerance,list) else [tolerance]*(2 if actual=='uvs' else 3)
+            require(values is not None and len(values)==len(expected) and
+                all(len(a)==len(b) and all(abs(x-y)<=tolerances[k]+1e-10 for k,(x,y) in enumerate(zip(a,b))) for a,b in zip(values,expected)),check,str(key))
+            if stats is not None:stats['leafTexcoordsChecked' if actual=='uvs' else 'leafNormalsChecked']+=1
+    return ','.join(map(str,key)),want
+
+
+def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod'):
+    """Check every published cell. Only one payload/tile is decoded at a time.
+
+    root frame removes the archive's common placement, conjugating relative tile
+    transforms by standard glTF Y-up -> 3D Tiles Z-up. Source expectations stay
+    in authored glTF coordinates. world frame retains placement and applies that
+    conversion, so its source manifest must independently use the same frame.
+    Legacy H17 explicitly relaxes only D4 coarse identity; geometry/interfaces,
+    leaves, rendered attributes and winding remain checked.
+    """
+    from source_manifest import load_manifest
+    with load_manifest(expected) as manifest, Archive(root) as archive, tempfile.TemporaryDirectory(prefix='s5-oracle-',dir=scratch) as temporary:
+        try:
+            tiles=expand(archive)
+        except ValueError as e:
+            if any(s in str(e) for s in ('geometricError','nonfinite JSON')):
+                raise Failure('geometricErrorFinite',str(e)) from e
+            raise Failure('oracleDomain',str(e)) from e
+        require(bool(tiles),'leafCoverage','empty hierarchy')
+        barrier=check_tiles(tiles)
+        require(barrier['ok'],'replaceContentContinuity',str(barrier['violations']))
+        doc=archive.json(archive.root_name)
+        g=doc.get('geometricError')
+        require(type(g) in (int,float) and math.isfinite(g) and g>=0,'geometricErrorFinite','tileset G')
+        for name in {name for t in tiles for name in t.get('external_uris',[])}:
+            external=archive.json(name)
+            g=external.get('geometricError')
+            require(type(g) in (int,float) and math.isfinite(g) and g>=0,'geometricErrorFinite',name)
+            require(external['root']['geometricError']<=g+1e-8,'geometricErrorOrder',name)
+        leaves=[]
+        def intervals(t):
+            t['lo']=len(leaves)
+            if not t['children']:
+                leaves.append(t)
+            else:
+                for c in t['children']: intervals(c)
+            t['hi']=len(leaves)
+        intervals(tiles[0])
+        for t in tiles:
+            t['rendered']=False
+            g=t['g'];parent=t['parent']
+            # Compose below the placement boundary directly. Inverting a large
+            # ECEF transform and multiplying it back loses small translations.
+            t['relative']=multiply(parent['relative'],t['node'].get('transform',IDENTITY)) if parent else IDENTITY
+            require(type(g) in (int,float) and math.isfinite(g) and g>=0,'geometricErrorFinite',str(g))
+            require(g <= (parent['g'] if parent else doc['geometricError'])+1e-8,'geometricErrorOrder',str(g))
+        yup=[1,0,0,0,0,0,1,0,0,-1,0,0,0,0,0,1]
+        # An identity placement is exact; avoid inverse/multiply cancellation in
+        # the overwhelmingly common root-only placement case.
+        work=Work(work_limit)
+        store=Store(Path(temporary)/'census.sqlite',work)
+        leaf_count=representatives=legacy=0
+        attributes=collections.Counter()
+        try:
+            for t in tiles:
+                if coordinate_frame=='root':
+                    relative=t['relative']
+                    matrix=IDENTITY if relative==IDENTITY else multiply(inverse(yup),multiply(relative,yup))
+                else:
+                    matrix=multiply(t['transform'],yup)
+                for uri in t['contents']:
+                    decoded=decode(archive.read(uri))
+                    faces=decoded['faces']
+                    require(len(faces)<=1_000_000,'oracleWorkLimit','one payload exceeds 1,000,000 faces')
+                    for f in faces:
+                        structural_face(f)
+                        transform_face(f,matrix)
+                        ids=f['ids']
+                        # Every HLOD payload participates, even if its identity
+                        # declarations were completely removed by a mutant.
+                        if profile=='hlod':
+                            require('source_primitive' in ids,'featureIdentity',uri)
+                            require(not t['children'] or 'source_triangle' not in ids,'featureIdentity','coarse source_triangle '+uri)
+                        t['rendered']=True
+                        if not t['children']:
+                            key,want=check_leaf(f,manifest,attributes)
+                            require(store.source_face(key,want,t['lo']),'leafCoverage','duplicate '+key)
+                            leaf_count+=1
+                    store.put_faces(int(t['id']),faces)
+                if not t['children']:
+                    # Empty terminal availability cells contain no rendered
+                    # source. Exact global multiplicity below decides coverage.
+                    store.leaf_bounds(t['lo'])
+                store.db.commit()
+            require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
+            result=store.census(tiles,leaves,require)
+            for t in tiles:
+                if not t['children']: continue
+                for f in store.faces(int(t['id'])):
+                    p=[sum(v[k] for v in f['xyz'])/3 for k in range(3)]
+                    nearest,want=store.nearest(p,t['lo'],t['hi'],distance2)
+                    actual=f['ids'].get('source_primitive',{})
+                    if profile=='hlod':
+                        require(all(actual.get(k)==want[k] for k in ('expanded_ordinal','material_index')),'representativeIdentity',t['id'])
+                        require(tuple(actual.get(k) for k in KEYS[:3])==nearest[:3],'representativeIdentity',t['id'])
+                        representatives+=1
+                    else: legacy+=1
+                    require(material_class(f['material'])==material_class(want['material']),'representativeMaterialClass',t['id'])
+                    a,b=area_vector(f['xyz']),area_vector(want['xyz'])
+                    # Degenerate source faces have no defined winding.
+                    if sum(x*x for x in b)>1e-28:
+                        require(sum(x*y for x,y in zip(a,b))>0,'interfaceWinding',t['id'])
+            result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
+                          legacyCoarseTriangles=legacy,coordinateFrame=coordinate_frame,profile=profile,
+                          candidateWork=work.used,sourceManifestSha256=file_hash(expected))
+            result['attributes']=dict(attributes)
+            result['uninspected']=(['textured leaf UV/source-pixel correspondence: crop/repack transforms require independent image-content proof']
+                                   if attributes['leafTexcoordCorrespondenceUninspected'] else [])
+            return result
+        finally:
+            store.close()
+
+
+def file_hash(path):
+    digest=hashlib.sha256()
+    with open(path,'rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):digest.update(chunk)
+    return digest.hexdigest()
+
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('root');p.add_argument('expected');a=p.parse_args()
+    p.add_argument('root');p.add_argument('expected')
+    p.add_argument('--scratch');p.add_argument('--work-limit',type=int,default=300_000_000)
+    p.add_argument('--coordinate-frame',choices=('root','world'),default='root')
+    p.add_argument('--profile',choices=('hlod','h17'),default='hlod')
+    a=p.parse_args()
     try:
-        print(json.dumps(audit(a.root,a.expected),sort_keys=True))
+        print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
+                              coordinate_frame=a.coordinate_frame,profile=a.profile),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
+        raise SystemExit(1)
+    except (ValueError,OSError,subprocess.SubprocessError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,IndexError) as e:
+        print(json.dumps(dict(ok=False,check='oracleWorkLimit' if isinstance(e,WorkLimit) else 'oracleDomain',detail=str(e))))
         raise SystemExit(1)

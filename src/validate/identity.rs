@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, rc::Rc};
 fn fail() -> Error {
     invalid("hlodFeatureIds: invalid source identity attribute or property table")
 }
-fn uint(v: &Value) -> Result<usize, Error> {
+pub(super) fn uint(v: &Value) -> Result<usize, Error> {
     v.as_u64()
         .and_then(|n| usize::try_from(n).ok())
         .ok_or_else(fail)
@@ -26,7 +26,7 @@ fn items(raw: Option<&RawValue>) -> Vec<&RawValue> {
     raw.and_then(|v| serde_json::from_str(v.get()).ok())
         .unwrap_or_default()
 }
-fn declares(raw: &RawValue) -> bool {
+pub(super) fn declares(raw: &RawValue) -> bool {
     let label = |r: &RawValue, key| {
         field(r, key)
             .and_then(|v| serde_json::from_str::<String>(v.get()).ok())
@@ -53,7 +53,7 @@ fn declares(raw: &RawValue) -> bool {
 
 /// Project only identity-owned fields from already admitted raw JSON. Opaque
 /// extras/extensions never become f64, and integer lexemes use C1's exact owner.
-fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
+pub(super) fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
     let element = match kind {
         "meshes" => Some("mesh"),
         "buffers" => Some("buffer"),
@@ -62,6 +62,9 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
         "views" => Some("view"),
         "tables" => Some("table"),
         "sets" => Some("set"),
+        "nodes" => Some("node"),
+        "scenes" => Some("scene"),
+        "numbers" => Some("number"),
         _ => None,
     };
     if let Some(element) = element {
@@ -89,19 +92,31 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
     for (key, raw) in fields {
         let next = match (kind, key.as_str()) {
             ("doc", "meshes") => Some("meshes"),
+            ("doc", "nodes") => Some("nodes"),
+            ("doc", "scenes") => Some("scenes"),
+            ("doc", "scene") | ("node", "mesh") => Some("number"),
+            ("scene", "nodes") | ("node", "children") => Some("numbers"),
+            ("node", "matrix" | "translation" | "rotation" | "scale") => Some("leaf"),
+            ("node", "skin" | "weights") | ("mesh", "weights") | ("primitive", "targets") => {
+                Some("present")
+            }
             ("doc", "accessors") => Some("accessors"),
             ("doc", "bufferViews") => Some("views"),
             ("doc", "buffers") => Some("buffers"),
             ("buffer", "byteLength") => Some("number"),
             ("buffer", "uri") => Some("present"),
             ("doc", "extensionsRequired") => Some("leaf"),
-            (_, "extensions") if matches!(kind, "doc" | "primitive" | "view" | "buffer") => {
+            (_, "extensions")
+                if matches!(kind, "doc" | "primitive" | "view" | "buffer" | "node") =>
+            {
                 Some("extensions")
             }
             ("mesh", "primitives") => Some("primitives"),
             ("primitive", "attributes") => Some("attributes"),
             ("primitive", "indices" | "mode") => Some("number"),
-            ("attributes", "POSITION") => Some("number"),
+            ("attributes", "POSITION" | "NORMAL") => Some("number"),
+            ("attributes", k) if k.starts_with("TEXCOORD_") => Some("number"),
+            ("extensions", "EXT_mesh_gpu_instancing") => Some("present"),
             ("attributes", k) if k.starts_with("_FEATURE_ID_") => Some("number"),
             ("accessor", "type" | "normalized") => Some("leaf"),
             ("accessor", "sparse") => Some("present"),
@@ -145,8 +160,8 @@ fn project(raw: &RawValue, kind: &str) -> Result<Value, Error> {
     Ok(Value::Object(out))
 }
 
-struct Work {
-    used: u64,
+pub(super) struct Work {
+    pub(super) used: u64,
     base: u64,
     budget: Budget,
     bytes: usize,
@@ -154,7 +169,7 @@ struct Work {
     views: BTreeMap<usize, Rc<Vec<u8>>>,
 }
 impl Work {
-    fn new(budget: Budget, base: u64, cap: usize) -> Self {
+    pub(super) fn new(budget: Budget, base: u64, cap: usize) -> Self {
         Self {
             used: 0,
             base,
@@ -164,7 +179,7 @@ impl Work {
             views: BTreeMap::new(),
         }
     }
-    fn charge(&mut self, count: usize) -> Result<(), Error> {
+    pub(super) fn charge(&mut self, count: usize) -> Result<(), Error> {
         let total =
             self.budget
                 .charge(self.base.saturating_add(self.used), count as u64, || {
@@ -175,7 +190,7 @@ impl Work {
     }
 }
 
-fn slice(bytes: &[u8], offset: usize, length: usize) -> Result<&[u8], Error> {
+pub(super) fn slice(bytes: &[u8], offset: usize, length: usize) -> Result<&[u8], Error> {
     bytes
         .get(offset..offset.checked_add(length).ok_or_else(fail)?)
         .ok_or_else(fail)
@@ -215,7 +230,12 @@ fn decode_view(doc: &Value, bin: &[u8], id: usize) -> Result<Vec<u8>, Error> {
         .to_vec())
     }
 }
-fn view(doc: &Value, bin: &[u8], id: usize, work: &mut Work) -> Result<Rc<Vec<u8>>, Error> {
+pub(super) fn view(
+    doc: &Value,
+    bin: &[u8],
+    id: usize,
+    work: &mut Work,
+) -> Result<Rc<Vec<u8>>, Error> {
     if let Some(data) = work.views.get(&id) {
         return Ok(data.clone());
     }
@@ -288,6 +308,7 @@ pub(super) fn inspect(
     budget: Budget,
     already: u64,
     decoded_limit: usize,
+    expected: bool,
 ) -> Result<(bool, u64), Error> {
     let embedded = bytes.get(..4) == Some(b"glTF");
     let length = if embedded {
@@ -301,7 +322,11 @@ pub(super) fn inspect(
         bytes
     })?;
     if !declares(raw) {
-        return Ok((false, 0));
+        return if expected {
+            Err(fail())
+        } else {
+            Ok((false, 0))
+        };
     }
     if !embedded {
         return Err(Error::unsupported("hlodFeatureIds: declared source identity requires embedded GLB; local glTF identity is outside this profile"));
@@ -419,6 +444,22 @@ pub(super) fn inspect(
     let has_triangles = tables.iter().any(|t| t["class"] == "source_triangle");
     for mesh in doc["meshes"].as_array().into_iter().flatten() {
         for p in mesh["primitives"].as_array().into_iter().flatten() {
+            if let Some(attributes) = p["attributes"].as_object() {
+                for (semantic, accessor) in attributes {
+                    let shape = if semantic == "NORMAL" {
+                        Some(("VEC3", "sourceNormals"))
+                    } else if semantic.starts_with("TEXCOORD_") {
+                        Some(("VEC2", "sourceTexcoords"))
+                    } else {
+                        None
+                    };
+                    if let Some((shape, label)) = shape {
+                        if doc["accessors"][uint(accessor)?]["type"] != shape {
+                            return Err(invalid(format!("{label}: decoded content accessor has wrong rendered semantic shape")));
+                        }
+                    }
+                }
+            }
             let sets = p["extensions"]["EXT_mesh_features"]["featureIds"]
                 .as_array()
                 .ok_or_else(fail)?;
@@ -502,6 +543,21 @@ mod tests {
         let doc = project(raw, "doc").unwrap();
         assert_eq!(uint(&doc["accessors"][0]["bufferView"]).unwrap(), 0);
         assert_eq!(uint(&doc["accessors"][0]["count"]).unwrap(), 3);
+    }
+
+    #[test]
+    fn archive_expectation_refuses_fully_stripped_payload() {
+        let bytes = br#"{"asset":{"version":"2.0"},"extras":{"opaque":1e400}}"#;
+        let budget = Budget {
+            key: super::super::LimitKey::TotalPayloadElements,
+            value: 100,
+            source: super::super::limits::Derivation::Explicit,
+        };
+        assert_eq!(inspect(bytes, budget, 0, 1024, false).unwrap(), (false, 0));
+        assert!(inspect(bytes, budget, 0, 1024, true)
+            .unwrap_err()
+            .to_string()
+            .contains("hlodFeatureIds"));
     }
 
     #[test]

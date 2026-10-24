@@ -62,31 +62,39 @@ fn sampled_hlod_archives_and_named_mutants() {
                     .contains(check),
                 "{name}: {cli_report}"
             );
-        } else if matches!(
-            name,
-            "valid"
-                | "quantized"
-                | "normalized"
-                | "trs"
-                | "numeric-lexemes"
-                | "opaque-extras"
-                | "wide-identity"
-                | "meshopt-fallback"
-        ) {
+        } else if case["oracleCheck"].is_null() && case["archiveCheck"].is_null() {
             if name == "valid" {
                 let error = inspect(
                     ValidationRequest::new(&archive)
-                        .max_volume(LimitKey::TotalPayloadElements, 100),
+                        .max_volume(LimitKey::TotalPayloadElements, 200),
                 )
                 .unwrap_err();
                 assert!(error.to_string().contains("hlodFeatureIds"), "{error}");
                 let refusal = error.exceeded().unwrap();
                 assert_eq!(refusal.limit, LimitKey::TotalPayloadElements);
-                assert_eq!(refusal.value, 100);
-                assert!(refusal.observed > 100);
+                assert_eq!(refusal.value, 200);
+                assert!(refusal.observed > 200);
             }
             let report = result.unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(cli.status.success(), "{name}: {cli_report}");
+            assert!(
+                report.checks.iter().any(|s| s == "hlodFeatureIds"),
+                "{name}: identity must run"
+            );
+            assert!(
+                report
+                    .checks
+                    .iter()
+                    .any(|s| s == "replaceContentContinuity"),
+                "{name}: continuity must run"
+            );
+            assert!(
+                !report
+                    .not_inspected
+                    .iter()
+                    .any(|s| s == "EXT_mesh_features" || s == "metadataSemantics"),
+                "{name}: checked identity must not be uninspected"
+            );
             assert!(report
                 .not_inspected
                 .iter()
