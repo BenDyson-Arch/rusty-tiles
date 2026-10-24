@@ -46,10 +46,12 @@ pub use mesh_large::{
     mesh_to_tileset, MeshSourceCrs, MeshSourceCrsReport, TilerDiagnostics, TilerJobs, TilerProfile,
     TilerReport, TilerRequest, TilerResult,
 };
+// The HLOD coarse-tile method and its memory budget stay hidden until HLOD replaces H17 as
+// the default.
 #[doc(hidden)]
 pub use mesh_large::{
-    parse_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan, MemoryBudget,
-    MemoryDiagnostics, TilerLod,
+    check_memory_budget_request, parse_memory_budget, validate_memory_budget, BudgetSource, HlodDiagnostics, HlodMemoryPlan,
+    MemoryBudget, MemoryDiagnostics, TilerLod,
 };
 pub use pack::{validate_3tz, TZ_INDEX_NAME};
 pub use raster_directory::{

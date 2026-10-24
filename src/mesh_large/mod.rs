@@ -26,10 +26,10 @@ mod source_crs;
 mod tree;
 pub use hlod::{HlodDiagnostics, HlodMemoryPlan, TilerLod};
 pub use pipeline::{
-    mesh_to_tileset, MemoryDiagnostics, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport,
+    check_memory_budget_request, mesh_to_tileset, MemoryDiagnostics, TilerDiagnostics, TilerJobs, TilerProfile, TilerReport,
     TilerRequest, TilerResult,
 };
-pub use resources::{parse_memory_budget, BudgetSource, MemoryBudget};
+pub use resources::{parse_memory_budget, validate_memory_budget, BudgetSource, MemoryBudget};
 pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};

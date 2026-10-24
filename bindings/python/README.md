@@ -69,11 +69,15 @@ scratch_dir=None, anchor=None, orientation_xyzw=None, scene_offset=None,
 source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
 height_offset=None, force=False, callback=None)` is the single new public
 source-mesh operation.
-It runs capture, leaf payloads and implicit hierarchy delivery through one core
-run and publication; leaf directories/manifests are internal. Output has
-full-detail leaves under certified coarse parent tiles (simplified proxies whose
-geometric error bounds their distance to the source), with proxy textures baked
-from the source appearance as an approximation that carries no certificate.
+It runs capture, leaf payloads, coarse levels and implicit hierarchy delivery through
+one core run and publication; leaf directories/manifests are internal. Output has
+exact full-detail leaves under coarse parent tiles built as a classic octree level
+of detail (HLOD). A coarse tile's geometric error is a sampled, measured distance to
+the source, not a certificate; its triangles carry one representative
+`source_primitive` ID while leaves keep exact provenance; and its textures are fresh
+charts sampled from the source, an approximation with no appearance certificate. See
+the [mesh guide](../../docs/MESH.md#coarse-levels-hlod), which also marks the legacy
+certified-proxy path a plain call still builds until it is removed.
 
 It accepts the local static metre/Y-up/core PBR domain in the [mesh guide](../../docs/MESH.md),
 with optional rigid WGS84 ellipsoidal anchor, active ENU quaternion and source
@@ -83,11 +87,13 @@ added in double precision or a strict Metashape `source_offset_file`, and
 `height_offset` metres defaulting to 0) is mapped at capture,
 with the CLI's rules; it excludes the rigid placement keywords and `None` or
 `"local"` keeps local input. There is no CRS inference, geoid height adjustment,
-texture-format selector, explicit mode or leaf/proxy tuning.
+texture-format selector, explicit mode or coarse-tile tuning.
 All four profile names (`fast`, default `balanced`, `quality`, `lossless`) are
-provisional; constants will be calibrated together after coarse levels and
-baking exist. KTX2/Basis and meshopt are in-process. PNG is the lossless leaf
-texture exception; JPEG source decoding remains supported.
+provisional; constants will be calibrated together as HLOD acceptance
+progresses. Once the separate default-codec change (#277) lands, base-colour and
+emissive pages, leaf and coarse, are KTX2 ETC1S (quality 50 in `fast`, 90 in
+`balanced`), UASTC in `quality` and PNG in `lossless`; KTX2/Basis and meshopt are in-process, and JPEG source decoding
+remains supported.
 
 A lossy texture page that misses a decoded-image gate is re-encoded at UASTC
 level 2, then level 3, and, for pages sampled at level 0 only, delivered as an

@@ -1,14 +1,19 @@
 """Exercise the installed native extension using only the Python standard library."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+import contextlib
+import io
 import importlib.metadata
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import inspect
 import platform
+import re
 import shutil
+import subprocess
 import sqlite3
 import struct
 import sys
@@ -20,6 +25,9 @@ import rusty_tiles
 
 ROOT = Path(sys.argv.pop(1))
 EXAMPLE = ROOT / "tests/fixtures/example.gltf"
+BUDGET_MATRIX = json.loads((ROOT / "tests/fixtures/memory_budget_matrix.json").read_text())
+# Optional: the CLI binary for the parity checks (the wheel runner keeps PATH empty).
+CLI = os.environ.get("RUSTY_TILES_BIN") or None
 
 
 def write_las(path, *, epsg=None):
@@ -61,6 +69,40 @@ def write_local_mesh(path, *, extras=False):
     }
     if extras:
         document["extras"] = {"not_supported": True}
+    encoded = json.dumps(document, separators=(",", ":")).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    path.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
+                     + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+                     + struct.pack("<II", len(payload), 0x004E4942) + payload)
+
+
+def write_grid_mesh(path, n=100):
+    """Indexed, gently curved n x n grid (2 n^2 untextured triangles), enough for coarse HLOD tiles."""
+    points = [struct.unpack("<3f", struct.pack("<3f", i * 0.5,
+                                               math.sin(i * 0.5 * 0.31) + math.cos(j * 0.5 * 0.17),
+                                               j * 0.5))
+              for j in range(n + 1) for i in range(n + 1)]
+    positions = b"".join(struct.pack("<3f", *point) for point in points)
+    indices = bytearray()
+    for j in range(n):
+        for i in range(n):
+            a = j * (n + 1) + i
+            indices += struct.pack("<6I", a, a + n + 1, a + 1, a + 1, a + n + 1, a + n + 2)
+    payload = positions + bytes(indices)
+    low = [min(point[axis] for point in points) for axis in range(3)]
+    high = [max(point[axis] for point in points) for axis in range(3)]
+    document = {
+        "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+        "buffers": [{"byteLength": len(payload)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+                        {"buffer": 0, "byteOffset": len(positions), "byteLength": len(indices)}],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": (n + 1) ** 2, "type": "VEC3",
+             "min": low, "max": high},
+            {"bufferView": 1, "componentType": 5125, "count": 6 * n * n, "type": "SCALAR"}],
+    }
     encoded = json.dumps(document, separators=(",", ":")).encode()
     encoded += b" " * (-len(encoded) % 4)
     path.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
@@ -210,6 +252,218 @@ class WheelAPI(unittest.TestCase):
                 rusty_tiles.mesh_to_tileset(source, output, force=True)
             self.assertEqual(caught.exception.kind, "invalid_request")
             self.assertEqual(output.read_bytes(), b"prior")
+
+    def test_tiler_memory_budget_matrix_matches_the_core_rules_before_source_io(self):
+        source = self.root / "missing.glb"
+        output = self.root / "budget.3tz"
+        output.write_bytes(b"previous")
+        events = []
+        integers = lambda row: re.fullmatch(r"-?\d+", row["text"])
+        invalid = BUDGET_MATRIX["invalid"]
+        self.assertGreaterEqual(len([row for row in invalid if integers(row)]), 4)
+        for row in invalid:
+            text = row["text"]
+            for lod in ("hlod", "h17"):
+                with self.subTest(text=text, lod=lod):
+                    if integers(row):
+                        # Zero, negative and overflowing integers are core refusals.
+                        with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                            rusty_tiles.mesh_to_tileset(
+                                source, output, force=True, callback=events.append,
+                                _memory_budget_bytes=int(text), _lod=lod)
+                        self.assertEqual(caught.exception.kind, "invalid_request")
+                        self.assertIn("memory budget", str(caught.exception))
+                    else:
+                        # Python takes integers only: suffix text is a type error.
+                        with self.assertRaises(TypeError):
+                            rusty_tiles.mesh_to_tileset(
+                                source, output, force=True, callback=events.append,
+                                _memory_budget_bytes=text, _lod=lod)
+                    self.assertEqual(output.read_bytes(), b"previous")
+                    self.assertEqual(events, [])
+        for value in (True, False, 1.0, 2.5, b"1", [1], "1"):
+            with self.subTest(value=value), self.assertRaises(TypeError):
+                rusty_tiles.mesh_to_tileset(source, output, _memory_budget_bytes=value)
+        for row in BUDGET_MATRIX["valid"]:
+            if not re.fullmatch(r"\d+", row["text"]):
+                continue
+            with self.subTest(valid=row["text"]):
+                # Accepted: the run proceeds to the source, which is missing.
+                with self.assertRaises(rusty_tiles.TilesIOError):
+                    rusty_tiles.mesh_to_tileset(
+                        source, output, force=True, _memory_budget_bytes=int(row["bytes"]),
+                        _lod="hlod")
+        # The legacy default method does not enforce a budget, so it refuses one, ahead of
+        # the (missing) source and an output that fails its own rules.
+        for budget in (2 << 30, 4 << 30):
+            with self.subTest(default_method=budget), \
+                    self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                rusty_tiles.mesh_to_tileset(source, self.root / "x.txt",
+                                            _memory_budget_bytes=budget)
+            self.assertIn("memory budget", str(caught.exception))
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.mesh_to_tileset(source, output, _lod="octree")
+
+    def test_tiler_budget_ignores_overridable_int_methods_and_checks_before_any_file(self):
+        class Liar(int):
+            """An int whose Python-level conversions all claim a valid budget."""
+            def __str__(self):
+                return "2147483648"
+            __repr__ = __str__
+            def __index__(self):
+                return 2147483648
+            def __int__(self):
+                return 2147483648
+            def __format__(self, spec):
+                return "2147483648"
+
+        source = self.root / "missing.glb"
+        output = self.root / "liar.3tz"
+        for value in (-1, 0, 2**64, 2**200):
+            with self.subTest(value=value):
+                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                    rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
+                                                _memory_budget_bytes=Liar(value))
+                self.assertIn("memory budget", str(caught.exception))
+        # A genuine value in a subclass is still accepted and reaches the (missing) source.
+        with self.assertRaises(rusty_tiles.TilesIOError):
+            rusty_tiles.mesh_to_tileset(source, output, _lod="hlod",
+                                        _memory_budget_bytes=Liar(2 << 30))
+        # The request is refused before the offset file is read: the budget is invalid for the
+        # default method, and the missing offset file would otherwise be an I/O error.
+        missing_offset = self.root / "no-such-offset.txt"
+        for options in ({}, {"_lod": "h17"}):
+            with self.subTest(options=options):
+                with self.assertRaises(rusty_tiles.InvalidRequestError) as caught:
+                    rusty_tiles.mesh_to_tileset(
+                        source, output, source_crs="EPSG:3857",
+                        source_offset_file=missing_offset, _memory_budget_bytes=2 << 30,
+                        **options)
+                self.assertEqual(caught.exception.kind, "invalid_request")
+                self.assertIn("memory budget", str(caught.exception))
+        # With a compatible request the offset file is read, so the same call is an I/O error.
+        with self.assertRaises(rusty_tiles.TilesError) as caught:
+            rusty_tiles.mesh_to_tileset(
+                source, output, source_crs="EPSG:3857", source_offset_file=missing_offset,
+                _lod="hlod", _memory_budget_bytes=2 << 30)
+        self.assertNotIsInstance(caught.exception, rusty_tiles.InvalidRequestError)
+        self.assertFalse(output.exists())
+
+    def test_tiler_hlod_installed_run_reports_budget_and_keeps_callback_semantics(self):
+        source = self.root / "grid.glb"
+        write_grid_mesh(source)
+        events = []
+        output = self.root / "hlod.3tz"
+
+        def observe(event):
+            self.assertFalse(output.exists(), "required callback ran after installation")
+            events.append(event)
+
+        result = rusty_tiles.mesh_to_tileset(
+            source, output, jobs=1, _memory_budget_bytes=2 << 30, callback=observe, _lod="hlod")
+        budget = result.diagnostics["memory"]["budget"]
+        self.assertEqual((budget["requested_bytes"], budget["resolved_bytes"], budget["source"]),
+                         (2 << 30, 2 << 30, "explicit"))
+        self.assertGreater(result.diagnostics["memory"]["minimum_bytes"], 0)
+        self.assertGreater(result.diagnostics["hlod"]["tiles"], 0)
+        self.assertGreater(result.report["tiles"], result.report["leaves"])
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(result.report, json.loads(archive.read("conversion.json")))
+        self.assertTrue(any(event.get("phase") == "hlod_geometry" for event in events))
+        self.assertTrue(any(event.get("phase") == "ready_to_publish" for event in events))
+        # An unset budget resolves the documented default and never exceeds 4 GiB.
+        defaulted = rusty_tiles.mesh_to_tileset(
+            source, self.root / "default.3tz", jobs=1, _lod="hlod")
+        default_budget = defaulted.diagnostics["memory"]["budget"]
+        self.assertIsNone(default_budget["requested_bytes"])
+        self.assertLessEqual(default_budget["resolved_bytes"], 4 << 30)
+        self.assertIn(default_budget["source"],
+                      ("default_ceiling", "default_headroom", "default_undetected"))
+        # A budget is a ceiling on admission, never an input to the output.
+        self.assertEqual(output.read_bytes(), (self.root / "default.3tz").read_bytes())
+        # A callback exception still wins before publication, and nothing is installed.
+        failure = RuntimeError("hlod callback")
+
+        def fail(event):
+            if event.get("phase") == "hlod_geometry":
+                raise failure
+
+        aborted = self.root / "aborted.3tz"
+        with self.assertRaises(RuntimeError) as caught:
+            rusty_tiles.mesh_to_tileset(source, aborted, jobs=1, callback=fail, _lod="hlod")
+        self.assertIs(caught.exception, failure)
+        self.assertFalse(aborted.exists())
+        # Below the stage minimum the run is a typed resource refusal that publishes nothing.
+        refused = self.root / "refused.3tz"
+        with self.assertRaises(rusty_tiles.ResourceLimitError) as caught:
+            rusty_tiles.mesh_to_tileset(source, refused, jobs=1, _memory_budget_bytes=1 << 20,
+                                        _lod="hlod")
+        self.assertEqual(caught.exception.kind, "resource_limit")
+        self.assertFalse(refused.exists())
+        self.assertFalse(any(path.name.startswith(".tiles-") for path in self.root.iterdir()))
+
+    @unittest.skipUnless(CLI, "set RUSTY_TILES_BIN for CLI/Python parity")
+    def test_tiler_cli_and_python_agree_on_hlod_archive_and_reports(self):
+        source = self.root / "parity.glb"
+        write_grid_mesh(source)
+        cli_output = self.root / "cli.3tz"
+        completed = subprocess.run(
+            [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--lod", "hlod",
+             "--jobs", "1", "--memory-budget", "2GiB"],
+            capture_output=True, check=True, timeout=300)
+        envelope = json.loads(completed.stdout)
+        python = rusty_tiles.mesh_to_tileset(
+            source, self.root / "python.3tz", jobs=1, _memory_budget_bytes=2 << 30, _lod="hlod")
+        self.assertEqual((self.root / "python.3tz").read_bytes(), cli_output.read_bytes())
+        self.assertEqual(python.report, envelope["tilerReport"])
+        with zipfile.ZipFile(cli_output) as archive:
+            self.assertEqual(envelope["tilerReport"], json.loads(archive.read("conversion.json")))
+            members = sorted(archive.namelist())
+        with zipfile.ZipFile(self.root / "python.3tz") as archive:
+            self.assertEqual(sorted(archive.namelist()), members)
+        self.assertTrue(any(name.endswith(".glb") for name in members))
+        # Diagnostics are runtime facts (times, scratch paths); the budget and the stage plan
+        # they report are not.
+        # (detected headroom moves between two processes, so only the declared parts compare.)
+        budget = {key: python.diagnostics["memory"]["budget"][key]
+                  for key in ("requested_bytes", "resolved_bytes", "source")}
+        self.assertEqual(budget, {key: envelope["diagnostics"]["memory"]["budget"][key]
+                                  for key in budget})
+        self.assertEqual(budget, {"requested_bytes": 2 << 30, "resolved_bytes": 2 << 30,
+                                  "source": "explicit"})
+        for key in ("minimum_bytes", "capture_minimum_bytes", "leaf_minimum_bytes",
+                    "archive_minimum_bytes"):
+            self.assertEqual(python.diagnostics["memory"][key], envelope["diagnostics"]["memory"][key], key)
+        self.assertEqual(python.diagnostics["memory"]["hlod"]["minimum_bytes"],
+                         envelope["diagnostics"]["memory"]["hlod"]["minimum_bytes"])
+        self.assertEqual(python.diagnostics["hlod"]["tiles"], envelope["diagnostics"]["hlod"]["tiles"])
+        self.assertEqual(python.diagnostics["archive_bytes"], envelope["diagnostics"]["archive_bytes"])
+
+    def test_tiler_documented_signatures_name_only_installed_parameters(self):
+        installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
+        documented = {"input", "output", "profile", "jobs", "scratch_dir",
+                      "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
+                      "source_offset", "source_offset_file", "height_offset", "force", "callback"}
+        # The private selector and budget travel through **kwargs: no signature or help() names
+        # them, and any other keyword is still a TypeError.
+        self.assertEqual(installed - documented, {"kwargs"})
+        self.assertLessEqual(documented, installed)
+        shown = io.StringIO()
+        with contextlib.redirect_stdout(shown):
+            help(rusty_tiles.mesh_to_tileset)
+        for hidden in ("_lod", "memory_budget", "hlod"):
+            self.assertNotIn(hidden, shown.getvalue() + str(inspect.signature(rusty_tiles.mesh_to_tileset))
+                             + (rusty_tiles.mesh_to_tileset.__doc__ or ""))
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(self.root / "x.glb", self.root / "x.3tz", _lod_typo="hlod")
+        for name in ("docs/MESH.md", "bindings/python/README.md"):
+            text = (ROOT / name).read_text()
+            self.assertNotIn("_lod", text, name)
+            self.assertNotIn("memory_budget_bytes", text, name)
+            signature = re.search(r"mesh_to_tileset\(input, output, \*,([^)]*)\)", text, re.S)
+            self.assertIsNotNone(signature, name)
+            names = re.findall(r"(\w+)=", signature.group(1))
+            self.assertEqual(set(names), documented - {"input", "output"}, name)
 
     def test_tiler_typed_source_failures_and_conflict_preserve_destination(self):
         source = self.root / "source.glb"

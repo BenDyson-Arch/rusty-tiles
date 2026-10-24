@@ -148,7 +148,8 @@ struct TilerArgs {
     /// Coarse-tile method: h17 (default) or hlod (0.4 octree HLOD, in development)
     #[arg(long, default_value = "h17", hide = true)]
     lod: rusty_tiles::TilerLod,
-    /// Declared memory budget for an hlod run: bytes, or with a KiB/MiB/GiB/TiB suffix
+    /// Memory ceiling, never raised: bytes, or with a KiB/MiB/GiB/TiB suffix (2GiB). Hidden
+    /// until HLOD is the default; the h17 method cannot enforce a budget and refuses it
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget, hide = true)]
     memory_budget: Option<u64>,
@@ -1090,6 +1091,15 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
     let json = cli.json;
     Ok(match cli.command {
         Command::Mesh(a) => {
+            // The whole request is checked before any file (offset file, source) is read.
+            rusty_tiles::check_memory_budget_request(a.lod, a.memory_budget).map_err(|error| {
+                rusty_tiles::JobFailure {
+                    error,
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                }
+            })?;
             let mut request = TilerRequest::new(a.io.input, a.io.output)
                 .with_profile(a.profile)
                 .with_jobs(a.jobs)

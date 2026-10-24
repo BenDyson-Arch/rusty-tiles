@@ -117,9 +117,12 @@ impl TilerRequest {
         self.lod = lod;
         self
     }
-    /// Declared memory budget in bytes (D8), a ceiling for every stage of an HLOD run.
-    /// Without one, HLOD runs resolve the lesser of 4 GiB and half the detected headroom
-    /// (2 GiB when undetected). Zero is refused.
+    /// Declared memory budget in bytes, a ceiling for every stage of the run: never raised,
+    /// and a run that cannot fit under it is refused as `resource_limit` before the binding
+    /// stage allocates. Without one the run resolves the lesser of 4 GiB and half the
+    /// detected host/cgroup headroom (2 GiB when headroom is undetected). Zero is refused as
+    /// `invalid_request` before any source I/O. Hidden until HLOD is the default: the
+    /// current default coarse-tile method does not enforce a budget, so it refuses one.
     #[doc(hidden)]
     pub fn with_memory_budget(mut self, bytes: u64) -> Self {
         self.memory_budget = Some(bytes);
@@ -335,6 +338,30 @@ fn invalid(message: &str) -> JobError {
     JobError::new(JobErrorKind::InvalidRequest, message)
 }
 
+/// Budget request rules, before any filesystem access: positive, and only for a coarse-tile
+/// method that enforces one.
+fn check_memory_budget(request: &TilerRequest) -> Result<(), JobError> {
+    check_memory_budget_request(request.lod, request.memory_budget)
+}
+
+/// The budget rules of one request, for frontends that resolve files (an offset file, say)
+/// before they build a [`TilerRequest`]: they call this first, so no file is read for a
+/// request that is already invalid.
+#[doc(hidden)]
+pub fn check_memory_budget_request(lod: TilerLod, budget: Option<u64>) -> Result<(), JobError> {
+    let Some(bytes) = budget else {
+        return Ok(());
+    };
+    super::resources::validate_memory_budget(bytes)?;
+    match lod {
+        TilerLod::Hlod => Ok(()),
+        TilerLod::H17 => Err(invalid(
+            "a memory budget is not yet accepted by the current default coarse-tile method, \
+             which does not enforce one",
+        )),
+    }
+}
+
 fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), JobError> {
     if !request
         .output
@@ -393,22 +420,16 @@ pub fn mesh_to_tileset(
 ) -> Result<TilerResult, JobFailure> {
     let attempt = control.begin()?;
     attempt.check().map_err(|e| attempt.fail(e))?;
+    // Request intent is refused first: no path, source or output is touched for a bad budget.
+    check_memory_budget(&request).map_err(|e| attempt.fail(e))?;
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
     config.lod = request.lod;
-    match request.lod {
-        TilerLod::Hlod => {
-            config.memory_budget =
-                Some(MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?)
-        }
-        TilerLod::H17 if request.memory_budget.is_some() => {
-            return Err(attempt.fail(invalid(
-                "a memory budget requires the HLOD coarse-tile method (--lod hlod)",
-            )))
-        }
-        TilerLod::H17 => {}
+    if request.lod == TilerLod::Hlod {
+        config.memory_budget =
+            Some(MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?);
     }
     #[cfg(test)]
     if let Some(leaf_triangles) = request.leaf_triangles {

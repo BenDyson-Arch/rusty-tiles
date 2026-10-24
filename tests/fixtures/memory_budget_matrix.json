@@ -1,0 +1,34 @@
+{
+  "comment": "One memory-budget matrix shared by the Rust parser, the CLI (--memory-budget) and Python (memory_budget_bytes, which takes the integer rows). Valid bytes are decimal strings; every invalid row is invalid_request.",
+  "valid": [
+    {"text": "1", "bytes": "1"},
+    {"text": "4096", "bytes": "4096"},
+    {"text": "4096B", "bytes": "4096"},
+    {"text": "3KiB", "bytes": "3072"},
+    {"text": "512MiB", "bytes": "536870912"},
+    {"text": "2GiB", "bytes": "2147483648"},
+    {"text": "4GiB", "bytes": "4294967296"},
+    {"text": "1TiB", "bytes": "1099511627776"},
+    {"text": "18446744073709551615", "bytes": "18446744073709551615"}
+  ],
+  "invalid": [
+    {"text": "", "why": "empty"},
+    {"text": "0", "why": "zero"},
+    {"text": "0GiB", "why": "zero with suffix"},
+    {"text": "-1", "why": "sign"},
+    {"text": "+1", "why": "sign"},
+    {"text": "1.5GiB", "why": "fraction"},
+    {"text": "1e9", "why": "exponent"},
+    {"text": "0x10", "why": "hexadecimal"},
+    {"text": "1_000", "why": "separator"},
+    {"text": "2GB", "why": "decimal-unit suffix"},
+    {"text": "2gib", "why": "suffix case"},
+    {"text": "2 GiB", "why": "space"},
+    {"text": "GiB", "why": "no number"},
+    {"text": "true", "why": "boolean"},
+    {"text": "false", "why": "boolean"},
+    {"text": "18446744073709551616", "why": "overflow by one"},
+    {"text": "16777216TiB", "why": "overflow by suffix"},
+    {"text": "99999999999999999999999", "why": "overflow"}
+  ]
+}
