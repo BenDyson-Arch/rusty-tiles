@@ -36,8 +36,6 @@ pub(crate) struct Built {
     pub interface_segments: u32,
     /// Output faces turned to (or dropped beside) their source orientation (`orient`).
     pub reoriented: u32,
-    /// Its interface cannot fit the cap: never published, held above the cap for its parent.
-    pub omitted: bool,
     /// Triangle visits of the representative selection (linear: `representatives`).
     pub representative_visits: u64,
 }
@@ -283,17 +281,15 @@ fn representatives(merged: &Merged, output: &[[u32; 3]]) -> (Vec<SourcePrimitive
 ///
 /// The interface is exact (shared points and segments only), so a parent that cannot keep
 /// it within its last cap has a genuine limit (D1: its exact interface, or topology plain
-/// simplification cannot reduce, D3). Its coarse tile is **omitted** (`Built::omitted`): it
-/// is never published and never refused. What it hands its own parent is the least
-/// simplification that holds its interface (meshopt's result, or its merged children where
-/// protected retries still lose an item), at most its merged input; its capped descendants
-/// are the published refinement frontier.
+/// simplification cannot reduce, D3). It returns `None`: its coarse tile is **omitted**,
+/// never published and never refused, and so is every ancestor's (the walk propagates it),
+/// so its capped descendants are the refinement frontier.
 pub(crate) fn build_parent(
     tile: TileKey,
     children: &[TileGeometry],
     caps: &[usize],
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Built, JobError> {
+) -> Result<Option<Built>, JobError> {
     check()?;
     let merged = merge(children);
     if merged.triangles.is_empty() {
@@ -314,28 +310,26 @@ pub(crate) fn build_parent(
         .copied()
         .collect();
     super::interfaces::merge_rows(&mut interface);
-    let Some((&last, earlier)) = caps.split_last() else {
+    if caps.is_empty() {
         return Err(state("a parent build needs at least one cap"));
-    };
-    for &cap in earlier {
-        match attempt(tile, &merged, &interface, cap, children_error, false) {
+    }
+    for &cap in caps {
+        match attempt(tile, &merged, &interface, cap, children_error) {
             Err(e) if e.kind() == JobErrorKind::Unsupported => continue,
-            built => return built,
+            built => return built.map(Some),
         }
     }
-    attempt(tile, &merged, &interface, last, children_error, true)
+    Ok(None)
 }
 
-/// One build of the parent from `merged` children under `interface`; `over` returns a
-/// parent whose interface cannot fit `cap` as omitted (held above the cap for its parent,
-/// never published) instead of refusing.
+/// One build of the parent from `merged` children under `interface`; `unsupported` when
+/// its interface cannot fit `cap`.
 fn attempt(
     tile: TileKey,
     merged: &Merged,
     interface: &[InterfaceRow],
     cap: usize,
     children_error: f64,
-    over: bool,
 ) -> Result<Built, JobError> {
     let segments: HashSet<(Key, Key)> = interface
         .iter()
@@ -363,7 +357,6 @@ fn attempt(
     let mut protected = vec![false; input];
     let mut retries = 0;
     let mut reoriented = 0;
-    let mut omitted = false;
     let degenerate_only = merged
         .triangles
         .iter()
@@ -383,12 +376,6 @@ fn attempt(
         loop {
             let (edges, points) = missing(&output, &merged.keys, &segments, &vertices);
             if edges.is_empty() && points.is_empty() {
-                break;
-            }
-            if retries == RETRIES && over {
-                // The merged children hold the interface (by induction): keep them whole.
-                output = merged.triangles.clone();
-                reoriented = 0;
                 break;
             }
             if retries == RETRIES {
@@ -447,10 +434,7 @@ fn attempt(
             reoriented = orient(merged, &mut output);
             error = e;
         }
-        if output.len() > cap && over {
-            omitted = true;
-            (output, error, StoppingBound::TriangleBudget)
-        } else if output.len() > cap {
+        if output.len() > cap {
             return Err(JobError::new(
                 JobErrorKind::Unsupported,
                 format!(
@@ -533,7 +517,6 @@ fn attempt(
         interface_vertices: vertices.len() as u32,
         interface_segments: segments.len() as u32,
         reoriented,
-        omitted,
         representative_visits,
         geometry,
     })

@@ -1577,17 +1577,12 @@ fn parent_jobs_allocate_within_their_charge() {
         );
         assert!(peak as u64 <= charge, "kind {kind}: {peak} > {charge}");
         match (kind, built) {
-            // Its whole interface cannot fit the cap: omitted (held for its parent above the
-            // cap, never published), never refused.
-            (0, built) => {
-                let built = built.unwrap();
-                assert!(built.omitted);
-                assert!(built.geometry.triangles.len() > cap);
-                assert!(built.geometry.triangles.len() as u64 <= merged);
-            }
-            (2, built) => grid = Some(built.unwrap()),
-            // The retries ran (and fitted, or ran out and kept the interface above the cap).
-            (_, Ok(b)) => assert!(b.retries > 0 || b.omitted, "kind {kind}"),
+            // Its whole interface cannot fit the cap: omitted (nothing published or held),
+            // never refused.
+            (0, built) => assert!(built.unwrap().is_none()),
+            (2, built) => grid = Some(built.unwrap().unwrap()),
+            // The retries ran (and fitted, or ran out and omitted it).
+            (_, Ok(b)) => assert!(b.is_none_or(|b| b.retries > 0), "kind {kind}"),
             (_, Err(e)) => panic!("kind {kind}: {e}"),
         }
     }
@@ -2157,10 +2152,15 @@ fn duplicated_soup_is_admitted_and_crack_free() {
     let dir = stage(&input, &work.path().join("capped"), &Run::default()).unwrap();
     let manifest: Value =
         serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
-    assert!(manifest["hlod"]["omittedProxies"].as_u64().unwrap() > 0);
+    let omitted: Vec<u64> =
+        serde_json::from_value(manifest["hlod"]["omittedByDepth"].clone()).unwrap();
+    assert_eq!(omitted.first(), Some(&1), "{}", manifest["hlod"]);
+    // Sol round 8: nothing compounds; every job merges at most eight capped children.
+    assert_bounded_jobs(&dir, 300);
     for row in rows(&dir.join("proxies.jsonl")) {
-        assert!(row["triangles"].as_u64().unwrap() <= 1024, "{row}");
+        assert!(row["triangles"].as_u64().unwrap() <= 300, "{row}");
     }
+    cover(&dir);
     let capped = super::tests::census(&dir);
     assert_eq!(
         capped.missing_segments + capped.missing_vertices + capped.reversed_coarse_faces,
@@ -2343,39 +2343,55 @@ fn moved_or_dropped_segments_fail() {
     assert!(!work.path().join("dropped").exists());
 }
 
-/// The published tiles a view refined to depth `d` needs (each leaf's shallowest published
-/// tile at depth `d` or deeper), their bytes, and how many of them lie deeper than `d`.
-fn frontier(dir: &Path, d: u32) -> (usize, u64, usize) {
+/// The coarsest published cover: each leaf's shallowest published tile. Its tiles' leaf
+/// ranges must cover every leaf exactly once (no gap, no double coverage); returns their
+/// count and bytes (what a first view of the whole model loads).
+fn cover(dir: &Path) -> (usize, u64) {
     let tiles = load(dir);
     let leaves = tiles.iter().filter(|t| t.leaf).count();
-    let mut chosen = BTreeSet::new();
+    let mut chosen: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     for i in 0..leaves {
-        if let Some(t) = tiles
+        let t = tiles
             .iter()
-            .filter(|t| t.depth >= d && t.begin <= i && i < t.end)
+            .filter(|t| t.begin <= i && i < t.end)
             .min_by_key(|t| t.depth)
-        {
-            chosen.insert(t.uri.clone());
-        }
+            .unwrap();
+        chosen.insert(t.uri.clone(), (t.begin, t.end));
     }
+    let mut ranges: Vec<(usize, usize)> = chosen.values().copied().collect();
+    ranges.sort_unstable();
+    let mut next = 0;
+    for (begin, end) in &ranges {
+        assert_eq!(*begin, next, "cover gap or double coverage: {ranges:?}");
+        next = *end;
+    }
+    assert_eq!(next, leaves);
     let bytes = chosen
-        .iter()
+        .keys()
         .map(|u| fs::metadata(dir.join(u)).unwrap().len())
         .sum();
-    let deeper = tiles
-        .iter()
-        .filter(|t| chosen.contains(&t.uri) && t.depth > d)
-        .count();
-    (chosen.len(), bytes, deeper)
+    (chosen.len(), bytes)
 }
 
-/// Round 7 (Sol): an exact interface that cannot fit the cap omits that parent's coarse tile
-/// instead of publishing it above the cap or refusing. Its capped descendants are the
-/// refinement frontier, and its own parent is built from what it held. The archive has no
-/// content-less tile below content under the default and under tight fragment caps (an
-/// omitted cell repeats its frontier as its contents, and is never demoted into an implicit
-/// tree or made a document's root). The cost: a view refined to the omitted cells' depth
-/// loads their frontier.
+/// Bounded jobs: every parent job merges at most eight capped children.
+fn assert_bounded_jobs(dir: &Path, cap: u64) {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let leaf_cap = rows(&dir.join("leaves.jsonl"))
+        .iter()
+        .map(|r| r["end"].as_u64().unwrap() - r["first"].as_u64().unwrap())
+        .max()
+        .unwrap();
+    let input = manifest["hlod"]["maxJobInputTriangles"].as_u64().unwrap();
+    let bound = 8 * leaf_cap.max(cap);
+    assert!(input > 0 && input <= bound, "{input} > {bound}");
+}
+
+/// Round 8 (owner): an exact interface that cannot fit the cap omits that cell's coarse tile
+/// and, by upward propagation, every ancestor's: omitted cells publish no content and hold
+/// nothing, so no job merges more than eight capped children and no content-less cell has a
+/// content ancestor (Cesium's empty traversal never meets one below content). The capped
+/// tiles below the omitted cap cover every leaf exactly once; the first view loads them.
 #[test]
 fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
     use crate::mesh_large::delivery::{self, plan::Limits};
@@ -2397,10 +2413,11 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
     assert!(omitted > 0, "{hlod}");
     let by_depth: Vec<u64> = serde_json::from_value(hlod["omittedByDepth"].clone()).unwrap();
     assert_eq!(by_depth.iter().sum::<u64>(), omitted);
-    assert!(
-        hlod["maxOmittedHeldTriangles"].as_u64().unwrap() > 12,
-        "{hlod}"
-    );
+    // Omission reaches the root.
+    assert_eq!(by_depth[0], 1, "{hlod}");
+    let sources = hlod["omissionSources"].as_u64().unwrap();
+    assert!(sources > 0 && sources <= omitted, "{hlod}");
+    assert_bounded_jobs(&dir, 12);
     for row in rows(&dir.join("proxies.jsonl")) {
         assert!(row["triangles"].as_u64().unwrap() <= 12, "{row}");
     }
@@ -2439,18 +2456,11 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
             "{name}: {shape:?} {report:?}"
         );
     }
-    let d = by_depth.iter().position(|n| *n > 0).unwrap() as u32;
-    let (tiles, bytes, deeper) = frontier(&dir, d);
-    let published = rows(&dir.join("proxies.jsonl"))
-        .iter()
-        .filter(|r| r["depth"].as_u64() == Some(u64::from(d)))
-        .count();
+    let (tiles, bytes) = cover(&dir);
     eprintln!(
-        "OMITTED {omitted} by depth {by_depth:?}; a view refined to depth {d} needs {tiles} \
-         tiles ({bytes} bytes), {deeper} of them deeper than {d} (frontier of omitted cells); \
-         {published} depth-{d} coarse tiles published"
+        "OMITTED {omitted} ({sources} sources) by depth {by_depth:?}; the first view loads \
+         {tiles} capped tiles ({bytes} bytes), each leaf covered once"
     );
-    assert!(deeper > 0);
 }
 
 /// Output is identical for any job count, any admitted budget and spilled sorts.

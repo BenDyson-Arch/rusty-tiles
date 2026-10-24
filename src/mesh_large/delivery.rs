@@ -14,7 +14,7 @@ pub(crate) mod source;
 mod tests;
 
 use self::{
-    plan::{document_members, state, Builder, Limits, Linked, Node, Payload, Shape, Sink, LIMITS},
+    plan::{document_members, state, Builder, Limits, Linked, Node, Shape, Sink, LIMITS},
     source::{LeafDirectory, LeafRow, ProxyRow},
 };
 use super::config::MEMBER_CEILING_3TZ;
@@ -355,31 +355,12 @@ impl WriteSink<'_> {
         if node.is_implicit_root() {
             return self.implicit(node);
         }
-        // Skeleton tiles and the tiles of a shallow tree written explicitly; an omitted cell
-        // repeats its frontier (`Node::omitted`).
-        let contents = if node.omitted {
-            let mut contents = Vec::with_capacity(node.frontier.len());
-            for (i, payload) in node.frontier.iter().enumerate() {
-                let member = format!("content/f{}-d{}-{i}.glb", node.first, node.depth);
-                contents.push(match payload {
-                    Payload::Leaf(row) => {
-                        self.stage(row, &member)?;
-                        leaf_content(row, member)?
-                    }
-                    Payload::Proxy(row) => {
-                        self.stage_payload(&row.uri, row.bytes, row.sha256, &member)?;
-                        proxy_content(row, member)?
-                    }
-                });
-            }
-            contents
-        } else {
-            self.stage_proxy(
-                &node,
-                &format!("content/f{}-d{}.glb", node.first, node.depth),
-                root,
-            )?
-        };
+        // Skeleton tiles and the tiles of a shallow tree written explicitly.
+        let contents = self.stage_proxy(
+            &node,
+            &format!("content/f{}-d{}.glb", node.first, node.depth),
+            root,
+        )?;
         let own = record(&node, contents)?;
         let mut children = Vec::with_capacity(node.children.len());
         for child in spliced(node.children) {

@@ -114,10 +114,7 @@ const ROW_WINDOW: usize = 1024;
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
 /// One parent job's admission for `merged` input triangles: its workspace, encode allowance
-/// and a cap-sized output. An omitted parent (`Built::omitted`) holds at most its merged
-/// triangles for its own parent, unencoded; their held footprint (`HELD_BYTES_PER_TRIANGLE`,
-/// under 300 bytes) fits in the workspace its simplification released, so it never needs
-/// more than this admission. A parent merging such a child is admitted at its actual size.
+/// and a cap-sized output.
 fn job_charge(merged: u64, cap: usize) -> u64 {
     merged
         .saturating_mul(JOB_BYTES_PER_TRIANGLE)
@@ -270,13 +267,16 @@ pub(crate) struct HlodReport {
     pub tiles_with_protected_faces: u64,
     pub protected_faces: u64,
     pub retries: u64,
-    /// Cells whose coarse tile was omitted because their exact interface (or topology plain
-    /// simplification cannot reduce) needs more triangles than the cap, by cell depth, and
-    /// the most triangles any of them held for its parent (never published). Their capped
-    /// descendants are the refinement frontier.
+    /// Cells whose coarse tile was omitted, by cell depth, and of them the sources: cells
+    /// whose exact interface (or topology plain simplification cannot reduce) needs more
+    /// triangles than the cap. Omission propagates to every ancestor (no content above a
+    /// content-less cell), so the rest are those ancestors; the capped tiles below are the
+    /// refinement frontier.
     pub omitted_proxies: u64,
+    pub omission_sources: u64,
     pub omitted_by_depth: Vec<u64>,
-    pub max_omitted_held_triangles: u64,
+    /// The largest merged input of any parent job (at most eight capped children).
+    pub max_job_input_triangles: u64,
     /// Simplified faces kept on their source orientation (`geometry::orient`).
     pub reoriented_faces: u64,
     pub interface_segments: u64,
@@ -389,16 +389,17 @@ struct Frame {
 }
 
 /// A finished parent: its geometry (held for its own parent) and its published row, or
-/// none when its coarse tile is omitted.
-type Done = Result<(TileGeometry, Finished), JobError>;
+/// neither when its coarse tile is omitted.
+type Done = Result<(Option<TileGeometry>, Finished), JobError>;
 
 /// A parent's outcome in postorder.
 enum Finished {
     Row(Box<HlodRow>),
-    /// Omitted (its interface cannot fit the cap): its cell depth and held triangles.
+    /// Omitted at its cell depth: it could not keep its interface within the cap (`source`),
+    /// or a child was omitted (propagated: omission reaches the root).
     Omitted {
         depth: u32,
-        triangles: u64,
+        source: bool,
     },
 }
 
@@ -725,29 +726,22 @@ fn build_tile(
     _ledger: &scratch::ScratchLedger<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Done {
-    let mut built = if closed.single_leaf {
+    let built = if closed.single_leaf {
         // Halved, or where its interface cannot be halved, the copy within the cap.
         let half = children[0].triangles.len().div_ceil(2).min(settings.cap);
         geometry::build_parent(closed.key, &children, &[half, settings.cap], check)?
     } else {
         geometry::build_parent(closed.key, &children, &[settings.cap], check)?
     };
-    let children_error = built.children_error;
     drop(children);
-    if built.omitted {
-        // Never published: its capped descendants are the frontier; its parent takes this
-        // geometry (the least simplification holding its interface) as input.
-        let mut geometry = built.geometry;
-        geometry.geometric_error = children_error;
-        let triangles = geometry.triangles.len() as u64;
-        return Ok((
-            geometry,
-            Finished::Omitted {
-                depth: closed.key.depth,
-                triangles,
-            },
-        ));
-    }
+    let Some(mut built) = built else {
+        // Its interface cannot fit the cap: omitted, nothing held for its parent.
+        let omitted = Finished::Omitted {
+            depth: closed.key.depth,
+            source: true,
+        };
+        return Ok((None, omitted));
+    };
     if settings.mutation == Mutation::DropSegment {
         let tile = &mut built.geometry;
         let locked: Vec<bool> = built.locked.clone();
@@ -829,7 +823,7 @@ fn build_tile(
     };
     let mut geometry = built.geometry;
     geometry.geometric_error = error.geometric_error;
-    Ok((geometry, Finished::Row(Box::new(row))))
+    Ok((Some(geometry), Finished::Row(Box::new(row))))
 }
 
 fn tally(report: &mut HlodReport, row: &HlodRow) {
@@ -876,6 +870,14 @@ fn walk(
     let materials = encode::flat_materials(&captured.materials);
     let ledger = Ledger::new(plan.ledger_bytes);
     let job_bytes = plan.job_bytes;
+    // The most a job merges: eight capped children (an omitted child is never merged).
+    let job_inputs = input
+        .config
+        .leaf_triangles()
+        .max(settings.cap as u64)
+        .saturating_mul(8);
+    let out_bytes = TileGeometry::charge(settings.cap as u64);
+    let job_peak = std::cell::Cell::new(0u64);
     let jobs = usize::try_from(plan.jobs.max(1)).map_err(|_| resource("jobs overflow"))?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(jobs)
@@ -906,7 +908,8 @@ fn walk(
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
         let (sender, receiver) = mpsc::channel::<(u64, u64, Done)>();
         let mut stack: Vec<Frame> = Vec::new();
-        let mut ready: HashMap<u64, TileGeometry> = HashMap::new();
+        // Finished children: their geometry, or none when omitted.
+        let mut ready: HashMap<u64, Option<TileGeometry>> = HashMap::new();
         let mut pending: Vec<Closed> = Vec::new();
         let mut finished_rows: BTreeMap<u64, Finished> = BTreeMap::new();
         let (mut next_id, mut next_seq, mut written, mut inflight) = (0u64, 0u64, 0u64, 0usize);
@@ -916,7 +919,7 @@ fn walk(
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
         let spawn = |pending: &mut Vec<Closed>,
-                     ready: &mut HashMap<u64, TileGeometry>,
+                     ready: &mut HashMap<u64, Option<TileGeometry>>,
                      inflight: &mut usize|
          -> Result<(), JobError> {
             let mut i = 0;
@@ -925,21 +928,42 @@ fn walk(
                     i += 1;
                     continue;
                 }
-                // Children kept above the cap merge into a larger job, admitted at its size.
+                // An omitted child omits this cell too, before any merge: nothing to build,
+                // its other children's geometry released (omission reaches the root).
+                if pending[i].children.iter().any(|c| ready[c].is_none()) {
+                    let closed = pending.remove(i);
+                    for c in &closed.children {
+                        ready.remove(c);
+                    }
+                    *inflight += 1;
+                    let omitted = Finished::Omitted {
+                        depth: closed.key.depth,
+                        source: false,
+                    };
+                    let _ = sender.send((closed.id, closed.seq, Ok((None, omitted))));
+                    continue;
+                }
+                // Children are capped (an omitted child propagates instead of merging), so
+                // every job is within its planned charge.
                 let merged: u64 = pending[i]
                     .children
                     .iter()
-                    .map(|c| ready[c].triangles.len() as u64)
+                    .map(|c| ready[c].as_ref().map_or(0, |g| g.triangles.len() as u64))
                     .sum();
-                let job = job_bytes.max(job_charge(merged, settings.cap));
-                let Some(job_lease) = ledger.try_lease(job, 0) else {
+                if merged > job_inputs {
+                    return Err(state(format!(
+                        "a parent job merges {merged} triangles, past its planned {job_inputs}"
+                    )));
+                }
+                job_peak.set(job_peak.get().max(merged));
+                let Some(job_lease) = ledger.try_lease(job_bytes, 0) else {
                     break;
                 };
                 let closed = pending.remove(i);
                 let children: Vec<TileGeometry> = closed
                     .children
                     .iter()
-                    .map(|c| ready.remove(c).unwrap())
+                    .map(|c| ready.remove(c).flatten().unwrap())
                     .collect();
                 let sender = sender.clone();
                 *inflight += 1;
@@ -958,13 +982,15 @@ fn walk(
                         )?;
                         // The job's admission includes its output: keep that part while the
                         // tile is held for its parent, release the workspace.
-                        let mut lease = job_lease;
-                        let held = built.0.check_charge()?;
-                        if held > job {
-                            return Err(state("a coarse tile exceeds its admitted job"));
+                        if let Some(tile) = built.0.as_mut() {
+                            let mut lease = job_lease;
+                            let held = tile.check_charge()?;
+                            if held > out_bytes {
+                                return Err(state("a coarse tile exceeds its admitted output"));
+                            }
+                            lease.shrink(held);
+                            tile.lease = Some(lease);
                         }
-                        lease.shrink(held);
-                        built.0.lease = Some(lease);
                         Ok(built)
                     }))
                     .unwrap_or_else(|_| Err(state("HLOD worker panicked")));
@@ -974,7 +1000,7 @@ fn walk(
             Ok(())
         };
         let receive = |pending: &mut Vec<Closed>,
-                       ready: &mut HashMap<u64, TileGeometry>,
+                       ready: &mut HashMap<u64, Option<TileGeometry>>,
                        inflight: &mut usize,
                        finished_rows: &mut BTreeMap<u64, Finished>|
          -> Result<(), JobError> {
@@ -1004,15 +1030,14 @@ fn walk(
                 let depth = publish.remove(written).unwrap().depth;
                 let mut row = match finished {
                     Finished::Row(row) => *row,
-                    Finished::Omitted { depth, triangles } => {
+                    Finished::Omitted { depth, source } => {
                         report.omitted_proxies += 1;
+                        report.omission_sources += u64::from(source);
                         let d = depth as usize;
                         if report.omitted_by_depth.len() <= d {
                             report.omitted_by_depth.resize(d + 1, 0);
                         }
                         report.omitted_by_depth[d] += 1;
-                        report.max_omitted_held_triangles =
-                            report.max_omitted_held_triangles.max(triangles);
                         *written += 1;
                         continue;
                     }
@@ -1175,7 +1200,7 @@ fn walk(
                     Some(parent) => {
                         kinds.insert(id, Child::Leaf);
                         adopt(parent, id, &kinds, &mut publish);
-                        ready.insert(id, tile);
+                        ready.insert(id, Some(tile));
                     }
                     None => {
                         return Err(state(
@@ -1219,6 +1244,7 @@ fn walk(
     });
     outcome?;
     report.pass_through = passed;
+    report.max_job_input_triangles = job_peak.get();
     if passed > 0 {
         // Pass-through cells complete with their child.
         input

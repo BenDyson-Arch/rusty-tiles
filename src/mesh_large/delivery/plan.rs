@@ -112,19 +112,13 @@ pub(crate) struct Node {
     /// empty: explicit output splices it out (its child replaces it), and where the layout
     /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
     pub chain: Option<Box<ProxyRow>>,
-    /// An HLOD cell whose coarse tile was omitted (its exact interface cannot fit the cap):
-    /// its capped descendants are the refinement frontier. It is never published empty
-    /// between content levels: it repeats its frontier, the content of each child (an omitted
-    /// child's own frontier), as its contents, so it renders exactly what replaces it. It is
-    /// kept explicit: never demoted into an implicit tree or written as a document's root
-    /// (`omits`).
+    /// An HLOD cell whose coarse tile was omitted: it, or a descendant, could not keep its
+    /// exact interface within the cap, and omission propagates to the root. It publishes no
+    /// content, and every ancestor is omitted too, so it never sits between content levels
+    /// (no coarse tile above it can stop drawing on reaching it); it is plain availability,
+    /// explicit or implicit, and may be a document's root. Checked: a coarse tile above an
+    /// omitted cell is refused.
     pub omitted: bool,
-    /// An omitted cell's repeated contents (see `omitted`).
-    pub frontier: Vec<Payload>,
-    /// A link's root content, kept for an omitted parent's frontier.
-    pub repeat: Option<Payload>,
-    /// This inline fragment holds an omitted cell (itself or below, not across links).
-    pub omits: bool,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -134,30 +128,7 @@ pub(crate) struct Node {
     pub levels: u32,
 }
 
-/// A published payload an omitted cell repeats.
-#[derive(Clone, Debug)]
-pub(crate) enum Payload {
-    Proxy(Box<ProxyRow>),
-    Leaf(Box<LeafRow>),
-}
-
 impl Node {
-    /// The content this node publishes, as an omitted parent repeats it: its leaf, coarse
-    /// tile or chain's coarse tile, a link's root content, or an omitted cell's frontier.
-    fn content(&self) -> Vec<Payload> {
-        if self.omitted {
-            return self.frontier.clone();
-        }
-        if let Some(r) = &self.repeat {
-            return vec![r.clone()];
-        }
-        match (&self.leaf, &self.proxy, &self.chain) {
-            (Some(l), _, _) => vec![Payload::Leaf(l.clone())],
-            (None, Some(p), _) | (None, None, Some(p)) => vec![Payload::Proxy(p.clone())],
-            _ => Vec::new(),
-        }
-    }
-
     pub(crate) fn is_skeleton(&self) -> bool {
         self.height >= SKELETON_HEIGHT
     }
@@ -182,7 +153,6 @@ impl Node {
         self.objects = 1 + self.children.iter().map(|c| c.objects).sum::<u64>();
         self.records = 1 + self.children.iter().map(|c| c.records).sum::<u64>();
         self.levels = 1 + self.children.iter().map(|c| c.levels).max().unwrap_or(0);
-        self.omits = self.omitted || self.children.iter().any(|c| c.omits);
     }
 
     /// The path (child indices) to the explicit shallow tree of this fragment to demote
@@ -194,11 +164,7 @@ impl Node {
                 path.push(i);
                 if child.is_inline_skeleton() {
                     visit(child, path, best);
-                } else if child.leaf.is_none()
-                    && child.link.is_none()
-                    && !child.implicit
-                    && !child.omits
-                {
+                } else if child.leaf.is_none() && child.link.is_none() && !child.implicit {
                     let key = (child.records, child.height, std::cmp::Reverse(child.first));
                     if best.as_ref().is_none_or(|(k, _)| key > *k) {
                         *best = Some((key, path.clone()));
@@ -274,7 +240,6 @@ pub(crate) fn document_members(node: &Node) -> u64 {
             1
         } else {
             u64::from(node.proxy.is_some() || (chains && node.chain.is_some()))
-                + node.frontier.len() as u64
                 + node
                     .children
                     .iter()
@@ -295,7 +260,6 @@ pub(crate) fn document_members(node: &Node) -> u64 {
             u64::from(root && node.is_chain_cell()) + payloads(node, false)
         } else {
             u64::from(node.proxy.is_some() || (root && node.is_chain_cell()))
-                + node.frontier.len() as u64
                 + node.children.iter().map(|c| walk(c, false)).sum::<u64>()
         }
     }
@@ -318,9 +282,8 @@ pub(crate) struct Shape {
     pub proxies: u64,
     /// HLOD chain cells spliced out of explicit output (not in `tiles`).
     pub spliced_chain_cells: u64,
-    /// HLOD cells whose coarse tile was omitted, and the frontier contents they repeat.
+    /// HLOD cells whose coarse tile was omitted (content-less, every ancestor too).
     pub omitted_cells: u64,
-    pub repeated_frontier_contents: u64,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -502,9 +465,6 @@ impl<'s, S: Sink> Builder<'s, S> {
             proxy: None,
             chain: None,
             omitted: false,
-            frontier: Vec::new(),
-            repeat: None,
-            omits: false,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -601,6 +561,17 @@ impl<'s, S: Sink> Builder<'s, S> {
         } else {
             None
         };
+        // Omission reaches the root: no coarse content above an omitted cell.
+        if (proxy.is_some() || chain.is_some()) && frame.children.iter().any(|c| c.omitted) {
+            return Err(JobError::new(
+                JobErrorKind::InvalidInput,
+                format!(
+                    "coarse content of f{}-d{} sits above an omitted cell (omission must reach \
+                     the root)",
+                    frame.first, frame.depth
+                ),
+            ));
+        }
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
@@ -639,27 +610,18 @@ impl<'s, S: Sink> Builder<'s, S> {
             proxy,
             chain,
             omitted,
-            frontier: Vec::new(),
-            repeat: None,
-            omits: false,
             children: frame.children,
             link: None,
             objects: 0,
             records: 0,
             levels: 0,
         };
-        if omitted {
-            node.frontier = node.children.iter().flat_map(Node::content).collect();
-            self.shape.repeated_frontier_contents += node.frontier.len() as u64;
-        }
         // Every tile starts explicit: a shallow tree's totals are its own explicit tiles.
         node.aggregate();
         if frame.depth == 0 {
             if skeleton {
                 self.fit(&mut node)?;
-            } else if (node.objects > self.limits.objects || node.levels > self.limits.levels)
-                && !node.omits
-            {
+            } else if node.objects > self.limits.objects || node.levels > self.limits.levels {
                 node.implicit = true;
             }
             tally(&mut self.shape, &node);
@@ -669,8 +631,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         }
         if skeleton {
             self.fit(&mut node)?;
-            // An omitted cell is never a document's root (it would be published empty).
-            if node.over(&self.limits) && !node.omitted {
+            if node.over(&self.limits) {
                 node = self.externalize(node)?;
             }
         }
@@ -707,8 +668,7 @@ impl<'s, S: Sink> Builder<'s, S> {
                     .map(|(i, _)| i)
             };
             let index = if node.levels > limits.levels {
-                let shallow =
-                    |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit && !c.omits;
+                let shallow = |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit;
                 match largest(&|c| u64::from(c.levels), &shallow) {
                     Some(i) if !node.children[i].is_skeleton() => {
                         node.demote(&[i]);
@@ -717,9 +677,9 @@ impl<'s, S: Sink> Builder<'s, S> {
                     found => found,
                 }
             } else if node.objects > limits.objects {
-                largest(&|c| c.objects, &|c| c.is_inline_skeleton() && !c.omitted)
+                largest(&|c| c.objects, &Node::is_inline_skeleton)
             } else {
-                largest(&|c| c.records, &|c| c.is_inline_skeleton() && !c.omitted)
+                largest(&|c| c.records, &Node::is_inline_skeleton)
             };
             let Some(index) = index else {
                 break;
@@ -746,8 +706,6 @@ impl<'s, S: Sink> Builder<'s, S> {
             node.error,
             node.height,
         );
-        // An omitted parent repeats this document's root content (never an omitted cell).
-        let repeat = node.content().pop();
         let link = self.sink.external(node)?;
         Ok(Node {
             first,
@@ -764,9 +722,6 @@ impl<'s, S: Sink> Builder<'s, S> {
             proxy: None,
             chain: None,
             omitted: false,
-            frontier: Vec::new(),
-            repeat,
-            omits: false,
             children: Vec::new(),
             link: Some(link),
             objects: 1,
@@ -795,5 +750,115 @@ impl<'s, S: Sink> Builder<'s, S> {
             }
         }
         Ok(self.shape)
+    }
+}
+
+#[cfg(test)]
+mod omission_tests {
+    use super::*;
+    use crate::mesh_large::delivery::source::Digits;
+
+    #[derive(Default)]
+    struct Collect {
+        /// (objects, records, levels) of each document, the root last.
+        docs: Vec<(u64, u64, u32)>,
+    }
+
+    impl Sink for Collect {
+        fn external(&mut self, node: Node) -> Result<Linked, JobError> {
+            self.docs.push((node.objects, node.records, node.levels));
+            Ok(None)
+        }
+        fn root(&mut self, node: Node) -> Result<(), JobError> {
+            self.docs.push((node.objects, node.records, node.levels));
+            Ok(())
+        }
+    }
+
+    /// A complete octree of `depth` levels of capped leaves, planned against `proxies`.
+    fn plan(depth: u32, proxies: Vec<ProxyRow>) -> (Result<Shape, JobError>, Collect) {
+        let mut sink = Collect::default();
+        let rows = proxies.into_iter().map(|r| {
+            Ok((
+                r,
+                Aabb {
+                    lo: [0.; 3],
+                    hi: [1.; 3],
+                },
+            ))
+        });
+        let mut builder = Builder::with_proxies(&mut sink, LIMITS, Some(Box::new(rows)))
+            .with_sparse_proxies(true);
+        let leaves = 8u64.pow(depth);
+        let result = (|| {
+            for i in 0..leaves {
+                let mut digits = Digits::ROOT;
+                for k in (0..depth).rev() {
+                    digits.push(((i >> (k * 3)) & 7) as u8);
+                }
+                let row = LeafRow {
+                    uri: format!("leaves/{i}.glb"),
+                    sha256: [0; 32],
+                    bytes: 100,
+                    first: i * 8192,
+                    end: (i + 1) * 8192,
+                    digits,
+                    last_octant: (i & 7) as u8,
+                    packed: false,
+                    synthetic: 0,
+                    geometry_error: 0.,
+                };
+                let bounds = Aabb {
+                    lo: [0.; 3],
+                    hi: [1.; 3],
+                };
+                builder.push(row, bounds)?;
+            }
+            builder.finish()
+        })();
+        (result, sink)
+    }
+
+    /// Sol round 8: a complete all-omitted octree (every internal cell content-less, as
+    /// upward propagation leaves it when a leaf's parent cannot fit) is plain availability:
+    /// the planner partitions it like any other, so every document stays within its caps,
+    /// and nothing is cloned (each leaf is one payload).
+    #[test]
+    fn an_all_omitted_octree_keeps_documents_bounded() {
+        for depth in [4u32, 5] {
+            let (shape, sink) = plan(depth, Vec::new());
+            let shape = shape.unwrap();
+            let internal = (8u64.pow(depth) - 1) / 7;
+            assert_eq!(shape.omitted_cells, internal, "{shape:?}");
+            assert_eq!(shape.proxies, 0);
+            assert!(shape.implicit_roots + shape.documents > 1, "partitioned: {shape:?}");
+            // Objects (the JSON cost) and levels within the caps in every document; records
+            // within the documented `1 + 8 · 585` exception (see `Limits`).
+            for &(objects, records, levels) in &sink.docs {
+                assert!(
+                    objects <= LIMITS.objects && records <= 1 + 8 * 585 && levels <= LIMITS.levels,
+                    "document ({objects}, {records}, {levels}) past {LIMITS:?}: {shape:?}"
+                );
+            }
+        }
+    }
+
+    /// No content-less cell has a content ancestor: a coarse tile above an omitted cell is
+    /// refused (omission must reach the root).
+    #[test]
+    fn a_coarse_tile_above_an_omitted_cell_is_refused() {
+        let root = ProxyRow {
+            uri: "proxies/f0-d0.glb".into(),
+            sha256: [0; 32],
+            bytes: 100,
+            first: 0,
+            end: 64 * 8192,
+            depth: 0,
+            geometric_error: 1.,
+            primitives: 1,
+        };
+        let (shape, _) = plan(2, vec![root]);
+        let err = shape.unwrap_err();
+        assert!(err.to_string().contains("above an omitted cell"), "{err}");
     }
 }

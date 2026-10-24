@@ -82,24 +82,27 @@ follows industry practice (Nanite, Simplygon) and locks only exactly shared item
 - **Consequence for source defects:** T-junctions, partial collinear overlaps and unwelded
   near-seams in the source are not locked. They may open cracks at mixed depths exactly
   there. They are reported, never matched by distance (see D3).
-- **Infeasible parents (replaces the `unsupported` rule above; round 7):** 8,192 stays the
+- **Infeasible parents (replaces the `unsupported` rule above; rounds 7–8):** 8,192 stays the
   hard published cap. A parent whose exact interface, or topology plain simplification
   cannot reduce (D3), needs more triangles than its cap has its coarse tile **omitted**. It
-  is never published above the cap and never refused.
-  - **Frontier:** its capped descendants are the refinement frontier.
-  - **What the omitted cell publishes:** it repeats that frontier's payloads as its own
-    contents. So it is never content-less between content levels (the Cesium vanishing
-    lesson), and it renders exactly what replaces it.
-  - **Layout:** it is never demoted into an implicit tree or written as a document's root.
-  - **Its parent's input:** the parent is built from the least simplification that holds the
-    omitted cell's interface. That geometry is held, never published, and is at most its
-    merged children.
-  - **Reported:** `hlod.omittedProxies` and `omittedByDepth`. The cost is that a view refined
-    to that depth loads the frontier instead of one tile.
-  - **Scope:** this is a safety net only. Whether large models need a different border scheme
-    is a separate owner decision. Exact seams keep each tile's outer border at leaf
-    resolution, so at about 500M source triangles mid-level tiles need roughly twice the
-    cap.
+  is never refused.
+  - **Upward propagation:** every ancestor up to the root is omitted too. Its parent cannot
+    be built without a hole where it was.
+  - **Omitted cells:** they publish no content and hold no geometry; nothing is merged from
+    them and nothing is cloned.
+  - **No vanishing:** a content-less cell has only content-less ancestors, so it never sits
+    between content levels (the Cesium vanishing lesson). Delivery refuses a coarse tile above
+    an omitted cell.
+  - **Delivery:** the omitted region is a top-connected cap of plain availability (explicit or
+    implicit, an omitted root included), partitioned under the existing document caps.
+  - **Jobs:** omission is decided before merging, so every job merges at most eight capped
+    children.
+  - **Reported:** `hlod.omittedProxies`, `omissionSources` (cells that could not fit) and
+    `omittedByDepth`.
+  - **Client cost:** local. One source omission costs about 8 × depth content-less cells plus
+    its children's tiles in the first view.
+  - **Scope:** this is the bounded last resort. D11/S1b's topology simplification and border
+    scheme are to make it rare.
 - **Winding:** simplified faces keep their source orientation. A face collapsed onto an
   opposite-facing source face is dropped beside its twin, or turned.
 
@@ -202,8 +205,8 @@ leaf recovery and visible-quality gates. **Evidence:** E2, E3, E5, C/H17.
 
 ### D4 — representative coarse identity and annotation
 
-**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. An omitted cell repeats
-its frontier's payloads with their own identity tables.
+**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. An omitted cell
+publishes no content, so it carries no identity table.
 
 
 Each coarse triangle carries one `source_primitive` feature ID selected from
