@@ -1,10 +1,14 @@
 //! Native, archive-only HLOD delivery checks. C1 owns admission; this module owns
 //! the decoded leaf contact/ancestor interface relation, never producer facts.
 //!
-//! A payload is decoded once at its catalog rank. Only its open/nonmanifold
+//! C1 and identity admission run once at catalog rank. Only open/nonmanifold
 //! edges survive the bounded per-payload reduction. A disk R-tree joins leaf
 //! contacts; each contact is checked along depth-bounded ancestor paths. No
 //! archive-sized triangle/point vector or ancestor cross-product is retained.
+//! Overlapping leaf payload bounds select bounded geometry replay pairs. This
+//! recovers locally balanced contacts even when both boundary reductions are
+//! empty. Only contacting edges and requested ancestor edges reach disk; replay
+//! reads, JSON projection, decoding and pair searches consume the work budget.
 //! SQLite pages are capped; its temporary sorts are disk backed.
 //! Decoded endpoints use exact canonical f64 keys (negative zero normalized),
 //! after mandatory Y-up conversion in a common root-relative content frame.
@@ -23,9 +27,11 @@
 //! source-aware oracle, which retains all source face incidences.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 use crate::spill::{Scratch, SlotFile};
+use rstar::{Envelope, RTree, RTreeObject, SelectionFunction, AABB};
 use rusqlite::{params, Connection};
 use serde_json::{value::RawValue, Value};
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::{
@@ -613,6 +619,229 @@ fn overlap(a: &Edge, b: &Edge) -> Option<(f64, f64)> {
     (hi - lo > tolerance / length).then_some((lo, hi))
 }
 
+// A cancelled local pair can still be a cross-owner interface. Canonical keys
+// identify edges; both real directions are retained when such a pair is exposed.
+fn hidden_edge(e: &Edge) -> bool {
+    (e.count == 2 && e.incidence == 0) || point_key(e.a) == point_key(e.b)
+}
+fn edge_key(e: &Edge) -> Vec<u8> {
+    let (a, b) = (point_key(e.a), point_key(e.b));
+    let (a, b) = if a <= b { (a, b) } else { (b, a) };
+    a.into_iter().chain(b).flat_map(u64::to_le_bytes).collect()
+}
+fn touches(a: &Edge, b: &Edge) -> bool {
+    if overlap(a, b).is_some() {
+        return true;
+    }
+    let t = a.tolerance + b.tolerance;
+    let hits = |p, e: &Edge| {
+        point_key(p) == point_key(e.a)
+            || point_key(p) == point_key(e.b)
+            || on_segment(p, e.a, e.b, t).is_some_and(|u| u > 0. && u < 1.)
+    };
+    [a.a, a.b].into_iter().any(|p| hits(p, b)) || [b.a, b.b].into_iter().any(|p| hits(p, a))
+}
+#[derive(Clone)]
+struct IndexedEdge {
+    index: usize,
+    bounds: AABB<Point>,
+}
+impl RTreeObject for IndexedEdge {
+    type Envelope = AABB<Point>;
+    fn envelope(&self) -> Self::Envelope {
+        self.bounds
+    }
+}
+fn envelope(e: &Edge) -> AABB<Point> {
+    let b = e.bounds();
+    AABB::from_corners([b[0], b[2], b[4]], [b[1], b[3], b[5]])
+}
+// Charge the actual traversal, including pruned parents and rejected leaves.
+// Height plus returned candidates is not a bound for overlapping R-tree boxes.
+struct ChargedQuery<'a> {
+    bounds: AABB<Point>,
+    effort: &'a Effort,
+    failure: RefCell<Option<Error>>,
+}
+impl<'a> ChargedQuery<'a> {
+    fn new(bounds: AABB<Point>, effort: &'a Effort) -> Self {
+        Self {
+            bounds,
+            effort,
+            failure: RefCell::new(None),
+        }
+    }
+    fn visit(&self) -> bool {
+        let mut failure = self.failure.borrow_mut();
+        if failure.is_some() {
+            return false;
+        }
+        if let Err(error) = self.effort.charge(1) {
+            *failure = Some(error);
+            return false;
+        }
+        true
+    }
+    // Required even for zero results or an early successful witness. Pruning
+    // after refusal must never turn a truncated census into acceptance.
+    fn finish(self) -> Result<(), Error> {
+        self.failure.into_inner().map_or(Ok(()), Err)
+    }
+}
+impl SelectionFunction<IndexedEdge> for &ChargedQuery<'_> {
+    fn should_unpack_parent(&self, bounds: &AABB<Point>) -> bool {
+        self.visit() && self.bounds.intersects(bounds)
+    }
+    fn should_unpack_leaf(&self, leaf: &IndexedEdge) -> bool {
+        self.visit() && self.bounds.intersects(&leaf.bounds)
+    }
+}
+fn edge_index(edges: &[Edge], cap: usize, effort: &Effort) -> Result<RTree<IndexedEdge>, Error> {
+    if edges.len().saturating_mul(384) > cap {
+        return Err(Error::limit(
+            "interfaceSegments: replay spatial workspace exceeds decoded document budget",
+        ));
+    }
+    // Charge comparisons in the bulk loader as well as its input scan.
+    effort.charge(
+        edges
+            .len()
+            .saturating_mul(edges.len().max(2).ilog2() as usize + 1),
+    )?;
+    Ok(RTree::bulk_load(
+        edges
+            .iter()
+            .enumerate()
+            .map(|(index, e)| IndexedEdge {
+                index,
+                bounds: envelope(e),
+            })
+            .collect(),
+    ))
+}
+
+/// Geometry-only replay of a C1/identity-admitted payload. At most two payload
+/// reductions and one RAM spatial index are live. No face soup is spilled.
+fn replay_geometry(
+    bytes: &[u8],
+    frame: Matrix,
+    cap: usize,
+    effort: &Effort,
+) -> Result<Vec<Edge>, Error> {
+    let length = u32::from_le_bytes(identity::slice(bytes, 12, 4)?.try_into().unwrap()) as usize;
+    let mut work = identity::Work::new(
+        effort.budget,
+        effort
+            .base
+            .saturating_add(effort.used.load(Ordering::Relaxed)),
+        cap,
+    );
+    work.charge(length.div_ceil(4))?;
+    let raw: &RawValue = serde_json::from_slice(identity::slice(bytes, 20, length)?)?;
+    let doc = identity::project(raw, "doc")?;
+    let bin = identity::slice(
+        bytes,
+        28 + length,
+        u32::from_le_bytes(identity::slice(bytes, 20 + length, 4)?.try_into().unwrap()) as usize,
+    )?;
+    let nodes = doc["nodes"]
+        .as_array()
+        .ok_or_else(|| bad("interfaceSegments", "missing replay nodes"))?;
+    let scene = doc["scene"].as_u64().unwrap_or(0) as usize;
+    let roots = doc["scenes"][scene]["nodes"]
+        .as_array()
+        .ok_or_else(|| bad("interfaceSegments", "missing replay scene"))?;
+    let mut edges = BTreeMap::<([u64; 3], [u64; 3]), Edge>::new();
+    let mut stack = vec![(roots.as_slice(), 0usize, IDENTITY)];
+    while let Some((children, next, parent)) = stack.last_mut() {
+        if *next == children.len() {
+            stack.pop();
+            continue;
+        }
+        let id = identity::uint(&children[*next])?;
+        *next += 1;
+        work.charge(1)?;
+        let node = nodes
+            .get(id)
+            .ok_or_else(|| bad("interfaceSegments", "replay node outside document"))?;
+        let m = multiply(*parent, node_matrix(node)?);
+        if let Some(mesh) = node.get("mesh") {
+            for p in doc["meshes"][identity::uint(mesh)?]["primitives"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                let positions = Accessor::new(
+                    &doc,
+                    bin,
+                    identity::uint(&p["attributes"]["POSITION"])?,
+                    &mut work,
+                )?;
+                let indices = p
+                    .get("indices")
+                    .map(|i| Accessor::new(&doc, bin, identity::uint(i)?, &mut work))
+                    .transpose()?;
+                let count = indices.as_ref().map_or(positions.count, |i| i.count);
+                for corner in (0..count).step_by(3) {
+                    work.charge(12 + 3 * edges.len().max(2).ilog2() as usize)?;
+                    let mut xyz = [[0.; 3]; 3];
+                    let mut tolerance: f64 = 0.;
+                    for j in 0..3 {
+                        let id = match &indices {
+                            Some(i) => i.index(corner + j)?,
+                            None => corner + j,
+                        };
+                        let (p, t) = positions.position(id, m)?;
+                        xyz[j] = p;
+                        tolerance = tolerance.max(t);
+                    }
+                    let n = cross(sub(xyz[1], xyz[0]), sub(xyz[2], xyz[0]));
+                    for j in 0..3 {
+                        let k = (j + 1) % 3;
+                        let (a, b) = (point_key(xyz[j]), point_key(xyz[k]));
+                        let forward = a <= b;
+                        let key = if forward { (a, b) } else { (b, a) };
+                        let incidence = if forward { 1 } else { -1 };
+                        if let Some(e) = edges.get_mut(&key) {
+                            e.count += 1;
+                            e.incidence += incidence;
+                            e.tolerance = e.tolerance.max(tolerance);
+                        } else {
+                            if edges.len().saturating_mul(384) >= cap {
+                                return Err(Error::limit("interfaceSegments: replay edge workspace exceeds decoded document budget"));
+                            }
+                            edges.insert(
+                                key,
+                                Edge {
+                                    a: xyz[j],
+                                    b: xyz[k],
+                                    n,
+                                    tolerance,
+                                    incidence,
+                                    count: 1,
+                                    original: None,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(children) = node["children"].as_array() {
+            stack.push((children.as_slice(), 0, m));
+        }
+    }
+    work.charge(edges.len())?;
+    // Scene arithmetic matches initial ingest, then tile placement; do not fold
+    // the matrices and change the decoded f64 evaluation order.
+    let result = edges
+        .into_values()
+        .map(|e| e.placed(frame))
+        .collect::<Result<Vec<_>, _>>()?;
+    effort.charge(usize::try_from(work.used).map_err(|_| super::refused())?)?;
+    Ok(result)
+}
+
 struct Effort {
     budget: Budget,
     base: u64,
@@ -639,6 +868,7 @@ pub(super) struct Store {
     pub(super) checked: bool,
     common_root: Option<Matrix>,
     profile_exclusion: Option<&'static str>,
+    decoded_limit: usize,
 }
 impl Store {
     pub(super) fn new(scratch: Arc<Scratch>) -> Result<Self, Error> {
@@ -653,6 +883,11 @@ impl Store {
             CREATE INDEX tile_parent ON tiles(parent);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL); CREATE INDEX refs_tile ON refs(tile); CREATE INDEX refs_rank ON refs(rank);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL);
+            CREATE TABLE geometry(rank INTEGER PRIMARY KEY,bounds BLOB NOT NULL,hidden INTEGER NOT NULL);
+            CREATE TABLE placements(id INTEGER PRIMARY KEY,tile INTEGER NOT NULL,rank INTEGER NOT NULL,frame BLOB NOT NULL,leaf INTEGER NOT NULL,hidden INTEGER NOT NULL);
+            CREATE VIRTUAL TABLE payload_spatial USING rtree(id,x0,x1,y0,y1,z0,z1);
+            CREATE TABLE recovered(tile INTEGER NOT NULL,key BLOB NOT NULL,PRIMARY KEY(tile,key));
+            CREATE TABLE requests(tile INTEGER NOT NULL,key BLOB NOT NULL,data BLOB NOT NULL,PRIMARY KEY(tile,key));
             CREATE TABLE raw_edges(rank INTEGER NOT NULL,data BLOB NOT NULL); CREATE INDEX raw_rank ON raw_edges(rank);
             CREATE TABLE original_vertices(rank INTEGER NOT NULL,key BLOB NOT NULL,point BLOB NOT NULL,tol REAL NOT NULL);
             CREATE INDEX originals ON original_vertices(key,rank);
@@ -668,6 +903,7 @@ impl Store {
             checked: false,
             common_root: None,
             profile_exclusion: None,
+            decoded_limit: 0,
         })
     }
     pub(super) fn tile(
@@ -743,6 +979,7 @@ impl Store {
         already: u64,
         decoded_limit: usize,
     ) -> Result<u64, Error> {
+        self.decoded_limit = self.decoded_limit.max(decoded_limit);
         let embedded = bytes.get(..4) == Some(b"glTF");
         let length = if embedded {
             u32::from_le_bytes(identity::slice(bytes, 12, 4)?.try_into().unwrap()) as usize
@@ -791,6 +1028,15 @@ impl Store {
                 as usize,
         )?;
         let mut edges = BTreeMap::<([u64; 3], [u64; 3]), Edge>::new();
+        let mut bounds = [
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        let mut degenerate = false;
         let mut originals = BTreeMap::<(Source, u64), (Point, f64)>::new();
         let tables = doc["extensions"]["EXT_structural_metadata"]["propertyTables"]
             .as_array()
@@ -884,6 +1130,15 @@ impl Store {
                             xyz[j] = p;
                             tolerance = tolerance.max(t);
                         }
+                        for p in xyz {
+                            for i in 0..3 {
+                                bounds[2 * i] = bounds[2 * i].min(p[i]);
+                                bounds[2 * i + 1] = bounds[2 * i + 1].max(p[i]);
+                            }
+                        }
+                        degenerate |= point_key(xyz[0]) == point_key(xyz[1])
+                            || point_key(xyz[1]) == point_key(xyz[2])
+                            || point_key(xyz[2]) == point_key(xyz[0]);
                         let (_, source) = primitive.row(ids[0], &mut work)?;
                         let mut original = None;
                         if let Some(triangle) = &triangle {
@@ -967,6 +1222,15 @@ impl Store {
                 "original triangle table has unreferenced rows",
             ));
         }
+        if bounds.iter().all(|v| v.is_finite()) {
+            let hidden = degenerate || edges.values().any(hidden_edge);
+            self.connection
+                .execute(
+                    "INSERT INTO geometry VALUES(?,?,?)",
+                    params![integer(rank)?, encode(&bounds), hidden],
+                )
+                .map_err(sql)?;
+        }
         let mut insert = self
             .connection
             .prepare_cached("INSERT INTO raw_edges VALUES(?,?)")
@@ -989,6 +1253,14 @@ impl Store {
             insert
                 .execute(params![integer(rank)?, e.bytes()])
                 .map_err(sql)?;
+            if e.count > e.incidence.unsigned_abs() as usize {
+                work.charge(1)?;
+                let mut reverse = e.clone();
+                std::mem::swap(&mut reverse.a, &mut reverse.b);
+                insert
+                    .execute(params![integer(rank)?, reverse.bytes()])
+                    .map_err(sql)?;
+            }
             if let Some((source, vs)) = e.original {
                 for (i, p) in [e.a, e.b].into_iter().enumerate() {
                     let mut key = Vec::with_capacity(48);
@@ -1034,7 +1306,12 @@ impl Store {
         self.checked = true;
     }
 
-    pub(super) fn finish(&mut self, budget: Budget, already: u64) -> Result<u64, Error> {
+    pub(super) fn finish(
+        &mut self,
+        budget: Budget,
+        already: u64,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<u64, Error> {
         let used = Arc::new(AtomicU64::new(0));
         let effort = Effort {
             budget,
@@ -1049,7 +1326,7 @@ impl Store {
                 Some(move || hook.fetch_add(1, Ordering::Relaxed) >= remaining),
             )
             .map_err(sql)?;
-        let result = self.finish_inner(&effort);
+        let result = self.finish_inner(&effort, read);
         self.connection
             .progress_handler(0, None::<fn() -> bool>)
             .map_err(sql)?;
@@ -1061,7 +1338,11 @@ impl Store {
         self.connection.execute_batch("COMMIT;").map_err(sql)?;
         Ok(count)
     }
-    fn finish_inner(&mut self, effort: &Effort) -> Result<(), Error> {
+    fn finish_inner(
+        &mut self,
+        effort: &Effort,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<(), Error> {
         self.hierarchy(effort)?;
         let declared: bool = self
             .connection
@@ -1112,6 +1393,10 @@ impl Store {
         }
         self.originals(effort)?;
         self.place_edges(effort)?;
+        self.place_geometry(effort)?;
+        self.recover_leaf_contacts(effort, read)?;
+        self.contact_pass(effort, true)?;
+        self.recover_ancestors(effort, read)?;
         self.contacts(effort)?;
         Ok(())
     }
@@ -1236,7 +1521,275 @@ impl Store {
         }
         Ok(())
     }
+    fn place_geometry(&self, effort: &Effort) -> Result<(), Error> {
+        let mut query = self.connection.prepare("SELECT r.tile,r.rank,t.world,t.leaf,g.bounds,g.hidden FROM refs r JOIN tiles t ON t.id=r.tile JOIN geometry g ON g.rank=r.rank").map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let tile: i64 = row.get(0).map_err(sql)?;
+            let rank: i64 = row.get(1).map_err(sql)?;
+            let world: Vec<u8> = row.get(2).map_err(sql)?;
+            let leaf: bool = row.get(3).map_err(sql)?;
+            let raw: Vec<u8> = row.get(4).map_err(sql)?;
+            let hidden: bool = row.get(5).map_err(sql)?;
+            let m = delivery_frame(decode::<16>(&world)?);
+            let b = decode::<6>(&raw)?;
+            let mut bounds = [
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            ];
+            for corner in 0..8 {
+                let p = std::array::from_fn(|i| b[2 * i + ((corner >> i) & 1)]);
+                let q = point(m, p);
+                let pad = evaluation_roundoff(m, p) + roundoff(q);
+                for i in 0..3 {
+                    bounds[2 * i] = bounds[2 * i].min(q[i] - pad);
+                    bounds[2 * i + 1] = bounds[2 * i + 1].max(q[i] + pad);
+                }
+            }
+            if bounds
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > f32::MAX as f64)
+            {
+                return Err(Error::unsupported(
+                    "interfaceSegments: replay bounds exceed spatial index finite range",
+                ));
+            }
+            self.connection
+                .execute(
+                    "INSERT INTO placements(tile,rank,frame,leaf,hidden) VALUES(?,?,?,?,?)",
+                    params![tile, rank, encode(&m), leaf, hidden],
+                )
+                .map_err(sql)?;
+            self.connection
+                .execute(
+                    "INSERT INTO payload_spatial VALUES(?,?,?,?,?,?,?)",
+                    params![
+                        self.connection.last_insert_rowid(),
+                        bounds[0],
+                        bounds[1],
+                        bounds[2],
+                        bounds[3],
+                        bounds[4],
+                        bounds[5]
+                    ],
+                )
+                .map_err(sql)?;
+        }
+        Ok(())
+    }
+    fn replay(
+        &self,
+        rank: i64,
+        frame: &[u8],
+        effort: &Effort,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<Vec<Edge>, Error> {
+        effort.charge(1)?;
+        let bytes = read(u64::try_from(rank).map_err(|_| super::refused())?)?;
+        replay_geometry(&bytes, decode::<16>(frame)?, self.decoded_limit, effort)
+    }
+    fn retain_recovered(
+        &self,
+        tile: i64,
+        leaf: bool,
+        e: &Edge,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        effort.charge(1)?;
+        if self
+            .connection
+            .execute(
+                "INSERT OR IGNORE INTO recovered VALUES(?,?)",
+                params![tile, edge_key(e)],
+            )
+            .map_err(sql)?
+            == 0
+        {
+            return Ok(());
+        }
+        let both =
+            e.count > e.incidence.unsigned_abs() as usize && point_key(e.a) != point_key(e.b);
+        let mut e = e.clone();
+        for _ in 0..if both { 2 } else { 1 } {
+            effort.charge(1)?;
+            self.connection
+                .execute(
+                    "INSERT INTO edges(tile,data,leaf) VALUES(?,?,?)",
+                    params![tile, e.bytes(), leaf],
+                )
+                .map_err(sql)?;
+            let b = e.bounds();
+            self.connection
+                .execute(
+                    "INSERT INTO spatial VALUES(?,?,?,?,?,?,?)",
+                    params![
+                        self.connection.last_insert_rowid(),
+                        b[0],
+                        b[1],
+                        b[2],
+                        b[3],
+                        b[4],
+                        b[5]
+                    ],
+                )
+                .map_err(sql)?;
+            std::mem::swap(&mut e.a, &mut e.b);
+        }
+        Ok(())
+    }
+    fn recover_leaf_contacts(
+        &self,
+        effort: &Effort,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<(), Error> {
+        // Actual geometry bounds select every potentially contacting payload
+        // pair. Never seed this census from open edges: two closed payloads can
+        // share a required edge while both boundary reductions are empty.
+        let mut outer = self.connection.prepare("SELECT p.id,p.tile,p.rank,p.frame,p.hidden,s.x0,s.x1,s.y0,s.y1,s.z0,s.z1 FROM placements p JOIN payload_spatial s ON s.id=p.id WHERE p.leaf=1 ORDER BY p.id").map_err(sql)?;
+        let mut rows = outer.query([]).map_err(sql)?;
+        let mut nearby = self.connection.prepare("SELECT p.tile,p.rank,p.frame FROM payload_spatial s CROSS JOIN placements p ON p.id=s.id WHERE s.x0<=?1 AND s.x1>=?2 AND s.y0<=?3 AND s.y1>=?4 AND s.z0<=?5 AND s.z1>=?6 AND p.leaf=1 AND p.id>?7 AND p.tile<>?8 AND (p.hidden=1 OR ?9)").map_err(sql)?;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let id: i64 = row.get(0).map_err(sql)?;
+            let tile: i64 = row.get(1).map_err(sql)?;
+            let rank: i64 = row.get(2).map_err(sql)?;
+            let frame: Vec<u8> = row.get(3).map_err(sql)?;
+            let hidden: bool = row.get(4).map_err(sql)?;
+            let mut b = [0.; 6];
+            for (i, v) in b.iter_mut().enumerate() {
+                *v = row.get(5 + i).map_err(sql)?;
+            }
+            let mut candidates = nearby
+                .query(params![
+                    b[1], b[0], b[3], b[2], b[5], b[4], id, tile, hidden
+                ])
+                .map_err(sql)?;
+            let mut left = None;
+            while let Some(other) = candidates.next().map_err(sql)? {
+                effort.charge(1)?;
+                if left.is_none() {
+                    left = Some(self.replay(rank, &frame, effort, read)?);
+                }
+                let left = left.as_ref().unwrap();
+                let other_tile: i64 = other.get(0).map_err(sql)?;
+                let other_rank: i64 = other.get(1).map_err(sql)?;
+                let other_frame: Vec<u8> = other.get(2).map_err(sql)?;
+                let right = self.replay(other_rank, &other_frame, effort, read)?;
+                let index = edge_index(&right, self.decoded_limit, effort)?;
+                for a in left {
+                    effort.charge(1)?;
+                    let query = ChargedQuery::new(envelope(a), effort);
+                    for candidate in index.locate_with_selection_function(&query) {
+                        effort.charge(1)?;
+                        let b = &right[candidate.index];
+                        if (hidden_edge(a) || hidden_edge(b)) && touches(a, b) {
+                            if hidden_edge(a) {
+                                self.retain_recovered(tile, true, a, effort)?;
+                            }
+                            if hidden_edge(b) {
+                                self.retain_recovered(other_tile, true, b, effort)?;
+                            }
+                        }
+                    }
+                    query.finish()?;
+                }
+            }
+        }
+        Ok(())
+    }
+    fn request_ancestors(
+        &self,
+        mut tile: i64,
+        other: i64,
+        e: &Edge,
+        effort: &Effort,
+    ) -> Result<(), Error> {
+        let mut lookup = self
+            .connection
+            .prepare_cached("SELECT parent,last FROM tiles WHERE id=?")
+            .map_err(sql)?;
+        // The leaf geometry is already complete at its discovered contacts.
+        let parent: Option<i64> = lookup.query_row([tile], |r| r.get(0)).map_err(sql)?;
+        let Some(parent) = parent else {
+            return Ok(());
+        };
+        tile = parent;
+        loop {
+            effort.charge(1)?;
+            let (parent, last): (Option<i64>, i64) = lookup
+                .query_row([tile], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(sql)?;
+            if other >= tile && other <= last {
+                break;
+            }
+            self.connection
+                .execute(
+                    "INSERT OR IGNORE INTO requests VALUES(?,?,?)",
+                    params![tile, edge_key(e), e.bytes()],
+                )
+                .map_err(sql)?;
+            let Some(parent) = parent else {
+                break;
+            };
+            tile = parent;
+        }
+        Ok(())
+    }
+    fn recover_ancestors(
+        &self,
+        effort: &Effort,
+        read: &mut dyn FnMut(u64) -> Result<Vec<u8>, Error>,
+    ) -> Result<(), Error> {
+        let mut query = self.connection.prepare("SELECT DISTINCT p.tile,p.rank,p.frame FROM placements p JOIN requests r ON r.tile=p.tile WHERE p.hidden=1 AND p.leaf=0 ORDER BY p.tile,p.id").map_err(sql)?;
+        let mut rows = query.query([]).map_err(sql)?;
+        while let Some(row) = rows.next().map_err(sql)? {
+            effort.charge(1)?;
+            let tile: i64 = row.get(0).map_err(sql)?;
+            let rank: i64 = row.get(1).map_err(sql)?;
+            let frame: Vec<u8> = row.get(2).map_err(sql)?;
+            let mut request_query = self
+                .connection
+                .prepare("SELECT data FROM requests WHERE tile=?")
+                .map_err(sql)?;
+            let mut request_rows = request_query.query([tile]).map_err(sql)?;
+            let mut requests = Vec::new();
+            while let Some(r) = request_rows.next().map_err(sql)? {
+                effort.charge(1)?;
+                if requests.len().saturating_mul(384) >= self.decoded_limit {
+                    return Err(Error::limit("interfaceSegments: ancestor request workspace exceeds decoded document budget"));
+                }
+                requests.push(Edge::from_bytes(&r.get::<_, Vec<u8>>(0).map_err(sql)?)?);
+            }
+            let index = edge_index(&requests, self.decoded_limit, effort)?;
+            let geometry = self.replay(rank, &frame, effort, read)?;
+            for e in &geometry {
+                effort.charge(1)?;
+                if !hidden_edge(e) {
+                    continue;
+                }
+                let query = ChargedQuery::new(envelope(e), effort);
+                for candidate in index.locate_with_selection_function(&query) {
+                    effort.charge(1)?;
+                    if touches(e, &requests[candidate.index]) {
+                        self.retain_recovered(tile, false, e, effort)?;
+                        break;
+                    }
+                }
+                query.finish()?;
+            }
+        }
+        Ok(())
+    }
+
     fn contacts(&self, effort: &Effort) -> Result<(), Error> {
+        self.contact_pass(effort, false)
+    }
+    fn contact_pass(&self, effort: &Effort, collect: bool) -> Result<(), Error> {
         let mut outer = self
             .connection
             .prepare("SELECT id,tile,data FROM edges WHERE leaf=1 ORDER BY id")
@@ -1265,6 +1818,13 @@ impl Store {
                 let b_tile: i64 = other.get(0).map_err(sql)?;
                 let bytes: Vec<u8> = other.get(1).map_err(sql)?;
                 let b = Edge::from_bytes(&bytes)?;
+                if collect {
+                    if touches(&a, &b) {
+                        self.request_ancestors(a_tile, b_tile, &a, effort)?;
+                        self.request_ancestors(b_tile, a_tile, &b, effort)?;
+                    }
+                    continue;
+                }
                 if overlap(&a, &b).is_some() {
                     self.ancestors(a_tile, b_tile, Some(&a), None, effort)?;
                     self.ancestors(b_tile, a_tile, Some(&b), None, effort)?;
@@ -1572,7 +2132,7 @@ mod tests {
             s.reference(2, 2).unwrap();
             s.payload(0, false, false).unwrap();
             s.payload(2, false, false).unwrap();
-            let result = s.finish(budget(), 0);
+            let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
             if placeholder {
                 result.unwrap();
             } else {
@@ -1599,7 +2159,7 @@ mod tests {
                 s.payload(1, true, true).unwrap();
             }
             assert!(s
-                .finish(budget(), 0)
+                .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
                 .unwrap_err()
                 .to_string()
                 .contains("hlodFeatureIds"));
@@ -1610,7 +2170,7 @@ mod tests {
         s.payload(0, false, false).unwrap();
         s.expect_identity();
         assert!(s
-            .finish(budget(), 0)
+            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
             .unwrap_err()
             .to_string()
             .contains("hlodFeatureIds"));
@@ -1627,7 +2187,7 @@ mod tests {
             if !same {
                 s.payload(1, true, true).unwrap();
             }
-            let result = s.finish(budget(), 0);
+            let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
             if same {
                 result.unwrap();
             } else {
@@ -1670,7 +2230,7 @@ mod tests {
         s.payload(0, false, false).unwrap();
         s.payload(2, false, false).unwrap();
         assert!(s
-            .finish(budget(), 0)
+            .finish(budget(), 0, &mut |_| panic!("unexpected replay"))
             .unwrap_err()
             .to_string()
             .contains("replaceContentContinuity"));
@@ -1811,7 +2371,7 @@ mod tests {
             s.reference(0, 0).unwrap();
             s.payload(0, identity, identity).unwrap();
             s.exclude_scene("tileset glTF up-axis override is outside the Y-up profile");
-            let result = s.finish(budget(), 0);
+            let result = s.finish(budget(), 0, &mut |_| panic!("unexpected replay"));
             if identity {
                 assert!(matches!(result, Err(Error::Unsupported(_))));
             } else {
@@ -1819,6 +2379,173 @@ mod tests {
             }
         }
     }
+    fn replay_fixture(faces: &[[Point; 3]]) -> Vec<u8> {
+        let mut bin: Vec<u8> = faces
+            .iter()
+            .flatten()
+            .flatten()
+            .flat_map(|v| (*v as f32).to_le_bytes())
+            .collect();
+        let doc = serde_json::json!({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"accessors":[{"bufferView":0,"componentType":5126,"type":"VEC3","count":faces.len()*3}],"bufferViews":[{"buffer":0,"byteLength":bin.len()}],"buffers":[{"byteLength":bin.len()}]});
+        let mut json = serde_json::to_vec(&doc).unwrap();
+        while json.len() % 4 != 0 {
+            json.push(b' ');
+        }
+        while bin.len() % 4 != 0 {
+            bin.push(0);
+        }
+        let mut bytes = b"glTF".to_vec();
+        bytes.extend(2u32.to_le_bytes());
+        bytes.extend(((28 + json.len() + bin.len()) as u32).to_le_bytes());
+        bytes.extend((json.len() as u32).to_le_bytes());
+        bytes.extend(b"JSON");
+        bytes.extend(json);
+        bytes.extend((bin.len() as u32).to_le_bytes());
+        bytes.extend(b"BIN\0");
+        bytes.extend(bin);
+        bytes
+    }
+    #[test]
+    fn closed_payload_pairs_recover_balanced_contacts_and_ancestor_edges() {
+        let (a, b, c, d, e, f) = (
+            [0., 0., 0.],
+            [2., 0., 0.],
+            [0., 2., 1.],
+            [2., -2., 0.],
+            [0., 0., 2.],
+            [2., 1., -2.],
+        );
+        let left = [[a, b, c], [b, a, d], [a, c, d], [b, d, c]];
+        let right = [[b, a, e], [a, b, f], [b, e, f], [a, f, e]];
+        for lost in [false, true] {
+            let coarse = if lost {
+                [[a, d, c], [b, c, d], [a, c, d], [b, d, c]]
+            } else {
+                left
+            };
+            let payloads = [
+                replay_fixture(&coarse),
+                replay_fixture(&left),
+                replay_fixture(&right),
+            ];
+            let mut s = store();
+            s.decoded_limit = 1 << 20;
+            for (id, parent) in [(0, None), (1, Some(0)), (2, Some(1)), (3, Some(0))] {
+                s.tile(id, parent, IDENTITY).unwrap();
+            }
+            for (tile, rank) in [(1, 0), (2, 1), (3, 2)] {
+                s.reference(tile, rank).unwrap();
+                s.payload(rank, true, rank != 0).unwrap();
+            }
+            for (rank, bytes) in payloads.iter().enumerate() {
+                let edges = replay_geometry(bytes, IDENTITY, s.decoded_limit, &effort()).unwrap();
+                let mut bounds = [
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                ];
+                for edge in &edges {
+                    for p in [edge.a, edge.b] {
+                        for i in 0..3 {
+                            bounds[2 * i] = bounds[2 * i].min(p[i]);
+                            bounds[2 * i + 1] = bounds[2 * i + 1].max(p[i]);
+                        }
+                    }
+                    if !hidden_edge(edge) {
+                        s.connection
+                            .execute(
+                                "INSERT INTO raw_edges VALUES(?,?)",
+                                params![rank as i64, edge.bytes()],
+                            )
+                            .unwrap();
+                    }
+                }
+                s.connection
+                    .execute(
+                        "INSERT INTO geometry VALUES(?,?,1)",
+                        params![rank as i64, encode(&bounds)],
+                    )
+                    .unwrap();
+            }
+            let open: i64 = s
+                .connection
+                .query_row(
+                    "SELECT count(*) FROM raw_edges WHERE rank IN (1,2)",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(open, 0, "neither leaf has a boundary seed");
+            let mut reads = 0;
+            let result = s.finish(budget(), 0, &mut |rank| {
+                reads += 1;
+                Ok(payloads[rank as usize].clone())
+            });
+            assert!(
+                reads >= 3,
+                "both leaves and the requested ancestor must be replayed"
+            );
+            if lost {
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("interfaceSegments"));
+            } else {
+                result.unwrap();
+            }
+        }
+    }
+    #[test]
+    fn empty_spatial_query_charges_rejected_leaves_and_refuses_truncation() {
+        // One parent envelope contains the origin; all six leaf envelopes miss
+        // it. A height-only charge would miss most of this zero-result work.
+        let points = [
+            [-1., 0., 0.],
+            [1., 0., 0.],
+            [0., -1., 0.],
+            [0., 1., 0.],
+            [0., 0., -1.],
+            [0., 0., 1.],
+        ];
+        let tree = RTree::bulk_load(
+            points
+                .into_iter()
+                .enumerate()
+                .map(|(index, p)| IndexedEdge {
+                    index,
+                    bounds: AABB::from_point(p),
+                })
+                .collect(),
+        );
+        for limit in [3, 100] {
+            let mut e = effort();
+            e.budget.value = limit;
+            let query = ChargedQuery::new(AABB::from_point([0.; 3]), &e);
+            assert_eq!(tree.locate_with_selection_function(&query).count(), 0);
+            let result = query.finish();
+            if limit == 3 {
+                assert!(result.unwrap_err().exceeded().is_some());
+            } else {
+                result.unwrap();
+                assert_eq!(e.used.load(Ordering::Relaxed), 7);
+            }
+        }
+    }
+    #[test]
+    fn replay_charges_json_and_decode_work_before_reduction() {
+        let bytes = replay_fixture(&[[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]]);
+        let mut e = effort();
+        e.budget.value = 1;
+        assert!(replay_geometry(&bytes, IDENTITY, 1 << 20, &e)
+            .err()
+            .unwrap()
+            .exceeded()
+            .is_some());
+    }
+
     #[test]
     fn final_work_has_a_structured_budget_refusal() {
         let mut s = store();
@@ -1831,6 +2558,7 @@ mod tests {
                     ..budget()
                 },
                 0,
+                &mut |_| panic!("unexpected replay"),
             )
             .unwrap_err();
         assert!(error.exceeded().is_some());

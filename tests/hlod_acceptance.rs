@@ -27,16 +27,19 @@ fn sampled_hlod_archives_and_named_mutants() {
         "lattice_controls.py",
         "winding_controls.py",
         "native_controls.py",
+        "nonmanifold_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
             .arg(oracle.join(name))
             .arg(&probes)
-            .args(if name == "native_controls.py" {
-                vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
-            } else {
-                vec![]
-            })
+            .args(
+                if matches!(name, "native_controls.py" | "nonmanifold_controls.py") {
+                    vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
+                } else {
+                    vec![]
+                },
+            )
             .output()
             .unwrap();
         assert!(

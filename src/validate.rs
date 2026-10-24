@@ -3380,10 +3380,27 @@ fn inspect_run(
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
-    let delivery_work = check.delivery.finish(
-        check.resources.budget(LimitKey::TotalPayloadElements),
-        check.elements,
-    )?;
+    let delivery_budget = check.resources.budget(LimitKey::TotalPayloadElements);
+    let delivery_reads = check.resources.budget(LimitKey::TotalBytesRead);
+    let delivery_member_cap = check.resources.limits.member_bytes;
+    let delivery_resources = &mut check.resources;
+    // Selected geometry replays use already C1-admitted payload ranks. Reads
+    // retain their ordinary volume charge; the delivery owner charges decoding.
+    let delivery_work = check
+        .delivery
+        .finish(delivery_budget, check.elements, &mut |rank| {
+            let name = delivery_resources
+                .archive
+                .name(rank)
+                .map_err(archive_admission_error)?;
+            read_member(
+                delivery_resources.archive,
+                &name,
+                &mut delivery_resources.bytes_read,
+                delivery_reads,
+                delivery_member_cap,
+            )
+        })?;
     check.elements = check
         .elements
         .checked_add(delivery_work)

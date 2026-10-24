@@ -36,8 +36,13 @@ renderable descendants. Leading empty roots and external-link placeholders are
 valid, as are S1's repeated coarse-content cells. An empty ADD override cannot
 clear a barrier owned by a renderable REPLACE ancestor.
 
-Only open/nonmanifold decoded edges survive each bounded payload reduction.
-A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
+The first bounded payload reduction retains open/nonmanifold decoded edges.
+Actual placed payload bounding boxes select geometry replays that recover hidden
+contacts, including two closed leaves with no open-edge seeds. Each replay uses
+bounded per-document RAM edge maps; only discovered contact edges and ancestor
+requests survive on disk. Original payload admission runs once; selected rereads
+and decoding retain their shared byte/work charges. No full triangle soup is
+spilled. A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
 subsegments, corner/T points and matching required-interface incidences. Keeping just a T vertex
 cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
 charged; dense queries refuse rather than truncate. Shared points and consecutive
@@ -129,10 +134,10 @@ python3 bench/architecture_audit/mesh_hlod/s5/oracle.py OUTPUT.3tz SOURCE.sqlite
 python3 bench/architecture_audit/mesh_hlod/s5/continuity.py OUTPUT.3tz
 ```
 
-Use `--profile h17` to audit retained legacy archives without applying D4's new
-coarse representative identity policy. Source leaves and geometry/material/
-winding/interface checks remain active. A named failed geometry check is a
-verdict, not a decoder crash or legacy certificate interpretation.
+H17 archives are outside S5 acceptance. S6 removes the H17/H27 producer without
+backward compatibility. Historical H17 diagnostic results remain evidence of
+legacy depth-mix gaps; no legacy admission path or interface exemption makes
+them pass. Common C1/C2, identity and continuity checks still apply to archives.
 
 The earlier S5 receipts at `33ce60c5` are historical and superseded by this
 review revision. Their cache remains
