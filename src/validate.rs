@@ -3419,6 +3419,9 @@ fn inspect_run(
         check
             .not_inspected
             .insert("non-identity metadata semantics".into());
+        check
+            .not_inspected
+            .insert("coarse interior/exterior orientation outside required interfaces".into());
     }
     if contained {
         check.stream()?;

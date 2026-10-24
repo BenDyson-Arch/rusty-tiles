@@ -5,7 +5,7 @@
 //! edges survive the bounded per-payload reduction. A disk R-tree joins leaf
 //! contacts; each contact is checked along depth-bounded ancestor paths. No
 //! archive-sized triangle/point vector or ancestor cross-product is retained.
-//! SQLite pages are capped; its temporary sorts are disk backed. Candidate and
+//! SQLite pages are capped; its temporary sorts are disk backed.
 //! Decoded endpoints use exact canonical f64 keys (negative zero normalized),
 //! after mandatory Y-up conversion in a common root-relative content frame.
 //! Source encoding error never relaxes delivered D1 membership or adjacency.
@@ -15,8 +15,12 @@
 //!
 //! Proof limits: original rows certify internal archive correspondence, not an
 //! unavailable source document. Fresh coarse UV charts cannot be certified from
-//! leaf UVs. Winding is checked on decoded interface incidences and coincident
-//! exterior segments, not as a source-distance or whole-surface certificate.
+//! leaf UVs. Winding covers required interfaces and contradictory local coarse
+//! directed pairs. Other coarse interior/exterior orientation is uninspected.
+//! Boundary reductions do not establish whole-subtree exterior incidence: an
+//! individual leaf open edge can be internal to the complete descendant union.
+//! Source-distance and broader orientation acceptance belong to the independent
+//! source-aware oracle, which retains all source face incidences.
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 use crate::spill::{Scratch, SlotFile};
 use rusqlite::{params, Connection};
@@ -1109,7 +1113,6 @@ impl Store {
         self.originals(effort)?;
         self.place_edges(effort)?;
         self.contacts(effort)?;
-        self.exterior_winding(effort)?;
         Ok(())
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -1242,7 +1245,7 @@ impl Store {
         let mut nearby = self
             .connection
             .prepare(
-                "SELECT e.tile,e.data FROM spatial s JOIN edges e ON e.id=s.id
+                "SELECT e.tile,e.data FROM spatial s CROSS JOIN edges e ON e.id=s.id
             WHERE s.x0<=?1 AND s.x1>=?2 AND s.y0<=?3 AND s.y1>=?4 AND s.z0<=?5 AND s.z1>=?6
                 AND e.leaf=1 AND e.id>?7 AND e.tile<>?8",
             )
@@ -1339,7 +1342,7 @@ impl Store {
         tolerance: f64,
         effort: &Effort,
     ) -> Result<(), Error> {
-        let mut query=self.connection.prepare_cached("SELECT e.data FROM spatial s JOIN edges e ON e.id=s.id
+        let mut query=self.connection.prepare_cached("SELECT e.data FROM spatial s CROSS JOIN edges e ON e.id=s.id
             WHERE e.tile=?1 AND s.x0<=?2 AND s.x1>=?3 AND s.y0<=?4 AND s.y1>=?5 AND s.z0<=?6 AND s.z1>=?7").map_err(sql)?;
         let mut rows = query
             .query(params![
@@ -1372,7 +1375,7 @@ impl Store {
         if start == end {
             return self.require_point(tile, want.a, want.tolerance, effort);
         }
-        let mut query=self.connection.prepare_cached("SELECT e.data FROM spatial s JOIN edges e ON e.id=s.id
+        let mut query=self.connection.prepare_cached("SELECT e.data FROM spatial s CROSS JOIN edges e ON e.id=s.id
             WHERE e.tile=?1 AND s.x0<=?2 AND s.x1>=?3 AND s.y0<=?4 AND s.y1>=?5 AND s.z0<=?6 AND s.z1>=?7").map_err(sql)?;
         let b = want.bounds();
         let mut rows = query
@@ -1432,56 +1435,6 @@ impl Store {
         if !connected(true)? {
             let witness=reversed_witness.map_or_else(||"no directed edge".into(),|e|format!("ancestor_edge={:?}->{:?}, ancestor_normal={:?}, normal_dot={}, directed_segment_dot={}",e.a,e.b,e.n,dot(want.n,e.n),dot(sub(want.b,want.a),sub(e.b,e.a))));
             return Err(bad("interfaceWinding",&format!("decoded ancestor reverses a leaf interface incidence: tile={tile}, leaf_edge={:?}->{:?}, leaf_normal={:?}, {witness}",want.a,want.b,want.n)));
-        }
-        Ok(())
-    }
-    fn exterior_winding(&self, effort: &Effort) -> Result<(), Error> {
-        // Roots contain every leaf, so the outside-owner rule has no required
-        // interfaces there. Coincident exterior edges still carry an independently
-        // decoded orientation witness; this also detects an entirely flipped root.
-        let mut outer=self.connection.prepare("SELECT e.tile,e.data,t.last FROM edges e JOIN tiles t ON t.id=e.tile WHERE e.leaf=0").map_err(sql)?;
-        let mut rows = outer.query([]).map_err(sql)?;
-        let mut nearby = self
-            .connection
-            .prepare(
-                "SELECT e.data FROM spatial s JOIN edges e ON e.id=s.id
-            WHERE s.x0<=?1 AND s.x1>=?2 AND s.y0<=?3 AND s.y1>=?4 AND s.z0<=?5 AND s.z1>=?6
-                AND e.leaf=1 AND e.tile>?7 AND e.tile<=?8",
-            )
-            .map_err(sql)?;
-        while let Some(row) = rows.next().map_err(sql)? {
-            effort.charge(1)?;
-            let tile: i64 = row.get(0).map_err(sql)?;
-            let bytes: Vec<u8> = row.get(1).map_err(sql)?;
-            let last: i64 = row.get(2).map_err(sql)?;
-            let a = Edge::from_bytes(&bytes)?;
-            let bounds = a.bounds();
-            let mut candidates = nearby
-                .query(params![
-                    bounds[1], bounds[0], bounds[3], bounds[2], bounds[5], bounds[4], tile, last
-                ])
-                .map_err(sql)?;
-            let mut positive = false;
-            let mut reversed = None;
-            while let Some(other) = candidates.next().map_err(sql)? {
-                effort.charge(1)?;
-                let bytes: Vec<u8> = other.get(0).map_err(sql)?;
-                let b = Edge::from_bytes(&bytes)?;
-                if overlap(&a, &b).is_some() {
-                    if dot(sub(a.b, a.a), sub(b.b, b.a)) > 0. {
-                        positive = true;
-                    } else if reversed.is_none() {
-                        reversed = Some(b);
-                    }
-                }
-            }
-            if let Some(b) = reversed.filter(|_| !positive) {
-                return Err(bad(
-                    "interfaceWinding",
-                    &format!("coarse exterior incidence reverses decoded descendant leaf geometry: tile={tile}, coarse_edge={:?}->{:?}, leaf_edge={:?}->{:?}, directed_segment_dot={}, normal_dot={}",
-                        a.a,a.b,b.a,b.b,dot(sub(a.b,a.a),sub(b.b,b.a)),dot(a.n,b.n)),
-                ));
-            }
         }
         Ok(())
     }
@@ -1595,7 +1548,6 @@ mod tests {
         placed(&s, 0, &coarse, false);
         placed(&s, 1, &leaf, true);
         s.require_segment(0, &leaf, &effort()).unwrap();
-        s.exterior_winding(&effort()).unwrap();
     }
     #[test]
     fn reflected_scene_changes_position_and_oriented_area_together() {
@@ -1682,24 +1634,6 @@ mod tests {
                 assert!(result.unwrap_err().to_string().contains("D4 coarse"));
             }
         }
-    }
-    #[test]
-    fn root_exterior_winding_has_a_descendant_witness_without_outside_owner() {
-        let mut s = store();
-        s.tile(0, None, IDENTITY).unwrap();
-        s.tile(1, Some(0), IDENTITY).unwrap();
-        s.hierarchy(&effort()).unwrap();
-        let good = edge([0., 0., 0.], [2., 0., 0.]);
-        let mut flipped = good.clone();
-        std::mem::swap(&mut flipped.a, &mut flipped.b);
-        flipped.n = [0., 0., -1.];
-        placed(&s, 0, &flipped, false);
-        placed(&s, 1, &good, true);
-        assert!(s
-            .exterior_winding(&effort())
-            .unwrap_err()
-            .to_string()
-            .contains("interfaceWinding"));
     }
     #[test]
     fn shared_corner_does_not_lock_a_canceled_internal_edge() {

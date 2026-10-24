@@ -23,17 +23,37 @@ fn sampled_hlod_archives_and_named_mutants() {
         "{}",
         String::from_utf8_lossy(&generated.stderr)
     );
-    for name in ["lattice_controls.py", "winding_controls.py"] {
-        let probes = tempfile::tempdir().unwrap();
+    for name in [
+        "lattice_controls.py",
+        "winding_controls.py",
+        "native_controls.py",
+    ] {
+        let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
             .arg(oracle.join(name))
-            .arg(probes.path())
+            .arg(&probes)
+            .args(if name == "native_controls.py" {
+                vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
+            } else {
+                vec![]
+            })
             .output()
             .unwrap();
         assert!(
             result.status.success(),
             "{name}: {}",
             String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let revision_hashes: Value =
+        serde_json::from_slice(&fs::read(oracle.join("revision-controls-sha256.json")).unwrap())
+            .unwrap();
+    for (name, expected) in revision_hashes.as_object().unwrap() {
+        let bytes = fs::read(work.path().join(name)).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(bytes)),
+            expected.as_str().unwrap(),
+            "{name}"
         );
     }
     let hashes: Value =

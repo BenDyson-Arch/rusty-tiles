@@ -305,7 +305,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['attributes']=dict(attributes)
             result['uninspected']=(['textured leaf UV/source-pixel correspondence: crop/repack transforms require independent image-content proof']
                                    if attributes['leafTexcoordCorrespondenceUninspected'] else [])
-            result['uninspected'].append('isolated interior coarse orientation without a coincident source face or directed retained-border witness; no continuous source-surface mapping is certified')
+            result['uninspected'].append('coarse face-interior orientation without a unique exact coincident descendant-leaf face is uninspected; directed retained-border witnesses certify only edge direction, not face-interior orientation; no continuous source-surface mapping is certified')
             return result
         finally:
             store.close()

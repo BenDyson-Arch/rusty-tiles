@@ -38,13 +38,14 @@ clear a barrier owned by a renderable REPLACE ancestor.
 
 Only open/nonmanifold decoded edges survive each bounded payload reduction.
 A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
-subsegments, corner/T points and matching interface incidences; root exterior
-incidences also have descendant orientation witnesses. Keeping just a T vertex
+subsegments, corner/T points and matching required-interface incidences. Keeping just a T vertex
 cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
 charged; dense queries refuse rather than truncate. Shared points and consecutive
 edge endpoints use exact decoded coordinates, with negative zero canonicalized.
 Encoding half-steps never excuse a delivered crack. Native winding
-checks cover interfaces/coincident exterior witnesses, not every isolated interior.
+checks cover required interfaces. Other coarse interior/exterior orientation is
+explicitly uninspected by native validation; the source oracle supplies the
+stronger exact coincident-face and unique retained-border witnesses.
 Fresh coarse UV/source-pixel correspondence cannot be inferred from leaf UVs.
 
 One shared invertible root placement is removed before coordinate arithmetic.
