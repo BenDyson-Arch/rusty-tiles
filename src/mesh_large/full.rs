@@ -368,6 +368,11 @@ fn scratch_need(
     // Runs are chunk files of about CHUNK_BYTES each (at least half of it, for any record).
     let chunk_files = logical_need_bytes.div_ceil((crate::spill::CHUNK_BYTES / 2) as u64);
     let max_live_files = add(max_live_files, chunk_files)?;
+    // HLOD's overlap join holds a bounded set of its own files besides its runs.
+    let max_live_files = match config.lod {
+        super::hlod::TilerLod::H17 => max_live_files,
+        super::hlod::TilerLod::Hlod => add(max_live_files, super::hlod::interfaces::KD_MAX_FILES)?,
+    };
     let file_rounding_bytes = config::file_rounding(unit, max_live_files).ok_or_else(overflow)?;
     let allocation_reserve_bytes = add(logical_need_bytes.div_ceil(10), file_rounding_bytes)?;
     let need_bytes = add(logical_need_bytes, allocation_reserve_bytes)?;

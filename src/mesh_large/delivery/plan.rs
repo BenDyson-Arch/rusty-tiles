@@ -106,6 +106,12 @@ pub(crate) struct Node {
     pub leaf: Option<Box<LeafRow>>,
     /// The H17 coarse tile of an internal tile.
     pub proxy: Option<Box<ProxyRow>>,
+    /// An HLOD single-child chain cell below its chain's coarse tile (this row) has no
+    /// content of its own. Cesium's empty traversal would let the coarse tile stop drawing
+    /// on reaching it, before the tiles that replace it are loaded, so it is never published
+    /// empty: explicit output splices it out (its child replaces it), and where the layout
+    /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
+    pub chain: Option<Box<ProxyRow>>,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -123,6 +129,11 @@ impl Node {
     /// An implicit root: a shallow tree demoted from explicit tiles.
     pub(crate) fn is_implicit_root(&self) -> bool {
         self.implicit && self.leaf.is_none() && !self.is_skeleton()
+    }
+
+    /// A chain cell (see `chain`): spliced out of explicit output.
+    pub(crate) fn is_chain_cell(&self) -> bool {
+        self.chain.is_some() && self.proxy.is_none() && self.leaf.is_none() && self.link.is_none()
     }
 
     /// A skeleton tile whose fragment is still inline (not a link).
@@ -182,18 +193,27 @@ impl Node {
 
 /// Add the published roles of one document's fragment to `shape`.
 fn tally(shape: &mut Shape, node: &Node) {
-    if node.link.is_some() {
-        return;
+    fn visit(shape: &mut Shape, node: &Node, root: bool) {
+        if node.link.is_some() {
+            return;
+        }
+        if node.is_implicit_root() {
+            shape.implicit_roots += 1;
+            shape.implicit_tiles += node.records;
+            return;
+        }
+        if node.is_chain_cell() && !root {
+            // Spliced out: its child takes its place.
+            shape.tiles -= 1;
+            shape.spliced_chain_cells += 1;
+        } else {
+            shape.explicit_tiles += 1;
+        }
+        for child in &node.children {
+            visit(shape, child, false);
+        }
     }
-    if node.is_implicit_root() {
-        shape.implicit_roots += 1;
-        shape.implicit_tiles += node.records;
-        return;
-    }
-    shape.explicit_tiles += 1;
-    for child in &node.children {
-        tally(shape, child);
-    }
+    visit(shape, node, true);
 }
 
 /// Where closed fragments go: counted while planning, written while publishing.
@@ -204,31 +224,39 @@ pub(crate) trait Sink {
     fn root(&mut self, node: Node) -> Result<(), JobError>;
 }
 
-/// Members one document adds: explicit payloads, implicit payloads and subtrees in it.
+/// Members one document adds: explicit payloads, implicit payloads and subtrees in it. A
+/// chain cell repeats its coarse tile in an implicit tree and as a document's root, and is
+/// spliced out (no payload) elsewhere.
 pub(crate) fn document_members(node: &Node) -> u64 {
-    fn implicit_leaves(node: &Node) -> u64 {
+    fn payloads(node: &Node, chains: bool) -> u64 {
         if node.leaf.is_some() {
             1
         } else {
-            u64::from(node.proxy.is_some()) + node.children.iter().map(implicit_leaves).sum::<u64>()
+            u64::from(node.proxy.is_some() || (chains && node.chain.is_some()))
+                + node
+                    .children
+                    .iter()
+                    .map(|c| payloads(c, chains))
+                    .sum::<u64>()
         }
     }
-    fn walk(node: &Node) -> u64 {
+    fn walk(node: &Node, root: bool) -> u64 {
         if node.link.is_some() {
             0
         } else if node.leaf.is_some() {
             1
         } else if node.is_implicit_root() {
             // Its payloads and its subtree.
-            implicit_leaves(node) + 1
+            payloads(node, true) + 1
         } else if !node.is_skeleton() {
             // A shallow tree written as explicit tiles: its payloads only.
-            implicit_leaves(node)
+            u64::from(root && node.is_chain_cell()) + payloads(node, false)
         } else {
-            u64::from(node.proxy.is_some()) + node.children.iter().map(walk).sum::<u64>()
+            u64::from(node.proxy.is_some() || (root && node.is_chain_cell()))
+                + node.children.iter().map(|c| walk(c, false)).sum::<u64>()
         }
     }
-    walk(node)
+    walk(node, true)
 }
 
 /// Counts of the published forest.
@@ -245,6 +273,8 @@ pub(crate) struct Shape {
     pub packed_leaves: u64,
     /// Internal tiles published with an H17 coarse tile.
     pub proxies: u64,
+    /// HLOD chain cells spliced out of explicit output (not in `tiles`).
+    pub spliced_chain_cells: u64,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -424,6 +454,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             implicit: false,
             leaf: Some(Box::new(row)),
             proxy: None,
+            chain: None,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -457,6 +488,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         let children_error = frame.children.iter().map(|c| c.error).fold(0., f64::max);
         // An HLOD cell without content sits below its single-child chain's coarse tile.
         let mut chain_error = None;
+        let mut chain = None;
         let proxy = if let Some(rows) = self.proxies.as_mut() {
             let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
             let next = match self.lookahead.take() {
@@ -487,6 +519,10 @@ impl<'s, S: Sink> Builder<'s, S> {
                         && row.depth < frame.depth =>
                 {
                     chain_error = Some(row.geometric_error);
+                    chain = Some(Box::new(row.clone()));
+                    // Where it cannot be spliced the cell repeats that payload, so its box
+                    // holds the payload's bounds too (as a coarse tile's own box does).
+                    extent = extent.union(bounds);
                     self.lookahead = Some((row, bounds));
                     None
                 }
@@ -543,6 +579,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             implicit: false,
             leaf: None,
             proxy,
+            chain,
             children: frame.children,
             link: None,
             objects: 0,
@@ -653,6 +690,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             leaf: None,
             // The proxy is the external document's root content, not the link's.
             proxy: None,
+            chain: None,
             children: Vec::new(),
             link: Some(link),
             objects: 1,
