@@ -1,0 +1,116 @@
+{
+  "evidence_directory": "/home/bend/.cache/rusty-tiles-evidence/etc1s-default-20261024",
+  "manifest_sha256": "0d2ec723fcf481126cbaf243d28c090c9d1f8be4307244c192a740d1aa4c2799",
+  "baseline_commit": "60a76db11da00551c0a9f18839095ff678675be1",
+  "final_binary_sha256": "6f422d172d2caf7f9f3f05f0bdca5210e677e38dfee786e70e45445424a4ba6b",
+  "cases": {
+    "develop-tex3-fast": {
+      "archive_sha256": "f809ecc4d4929f408034ec3cb3c471ef7226c289e983971b9a6af56bbd4b6bc7",
+      "archive_bytes": 82287053,
+      "texture_bytes": 37105816,
+      "jobs": 2
+    },
+    "develop-tex3-balanced": {
+      "archive_sha256": "a7097a9e246169c95646e59a3d009e452131beec31285bd2ade2cc3246a6d56c",
+      "archive_bytes": 84344677,
+      "texture_bytes": 39083023,
+      "jobs": 2
+    },
+    "develop-tex3-quality": {
+      "archive_sha256": "ccebb456aa9c7da5e73047c9491deb6e7fb4e62402fb24276fd89dcd8c11b242",
+      "archive_bytes": 92568655,
+      "texture_bytes": 40838041,
+      "jobs": 2
+    },
+    "develop-tex3-lossless": {
+      "archive_sha256": "8646c4a515725bbf164a02d3d167b8d2977a3cea0e83f9d417b41df7a8e09c93",
+      "archive_bytes": 94500728,
+      "texture_bytes": 41807840,
+      "jobs": 2
+    },
+    "develop-crop3-fast": {
+      "archive_sha256": "f49add341fef8500d9e17c64c3736a62d7020a21bf850d704c0b5860525e2915",
+      "archive_bytes": 78863869,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "develop-crop3-balanced": {
+      "archive_sha256": "c94cbbf690f04d499c409f6e734f973e30642e7940c01a2f047bbd4e15afeb16",
+      "archive_bytes": 78863873,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "develop-crop3-quality": {
+      "archive_sha256": "91113a948e4631c808a415393c9e58e7c3447af2eb672f3a3805fe6a53945961",
+      "archive_bytes": 85351531,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "develop-crop3-lossless": {
+      "archive_sha256": "914b204031498d041993d77ecd0f5bbb254a6805bf90a3cc343a47185a6ef108",
+      "archive_bytes": 102061768,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "candidate-tex3-fast": {
+      "archive_sha256": "703ab71131e75a2b21df6d7e938515426e1757462c40376917bdaec0b0903a60",
+      "archive_bytes": 55554440,
+      "texture_bytes": 10373367,
+      "jobs": 2
+    },
+    "candidate-tex3-balanced": {
+      "archive_sha256": "6937d25f645c582016cacff42fbed10cf356c65862900015a6deacc344d209d4",
+      "archive_bytes": 60170748,
+      "texture_bytes": 14909217,
+      "jobs": 2
+    },
+    "candidate-tex3-quality": {
+      "archive_sha256": "ccebb456aa9c7da5e73047c9491deb6e7fb4e62402fb24276fd89dcd8c11b242",
+      "archive_bytes": 92568655,
+      "texture_bytes": 40838041,
+      "jobs": 2
+    },
+    "candidate-tex3-lossless": {
+      "archive_sha256": "8646c4a515725bbf164a02d3d167b8d2977a3cea0e83f9d417b41df7a8e09c93",
+      "archive_bytes": 94500728,
+      "texture_bytes": 41807840,
+      "jobs": 2
+    },
+    "candidate-crop3-fast": {
+      "archive_sha256": "f49add341fef8500d9e17c64c3736a62d7020a21bf850d704c0b5860525e2915",
+      "archive_bytes": 78863869,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "candidate-crop3-balanced": {
+      "archive_sha256": "c94cbbf690f04d499c409f6e734f973e30642e7940c01a2f047bbd4e15afeb16",
+      "archive_bytes": 78863873,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "candidate-crop3-quality": {
+      "archive_sha256": "91113a948e4631c808a415393c9e58e7c3447af2eb672f3a3805fe6a53945961",
+      "archive_bytes": 85351531,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "candidate-crop3-lossless": {
+      "archive_sha256": "914b204031498d041993d77ecd0f5bbb254a6805bf90a3cc343a47185a6ef108",
+      "archive_bytes": 102061768,
+      "texture_bytes": 0,
+      "jobs": 2
+    },
+    "final-tex3-fast": {
+      "archive_sha256": "703ab71131e75a2b21df6d7e938515426e1757462c40376917bdaec0b0903a60",
+      "archive_bytes": 55554440,
+      "texture_bytes": 10373367,
+      "jobs": 1
+    },
+    "final-tex3-balanced": {
+      "archive_sha256": "6937d25f645c582016cacff42fbed10cf356c65862900015a6deacc344d209d4",
+      "archive_bytes": 60170748,
+      "texture_bytes": 14909217,
+      "jobs": 1
+    }
+  }
+}

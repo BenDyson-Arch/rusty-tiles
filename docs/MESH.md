@@ -1,5 +1,11 @@
 # Mesh tiling
 
+> **Direction change, 2026-10-24:** the [0.4 HLOD decision](architecture/hlod-040-decision.md)
+> replaces H17/H27 for the forthcoming implementation. This guide below still
+> describes the current code; sampled coarse error, representative coarse IDs,
+> the new bake and memory-budget option are planned, not shipped. The guide will
+> change with implementation; historical ledger follow-ups are superseded.
+
 `rusty-tiles mesh` and Python's `rusty_tiles.mesh_to_tileset` stream one admitted
 static glTF/GLB scene, in local metres or a declared source CRS, into a 3D Tiles
 1.1 implicit forest in one `.3tz`.
@@ -141,13 +147,114 @@ source that would need native PROJ for only some vertices is refused.
 
 `--profile` accepts `fast`, `balanced` (the default), `quality` or `lossless`.
 These are **provisional policies**: leaf sizing, texture resolution, encoder
-effort and other constants will be calibrated together after coarse geometry
-and baking exist. Do not build scripts around today's numerical constants.
+effort and other constants will be calibrated together as HLOD implementation
+and acceptance progress. Do not build scripts around today's numerical constants.
 Every present PBR slot follows its colour/data class and the chosen policy.
 Lossy output uses in-process KTX2/Basis; lossless leaf textures use PNG.
 `lossless` describes the agreed leaf texel policy, not exact source GLB bytes,
 arbitrary viewer filtering, or lossless coarse geometry. Leaf coordinate
 encoding and provenance still follow the tiler contract.
+
+Colour-class pages (base colour and emissive), in **both leaves and coarse
+proxies**, use the following initial codec. The single policy owner is
+`src/mesh_large/leaves/delivery.rs::codec_settings`; proxy delivery calls it
+through the shared authored-chain encoder. HLOD consumers of that encoder
+inherit the same choice.
+
+| Profile | Colour codec | ETC1S quality / effort |
+| --- | --- | --- |
+| `fast` | KTX2 ETC1S (BasisLZ) | 50 / 0 (lean) |
+| `balanced` (default) | KTX2 ETC1S (BasisLZ) | 90 / 0 (good) |
+| `quality` | KTX2 UASTC + Zstd | unchanged |
+| `lossless` | PNG | unchanged |
+
+Quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
+compression level 0. The initial effort-3 setting mapped to native level 2;
+the [effort sweep](../bench/architecture_audit/etc1s_default/effort.md) records
+the processing cost and byte/error tradeoffs behind the revision. Colour remains
+sRGB with class-correct authored mips. Normal and metallic-roughness remain UASTC;
+occlusion remains scalar ETC1S q90/effort 0 in fast/balanced and UASTC in
+quality. ID pages remain exact PNG in every profile.
+
+The processing tradeoff is explicit: the matched two-worker tex3 sweep took
+47.1/56.5 CPU-s for fast/balanced ETC1S, versus 16.1/18.2 CPU-s for their
+previous UASTC pack 0 codec. Effort 0 cuts the initial effort 3 cost substantially
+and balanced meets the 91.2 CPU-s quality-reference budget, while costing about
+3× the previous same-profile codec's encode CPU. Full tables, byte savings,
+measurement context and resource limits are in the linked effort record.
+
+Decoded RGB floors are support-weighted and checked on **every mip**, including
+1×1. The leaf/delivery gate selects a band by the count of texels with positive
+support, not their summed weights or the padded level area. The middle band is
+64–1,023 supported texels; tiny means fewer than 64.
+A page must meet all applicable criteria; PSNR is in dB, errors in RGBA8 byte units.
+
+| Colour profile | PSNR ≥1,024 / middle / tiny | Large p99.9 cap | Worst supported 4×4 block RMSE cap |
+| --- | --- | --- | --- |
+| `fast` | 20 / 16 / 13 | 112 | 96 |
+| `balanced` | 20 / 16 / 13 | 80 | 80 |
+| `quality` | 27 / 23 / 23 | 64 | 48 |
+
+These fast/balanced RGB gates are looser than develop's previous UASTC floors
+of 24 dB at ≥1,024 supported texels and 20 dB below that, and their local and
+decoded sampler caps are wider. The accepted byte saving carries an explicit
+reduction in reconstruction accuracy.
+Tiny fast/balanced levels additionally require **combined RGB PSNR ≥16 dB**,
+computed from the mean of the three channel MSEs, never the mean of their dB
+values. This catches correlated RGB damage while admitting a shared-palette
+tail concentrated in one channel. The sampler applies this joint floor only
+to decoded colour in its own tiny area band; authored correspondence remains
+strict and separate.
+
+The percentile cap is omitted below 1,024 supported texels; the block guard stays
+active. Alpha keeps PSNR/max-error floors of 30/80 (fast), 30/64 (balanced),
+34/32 (quality). Normal RGB keeps 30/112 plus normalized-length mean/max caps
+0.08/0.20, 0.05/0.15, 0.03/0.10 respectively, and angular mean/p99 caps
+3°/12°. Metallic-roughness keeps 30/32 on G/B; occlusion keeps 30/80 on R
+(quality 30/8). MASK decoded coverage keeps the attainable semantic gap plus
+0.02/0.01/0.005. Non-MASK alpha and data source-sampler floors are unchanged.
+Decoded fast/balanced colour source sampling uses the same RGB PSNR bands,
+selected by the sampled level's **area** (width × height), including padding,
+not its positive-support count. Nearest-mip filtering rounds to the selected
+level; a fractional mip blend uses the coarser participating level. Non-mip
+filters use level zero. Thus a sparsely supported 32×32 level uses the large
+sampler band even when its leaf gate uses the tiny band. Maximum errors are
+160/144 respectively. Quality keeps 34/24. Pre-encode source correspondence
+keeps its original 22/56, 22/32, 34/24 limits; codec error does not authorize
+weaker chart correspondence. These errors are in sRGB byte space after
+linear-light sampling.
+
+The q50/q90 photo, alpha-photo and odd-size fixture bases were authored into
+valid colour-correct mip pages (POT padding has zero support). They measured
+minimum channel PSNR 20.28/20.67 dB at ≥1,024 texels, 18.57/18.62 dB in the
+middle band and 13.30/13.30 dB in tiny mips at effort 0. Their minimum joint
+tiny RGB PSNR is 16.85 dB. The effort-0 smooth 64² photo control
+reaches 17.05/17.16 dB in the middle band. Shared palettes and joint-channel
+reconstruction explain the coarse/tiny channel tails, motivating the initial
+20/16/12 bands. The processing-cost revision raises tiny channel PSNR to 13 dB
+and adds the 16 dB joint RGB floor. The former 12 dB admitted a light flat grey 200
+page wrongly converted to linear bytes 147 (13.65 dB in all channels). Raising
+the channel floor to 14 dB would also reject valid 13.30 dB fixture tails; the
+joint guard separates those cases. The existing codec byte-domain
+pyramids were measured separately; they do not define the colour-mip filtering contract.
+
+A legal ETC1S decode is not automatically acceptable. The effort-0 128² and 256²
+smooth-photo stress controls miss the large-level floors and require escalation; the
+256² q90 case reaches 17.52 dB and p99.9 95 on its 32² mip. Noise/chroma-noise also miss the RGB floors; they do not set
+acceptance floors. Percentile/block caps retain local damage detection, with
+flat/low-noise and saturated checker controls measured separately. Source max
+caps cover photo tails with margin; alpha/MASK guards remain independent and
+are never relaxed to admit RGB error.
+
+This brings forward D7 by the owner's 2026-10-24 decision. Calibration and
+bounded tex3/crop3 measurements, corruption controls and proof limits are
+recorded in [the ETC1S acceptance record](../bench/architecture_audit/etc1s_default/README.md).
+The [processing-cost revision](../bench/architecture_audit/etc1s_default/effort.md)
+records the effort sweep, tighter tiny gate and default-lossy archive golden.
+Black pages, inverted channels and an upsampled coarse checker mip fail the
+decoded gate. Smooth wrong-mip content can still pass even a 20 dB floor; the
+revision records a >40 dB example and proposes a separately calibrated spatial
+derivative/band-pass check. PSNR does not establish mip provenance.
 
 In a lossy profile, a texture page that misses any decoded-image gate at the
 profile's own encoder setting (per-level channel and normal floors, MASK

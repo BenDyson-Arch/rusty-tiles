@@ -1256,6 +1256,394 @@ fn t_junctions_keep_their_shared_vertices_and_segments() {
     );
 }
 
+/// Three- and four-cell corners: sheets of different, non-nested resolutions meet along two
+/// border lines (both off every coarse lattice) and at their common corner, so T-junction
+/// runs end at a point shared by three or four meshes. Flat along both borders (exactly
+/// collinear once decoded), curved inside.
+fn corners(four: bool) -> Vec<Mesh> {
+    let c = T_LINE;
+    let height = move |x: f32, z: f32| {
+        let w = |v: f32| (std::f32::consts::PI * (v - c) / 50.).sin().powi(2);
+        2. + 3. * w(x) * w(z)
+    };
+    let colour = [0.5, 0.5, 0.5, 1.];
+    if four {
+        vec![
+            grid((10, 10), (0., c), (0., c), &height, colour),
+            grid((20, 20), (c, 100.), (0., c), &height, colour),
+            grid((15, 15), (0., c), (c, 100.), &height, colour),
+            grid((40, 40), (c, 100.), (c, 100.), &height, colour),
+        ]
+    } else {
+        vec![
+            grid((10, 20), (0., c), (0., 100.), &height, colour),
+            grid((25, 12), (c, 100.), (0., c), &height, colour),
+            grid((16, 30), (c, 100.), (c, 100.), &height, colour),
+        ]
+    }
+}
+
+#[test]
+fn three_and_four_cell_corners_are_crack_free() {
+    for (name, four) in [("three-cell corner", false), ("four-cell corner", true)] {
+        let census = accept(name, &corners(four), Run::default());
+        assert!(census.overlaps > 0, "{name}: {census:?}");
+    }
+}
+
+/// A long collinear run: many short slivers laid end to end along one line in one leaf,
+/// one long border segment of a neighbouring sheet along the same line, and the run's
+/// joints all T-junctions on it.
+#[test]
+fn long_collinear_runs_are_crack_free() {
+    let c = T_LINE;
+    let flat = |_: f32, _: f32| 2.;
+    let source = vec![
+        grid((1, 40), (0., c), (0., 100.), &flat, [0.6, 0.5, 0.4, 1.]),
+        grid((30, 400), (c, 100.), (0., 100.), &flat, [0.3, 0.6, 0.3, 1.]),
+    ];
+    let census = accept("collinear run", &source, Run::default());
+    assert!(census.overlaps > 0, "{census:?}");
+}
+
+/// Round 4: 64 separate ribbons (16,384 triangles) and 65 long diagonal slivers that never
+/// come near them. The slivers are long against every region they cross; testing them
+/// against every ribbon point (as an aggregate once did) locked all 16,512 ribbon vertices
+/// and refused the parent at the cap. The exact join locks nothing here.
+fn ribbons(n: usize) -> Mesh {
+    let mut ribbons = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.6, 0.6, 0.6, 1.],
+    };
+    for i in 0..=n {
+        for j in 0..=n {
+            ribbons.positions.push([
+                -90. + 80. * i as f32 / n as f32,
+                0.,
+                10. + 80. * j as f32 / n as f32,
+            ]);
+        }
+    }
+    for i in 0..n {
+        for j in (0..n).step_by(2) {
+            let a = (i * (n + 1) + j) as u32;
+            let b = a + n as u32 + 1;
+            ribbons.indices.extend([a, a + 1, b, b, a + 1, b + 1]);
+        }
+    }
+    ribbons
+}
+
+#[test]
+fn distant_long_slivers_lock_nothing_and_never_refuse() {
+    let ribbons = ribbons(128);
+    let mut slivers = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.3, 0.3, 1.],
+    };
+    for k in 0..65i32 {
+        let off = (k - 32) as f32 * 0.02;
+        let base = slivers.positions.len() as u32;
+        slivers.positions.extend([
+            [-100., 0., -100. + off],
+            [100., 0., 100. + off],
+            [100., 0., 100. + off + 0.005],
+        ]);
+        slivers.indices.extend([base, base + 1, base + 2]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[ribbons, slivers]);
+    let run = Run {
+        leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+        cap: super::TRIANGLE_CAP,
+        jobs: 4,
+        ..Run::default()
+    };
+    let dir =
+        stage(&input, &work.path().join("hlod"), &run).unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let incidence = &manifest["hlod"]["incidence"];
+    assert!(
+        incidence["matchedGuests"].as_u64().unwrap() < 100,
+        "{incidence}"
+    );
+    assert_eq!(incidence["fallbackRegions"], 0, "{incidence}");
+    let census = census(&dir);
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+}
+
+/// The owner's fallback case: 2,048 random chord slivers spanning two ribbon blocks on either
+/// side of the root's split. Their long edges cross every region, so the join's exact tests
+/// pass the budget and it matches those regions by a superset, locking every ribbon point
+/// against chords of the other side; the side's parent those locks keep from its cap resolves
+/// them exactly and builds. Never refused, crack-free, and identical (counters included) at
+/// one and four jobs.
+#[test]
+fn random_chords_fall_back_resolve_and_never_refuse() {
+    let mut state = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f32 / (1u64 << 53) as f32
+    };
+    let mut chords = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.3, 0.3, 1.],
+    };
+    for _ in 0..2048 {
+        let mut p = || [-90. + 180. * next(), -2. + 4. * next(), 10. + 80. * next()];
+        let (a, b) = (p(), p());
+        let base = chords.positions.len() as u32;
+        chords.positions.extend([a, b, [b[0], b[1], b[2] + 0.005]]);
+        chords.indices.extend([base, base + 1, base + 2]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let left = ribbons(128);
+    let mut right = left.clone();
+    for p in &mut right.positions {
+        p[0] += 100.;
+    }
+    let input = write_gltf(&work.path().join("src"), &[left, right, chords]);
+    let run = |jobs: usize, name: &str| {
+        let run = Run {
+            leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+            cap: super::TRIANGLE_CAP,
+            jobs,
+            ..Run::default()
+        };
+        stage(&input, &work.path().join(name), &run).unwrap_or_else(|f| panic!("{}", f.error))
+    };
+    let one = run(1, "one");
+    let four = run(4, "four");
+    let manifest = |dir: &Path| -> Value {
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+    };
+    let (m1, m4) = (manifest(&one), manifest(&four));
+    let incidence = &m1["hlod"]["incidence"];
+    eprintln!(
+        "FALLBACK {incidence} resolved {}",
+        m1["hlod"]["resolvedTiles"]
+    );
+    assert!(
+        incidence["fallbackRegions"].as_u64().unwrap() > 0,
+        "{incidence}"
+    );
+    assert!(
+        m1["hlod"]["resolvedTiles"].as_u64().unwrap() > 0,
+        "{}",
+        m1["hlod"]
+    );
+    assert_eq!(m1["hlod"], m4["hlod"]);
+    assert_eq!(published(&one), published(&four));
+    let census = census(&one);
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
+}
+
+/// Round 4: what one parent job allocates (meshopt's temporary arrays included, routed
+/// through the counting allocator) stays within the job's charge, on adversarial children:
+/// a fully locked disconnected soup (every vertex distinct, refused at the cap), grids whose
+/// required border segments are not point-locked (protected retries), and grids with no
+/// interface (free simplification); and the encode and decode check of a cap-sized tile
+/// within the job's encode allowance.
+#[test]
+fn parent_jobs_allocate_within_their_charge() {
+    use super::{encode, geometry, interfaces::key, interfaces::InterfaceRow, store::*};
+    crate::test_alloc::route_meshopt();
+    let bounds = Bounds {
+        min: [-100.; 3],
+        max: [100.; 3],
+    };
+    let lattice = LatticePlan::new(Profile::Balanced, bounds, &[255., 127., 63.]).unwrap();
+    let cap = super::TRIANGLE_CAP;
+    let n = 8192usize;
+    let parent = TileKey {
+        first: 0,
+        end: 8 * n as u64,
+        depth: 1,
+        leaf_begin: 1,
+        leaf_end: 9,
+    };
+    let outer = |slot: usize, a: [f32; 3], b: [f32; 3]| {
+        InterfaceRow::certain(
+            slot as u32 + 1,
+            key(a).min(key(b)),
+            key(a).max(key(b)),
+            0,
+            slot as u32 + 1,
+        )
+    };
+    let primitive = |t: usize| SourcePrimitive {
+        node: 0,
+        mesh: 0,
+        primitive: t as u32,
+        expanded_ordinal: t as u64,
+        material: u32::MAX,
+    };
+    let child = |slot: usize, kind: u8| -> TileGeometry {
+        let origin = [
+            -90. + 90. * (slot & 1) as f32,
+            -90. + 90. * ((slot >> 1) & 1) as f32,
+            -90. + 90. * ((slot >> 2) & 1) as f32,
+        ];
+        let mut tile = TileGeometry {
+            key: TileKey {
+                first: (slot * n) as u64,
+                end: ((slot + 1) * n) as u64,
+                depth: 2,
+                leaf_begin: slot as u32 + 1,
+                leaf_end: slot as u32 + 2,
+            },
+            ells: Vec::new(),
+            positions: Vec::new(),
+            triangles: Vec::new(),
+            representative: Vec::new(),
+            primitives: Vec::new(),
+            interface: Vec::new(),
+            geometric_error: 0.,
+            lease: None,
+            measurement: None,
+        };
+        let at = |x: f32, z: f32, y: f32| {
+            lattice
+                .canonical([origin[0] + x, origin[1] + y, origin[2] + z], 2)
+                .unwrap()
+        };
+        if kind == 0 || kind == 3 {
+            // Disconnected soup, every segment required; point-locked too (kind 0, refused
+            // at the cap), or not (kind 3: simplification deletes segments and retries).
+            for t in 0..n {
+                let (x, z) = ((t % 64) as f32 * 1.25, (t / 64) as f32 * 0.6);
+                let c = [at(x, z, 0.), at(x + 1., z, 0.1), at(x, z + 0.5, 0.2)];
+                let base = tile.positions.len() as u32;
+                tile.positions.extend(c);
+                tile.ells.extend([2; 3]);
+                tile.triangles.push([base, base + 1, base + 2]);
+                for k in 0..3 {
+                    if kind == 0 {
+                        tile.interface.push(outer(slot, c[k], c[k]));
+                    }
+                    tile.interface.push(outer(slot, c[k], c[(k + 1) % 3]));
+                }
+            }
+        } else {
+            // A 64 x 64 grid of quads (8,192 triangles), gently curved.
+            let w = 65;
+            for i in 0..w {
+                for j in 0..w {
+                    let (x, z) = (i as f32 * 1.25, j as f32 * 1.25);
+                    tile.positions
+                        .push(at(x, z, 0.02 * ((x * 0.3).sin() + (z * 0.2).cos())));
+                    tile.ells.push(2);
+                }
+            }
+            for i in 0..w - 1 {
+                for j in 0..w - 1 {
+                    let v = |a: usize, b: usize| (a * w + b) as u32;
+                    tile.triangles.push([v(i, j), v(i, j + 1), v(i + 1, j)]);
+                    tile.triangles
+                        .push([v(i + 1, j), v(i, j + 1), v(i + 1, j + 1)]);
+                }
+            }
+            if kind == 1 {
+                // Required border segments without point locks: simplification deletes some
+                // and the job protects and retries.
+                for i in 0..w - 1 {
+                    for (a, b) in [
+                        ((i, 0), (i + 1, 0)),
+                        ((i, w - 1), (i + 1, w - 1)),
+                        ((0, i), (0, i + 1)),
+                        ((w - 1, i), (w - 1, i + 1)),
+                    ] {
+                        let p = |(x, z): (usize, usize)| tile.positions[x * w + z];
+                        tile.interface.push(outer(slot, p(a), p(b)));
+                    }
+                }
+            }
+        }
+        tile.primitives = (0..tile.triangles.len()).map(primitive).collect();
+        tile.representative = (0..tile.triangles.len() as u32).collect();
+        tile.interface.sort_unstable_by_key(|r| (r.a, r.b));
+        tile.interface.dedup_by_key(|r| (r.a, r.b));
+        tile
+    };
+    let merged = (8 * n) as u64;
+    let charge = merged * super::JOB_BYTES_PER_TRIANGLE;
+    let mut grid = None;
+    for kind in [0u8, 1, 3, 2] {
+        let children: Vec<TileGeometry> = (0..8).map(|slot| child(slot, kind)).collect();
+        let (built, peak) = crate::test_alloc::peak(|| {
+            let fallback = super::interfaces::Fallback::default();
+            let resolve = geometry::Resolve {
+                fallback: &fallback,
+                check: &|| Ok(()),
+            };
+            geometry::build_parent(parent, &children, cap, &resolve)
+        });
+        eprintln!(
+            "JOB kind {kind}: peak {peak} bytes = {:.0} per merged triangle (charge {})",
+            peak as f64 / merged as f64,
+            super::JOB_BYTES_PER_TRIANGLE
+        );
+        assert!(peak as u64 <= charge, "kind {kind}: {peak} > {charge}");
+        match (kind, built) {
+            (0, built) => assert!(built.is_err()),
+            (2, built) => grid = Some(built.unwrap()),
+            // The retries ran (and fitted, or ran out and refused).
+            (_, Ok(b)) => assert!(b.retries > 0, "kind {kind}"),
+            (_, Err(e)) => assert!(e.to_string().contains("protected"), "{e}"),
+        }
+    }
+    let built = grid.unwrap();
+    let (checked, peak) = crate::test_alloc::peak(|| {
+        let positions = encode::positions(
+            &built.geometry,
+            &built.locked,
+            &lattice,
+            Mutation::None,
+        )?;
+        let appearance = super::appearance::Appearance {
+            groups: vec![super::appearance::Group {
+                class: 0,
+                faces: (0..built.geometry.triangles.len()).collect(),
+                material: json!({"pbrMetallicRoughness":{"metallicFactor":0.0,"roughnessFactor":1.0}}),
+                uvs: None,
+                tangents: None,
+                colors: None,
+                pages: Vec::new(),
+            }],
+            normals: None,
+            facts: Default::default(),
+            timing: Default::default(),
+        };
+        let encoded = encode::encode(
+            &built.geometry,
+            positions,
+            &appearance,
+            Mutation::None,
+        )?;
+        encode::check(&built.geometry, &built.locked, &encoded)
+    });
+    checked.unwrap();
+    eprintln!(
+        "JOB encode+check peak {peak} (allowance {})",
+        super::JOB_ENCODE_BYTES
+    );
+    assert!(peak as u64 <= super::JOB_ENCODE_BYTES, "{peak}");
+}
+
 /// The reviewer's encoder probe: steps 2^-7, 2^-8, 2^-9; a depth-1 coarse tile whose border
 /// runs along x = 50 + 2^-9 with locked endpoints and an unmatched midpoint. Snapped to the
 /// depth-1 lattice the midpoint would decode at x = 50 (a 2^-9 m gap); on the open border
@@ -1277,13 +1665,7 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         .unwrap();
     assert_eq!(snapped.decoded[2][0], 50., "probe must be sensitive");
     let key = super::interfaces::key;
-    let row = |p: [f32; 3]| InterfaceRow {
-        leaf: 0,
-        a: key(p),
-        b: key(p),
-        lo: 0,
-        hi: 1,
-    };
+    let row = |p: [f32; 3]| InterfaceRow::certain(0, key(p), key(p), 0, 1);
     let tile = TileGeometry {
         key: TileKey {
             first: 0,
@@ -1374,14 +1756,179 @@ fn single_child_chains_publish_their_content_once() {
     let passed = manifest["hlod"]["passThrough"].as_u64().unwrap();
     assert!(passed >= 3, "{}", manifest["hlod"]);
     assert!(census.coarse >= 1, "{census:?}");
-    let result = public(&input, &work.path().join("chain.3tz"), None, 2).unwrap();
+    let archive = work.path().join("chain.3tz");
+    let result = public(&input, &archive, None, 2).unwrap();
     assert!(result.diagnostics.hlod.unwrap().tiles >= 1);
+    // The chain cells are spliced out of the explicit hierarchy: no content-less tile below
+    // content (Cesium would drop the coarse tile there before its replacements load), and
+    // the coarse tile's children are its deeper renderable replacements.
+    let shape = refinement_shape(&archive);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{shape:?}"
+    );
+    assert!(shape.skipped_levels > 0, "{shape:?}");
+}
+
+/// Where the layout cannot skip a cell (implicit trees and document roots, forced here by
+/// tight fragment caps), a chain cell repeats its coarse tile instead of publishing empty;
+/// under the default caps every chain cell is spliced out and nothing repeats.
+#[test]
+fn chain_cells_repeat_coarse_content_where_they_cannot_be_spliced() {
+    use crate::mesh_large::delivery::{self, plan::Limits};
+    use sha2::{Digest, Sha256};
+    let source = vec![
+        grid(
+            (24, 24),
+            (0., 3.),
+            (0., 3.),
+            &|x, z| 0.05 * (x * z).sin(),
+            [0.6, 0.5, 0.4, 1.],
+        ),
+        Mesh {
+            positions: vec![[4000., 0., 4000.], [4001., 0., 4000.], [4000., 0., 4001.]],
+            indices: vec![0, 2, 1],
+            color: [0.5, 0.5, 0.5, 1.],
+        },
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir = stage(&input, &work.path().join("hlod"), &Run::default()).unwrap();
+    let repeats = |archive: &Path| {
+        let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+        let mut seen: HashMap<Vec<u8>, usize> = HashMap::new();
+        for i in 0..zip.len() {
+            let mut bytes = Vec::new();
+            zip.by_index(i).unwrap().read_to_end(&mut bytes).unwrap();
+            if bytes.starts_with(b"glTF") {
+                *seen.entry(Sha256::digest(&bytes).to_vec()).or_default() += 1;
+            }
+        }
+        seen.values().filter(|n| **n > 1).count()
+    };
+    let publish = |name: &str, limits: Limits| {
+        let output = work.path().join(name);
+        let mut file = fs::File::create(&output).unwrap();
+        let (report, _) = delivery::publish_with_limits(
+            &MeshTilesetRequest::new(&dir, &output),
+            limits,
+            &mut file,
+            work.path(),
+        )
+        .unwrap();
+        drop(file);
+        let checked = inspect(ValidationRequest::new(&output)).unwrap();
+        assert!(checked
+            .checks
+            .iter()
+            .any(|c| c == "decodedContentContainment"));
+        (output, report)
+    };
+    let (spliced, report) = publish("spliced.3tz", delivery::plan::LIMITS);
+    assert_eq!(repeats(&spliced), 0, "{report:?}");
+    assert_eq!(report.implicit_roots, 0, "{report:?}");
+    assert_eq!(refinement_shape(&spliced).empty_below_content, 0);
+    let tight = Limits {
+        objects: 3,
+        records: 6,
+        levels: 2,
+    };
+    let (repeated, report) = publish("repeated.3tz", tight);
+    assert!(report.implicit_roots + report.documents > 1, "{report:?}");
+    assert!(repeats(&repeated) > 0, "{report:?}");
+    let shape = refinement_shape(&repeated);
+    assert_eq!(
+        shape.empty_below_content + shape.error_inversions,
+        0,
+        "{shape:?}"
+    );
+}
+
+/// The published hierarchy's refinement structure, over every document of an archive.
+#[derive(Debug, Default)]
+struct RefinementShape {
+    tiles: usize,
+    /// Tiles without content (neither geometry nor a document link nor implicit tiling)
+    /// below a tile with content.
+    empty_below_content: usize,
+    /// Explicit parent/child pairs more than one octree level apart (spliced chains).
+    skipped_levels: usize,
+    /// Child geometric error above its parent's.
+    error_inversions: usize,
+}
+
+fn refinement_shape(archive: &Path) -> RefinementShape {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+    let mut docs: HashMap<String, Value> = HashMap::new();
+    for i in 0..zip.len() {
+        let mut member = zip.by_index(i).unwrap();
+        let name = member.name().to_owned();
+        if name.ends_with(".json") {
+            let mut bytes = Vec::new();
+            member.read_to_end(&mut bytes).unwrap();
+            if let Ok(doc) = serde_json::from_slice::<Value>(&bytes) {
+                docs.insert(name, doc);
+            }
+        }
+    }
+    fn visit(
+        tile: &Value,
+        docs: &HashMap<String, Value>,
+        above: bool,
+        parent: Option<(u64, f64)>,
+        shape: &mut RefinementShape,
+    ) {
+        shape.tiles += 1;
+        let uris: Vec<&str> = tile["content"]["uri"]
+            .as_str()
+            .into_iter()
+            .chain(
+                tile["contents"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| c["uri"].as_str()),
+            )
+            .collect();
+        let link = uris.iter().find(|u| u.ends_with(".json"));
+        let geometry = uris.iter().any(|u| !u.ends_with(".json"));
+        let implicit = tile.get("implicitTiling").is_some();
+        let error = tile["geometricError"].as_f64().unwrap();
+        let depth = tile["extras"]["depth"].as_u64();
+        if let Some((parent_depth, parent_error)) = parent {
+            if depth.is_some_and(|d| d > parent_depth + 1) {
+                shape.skipped_levels += 1;
+            }
+            shape.error_inversions += usize::from(error > parent_error);
+        }
+        if above && !geometry && link.is_none() && !implicit {
+            shape.empty_below_content += 1;
+        }
+        let here = depth.map(|d| (d, error));
+        if let Some(uri) = link {
+            let doc = &docs[*uri];
+            visit(&doc["root"], docs, above || geometry, parent, shape);
+        }
+        for child in tile["children"].as_array().into_iter().flatten() {
+            visit(child, docs, above || geometry, here, shape);
+        }
+    }
+    let mut shape = RefinementShape::default();
+    visit(
+        &docs["tileset.json"]["root"],
+        &docs,
+        false,
+        None,
+        &mut shape,
+    );
+    shape
 }
 
 /// The adversarial interface inputs (sub-lattice micro geometry meeting long frame edges, a
 /// duplicated triangle soup with every point and segment shared) run within a small
-/// declared budget: the walk's leases stay within its ledger, and the overlap join stays
-/// within its declared probes.
+/// declared budget: the walk's leases stay within its ledger, and the overlap join's tests
+/// and rows stay within their by-design bounds.
 #[test]
 fn adversarial_interfaces_stay_within_a_small_budget() {
     let mut soup = Mesh {
@@ -1411,7 +1958,7 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
             &Run {
                 leaf_triangles,
                 cap: super::TRIANGLE_CAP,
-                budget: Some(1 << 30),
+                budget: Some(2 << 30),
                 ..Run::default()
             },
         )
@@ -1427,10 +1974,16 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
         let manifest: Value =
             serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
         let inc = &manifest["hlod"]["incidence"];
-        let probes = inc["probes"].as_u64().unwrap();
-        let bound =
-            27 * inc["openSegments"].as_u64().unwrap() + 31 * inc["openPoints"].as_u64().unwrap();
-        assert!(probes <= bound, "{name}: {inc}");
+        let (segments, points) = (
+            inc["openSegments"].as_u64().unwrap(),
+            inc["openPoints"].as_u64().unwrap(),
+        );
+        eprintln!("ADVERSARIAL {name}: {inc}");
+        assert!(
+            inc["matchedHosts"].as_u64().unwrap() <= segments
+                && inc["matchedGuests"].as_u64().unwrap() <= points,
+            "{name}: {inc}"
+        );
         let census = census(&dir);
         assert_eq!(
             census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
@@ -1438,6 +1991,93 @@ fn adversarial_interfaces_stay_within_a_small_budget() {
             "{name}: {census:?}"
         );
     }
+}
+
+/// The round-2 dense fixture: 2,100 long slivers packed in one block plus a connected
+/// grid (9,300 triangles, two leaves). Their long open edges crowd one region far past the
+/// exact leaf size; the join splits them apart instead of refusing.
+#[test]
+fn dense_sliver_borders_are_joined_not_refused() {
+    let mut slivers = Mesh {
+        positions: vec![],
+        indices: vec![],
+        color: [0.8, 0.4, 0.4, 1.],
+    };
+    for i in 0..2100u32 {
+        let (x, y) = (2. + (i % 50) as f32 * 0.2, 1. + (i / 50) as f32 * 0.2);
+        let base = slivers.positions.len() as u32;
+        slivers
+            .positions
+            .extend([[x, y, 2.], [x + 0.05, y, 2.], [x + 0.02, y, 12.]]);
+        slivers.indices.extend([base, base + 1, base + 2]);
+    }
+    let source = vec![
+        grid((60, 60), (20., 80.), (0., 60.), &bump, [0.4, 0.6, 0.4, 1.]),
+        slivers,
+    ];
+    let run = Run {
+        leaf_triangles: crate::mesh_large::config::CONSUMER_TABLE_ROWS,
+        cap: super::TRIANGLE_CAP,
+        ..Run::default()
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &source);
+    let dir =
+        stage(&input, &work.path().join("hlod"), &run).unwrap_or_else(|f| panic!("{}", f.error));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let incidence = &manifest["hlod"]["incidence"];
+    assert!(incidence["kdSplits"].as_u64().unwrap() >= 1, "{incidence}");
+    let census = census(&dir);
+    assert!(census.leaves >= 2, "{census:?}");
+    assert_eq!(
+        census.missing_segments
+            + census.missing_vertices
+            + census.missing_overlap_items
+            + census.perpendicular_displaced
+            + census.duplicate_chain_tiles,
+        0,
+        "{census:?}"
+    );
+}
+
+/// Many leaves share one point (a fan of thin triangles about a common apex): its item
+/// group holds one item per leaf, within the stage's charged bound, and stays crack-free.
+#[test]
+fn a_point_shared_by_every_leaf_is_charged_and_crack_free() {
+    let mut fan = Mesh {
+        positions: vec![[50., 1., 50.]],
+        indices: vec![],
+        color: [0.6, 0.6, 0.6, 1.],
+    };
+    let n = 1200u32;
+    for i in 0..=n {
+        let a = std::f32::consts::TAU * i as f32 / n as f32;
+        fan.positions
+            .push([50. + 40. * a.cos(), 0., 50. + 40. * a.sin()]);
+    }
+    for i in 0..n {
+        fan.indices.extend([0, i + 2, i + 1]);
+    }
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("src"), &[fan]);
+    let dir = stage(
+        &input,
+        &work.path().join("hlod"),
+        &Run {
+            leaf_triangles: 8,
+            budget: Some(1 << 30),
+            ..Run::default()
+        },
+    )
+    .unwrap_or_else(|f| panic!("{}", f.error));
+    let census = census(&dir);
+    assert!(census.leaves >= 100, "{census:?}");
+    assert_eq!(
+        census.missing_segments + census.missing_vertices + census.perpendicular_displaced,
+        0,
+        "{census:?}"
+    );
 }
 
 /// The census's segment index holds at most eight entries per segment whatever the length
@@ -1499,13 +2139,7 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         for i in 0..3 {
             let (p, q) = (k[i], k[(i + 1) % 3]);
             for (a, b) in [(p, p), (p.min(q), p.max(q))] {
-                tile.interface.push(InterfaceRow {
-                    leaf: 0,
-                    a,
-                    b,
-                    lo: 0,
-                    hi: 1,
-                });
+                tile.interface.push(InterfaceRow::certain(0, a, b, 0, 1));
             }
         }
     }

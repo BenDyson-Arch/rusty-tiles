@@ -139,12 +139,13 @@ impl TileGeometry {
 ///   index (`3n` entries of 16 bytes and a control byte in at most `48n/7` buckets, < 117);
 /// - representatives: rows, their sorted copy and the indices (index released);
 /// - rows: the held layout with the interface reserved at six items (the held bound);
-/// - open edges: the held bound plus the point map (≤ 3 entries of 20 bytes and a control
-///   byte in ≤ 48/7 buckets each, < 144) and the edge list (3 × 24 bytes);
-/// - shrinking the interface: the held bound plus its old reservation (216 bytes).
+/// - open edges: the held bound plus the point map (≤ 3 entries of a 12-byte key and a 44-byte
+///   row with a control byte, in ≤ 48/7 buckets each: < 391) and the edge list (3 × 24
+///   bytes);
+/// - shrinking the interface: the held bound plus its old reservation (6 × 44 bytes).
 ///
-/// The open-edge phase is the peak: the held bound plus 216 bytes.
-pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 = HELD_BYTES_PER_TRIANGLE + 216;
+/// The open-edge phase is the peak: the held bound plus 463 bytes.
+pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 = HELD_BYTES_PER_TRIANGLE + 464;
 /// Fixed part of reading one leaf: the record and small-table minimums of its hash maps.
 pub(crate) const LEAF_READ_FIXED_BYTES: u64 = HELD_FIXED_BYTES + 4096;
 
@@ -218,6 +219,9 @@ pub(crate) struct HlodRow {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
+    /// Provisional interface rows this tile resolved exactly (an over-budget join region's
+    /// superset kept it from its budget); zero almost always.
+    pub resolved_rows: u32,
     pub quantized: bool,
     pub bounds: BoundsRow,
     pub appearance: super::appearance::TileAppearance,

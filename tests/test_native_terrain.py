@@ -1,5 +1,6 @@
 """Independent analytic T1 source, topology, refusal and publication acceptance."""
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -71,6 +72,22 @@ class NativeTerrainTests(unittest.TestCase):
             report = summary['terrainReport']
             self.assertEqual((report['levels'], report['tilesPerLevel']), (4, [1, 2, 6, 15]))
             checked = oracle.check_directory(output)
+            # Absolute source truth as well as relative coarse-to-leaf errors:
+            # bilinear pixel-centre samples of the literal nonplanar fixture.
+            _, frame, nodes = oracle.tree(output)
+            for node in (n for n in nodes if not n['children']):
+                patch = oracle.Patch(output, node, report, frame['transform'])
+                for local, (i, j), _ in patch.points:
+                    x = max(0., min(66., i-.5))
+                    y = max(0., min(44., 45-j-.5))
+                    height = 0.
+                    for row, wy in [(math.floor(y), 1-y%1), (min(44, math.floor(y)+1), y%1)]:
+                        for col, wx in [(math.floor(x), 1-x%1), (min(66, math.floor(x)+1), x%1)]:
+                            height += (300+40*math.sin(col/5)*math.cos(row/7)+.5*col)*wx*wy
+                    expected = oracle.ecef(10+i*.001, 21-45*.001+j*.001, height+10.25)
+                    actual = oracle.transform(frame['transform'], local)
+                    self.assertLessEqual(math.dist(actual, expected), report['positionErrorMetres']+1e-7)
+            self.assertLessEqual(report['positionErrorMetres'], .05)
             self.assertGreater(checked['certified']['1'], .1)
             self.assertLessEqual(report['skirtDepthMetres'][0], report['skirtDepthMetres'][1])
             oracle.corruption_controls(output, plane=False)
@@ -106,6 +123,7 @@ class NativeTerrainTests(unittest.TestCase):
             for position, expected in zip(positions, truth):
                 actual = oracle.transform(root_tile['transform'], (position[0],-position[2],position[1]))
                 errors.append(sum((a-b)**2 for a,b in zip(actual,expected))**.5)
+            oracle.check_directory(output)
             # The leaf is quantized on a micrometre grid, finer than Float32 at
             # 1000 m, so a hidden Float32 source cast (about 1.7e-5 m here) would
             # exceed the receipt.
@@ -172,6 +190,7 @@ class NativeTerrainTests(unittest.TestCase):
             self.assertEqual(len(observed), len(wanted))
             for point, truth in zip(observed, wanted):
                 self.assertLessEqual(sum((a-b)**2 for a,b in zip(point,truth))**.5, report['positionErrorMetres']+1e-7)
+            oracle.check_directory(output)
             self.assertEqual(report['heightRange'][0], -999.125)
             self.assertFalse((output/'layer.json').exists())
             self.assertFalse(list(output.rglob('*.terrain')))

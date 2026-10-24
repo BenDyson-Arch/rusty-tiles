@@ -11,6 +11,8 @@ use crate::content_integrity::{
 mod catalog_controls;
 mod containment;
 mod facts;
+mod hlod_delivery;
+mod identity;
 mod limits;
 #[cfg(test)]
 mod limits_controls;
@@ -1256,6 +1258,10 @@ pub(crate) struct ImplicitTileFact {
 struct Check<'a> {
     resources: ArchiveResources<'a>,
     reports: Value,
+    hlod_identity: bool,
+    delivery: hlod_delivery::Store,
+    delivery_path: Vec<u64>,
+    delivery_next: u64,
     tiles: usize,
     contents: usize,
     /// Link tiles: explicit tiles whose contents are all external tilesets.
@@ -1366,6 +1372,11 @@ enum Event {
         tile: usize,
         rank: u64,
         content: Option<VolumeFacts>,
+    },
+    Delivery {
+        tile: usize,
+        refine: Option<bool>,
+        placeholder: bool,
     },
     Place(Box<Placement>),
 }
@@ -1568,6 +1579,31 @@ impl Check<'_> {
                 .refuse(self.elements.saturating_add(planned), message),
             (error, _) => scene_error(error),
         })?;
+        let (identity_checked, identity_work) = identity::inspect(
+            &bytes,
+            self.resources.budget(LimitKey::TotalPayloadElements),
+            self.elements.saturating_add(facts.elements_checked),
+            self.resources.content_limits.decoded_bytes,
+            false,
+        )?;
+        let delivery_work = self.delivery.ingest(
+            rank,
+            &bytes,
+            self.resources.budget(LimitKey::TotalPayloadElements),
+            self.elements
+                .saturating_add(facts.elements_checked)
+                .saturating_add(identity_work),
+            self.resources.content_limits.decoded_bytes,
+        )?;
+        if identity_checked {
+            self.delivery.expect_identity();
+        }
+        self.hlod_identity |= identity_checked;
+        let elements_checked = facts
+            .elements_checked
+            .checked_add(identity_work)
+            .and_then(|n| n.checked_add(delivery_work))
+            .ok_or_else(|| Error::limit("hlodFeatureIds: payload element count overflow"))?;
         drop(bytes);
         let mut exclusions = content_reasons(&facts.exclusions);
         if consumer.quaternion_window {
@@ -1583,7 +1619,7 @@ impl Check<'_> {
             t: consumer.t,
             nodes: consumer.nodes,
             idx: consumer.idx,
-            e: facts.elements_checked,
+            e: elements_checked,
             per_reference: ReferenceFacts {
                 b: self.resources.bytes_read - bytes_before,
                 dec: facts.materialized_bytes,
@@ -1607,7 +1643,7 @@ impl Check<'_> {
         self.elements = self
             .resources
             .budget(LimitKey::TotalPayloadElements)
-            .charge(self.elements, facts.elements_checked, || {
+            .charge(self.elements, elements_checked, || {
                 "payload elements exceed archive budget".into()
             })?;
         if let Some(value) = facts.schema_uri.as_deref() {
@@ -1640,6 +1676,7 @@ impl Check<'_> {
         rank: u64,
         stored: &Stored,
     ) -> Result<(), Error> {
+        self.delivery.reference(self.delivery_path[tile], rank)?;
         if !self.c2.reference(tile, content, &stored.facts)? {
             return self.log(None);
         }
@@ -1659,7 +1696,14 @@ impl Check<'_> {
     }
     /// A tile on the path stack, logged for the phase-2 stream while in domain (VS-B-4).
     fn path_tile(&mut self, fact: TileFact) -> Result<usize, Error> {
+        let parent = fact.parent.map(|index| self.delivery_path[index]);
+        let id = self.delivery_next;
+        self.delivery_next = self.delivery_next.checked_add(1).ok_or_else(refused)?;
+        self.delivery
+            .tile(id, parent, fact.transform.unwrap_or(IDENTITY))?;
         let index = self.c2.tile(fact)?;
+        self.delivery_path.truncate(index);
+        try_push(&mut self.delivery_path, id)?;
         self.log(Some(stream_log::Entry::Tile(fact)))?;
         Ok(index)
     }
@@ -2002,6 +2046,18 @@ impl Check<'_> {
                     self.c2_ref(frame.locals[*tile], *content, *rank, &stored)?;
                     None
                 }
+                Event::Delivery {
+                    tile,
+                    refine,
+                    placeholder,
+                } => {
+                    self.delivery.kind(
+                        self.delivery_path[frame.locals[*tile]],
+                        *refine,
+                        *placeholder,
+                    )?;
+                    None
+                }
                 Event::Place(placement) => Some(Frame {
                     summary: placement.summary.clone(),
                     next: 0,
@@ -2221,6 +2277,28 @@ impl Check<'_> {
         Ok(())
     }
 
+    /// Delivery state is replayed with memoized hierarchy placements, like C2 facts.
+    fn delivery_kind(
+        &mut self,
+        tile: usize,
+        refine: Option<bool>,
+        placeholder: bool,
+    ) -> Result<(), Error> {
+        self.delivery
+            .kind(self.delivery_path[tile], refine, placeholder)?;
+        if self.recording.last().is_some_and(|r| !r.opaque) {
+            match self.local(Some(tile)) {
+                Some(tile) => self.record(Event::Delivery {
+                    tile,
+                    refine,
+                    placeholder,
+                })?,
+                None => self.make_opaque(),
+            }
+        }
+        Ok(())
+    }
+
     /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
     /// metadata schema of an implicit root, and its live-document charge.
     #[allow(clippy::type_complexity)]
@@ -2244,6 +2322,12 @@ impl Check<'_> {
         let error = number(&doc["geometricError"], "tileset.geometricError")?;
         let schema_uri = self.metadata_schema(name, &doc)?;
         self.tileset_exclusions(&doc);
+        if doc["asset"]
+            .get("gltfUpAxis")
+            .is_some_and(|v| v.as_str() != Some("Y"))
+        {
+            self.delivery.exclude_scene("tileset glTF up-axis override");
+        }
         // One ImplicitSchema per preparation, kept only for documents that hold an
         // implicit root and only while their tiles are pending (§5, DC-4, VS-B-8).
         // `schema` and `schemaUri` are mutually exclusive in the tileset schema.
@@ -2420,6 +2504,7 @@ impl Check<'_> {
         }
         self.tiles += 1;
         if let Some(root) = implicit {
+            self.delivery_kind(tile, node["refine"].as_str().map(|v| v == "REPLACE"), true)?;
             // R's content entries are templates: never explicit references.
             // A header `metadata` entity is copied to every emitted content, so
             // it is "content has `metadata`" (slice 3 I6, §4 step 7).
@@ -2528,6 +2613,16 @@ impl Check<'_> {
                 .checked_add(stored.vertices)
                 .ok_or_else(|| invalid("tile vertex count overflow"))?;
         }
+        self.delivery_kind(
+            tile,
+            node["refine"].as_str().map(|v| v == "REPLACE"),
+            external_seen
+                && !payload_seen
+                && node
+                    .get("children")
+                    .and_then(Value::as_array)
+                    .is_none_or(Vec::is_empty),
+        )?;
         // Amendment D-1: a link tile (external tileset content only) is
         // reported but not compared against the recorded tile budget.
         if external_seen && !payload_seen {
@@ -3220,6 +3315,10 @@ fn inspect_run(
             reference_visits: 0,
         },
         reports: report,
+        hlod_identity: false,
+        delivery: hlod_delivery::Store::new(scratch.clone())?,
+        delivery_path: Vec::new(),
+        delivery_next: 0,
         tiles: 0,
         contents: 0,
         links: 0,
@@ -3281,6 +3380,32 @@ fn inspect_run(
             return Err(invalid("hierarchy exceeds recorded tile budget"));
         }
     }
+    let delivery_budget = check.resources.budget(LimitKey::TotalPayloadElements);
+    let delivery_reads = check.resources.budget(LimitKey::TotalBytesRead);
+    let delivery_member_cap = check.resources.limits.member_bytes;
+    let delivery_resources = &mut check.resources;
+    // Selected geometry replays use already C1-admitted payload ranks. Reads
+    // retain their ordinary volume charge; the delivery owner charges decoding.
+    let delivery_work = check
+        .delivery
+        .finish(delivery_budget, check.elements, &mut |rank| {
+            let name = delivery_resources
+                .archive
+                .name(rank)
+                .map_err(archive_admission_error)?;
+            read_member(
+                delivery_resources.archive,
+                &name,
+                &mut delivery_resources.bytes_read,
+                delivery_reads,
+                delivery_member_cap,
+            )
+        })?;
+    check.elements = check
+        .elements
+        .checked_add(delivery_work)
+        .ok_or_else(refused)?;
+    check.hlod_identity |= check.delivery.checked;
     unreferenced(check.resources.archive, &check.resources.used)?;
     // C2 outcome precedence after C1 success: exclusions, then the precheck,
     // then streaming (Outside or allocation refusal), otherwise Contained.
@@ -3299,6 +3424,22 @@ fn inspect_run(
     // VS-B-9: the kept archive-named labels join the list before Contained edits it.
     let labels = std::mem::take(&mut check.extension_labels);
     check.not_inspected.extend(labels.kept);
+    if check.hlod_identity {
+        for label in [
+            "EXT_mesh_features",
+            "EXT_structural_metadata",
+            "metadataSemantics",
+            "metadata and feature semantics",
+        ] {
+            check.not_inspected.remove(label);
+        }
+        check
+            .not_inspected
+            .insert("non-identity metadata semantics".into());
+        check
+            .not_inspected
+            .insert("coarse interior/exterior orientation outside required interfaces".into());
+    }
     if contained {
         check.stream()?;
         #[cfg(test)]
@@ -3350,7 +3491,9 @@ fn inspect_run(
         payloads,
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
-            peak_bytes: scratch.peak_bytes(),
+            peak_bytes: scratch
+                .peak_bytes()
+                .saturating_add(check.delivery.disk_bytes()),
         }),
         stored_bytes,
         limits: check.resources.limits,
@@ -3371,10 +3514,15 @@ fn inspect_run(
         .chain(implicit.then_some("implicitAddressingAndAvailability"))
         .chain([
             "geometricErrorOrder",
+            "replaceContentContinuity",
             "resourceReferences",
             "recordedBudgets",
         ])
         .chain(contained.then_some("decodedContentContainment"))
+        .chain(check.hlod_identity.then_some("hlodFeatureIds"))
+        .chain(check.hlod_identity.then_some("interfaceSegments"))
+        .chain(check.hlod_identity.then_some("interfacePoints"))
+        .chain(check.hlod_identity.then_some("interfaceWinding"))
         .map(String::from)
         .collect(),
         not_inspected: check.not_inspected.into_iter().collect(),

@@ -1,6 +1,10 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+#[cfg(target_os = "linux")]
+#[path = "effort_sweep.rs"]
+mod effort_sweep;
+
 /// splitmix64, so fixtures are identical on every target.
 struct Rng(u64);
 
@@ -1576,6 +1580,25 @@ fn measure_caller_mip_floors() {
         ("normal", 256, 256, normal_map(256).0, Class::Normal),
     ];
     for (name, width, height, image, class) in fixtures {
+        // Export base witnesses for the leaf calibration owner to author
+        // semantic colour mips; this codec test's own pyramids are byte-domain.
+        if let Some(dir) = std::env::var_os("RT_COLOUR_FIXTURE_DUMP").filter(|_| {
+            matches!(
+                name,
+                "photo" | "photo-alpha" | "photo-odd" | "checker" | "noise-low"
+            )
+        }) {
+            let dir = std::path::PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            let stem = dir.join(format!("{width}x{height}-colour-{name}"));
+            std::fs::write(stem.with_extension("rgba"), &image).unwrap();
+            std::fs::write(
+                stem.with_extension("support"),
+                vec![1u8; (width * height) as usize],
+            )
+            .unwrap();
+        }
+
         // Profile configs plus q1 exposes the existing supported codec domain.
         let mut configurations: Vec<(&str, Mode, Params)> = ["fast", "balanced", "quality"]
             .iter()
@@ -1585,6 +1608,16 @@ fn measure_caller_mip_floors() {
             })
             .collect();
         if class == Class::Colour {
+            for (name, quality) in [("lean-q50", 50), ("good-q90", 90)] {
+                configurations.push((
+                    name,
+                    Mode::Etc1s { quality },
+                    Params {
+                        effort: 3,
+                        ..COLOUR
+                    },
+                ));
+            }
             configurations.push(("domain-q1", Mode::Etc1s { quality: 1 }, COLOUR));
         }
         let images = fixture_mips(&image, width, height, COLOUR);
@@ -1709,6 +1742,39 @@ fn measure_caller_mip_floors() {
                     own.correlation_at_least(detail_floor.numerator, detail_floor.denominator);
                 let wrong_detail_pass = wrong_detail
                     .correlation_at_least(detail_floor.numerator, detail_floor.denominator);
+                if matches!(profile, "lean-q50" | "good-q90") {
+                    for channel in 0..4 {
+                        let mut errors: Vec<u8> = mip
+                            .rgba
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .zip(decoded.as_chunks::<4>().0)
+                            .map(|(a, b)| a[channel].abs_diff(b[channel]))
+                            .collect();
+                        let mse = errors.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>()
+                            / errors.len() as f64;
+                        errors.sort_unstable();
+                        let mut block_rmse = 0.0_f64;
+                        for by in (0..mip.height as usize).step_by(4) {
+                            for bx in (0..mip.width as usize).step_by(4) {
+                                let (mut sum, mut count) = (0.0, 0);
+                                for y in by..(by + 4).min(mip.height as usize) {
+                                    for x in bx..(bx + 4).min(mip.width as usize) {
+                                        let i = (y * mip.width as usize + x) * 4 + channel;
+                                        sum += f64::from(mip.rgba[i].abs_diff(decoded[i])).powi(2);
+                                        count += 1;
+                                    }
+                                }
+                                block_rmse = block_rmse.max((sum / f64::from(count)).sqrt());
+                            }
+                        }
+                        println!(
+                            "etc1s-measure {}",
+                            serde_json::json!({"fixture":name,"profile":profile,"mip":index,"channel":channel,"texels":texels,"psnr":if mse==0. {99.} else {10.*(65025./mse).log10()},"p999":errors[(errors.len()*999).div_ceil(1000)-1],"max":errors.last(),"blockRmse":block_rmse})
+                        );
+                    }
+                }
                 println!("caller-mip-measure fixture={name} profile={profile} class={class:?} mode={mode:?} transfer={:?} mip={index} width={} height={} bytes={} chain_bytes={} sse={error} block_sse={mean_error} allowed={allowed} corr={:.6} variance={:.6} detail_applies={detail_applies} detail_pass={own_detail_pass} wrong_sse={wrong_error} wrong_allowed={wrong_allowed} wrong_corr={:.6} wrong_detail_pass={wrong_detail_pass} psnr={psnr:.6} max_error={max_error} channel_mse={channel_mses:?} alpha_psnr={alpha_psnr:.6} alpha_max={alpha_max} normal_input_length_mean={normal_input_length_mean:.6} normal_length_mean={normal_length_mean:.6} normal_length_max={normal_length_max:.6} angle_mean={angle_mean:.6} angle_p99={angle_p99:.6} angle_max={angle_max:.6} standalone_sse={alone_error:?}",
                     params.transfer,mip.width,mip.height,mip.rgba.len(),encoded.len(),correlation(own),own.input as f64/own.scale as f64,correlation(wrong_detail));
             }
