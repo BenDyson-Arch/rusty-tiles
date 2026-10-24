@@ -1,5 +1,10 @@
 # H17 certified geometry LOD (coarse tiles)
 
+> **Superseded direction — 2026-10-24.** The owner adopted classic octree HLOD;
+> see the [0.4 decision and implementation plan](hlod-040-decision.md). This file
+> is retained as historical implementation/evidence documentation, not the
+> successor's requirements. H17 code remains until the planned replacement lands.
+
 Status: implemented on `ml/h17-lod`, light process (tests with controls, one
 nonauthor review, perf/memory evidence, consumer proof, CI). Design:
 `~/.cache/rusty-tiles-evidence/tiler-lod-design-20261013/design.md` Revision 2
