@@ -40,6 +40,16 @@ fn state(message: impl Into<String>) -> JobError {
 
 /// Balanced coarse page cap per side (D5); the page is otherwise sized to its content.
 pub(crate) const MAX_PAGE_EDGE: u32 = 1024;
+/// Page texels (per slot) a whole coarse tile may spend over all its material groups,
+/// shared by surface area: many classes per parent split one page's worth instead of
+/// each taking a full page.
+pub(crate) const TILE_TEXELS: u64 = 1 << 20;
+/// Least allowance per group face, so any group fits at zero scale (one gutter-wrapped
+/// chart per face, packed).
+const FACE_TEXELS: u64 = 64;
+/// Encoded page bytes one coarse tile may publish over every slot and group (well under
+/// D5's 96 MiB complete tile); more is a typed refusal, never a silent drop.
+pub(crate) const TILE_PAGE_BYTES: u64 = 48 << 20;
 /// Finest requested spacing (D5's `1e-5 m` floor).
 const MIN_SPACING: f64 = 1e-5;
 
@@ -284,6 +294,33 @@ pub(crate) fn build(
     let started = clock();
     let source = source_spacing(services, &mut searcher, tile, &by_class)?;
     timing.query += clock() - started;
+    // Each textured group's share of the tile's texel budget, by decoded surface area.
+    let face_area = |f: usize| {
+        let q = tile.triangles[f].map(|v| tile.decoded[v as usize].map(f64::from));
+        let e1: [f64; 3] = std::array::from_fn(|a| q[1][a] - q[0][a]);
+        let e2: [f64; 3] = std::array::from_fn(|a| q[2][a] - q[0][a]);
+        0.5 * dot3(cross3(e1, e2), cross3(e1, e2)).sqrt()
+    };
+    let textured_area: BTreeMap<u32, f64> = by_class
+        .iter()
+        .filter(|(c, _)| {
+            captured
+                .materials
+                .get(**c as usize)
+                .is_some_and(|m| m.bindings().next().is_some())
+        })
+        .map(|(c, faces)| (*c, faces.iter().map(|&f| face_area(f)).sum::<f64>()))
+        .collect();
+    let total_area: f64 = textured_area.values().sum();
+    let groups_textured = textured_area.len().max(1) as f64;
+    let allowance = |class: u32, faces: usize| -> u64 {
+        let share = match textured_area.get(&class) {
+            Some(a) if total_area > 0. && a.is_finite() => a / total_area,
+            _ => 1. / groups_textured,
+        };
+        ((TILE_TEXELS as f64 * share) as u64).max(FACE_TEXELS * faces as u64)
+    };
+    let mut page_bytes = 0u64;
     let mut groups = Vec::with_capacity(by_class.len());
     for (class, faces) in by_class {
         check()?;
@@ -304,16 +341,24 @@ pub(crate) fn build(
         };
         if !slots.is_empty() {
             let floor = source.get(&class).copied().unwrap_or(0.);
+            let max_texels = allowance(class, group.faces.len());
             textured(
                 services,
                 &mut searcher,
                 tile,
                 &mut group,
                 slots,
-                (target, floor),
+                (target, floor, max_texels),
                 normals.as_deref(),
                 (&mut timing, &mut facts),
             )?;
+            page_bytes += group.pages.iter().map(|p| p.bytes.len() as u64).sum::<u64>();
+            if page_bytes > TILE_PAGE_BYTES {
+                return Err(JobError::new(
+                    JobErrorKind::Unsupported,
+                    format!("coarse tile pages exceed {TILE_PAGE_BYTES} encoded bytes"),
+                ));
+            }
         } else {
             group.material = flat(captured, class);
             if services.colors {
@@ -341,7 +386,7 @@ fn textured(
     tile: &TileView<'_>,
     group: &mut Group,
     slots: Vec<TextureSlot>,
-    (target, floor): (f64, f64),
+    (target, floor, max_texels): (f64, f64, u64),
     normals: Option<&[[f32; 3]]>,
     (timing, facts): (&mut Timing, &mut TileAppearance),
 ) -> Result<(), JobError> {
@@ -359,7 +404,13 @@ fn textured(
     if floor > target {
         facts.source_limited = true;
     }
-    let layout = charts::layout(tile.decoded, &corners, target.max(floor), services.max_edge)?;
+    let layout = charts::layout(
+        tile.decoded,
+        &corners,
+        target.max(floor),
+        services.max_edge,
+        max_texels,
+    )?;
     let mut owner = vec![false; (layout.size[0] * layout.size[1]) as usize];
     let mut texels = Vec::new();
     let mut covered = Vec::new();
