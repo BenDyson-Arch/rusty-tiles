@@ -895,7 +895,7 @@ mod tests {
     #[test]
     fn mipmapped_islands_are_exact_through_k_and_box_filtered_below() {
         use super::super::{mips::Class, sparse_mips};
-        let k = sparse_mips::ISLAND_ISOLATED_LEVELS;
+        let k = sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS;
         let a = 1u32 << k;
         let n = 128u32;
         let source: Vec<u8> = (0..n * n)

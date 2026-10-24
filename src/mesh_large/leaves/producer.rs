@@ -892,6 +892,8 @@ pub(crate) fn produce(
     phases.progress(Phase::LeafBuild, total_leaves, Some(total_leaves))?;
     phases.finished(Phase::LeafBuild, leaf_started.elapsed().as_secs_f64())?;
     if let Coarse::Hlod { plan, settings } = coarse {
+        // Opt-in stage timing: the leaf stage's share, before HLOD adds its own.
+        let leaf_timing = timing::snapshot();
         // HLOD needs no decoded image or leaf worker: record the cache and page-gate
         // observations, then release the decoded images and the pool before its own
         // admission takes effect (the gate and services own no memory).
@@ -925,6 +927,7 @@ pub(crate) fn produce(
             &path.join("resources.json"),
             &serde_json::to_vec_pretty(&resources).map_err(|e| invariant(&e.to_string()))?,
         )?;
+        timing::finish(json!({"lod":"hlod","leafStageTiming":leaf_timing}));
         return Ok(LeafStageOutput {
             report,
             diagnostics: LeafStageDiagnostics {

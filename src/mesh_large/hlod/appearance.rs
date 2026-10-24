@@ -1044,7 +1044,7 @@ mod tests {
     /// box filter, so the islands blend to grey (never one island's value).
     #[test]
     fn islands_isolated_through_k_and_box_filtered_below() {
-        let k = crate::mesh_large::leaves::sparse_mips::ISLAND_ISOLATED_LEVELS;
+        let k = crate::mesh_large::leaves::sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS;
         let (w, h) = (64u32, 32u32);
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         let mut support = vec![0u32; (w * h) as usize];

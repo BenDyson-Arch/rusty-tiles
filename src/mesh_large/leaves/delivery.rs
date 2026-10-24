@@ -1083,16 +1083,19 @@ fn lossy_step(
             return Err(error(JobErrorKind::InvalidState, "decoded level shape"));
         }
         tamper(step, index, &mut decoded);
+        let texels = u64::from(level.width) * u64::from(level.height);
         match timing::time(Stage::FidelityCheck, || {
-            check_level(
-                &prepared.expected[index],
-                &decoded,
-                &level.support,
-                level.width,
-                slot,
-                profile,
-                index,
-            )
+            timing::level(timing::LEVEL_GATES, index, texels, || {
+                check_level(
+                    &prepared.expected[index],
+                    &decoded,
+                    &level.support,
+                    level.width,
+                    slot,
+                    profile,
+                    index,
+                )
+            })
         }) {
             Ok(receipt) => receipts.push(receipt),
             Err(e) => return missed(e, step, Some(index)).map(Err),

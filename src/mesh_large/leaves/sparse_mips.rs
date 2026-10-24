@@ -231,11 +231,13 @@ pub(in crate::mesh_large) fn build(
     build_islands(width, height, rgba, support, None, 0, class, memory_limit)
 }
 
-/// Mip levels through which packed island pages keep every island isolated: islands sit
-/// on a `2^K` grid with gutters of at least `2^K` texels (leaf island crops and coarse
-/// charts), so levels `0..=K` never mix two islands (leaf islands also match the source's
-/// own reduction there). A scale-gate tuning constant.
-pub(crate) const ISLAND_ISOLATED_LEVELS: u32 = 3;
+/// Mip levels through which leaf island pages keep every island isolated: island crops
+/// sit on the `2^K` source grid with gutters of `2^K` texels, so levels `0..=K` never mix
+/// two islands and match the source's own reduction. Leaves keep source-density texels,
+/// which can be minified far before the HLOD parent replaces the leaf, so K is deeper
+/// than for coarse charts (`hlod::charts::COARSE_ISLAND_ISOLATED_LEVELS`). A scale-gate
+/// tuning constant.
+pub(crate) const LEAF_ISLAND_ISOLATED_LEVELS: u32 = 3;
 
 /// [`build`] for packed island pages: a COMPLETE chain to 1x1 (a mipmapped consumer needs
 /// complete chains), every level the support-weighted box filter of the previous one.

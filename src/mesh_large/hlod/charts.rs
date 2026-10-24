@@ -28,9 +28,18 @@ const CHART_FACES: usize = 192;
 /// Texels of gutter on every side of a chart; the sparse-mip encoder fills them from the
 /// nearest covered texel at every level.
 pub(crate) const GUTTER: u32 = 2;
-/// Islands of the page stay isolated through this many mip levels: chart rectangles sit
-/// on the `2^K` grid with gutters of `2^K` (the shared island tuning constant).
-use crate::mesh_large::leaves::sparse_mips::ISLAND_ISOLATED_LEVELS;
+/// Mip levels through which a coarse page keeps its charts isolated: chart rectangles sit
+/// on the `2^K` grid with gutters of `2^K` (at least [`GUTTER`]). A scale-gate tuning
+/// constant. One level suffices in normal traversal: a coarse texel is at least `G/16`
+/// (the requested spacing; the source-density floor and the page cap only coarsen it), so
+/// when Cesium refines at SSE 16 the tile's `G` spans 16 px and a texel at least 1 px.
+/// The tile stays shown only until its parent's SSE drops below 16; with the parent's
+/// error about `2G` the tile's `G` then spans 8 px, a texel at least 0.5 px, so the tile is
+/// minified at most about 2x (one level) before its parent replaces it. The exceptions
+/// (the root, which nothing replaces; a parent whose error is well above `2G`; parents
+/// shown while children load) are seen from distances where bleed below level 1 is
+/// invisible.
+pub(crate) const COARSE_ISLAND_ISOLATED_LEVELS: u32 = 1;
 pub(crate) const MIN_PAGE: u32 = 32;
 /// Page dimensions are whole codec blocks.
 const BLOCK: u32 = 4;
@@ -79,7 +88,7 @@ pub(crate) struct Layout {
     /// Page texels per metre on every chart plane.
     pub scale: f64,
     /// Mip levels through which the charts stay isolated (`2^isolated` alignment and
-    /// gutters): [`ISLAND_ISOLATED_LEVELS`], lower only when the charts cannot fit the
+    /// gutters): [`COARSE_ISLAND_ISOLATED_LEVELS`], lower only when the charts cannot fit the
     /// page at that alignment even at zero scale.
     pub isolated: u32,
     /// The requested spacing could not fit `max_edge²`: `scale < 1 / spacing`.
@@ -553,7 +562,7 @@ pub(crate) fn layout(
     let (mut charts, chart_of) = grow(positions, faces);
     let target = 1. / spacing;
     // The deepest isolation whose alignment and gutters still fit at zero scale.
-    let Some(isolated) = (1..=ISLAND_ISOLATED_LEVELS.max(1))
+    let Some(isolated) = (1..=COARSE_ISLAND_ISOLATED_LEVELS.max(1))
         .rev()
         .find(|&k| fit(&mut charts, 0., max_edge, max_texels, 1 << k).is_some())
     else {
@@ -698,12 +707,13 @@ mod tests {
         assert_ne!(l.chart_of[0], l.chart_of[2]);
         assert!(!l.capped);
         assert!((l.scale - 10.).abs() < 1e-12);
-        // Content sized on the 2^K grid with 2^K gutters: two 120-texel charts (100 + 2*8,
-        // rounded to 8) stacked, the point chart's 24 below.
-        assert_eq!(l.isolated, ISLAND_ISOLATED_LEVELS);
-        assert_eq!(l.size, [120, 264]);
-        assert!(l.size.iter().all(|e| e % 8 == 0));
-        assert!(l.charts.iter().all(|c| c.origin.iter().chain(&c.size).all(|v| v % 8 == 0)));
+        // Content sized on the 2^K grid with 2^K gutters (K = 1: 2-texel grid and gutters):
+        // two 104-texel charts stacked, the point chart beside, block-aligned page.
+        assert_eq!(l.isolated, COARSE_ISLAND_ISOLATED_LEVELS);
+        let a = 1u32 << l.isolated;
+        assert_eq!(l.size, [104, 216]);
+        assert!(l.size.iter().all(|e| e % 4 == 0));
+        assert!(l.charts.iter().all(|c| c.origin.iter().chain(&c.size).all(|v| v % a == 0)));
         let r = rects(&l);
         for (i, a) in r.iter().enumerate() {
             assert!(a[0] + a[2] <= l.size[0] && a[1] + a[3] <= l.size[1]);
@@ -748,7 +758,7 @@ mod tests {
         assert!(l.scale < 1000. && l.scale > 40.);
         // Smallest page at the minimum edge for tiny content.
         let l = layout(&p, &f, 10., 1024, 1 << 20).unwrap();
-        assert_eq!(l.size, [48, 48], "two 24-texel point-sized charts and a point chart");
+        assert_eq!(l.size, [MIN_PAGE, MIN_PAGE], "tiny content: the minimum page");
         assert!(!l.capped);
     }
 
@@ -770,7 +780,7 @@ mod tests {
         let l = layout(&positions, &faces, 0.1, 1024, 1 << 20).unwrap();
         assert_eq!(l.charts.len(), 1);
         let area: u64 = l.charts.iter().map(|c| u64::from(c.size[0]) * u64::from(c.size[1])).sum();
-        assert!(area < 160 * 40, "the rotated strip stays thin: {area} texels, unrotated ~127^2");
+        assert!(area < 160 * 20, "the rotated strip stays thin: {area} texels, unrotated ~111^2");
         assert!(l.charts.iter().all(|c| c.size[0] >= c.size[1]), "long side along u");
     }
 

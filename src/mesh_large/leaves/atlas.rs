@@ -11,7 +11,7 @@ use super::{
     geometry::LatticePlan,
     mask::SurfaceSample,
     mips::{self, Class},
-    sparse_mips::ISLAND_ISOLATED_LEVELS,
+    sparse_mips::LEAF_ISLAND_ISOLATED_LEVELS,
     prepared::{PreparedAtlas, PreparedPage, PreparedPrimitive},
 };
 use crate::stage_timing::{self as timing, Counter, Stage};
@@ -279,7 +279,7 @@ fn pack(
 /// Gutter and allocation alignment of island crops. Lossy pages align islands
 /// to the 4x4 codec block so no block mixes two islands. Lossy mipmapped bindings
 /// (complete authored KTX2 chains) put every island's real-source interior on the
-/// `2^K` source grid with gutters of `2^K` ([`ISLAND_ISOLATED_LEVELS`]): islands are
+/// `2^K` source grid with gutters of `2^K` ([`LEAF_ISLAND_ISOLATED_LEVELS`]): islands are
 /// isolated through level K and match the source's own reduction there; deeper levels
 /// are a page-wide box filter (bleed accepted, as standard; the HLOD parent replaces the
 /// leaf before deep levels dominate). PNG pages filtered with viewer-generated mips carry
@@ -294,7 +294,7 @@ fn crop_padding(class: Class, profile: Profile, sampler: SourceSampler) -> (u32,
     match profile {
         Profile::Lossless if matches!(sampler.min_filter, 9984..=9987) => (8, 8),
         _ if matches!(sampler.min_filter, 9984..=9987) => {
-            let a = 1 << ISLAND_ISOLATED_LEVELS;
+            let a = 1 << LEAF_ISLAND_ISOLATED_LEVELS;
             (a, a)
         }
         Profile::Lossless => (2, 1),
@@ -1078,7 +1078,7 @@ fn encode_page(
             &rgba,
             &support,
             mipmapped.then_some(labels.as_slice()),
-            if mipmapped { ISLAND_ISOLATED_LEVELS } else { 0 },
+            if mipmapped { LEAF_ISLAND_ISOLATED_LEVELS } else { 0 },
             page.slot,
             profile,
             memory,
