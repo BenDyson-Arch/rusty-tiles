@@ -112,6 +112,13 @@ pub(crate) struct Node {
     /// empty: explicit output splices it out (its child replaces it), and where the layout
     /// cannot skip a cell (an implicit tree, a document's root) it repeats the coarse tile.
     pub chain: Option<Box<ProxyRow>>,
+    /// An HLOD cell whose coarse tile was omitted: it, or a descendant, could not keep its
+    /// exact interface within the cap, and omission propagates to the root. It publishes no
+    /// content, and every ancestor is omitted too, so it never sits between content levels
+    /// (no coarse tile above it can stop drawing on reaching it); it is plain availability,
+    /// explicit or implicit, and may be a document's root. Checked: a coarse tile above an
+    /// omitted cell is refused.
+    pub omitted: bool,
     /// Inline children in slot order (empty for leaves and links).
     pub children: Vec<Node>,
     /// Set when this skeleton tile was written as an external document.
@@ -275,6 +282,8 @@ pub(crate) struct Shape {
     pub proxies: u64,
     /// HLOD chain cells spliced out of explicit output (not in `tiles`).
     pub spliced_chain_cells: u64,
+    /// HLOD cells whose coarse tile was omitted (content-less, every ancestor too).
+    pub omitted_cells: u64,
     /// The largest number of tile records held at once by the open stack and its inline
     /// fragments (the planner's resident hierarchy state).
     pub peak_held_records: u64,
@@ -455,6 +464,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             leaf: Some(Box::new(row)),
             proxy: None,
             chain: None,
+            omitted: false,
             children: Vec::new(),
             link: None,
             objects: 1,
@@ -489,6 +499,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         // An HLOD cell without content sits below its single-child chain's coarse tile.
         let mut chain_error = None;
         let mut chain = None;
+        let mut omitted = false;
         let proxy = if let Some(rows) = self.proxies.as_mut() {
             let bad = |why: String| JobError::new(JobErrorKind::InvalidInput, why);
             let next = match self.lookahead.take() {
@@ -526,6 +537,14 @@ impl<'s, S: Sink> Builder<'s, S> {
                     self.lookahead = Some((row, bounds));
                     None
                 }
+                // Sparse coarse rows (HLOD): a cell whose coarse tile was omitted has no row
+                // (the next row is a later tile's in postorder, or there is none).
+                next if self.sparse => {
+                    omitted = true;
+                    self.shape.omitted_cells += 1;
+                    self.lookahead = next;
+                    None
+                }
                 Some((row, _)) => {
                     return Err(bad(format!(
                         "proxies.jsonl row {} is not internal tile f{}-d{} (postorder)",
@@ -542,6 +561,17 @@ impl<'s, S: Sink> Builder<'s, S> {
         } else {
             None
         };
+        // Omission reaches the root: no coarse content above an omitted cell.
+        if (proxy.is_some() || chain.is_some()) && frame.children.iter().any(|c| c.omitted) {
+            return Err(JobError::new(
+                JobErrorKind::InvalidInput,
+                format!(
+                    "coarse content of f{}-d{} sits above an omitted cell (omission must reach \
+                     the root)",
+                    frame.first, frame.depth
+                ),
+            ));
+        }
         let (tile, extent) = tile_box(extent)?;
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
@@ -560,6 +590,8 @@ impl<'s, S: Sink> Builder<'s, S> {
                     ),
                 ))
             }
+            // An omitted cell (spliced) refines exactly where its children do.
+            (None, None) if omitted => children_error,
             (None, None) => children_error.max(EMPTY_PARENT_SCALE * diagonal),
         };
         if !error.is_finite() {
@@ -580,6 +612,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             leaf: None,
             proxy,
             chain,
+            omitted,
             children: frame.children,
             link: None,
             objects: 0,
@@ -691,6 +724,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             // The proxy is the external document's root content, not the link's.
             proxy: None,
             chain: None,
+            omitted: false,
             children: Vec::new(),
             link: Some(link),
             objects: 1,
@@ -719,5 +753,119 @@ impl<'s, S: Sink> Builder<'s, S> {
             }
         }
         Ok(self.shape)
+    }
+}
+
+#[cfg(test)]
+mod omission_tests {
+    use super::*;
+    use crate::mesh_large::delivery::source::Digits;
+
+    #[derive(Default)]
+    struct Collect {
+        /// (objects, records, levels) of each document, the root last.
+        docs: Vec<(u64, u64, u32)>,
+    }
+
+    impl Sink for Collect {
+        fn external(&mut self, node: Node) -> Result<Linked, JobError> {
+            self.docs.push((node.objects, node.records, node.levels));
+            Ok(None)
+        }
+        fn root(&mut self, node: Node) -> Result<(), JobError> {
+            self.docs.push((node.objects, node.records, node.levels));
+            Ok(())
+        }
+    }
+
+    /// A complete octree of `depth` levels of capped leaves, planned against `proxies`.
+    fn plan(depth: u32, proxies: Vec<ProxyRow>) -> (Result<Shape, JobError>, Collect) {
+        let mut sink = Collect::default();
+        let rows = proxies.into_iter().map(|r| {
+            Ok((
+                r,
+                Aabb {
+                    lo: [0.; 3],
+                    hi: [1.; 3],
+                },
+            ))
+        });
+        let mut builder = Builder::with_proxies(&mut sink, LIMITS, Some(Box::new(rows)))
+            .with_sparse_proxies(true);
+        let leaves = 8u64.pow(depth);
+        let result = (|| {
+            for i in 0..leaves {
+                let mut digits = Digits::ROOT;
+                for k in (0..depth).rev() {
+                    digits.push(((i >> (k * 3)) & 7) as u8);
+                }
+                let row = LeafRow {
+                    uri: format!("leaves/{i}.glb"),
+                    sha256: [0; 32],
+                    bytes: 100,
+                    first: i * 8192,
+                    end: (i + 1) * 8192,
+                    digits,
+                    last_octant: (i & 7) as u8,
+                    packed: false,
+                    synthetic: 0,
+                    geometry_error: 0.,
+                };
+                let bounds = Aabb {
+                    lo: [0.; 3],
+                    hi: [1.; 3],
+                };
+                builder.push(row, bounds)?;
+            }
+            builder.finish()
+        })();
+        (result, sink)
+    }
+
+    /// Sol round 8: a complete all-omitted octree (every internal cell content-less, as
+    /// upward propagation leaves it when a leaf's parent cannot fit) is plain availability:
+    /// the planner partitions it like any other, so every document stays within its caps,
+    /// and nothing is cloned (each leaf is one payload).
+    #[test]
+    fn an_all_omitted_octree_keeps_documents_bounded() {
+        for depth in [4u32, 5] {
+            let (shape, sink) = plan(depth, Vec::new());
+            let shape = shape.unwrap();
+            let internal = (8u64.pow(depth) - 1) / 7;
+            assert_eq!(shape.omitted_cells, internal, "{shape:?}");
+            assert_eq!(shape.proxies, 0);
+            assert!(
+                shape.implicit_roots + shape.documents > 1,
+                "partitioned: {shape:?}"
+            );
+            // Objects (the JSON cost) and levels within the caps in every document; records
+            // within the documented `1 + 8 · 585` exception (see `Limits`).
+            for &(objects, records, levels) in &sink.docs {
+                assert!(
+                    objects <= LIMITS.objects && records <= 1 + 8 * 585 && levels <= LIMITS.levels,
+                    "document ({objects}, {records}, {levels}) past {LIMITS:?}: {shape:?}"
+                );
+            }
+        }
+    }
+
+    /// No content-less cell has a content ancestor: a coarse tile above an omitted cell is
+    /// refused (omission must reach the root).
+    #[test]
+    fn a_coarse_tile_above_an_omitted_cell_is_refused() {
+        let root = ProxyRow {
+            uri: "proxies/f0-d0.glb".into(),
+            sha256: [0; 32],
+            bytes: 100,
+            first: 0,
+            end: 64 * 8192,
+            depth: 0,
+            geometric_error: 1.,
+            primitives: 1,
+            sample_count: None,
+        };
+        let (shape, _) = plan(2, vec![root]);
+        let err = shape.unwrap_err();
+        assert!(err.to_string().contains("above an omitted cell"), "{err}");
     }
 }

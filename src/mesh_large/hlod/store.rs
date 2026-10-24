@@ -139,13 +139,13 @@ impl TileGeometry {
 ///   index (`3n` entries of 16 bytes and a control byte in at most `48n/7` buckets, < 117);
 /// - representatives: rows, their sorted copy and the indices (index released);
 /// - rows: the held layout with the interface reserved at six items (the held bound);
-/// - open edges: the held bound plus the point map (≤ 3 entries of a 12-byte key and a 48-byte
-///   row with a control byte, in ≤ 48/7 buckets each: < 419) and the edge list (3 × 24
-///   bytes);
-/// - shrinking the interface: the held bound plus its old reservation (6 × 48 bytes).
+/// - shrinking the interface: the held bound plus its old reservation (6 × 36 bytes).
 ///
-/// The open-edge phase is the peak: the held bound plus 491 bytes.
-pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 = HELD_BYTES_PER_TRIANGLE + 492;
+/// The shrink is the peak (the weld's 168 bytes and the representatives' two rows and an
+/// index stay below the held bound plus 216, the held bound already holding 271 bytes and a
+/// row per triangle): the held bound plus 216 bytes.
+pub(crate) const LEAF_READ_BYTES_PER_TRIANGLE: u64 =
+    HELD_BYTES_PER_TRIANGLE + 6 * std::mem::size_of::<InterfaceRow>() as u64;
 /// Fixed part of reading one leaf: the record and small-table minimums of its hash maps.
 pub(crate) const LEAF_READ_FIXED_BYTES: u64 = HELD_FIXED_BYTES + 4096;
 
@@ -219,12 +219,6 @@ pub(crate) struct HlodRow {
     pub retries: u32,
     pub interface_vertices: u32,
     pub interface_segments: u32,
-    /// Provisional interface rows this tile resolved exactly (an over-budget join region's
-    /// superset kept it from its budget); zero almost always. Its index records read and
-    /// exact tests.
-    pub resolved_rows: u32,
-    pub resolve_visits: u64,
-    pub resolve_tests: u64,
     /// Simplified faces that landed exactly on an opposite-facing source face (a collapse
     /// across a fold), turned to the source's orientation or dropped beside their twin.
     pub reoriented_faces: u32,

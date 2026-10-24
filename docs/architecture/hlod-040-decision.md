@@ -57,6 +57,56 @@ comparison is indicative; integrated production speedup remains unmeasured.
 
 ### D1 — geometry and exact leaves
 
+**Owner amendment, 2026-10-24 — exact seams only (S1, PR #275).** No tolerance-based
+interface matching can prove bounded work, never refuse and stay crack-free together.
+The S1 review's dense-false-box probe took Θ(H·G) exact tests, and the design note
+`astra-s1-interface-bound-20261024` found no construction that closes that gap. So S1
+follows industry practice (Nanite, Simplygon) and locks only exactly shared items:
+
+- **Canonical key:** a vertex's leaf-canonical decoded position, the f32 triple every leaf
+  publishes for it, compared bit for bit (`LatticePlan::canonical`).
+  - **Lossy profiles:** `round_ties_even(p / step[ell]) * step[ell]` per axis, computed in
+    f64 and stored as f32, with −0 written as +0. `p` is the captured source position after
+    node transforms and placement. `ell` is the welded vertex's minimum incident leaf depth.
+  - **Quality and lossless:** the captured f32 position, −0 written as +0.
+  - **From the archive alone:** the bit patterns of the decoded leaf vertex positions in the
+    tileset's common frame.
+- **Edge key:** the unordered pair of the two endpoint keys of an edge of a surface
+  triangle. A triangle whose corners decode onto fewer than three distinct keys has no
+  surface and contributes nothing, so no edge key is ever degenerate.
+- **Interface items:** a vertex is an interface vertex of a tile iff its key occurs in a
+  leaf outside the tile. A segment is an interface segment iff its edge key occurs in a leaf
+  outside the tile. Both come from one external sort of at most six items per triangle:
+  O(n log n), bounded memory, staged scratch. Nothing is inferred: a segment between two
+  shared vertices is not shared unless another leaf holds that very edge.
+- **Consequence for source defects:** T-junctions, partial collinear overlaps and unwelded
+  near-seams in the source are not locked. They may open cracks at mixed depths exactly
+  there. They are reported, never matched by distance (see D3).
+- **Infeasible parents (replaces the `unsupported` rule above; rounds 7–8):** 8,192 stays the
+  hard published cap. A parent whose exact interface, or topology plain simplification
+  cannot reduce (D3), needs more triangles than its cap has its coarse tile **omitted**. It
+  is never refused.
+  - **Upward propagation:** every ancestor up to the root is omitted too. Its parent cannot
+    be built without a hole where it was.
+  - **Omitted cells:** they publish no content and hold no geometry; nothing is merged from
+    them and nothing is cloned.
+  - **No vanishing:** a content-less cell has only content-less ancestors, so it never sits
+    between content levels (the Cesium vanishing lesson). Delivery refuses a coarse tile above
+    an omitted cell.
+  - **Delivery:** the omitted region is a top-connected cap of plain availability (explicit or
+    implicit, an omitted root included), partitioned under the existing document caps.
+  - **Jobs:** omission is decided before merging, so every job merges at most eight capped
+    children.
+  - **Reported:** `hlod.omittedProxies`, `omissionSources` (cells that could not fit) and
+    `omittedByDepth`.
+  - **Client cost:** local. One source omission costs about 8 × depth content-less cells plus
+    its children's tiles in the first view.
+  - **Scope:** this is the bounded last resort. D11/S1b's topology simplification and border
+    scheme are to make it rare.
+- **Winding:** simplified faces keep their source orientation. A face collapsed onto an
+  opposite-facing source face is dropped beside its twin, or turned.
+
+
 Keep today's ownership octree, packed/synthetic addresses and **8,192-triangle
 leaf cap**, every source triangle exactly once, with exact primitive/triangle
 provenance and picking IDs. “Exact leaves” preserves current leaf fidelity:
@@ -95,6 +145,11 @@ and crack-free REPLACE traversal without seam consensus. **Evidence:** E1–E5, 
 
 ### D2 — sampled geometric error, not certification
 
+**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. Where a source defect is
+left unlocked, the crack it may open at a mixed-depth frontier is a seam defect, not
+geometric error. Sampled error does not measure it; the D3 counts report it.
+
+
 For final decoded parent P and captured source surface S in its descendant
 range, measure both directed distances with deterministic area-stratified
 samples; include boundaries, component representatives and sliver controls in
@@ -128,6 +183,17 @@ cost or a false proof claim. **Evidence:** E2, E7, E8, C/H17 and validator sourc
 
 ### D3 — holes and islands
 
+**Owner amendment, 2026-10-24 (exact seams, see D1).** Source defects are counted
+combinatorially after welding by canonical key, with no distance radius, and reported in the
+HLOD manifest (`hlod.incidence`):
+- `sourceOpenEdges`: edge keys with exactly one incident surface face over all leaves.
+- `sourceOpenEdgesWithSharedEndpoints`: those open edges whose two endpoint keys each also
+  occur in a leaf other than the edge's own. These are candidate T-junctions and unwelded
+  seams: their ends meet other geometry and the edge does not.
+
+Both come from one external sort and merge join. Neither is locked.
+
+
 Use plain simplification; no explicit vanished-island selection, hole filling,
 reopening rules or `lod_vanished`/`lod_filled` records. Coarse holes/components
 may change through ordinary simplification, assessed by source-distance and
@@ -138,6 +204,10 @@ is always a defect, never an intentional hole.
 leaf recovery and visible-quality gates. **Evidence:** E2, E3, E5, C/H17.
 
 ### D4 — representative coarse identity and annotation
+
+**Owner amendment, 2026-10-24 (exact seams, see D1).** Unchanged. An omitted cell
+publishes no content, so it carries no identity table.
+
 
 Each coarse triangle carries one `source_primitive` feature ID selected from
 the nearest source primitive at its centroid in the tile's descendant source

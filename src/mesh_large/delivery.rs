@@ -222,9 +222,9 @@ impl Sink for PlanSink {
     }
 }
 
-/// Explicit children with every chain cell replaced by its children (recursively): a coarse
-/// tile's children are then its renderable replacements, each with its own box and error
-/// (no greater than the coarse tile's).
+/// Explicit children with every chain or omitted cell replaced by its children
+/// (recursively): a coarse tile's children are then its renderable replacements, each with
+/// its own box and error (no greater than the coarse tile's).
 fn spliced(children: Vec<Node>) -> Vec<Node> {
     let mut out = Vec::with_capacity(children.len());
     for child in children {
