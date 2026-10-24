@@ -468,6 +468,47 @@ impl PreencodeStore {
     ) -> Result<(), JobError> {
         self.put(&self.proxy_path(first, depth), bytes)
     }
+    /// A bake-produced proxy packet of exactly `size` bytes, streamed by `write` (which
+    /// gets the file's buffered writer and path, and returns the bytes it wrote): the
+    /// packet is never held in memory. Charged and preflighted at `size` first.
+    pub(in crate::mesh_large) fn write_proxy_with(
+        &self,
+        first: u64,
+        depth: u32,
+        size: u64,
+        write: impl FnOnce(&mut dyn Write, &Path) -> Result<u64, JobError>,
+    ) -> Result<(), JobError> {
+        let path = self.proxy_path(first, depth);
+        self.charge(size)?;
+        crate::spill::preflight(
+            &self.dir,
+            size,
+            crate::spill::SpaceRole::Scratch,
+            crate::spill::PreflightStage::Texture,
+        )?;
+        let io = |e| JobError::io("write pre-encode store", &path, e);
+        let mut out =
+            std::io::BufWriter::with_capacity(1 << 20, fs::File::create(&path).map_err(io)?);
+        let written = write(&mut out, &path)?;
+        out.flush().map_err(io)?;
+        if written != size {
+            return Err(state(
+                "a retained proxy packet differs from its stated size",
+            ));
+        }
+        Ok(())
+    }
+    /// A bake-produced proxy packet opened for positional reads, with its path.
+    pub(in crate::mesh_large) fn open_proxy(
+        &self,
+        first: u64,
+        depth: u32,
+    ) -> Result<(fs::File, PathBuf), JobError> {
+        let path = self.proxy_path(first, depth);
+        let file =
+            fs::File::open(&path).map_err(|e| JobError::io("open pre-encode store", &path, e))?;
+        Ok((file, path))
+    }
     /// A bake-produced proxy packet within `memory_limit` bytes (bounded, cancellable).
     pub(in crate::mesh_large) fn read_proxy(
         &self,
@@ -2247,6 +2288,70 @@ mod tests {
         );
     }
 
+    /// A parent reads its children's texels a tile at a time through a cache of fixed
+    /// size, and its workers share one cache of decoded source images. With the smallest
+    /// caches (a child texel cache of its fewest tiles, evicting constantly, and no
+    /// shared room for decoded images) and a small allowance, a textured hierarchy whose
+    /// parents sample baked children bakes the same bytes as with large caches.
+    #[test]
+    fn real_baker_is_the_same_with_the_smallest_caches() {
+        use crate::mesh_large::bake::{
+            integration::ProxyTextureBaker, BakeLimits, CHILD_TEXEL_MIN_SLOTS,
+            CHILD_TEXEL_SLOT_BYTES,
+        };
+        let work = tempfile::tempdir().unwrap();
+        let input = fixture(&work.path().join("src"), 48);
+        let run = |name: &str, memory_bytes: u64, shared: u64, texels: u64| {
+            let out = work.path().join(name);
+            let scratch = work.path().join(format!("{name}-scratch"));
+            fs::create_dir_all(&scratch).unwrap();
+            let baker = Arc::new(
+                ProxyTextureBaker::new(BakeLimits {
+                    profile: crate::mesh_large::config::Profile::Balanced,
+                    memory_bytes,
+                    member_bytes: crate::mesh_large::config::TILE_BYTES,
+                    source_cache_bytes: 256 << 20,
+                    shared_image_bytes: shared,
+                    child_texel_bytes: texels,
+                    query_work: 1 << 40,
+                    max_page_edge: 4096,
+                    max_density_drops: 8,
+                    id_textures: false,
+                })
+                .unwrap(),
+            );
+            let request = LeafOutputRequest::new(&input, &out, LeafProfile::Balanced)
+                .with_jobs(NonZeroUsize::new(2).unwrap())
+                .with_scratch_dir(&scratch)
+                .with_lod_target(256)
+                .with_leaf_triangles(1024)
+                .with_baker(baker.clone());
+            mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+            let mut files = std::collections::BTreeMap::new();
+            for dir in ["leaves", "proxies"] {
+                for e in fs::read_dir(out.join(dir)).unwrap() {
+                    let path = e.unwrap().path();
+                    files.insert(
+                        path.strip_prefix(&out).unwrap().to_owned(),
+                        fs::read(&path).unwrap(),
+                    );
+                }
+            }
+            (files, baker.child_tile_reads())
+        };
+        let (large, large_reads) = run("large", 2 << 30, 1 << 30, 256 << 20);
+        let smallest = CHILD_TEXEL_SLOT_BYTES * CHILD_TEXEL_MIN_SLOTS as u64;
+        let (small, small_reads) = run("small", 1 << 30, 0, smallest);
+        assert!(large.keys().filter(|k| k.starts_with("proxies")).count() >= 3);
+        assert!(
+            large == small,
+            "baked bytes differ with the smallest caches"
+        );
+        // Parents did read child texels, and the smallest cache read tiles again.
+        assert!(large_reads > 0);
+        assert!(small_reads > large_reads, "{small_reads} vs {large_reads}");
+    }
+
     /// A source without NORMAL or COLOR_0 (photogrammetry): leaves carry POSITION and
     /// TEXCOORD_0 only and render unlit, so baked proxies must carry the same shading
     /// inputs (no NORMAL, TANGENT or COLOR_0), keep the source material factors, publish
@@ -2264,6 +2369,8 @@ mod tests {
             memory_bytes: 2 << 30,
             member_bytes: crate::mesh_large::config::TILE_BYTES,
             source_cache_bytes: 256 << 20,
+            shared_image_bytes: 0,
+            child_texel_bytes: 256 << 20,
             query_work: 1 << 40,
             max_page_edge: 4096,
             max_density_drops: 8,
@@ -2520,6 +2627,8 @@ mod tests {
                 memory_bytes: 2 << 30,
                 member_bytes: crate::mesh_large::config::TILE_BYTES,
                 source_cache_bytes: 256 << 20,
+                shared_image_bytes: 0,
+                child_texel_bytes: 256 << 20,
                 query_work: 1 << 40,
                 max_page_edge: 4096,
                 max_density_drops: 8,
@@ -2693,6 +2802,8 @@ mod tests {
                 memory_bytes: 2 << 30,
                 member_bytes: crate::mesh_large::config::TILE_BYTES,
                 source_cache_bytes: 256 << 20,
+                shared_image_bytes: 0,
+                child_texel_bytes: 256 << 20,
                 query_work: 1 << 40,
                 max_page_edge: 4096,
                 max_density_drops: 8,

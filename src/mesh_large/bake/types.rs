@@ -107,6 +107,13 @@ pub(crate) struct BakeLimits {
     pub memory_bytes: u64,
     pub member_bytes: u64,
     pub source_cache_bytes: u64,
+    /// Bytes of the lease the bake's shared decoded-image cache may hold beyond the
+    /// workers' decode reservations: each of `n` running workers reserves
+    /// `source_cache_bytes + shared_image_bytes / n` (see `integration::run_depth`).
+    pub shared_image_bytes: u64,
+    /// The most bytes a parent's cache of child texel tiles may own; it also gets at
+    /// most an eighth of the parent's lease (see `retained::TexelCache`).
+    pub child_texel_bytes: u64,
     pub query_work: u64,
     pub max_page_edge: u32,
     pub max_density_drops: u32,
@@ -268,6 +275,11 @@ pub(crate) struct BakeStats {
     pub facing_fallback_samples: u64,
     pub facing_fallback_faces: u64,
     pub fill_fallback_samples: u64,
+    /// Source images this tile decoded into its sampling cache, and their seconds.
+    pub source_decodes: u64,
+    pub source_decode_seconds: f64,
+    /// Child texel tiles read from retained packets.
+    pub child_tile_reads: u64,
 }
 pub(super) fn slot_index(slot: TextureSlot) -> usize {
     match slot {

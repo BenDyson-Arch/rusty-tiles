@@ -142,6 +142,78 @@ fn srgb(v: f64) -> f64 {
 fn byte(v: f64) -> u8 {
     (v.clamp(0., 1.) * 255.).round() as u8
 }
+/// One page [`build`] makes: its size, slot, and the raster workspace it charges.
+pub(super) struct PlannedPage {
+    pub size: [u32; 2],
+    pub slot: TextureSlot,
+    pub raster_charge: u64,
+}
+/// The pages [`build`] makes from `layout`, in its order: each layout page with a face
+/// of nonzero area, once per texture slot its material binds.
+pub(super) fn planned_pages(
+    f: &FrozenNode,
+    layout: &Layout,
+    source: &CapturedSource<'_>,
+) -> Result<Vec<PlannedPage>, JobError> {
+    let mut out = Vec::new();
+    for plan in &layout.pages {
+        if !plan.charts.iter().any(|&ci| {
+            layout.charts[ci].faces.iter().any(|&fi| {
+                math::face_normal(f.faces[fi].positions.map(|p| p.map(f64::from))).is_some()
+            })
+        }) {
+            continue;
+        }
+        let bindings: Vec<_> = if plan.material == u32::MAX {
+            Vec::new()
+        } else {
+            source
+                .captured
+                .materials
+                .get(plan.material as usize)
+                .ok_or_else(|| invalid("immutable source material closure"))?
+                .bindings()
+                .copied()
+                .collect()
+        };
+        let material = source.material(plan.material)?;
+        for slot in SLOTS {
+            if bindings.iter().any(|b| b.slot == slot) {
+                let mask = slot == TextureSlot::BaseColor && material["alphaMode"] == "MASK";
+                out.push(PlannedPage {
+                    size: plan.size,
+                    slot,
+                    raster_charge: raster_charge(plan.size, slot, mask)?,
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+/// The raster workspace [`build`] charges for a page of `size` and `slot` (`mask`: a
+/// MASK material's base colour).
+fn raster_charge(size: [u32; 2], slot: TextureSlot, mask: bool) -> Result<u64, JobError> {
+    (u64::from(size[0]) * u64::from(size[1]))
+        .checked_mul(if slot == TextureSlot::Normal {
+            4096
+        } else if mask {
+            2048
+        } else {
+            512
+        })
+        .ok_or_else(|| resource("raster workspace"))
+}
+/// The bytes [`build`]'s page of `size` and `slot` owns once rasterised, before its
+/// mips: base RGBA, support and terminal samples twice (the page and its base level),
+/// the base level's frames (and world normals on a normal page), and the texel owners.
+/// Its renderer witnesses and MASK samples come on top.
+pub(super) fn page_bytes(size: [u32; 2], slot: TextureSlot) -> Option<u64> {
+    let per_texel = 2 * (4 + 4 + std::mem::size_of::<TerminalSample>())
+        + std::mem::size_of::<Frame>()
+        + std::mem::size_of::<usize>()
+        + if slot == TextureSlot::Normal { 24 } else { 0 };
+    (u64::from(size[0]) * u64::from(size[1])).checked_mul(per_texel as u64)
+}
 pub(super) fn build(
     f: &FrozenNode,
     layout: &Layout,
@@ -210,15 +282,7 @@ pub(super) fn build(
                 .checked_mul(height as usize)
                 .ok_or_else(|| resource("raster size"))?;
             let mask = slot == TextureSlot::BaseColor && material["alphaMode"] == "MASK";
-            let charge = (count as u64)
-                .checked_mul(if slot == TextureSlot::Normal {
-                    4096
-                } else if mask {
-                    2048
-                } else {
-                    512
-                })
-                .ok_or_else(|| resource("raster workspace"))?;
+            let charge = raster_charge([width, height], slot, mask)?;
             charged = charged
                 .checked_add(charge)
                 .ok_or_else(|| resource("raster owning sum"))?;

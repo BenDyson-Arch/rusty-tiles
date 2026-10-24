@@ -384,13 +384,13 @@ fn actual_child_linear_filter_ignores_unequal_geometric_support() {
     source.begin(node, 10000).unwrap();
     // Authored mip construction correctly uses geometric1/9support (coarse243),
     // but physical LINEAR sampling of two base pixels uses equal sampler taps.
-    let children = [appearance_child(
+    let children = [super::ChildView::resident(appearance_child(
         node,
         &face,
         [[0., 0.25], [1., 0.25], [0., 1.]],
         two_pixel_child_page(&face, [1, 9], 243),
-    )];
-    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    ))];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 0, 10000).unwrap();
     let signal = query
         .signal(
             &mut source,
@@ -440,8 +440,10 @@ fn actual_child_lod_uses_final_decoded_uvs_instead_of_nominal_ratio() {
     // and nearest white255 at u~.625. The true coarse linear mean is188.
     let stretch = 2. * (1. - f64::from(decoded(16384)));
     assert!(stretch.log2() > 0.5 && stretch.log2() < 1.);
-    let children = [appearance_child(node, &face, uv, page)];
-    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    let children = [super::ChildView::resident(appearance_child(
+        node, &face, uv, page,
+    ))];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 0, 10000).unwrap();
     let signal = query
         .signal(
             &mut source,
@@ -494,8 +496,8 @@ fn actual_child_slot_bindings_keep_distinct_uv_sampler_and_aliased_signal_classe
         uv: other_uv,
     });
     child.pages.extend([data, emissive]);
-    let children = [child];
-    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 10000).unwrap();
+    let children = [super::ChildView::resident(child)];
+    let mut query = super::sampling::ChildQuery::new(&children, 1 << 20, 0, 10000).unwrap();
     // All three pages originate in one admitted black/white source image.
     // At the same world point, Base UV1 is.5 and Data/Emissive UV0 is.375.
     // Base LINEAR averages in light space to188; Data LINEAR whiteweight.25
@@ -795,6 +797,8 @@ fn actual_raster_fragment_frame_interpolates_emitted_corner_fan_attributes() {
         memory_bytes: 512 << 20,
         member_bytes: 96 << 20,
         source_cache_bytes: 128 << 20,
+        shared_image_bytes: 0,
+        child_texel_bytes: 256 << 20,
         query_work: 1_000_000,
         max_page_edge: 2048,
         max_density_drops: 4,
@@ -804,7 +808,7 @@ fn actual_raster_fragment_frame_interpolates_emitted_corner_fan_attributes() {
         source::CapturedSource::new(&captured, limits.source_cache_bytes, &mut || Ok(())).unwrap();
     source.begin(f.node, limits.query_work).unwrap();
     let mut children =
-        super::sampling::ChildQuery::new(&[], limits.memory_bytes, limits.query_work).unwrap();
+        super::sampling::ChildQuery::new(&[], limits.memory_bytes, 0, limits.query_work).unwrap();
     let raster = super::raster::build(&f, &layout, &mut source, &mut children, limits, &mut || {
         Ok(())
     })

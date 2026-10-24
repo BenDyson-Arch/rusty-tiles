@@ -12,7 +12,7 @@
 use crate::{JobError, JobErrorKind};
 use std::mem::size_of;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Class {
     Colour,
     Normal,

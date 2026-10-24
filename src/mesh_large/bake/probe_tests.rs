@@ -74,6 +74,8 @@ fn limits() -> BakeLimits {
         memory_bytes: 512 << 20,
         member_bytes: 96 << 20,
         source_cache_bytes: 128 << 20,
+        shared_image_bytes: 0,
+        child_texel_bytes: 256 << 20,
         query_work: 1_000_000,
         max_page_edge: 2048,
         max_density_drops: 4,
@@ -164,7 +166,7 @@ fn five_aliased_slots_raster_and_normal_mips_use_original_captured_samples() {
         &mut || Ok(()),
     )
     .unwrap();
-    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, 0, l.query_work).unwrap();
     let mut raster =
         raster::build(&f, &layout, &mut source, &mut child, l, &mut || Ok(())).unwrap();
     assert_eq!(raster.pages.len(), 5);
@@ -271,7 +273,7 @@ fn proxy_face_turned_away_from_every_same_primitive_donor_takes_the_nearest_witn
         ok,
     )
     .unwrap();
-    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, 0, l.query_work).unwrap();
     let raster = raster::build(&f, &layout, &mut source, &mut child, l, ok).unwrap();
     assert_eq!(raster.facing_fallback_faces, 1);
     assert!(raster.facing_fallback_samples > 0);
@@ -324,7 +326,7 @@ fn proxy_face_turned_away_from_every_same_primitive_donor_takes_the_nearest_witn
     // Deterministic: the same packet bakes the same pages.
     let mut again = CapturedSource::new(&c, l.source_cache_bytes, ok).unwrap();
     again.begin(f.node, l.query_work).unwrap();
-    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+    let mut child = sampling::ChildQuery::new(&[], l.memory_bytes, 0, l.query_work).unwrap();
     let repeat = raster::build(&f, &layout, &mut again, &mut child, l, ok).unwrap();
     for (a, b) in raster.pages.iter().zip(&repeat.pages) {
         assert_eq!(a.rgba, b.rgba);
@@ -359,9 +361,27 @@ fn all_and_mixed_degenerate_textured_capture_keeps_colour_and_geometry_without_e
             &mut || Ok(()),
         )
         .unwrap();
-        let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+        let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, 0, l.query_work).unwrap();
         let raster =
             raster::build(&f, &layout, &mut source, &mut children, l, &mut || Ok(())).unwrap();
+        // The pre-raster admission sees exactly the pages the raster makes, and each
+        // page owns at least the bytes it assumes.
+        let planned = raster::planned_pages(&f, &layout, &source).unwrap();
+        assert_eq!(planned.len(), raster.pages.len());
+        for (p, page) in planned.iter().zip(&raster.pages) {
+            assert_eq!((p.size, p.slot), ([page.width, page.height], page.slot));
+            let level = &page.levels[0];
+            let owned = page.rgba.capacity()
+                + page.support.capacity() * 4
+                + page.samples.capacity() * std::mem::size_of::<TerminalSample>()
+                + level.rgba.capacity()
+                + level.support.capacity() * 4
+                + level.frames.capacity() * std::mem::size_of::<frames::Frame>()
+                + level.samples.capacity() * std::mem::size_of::<TerminalSample>()
+                + level.world_normals.capacity() * 24
+                + (page.width * page.height) as usize * std::mem::size_of::<usize>();
+            assert!(raster::page_bytes(p.size, p.slot).unwrap() <= owned as u64);
+        }
         assert_eq!(raster.frames.len(), count);
         assert_eq!(raster.colors.len(), count);
         assert_eq!(raster.colors[0], [[1., 0.25, 0.5, 1.]; 3]);
@@ -804,12 +824,12 @@ fn positive_actual_child_density_is_not_coarsened_by_source_heuristic() {
             node.children = 0;
             node.first = f.node.first + i;
             node.end = node.first + 1;
-            PreencodeChild {
+            ChildView::resident(PreencodeChild {
                 node,
                 texel_size: 0.25,
                 faces: Vec::new(),
                 pages: Vec::new(),
-            }
+            })
         })
         .collect();
     let mut source = CapturedSource::new(&c, 128 << 20, &mut || Ok(())).unwrap();
@@ -1030,7 +1050,7 @@ fn actual_five_slot_proxy_delivery_executes_all_profiles_and_decodes_every_level
             &mut || Ok(()),
         )
         .unwrap();
-        let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, l.query_work).unwrap();
+        let mut children = sampling::ChildQuery::new(&[], l.memory_bytes, 0, l.query_work).unwrap();
         let mut raster =
             raster::build(&f, &layout, &mut source, &mut children, l, &mut || Ok(())).unwrap();
         assert_eq!(raster.pages.len(), 5);

@@ -1,7 +1,7 @@
 //! Retained child closure, owned only until its immediate parent commits.
 //! Leaf render witnesses must come from the accepted writer/readback; authored
 //! source attributes cannot substitute for published corner frames or density.
-use super::{invalid, packet, resource, types::*, unsupported};
+use super::{invalid, packet, resource, retained::ChildView, types::*, unsupported};
 use crate::{
     gltf_source::source::TextureSlot,
     mesh_large::{
@@ -306,26 +306,14 @@ pub(super) fn from_leaf(
     Ok(child)
 }
 
-/// `memory` covers the resident child plus the encoded packet output. The
-/// caller separately accounts other live baked-member/pass owners.
-pub(super) fn persist(
+/// Stream a baked tile's exact packet for its parent into the store (see
+/// [`packet::write`]); nothing of it is held in memory.
+pub(super) fn persist_packet(
     store: &PreencodeStore,
     child: &PreencodeChild,
     classes: &MaterialClasses,
-    memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<(), JobError> {
-    let bytes = encode_packet(child, classes, memory, check)?;
-    store.write_proxy(child.node.first, child.node.depth(), &bytes)
-}
-/// A baked tile's exact packet for its parent, within `memory` bytes; nothing is
-/// written (see [`persist`]).
-pub(super) fn encode_packet(
-    child: &PreencodeChild,
-    classes: &MaterialClasses,
-    memory: u64,
-    check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Vec<u8>, JobError> {
     if child
         .pages
         .iter()
@@ -335,9 +323,11 @@ pub(super) fn encode_packet(
             "proxy preencode normal scale must be absorbed exactly once",
         ));
     }
-    let bytes = packet::encode(child, classes, memory, check)?;
-    check()?;
-    Ok(bytes)
+    let size = packet::size(child, check)?;
+    store.write_proxy_with(child.node.first, child.node.depth(), size, |out, path| {
+        packet::write(child, classes, out, path, check)
+    })?;
+    check()
 }
 /// The H1 identity of `parent`'s child in octant `slot`: a synthetic run step below a
 /// key-depth cell or inside a run, else a spatial child cell.
@@ -553,7 +543,9 @@ pub(super) fn from_witness(
 }
 
 /// Every retained child of `frozen`, within `memory` bytes: proxy children are the
-/// bake's own exact packets; leaf children come from their accepted witness.
+/// bake's own exact packets, of which only the head (faces and page metadata) is
+/// decoded, their texels staying in the packet for the parent's bounded texel cache;
+/// leaf children come from their accepted witness.
 ///
 /// The children share one running lease rather than equal fixed shares, so one large
 /// child may use what its smaller siblings leave. Each child's transient read and
@@ -564,12 +556,12 @@ pub(super) fn load_children(
     parent: &NodeRecord,
     memory: u64,
     check: &mut dyn FnMut() -> Result<(), JobError>,
-) -> Result<Vec<PreencodeChild>, JobError> {
+) -> Result<Vec<ChildView>, JobError> {
     if frozen.children.len() > 8 {
         return Err(invalid("retained children exceed octants"));
     }
     let owner = (frozen.children.len() as u64)
-        .checked_mul(std::mem::size_of::<PreencodeChild>() as u64)
+        .checked_mul(std::mem::size_of::<ChildView>() as u64)
         .ok_or_else(|| resource("retained children outer owner overflow"))?;
     let mut remaining = memory
         .checked_sub(owner)
@@ -588,26 +580,29 @@ pub(super) fn load_children(
             let owned = (decoded.faces.len() as u64)
                 .checked_mul(std::mem::size_of::<ChildFace>() as u64)
                 .ok_or_else(|| resource("retained leaf child owner overflow"))?;
-            (decoded, owned)
+            (ChildView::resident(decoded), owned)
         } else {
-            // The decode lease counts the encoded bytes it reads from.
-            let bytes =
-                pass.preencode
-                    .read_proxy(child.first, child.depth, remaining, pass.check)?;
-            let (decoded, owned) =
-                packet::decode_owned(&bytes, &pass.captured.material_classes, remaining, check)?;
-            if decoded.node.first != child.first
-                || decoded.node.end != child.end
-                || decoded.node.depth() != child.depth
+            let (file, path) = pass.preencode.open_proxy(child.first, child.depth)?;
+            let opened = packet::open(
+                &file,
+                &path,
+                &pass.captured.material_classes,
+                remaining,
+                check,
+            )?;
+            if opened.node.first != child.first
+                || opened.node.end != child.end
+                || opened.node.depth() != child.depth
             {
                 return Err(invalid("retained proxy child identity/rank"));
             }
-            if decoded.pages.iter().any(|p| {
+            if opened.pages.iter().any(|p| {
                 p.slot == TextureSlot::Normal && p.normal_scale.to_bits() != 1.0f64.to_bits()
             }) {
                 return Err(invalid("retained proxy normal scale was not absorbed"));
             }
-            (decoded, owned)
+            let owned = opened.owned;
+            (ChildView::packet(opened, file, path), owned)
         };
         remaining = remaining
             .checked_sub(owned)
