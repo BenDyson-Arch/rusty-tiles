@@ -45,8 +45,12 @@ def generate(root):
         }}
         source_path = root / (kind + '-source.json')
         source_path.write_text(json.dumps(source))
-        for lost in (False, True):
-            name = kind + ('-lost' if lost else '-retained')
+        variants = [(False, False), (True, False)]
+        if kind == 'three':
+            variants.append((False, True))
+        for lost, one_incidence in variants:
+            name = kind + ('-one-incidence' if one_incidence else
+                           '-lost' if lost else '-retained')
             folder = root / name
             folder.mkdir(exist_ok=True)
             coarse = original.copy()
@@ -57,7 +61,11 @@ def generate(root):
                 _, _, d = left[1]
                 coarse[:2] = [[a, d, c], [b, c, d]]
             split = len(left)
-            files = {'coarse.glb': payload(list(range(split)), coarse, False),
+            # A locked unordered edge need not retain every incident source
+            # face. One correctly oriented witness remains valid when the
+            # source offers both directions along a nonmanifold interface.
+            coarse_ids = [0] if one_incidence else list(range(split))
+            files = {'coarse.glb': payload(coarse_ids, coarse, False),
                      'left.glb': payload(list(range(split)), original, True),
                      'right.glb': payload(list(range(split, len(original))), original, True)}
             tile = native_controls.tile
@@ -119,7 +127,7 @@ def run(root, binary=None):
         digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     for name, folder, source, lost in generate(root):
         identity = name.startswith('shared-closed-')
-        oracle_check = 'leafGeometry' if identity else 'interfaceSegments'
+        oracle_check = 'interfacePoints' if identity else 'interfaceSegments'
         archive_check = 'sourceIdentity' if identity else 'interfaceSegments'
         try:
             result = audit(folder, source, scratch=root, work_limit=100_000)

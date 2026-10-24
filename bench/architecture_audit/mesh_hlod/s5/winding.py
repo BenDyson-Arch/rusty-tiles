@@ -15,6 +15,7 @@ and source-table construction belong to the caller.
 import collections
 import math
 import struct
+from spatial import f32_point
 
 
 def _point(xyz):
@@ -66,27 +67,28 @@ def _rows(store, sql, parameters):
 
 def _point_ids(store, point):
     packed = struct.pack('<3d', *point)
-    # Both arms use the corresponding indexed exact-coordinate lookup. NULL
-    # fallback supports literal probes without inventing an approximate join.
+    # The source formula has already established these welds. An accidental
+    # delivered-coordinate alias never creates a source topology group.
     return {row[0] for row in _rows(store,
-        'SELECT id FROM points WHERE rendered=? UNION ALL '
-        'SELECT id FROM points WHERE xyz=? AND rendered IS NULL',
-        (packed, packed))}
+        'SELECT id FROM canonical_points WHERE xyz=?', (packed,))}
 
 
-def _source_border(store, low, high, lo, hi):
+def _source_border(store, low, high, lo, hi, *, details=False):
     """Sum incidences after rendered aliases, without endpoint products."""
     from spatial import MAX_QUERY_CANDIDATES, WorkLimit
     left, right = _point_ids(store, low), _point_ids(store, high)
     if not left or not right:
-        return 0, 0
+        return (0,0,False,[]) if details else (0,0)
     endpoints, others = (left, right) if len(left) <= len(right) else (right, left)
     seen = set()
     forward = reverse = candidates = 0
+    supports={}
     for endpoint in endpoints:
-        for a, b, leaf, nf, nr in _rows(store,
-                'SELECT a,b,leaf,nf,nr FROM edges WHERE a=? UNION ALL '
-                'SELECT a,b,leaf,nf,nr FROM edges WHERE b=?',
+        for a, b, leaf, nf, nr, incidence in _rows(store,
+                'SELECT e.a,e.b,e.leaf,e.nf,e.nr,i.faces FROM canonical_edges e '
+                'JOIN incidence i ON i.a=e.a AND i.b=e.b WHERE e.a=? UNION ALL '
+                'SELECT e.a,e.b,e.leaf,e.nf,e.nr,i.faces FROM canonical_edges e '
+                'JOIN incidence i ON i.a=e.a AND i.b=e.b WHERE e.b=?',
                 (endpoint, endpoint)):
             # Charge and cap every returned row, including duplicate rows and
             # other descendants, across all endpoint probes for this edge.
@@ -100,13 +102,16 @@ def _source_border(store, low, high, lo, hi):
             if key in seen:
                 continue
             seen.add(key)
+            supports[a,b]=incidence
             if a in left:
                 forward += nf
                 reverse += nr
             else:
                 forward += nr
                 reverse += nf
-    return forward, reverse
+    if details:
+        return forward,reverse,bool(supports) and all(n==1 for n in supports.values()),list(supports)
+    return forward,reverse
 
 
 def inspect(store, tiles, require):
@@ -117,8 +122,12 @@ def inspect(store, tiles, require):
     remain in uninspectedInteriorOrientation. Border witnesses never remove a
     face from that count. Degenerate faces have no orientation witness.
     """
+    if not hasattr(store,'canonical_stats'):
+        store.finalize_canonical(require)
     stats = dict(checkedTiles=0, checkedFaces=0, borderedEdges=0,
                  checkedBorders=0, unwitnessedBorders=0,
+                 sourceOpenBordersExempt=0, exemptWindingEvents=0,
+                 checkedDirectedEdges=0,
                  coincidentFaces=0, ambiguousCoincidentFaces=0,
                  degenerateFaces=0, uninspectedFaces=0,
                  uninspectedBorderFaces=0, uninspectedInteriorFaces=0,
@@ -134,6 +143,8 @@ def inspect(store, tiles, require):
             points = [_point(p) for p in face['xyz']]
             if len(points) != 3:
                 raise ValueError('winding requires three corners')
+            if len(set(f32_point(p) for p in points))<3:
+                continue
             for k in range(3):
                 store.work.charge()
                 a, b = points[k], points[(k + 1) % 3]
@@ -144,22 +155,37 @@ def inspect(store, tiles, require):
         borders = set()
         for (a, b), (count, direction) in edges.items():
             store.work.charge()
-            if count != 1 or a == b:
+            if a == b:
                 continue
-            borders.add((a, b))
-            stats['borderedEdges'] += 1
-            nf, nr = _source_border(store, a, b, lo, hi)
-            if nf + nr != 1:
-                stats['unwitnessedBorders'] += 1
+            border=count==1
+            if border:
+                borders.add((a,b))
+                stats['borderedEdges']+=1
+            nf,nr,all_open,supports = _source_border(store,a,b,lo,hi,details=True)
+            if not nf+nr:
+                stats['unwitnessedBorders']+=int(border)
                 continue
-            stats['checkedBorders'] += 1
-            require(direction == nf - nr, 'interfaceWinding',
-                    f'tile {tile["id"]}: reversed exact border {a} -> {b}')
+            allowed=int(nf>0)|int(nr>0)<<1
+            actual=int(count+direction>0)|int(count-direction>0)<<1
+            if all_open:
+                stats['sourceOpenBordersExempt']+=int(border)
+                if actual & ~allowed:
+                    for x,y in supports:
+                        changed=store.db.execute('INSERT OR IGNORE INTO exemptions VALUES (?,?,?,?)',(tileid,x,y,'winding')).rowcount
+                        stats['exemptWindingEvents']+=changed
+                continue
+            stats['checkedDirectedEdges']+=1
+            stats['checkedBorders']+=int(border)
+            # Direction is an allowance, never a multiplicity or retention
+            # requirement. Source mask 3 permits actual 1,2 or3; mask1 may
+            # not acquire mask2, including an extra reversed interior face.
+            require(not actual & ~allowed,'interfaceWinding',
+                    f'tile {tile["id"]}: disallowed exact edge direction {a} -> {b}; source mask {allowed}, actual mask {actual}')
         # Stream again rather than retaining all face coordinates with edges.
         for face in store.faces(tileid):
             store.work.charge()
             stats['checkedFaces'] += 1
-            packed, sign = shape(face['xyz'])
+            packed, sign = shape(face['xyz']) if len(set(f32_point(p) for p in face['xyz']))==3 else (None,0)
             signs = set()
             if packed is not None:
                 for (source_sign,) in _rows(store,

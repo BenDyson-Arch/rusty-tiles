@@ -38,6 +38,17 @@ function positionTolerance(local,values,m) {
  return [0,1,2].map(k=>local.reduce((s,v,c)=>s+Math.abs(m[k+c*4])*v,0)+
   32*Number.EPSILON*(Math.abs(m[k+12])+values.reduce((s,v)=>Math.max(s,...v.map((x,c)=>Math.abs(x*m[k+c*4]))),0)+1));
 }
+function positionGrid(a,m) {
+ // A global axis spacing exists only for an exact signed axis permutation
+ // with scale. Lengths of rotated/sheared basis vectors are not grid steps.
+ if(a.componentType===5126)return {positionStorage:'float',positionStep:null,positionGridUnsupported:false};
+ const nonzero=[0,1,2].map(r=>[0,1,2].filter(c=>m[r+c*4]!==0));
+ const representable=nonzero.every(columns=>columns.length===1)&&new Set(nonzero.map(columns=>columns[0])).size===3;
+ const denominator=a.normalized?{5120:127,5121:255,5122:32767,5123:65535,5125:4294967295}[a.componentType]:1;
+ const step=representable?nonzero.map((columns,r)=>Math.abs(m[r+columns[0]*4])/denominator):null;
+ if(step?.some(s=>!Number.isFinite(s)||s<=0))throw Error('accessorValues: POSITION grid');
+ return {positionStorage:'integer',positionStep:step,positionGridUnsupported:!representable};
+}
 export async function decode(input) {
  const b=Buffer.isBuffer(input)?input:input instanceof Uint8Array?Buffer.from(input):fs.readFileSync(input);
  if(b.length<28||b.toString('ascii',0,4)!=='glTF'||b.readUInt32LE(4)!==2||b.readUInt32LE(8)!==b.length||b.toString('ascii',16,20)!=='JSON')throw Error('codecStructure: GLB');
@@ -74,12 +85,16 @@ export async function decode(input) {
    props[key]=Array.from({length:t.count},(_,i)=>wide?d.getBigUint64(i*8,true).toString():width===1?d.getUint8(i):d.getUint32(i*4,true));
   }tables.push({class:t.class,count:t.count,props});
  }
- const faces=[];
+ const faces=[],positionStorageStats={integerPrimitives:0,floatPrimitives:0,unsupportedIntegerPrimitives:0,integerGrids:[]};
  async function visit(id,parent,stack){if(stack.has(id))throw Error('scene cycle');const n=j.nodes[id],m=mul(parent,matrix(n));stack=new Set([...stack,id]);
   if(n.mesh!==undefined)for(const [pi,p] of j.meshes[n.mesh].primitives.entries()){
    if((p.mode??4)!==4)throw Error('unsupported oracle primitive mode');
    const local=await acc(p.attributes.POSITION);
    if(j.accessors[p.attributes.POSITION].type!=='VEC3')throw Error('accessorValues: POSITION');
+   const grid=positionGrid(j.accessors[p.attributes.POSITION],m);
+   positionStorageStats[grid.positionStorage==='integer'?'integerPrimitives':'floatPrimitives']++;
+   if(grid.positionGridUnsupported)positionStorageStats.unsupportedIntegerPrimitives++;
+   if(grid.positionStep&&!positionStorageStats.integerGrids.some(step=>step.every((s,k)=>s===grid.positionStep[k])))positionStorageStats.integerGrids.push(grid.positionStep);
    const pos=local.map(v=>point(m,v)),tolerance=positionTolerance(accessorTolerance(p.attributes.POSITION,local,3),local,m),idx=p.indices===undefined?pos.map((_,i)=>i):(await acc(p.indices)).flat(),sets=[];
    const directions=p.attributes.NORMAL===undefined?null:await acc(p.attributes.NORMAL),uvs=p.attributes.TEXCOORD_0===undefined?null:await acc(p.attributes.TEXCOORD_0);
    if(directions&&(directions.length!==pos.length||j.accessors[p.attributes.NORMAL].type!=='VEC3')||uvs&&(uvs.length!==pos.length||j.accessors[p.attributes.TEXCOORD_0].type!=='VEC2'))throw Error('accessorValues: NORMAL/TEXCOORD_0 shape');
@@ -98,14 +113,14 @@ export async function decode(input) {
    if(idx.length%3||idx.some(i=>!Number.isSafeInteger(i)||i<0||i>=pos.length))throw Error('primitiveIndices');
    for(let k=0;k<idx.length;k+=3){const ids={};for(const s of sets){const a=s.values[idx[k]];if([1,2].some(c=>s.values[idx[k+c]]!==a))throw Error('featureIdentity');ids[s.label]=Object.fromEntries(Object.entries(s.table.props).map(([key,col])=>[key,col[a]]));}
     const corners=idx.slice(k,k+3);
-    faces.push({xyz:corners.map(i=>pos[i]),normals:normals?corners.map(i=>normals[i]):null,uvs:uvs?corners.map(i=>uvs[i]):null,positionTolerance:tolerance,normalTolerance,uvTolerance,ids,source:[id,n.mesh,pi,k/3],material:p.material===undefined?null:j.materials[p.material]});
+    faces.push({xyz:corners.map(i=>pos[i]),normals:normals?corners.map(i=>normals[i]):null,uvs:uvs?corners.map(i=>uvs[i]):null,positionTolerance:tolerance,...grid,normalTolerance,uvTolerance,ids,source:[id,n.mesh,pi,k/3],material:p.material===undefined?null:j.materials[p.material]});
    }
   }
   for(const child of n.children??[])await visit(child,m,stack);
  }
  for(const id of j.scenes[j.scene??0].nodes)await visit(id,I,new Set());
  const hasHlodIdentity=tables.some(t=>['source_primitive','source_triangle'].includes(t.class))||faces.some(f=>Object.keys(f.ids).some(k=>['source_primitive','source_triangle'].includes(k)));
- return {faces,tables,hasHlodIdentity};
+ return {faces,tables,hasHlodIdentity,positionStorageStats};
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  try{process.stdout.write(JSON.stringify(await decode(process.argv[2]==='-'?fs.readFileSync(0):process.argv[2])));}catch(e){console.error(e.stack);process.exitCode=1;}

@@ -137,7 +137,14 @@ def run(root, binary):
             assert report.get('ok') is False and report['error']['code'] == expected, (name, report)
             assert label in report['error']['message'], (name, label, report)
         else:
-                assert {'hlodFeatureIds', 'interfaceSegments', 'interfaceWinding'} <= set(report['checks']), name
+            assert {'hlodFeatureIds', 'interfaceSegments', 'interfaceWinding'} <= set(report['checks']), name
+            census = report['interfaceCensus']
+            assert census['basis'] == 'decoded leaf canonical f32 keys', (name, census)
+            assert census['sourceOpenEdgesWithSharedEndpoints'] <= census['sourceOpenEdges'], (name, census)
+            if name in ('rebase-control', 'rebase-identical-world', 'axis-control',
+                        'scene-material-neutral-ior', 'up-axis-Y'):
+                assert (census['sharedPoints'], census['sharedSegments'],
+                        census['sourceOpenEdges'], census['sourceOpenEdgesWithSharedEndpoints']) == (2, 1, 4, 0), (name, census)
         results.append(dict(name=name, exit=code, check=label))
     assert hashlib.sha256(binary.read_bytes()).hexdigest() == digest, 'binary changed'
     return dict(binarySha256=digest, results=results)

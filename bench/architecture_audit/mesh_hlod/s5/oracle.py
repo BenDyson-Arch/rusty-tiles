@@ -19,6 +19,7 @@ import zipfile
 from archive import Archive, expand
 from continuity import check_tiles
 from spatial import Store, Work, WorkLimit
+from seam_diagnostic import WorkLimit as SeamWorkLimit
 
 ROOT = Path(__file__).parent
 
@@ -122,6 +123,14 @@ def transform_face(f,m):
     f['xyz']=[[sum(m[a+k*4]*p[k] for k in range(3))+m[a+12] for a in range(3)] for p in f['xyz']]
     tol=f.get('positionTolerance',[0,0,0])
     f['positionTolerance']=[sum(abs(m[a+k*4])*tol[k] for k in range(3))+1e-12 for a in range(3)]
+    if f.get('positionStep') is not None:
+        linear=[[m[a+k*4] for k in range(3)] for a in range(3)]
+        axis_aligned=all(sum(v!=0 for v in row)==1 for row in linear) and all(sum(linear[a][k]!=0 for a in range(3))==1 for k in range(3))
+        if axis_aligned:
+            f['positionStep']=[sum(abs(linear[a][k])*f['positionStep'][k] for k in range(3)) for a in range(3)]
+        else:
+            f['positionStep']=None
+            f['positionGridUnsupported']=True
     if f.get('normals') is not None:
         inv=inverse(m)
         ns=[[sum(inv[k+a*4]*n[k] for k in range(3)) for a in range(3)] for n in f['normals']]
@@ -209,6 +218,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
     """
     from source_manifest import load_manifest
     with load_manifest(expected) as manifest, Archive(root) as archive, tempfile.TemporaryDirectory(prefix='s5-oracle-',dir=scratch) as temporary:
+        metadata=manifest.get('metadata',{})
+        require(coordinate_frame=='root' and metadata.get('coordinateFrame','root')=='root'
+                and metadata.get('transform16',IDENTITY)==IDENTITY,
+                'oracleDomain','sourceCanonical: exact D1 source topology requires root-frame capture coordinates without post-capture transform16; world placement after f32 capture is not a canonical-key frame')
         try:
             tiles=expand(archive)
         except ValueError as e:
@@ -273,7 +286,7 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                         t['rendered']=True
                         if not t['children']:
                             key,want=check_leaf(f,manifest,attributes,geometry=False)
-                            require(store.source_face(key,want,t['lo'],actual=f),'leafCoverage','duplicate '+key)
+                            require(store.source_face(key,want,t['lo'],actual=f,depth=t['depth']),'leafCoverage','duplicate '+key)
                             leaf_count+=1
                     store.put_faces(int(t['id']),faces)
                 if not t['children']:
@@ -282,10 +295,16 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
                     store.leaf_bounds(t['lo'])
                 store.db.commit()
             require(leaf_count==len(manifest['triangles']),'leafCoverage',f'{leaf_count} != {len(manifest["triangles"])}')
+            store.finalize_canonical(require)
             source_points=store.validate_leaf_points(require)
             result=store.census(tiles,leaves,require)
             from winding import inspect as inspect_winding
             result['winding']=inspect_winding(store,tiles,require)
+            from seam_diagnostic import inspect_open_edges
+            result['seamDiagnostics']=inspect_open_edges(store,tiles,leaves)
+            result['exemptCrackEvents']=store.db.execute("SELECT count(*) FROM exemptions WHERE kind='crack'").fetchone()[0]
+            result['exemptCrackEventBasis']='deduplicated (tile,source-open-edge) positive sampled-width witnesses only; changed open edges are candidates, and unmeasured correspondences are not zero-gap proofs'
+            result['exemptWindingEvents']=result['winding']['exemptWindingEvents']
             for t in tiles:
                 if not t['children']: continue
                 for f in store.faces(int(t['id'])):
@@ -332,5 +351,5 @@ if __name__=='__main__':
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)
     except (ValueError,OSError,subprocess.SubprocessError,sqlite3.Error,zipfile.BadZipFile,KeyError,TypeError,IndexError) as e:
-        print(json.dumps(dict(ok=False,check='oracleWorkLimit' if isinstance(e,WorkLimit) else 'oracleDomain',detail=str(e))))
+        print(json.dumps(dict(ok=False,check='oracleWorkLimit' if isinstance(e,(WorkLimit,SeamWorkLimit)) else 'oracleDomain',detail=str(e))))
         raise SystemExit(1)

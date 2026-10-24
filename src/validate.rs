@@ -33,8 +33,8 @@ pub use limits::{
 use limits::{LimitPlan, Sources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure, ValidationLimits,
-    ValidationReport, ValidationRequest,
+    InterfaceCensus, PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure,
+    ValidationLimits, ValidationReport, ValidationRequest,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -3439,6 +3439,9 @@ fn inspect_run(
         check
             .not_inspected
             .insert("coarse interior/exterior orientation outside required interfaces".into());
+        check
+            .not_inspected
+            .insert("source-original fidelity and exempt crack-width diagnostics".into());
     }
     if contained {
         check.stream()?;
@@ -3489,6 +3492,15 @@ fn inspect_run(
         content_references: check.contents as u64,
         entries,
         payloads,
+        interface_census: check.delivery.census().map(|c| InterfaceCensus {
+            basis: "decoded leaf canonical f32 keys",
+            shared_points: c.shared_points,
+            shared_segments: c.shared_segments,
+            source_open_edges: c.source_open_edges,
+            source_open_edges_with_shared_endpoints: c.source_open_edges_with_shared_endpoints,
+            stopped_above_cap: c.stopped_above_cap,
+            max_above_cap_triangles: c.max_above_cap_triangles,
+        }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
             peak_bytes: scratch

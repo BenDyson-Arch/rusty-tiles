@@ -238,9 +238,26 @@ pub struct ValidationReport {
     pub limit_derivation: LimitDerivation,
     /// One row per inspected payload URI, in URI byte order, read on demand.
     pub payloads: PayloadRows,
+    /// Exact item incidence derived from decoded leaf placements. Original-source
+    /// fidelity and source-open-edge exemptions require the source-aware audit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_census: Option<InterfaceCensus>,
     /// Present only when the catalog or the payload rows spilled to scratch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch: Option<ScratchReport>,
+}
+/// Archive-only incidence and above-cap observations; no producer counters are used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceCensus {
+    pub basis: &'static str,
+    pub shared_points: u64,
+    pub shared_segments: u64,
+    pub source_open_edges: u64,
+    pub source_open_edges_with_shared_endpoints: u64,
+    /// Nonleaf content references above 8,192 decoded triangles, including reuse.
+    pub stopped_above_cap: u64,
+    pub max_above_cap_triangles: u64,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -270,6 +287,9 @@ impl ValidationReport {
         value["storedBytes"] = self.stored_bytes.into();
         value["limits"] = serde_json::to_value(&self.limits)?;
         value["limitDerivation"] = serde_json::to_value(&self.limit_derivation)?;
+        if let Some(census) = self.interface_census {
+            value["interfaceCensus"] = serde_json::to_value(census)?;
+        }
         if let Some(scratch) = self.scratch {
             value["scratch"] = serde_json::to_value(scratch)?;
         }

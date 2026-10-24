@@ -23,6 +23,11 @@ NORMALS=[(1,0,0),(0,1,0),(0,0,1)]
 UVS=[(0,0),(1,0),(0,1)]
 SPLIT_POINTS=copy.deepcopy(POINTS)
 SPLIT_POINTS[3]=[(0,0,0),(1,0,0),(0,-1,0)]
+WELDED_POINTS=copy.deepcopy(SPLIT_POINTS)
+WELDED_POINTS[0][1]=(1,0,0)
+# The welded pair has opposite source incidences; its detour must exercise a
+# missing exact edge without an unrelated equal-direction winding defect.
+WELDED_POINTS[3]=[(1,0,0),(0,0,0),(0,-1,0)]
 
 def transformed(p, trs=False):
     # outer translation [8,4,2], inner column-major matrix: rotate 90 deg
@@ -135,6 +140,10 @@ def generate(root):
     expected_split=copy.deepcopy(expected)
     expected_split['triangles']['0,0,3,0']['xyz']=[transformed(p) for p in SPLIT_POINTS[3]]
     (root/'source-split.json').write_text(json.dumps(expected_split,sort_keys=True,indent=2)+'\n')
+    expected_welded=copy.deepcopy(expected_split)
+    for i in (0,3):
+        expected_welded['triangles'][f'0,0,{i},0']['xyz']=[transformed(p) for p in WELDED_POINTS[i]]
+    (root/'source-welded.json').write_text(json.dumps(expected_welded,sort_keys=True,indent=2)+'\n')
     def tile(uri,g,children=None):
         d=dict(boundingVolume={'box':[0,0,0,32,0,0,0,32,0,0,0,32]},geometricError=g,refine='REPLACE',content={'uri':uri})
         if children:d['children']=children
@@ -145,11 +154,12 @@ def generate(root):
     groups={'root.glb':[0,1,2,3],'left.glb':[0,1],'right.glb':[2,3],'middle.glb':[2,3],**{f'leaf{i}.glb':[i] for i in range(4)}}
     cases=[('valid',None,None),('quantized',None,None),('normalized',None,None),('trs',None,None),('numeric-lexemes',None,None),('opaque-extras',None,None),('wide-identity',None,None),('meshopt-fallback',None,None),('adjacent-uint64-leaf','sourceIdentity',None),('adjacent-uint64-representative','representativeIdentity',None),('wrong-feature','featureIdentity','hlodFeatureIds'),
            ('wrong-source','sourceIdentity',None),('wrong-representative','representativeIdentity',None),('wrong-representative-contents','representativeIdentity',None),('missing-leaf','leafCoverage',None),('duplicate-leaf','leafCoverage',None),
-           ('moved-interface','interfaceSegments',None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity','replaceContentContinuity'),
+           ('moved-interface',None,None),('moved-corner','interfacePoints',None),('empty-intermediate','replaceContentContinuity','replaceContentContinuity'),
            ('negative-g','geometricErrorFinite','tileset schema'),('nan-g','geometricErrorFinite','JSON'),
            ('nonmonotone-g','geometricErrorOrder','geometricError increases'),('bad-bounds',None,'decoded content'),
            ('stale-hash',None,'content checksum mismatch'),('malformed-codec',None,'meshopt'),('bad-metadata','featureIdentity','hlodFeatureIds'),('optional-property','featureIdentity','hlodFeatureIds'),('bad-property-type','featureIdentity','hlodFeatureIds'),('wrong-table-class','featureIdentity','hlodFeatureIds'),('missing-feature-set','sourceIdentity','hlodFeatureIds'),('correlated-metadata','sourceIdentity',None),('active-morph','codecStructure',None),('infinite-root-g','geometricErrorFinite','JSON'),('normalized-identity','featureIdentity','hlodFeatureIds'),('array-identity','featureIdentity','hlodFeatureIds'),('offset-identity','featureIdentity','hlodFeatureIds'),('null-identity','featureIdentity','hlodFeatureIds'),('gpu-instancing','codecStructure',None),('source-triangle-only','featureIdentity','hlodFeatureIds'),('local-gltf-identity',None,'hlodFeatureIds'),('coarse-material-class','representativeMaterialClass',None),('uri-buffer-shadow','codecStructure','hlodFeatureIds'),('wrong-bin-chunk','codecStructure','buffer has no resource')]
-    cases += [('split-side',None,None),('split-side-detour','interfaceSegments','interfaceSegments'),
+    cases += [('split-side',None,None),('split-side-detour',None,None),
+              ('welded-shared-segment-detour','interfaceSegments','interfaceSegments'),
               ('coarse-winding','interfaceWinding','interfaceWinding'),('swapped-uv','sourceTexcoords',None),
               ('swapped-normal','sourceNormals',None),('swapped-uv-normal-accessors','codecStructure','NORMAL accessor type'),
               ('partial-identity-strip','featureIdentity','hlodFeatureIds'),
@@ -161,8 +171,8 @@ def generate(root):
         out=root/name;out.mkdir(exist_ok=True);d=copy.deepcopy(doc)
         for uri,ids in groups.items():
             data=glb(ids,quantized=name=='quantized',wrong_id=name=='wrong-feature' and uri=='root.glb',moved=(name=='moved-interface' and uri=='left.glb') or (name=='moved-corner' and uri=='right.glb'),bad_metadata=name=='bad-metadata' and uri=='root.glb',trs=name=='trs',normalized=name=='normalized',leaf=uri.startswith('leaf') or (name=='coarse-source-triangle' and uri=='root.glb'),compressed=name in ('meshopt-fallback','meshopt-octahedral'),octahedral=name=='meshopt-octahedral',
-                points=SPLIT_POINTS if name in ('split-side','split-side-detour') else POINTS,
-                detour=name=='split-side-detour' and uri=='right.glb',winding=name=='coarse-winding' and uri=='root.glb',
+                points=WELDED_POINTS if name=='welded-shared-segment-detour' else SPLIT_POINTS if name in ('split-side','split-side-detour') else POINTS,
+                detour=name in ('split-side-detour','welded-shared-segment-detour') and uri=='right.glb',winding=name=='coarse-winding' and uri=='root.glb',
                 swap_uv=name=='swapped-uv' and uri=='leaf0.glb',swap_normal=name=='swapped-normal' and uri=='leaf0.glb',
                 triangle_wrong_in_range=name=='wrong-in-range-triangle' and uri=='leaf0.glb')
             (out/uri).write_bytes(data)
@@ -286,7 +296,15 @@ def generate(root):
             # Add a malformed EXT_meshopt stream to a POSITION buffer view.
             p=out/'root.glb';b=p.read_bytes();jl=int.from_bytes(b[12:16],'little');j=json.loads(b[20:20+jl]);j['bufferViews'][0]['extensions']={'EXT_meshopt_compression':dict(buffer=0,byteOffset=0,byteLength=1,count=12,byteStride=12,mode='ATTRIBUTES')};j['extensionsUsed'].append('EXT_meshopt_compression');j['extensionsRequired']=['EXT_meshopt_compression'];data=json.dumps(j).encode();data+=b' '*(-len(data)%4);binary=b[28+jl:];p.write_bytes(b'glTF'+struct.pack('<III',2,28+len(data)+len(binary),len(data))+b'JSON'+data+struct.pack('<I',len(binary))+b'BIN\0'+binary)
         (out/'tileset.json').write_text(json.dumps(d))
-        manifest.append(dict(name=name,oracleCheck=oracle_check,archiveCheck=archive_check,source='source-split.json' if name in ('split-side','split-side-detour') else 'source-trs.json' if name=='trs' else 'source-wide.json' if name in ('wide-identity','adjacent-uint64-leaf','adjacent-uint64-representative') else 'source.json'))
+        case=dict(name=name,oracleCheck=oracle_check,archiveCheck=archive_check,source='source-welded.json' if name=='welded-shared-segment-detour' else 'source-split.json' if name in ('split-side','split-side-detour') else 'source-trs.json' if name=='trs' else 'source-wide.json' if name in ('wide-identity','adjacent-uint64-leaf','adjacent-uint64-representative') else 'source.json')
+        # Exact D1 items do not infer a long edge or split-side subsegments.
+        # Keep the former T-only mutants as positives with visible source
+        # incidence diagnostics; the genuinely welded detour remains negative.
+        if name in ('moved-interface','split-side','split-side-detour'):
+            # Split A is shared with leaf 3; C was already shared with leaf 1.
+            # Thus both open A-B and A-C have externally shared endpoints.
+            case['sourceIncidence']=dict(sourceOpenEdges=10,sourceOpenEdgesWithSharedEndpoints=2 if name.startswith('split-side') else 0)
+        manifest.append(case)
     (root/'cases.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 
@@ -306,6 +324,8 @@ if __name__=='__main__':
         try:
             result=audit(root/c['name'],root/c['source'])
             assert c['oracleCheck'] is None, c
+            for key,value in c.get('sourceIncidence',{}).items():
+                assert result[key]==value,(c['name'],key,result[key],value)
         except Failure as e:
             assert e.check==c['oracleCheck'], (c,e)
             result=dict(ok=False,check=e.check)

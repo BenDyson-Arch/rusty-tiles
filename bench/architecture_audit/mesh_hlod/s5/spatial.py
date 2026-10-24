@@ -11,7 +11,15 @@ import sqlite3
 import struct
 
 MAX_QUERY_CANDIDATES = 2_000_000
-MAX_CONTACTS_PER_EDGE = 1_000_000
+
+
+def packed_point(xyz):
+    return struct.pack('<3d', *(0.0 if x == 0 else x for x in xyz))
+
+
+def f32_point(xyz):
+    """The published canonical domain, including positive zero."""
+    return tuple(0.0 if x == 0 else x for x in struct.unpack('<3f', struct.pack('<3f', *xyz)))
 
 
 class WorkLimit(ValueError):
@@ -55,17 +63,28 @@ class Store:
             tx REAL DEFAULT 0,ty REAL DEFAULT 0,tz REAL DEFAULT 0,
             x0 REAL,x1 REAL,y0 REAL,y1 REAL,z0 REAL,z1 REAL,conflict INTEGER DEFAULT 0);
           CREATE INDEX points_rendered ON points(rendered);
-          CREATE TABLE owners(point INTEGER, leaf INTEGER, PRIMARY KEY(point,leaf)) WITHOUT ROWID;
-          CREATE VIRTUAL TABLE point_box USING rtree(id,x0,x1,y0,y1,z0,z1);
-          CREATE TABLE edges(a INTEGER,b INTEGER,leaf INTEGER,nf INTEGER,nr INTEGER,
+          CREATE TABLE observations(point INTEGER,leaf INTEGER,depth INTEGER,grid BLOB,
+            unsupported INTEGER,xyz BLOB,PRIMARY KEY(point,leaf,grid,xyz)) WITHOUT ROWID;
+          CREATE INDEX observations_depth ON observations(depth,grid);
+          CREATE TABLE source_corners(source INTEGER PRIMARY KEY,a INTEGER,b INTEGER,c INTEGER);
+          CREATE TABLE source_orientation(source INTEGER PRIMARY KEY,shape BLOB,sign INTEGER);
+          CREATE TABLE canonical_points(id INTEGER PRIMARY KEY,key BLOB UNIQUE,xyz BLOB);
+          CREATE INDEX canonical_xyz ON canonical_points(xyz);
+          CREATE TABLE canonical_map(point INTEGER PRIMARY KEY,canonical INTEGER);
+          CREATE TABLE canonical_owners(point INTEGER,leaf INTEGER,PRIMARY KEY(point,leaf)) WITHOUT ROWID;
+          CREATE TABLE canonical_edges(a INTEGER,b INTEGER,leaf INTEGER,nf INTEGER,nr INTEGER,
             PRIMARY KEY(a,b,leaf)) WITHOUT ROWID;
-          CREATE INDEX edges_b ON edges(b,a,leaf);
+          CREATE INDEX canonical_edges_b ON canonical_edges(b,a,leaf);
+          CREATE TABLE incidence(a INTEGER,b INTEGER,faces INTEGER,leaf INTEGER,
+            PRIMARY KEY(a,b)) WITHOUT ROWID;
+          CREATE INDEX incidence_faces ON incidence(faces,a,b,leaf);
+          CREATE TABLE exemptions(tile INTEGER,a INTEGER,b INTEGER,kind TEXT,
+            PRIMARY KEY(tile,a,b,kind)) WITHOUT ROWID;
           CREATE TABLE source_shapes(shape BLOB,leaf INTEGER,sign INTEGER,
             PRIMARY KEY(shape,leaf,sign)) WITHOUT ROWID;
           CREATE TABLE requirements(tile INTEGER,kind INTEGER,a INTEGER,b INTEGER,
             PRIMARY KEY(tile,kind,a,b)) WITHOUT ROWID;
           CREATE TABLE pairs(a INTEGER,b INTEGER,PRIMARY KEY(a,b)) WITHOUT ROWID;
-          CREATE VIRTUAL TABLE leaf_box USING rtree(id,x0,x1,y0,y1,z0,z1);
         ''')
 
     def close(self):
@@ -84,8 +103,6 @@ class Store:
         if row:
             return row[0]
         i = self.db.execute('INSERT INTO points(xyz) VALUES (?)', (packed,)).lastrowid
-        self.db.execute('INSERT INTO point_box VALUES (?,?,?,?,?,?,?)',
-                        (i,xyz[0],xyz[0],xyz[1],xyz[1],xyz[2],xyz[2]))
         return i
 
     def xyz(self, point):
@@ -126,10 +143,14 @@ class Store:
             checked+=1
         return checked
 
-    def owners(self, point):
-        return {r[0] for r in self.db.execute('SELECT leaf FROM owners WHERE point=?', (point,))}
+    def validate_leaf_agreement(self,require):
+        """A source-point contradiction is provable without any grid inference."""
+        for point,xyz,conflict in self.db.execute('SELECT id,xyz,conflict FROM points'):
+            self.work.charge()
+            require(not conflict,'interfacePoints',
+                    f'leaf decoded disagreement at source point {point} {struct.unpack("<3d",xyz)}')
 
-    def source_face(self, key, want, leaf, actual=None):
+    def source_face(self, key, want, leaf, actual=None, depth=0):
         self.work.charge()
         try:
             i = self.db.execute('INSERT INTO source(leaf,key,data) VALUES (?,?,?)',
@@ -138,26 +159,111 @@ class Store:
             return False
         self.db.execute('INSERT INTO source_box VALUES (?,?,?,?,?,?,?)', (i,*bounds(want['xyz'])))
         ids = [self.point(p) for p in want['xyz']]
+        self.db.execute('INSERT INTO source_corners VALUES (?,?,?,?)',(i,*ids))
         if actual is not None:
             tolerance=actual.get('positionTolerance',[0.,0.,0.])
+            step=actual.get('positionStep')
+            grid=struct.pack('<3d',*step) if step is not None else b''
             for p,xyz in zip(ids,actual['xyz']):
                 self.observe_point(p,xyz,tolerance)
-        self.db.executemany('INSERT OR IGNORE INTO owners VALUES (?,?)', ((p,leaf) for p in ids))
-        self.db.executemany('INSERT INTO edges(a,b,leaf,nf,nr) VALUES (?,?,?,?,?) '
-                            'ON CONFLICT(a,b,leaf) DO UPDATE SET nf=nf+excluded.nf,nr=nr+excluded.nr',
-                            ((*sorted((ids[k],ids[(k+1)%3])),leaf,
-                              int(ids[k]<ids[(k+1)%3]),int(ids[k]>ids[(k+1)%3])) for k in range(3)))
+                self.db.execute('INSERT OR IGNORE INTO observations VALUES (?,?,?,?,?,?)',
+                    (p,leaf,depth,grid,int(actual.get('positionGridUnsupported',False)),packed_point(xyz)))
         from winding import shape
         key,sign=shape(actual['xyz'] if actual is not None else want['xyz'])
         if key is not None:
-            self.db.execute('INSERT OR IGNORE INTO source_shapes VALUES (?,?,?)',(key,leaf,sign))
+            self.db.execute('INSERT INTO source_orientation VALUES (?,?,?)',(i,key,sign))
         return True
+
+    def finalize_canonical(self, require):
+        """Derive source welds before looking at delivered coordinate aliases.
+
+        A codec error bound is not a lattice. Only the independent integer
+        accessor's axis-aligned grid is eligible for zero-phase snapping. An
+        unchanged float source point needs no inferred grid. Changed float
+        fallback points require a uniquely observed grid at their minimum
+        incident depth; absence/ambiguity fails closed.
+        """
+        self.validate_leaf_agreement(require)
+        stats=collections.Counter()
+        depth_grids={}
+        for depth,grid in self.db.execute('SELECT depth,grid FROM observations ORDER BY depth,grid'):
+            self.work.charge()
+            if grid:
+                known=depth_grids.setdefault(depth,set())
+                known.add(grid)
+                if len(known)>4096:
+                    raise WorkLimit('distinct source grids per depth exceeds 4096')
+        for point,source,rendered in self.db.execute('SELECT id,xyz,rendered FROM points ORDER BY id'):
+            self.work.charge()
+            p=struct.unpack('<3d',source)
+            actual=struct.unpack('<3d',rendered) if rendered is not None else p
+            depth=self.db.execute('SELECT min(depth) FROM observations WHERE point=?',(point,)).fetchone()[0]
+            grids=set()
+            unsupported=False
+            for grid,bad in self.db.execute('SELECT grid,unsupported FROM observations WHERE point=? AND depth=?',(point,depth)):
+                self.work.charge()
+                if grid:grids.add(grid)
+                unsupported |= bool(bad)
+            if not grids and not unsupported:
+                grids=depth_grids.get(depth,set())
+            if len(grids)==1 and not unsupported:
+                step=struct.unpack('<3d',next(iter(grids)))
+                require(all(math.isfinite(s) and s>0 for s in step),'oracleDomain','sourceCanonical: invalid independently decoded grid')
+                canonical=f32_point([round(p[k]/step[k])*step[k] for k in range(3)])
+                stats['gridSourcePoints']+=1
+                for (observation,) in self.db.execute('SELECT xyz FROM observations WHERE point=?',(point,)):
+                    self.work.charge()
+                    delivered=struct.unpack('<3d',observation)
+                    require(f32_point(delivered)==canonical,'leafGeometry',f'sourceCanonical point {point}: zero-phase canonical {canonical}, delivered {delivered}, step {step}')
+            else:
+                for (observation,) in self.db.execute('SELECT xyz FROM observations WHERE point=?',(point,)):
+                    self.work.charge()
+                    require(observation==source,'oracleDomain',f'sourceCanonical point {point}: changed source position without a unique supported minimum-depth grid')
+                canonical=f32_point(p)
+                stats['capturedSourcePoints']+=1
+            key=struct.pack('<3f',*canonical)
+            row=self.db.execute('SELECT id,xyz FROM canonical_points WHERE key=?',(key,)).fetchone()
+            if row is None:
+                identity=self.db.execute('INSERT INTO canonical_points(key,xyz) VALUES (?,?)',(key,packed_point(actual))).lastrowid
+            else:
+                identity,prior=row
+                # Formula-confirmed source collisions are welds. Raw delivered
+                # aliases may not erase a real displacement after that weld.
+                require(prior==packed_point(actual),'interfacePoints',f'canonical source key {canonical}: raw delivered disagreement')
+                stats['canonicalSourceCollisions']+=1
+            self.db.execute('INSERT INTO canonical_map VALUES (?,?)',(point,identity))
+        # Triangles with fewer than three keys contribute neither points nor
+        # edges, but remain in source identity/fidelity and orientation checks.
+        for leaf,a,b,c in self.db.execute('SELECT s.leaf,x.canonical,y.canonical,z.canonical FROM source_corners c '
+                'JOIN source s ON s.id=c.source JOIN canonical_map x ON x.point=c.a '
+                'JOIN canonical_map y ON y.point=c.b JOIN canonical_map z ON z.point=c.c'):
+            self.work.charge()
+            ids=(a,b,c)
+            if len(set(ids))<3:
+                stats['collapsedSourceTriangles']+=1
+                continue
+            self.db.executemany('INSERT OR IGNORE INTO canonical_owners VALUES (?,?)',((p,leaf) for p in ids))
+            self.db.executemany('INSERT INTO canonical_edges VALUES (?,?,?,?,?) ON CONFLICT(a,b,leaf) '
+                'DO UPDATE SET nf=nf+excluded.nf,nr=nr+excluded.nr',
+                ((*sorted((ids[k],ids[(k+1)%3])),leaf,int(ids[k]<ids[(k+1)%3]),int(ids[k]>ids[(k+1)%3])) for k in range(3)))
+        self.db.execute('INSERT INTO incidence SELECT a,b,sum(nf+nr),min(leaf) FROM canonical_edges GROUP BY a,b')
+        for shape,leaf,sign in self.db.execute('SELECT o.shape,s.leaf,o.sign FROM source_orientation o '
+                'JOIN source s ON s.id=o.source JOIN source_corners c ON c.source=o.source '
+                'JOIN canonical_map x ON x.point=c.a JOIN canonical_map y ON y.point=c.b '
+                'JOIN canonical_map z ON z.point=c.c WHERE x.canonical<>y.canonical '
+                'AND x.canonical<>z.canonical AND y.canonical<>z.canonical'):
+            self.work.charge()
+            self.db.execute('INSERT OR IGNORE INTO source_shapes VALUES (?,?,?)',(shape,leaf,sign))
+        self.canonical_stats=dict(stats)
+        self.db.commit()
+
+    def canonical_xyz(self, point):
+        return struct.unpack('<3d',self.db.execute('SELECT xyz FROM canonical_points WHERE id=?',(point,)).fetchone()[0])
 
     def leaf_bounds(self, leaf):
         row = self.db.execute('SELECT min(x0),max(x1),min(y0),max(y1),min(z0),max(z1) '
                              'FROM source_box JOIN source USING(id) WHERE leaf=?', (leaf,)).fetchone()
         if row[0] is not None:
-            self.db.execute('INSERT INTO leaf_box VALUES (?,?,?,?,?,?,?)', (leaf,*row))
             self.leaf_boxes[leaf]=row
 
     def nearest(self, p, lo, hi, distance2):
@@ -209,6 +315,8 @@ class Store:
                 raise ValueError('unbounded nearest source query')
 
     def census(self, tiles, leaves, require):
+        if not hasattr(self,'canonical_stats'):
+            self.finalize_canonical(require)
         chains = {}
         for leaf,t in enumerate(leaves):
             chain = []
@@ -218,11 +326,18 @@ class Store:
             chains[leaf] = chain
         def inside(t, owner):
             return t['lo'] <= owner < t['hi']
+        def owners(point):
+            answer=set()
+            for (owner,) in self.db.execute('SELECT leaf FROM canonical_owners WHERE point=?',(point,)):
+                self.work.charge()
+                answer.add(owner)
+            return answer
         def demand(owners, kind, a, b=-1):
+            low,high=min(owners),max(owners)
             for owner in owners:
                 for t in chains[owner]:
                     self.work.charge()
-                    if t['rendered'] and any(not inside(t,o) for o in owners):
+                    if t['rendered'] and (low<t['lo'] or high>=t['hi']):
                         self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)', (int(t['id']),kind,a,b))
         def pairs(owners):
             for a,b in itertools.combinations(sorted(owners),2):
@@ -230,112 +345,86 @@ class Store:
                     self.work.charge()
                     if x['hi']<=y['lo'] or y['hi']<=x['lo']:
                         self.db.execute('INSERT OR IGNORE INTO pairs VALUES (?,?)', tuple(sorted((int(x['id']),int(y['id'])))))
-        corners = contacts = 0
-        for (p,) in self.db.execute('SELECT point FROM owners GROUP BY point HAVING count(*)>1'):
-            owners = self.owners(p)
-            corners += 1
-            demand(owners,0,p)
-            pairs(owners)
-        for a,b,owner_text in self.db.execute('SELECT a,b,group_concat(leaf) FROM edges GROUP BY a,b'):
+        shared_points=shared_segments=open_edges=open_shared=0
+        for (p,) in self.db.execute('SELECT point FROM canonical_owners GROUP BY point HAVING count(*)>1'):
+            own=owners(p)
+            shared_points+=1
+            demand(own,0,p)
+            pairs(own)
+        for a,b,incidence,leaf in self.db.execute('SELECT a,b,faces,leaf FROM incidence'):
             self.work.charge()
-            owners = set(map(int,owner_text.split(',')))
-            if len(owners)>1:
-                demand(owners,1,a,b)
-                pairs(owners)
-            x,y = self.xyz(a),self.xyz(b)
-            d = [y[k]-x[k] for k in range(3)]
-            l2 = sum(v*v for v in d)
-            if not l2:
-                continue
-            eps = 1e-7*math.sqrt(l2)
-            box = tuple(v for k in range(3) for v in (min(x[k],y[k])-eps,max(x[k],y[k])+eps))
-            params = tuple(v for k in range(3) for v in (box[2*k+1],box[2*k]))
-            nearby=set()
-            for (leaf,) in self.db.execute('SELECT id FROM leaf_box WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?',params):
-                self.work.charge()
-                if len(nearby)>=MAX_QUERY_CANDIDATES:
-                    raise WorkLimit('edge leaf-box query candidate limit')
-                nearby.add(leaf)
-            if not nearby-owners:
-                continue
-            split = [(0,a,self.owners(a)),(1,b,self.owners(b))]
-            candidates = 0
-            for (p,) in self.db.execute('SELECT id FROM point_box WHERE x0<=? AND x1>=? AND y0<=? AND y1>=? AND z0<=? AND z1>=?', params):
-                self.work.charge()
-                candidates += 1
-                if candidates>MAX_QUERY_CANDIDATES:
-                    raise WorkLimit('edge spatial query candidate limit')
-                if p in (a,b):
-                    continue
-                other = self.owners(p)
-                if not other-owners:
-                    continue
-                z = self.xyz(p)
-                u = sum((z[k]-x[k])*d[k] for k in range(3))/l2
-                if 0<u<1 and sum((z[k]-x[k]-u*d[k])**2 for k in range(3)) <= 1e-14*l2:
-                    contacts += 1
-                    split.append((u,p,other))
-                    if len(split)>MAX_CONTACTS_PER_EDGE:
-                        raise WorkLimit('collinear contacts per edge limit')
-                    union = owners|other
-                    for owner in owners:
-                        for t in chains[owner]:
-                            if t['rendered'] and any(not inside(t,o) for o in other):
-                                self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)',(int(t['id']),1,a,b))
-                    for owner in other:
-                        for t in chains[owner]:
-                            if t['rendered'] and any(not inside(t,o) for o in owners):
-                                self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)',(int(t['id']),0,p,-1))
-                    pairs(union)
-            if len(split)>2:
-                # Preserve every original split-side edge in the span. Testing
-                # only consecutive global contact points misses A-T when an
-                # unrelated S lies between A and T but belongs to this same
-                # ancestor: A-S/S-T need not be edges in that source partition.
-                point_ids={p for _,p,_ in split}
-                for p in point_ids:
-                    for x,y,owner in self.db.execute('SELECT a,b,leaf FROM edges WHERE a=? OR b=?',(p,p)):
+            own=set()
+            for (o,) in self.db.execute('SELECT leaf FROM canonical_edges WHERE a=? AND b=?',(a,b)):
+                self.work.charge();own.add(o)
+            if len(own)>1:
+                shared_segments+=1
+                demand(own,1,a,b)
+                pairs(own)
+            if incidence==1:
+                open_edges+=1
+                left,right=owners(a),owners(b)
+                if left-{leaf} and right-{leaf}:
+                    open_shared+=1
+                    low_a,high_a=min(left),max(left)
+                    low_b,high_b=min(right),max(right)
+                    # These are diagnostics, never chord/interface demands.
+                    for t in chains[leaf]:
                         self.work.charge()
-                        if x!=p or y not in point_ids or owner in owners:
-                            continue
-                        for t in chains[owner]:
-                            if t['rendered'] and any(not inside(t,o) for o in owners):
-                                self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)', (int(t['id']),1,x,y))
-        segments = points = 0
+                        if t['rendered'] and (low_a<t['lo'] or high_a>=t['hi']) and (low_b<t['lo'] or high_b>=t['hi']):
+                            self.db.execute('INSERT OR IGNORE INTO requirements VALUES (?,?,?,?)',(int(t['id']),2,a,b))
+        self.db.execute('CREATE TABLE rendered_borders(tile INTEGER,a BLOB,b BLOB,PRIMARY KEY(tile,a,b)) WITHOUT ROWID')
+        segments=points=exempt=above_cap=max_triangles=0
         for t in tiles:
             if not t['rendered']:
                 continue
-            vertices = set()
-            adjacency=collections.defaultdict(set)
+            vertices=set();adjacency=collections.defaultdict(set)
+            edge_counts=collections.Counter();triangles=0
             for f in self.faces(int(t['id'])):
-                ps = [tuple(p) for p in f['xyz']]
+                self.work.charge()
+                triangles+=1
+                if triangles>1_000_000:
+                    raise WorkLimit('rendered tile exceeds 1,000,000 faces')
+                ps=[tuple(p) for p in f['xyz']]
+                if len(set(f32_point(p) for p in ps))<3:
+                    continue
                 vertices.update(ps)
                 for k in range(3):
                     a,b=ps[k],ps[(k+1)%3]
                     adjacency[a].add(b);adjacency[b].add(a)
-            cache = {}
+                    edge_counts[tuple(sorted((a,b)))]+=1
+            if t['children']:
+                above_cap+=int(triangles>8192)
+                max_triangles=max(max_triangles,triangles)
+            self.db.executemany('INSERT INTO rendered_borders VALUES (?,?,?)',
+                ((int(t['id']),packed_point(a),packed_point(b)) for (a,b),n in edge_counts.items() if n==1))
+            cache={}
             def canonical(p):
-                if p not in cache:
-                    cache[p] = self.rendered_xyz(p)
+                if p not in cache:cache[p]=self.canonical_xyz(p)
                 return cache[p]
             for kind,a,b in self.db.execute('SELECT kind,a,b FROM requirements WHERE tile=? ORDER BY kind DESC',(int(t['id']),)):
-                if kind == 0:
-                    points += 1
-                    self.work.charge()
+                self.work.charge()
+                if kind==0:
+                    points+=1
                     require(canonical(a) in vertices,'interfacePoints',t['id'])
-                else:
-                    segments += 1
-                    self.work.charge(2)
-                    # Codec error bounds govern fidelity to source, never a
-                    # crack between two rendered levels. Canonical leaf points
-                    # have already passed independent source/incident-grid
-                    # validation and exact cross-leaf agreement.
+                elif kind==1:
+                    segments+=1
                     require(canonical(b) in adjacency.get(canonical(a),()),'interfaceSegments',t['id'])
-        depths = {int(t['id']):t['depth'] for t in tiles}
-        mixed = same = 0
+                elif canonical(b) not in adjacency.get(canonical(a),()):
+                    exempt+=1
+                    self.db.execute('INSERT OR IGNORE INTO exemptions VALUES (?,?,?,?)',(int(t['id']),a,b,'open-edge-change'))
+        depths={int(t['id']):t['depth'] for t in tiles}
+        mixed=same=0
         for a,b in self.db.execute('SELECT a,b FROM pairs'):
-            if depths[a] == depths[b]: same += 1
-            else: mixed += 1
-        return dict(checkedSegments=segments,checkedPoints=points,cornerContacts=corners,
-                    tContacts=contacts,mixedPairs=mixed,sameDepthPairs=same,
-                    candidateWork=self.work.used,workLimit=self.work.limit)
+            self.work.charge()
+            if depths[a]==depths[b]:same+=1
+            else:mixed+=1
+        return dict(checkedSegments=segments,checkedPoints=points,
+                    sharedPoints=shared_points,sharedSegments=shared_segments,
+                    sharedSourcePoints=shared_points,sharedSourceSegments=shared_segments,
+                    cornerContacts=shared_points,tContacts=0,
+                    sourceOpenEdges=open_edges,sourceOpenEdgesWithSharedEndpoints=open_shared,
+                    exemptOpenEdgeChanges=exempt,exemptCrackEvents=0,
+                    mixedPairs=mixed,sameDepthPairs=same,
+                    aboveCapCoarseTiles=above_cap,maxCoarseTriangles=max_triangles,
+                    coarseTriangleCountBasis='expanded tile instances, summed across each tile contents; repeated payload URIs counted per tile',
+                    canonical=self.canonical_stats,candidateWork=self.work.used,workLimit=self.work.limit)

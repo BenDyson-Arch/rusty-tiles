@@ -28,13 +28,22 @@ fn sampled_hlod_archives_and_named_mutants() {
         "winding_controls.py",
         "native_controls.py",
         "nonmanifold_controls.py",
+        "exact_controls.py",
+        "seam_diagnostic_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
             .arg(oracle.join(name))
-            .arg(&probes)
+            .args(if name == "seam_diagnostic_controls.py" {
+                vec![]
+            } else {
+                vec![probes.as_os_str()]
+            })
             .args(
-                if matches!(name, "native_controls.py" | "nonmanifold_controls.py") {
+                if matches!(
+                    name,
+                    "native_controls.py" | "nonmanifold_controls.py" | "exact_controls.py"
+                ) {
                     vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")]
                 } else {
                     vec![]
@@ -113,6 +122,14 @@ fn sampled_hlod_archives_and_named_mutants() {
             }
             let report = result.unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(cli.status.success(), "{name}: {cli_report}");
+            let census = report
+                .interface_census
+                .expect("identity-bearing positive must run the decoded incidence census");
+            assert_eq!(census.basis, "decoded leaf canonical f32 keys", "{name}");
+            assert!(
+                census.source_open_edges_with_shared_endpoints <= census.source_open_edges,
+                "{name}: open-edge subset must be counted consistently"
+            );
             assert!(
                 report.checks.iter().any(|s| s == "hlodFeatureIds"),
                 "{name}: identity must run"

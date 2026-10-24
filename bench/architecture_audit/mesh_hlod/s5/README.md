@@ -1,9 +1,8 @@
 # S5 validator and independent HLOD acceptance
 
-**Checkpoint:** runtime `9bc1760d` predates the owner's exact-seam D1 revision.
-The revised canonical source/open-edge contract, exemption counts/widths and
-reworked S1 campaign remain pending. The strict T-contact implementation below
-describes this reviewed snapshot, not acceptance of the forthcoming contract.
+This slice implements the owner’s D1–D4 exact-seam amendment published with S1
+`055be853`. The source-aware oracle and archive-only census have separate truth
+boundaries. Final stack acceptance and cost require the final integrated campaign.
 
 Sampled G is finite, nonnegative and ordered; it is not a certified maximum.
 C1 still owns resources, hashes, codecs and accessor admission, C2 owns decoded
@@ -14,7 +13,7 @@ sampling is the separately invoked `../s2/audit.py`, never an archive certificat
 Retain the bounded validator/facts/replay owners. Add source-identity admission
 and a disk-backed decoded delivery relation; replace ad-hoc seam probes with
 permanent independent controls. The census harvests E2 `816d0670`'s decoded leaf
-incidence/ancestor cross-product and extends it to corner and T contacts. No
+incidence/ancestor cross-product with exact shared corner and edge keys. No
 producer facts, lock files, reports or producer imports supply independent truth.
 
 ## Archive validation
@@ -41,25 +40,33 @@ renderable descendants. Leading empty roots and external-link placeholders are
 valid, as are S1's repeated coarse-content cells. An empty ADD override cannot
 clear a barrier owned by a renderable REPLACE ancestor.
 
-The first bounded payload reduction retains open/nonmanifold decoded edges.
-Actual placed payload bounding boxes select geometry replays that recover hidden
-contacts, including two closed leaves with no open-edge seeds. Each replay uses
-bounded per-document RAM edge maps; only discovered contact edges and ancestor
-requests survive on disk. Original payload admission runs once; selected rereads
-and decoding retain their shared byte/work charges. No full triangle soup is
-spilled. Compact per-source-primitive original-vertex ranges select a separate
-identity replay even when decoded boxes are disjoint. Every shared original key
-must have the same placed point; closed-leaf reduction cannot erase this join.
-A disk R-tree joins leaf contacts. Ancestor checks require consecutive border
-subsegments, corner/T points and matching required-interface incidences. Keeping just a T vertex
-cannot conceal a detour. Every candidate/interval visit and SQLite VM work is
-charged; dense queries refuse rather than truncate. Shared points and consecutive
-edge endpoints use exact decoded coordinates, with negative zero canonicalized.
-Encoding half-steps never excuse a delivered crack. Native winding
-checks cover required interfaces. Other coarse interior/exterior orientation is
-explicitly uninspected by native validation; the source oracle supplies the
-stronger exact coincident-face and unique retained-border witnesses.
-Fresh coarse UV/source-pixel correspondence cannot be inferred from leaf UVs.
+The native census externally groups canonical point keys (12 bytes) and
+unordered endpoint-pair edge keys (24 bytes), retaining actual per-leaf face
+incidences. Canonical keys are decoded common-frame f32 bits, with negative zero
+normalized. A triangle with fewer than three distinct keys contributes no
+interface items. No triangle geometry soup, chord inference, distance matching
+or T-junction obligations are used. Shared points and edges must be retained
+exactly by every ancestor with an outside owner; required edge directions are
+checked independently. Closed, locally balanced and nonmanifold items remain in
+the incidence relation. Three distinct collinear keys still contribute items.
+
+The separate original-ID check retains conservative full-width vertex ranges
+and bounded per-payload alias replay, including disjoint boxes and repeated
+references. Every shared original key must retain its exact placed f64 position;
+f32 seam canonicalization cannot weaken that identity relation. Selected rereads,
+decoding, key/map work, group members, owner walks and SQLite VM work keep their
+shared charges; dense work refuses rather than silently truncating.
+
+`interfaceCensus` reports decoded-leaf `sharedPoints`, `sharedSegments`,
+`sourceOpenEdges` and `sourceOpenEdgesWithSharedEndpoints`. A source-open edge has
+exactly one incident surface face globally; its two endpoints are shared when
+each occurs in a different leaf. Incidence counts faces, never net orientation
+or owner count. The report names its decoded-leaf basis; authenticating source
+canonical positions and measuring exempt crack widths require the source oracle.
+It also reports nonleaf content references above 8,192 triangles and their maximum
+triangle count, without rejecting them. The coarse primitive metadata row limit
+remains 8,192. Other coarse interior/exterior orientation is uninspected by native
+validation; the oracle retains the stronger coincident-face guard everywhere.
 
 One shared invertible root placement is removed before coordinate arithmetic.
 Relative tile transforms are conjugated by the mandatory glTF Y-up conversion;
@@ -89,9 +96,11 @@ fail closed.
 `source_manifest.py` independently reads the input GLB with mmap and streams
 original geometry, vertex IDs, normals, UVs, material classes/constants and source
 order to SQLite. Source keys and ordinals remain exact. It imports no producer.
-The default root-relative glTF frame removes common archive placement and applies
-relative tile transforms; explicit world frames require a documented 4x4 source
-transform. Source manifests can also pin a separately accepted baseline, but the
+The root-relative glTF frame removes common archive placement and applies
+relative tile transforms. Exact source canonicalization currently requires that
+frame and an identity postcapture source transform; world and other postcapture
+frames are explicitly refused as `oracleDomain`/`sourceCanonical`. Source
+manifests can also pin a separately accepted baseline, but the
 real campaign uses the original input GLBs.
 
 `oracle.py` checks source leaf multiplicity/IDs/geometry/normals, materials and
@@ -101,21 +110,35 @@ and texture bindings: their material class/PBR constants/slot presence and
 rendered UV structure are checked, while UV/source-pixel correspondence is
 explicitly counted as uninspected. No large epsilon substitutes for image proof.
 
-Source position fidelity uses independently decoded accessor grids. Canonical
-leaf snapping may use the coarsest grid incident to an authoritative source
-point, so bounds are joined by source XYZ after all leaves are ingested. An
-unrelated coarse leaf cannot enlarge a point's bound. Shared delivered points
-must agree exactly, and ancestor matching has no encoding tolerance. The six
-permanent `lattice_controls.py` cases exercise order independence, incident-only
-bounds, decoded disagreement and a coarse gap smaller than half a codec step.
+Source position fidelity and exact canonicalization are separate. The oracle
+keeps original source XYZ, identities, attributes and source order. It derives
+canonical f32 keys from captured source positions and independently decoded
+integer lattice spacings, using ties-to-even f64 rounding and the coarsest
+required incident-depth grid. FLOAT and non-axis-representable integer storage
+are distinguished explicitly; conservative codec tolerance never supplies seam
+equality or invents a weld. Source-equal FLOAT delivery needs no inferred grid.
 
-`spatial.py` keeps archive-sized geometry/indexes on disk. R-tree candidate rows,
-leaf-box broadphase visits, descendant interval tests, segment-chain candidates
-and nearest-source queries have charges and caps. The T census requires all
-original split-side subsegments even when another contact point interleaves.
-It enumerates disjoint same/mixed-depth ancestor pairs without retaining an
-archive-sized pair cross-product. Full 2048 CPU/RSS and pair counts remain S8
-measurements, not extrapolated acceptance claims.
+Exact source-canonical point/edge ownership produces requirements. The oracle
+counts original surface-face incidence after canonical welding, excluding only
+triangles with fewer than three keys. A crack or directed border-winding witness
+is exempt only when all its supports have incidence one; incidence two or more,
+nonmanifold supports, shared-point requirements and exact coincident orientation
+remain strict. Open boundaries, candidate open-edge changes, and exempt
+crack/winding events are deduplicated and reported separately. A crack event
+needs a positive certified sampled width witness; source-open edges or missing
+open-edge keys alone are not counted as cracks. An unmeasured candidate is not
+evidence of a zero-width gap.
+
+Width diagnostics sample complete corresponding boundary traces with bounded
+work and memory. A truncated spatial traversal reports a certified sampled
+Hausdorff lower bound, never a nearest-distance overestimate. Ambiguous trace
+correspondence and unresolved queries are explicit counts, never silent zero.
+Width precision does not change exemption eligibility or exact seam acceptance.
+
+`spatial.py` keeps archive-sized source, canonical incidence, requirements and
+geometry indexes on disk. Queries, group visits and representative searches have
+charges and caps. Mixed-depth pairs are enumerated without an archive-sized
+cross-product. Full 2048 CPU/RSS and pair counts remain S8 measurements.
 
 ## Reproduction and evidence
 
@@ -183,3 +206,26 @@ Review, commands, test logs, pinned artifacts and refusal receipts are retained
 in `/home/bend/.cache/rusty-tiles-evidence/hlod-s5-review-20261024/`.
 Immutable checkpoint manifest `sha256-9bc1760d.json` has SHA256
 `0617b2f4cec6f3c44b03275a4379a82b95de0d42a657c265499055da60720d51`.
+
+### Exact-seam implementation checkpoint
+
+The permanent integration passes 107 archive/profile cases and 679 fixture
+hashes: 56 base, nine lattice, nine winding, 15 native scene/frame, ten
+nonmanifold/original-alias and eight exact-key cases. The separate width suite
+passes 12 controls and 112 exact rational comparisons. The 8,193-face positive
+checks above-cap reporting without rejection. The welded detour has opposite
+source incidences so its missing exact edge reaches `interfaceSegments` in both
+validators; the former T-only detours are counted source-open positives.
+
+The broader validator run passes 173 tests with two helpers ignored; the final
+23 native tests include three additional direction-mask cases. C1/C2/I1's 20
+external tests and scoped all-target lint pass, retaining only the inherited
+producer argument-count exception. These executions establish the recorded
+control domain, not real-output acceptance. A fresh full R11 review precedes
+the S1 `055be853` integration and own tex3/crop3 campaign; final cost waits for
+the stack freeze. Source-original census and width measurements require that
+source-aware campaign, not producer reports.
+
+Receipts are retained under the same evidence cache's `exact-d1/` directory;
+its `sha256.json` has SHA256
+`43aae428cd257339d266fb27b0a4ed4d61d29de9ba31ac262ee2ceeef6705350`.
