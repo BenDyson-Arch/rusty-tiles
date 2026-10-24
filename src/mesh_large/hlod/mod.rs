@@ -81,6 +81,9 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// index/vertex copies, meshopt's internal tables, edge sets, representatives and the
 /// encode/decode check.
 const JOB_BYTES_PER_TRIANGLE: u64 = 1280;
+/// Finished coarse rows held while an earlier tile is still being built (`walk`); each is a
+/// few hundred bytes, charged within `STAGE_RESERVE`.
+const ROW_WINDOW: usize = 1024;
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
@@ -375,7 +378,6 @@ pub(crate) fn produce(
         &captured.triangles,
         &captured.corner_depths,
         &captured.lattice,
-        super::records::Cube::around(&captured.scan.bounds),
         check,
     )?;
     report.incidence = stats;
@@ -565,23 +567,56 @@ fn read_leaf(
     Ok(tile)
 }
 
-/// An open edge of the leaf between two kept points is kept too (a T-junction side's
-/// subdivided border, a hole chord ending on interfaces): conservative, never a crack. Such
-/// an edge is outer only where both its endpoints are, so it takes the narrower interval
-/// (an existing row for the same segment widens to the union). The rows stay merged and
-/// sorted by item within the `items` reserved.
+/// Close the leaf's rows over what keeping them implies, conservatively (never a crack):
+/// - a kept segment keeps its endpoints (the overlap join records only the segment): each
+///   endpoint is a kept point with at least the segment's interval;
+/// - an open edge of the leaf between two kept points is kept too (a T-junction side's
+///   subdivided border, a hole chord ending on interfaces). Such an edge is outer only where
+///   both its endpoints are, so it takes the narrower interval (an existing row for the
+///   same segment widens to the union).
+///
+/// The rows stay merged and sorted by item within the `items` reserved: every row is a point
+/// or segment of the leaf's own surface.
 fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(), JobError> {
-    let vertices = tile.interface.iter().filter(|r| r.is_vertex()).count();
-    if vertices == 0 {
+    if tile.interface.is_empty() {
         return Ok(());
     }
-    let mut points: HashMap<interfaces::Key, (u32, u32)> = HashMap::with_capacity(vertices);
-    points.extend(
-        tile.interface
-            .iter()
-            .filter(|r| r.is_vertex())
-            .map(|r| (r.a, (r.lo, r.hi))),
-    );
+    let capacity = (2 * tile.interface.len()).min(3 * tile.triangles.len());
+    let mut points: HashMap<interfaces::Key, (u32, u32)> = HashMap::with_capacity(capacity);
+    for r in &tile.interface {
+        let ends = if r.is_vertex() {
+            [r.a, r.a]
+        } else {
+            [r.a, r.b]
+        };
+        for p in ends {
+            let e = points.entry(p).or_insert((r.lo, r.hi));
+            e.0 = e.0.min(r.lo);
+            e.1 = e.1.max(r.hi);
+        }
+    }
+    let merged = tile.interface.len();
+    for (&p, &(lo, hi)) in &points {
+        match tile.interface[..merged].binary_search_by_key(&(p, p), InterfaceRow::item) {
+            Ok(at) => {
+                let row = &mut tile.interface[at];
+                row.lo = row.lo.min(lo);
+                row.hi = row.hi.max(hi);
+            }
+            Err(_) if tile.interface.len() == items => {
+                return Err(state(
+                    "more interface items than the leaf has points and segments",
+                ));
+            }
+            Err(_) => tile.interface.push(InterfaceRow {
+                leaf,
+                a: p,
+                b: p,
+                lo,
+                hi,
+            }),
+        }
+    }
     let key = |v: u32| interfaces::key(tile.positions[v as usize]);
     let mut edges: Vec<(interfaces::Key, interfaces::Key)> =
         Vec::with_capacity(3 * tile.triangles.len());
@@ -596,7 +631,6 @@ fn keep_open_edges(tile: &mut TileGeometry, leaf: u32, items: usize) -> Result<(
         }
     }
     edges.sort_unstable();
-    let merged = tile.interface.len();
     let mut i = 0;
     while i < edges.len() {
         let mut j = i + 1;
@@ -1000,6 +1034,13 @@ fn walk(
             for node in nodes.by_ref() {
                 let node = node?;
                 check()?;
+                // Finished rows wait for every earlier tile in postorder: while too many wait,
+                // read nothing further and let in-flight jobs finish. No earlier tile needs
+                // a leaf not yet read (it is closed), so this never blocks the walk.
+                while finished_rows.len() >= ROW_WINDOW && inflight > 0 {
+                    receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
+                    flush(&mut finished_rows, &mut publish, &mut written)?;
+                }
                 while stack.last().is_some_and(|f| f.node.end <= node.first) {
                     close(
                         &mut stack,
